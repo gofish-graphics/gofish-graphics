@@ -1,16 +1,16 @@
-/** Algebraic laws for the proof-bearing SizeRequest language. */
+/** Algebraic laws for the proof-bearing ScaleDependentExtent language. */
 import {
-  addRequests,
-  constantRequest,
-  dataRequest,
-  fitSizeRequest,
-  maxRequests,
-  requestedExtentAt,
-  scaleRequest,
-  shiftRequest,
-  sizeRequest,
-  type SizeRequest,
-} from "../ast/sizeRequests";
+  addExtents,
+  constantExtent,
+  dataExtent,
+  extentAtScale,
+  fitScale,
+  maxExtents,
+  scaleDependentExtent,
+  scaleExtent,
+  shiftExtent,
+  type ScaleDependentExtent,
+} from "../ast/scaleDependentExtents";
 
 let passed = 0;
 let failed = 0;
@@ -25,7 +25,10 @@ function ok(name: string, condition: boolean, detail?: string): void {
   }
 }
 
-const sameRequest = (left: SizeRequest, right: SizeRequest): boolean =>
+const sameExtent = (
+  left: ScaleDependentExtent,
+  right: ScaleDependentExtent
+): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 
 const approximatelyEqual = (left: number, right: number): boolean =>
@@ -33,14 +36,14 @@ const approximatelyEqual = (left: number, right: number): boolean =>
   8 * Number.EPSILON * Math.max(1, Math.abs(left), Math.abs(right));
 
 const approximatelyEquivalentAt = (
-  left: SizeRequest,
-  right: SizeRequest,
+  left: ScaleDependentExtent,
+  right: ScaleDependentExtent,
   samples: readonly number[]
 ): boolean =>
   samples.every((sigma) =>
     approximatelyEqual(
-      requestedExtentAt(left, sigma),
-      requestedExtentAt(right, sigma)
+      extentAtScale(left, sigma),
+      extentAtScale(right, sigma)
     )
   );
 
@@ -53,54 +56,54 @@ const permutations = <T>(values: readonly T[]): T[][] => {
   );
 };
 
-console.log("# size requests: canonical max-plus laws");
+console.log("# scale-dependent extents: canonical max-plus laws");
 {
-  const a = sizeRequest({ slope: 2, intercept: 1 });
-  const b = sizeRequest({ slope: 1, intercept: 5 });
-  const c = constantRequest(3);
+  const a = scaleDependentExtent({ slope: 2, intercept: 1 });
+  const b = scaleDependentExtent({ slope: 1, intercept: 5 });
+  const c = constantExtent(3);
   const values = [a, b, c];
 
-  const sums = permutations(values).map((order) => addRequests(...order));
+  const sums = permutations(values).map((order) => addExtents(...order));
   ok(
     "addition is permutation invariant for exactly represented coefficients",
-    sums.every((value) => sameRequest(value, sums[0]))
+    sums.every((value) => sameExtent(value, sums[0]))
   );
   ok(
     "addition is associative for exactly represented coefficients",
-    sameRequest(
-      addRequests(a, addRequests(b, c)),
-      addRequests(addRequests(a, b), c)
+    sameExtent(
+      addExtents(a, addExtents(b, c)),
+      addExtents(addExtents(a, b), c)
     )
   );
 
-  const maxima = permutations(values).map((order) => maxRequests(...order));
+  const maxima = permutations(values).map((order) => maxExtents(...order));
   ok(
     "maximum is permutation invariant",
-    maxima.every((value) => sameRequest(value, maxima[0]))
+    maxima.every((value) => sameExtent(value, maxima[0]))
   );
   ok(
     "maximum is associative",
-    sameRequest(
-      maxRequests(a, maxRequests(b, c)),
-      maxRequests(maxRequests(a, b), c)
+    sameExtent(
+      maxExtents(a, maxExtents(b, c)),
+      maxExtents(maxExtents(a, b), c)
     )
   );
-  ok("maximum is idempotent", sameRequest(maxRequests(a, a), a));
+  ok("maximum is idempotent", sameExtent(maxExtents(a, a), a));
 }
 
-console.log("# size requests: floating-point policy");
+console.log("# scale-dependent extents: floating-point policy");
 {
   const decimalOperands = [
-    dataRequest(0.1),
-    dataRequest(0.2),
-    dataRequest(0.3),
+    dataExtent(0.1),
+    dataExtent(0.2),
+    dataExtent(0.3),
   ];
   const decimalSums = permutations(decimalOperands).map((order) =>
-    addRequests(...order)
+    addExtents(...order)
   );
   ok(
     "decimal reordering is not promised to preserve structural equality",
-    decimalSums.some((value) => !sameRequest(value, decimalSums[0]))
+    decimalSums.some((value) => !sameExtent(value, decimalSums[0]))
   );
   ok(
     "decimal reordering preserves sampled denotation within numeric tolerance",
@@ -109,13 +112,13 @@ console.log("# size requests: floating-point policy");
     )
   );
 
-  const huge = constantRequest(1e16);
-  const one = constantRequest(1);
-  const leftAssociated = addRequests(addRequests(huge, one), one);
-  const rightAssociated = addRequests(huge, addRequests(one, one));
+  const huge = constantExtent(1e16);
+  const one = constantExtent(1);
+  const leftAssociated = addExtents(addExtents(huge, one), one);
+  const rightAssociated = addExtents(huge, addExtents(one, one));
   ok(
     "large-magnitude addition exposes non-associative number rounding",
-    !sameRequest(leftAssociated, rightAssociated)
+    !sameExtent(leftAssociated, rightAssociated)
   );
   ok(
     "large-magnitude regrouping remains within the numeric tolerance",
@@ -123,36 +126,48 @@ console.log("# size requests: floating-point policy");
   );
 }
 
-console.log("# size requests: minimal upper-envelope canonicalization");
+console.log("# scale-dependent extents: minimal upper-envelope canonicalization");
 {
   // The middle line crosses both neighbors at sigma=5, but is never strictly
   // above their maximum. Pairwise dominance cannot remove it because each
   // neighbor has either the smaller slope or the smaller intercept.
-  const envelope = sizeRequest(
+  const envelope = scaleDependentExtent(
     { slope: 0, intercept: 10 },
     { slope: 1, intercept: 5 },
     { slope: 2, intercept: 0 }
   );
   ok(
     "a crossing line that never binds is removed",
-    sameRequest(
+    sameExtent(
       envelope,
-      sizeRequest({ slope: 0, intercept: 10 }, { slope: 2, intercept: 0 })
+      scaleDependentExtent(
+        { slope: 0, intercept: 10 },
+        { slope: 2, intercept: 0 }
+      )
     ),
     JSON.stringify(envelope)
   );
 
   const operands = [
-    sizeRequest({ slope: 0, intercept: 8 }, { slope: 2, intercept: 0 }),
-    sizeRequest({ slope: 1, intercept: 4 }, { slope: 3, intercept: -2 }),
-    sizeRequest({ slope: 0, intercept: 3 }, { slope: 4, intercept: -9 }),
+    scaleDependentExtent(
+      { slope: 0, intercept: 8 },
+      { slope: 2, intercept: 0 }
+    ),
+    scaleDependentExtent(
+      { slope: 1, intercept: 4 },
+      { slope: 3, intercept: -2 }
+    ),
+    scaleDependentExtent(
+      { slope: 0, intercept: 3 },
+      { slope: 4, intercept: -9 }
+    ),
   ];
-  const sum = addRequests(...operands);
+  const sum = addExtents(...operands);
   const samples = [0, 0.5, 1, 2, 3, 5, 8, 13];
   const pointwise = samples.map((sigma) => ({
-    actual: requestedExtentAt(sum, sigma),
+    actual: extentAtScale(sum, sigma),
     expected: operands.reduce(
-      (total, operand) => total + requestedExtentAt(operand, sigma),
+      (total, operand) => total + extentAtScale(operand, sigma),
       0
     ),
   }));
@@ -164,32 +179,35 @@ console.log("# size requests: minimal upper-envelope canonicalization");
     JSON.stringify(pointwise)
   );
 
-  const twoPiece = sizeRequest(
+  const twoPiece = scaleDependentExtent(
     { slope: 0, intercept: 10 },
     { slope: 1, intercept: 0 }
   );
-  const repeated = addRequests(
-    ...new Array<SizeRequest>(16).fill(twoPiece)
+  const repeated = addExtents(
+    ...new Array<ScaleDependentExtent>(16).fill(twoPiece)
   );
   ok(
     "repeated two-piece additions retain only the active pieces",
     repeated.pieces.length === 2 &&
-      sameRequest(
+      sameExtent(
         repeated,
-        sizeRequest({ slope: 0, intercept: 160 }, { slope: 16, intercept: 0 })
+        scaleDependentExtent(
+          { slope: 0, intercept: 160 },
+          { slope: 16, intercept: 0 }
+        )
       ),
     JSON.stringify(repeated)
   );
 }
 
-console.log("# size requests: closure and monotonicity");
+console.log("# scale-dependent extents: closure and monotonicity");
 {
-  const composed = shiftRequest(
-    addRequests(scaleRequest(0.5, dataRequest(8)), constantRequest(6)),
+  const composed = shiftExtent(
+    addExtents(scaleExtent(0.5, dataExtent(8)), constantExtent(6)),
     -10
   );
   const samples = [0, 0.5, 1, 2, 4].map((sigma) =>
-    requestedExtentAt(composed, sigma)
+    extentAtScale(composed, sigma)
   );
   ok(
     "composition remains non-negative",
@@ -206,46 +224,52 @@ console.log("# size requests: closure and monotonicity");
 
   let negativeScaleRejected = false;
   try {
-    scaleRequest(-1, composed);
+    scaleExtent(-1, composed);
   } catch {
     negativeScaleRejected = true;
   }
   ok("negative scalar is rejected", negativeScaleRejected);
 }
 
-console.log("# size requests: explicit fit outcomes");
+console.log("# scale-dependent extents: explicit fit outcomes");
 {
-  const fixed = constantRequest(10);
+  const fixed = constantExtent(10);
   ok(
-    "a fixed request at its extent is underdetermined",
-    fitSizeRequest(fixed, 10).kind === "underdetermined"
+    "a fixed extent at the available extent is underdetermined",
+    fitScale(fixed, 10).kind === "underdetermined"
   );
+  const slack = fitScale(fixed, 20);
   ok(
-    "a fixed request below budget reports slack",
-    fitSizeRequest(fixed, 20).kind === "slack"
+    "slack preserves the full required extent and reports only unused pixels",
+    slack.kind === "slack" && slack.extent === 10 && slack.unused === 10,
+    JSON.stringify(slack)
   );
+  const overflow = fitScale(fixed, 5);
   ok(
-    "a fixed request above budget reports overflow",
-    fitSizeRequest(fixed, 5).kind === "overflow"
+    "overflow reports that no feasible scale can satisfy the hard extent",
+    overflow.kind === "overflow" &&
+      overflow.minimumExtent === 10 &&
+      overflow.deficit === 5,
+    JSON.stringify(overflow)
   );
 
-  const linear = sizeRequest({ slope: 2, intercept: 3 });
-  const fit = fitSizeRequest(linear, 13);
+  const linear = scaleDependentExtent({ slope: 2, intercept: 3 });
+  const fit = fitScale(linear, 13);
   ok(
-    "a growing affine request has an exact fit",
+    "a growing affine extent has an exact fit",
     fit.kind === "exact" && fit.sigma === 5 && fit.extent === 13,
     JSON.stringify(fit)
   );
 
-  const plateau = sizeRequest(
+  const plateau = scaleDependentExtent(
     { slope: 0, intercept: 10 },
     { slope: 2, intercept: 0 }
   );
   ok(
     "a minimum plateau reports underdetermination",
-    fitSizeRequest(plateau, 10).kind === "underdetermined"
+    fitScale(plateau, 10).kind === "underdetermined"
   );
-  const afterPlateau = fitSizeRequest(plateau, 12);
+  const afterPlateau = fitScale(plateau, 12);
   ok(
     "growth after a plateau has an exact least fit",
     afterPlateau.kind === "exact" && afterPlateau.sigma === 6,

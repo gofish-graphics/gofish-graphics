@@ -48,9 +48,9 @@ const stages = [
     id: "scale",
     label: "2 · scale",
     mechanism: "production scope roots and ScopeRegistry",
-    input: "scale-dependent size request R(σ) plus a pixel allocation",
+    input: "hard scale-dependent extent E(σ) plus a pixel allocation",
     output: "σ and/or an anchored data-to-pixel map",
-    note: "Today roots include the render root, coordinate boundaries, and some Layers. The target declares fit/inherit/share policy on Frames.",
+    note: "Today roots include the render root, coordinate boundaries, and some Layers. The target declares fitToExtent/inherit/share policy on Frames.",
   },
   {
     id: "intrinsic",

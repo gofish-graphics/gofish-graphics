@@ -41,10 +41,11 @@ Put the mathematical type before prose. Define domains, codomains, units, scope 
 ```text
 ScaleFactor_S = R_{≥0} [px / u_S]
 PixelExtent   = R_{≥0} [px]
-R_n : ScaleFactor_S → PixelExtent
+E_n : ScaleFactor_S → PixelExtent
 ```
 
-Then explain that `R_n(σ)` is node `n`'s requested pixel extent at scale factor `σ`. Do not make the prose carry information missing from the signature.
+Then explain that `E_n(σ)` is the pixel extent required by node `n` at scale
+factor `σ`. Do not make the prose carry information missing from the signature.
 
 Use `⇀`, `Option`, or `Result` when an operation can be undefined or fail; state the condition. Annotate affine quantities dimensionally so expressions such as `aσ + b` can be checked by units.
 
@@ -53,10 +54,17 @@ Maintain a notation ledger near the article or in a collapsible side panel:
 | Symbol | Type | Meaning | Scope | Units |
 | --- | --- | --- | --- | --- |
 | `σ` | `ScaleFactor_S` | scale chosen for scope `S` | scale scope `S` | `px/u_S` |
-| `R_n` | `ScaleFactor_S → PixelExtent` | size request for node `n` | node `n` | output in `px` |
+| `E_n` | `ScaleFactor_S → PixelExtent` | extent required by node `n` | node `n` | output in `px` |
 
 Define terminology at first use and use one term consistently. Prefer an established term when it matches the type and semantics; otherwise coin a descriptive compound term and explain the distinction.
-Audit the ledger for symbol overload; for example, do not use `R_n` for both a size request and node `n`'s right edge.
+Do not call a value a _request_, _proposal_, or _preference_ unless another
+component can accept it, override it, partially fulfill it, or reject it. A
+symbolic function that states the exact content extent at a chosen scale is a
+scale-dependent extent, not a negotiation. Distinguish full satisfaction with
+unused space (slack) from partial fulfillment.
+
+Audit the ledger for symbol overload; for example, do not use `E_n` for both a
+scale-dependent extent and node `n`'s right edge.
 
 ## Map the model to the implementation
 

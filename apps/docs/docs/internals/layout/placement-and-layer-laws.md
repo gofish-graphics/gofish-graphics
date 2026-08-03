@@ -58,7 +58,7 @@ covers:
 
 > **Layout engine series · Part 3 of 4**<br>
 > [1. How the Layout Engine Works](/internals/layout/how-layout-works) ·
-> [2. Frames, Scale Scopes, and Size Requests](/internals/layout/frames-scale-scopes-and-claims)
+> [2. Frames, Scale Scopes, and Scale-Dependent Extents](/internals/layout/frames-scale-scopes-and-claims)
 > · **3. Placement Solving and the Layer Laws** ·
 > [4. References, Coordinate Transport, and Scheduling](/internals/layout/references-coordinates-and-scheduling)
 
@@ -500,5 +500,5 @@ associative.
 
 ---
 
-> **Previous:** [Frames, Scale Scopes, and Size Requests](/internals/layout/frames-scale-scopes-and-claims)<br>
+> **Previous:** [Frames, Scale Scopes, and Scale-Dependent Extents](/internals/layout/frames-scale-scopes-and-claims)<br>
 > **Next:** [References, Coordinate Transport, and Scheduling](/internals/layout/references-coordinates-and-scheduling)

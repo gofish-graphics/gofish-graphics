@@ -1,6 +1,6 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
 // @wiki Underlying Space — /internals/core/underlying-space
-// @wiki Frames, Scale Scopes, and Size Requests — /internals/layout/frames-scale-scopes-and-claims
+// @wiki Frames, Scale Scopes, and Scale-Dependent Extents — /internals/layout/frames-scale-scopes-and-claims
 // </gofish-wiki>
 
 import { GoFishNode, placeUnplacedChild, type ToPixel } from "../_node";

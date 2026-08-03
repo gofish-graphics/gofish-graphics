@@ -1,5 +1,5 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
-// @wiki Frames, Scale Scopes, and Size Requests — /internals/layout/frames-scale-scopes-and-claims
+// @wiki Frames, Scale Scopes, and Scale-Dependent Extents — /internals/layout/frames-scale-scopes-and-claims
 // </gofish-wiki>
 
 /**

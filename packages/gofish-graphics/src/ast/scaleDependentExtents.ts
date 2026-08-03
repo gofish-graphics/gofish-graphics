@@ -1,27 +1,26 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
 // @wiki Core Layout Semantics v0 — /internals/core/layout-kernel
-// @wiki Frames, Scale Scopes, and Size Requests — /internals/layout/frames-scale-scopes-and-claims
+// @wiki Frames, Scale Scopes, and Scale-Dependent Extents — /internals/layout/frames-scale-scopes-and-claims
 // </gofish-wiki>
 
 /**
- * The proof-bearing size-request language for the layout kernel.
+ * The proof-bearing scale-dependent extent language for the layout kernel.
  *
- * A size request is the upper envelope of finitely many affine pieces on
- * sigma >= 0,
- * with an implicit zero piece:
+ * A scale-dependent content extent is the upper envelope of finitely many
+ * affine pieces on sigma >= 0, with an implicit zero piece:
  *
- *   requestedExtent(sigma) = max(0, a_1 sigma + b_1, ..., a_n sigma + b_n)
+ *   extent(sigma) = max(0, a_1 sigma + b_1, ..., a_n sigma + b_n)
  *
- * Slopes are finite and non-negative. Consequently every request denotes a
+ * Slopes are finite and non-negative. Consequently every value denotes a
  * finite, non-negative, continuous, non-decreasing, convex, piecewise-linear
- * function from scale factor to pixel extent.
+ * function from scale factor to the content's required pixel extent.
  * Keeping the representation closed and inspectable avoids the opaque numeric
  * inverses used by the legacy Monotonic.unknown escape hatch.
  *
  * The algebraic laws are laws of this denotation over exact real numbers.
  * JavaScript `number` is a numerical approximation: structural equality is
  * guaranteed only when the relevant arithmetic is exactly representable, and
- * callers comparing general floating-point requests need an explicit tolerance.
+ * callers comparing general floating-point extents need an explicit tolerance.
  */
 
 export type AffineExtent = Readonly<{
@@ -29,12 +28,19 @@ export type AffineExtent = Readonly<{
   intercept: number;
 }>;
 
-export type SizeRequest = Readonly<{
+export type ScaleDependentExtent = Readonly<{
   /** Canonically sorted pieces active on the upper envelope for sigma >= 0. */
   pieces: readonly AffineExtent[];
 }>;
 
-export type FitResult =
+/**
+ * The result of fitting a hard content extent into the available pixel extent.
+ *
+ * `slack` means the content's required extent is fully satisfied and pixels
+ * remain unused. `overflow` means no non-negative scale can satisfy the hard
+ * requirement. There is deliberately no partial-fulfillment result.
+ */
+export type ScaleFitResult =
   | {
       kind: "exact";
       sigma: number;
@@ -63,7 +69,7 @@ const normalizeNumber = (value: number): number =>
 const assertFinite = (value: number, label: string): void => {
   if (!Number.isFinite(value)) {
     throw new Error(
-      `Layout size request ${label} must be finite; received ${value}`
+      `Layout scale-dependent extent ${label} must be finite; received ${value}`
     );
   }
 };
@@ -73,7 +79,7 @@ const normalizedPiece = (piece: AffineExtent): AffineExtent => {
   assertFinite(piece.intercept, "intercept");
   if (piece.slope < 0) {
     throw new Error(
-      `Layout size-request slope must be non-negative; received ${piece.slope}`
+      `Layout scale-dependent extent slope must be non-negative; received ${piece.slope}`
     );
   }
   return {
@@ -131,28 +137,28 @@ const canonicalPieces = (input: readonly AffineExtent[]): AffineExtent[] => {
   return hull.slice(firstActive);
 };
 
-export const sizeRequest = (
+export const scaleDependentExtent = (
   ...pieces: readonly AffineExtent[]
-): SizeRequest => ({
+): ScaleDependentExtent => ({
   pieces: canonicalPieces(pieces),
 });
 
-export const zeroRequest = (): SizeRequest => sizeRequest();
+export const zeroExtent = (): ScaleDependentExtent => scaleDependentExtent();
 
-export const constantRequest = (extent: number): SizeRequest =>
-  sizeRequest({ slope: 0, intercept: extent });
+export const constantExtent = (extent: number): ScaleDependentExtent =>
+  scaleDependentExtent({ slope: 0, intercept: extent });
 
-export const dataRequest = (magnitude: number): SizeRequest =>
-  sizeRequest({ slope: magnitude, intercept: 0 });
+export const dataExtent = (magnitude: number): ScaleDependentExtent =>
+  scaleDependentExtent({ slope: magnitude, intercept: 0 });
 
-export const requestedExtentAt = (
-  value: SizeRequest,
+export const extentAtScale = (
+  value: ScaleDependentExtent,
   sigma: number
 ): number => {
   assertFinite(sigma, "input sigma");
   if (sigma < 0) {
     throw new Error(
-      `Layout size-request sigma must be non-negative; received ${sigma}`
+      `Layout scale-dependent extent sigma must be non-negative; received ${sigma}`
     );
   }
   return Math.max(
@@ -160,16 +166,20 @@ export const requestedExtentAt = (
   );
 };
 
-export const maxRequests = (...values: readonly SizeRequest[]): SizeRequest =>
-  sizeRequest(...values.flatMap((value) => value.pieces));
+export const maxExtents = (
+  ...values: readonly ScaleDependentExtent[]
+): ScaleDependentExtent =>
+  scaleDependentExtent(...values.flatMap((value) => value.pieces));
 
-export const addRequests = (...values: readonly SizeRequest[]): SizeRequest => {
-  let sum = zeroRequest();
+export const addExtents = (
+  ...values: readonly ScaleDependentExtent[]
+): ScaleDependentExtent => {
+  let sum = zeroExtent();
   for (const value of values) {
     // Canonicalize every intermediate envelope. Without this reduction, a
     // many-operand sum retains the full cartesian product until the final step
     // even though almost all of those affine pieces never bind.
-    sum = sizeRequest(
+    sum = scaleDependentExtent(
       ...sum.pieces.flatMap((left) =>
         value.pieces.map((right) => ({
           slope: left.slope + right.slope,
@@ -181,17 +191,17 @@ export const addRequests = (...values: readonly SizeRequest[]): SizeRequest => {
   return sum;
 };
 
-export const scaleRequest = (
+export const scaleExtent = (
   scalar: number,
-  value: SizeRequest
-): SizeRequest => {
+  value: ScaleDependentExtent
+): ScaleDependentExtent => {
   assertFinite(scalar, "scalar");
   if (scalar < 0) {
     throw new Error(
-      `Layout size-request scalar must be non-negative; received ${scalar}`
+      `Layout scale-dependent extent scalar must be non-negative; received ${scalar}`
     );
   }
-  return sizeRequest(
+  return scaleDependentExtent(
     ...value.pieces.map((piece) => ({
       slope: scalar * piece.slope,
       intercept: scalar * piece.intercept,
@@ -200,12 +210,12 @@ export const scaleRequest = (
 };
 
 /** Add a constant and clamp the physical extent back to zero. */
-export const shiftRequest = (
-  value: SizeRequest,
+export const shiftExtent = (
+  value: ScaleDependentExtent,
   offset: number
-): SizeRequest => {
+): ScaleDependentExtent => {
   assertFinite(offset, "offset");
-  return sizeRequest(
+  return scaleDependentExtent(
     ...value.pieces.map((piece) => ({
       slope: piece.slope,
       intercept: piece.intercept + offset,
@@ -214,39 +224,40 @@ export const shiftRequest = (
 };
 
 /**
- * Fit a size request to an allocated pixel budget without inventing an inverse.
+ * Solve only sigma so a hard scale-dependent content extent fits the available
+ * pixel extent, without inventing an inverse.
  *
- * Positive-growth requests have an exact canonical least solution whenever the
- * budget is at least the minimum extent. A flat request either fits at every
- * sigma, leaves slack, or already overflows. A plateau at the minimum likewise
- * reports underdetermination rather than pretending sigma=0 was uniquely
- * derived.
+ * Positive-growth extents have an exact canonical least solution whenever the
+ * available extent is at least the minimum. A flat extent either fits at every
+ * sigma, is fully satisfied with slack, or cannot fit at all. A plateau at the
+ * minimum likewise reports underdetermination rather than pretending sigma=0
+ * was uniquely derived.
  */
-export const fitSizeRequest = (
-  value: SizeRequest,
-  budget: number,
+export const fitScale = (
+  value: ScaleDependentExtent,
+  availableExtent: number,
   tolerance = 1e-9
-): FitResult => {
-  assertFinite(budget, "budget");
+): ScaleFitResult => {
+  assertFinite(availableExtent, "available extent");
   assertFinite(tolerance, "fit tolerance");
   if (tolerance < 0) {
     throw new Error(
-      `Layout size-request fit tolerance must be non-negative; received ${tolerance}`
+      `Layout scale-dependent extent fit tolerance must be non-negative; received ${tolerance}`
     );
   }
 
-  const minimumExtent = requestedExtentAt(value, 0);
-  if (budget < minimumExtent - tolerance) {
+  const minimumExtent = extentAtScale(value, 0);
+  if (availableExtent < minimumExtent - tolerance) {
     return {
       kind: "overflow",
       minimumExtent,
-      deficit: minimumExtent - budget,
+      deficit: minimumExtent - availableExtent,
     };
   }
 
   const maxSlope = Math.max(...value.pieces.map((piece) => piece.slope));
   if (maxSlope === 0) {
-    if (Math.abs(budget - minimumExtent) <= tolerance) {
+    if (Math.abs(availableExtent - minimumExtent) <= tolerance) {
       return {
         kind: "underdetermined",
         leastSigma: 0,
@@ -256,11 +267,11 @@ export const fitSizeRequest = (
     return {
       kind: "slack",
       extent: minimumExtent,
-      unused: budget - minimumExtent,
+      unused: availableExtent - minimumExtent,
     };
   }
 
-  if (Math.abs(budget - minimumExtent) <= tolerance) {
+  if (Math.abs(availableExtent - minimumExtent) <= tolerance) {
     const growsImmediately = value.pieces.some(
       (piece) =>
         Math.abs(piece.intercept - minimumExtent) <= tolerance &&
@@ -278,7 +289,9 @@ export const fitSizeRequest = (
   const sigma = Math.min(
     ...value.pieces
       .filter((piece) => piece.slope > 0)
-      .map((piece) => Math.max(0, (budget - piece.intercept) / piece.slope))
+      .map((piece) =>
+        Math.max(0, (availableExtent - piece.intercept) / piece.slope)
+      )
   );
-  return { kind: "exact", sigma, extent: requestedExtentAt(value, sigma) };
+  return { kind: "exact", sigma, extent: extentAtScale(value, sigma) };
 };

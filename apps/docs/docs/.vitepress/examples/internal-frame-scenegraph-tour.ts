@@ -49,7 +49,7 @@ const stages = [
     label: "2 · scale",
     focus: "scale ownership",
     source:
-      "Frame P solves the points' size request in polar axes and owns σₚ.",
+      "Frame P fits the points' scale-dependent extent in polar axes and owns σₚ.",
     consumer:
       "The root Frame does not re-solve σₚ merely because it observes a point.",
     invariant: "The LCA is a transport rendezvous, not a scale owner.",
@@ -72,7 +72,7 @@ const stages = [
     consumer:
       "The ports are transported into Cartesian root coordinates as constants.",
     invariant:
-      "Observing p or q neither moves them nor contributes their size request again.",
+      "Observing p or q neither moves them nor contributes their scale-dependent extent again.",
   },
   {
     id: "paint",

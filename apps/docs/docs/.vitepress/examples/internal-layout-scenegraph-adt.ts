@@ -198,9 +198,9 @@ const radialScaleRegion = gf.enclose(
   ]
 );
 
-// Frame P is an auto-sized coordinate/writability region in this toy scene.
+// Frame P is a content-sized coordinate/writability region in this toy scene.
 // Deriving its yellow background from the nested scale group makes the visual
-// containment claim true even when the scale group's contents change.
+// containment relation true even when the scale group's contents change.
 const framePRegion = gf.enclose(
   {
     padding: 16,
@@ -213,7 +213,7 @@ const framePRegion = gf.enclose(
   [
     gf.stackY({ spacing: 10, alignment: "middle" }, [
       text(
-        "Frame P · κᴾ · shell(P) ∈ R · body owner P",
+        "Frame P · κᴾ · P ∈ R · body owner P",
         9.5,
         palette.coordText,
         "760"
@@ -272,7 +272,7 @@ const nodes = [
     y: 106,
     w: 320,
     title: "Mark(id, intrinsicSpec)",
-    detail: "size request → intrinsic geometry",
+    detail: "scale-dependent extent → intrinsic geometry",
     fill: "#dbeafa",
     stroke: palette.targetStroke,
   }),

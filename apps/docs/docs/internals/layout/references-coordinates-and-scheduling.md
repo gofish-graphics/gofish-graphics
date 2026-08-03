@@ -9,17 +9,17 @@ glossary:
   title: Reference terms
   entries:
     - term: Frame
-      definition: "The target boundary declaring shell-extent, coordinate, and per-axis scale policy."
+      definition: "The target boundary declaring Frame-box extent, coordinate, and per-axis scale policy."
       href: "#term-frame"
     - term: Allocation
       definition: "A finite pixel extent offered by the root or a parent-owned sizing task; it is an input, not measured body size."
       href: "#term-allocation"
     - term: Extent policy
-      definition: "The per-axis rule that makes a Frame shell fixed, allocated, or auto-sized from its resolved body."
+      definition: "The per-axis rule that makes a Frame box fixed, allocated, or content-sized from its resolved body."
       href: "#term-extent-policy"
-    - term: Frame shell
-      definition: "A child Frame viewed as one writable box in its parent, distinct from nodes inside its body."
-      href: "#term-frame-shell"
+    - term: Frame box
+      definition: "The resolved geometry of a child Frame viewed as a writable parent-region target, not a second semantic object."
+      href: "#term-frame-box"
     - term: Placement region
       definition: "The writable targets and simultaneous facts owned by one Frame."
       href: "#term-placement-region"
@@ -59,7 +59,7 @@ covers:
 
 > **Layout engine series · Part 4 of 4**<br>
 > [1. How the Layout Engine Works](/internals/layout/how-layout-works) ·
-> [2. Frames, Scale Scopes, and Size Requests](/internals/layout/frames-scale-scopes-and-claims)
+> [2. Frames, Scale Scopes, and Scale-Dependent Extents](/internals/layout/frames-scale-scopes-and-claims)
 > · [3. Placement Solving and the Layer Laws](/internals/layout/placement-and-layer-laws)
 > · **4. References, Coordinate Transport, and Scheduling**
 
@@ -84,15 +84,17 @@ Frame R · Cartesian
 ```
 
 A <dfn id="term-frame">Frame</dfn> is the target boundary that declares one
-shell-extent policy, one coordinate context, and one scale policy per axis. Some
-extent policies consume an allocation supplied by the root or parent; an
-auto-sized Frame instead derives its shell extent after resolving its body. Its
+Frame-box extent policy, one coordinate context, and one scale policy per axis. Some
+extent policies consume an allocation supplied by the root or parent; a
+`content`-sized Frame instead derives its box extent after resolving its body. Its
 contents form one local writable
 <dfn id="term-placement-region">placement region</dfn>.
 
 The label belongs to `R`; the point belongs to `P`. `P` is also represented in
-`R` by a <dfn id="term-frame-shell">Frame shell</dfn>: an outer box that `R` may
-place without gaining write authority over `q` inside `P`.
+`R` by a <span id="term-frame-shell"></span><dfn id="term-frame-box">Frame
+box</dfn>: the resolved geometry of the child Frame target that `R` may place
+without gaining write authority over `q` inside `P`. `box(P)` is not a second
+node or identity distinct from `P`.
 
 The label needs a point exported from `q` as a
 <dfn id="term-geometry-port">geometry port</dfn>. It therefore runs after `q` is
@@ -109,12 +111,16 @@ interface ProgramIR {
   paint: Set<PaintEdge>;
 }
 
+interface ChildFrameDef {
+  frame: FrameId; // this Frame is the parent-region target
+}
+
 interface FrameIR {
   parent?: FrameId;
   coordToParent: CoordinateMap;
   extent: readonly [ExtentPolicy, ExtentPolicy];
   scale: readonly [ScalePolicy, ScalePolicy];
-  localNodes: Map<NodeId, MarkDef | FrameShell | DerivedDef>;
+  localNodes: Map<NodeId, MarkDef | ChildFrameDef | DerivedDef>;
   facts: Set<LocalFact>;
   derivedTasks: Set<DerivedTask>;
 }
@@ -125,7 +131,7 @@ from <dfn id="term-paint-order">paint order</dfn>. A task that waits for source
 ports and constructs a connector, enclosure, or label produces
 <dfn id="term-derived-geometry">derived geometry</dfn>.
 
-This is a target architecture, not a claim that production already implements
+This is a target architecture, not an assertion that production already implements
 all of it. **AS BUILT** paragraphs describe current behavior. **TARGET**
 paragraphs state the normalized semantics. **THEOREM** paragraphs state laws
 for that abstract system and identify the assumptions they need.
@@ -204,7 +210,7 @@ It ignores the consumer scale passed to its own `layout()`, but its
 `resolveUnderlyingSpace()` still proxies the source space upward.
 
 That last mismatch can let an observation contaminate or duplicate the consumer's
-scale-dependent size request.
+scale-dependent extent.
 
 The established production workaround is to put sources in an earlier inner tier
 and connectors, labels, hulls, or other observers in a later outer tier.
@@ -247,7 +253,7 @@ its home Frame. _Local_ means inside the same writable placement region;
 _nonlocal_ means outside it.
 
 `ConstraintTarget` is concrete because it always identifies a node and anchor.
-Only `PlacedRef<G>` is generic: $G$ is the requested geometry-port type.
+Only `PlacedRef<G>` is generic: $G$ is the selected geometry-port type.
 
 When a relation mixes the two, the placed reference lowers to a constant and the
 local target remains a variable.
@@ -269,7 +275,7 @@ relation or construct new derived geometry.
 It should not silently choose one source to move.
 
 <Badge type="info" text="THEOREM" /> Observing a source through a `PlacedRef` does
-not alter the source's scale, placement, or outward size request.
+not alter the source's scale, placement, or outward scale-dependent extent.
 
 This noninterference property is what makes dependency layering safe.
 
@@ -290,7 +296,7 @@ placement solve.
 
 1. solve the source in its home Frame;
 2. place it in its home coordinate system;
-3. compute the requested geometry port;
+3. compute the selected geometry port;
 4. transport that geometry into a common space;
 5. express it in the consumer's coordinates; and
 6. never re-solve or resize the source.
@@ -334,7 +340,7 @@ Cartesian connector and labels
 The points retain the scale chosen by their polar Frame.
 
 The Cartesian consumer receives resolved geometry rather than the original polar
-data-dependent size request.
+scale-dependent extent.
 
 This also separates geometry dependency from paint order.
 
@@ -364,7 +370,7 @@ another, and be unsupported when a required inverse does not exist.
 
 The current ref implementation does not yet make those cases explicit.
 
-## Allocation is an input; shell extent is a task result
+## Allocation is an input; Frame-box extent is a task result
 
 <Badge type="tip" text="TARGET" /> On axis $a$, keep these two values distinct:
 
@@ -378,7 +384,7 @@ to $F$ independently of $F$'s body. The root viewport or a parent-owned sizing
 task supplies it. `Allocation(F, a)` is therefore an input task, not an alias for
 `Bounds(F.body)`.
 
-`Extent(F, a)` is the resolved size of $F$'s shell in its parent's placement
+`Extent(F, a)` is the resolved size of $F$'s box in its parent's placement
 region. The <dfn id="term-extent-policy">extent policy</dfn> says how that task
 gets its value:
 
@@ -389,13 +395,13 @@ type ExtentPolicy =
   | { kind: "fixed"; px: PixelExtent }
   | { kind: "allocated" }
   | {
-      kind: "auto";
+      kind: "content";
       inset?: { before: PixelExtent; after: PixelExtent };
     };
 ```
 
 Let $B_F$ be the resolved body bounds after $F$'s coordinate map, expressed in
-the shell's parent-facing basis but before the parent places the shell. For
+the Frame box's parent-facing basis but before the parent places that box. For
 insets $i^-$ and $i^+$,
 
 $$
@@ -405,58 +411,65 @@ p & \text{if the policy is }\operatorname{fixed}(p),\\
 \operatorname{Allocation}(F,a)
   & \text{if the policy is }\operatorname{allocated},\\
 \operatorname{span}_a(B_F)+i^-+i^+
-  & \text{if the policy is }\operatorname{auto}.
+  & \text{if the policy is }\operatorname{content}.
 \end{cases}
 $$
 
-`fixed` and `allocated` extents exist before body layout. An `auto` extent exists
+`fixed` and `allocated` extents exist before body layout. A `content` extent exists
 only after the body's scale, intrinsic geometry, Frame-local placement, and local
 bounds exist. This distinction supplies the missing scheduler edges.
 
-An auto-sized shell is schedulable with an inherited scale when its coordinate
-map does not itself require that same shell extent.
+A content-sized Frame box is schedulable with an inherited scale when its coordinate
+map does not itself require that same box extent.
 
-The body's symbolic size request first contributes to the inherited scale
-identity's request join. The ancestor owner solves that joined request against
-its own pre-body extent; it does not wait for the child's auto shell.
-`RequestJoin(S, a)` below denotes the associative join of requests for scale
+The body's symbolic scale-dependent extent first contributes to the inherited scale
+identity's extent join. The ancestor owner solves that joined extent against
+its own pre-body extent; it does not wait for the child's content-sized box.
+`ExtentJoin(S, a)` below denotes the associative join of extents for scale
 identity $S$.
 
 ```text
-SizeRequest(F.body, a) → RequestJoin(S, a)
-RequestJoin(S, a) + Extent(owner(S), a)
+ScaleDependentExtent(F.body, a) → ExtentJoin(S, a)
+ExtentJoin(S, a) + Extent(owner(S), a)
     → Scale(S, a)
     → Scale(F, a) [inherit S]
     → Intrinsic(F.body)
     → Place(F)
     → BodyBounds(F)
-    → Extent(F, a) [auto]
+    → Extent(F, a) [content]
     → Place(parent(F))
 ```
 
 The child body can be solved before the parent knows where to place the child
-shell. `pixel` follows the same path without a scale task. If the coordinate map
+Frame box. `pixel` follows the same path without a scale task. If the coordinate map
 also consumes `Extent(F, a)`, the DAG exposes another extent cycle rather than
-treating `auto` as available.
+treating `content` as available.
 
-By contrast, `fit` needs a shell extent before it can solve the body's scale:
+By contrast, `fitToExtent` needs a Frame-box extent before it can solve the body's scale:
 
 ```text
-SizeRequest(F.body, a) + Extent(F, a) [fixed or allocated]
-    → Scale(F, a) [fit]
+ScaleDependentExtent(F.body, a) + Extent(F, a) [fixed or allocated]
+    → Scale(F, a) [fitToExtent]
 ```
 
-Pairing `fit` with `auto` on the same axis creates the cycle
+Pairing `fitToExtent` with `content` on the same axis creates the cycle
 `Extent → Scale → Intrinsic → BodyBounds → Extent`; v0 reports that cycle
-instead of guessing a fixed point. A shared-scale participant may be auto-sized
+instead of guessing a fixed point. A shared-scale participant may be content-sized
 after the shared scale is solved, but the one owner that fits the shared scale
 must have a fixed or allocated extent independent of its own body.
+
+`fitToExtent` varies only $\sigma$; it never partially fulfills the body's hard
+scale-dependent extent. If even $\sigma=0$ exceeds the Frame extent, v0 reports
+`InfeasibleExtent`. A constant extent below the Frame extent is fully satisfied
+with unused pixels, but does not determine $\sigma$ and therefore reports
+`UnderdeterminedScale` unless another policy supplies it. A plateau likewise
+requires an explicit endpoint policy or reports `UnderdeterminedScale`.
 
 <Badge type="info" text="AS BUILT" /> Production has no `ExtentPolicy` union and
 no explicit `Allocation` or `Extent` task records. `Frame(...)` immediately
 delegates to a Layer or coordinate node, and recursive `layout()` calls carry
 sizes through a partial, operator-specific schedule. The task semantics above is
-the normalization target; in particular, the target's explicit auto/fit cycle
+the normalization target; in particular, the target's explicit `content`/`fitToExtent` cycle
 diagnostic is not yet a production guarantee.
 
 ## What the scheduler should schedule
@@ -473,23 +486,23 @@ Same-Frame constraints contribute to one simultaneous fact set.
 
 The scheduler is for dependencies between computations whose outputs do not exist
 at the same time. Its task vocabulary includes the allocation input and resolved
-shell extent rather than treating “allocated extent” as an unexplained value:
+Frame-box extent rather than treating “allocated extent” as an unexplained value:
 
 ```text
 root/parent offer → Allocation(F, a) → Extent(F, a) [allocated]
 fixed pixels ──────────────────↗
 
-SizeRequest(F.body, a) + Extent(F, a) [pre-body]
-    → Scale(F, a) [fit]
+ScaleDependentExtent(F.body, a) + Extent(F, a) [pre-body]
+    → Scale(F, a) [fitToExtent]
 Scale(ancestor, a) → Scale(F, a) [inherit]
-RequestJoin(S, a) + Extent(owner(S), a) [pre-body]
+ExtentJoin(S, a) + Extent(owner(S), a) [pre-body]
     → Scale(S, a) → Scale(F, a) [share(S)]
 
 Scale(F, a)
     → Intrinsic(F.body)
     → Place(F)
     → BodyBounds(F)
-    → Extent(F, a) [auto, when requested]
+    → Extent(F, a) [content, when needed]
 
 Bounds(source)
     → Transport(ref port)
@@ -537,8 +550,8 @@ defines that cycle.
 
 The `ProgramIR`, `FrameIR`, `ConstraintTarget`, and `PlacedRef` records introduced
 near the beginning are enough for the normalized engine. Transparent Layers
-disappear into immutable Fragments before evaluation; Frames and their shell/body
-distinction remain.
+disappear into immutable Fragments before evaluation; each Frame remains a box in
+its parent and a body containing its own local problem.
 
 An independent implementation can then use the following sequence:
 
@@ -546,15 +559,15 @@ An independent implementation can then use the following sequence:
 2. Reject missing and ambiguous targets.
 3. Normalize transparent Layers into Frame-local node and fact sets.
 4. Build the cross-Frame and derived-geometry task DAG.
-5. Fold each Frame's symbolic size requests.
+5. Fold each Frame body's symbolic scale-dependent extents.
 6. Seed root/parent `Allocation` inputs and constant `fixed` extents.
-7. Execute ready scale tasks; `fit` waits for a pre-body extent, `inherit` waits
+7. Execute ready scale tasks; `fitToExtent` waits for a pre-body extent, `inherit` waits
    for its ancestor scale, and `share(id)` waits for its owner extent and joined
-   requests.
+   scale-dependent extents.
 8. Compute intrinsic boxes, close strong `(min, size)` facts, and solve
    fixed-size anchor differences inside each ready Frame.
-9. Apply coordinate maps needed for parent-facing body bounds, resolve `auto`
-   shell extents, and unblock parent placement tasks.
+9. Apply coordinate maps needed for parent-facing body bounds, resolve `content`
+   Frame-box extents, and unblock parent placement tasks.
 10. Compute exported geometry ports.
 11. Transport ports and build derived geometry.
 12. Solve paint order and lower to a display list.
@@ -565,13 +578,14 @@ fallback.
 Useful failure categories include:
 
 - incompatible measures;
-- empty, unbounded, or set-valued scale fits;
+- `InfeasibleExtent` or `UnderdeterminedScale` from an empty, unbounded, or
+  set-valued scale fit;
 - conflicting box equations;
 - a nonzero difference cycle;
 - an unknown or ambiguous target;
 - a cross-Frame dependency cycle;
 - unsupported geometry transport; and
-- overflow without an explicit clipping policy.
+- non-finite geometry.
 
 The executable `layoutKernel.ts` is currently only the same-Frame, known-size
 placement slice of this design.
@@ -585,23 +599,23 @@ pipeline and not evidence that every surface program already conforms.
 
 These laws separate established mathematics from end-to-end conformance goals.
 
-| Property                                                        | Kind                            |
-| --------------------------------------------------------------- | ------------------------------- |
-| Size-request `max` is associative, commutative, and idempotent  | Exact-real size-request algebra |
-| Size-request addition is associative and commutative            | Exact-real size-request algebra |
-| Canonical request hull equality is pointwise semantic equality  | Size-request algebra            |
-| Request evaluation preserves `max` and addition                 | Size-request algebra            |
-| A strictly increasing request has at most one equality solution | Size-request algebra            |
-| Two independent box equations uniquely determine `(min, size)`  | Placement algebra               |
-| Relation edges are feasible iff every signed cycle sums to zero | Placement algebra               |
-| Component pins are feasible iff they imply one translation      | Placement algebra               |
-| A consistent difference component is unique modulo translation  | Placement algebra               |
-| A fixed placement fact multiset is permutation-invariant        | Kernel conformance target       |
-| Transparent Layer identity and associativity                    | Core conformance target         |
-| Node and fact storage permutations preserve geometry            | Core conformance target         |
-| A `PlacedRef` cannot alter source scale or geometry             | Reference conformance target    |
-| A complete task DAG is independent of topological schedule      | Scheduler conformance target    |
-| Paint order is permutation-invariant                            | Deliberately false              |
+| Property                                                                 | Kind                         |
+| ------------------------------------------------------------------------ | ---------------------------- |
+| Scale-dependent-extent `max` is associative, commutative, and idempotent | Exact-real extent algebra    |
+| Scale-dependent-extent addition is associative and commutative           | Exact-real extent algebra    |
+| Canonical extent-hull equality is pointwise semantic equality            | Extent algebra               |
+| Extent evaluation preserves `max` and addition                           | Extent algebra               |
+| A strictly increasing extent has at most one equality solution           | Extent algebra               |
+| Two independent box equations uniquely determine `(min, size)`           | Placement algebra            |
+| Relation edges are feasible iff every signed cycle sums to zero          | Placement algebra            |
+| Component pins are feasible iff they imply one translation               | Placement algebra            |
+| A consistent difference component is unique modulo translation           | Placement algebra            |
+| A fixed placement fact multiset is permutation-invariant                 | Kernel conformance target    |
+| Transparent Layer identity and associativity                             | Core conformance target      |
+| Node and fact storage permutations preserve geometry                     | Core conformance target      |
+| A `PlacedRef` cannot alter source scale or geometry                      | Reference conformance target |
+| A complete task DAG is independent of topological schedule               | Scheduler conformance target |
+| Paint order is permutation-invariant                                     | Deliberately false           |
 
 The conformance properties need differential tests from surface `Layer`, `Frame`,
 and `ref` programs into normalized kernel records.
@@ -622,12 +636,12 @@ Every layout change or agent brief should answer:
 - Is this describing production behavior, target semantics, or the executable
   reference kernel?
 - What is the Frame's extent policy? If it is `allocated`, which root or
-  parent-owned task supplies `Allocation(F, axis)`? If it is `auto`, which
+  parent-owned task supplies `Allocation(F, axis)`? If it is `content`, which
   already-available scale makes its body resolvable?
 - What scale policy does the Frame declare, and which scale scope performs the
   solve?
 - Is each operand a writable local `ConstraintTarget` or a read-only `PlacedRef`?
-- Which phase owns the behavior: size request, scale, intrinsic layout, placement, bounds,
+- Which phase owns the behavior: scale-dependent extent, scale, intrinsic layout, placement, bounds,
   transport, derived geometry, or paint?
 - Which collections are unordered fact sets, and which are explicit sequences?
 - Which theorem should the change preserve?
@@ -636,8 +650,8 @@ Every layout change or agent brief should answer:
 
 The shortest durable mental model is this:
 
-> A Frame declares shell-extent, scale, and coordinate policy; an allocation is
-> an explicit root/parent input when that extent policy requests one; a Layer
+> A Frame declares Frame-box extent, scale, and coordinate policy; an allocation is
+> an explicit root/parent input when that extent policy needs one; a Layer
 > contributes unordered facts to its local placement region; the placement solver
 > solves those facts jointly; a PlacedRef observes completed geometry without
 > moving its source; the task DAG orders dependencies between Frames; and paint
@@ -647,6 +661,6 @@ The shortest durable mental model is this:
 
 > **Layout engine series · Part 4 of 4**<br>
 > [1. How the Layout Engine Works](/internals/layout/how-layout-works) ·
-> [2. Frames, Scale Scopes, and Size Requests](/internals/layout/frames-scale-scopes-and-claims)
+> [2. Frames, Scale Scopes, and Scale-Dependent Extents](/internals/layout/frames-scale-scopes-and-claims)
 > · [3. Placement Solving and the Layer Laws](/internals/layout/placement-and-layer-laws)
 > · **4. References, Coordinate Transport, and Scheduling**

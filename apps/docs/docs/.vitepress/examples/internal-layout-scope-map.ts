@@ -278,7 +278,12 @@ const nodes = [
   at(
     228,
     146,
-    text("radial scale scope Sᵣ · fit in P", 10, palette.scaleText, "760")
+    text(
+      "radial scale scope Sᵣ · fitToExtent in P",
+      10,
+      palette.scaleText,
+      "760"
+    )
   ),
   at(540, 214, text("PlacedRef ports → consumers", 10, palette.muted, "760")),
   at(
@@ -309,9 +314,9 @@ const nodes = [
   ),
 ];
 
-// fit: one new purple identity is owned locally.
+// fitToExtent: one new purple identity is owned locally.
 nodes.push(
-  ...policyPanel(24, "fit", "new local S", [
+  ...policyPanel(24, "fitToExtent", "new local S", [
     at(
       68,
       480,
@@ -455,7 +460,7 @@ const applyViewport = () => {
   if (!svg) return false;
 
   // GoFish currently sizes this absolute-positioned Layer from its conservative
-  // size request, which is wider than the actual drawing. Supply the intended
+  // conservative pre-layout extent estimate, which is wider than the actual drawing. Supply the intended
   // viewport explicitly so the complete scope map scales into the article column.
   svg.setAttribute("viewBox", `40 40 ${W} ${H}`);
   svg.setAttribute("width", String(W));
