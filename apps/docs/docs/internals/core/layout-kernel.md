@@ -47,7 +47,9 @@ implementation in this change makes three deliberately bounded pieces executable
   `PlacedPort` supplied to it is already resolved and transported into the consumer
   frame. Frame construction, allocation/extent resolution, scale ownership,
   coordinate transport, name lowering, and the full task DAG remain upstream
-  obligations; this subkernel does not pretend to prove them.
+  obligations; this subkernel does not pretend to prove them. Its solved axes now
+  include exact occupied bounds summarized from the same component potentials as
+  placement.
 - the production underlying-space fold now has a lossless `none | one | mixed`
   measure state, eliminating one concrete violation of layer associativity.
 
@@ -428,7 +430,7 @@ fixed. If the equations are consistent, both sides yield the same boxes and scal
 If they are inconsistent, both yield the same canonical conflict set.
 
 An unpinned placement component has translation freedom. The kernel fixes that
-gauge by translating the component so its minimum finite occupied coordinate is
+gauge by translating the component so the minimum of its box-min coordinates is
 zero. A lone unconstrained target is placed at the local origin. Remaining rank
 deficiency in an extent or scale is `UnderdeterminedLayout`; it is not resolved by
 choosing the first declaration.
@@ -437,6 +439,54 @@ If an ordered operator needs a different gauge—such as keeping the head of a
 negative-gap distribute path at zero—its lowering emits that origin as an explicit
 pin. The generic solver never recovers semantic order by inspecting fact storage or
 owner strings.
+
+### Known-size body bounds
+
+Fix one Frame-local axis after every node has a finite size $s_v\geq 0$. If
+canonical placement gives box minimum $x_v$, that node occupies the closed interval
+
+$$
+I_v=[x_v,x_v+s_v].
+$$
+
+The axis body bounds have type
+
+$$
+\operatorname{BodyBounds}_a:
+\operatorname{SolvedAxis}_a\longrightarrow\operatorname{Interval}_{\bot},
+$$
+
+where $\bot$ means that the axis contains no geometry. For a nonempty node set,
+
+$$
+\operatorname{BodyBounds}_a
+=
+\left[
+\min_v x_v,
+\max_v(x_v+s_v)
+\right].
+$$
+
+Its scalar occupied extent is the difference between those endpoints. The kernel
+MUST NOT identify $\bot$ with the occupied point interval $[0,0]$: an enclosing
+Frame policy may map empty content to a zero box extent, but that is a later policy
+decision. `layoutKernel.ts` represents $\bot$ as `bounds: null`.
+
+For a component $C$ with relative potentials $r_v$ and chosen translation $t_C$,
+an implementation MAY compute the same result without first materializing every
+box:
+
+$$
+B_C^- = t_C + \min_{v\in C}r_v,
+\qquad
+B_C^+ = t_C + \max_{v\in C}(r_v+s_v).
+$$
+
+Hulling these component summaries MUST equal hulling the intervals returned by
+full placement. Placement and bounds may be fused into one traversal, but they are
+not allowed to use divergent constraint interpretations or gauge policies. A
+conflict returns neither partial placement nor partial bounds, and every derived
+coordinate, endpoint, and occupied extent MUST remain finite.
 
 ## 7. Proof sketches for the executable laws
 
@@ -457,6 +507,26 @@ differ by one translation. Consistent pins determine that translation; without a
 pin, the minimum-at-zero gauge determines it. Thus a consistent component has one
 canonical solution independent of fact order. A nonzero cycle or disagreeing pins is
 an order-independent conflict.
+
+**Known-size body-bounds coherence.** Canonical placement has
+$x_v=r_v+t_C$. Distributing the global minimum and maximum over connected
+components gives
+
+$$
+\min_v x_v=\min_C\left(t_C+\min_{v\in C}r_v\right),
+$$
+
+and
+
+$$
+\max_v(x_v+s_v)
+=
+\max_C\left(t_C+\max_{v\in C}(r_v+s_v)\right).
+$$
+
+Those are exactly the component-summary endpoints above. Therefore summarizing a
+valid solve plan and placing its cells and then taking their hull commute. Combined
+with placement confluence, bounds are also independent of fact traversal order.
 
 **Placed-reference immutability.** A transported `PlacedRef` lowers to a numeric
 constant, never to the source node's writable variable. Local equations can position

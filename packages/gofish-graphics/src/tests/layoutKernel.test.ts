@@ -29,6 +29,7 @@ import {
   type ConflictOutcome,
   type Fragment,
   type NodeId,
+  type SolvedAxis,
   type SolveOutcome,
   type SolvedLayout,
 } from "../ast/layoutKernel";
@@ -95,6 +96,14 @@ function expectConflict(
   );
   return outcome;
 }
+
+const cellHull = (axis: SolvedAxis): SolvedAxis["bounds"] =>
+  axis.cells.length === 0
+    ? null
+    : {
+        min: Math.min(...axis.cells.map((cell) => cell.min)),
+        max: Math.max(...axis.cells.map((cell) => cell.min + cell.size)),
+      };
 
 const A = nodeId("A");
 const B = nodeId("B");
@@ -215,6 +224,67 @@ test("child and fact permutations have identical geometry", () => {
   }
 });
 
+test("known-size bounds equal the hull of canonical placement", () => {
+  const cases = [
+    EMPTY_FRAGMENT,
+    fragment({ nodes: [node(A, 0, 0)] }),
+    fragment({
+      nodes: [node(A, 10), node(B, 20)],
+      pins: [pin("x", start(A), -20)],
+      relations: [relation("x", end(A), start(B), -15)],
+    }),
+    fragment({
+      nodes: [node(A), node(B), node(C), node(D)],
+      pins: [pin("x", start(A), 95), pin("x", start(C), 295)],
+      relations: [
+        relation("x", end(A), start(B), 5),
+        relation("x", end(C), start(D), 5),
+      ],
+    }),
+  ];
+
+  for (const value of cases) {
+    const solved = expectSolved(solveFragment(value));
+    for (const axis of ["x", "y"] as const)
+      assertEqual(
+        solved.axes[axis].bounds,
+        cellHull(solved.axes[axis]),
+        `${axis} bounds/placement coherence`
+      );
+  }
+
+  const empty = expectSolved(solveFragment(EMPTY_FRAGMENT));
+  assert(empty.axes.x.bounds === null, "empty geometry acquired a bounds box");
+  const point = expectSolved(
+    solveFragment(fragment({ nodes: [node(A, 0, 0)] }))
+  );
+  assertEqual(
+    point.axes.x.bounds,
+    { min: 0, max: 0 },
+    "zero-size geometry was confused with empty geometry"
+  );
+});
+
+test("bounds include the separation between disconnected pinned components", () => {
+  const solved = expectSolved(
+    solveFragment(
+      fragment({
+        nodes: [node(A), node(B), node(C), node(D)],
+        pins: [pin("x", start(A), 95), pin("x", start(C), 295)],
+        relations: [
+          relation("x", end(A), start(B), 5),
+          relation("x", end(C), start(D), 5),
+        ],
+      })
+    )
+  );
+  assertEqual(solved.axes.x.bounds, { min: 95, max: 320 }, "global hull");
+  assert(
+    solved.axes.x.bounds!.max - solved.axes.x.bounds!.min === 225,
+    "occupied extent omitted inter-component separation"
+  );
+});
+
 test("align-like relation sets are permutation invariant", () => {
   const base = [node(A, 10), node(B, 20), node(C, 30)];
   const alignAB = relation("x", middle(A), middle(B));
@@ -327,6 +397,44 @@ test("compatible pins give a unique component and incompatible pins conflict", (
     ),
     "inconsistent-pins"
   );
+});
+
+test("relation conflicts return no partial placement or bounds", () => {
+  const outcome = solveFragment(
+    fragment({
+      nodes: [node(A), node(B), node(C)],
+      relations: [
+        relation("x", start(A), start(B), 10),
+        relation("x", start(B), start(C), 10),
+        relation("x", start(A), start(C), 25),
+      ],
+    })
+  );
+  const conflict = expectConflict(outcome, "inconsistent-relation-cycle");
+  assert(!("axes" in conflict), "conflict exposed a partial solved axis");
+});
+
+test("derived non-finite coordinates fail atomically", () => {
+  expectConflict(
+    solveFragment(
+      fragment({
+        nodes: [node(A, Number.MAX_VALUE), node(B, 0)],
+        relations: [
+          relation("x", end(A), start(B), Number.MAX_VALUE),
+        ],
+      })
+    ),
+    "invalid-number"
+  );
+
+  const endpointOverflow = solveFragment(
+    fragment({
+      nodes: [node(A, Number.MAX_VALUE)],
+      pins: [pin("x", start(A), Number.MAX_VALUE)],
+    })
+  );
+  const conflict = expectConflict(endpointOverflow, "invalid-number");
+  assert(!("axes" in conflict), "numeric failure exposed partial bounds");
 });
 
 test("dependency scheduling is invariant and cycle diagnostics are canonical", () => {
@@ -454,6 +562,19 @@ test("absolute translation shifts pinned components and preserves differences", 
       solvedMin(shifted, "x", B)! - solvedMin(shifted, "x", A)!,
     "relative solution changed"
   );
+  assertEqual(
+    shifted.axes.x.bounds,
+    {
+      min: original.axes.x.bounds!.min + 37,
+      max: original.axes.x.bounds!.max + 37,
+    },
+    "bounds translation"
+  );
+  assert(
+    shifted.axes.x.bounds!.max - shifted.axes.x.bounds!.min ===
+      original.axes.x.bounds!.max - original.axes.x.bounds!.min,
+    "translation changed occupied extent"
+  );
 });
 
 test("disconnected components are local and free components normalize at min zero", () => {
@@ -478,6 +599,16 @@ test("disconnected components are local and free components normalize at min zer
     );
   assert(solvedMin(one, "x", C) === 3, "free relative predecessor");
   assert(solvedMin(one, "x", D) === 0, "free component min is not zero");
+  assertEqual(
+    one.axes.x.bounds,
+    { min: 0, max: 25 },
+    "pinned and free component hull"
+  );
+  assertEqual(
+    two.axes.x.bounds,
+    { min: 0, max: 110 },
+    "disconnected pin did not expand only the aggregate hull"
+  );
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

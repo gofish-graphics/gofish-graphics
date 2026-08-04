@@ -32,6 +32,9 @@ glossary:
     - term: Gauge
       definition: "A canonical origin chosen for an otherwise unpinned component."
       href: "#term-gauge"
+    - term: Body bounds
+      definition: "The exact hull of the occupied intervals produced by Frame-local placement."
+      href: "#term-body-bounds"
     - term: Placed reference
       definition: "A read-only source geometry value that lowers to a constant in a local placement problem."
       href: "#term-placed-reference"
@@ -315,6 +318,102 @@ The two algebraic conflicts are now explicit:
 A useful structured diagnostic would retain the complete cycle or pin-to-pin path
 as a witness. Production currently reports the conflicting owners plus asserted
 and implied values, but not the whole path.
+
+### Known-size placement determines body bounds
+
+Placement and extent are not separate guesses in this subset. They are two views
+of the same solved component potentials.
+
+For a known finite size $s_v\geq0$, a placed node occupies the one-axis interval
+
+$$
+I_v(x)=[x_v,x_v+s_v].
+$$
+
+The <dfn id="term-body-bounds">body bounds</dfn> operation has type
+
+$$
+\operatorname{BodyBounds}_a:
+\operatorname{SolvedAxis}_a\longrightarrow\operatorname{Interval}_{\bot}.
+$$
+
+$\bot$ is the empty hull. It is different from $[0,0]$, which may be the real
+occupied interval of a zero-size node at the origin. For nonempty $V$,
+
+$$
+\operatorname{BodyBounds}_a(x)
+=
+\left[
+\min_{v\in V}x_v,
+\max_{v\in V}(x_v+s_v)
+\right],
+$$
+
+and its scalar occupied extent is
+
+$$
+W_a=\max_{v\in V}(x_v+s_v)-\min_{v\in V}x_v.
+$$
+
+The same answer can be projected directly from the component plan. If component
+$C$ has potentials $r_v$ and translation $t_C$, define
+
+$$
+B_C^- = t_C+\min_{v\in C}r_v,
+\qquad
+B_C^+ = t_C+\max_{v\in C}(r_v+s_v).
+$$
+
+The global body bounds are
+
+$$
+\left[\min_C B_C^-,\max_C B_C^+\right].
+$$
+
+<Badge type="info" text="THEOREM" /> **Known-size body-bounds coherence.** For
+finite non-negative intrinsic sizes, a consistent fixed fact multiset, and the
+same pin/gauge policy, component-summary bounds equal the hull of canonical full
+placement:
+
+$$
+\operatorname{BoundsSummary}(K)
+=
+\operatorname{Hull}(\operatorname{Place}(K)).
+$$
+
+**Proof sketch.** Consistency makes each $r_v$ path-independent, and the pins or
+gauge choose one $t_C$. Substituting $x_v=r_v+t_C$ into the two hull endpoints
+and grouping nodes by component gives exactly $B_C^-$ and $B_C^+$.
+
+This handles the far-apart-distributes case without a special rule. If one
+component occupies $[95,120]$ and another occupies $[295,320]$, their body bounds
+are $[95,320]$ and their occupied extent is $225$. Adding their local widths, or
+overlaying their local extents at zero, would lose the separation introduced by
+the pins.
+
+A common translation by $\delta$ translates both bounds endpoints by $\delta$
+and preserves $W_a$. Translating one disconnected component may change the global
+hull. Multiple unpinned components currently overlay at their independently chosen
+minimum-at-zero gauges; that is a policy, not a consequence of the equalities.
+
+Both component summarization and materialized placement visit the sparse graph, so
+both are $O(|V|+|E|)$. Summarization can avoid allocating every final box, but it
+is not asymptotically cheaper. The useful simplification is one normalized solve
+plan with coherent placement and bounds projections, not two unrelated solvers.
+
+This theorem does **not** say that a Frame with `fixed(A)` has body extent $A$.
+Containment, translation into the frame box, overflow, clipping, and errors belong
+to the later Frame-fit policy. It also does not yet cover scale-dependent sizes,
+choice, nonlinear coordinate maps, or custom silhouettes.
+
+<Badge type="info" text="AS BUILT" /> The reference `layoutKernel.ts` now returns
+these bounds with its cells and checks the coherence law directly. Production's
+rank-two placement solver already materializes the authoritative positioned cells,
+but currently writes them into mutable nodes and discards the solve result; Layer
+then reads child boxes back and folds them again. The safe migration is to return
+the covered-cell bounds from that solve and union only children the placement
+program did not cover. Layer's special painted-y fold is deliberately separate:
+it summarizes post-scope painted geometry, not ordinary placement intervals.
 
 ### Placed references lower to constants
 

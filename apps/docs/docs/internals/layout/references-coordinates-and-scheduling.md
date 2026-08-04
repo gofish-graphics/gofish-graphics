@@ -588,7 +588,7 @@ Useful failure categories include:
 - non-finite geometry.
 
 The executable `layoutKernel.ts` is currently only the same-Frame, known-size
-placement slice of this design.
+placement-and-occupied-bounds slice of this design.
 
 Its placed ports are assumed to have already been resolved and transported.
 
@@ -610,6 +610,7 @@ These laws separate established mathematics from end-to-end conformance goals.
 | Relation edges are feasible iff every signed cycle sums to zero          | Placement algebra            |
 | Component pins are feasible iff they imply one translation               | Placement algebra            |
 | A consistent difference component is unique modulo translation           | Placement algebra            |
+| Component-summary bounds equal the hull of known-size placement          | Placement algebra            |
 | A fixed placement fact multiset is permutation-invariant                 | Kernel conformance target    |
 | Transparent Layer identity and associativity                             | Core conformance target      |
 | Node and fact storage permutations preserve geometry                     | Core conformance target      |

@@ -296,6 +296,11 @@ const fail = (
     status: "conflict",
     conflict: freeze({ kind, message, ids: freeze([...ids]), ...details }),
   });
+const nonFinite = (
+  message: string,
+  ids: readonly string[],
+  axis: Axis
+): ConflictOutcome => fail("invalid-number", message, ids, { axis });
 
 interface Prepared {
   readonly status: "prepared";
@@ -470,44 +475,76 @@ function lowerPrepared(
     node: NodeId,
     value: number,
     source: PotentialPin["source"]
-  ) => pins.push(freeze({ node, value: normalized(value), source }));
+  ): ConflictOutcome | undefined => {
+    if (!Number.isFinite(value))
+      return nonFinite(
+        `Anchor lowering produced a non-finite ${axis} pin on ${node}`,
+        [node],
+        axis
+      );
+    pins.push(freeze({ node, value: normalized(value), source }));
+    return undefined;
+  };
 
   for (const fact of input.pins) {
     if (fact.axis !== axis) continue;
     const node = prepared.nodes.get(fact.target.node)!;
-    addPin(
+    const error = addPin(
       node.id,
       fact.value - anchorOffset(node, axis, fact.target.anchor),
       "pin"
     );
+    if (error !== undefined) return error;
   }
   for (const fact of input.relations) {
     if (fact.axis !== axis) continue;
     const from = endpointTerm(fact.from, axis, prepared);
     const to = endpointTerm(fact.to, axis, prepared);
-    if ("node" in from && "node" in to)
+    if ("node" in from && "node" in to) {
+      const delta = from.offset + fact.gap - to.offset;
+      if (!Number.isFinite(delta))
+        return nonFinite(
+          `Anchor lowering produced a non-finite ${axis} relation`,
+          [from.node, to.node],
+          axis
+        );
       equations.push(
         freeze({
           from: from.node,
           to: to.node,
-          delta: normalized(from.offset + fact.gap - to.offset),
+          delta: normalized(delta),
         })
       );
-    else if ("value" in from && "node" in to)
-      addPin(to.node, from.value + fact.gap - to.offset, "placed-port");
-    else if ("node" in from && "value" in to)
-      addPin(from.node, to.value - fact.gap - from.offset, "placed-port");
-    else if (
-      "value" in from &&
-      "value" in to &&
-      Math.abs(to.value - from.value - fact.gap) > TOLERANCE
-    )
-      return fail(
-        "inconsistent-placed-relation",
-        `Placed relation on ${axis} is inconsistent`,
-        [endpointKey(fact.from), endpointKey(fact.to)],
-        { axis, asserted: to.value, implied: from.value + fact.gap }
+    } else if ("value" in from && "node" in to) {
+      const error = addPin(
+        to.node,
+        from.value + fact.gap - to.offset,
+        "placed-port"
       );
+      if (error !== undefined) return error;
+    } else if ("node" in from && "value" in to) {
+      const error = addPin(
+        from.node,
+        to.value - fact.gap - from.offset,
+        "placed-port"
+      );
+      if (error !== undefined) return error;
+    } else if ("value" in from && "value" in to) {
+      const implied = from.value + fact.gap;
+      if (!Number.isFinite(implied))
+        return nonFinite(
+          `Placed relation produced a non-finite ${axis} value`,
+          [endpointKey(fact.from), endpointKey(fact.to)],
+          axis
+        );
+      if (Math.abs(to.value - implied) > TOLERANCE)
+        return fail(
+          "inconsistent-placed-relation",
+          `Placed relation on ${axis} is inconsistent`,
+          [endpointKey(fact.from), endpointKey(fact.to)],
+          { axis, asserted: to.value, implied }
+        );
+    }
   }
   return freeze({
     status: "lowered",
@@ -546,9 +583,17 @@ export interface SolvedComponent {
   readonly pinned: boolean;
 }
 
+/** Exact hull of the occupied intervals on one solved axis. */
+export interface AxisBounds {
+  readonly min: number;
+  readonly max: number;
+}
+
 export interface SolvedAxis {
   readonly cells: readonly SolvedCell[];
   readonly components: readonly SolvedComponent[];
+  /** `null` means that the fragment contains no geometry on this axis. */
+  readonly bounds: AxisBounds | null;
 }
 
 interface PotentialEdge {
@@ -588,7 +633,14 @@ function solveAxis(
       const current = queue[i];
       members.push(current);
       for (const edge of graph.get(current)!) {
-        const expected = normalized(relative.get(current)! + edge.delta);
+        const rawExpected = relative.get(current)! + edge.delta;
+        if (!Number.isFinite(rawExpected))
+          return nonFinite(
+            `Relation propagation produced a non-finite ${lowered.axis} coordinate`,
+            [current, edge.node],
+            lowered.axis
+          );
+        const expected = normalized(rawExpected);
         const prior = relative.get(edge.node);
         if (prior === undefined) {
           relative.set(edge.node, expected);
@@ -610,9 +662,16 @@ function solveAxis(
   for (const pin of lowered.pins) {
     const index = componentOf.get(pin.node)!;
     const values = pinOffsets.get(index) ?? [];
+    const value = pin.value - relative.get(pin.node)!;
+    if (!Number.isFinite(value))
+      return nonFinite(
+        `Pin resolution produced a non-finite ${lowered.axis} translation`,
+        [pin.node],
+        lowered.axis
+      );
     values.push({
       node: pin.node,
-      value: normalized(pin.value - relative.get(pin.node)!),
+      value: normalized(value),
     });
     pinOffsets.set(index, values);
   }
@@ -621,7 +680,9 @@ function solveAxis(
   for (let index = 0; index < components.length; index++) {
     const values = pinOffsets.get(index);
     if (values === undefined) {
-      const min = Math.min(...components[index].map((id) => relative.get(id)!));
+      let min = Infinity;
+      for (const id of components[index])
+        min = Math.min(min, relative.get(id)!);
       translations.set(index, normalized(-min));
       continue;
     }
@@ -642,17 +703,39 @@ function solveAxis(
     translations.set(index, first.value);
   }
 
+  // Materialize each occupied interval once and fold those exact endpoints
+  // into the axis hull. Placement and bounds are one atomic solve result.
+  const cells: SolvedCell[] = [];
+  let boundsMin = Infinity;
+  let boundsMax = -Infinity;
+  for (const id of lowered.nodes) {
+    const index = componentOf.get(id)!;
+    const min = normalized(relative.get(id)! + translations.get(index)!);
+    const size = nodes.get(id)!.size[lowered.axis];
+    const max = min + size;
+    if (!Number.isFinite(min) || !Number.isFinite(max))
+      return nonFinite(
+        `Placed ${lowered.axis} interval on ${id} is non-finite`,
+        [id],
+        lowered.axis
+      );
+    cells.push(freeze({ node: id, min, size }));
+    boundsMin = Math.min(boundsMin, min);
+    boundsMax = Math.max(boundsMax, max);
+  }
+  if (cells.length > 0 && !Number.isFinite(boundsMax - boundsMin))
+    return nonFinite(
+      `Occupied ${lowered.axis} extent is non-finite`,
+      lowered.nodes,
+      lowered.axis
+    );
+  const bounds =
+    cells.length === 0
+      ? null
+      : freeze({ min: normalized(boundsMin), max: normalized(boundsMax) });
+
   return freeze({
-    cells: freeze(
-      lowered.nodes.map((id) => {
-        const index = componentOf.get(id)!;
-        return freeze({
-          node: id,
-          min: normalized(relative.get(id)! + translations.get(index)!),
-          size: nodes.get(id)!.size[lowered.axis],
-        });
-      })
-    ),
+    cells: freeze(cells),
     components: freeze(
       components.map((members, index) =>
         freeze({
@@ -662,6 +745,7 @@ function solveAxis(
         })
       )
     ),
+    bounds,
   });
 }
 
