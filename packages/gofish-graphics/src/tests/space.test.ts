@@ -15,11 +15,22 @@ import {
   isDIFFERENCE,
   isBaselineMagnitude,
   anchorAt,
+  forgetAllMeasures,
+  forgetOnConflict,
+  mergeMeasures,
+  MIXED_MEASURE,
+  spaceMeasure,
+  spaceMeasureState,
   spacePlacement,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
-import { unionChildSpaces } from "../ast/graphicalOperators/alignment";
+import {
+  resolveAlignmentSpace,
+  unionChildSpaces,
+} from "../ast/graphicalOperators/alignment";
+import { distributeSpaceFold } from "../ast/constraints/distribute";
+import { resolveLayerAxisSpace } from "../ast/constraints/compose";
 import * as M from "../util/monotonic";
 import { interval } from "../util/interval";
 
@@ -47,6 +58,16 @@ const throws = (fn: () => unknown): string | null => {
   }
 };
 
+const permutations = <T>(xs: readonly T[]): T[][] => {
+  if (xs.length <= 1) return [[...xs]];
+  return xs.flatMap((x, i) =>
+    permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((rest) => [
+      x,
+      ...rest,
+    ])
+  );
+};
+
 console.log("# space: baseline magnitude vs data axis anchored at 0");
 {
   // Two anchored data axes, both with data-min 0 (POSITION([0, X])), in DIFFERENT
@@ -65,7 +86,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   );
 
   // Two baseline magnitudes (the old SIZE) in different fields compose into a
-  // real extent that carries no single unit — this must NOT throw, just forget.
+  // real extent that carries no single unit — this must NOT throw; it records a
+  // raw mixed state and projects that to no public measure.
   const dollarsMag = SIZE(M.linear(100, 0), "dollars");
   const unitsMag = SIZE(M.linear(50, 0), "units");
   let composed: UnderlyingSpace | undefined;
@@ -73,7 +95,7 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
     composed = unionChildSpaces([onY(dollarsMag), onY(unitsMag)], 1);
   });
   ok(
-    "overlay of two baseline magnitudes with clashing measures FORGETS (no throw)",
+    "overlay of two baseline magnitudes with clashing measures stays valid",
     magMsg === null,
     magMsg ?? ""
   );
@@ -81,6 +103,101 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
     "...and the forgotten composition is itself a baseline magnitude",
     composed !== undefined && isBaselineMagnitude(composed),
     composed && `dataDomain=${JSON.stringify((composed as any).dataDomain)}`
+  );
+  ok(
+    "...and its public measure projection is undefined",
+    composed !== undefined && spaceMeasure(composed) === undefined
+  );
+}
+
+console.log("# space: permissive measure composition is a semilattice");
+{
+  const A = "A";
+  const B = "B";
+
+  ok(
+    "different singleton measures compose to the absorbing mixed state",
+    forgetOnConflict(A, B) === MIXED_MEASURE
+  );
+  ok(
+    "permissive composition is commutative",
+    forgetOnConflict(A, B) === forgetOnConflict(B, A)
+  );
+  ok(
+    "permissive composition is idempotent",
+    forgetOnConflict(A, A) === A &&
+      forgetOnConflict(MIXED_MEASURE, MIXED_MEASURE) === MIXED_MEASURE
+  );
+  ok(
+    "mixed is absorbing even across a no-claim input",
+    forgetOnConflict(MIXED_MEASURE, undefined) === MIXED_MEASURE &&
+      forgetOnConflict(undefined, MIXED_MEASURE) === MIXED_MEASURE
+  );
+
+  // Regression: with `undefined` serving as both identity and conflict, the old
+  // left fold returned undefined for [A,A,B] but A for [A,B,A]. All six
+  // permutations must now retain the same raw mixed state.
+  const flatResults = permutations([A, A, B]).map((p) =>
+    forgetAllMeasures(p)
+  );
+  ok(
+    "[A,A,B] and every permutation fold to mixed",
+    flatResults.length === 6 && flatResults.every((m) => m === MIXED_MEASURE)
+  );
+
+  const a = SIZE(M.linear(10, 0), A);
+  const b = SIZE(M.linear(20, 0), A);
+  const c = SIZE(M.linear(30, 0), B);
+  const groupedResults = permutations([a, b, c]).flatMap((p) => {
+    const flat = unionChildSpaces(p.map(onY), 1);
+    const left = unionChildSpaces(
+      [onY(unionChildSpaces([onY(p[0]), onY(p[1])], 1)), onY(p[2])],
+      1
+    );
+    const right = unionChildSpaces(
+      [onY(p[0]), onY(unionChildSpaces([onY(p[1]), onY(p[2])], 1))],
+      1
+    );
+    return [flat, left, right];
+  });
+  ok(
+    "all permutations and binary groupings preserve the raw mixed state",
+    groupedResults.length === 18 &&
+      groupedResults.every(
+        (s) => isBaselineMagnitude(s) && s.measure === MIXED_MEASURE
+      )
+  );
+  ok(
+    "all mixed groupings preserve the public undefined projection",
+    groupedResults.every((s) => spaceMeasure(s) === undefined)
+  );
+
+  const mixed = unionChildSpaces([onY(a), onY(c)], 1);
+  const aligned = resolveAlignmentSpace([mixed, b], "start");
+  const distributed = distributeSpaceFold(
+    [mixed, b],
+    [undefined, undefined],
+    { spacing: 0, anchor: "edge" }
+  );
+  const positioned = resolveLayerAxisSpace(
+    [onY(mixed)],
+    1,
+    1,
+    interval(0, 1),
+    undefined
+  );
+  ok(
+    "nested layout folds cannot resurrect a measure after conflict",
+    [aligned, distributed, positioned].every(
+      (s) => spaceMeasureState(s) === MIXED_MEASURE
+    )
+  );
+
+  const strictMixed = throws(() => mergeMeasures(MIXED_MEASURE, A));
+  ok(
+    "strict measure composition rejects a prior mixed state",
+    strictMixed !== null && /mixed measure/.test(strictMixed),
+    strictMixed ?? "did not throw"
   );
 }
 

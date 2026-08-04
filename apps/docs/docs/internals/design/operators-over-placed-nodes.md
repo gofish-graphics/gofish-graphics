@@ -78,6 +78,17 @@ plural refs — no implicit comprehension, `.each()` templates instead (§3.4); 
 gallery call sites are one pattern) and piccl's `lengthMatch` (§3.5); and
 ownership-conflict errors promoted from nice-to-have to prerequisite (§4, item 6).
 
+**Resolution note (2026-07-30).** [Core Layout Semantics
+v0](/internals/core/layout-kernel) separates two handles that this exploration called
+“refs.” Values passed to `.constrain()` are frame-local writable
+`ConstraintTarget`s; public and cross-frame `ref()` values are resolved read-only
+`PlacedRef`s. Transparent `Layer` nesting does not change the writable region, while a
+`Frame` does. An align or distribute may read a placed operand as a fixed anchor and
+move local targets around it, but it never moves the placed source. The source is solved
+under its own scale and coordinate policy, then transported through the least common
+coordinate scope. The historical analysis below still describes the current AST's
+failure modes, but its single polymorphic-ref proposal is no longer the target core.
+
 ## 1. Where the language is today
 
 Mechanics established by code reading (2026-07-08), so the design rests on what actually

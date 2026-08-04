@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Frames, Scale Scopes, and Scale-Dependent Extents — /internals/layout/frames-scale-scopes-and-claims
+// </gofish-wiki>
+
 /**
  * The σ-scope registry (#39 endgame, Stage 6b) — the ONE place σ / posScale is
  * derived.

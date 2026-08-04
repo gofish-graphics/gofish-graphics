@@ -2,7 +2,8 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // @wiki Axes — /internals/frontend/axes
 // @wiki Color Scale Resolution — /internals/layout/color-scales
-// @wiki Overview — /internals/layout/passes
+// @wiki How the Layout Engine Works — /internals/layout/how-layout-works
+// @wiki Production Pass Inventory — /internals/layout/passes
 // @wiki Architecture Overview — /internals/overview/architecture
 // </gofish-wiki>
 
@@ -58,6 +59,7 @@ import {
   isPOSITION,
   isUNDEFINED,
   continuousInterval,
+  MIXED_MEASURE,
   spacePlacement,
   UnderlyingSpace,
 } from "./underlyingSpace";
@@ -303,7 +305,7 @@ function selfScaledAxisSignature(
     JSON.stringify({
       d: s.dataDomain,
       w: s.width,
-      m: s.measure,
+      m: s.measure === MIXED_MEASURE ? { mixed: true } : s.measure,
     })
   );
 }

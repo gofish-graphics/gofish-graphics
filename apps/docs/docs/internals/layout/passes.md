@@ -1,7 +1,7 @@
 ---
-title: Overview
+title: Production Pass Inventory
 section: Layout & Rendering
-order: 50
+order: 50.4
 group: Layout
 status: draft
 covers:
@@ -11,9 +11,13 @@ covers:
   - packages/gofish-graphics/src/ast/perf.ts
 ---
 
-# Layout and Render Passes in GoFish Graphics
+# Production Pass Inventory
 
-This document explains the order and mechanics of layout and render passes in the GoFish graphics system, with specific examples and code references.
+This is the chronological, <Badge type="info" text="AS BUILT" /> inventory of
+the production layout and render calls. Start with
+[How the Layout Engine Works](/internals/layout/how-layout-works) for the
+conceptual model, then use this page to find the corresponding implementation
+stage and source code.
 
 ## Overview
 

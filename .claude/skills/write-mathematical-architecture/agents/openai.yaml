@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write Mathematical Architecture"
+  short_description: "Make formal systems precise and teachable"
+  default_prompt: "Use $write-mathematical-architecture to explain this system with typed notation, a running example, implementation mappings, and truthful diagrams."

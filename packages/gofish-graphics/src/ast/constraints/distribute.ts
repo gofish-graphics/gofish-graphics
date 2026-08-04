@@ -1,5 +1,6 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
 // @wiki Underlying Space — /internals/core/underlying-space
+// @wiki Placement Solving and the Layer Laws — /internals/layout/placement-and-layer-laws
 // </gofish-wiki>
 
 import type { Axis, AlignAnchor, ConstraintRef } from "./shared";
@@ -16,7 +17,7 @@ import {
   forgetAllMeasures,
   isBaselineMagnitude,
   isPOSITION,
-  spaceMeasure,
+  spaceMeasureState,
 } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
 import * as Interval from "../../util/interval";
@@ -167,7 +168,8 @@ export function lowerDistributePlacement(
  *  - non-glue, all-POSITION → POSITION([0, Σ widths]).
  *  - anything else → UNDEFINED (caller falls back to its default union).
  *
- * Measures forget-merge on conflict, like spread. `keys` are the targets'
+ * Measures record a unit-erasing MIXED state on conflict, like spread. `keys`
+ * are the targets'
  * ordinal keys (node.key) in the same order as `targetSpaces`; only used to
  * pick the ORDINAL branch. This is ref-independent (plain arrays) so spread can
  * call it with its positional children and the layer with its name-resolved
@@ -195,9 +197,7 @@ export function distributeSpaceFold(
 ): UnderlyingSpace {
   const n = targetSpaces.length;
   if (n === 0) return UNDEFINED;
-  const childMeasure = forgetAllMeasures(
-    targetSpaces.map((s) => spaceMeasure(s))
-  );
+  const childMeasure = forgetAllMeasures(targetSpaces.map(spaceMeasureState));
 
   // Explicit size on the stack axis dominates the children-derived claim.
   if (opts.size !== undefined && isValue(opts.size)) {

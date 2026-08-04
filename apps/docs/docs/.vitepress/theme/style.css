@@ -376,3 +376,17 @@ a.gofish-codepen:hover {
   padding-left: 2rem;
   padding-right: 2rem;
 }
+
+/* Definition anchors used by the layout-engine article's glossary. */
+.layout-engine-article dfn[id] {
+  scroll-margin-top: calc(var(--vp-nav-height) + 16px);
+  color: var(--vp-c-text-1);
+  font-style: normal;
+  font-weight: 600;
+  text-decoration: underline dotted var(--vp-c-brand-2);
+  text-underline-offset: 3px;
+}
+
+.layout-engine-article dfn[id]:target {
+  background: var(--vp-c-brand-soft);
+}

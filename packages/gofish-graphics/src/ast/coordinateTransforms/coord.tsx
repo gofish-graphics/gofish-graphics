@@ -31,8 +31,8 @@ import {
   forgetAllMeasures,
   continuousInterval,
   type CONTINUOUS_TYPE,
+  type SpaceMeasure,
 } from "../underlyingSpace";
-import type { Measure } from "../data";
 import { posScaleFromSpace, axisScale, type AxisMap } from "../domain";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry } from "../solver/scopes";
@@ -61,7 +61,7 @@ export type CoordinateTransform = {
 };
 
 /** Union all child ORDINAL spaces on `axis` into one ORDINAL, carrying the
- *  grouping measure (FORGET on a clash) so a polar category axis names itself
+ *  grouping measure (MIXED on a clash) so a polar category axis names itself
  *  off its space — the coord-space analogue of `unionChildSpaces`'s ordinal
  *  fold. (Children are tuples; non-ordinal entries on `axis` are ignored.) */
 const unionOrdinal = (
@@ -69,7 +69,7 @@ const unionOrdinal = (
   axis: 0 | 1
 ): UnderlyingSpace => {
   const keys = new Set<string>();
-  const measures: (Measure | undefined)[] = [];
+  const measures: SpaceMeasure[] = [];
   // Anonymous only if EVERY contributing ordinal is anonymous.
   let anonymous = true;
   for (const child of children) {
@@ -135,7 +135,7 @@ export const coord = createNodeOperator(
             // A coord transform maps these data positions into its own fixed
             // coordinate space (e.g. angle/radius). Cross-unit unions are the
             // transform's business, not the marginal-style corruption the guard
-            // targets, so forget on conflict rather than throwing.
+            // targets, so record MIXED on conflict rather than throwing.
             const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
             xSpace = POSITION(domain, xMeasure, coordTransform);
           } else if (xChildrenOrdinalSpaces.length > 0) {
@@ -161,7 +161,7 @@ export const coord = createNodeOperator(
               ...yPos.map((s) => continuousInterval(s)!)
             );
             // See the x branch: coord maps into its own coordinate space, so
-            // forget on cross-unit conflict rather than throwing.
+            // record MIXED on cross-unit conflict rather than throwing.
             const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
             ySpace = POSITION(domain, yMeasure, coordTransform);
           } else if (yChildrenOrdinalSpaces.length > 0) {

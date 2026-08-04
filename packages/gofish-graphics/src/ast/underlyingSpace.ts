@@ -9,6 +9,20 @@ import * as Monotonic from "../util/monotonic";
 import type { Measure } from "./data";
 import { nice as d3Nice } from "d3-array";
 
+/**
+ * Internal result of permissively composing two or more different measures.
+ *
+ * This must be distinct from `undefined`: undefined means "no measure claim"
+ * and is the identity of the permissive fold, while a mixed result is
+ * absorbing. Conflating the two made `[A, A, B]` fold differently from
+ * `[A, B, A]`, and allowed a nested mixed layer to acquire a measure again.
+ */
+export const MIXED_MEASURE: unique symbol = Symbol("gofish.mixed-measure");
+
+/** Raw measure state carried by an underlying space. Public consumers should
+ * use {@link spaceMeasure}, which projects the mixed state to `undefined`. */
+export type SpaceMeasure = Measure | typeof MIXED_MEASURE | undefined;
+
 export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
 
 /**
@@ -22,7 +36,7 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  *     unplaced extent with a local baseline at 0 but no committed position. Its
  *     position is not yet assigned but CAN be (a baseline-align anchors it → a
  *     numeric anchor; a middle-align makes it `"impossible"`). Builds no
- *     posScale; composes as a magnitude (measures FORGET on conflict), scales
+ *     posScale; composes as a magnitude (measure conflicts become MIXED), scales
  *     with a parent `transform.scale`, and is never niced.
  *   - `anchor: number` — ANCHORED (the old `POSITION`): the position IS assigned.
  *     The number is the DOMAIN MIN — the data-space coordinate of the extent's
@@ -99,9 +113,10 @@ export type CONTINUOUS_TYPE = {
   dataDomain: DataDomain;
   spacing?: number;
   ordinalGroupId?: string;
-  /** The measure (unit) of this axis. Spaces unify per measure — see
-   *  {@link mergeMeasures}. Undefined = "no claim" (permissive). */
-  measure?: Measure;
+  /** The raw measure state of this axis. Undefined = no claim;
+   *  {@link MIXED_MEASURE} = multiple incompatible measures were permissively
+   *  composed. Use {@link spaceMeasure} for the public singleton projection. */
+  measure?: SpaceMeasure;
   coordinateTransform?: CoordinateTransform;
 };
 
@@ -115,7 +130,7 @@ export type ORDINAL_TYPE = {
    *  Read by axis-title inference so every axis names itself off its own resolved
    *  space (continuous → measure unit, ordinal → grouping field), not a surface
    *  field-name heuristic. Undefined = "no claim". */
-  measure?: Measure;
+  measure?: SpaceMeasure;
   /** True when this ordinal's keys are POSITIONAL (a `spread` with no `by` — its
    *  children were auto-keyed by index). Such a spread carries no grouping
    *  identity, so it renders no axis (unit dots packed for layout only). Set at
@@ -141,7 +156,7 @@ export type UnderlyingSpace = CONTINUOUS_TYPE | ORDINAL_TYPE | UNDEFINED_TYPE;
 export const CONTINUOUS = (
   width: Monotonic.Monotonic,
   dataDomain: DataDomain,
-  measure?: Measure,
+  measure?: SpaceMeasure,
   coordinateTransform?: CoordinateTransform
 ): CONTINUOUS_TYPE => ({
   kind: "continuous",
@@ -187,7 +202,7 @@ export const isBaselineMagnitude = (
  *  posScale and an absolute axis. Keys on the DATA fact (`dataDomain`). */
 export const POSITION = (
   domain: Interval,
-  measure?: Measure,
+  measure?: SpaceMeasure,
   coordinateTransform?: CoordinateTransform
 ): UnderlyingSpace =>
   CONTINUOUS(
@@ -239,8 +254,10 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
 /** UNANCHORED continuous space (old DIFFERENCE) — delta axis. Keys on the DATA
  *  fact (`dataDomain === "delta"`), NOT on placement, so a future `conflict`
  *  placement that still has a real data domain doesn't render delta ticks. */
-export const DIFFERENCE = (width: number, measure?: Measure): UnderlyingSpace =>
-  CONTINUOUS(Monotonic.linear(width, 0), "delta", measure);
+export const DIFFERENCE = (
+  width: number,
+  measure?: SpaceMeasure
+): UnderlyingSpace => CONTINUOUS(Monotonic.linear(width, 0), "delta", measure);
 export const isDIFFERENCE = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE =>
@@ -249,7 +266,7 @@ export const isDIFFERENCE = (
 /** A sized-but-unpositioned extent (the old `SIZE`): a baseline magnitude. */
 export const SIZE = (
   domain: Monotonic.Monotonic,
-  measure?: Measure
+  measure?: SpaceMeasure
 ): UnderlyingSpace => CONTINUOUS(domain, undefined, measure);
 
 /** Re-anchor a continuous space at data coordinate `min`, preserving its
@@ -261,7 +278,7 @@ export const SIZE = (
 export const anchorAt = (
   space: CONTINUOUS_TYPE,
   min: number,
-  measure?: Measure
+  measure?: SpaceMeasure
 ): CONTINUOUS_TYPE =>
   CONTINUOUS(
     space.width,
@@ -278,7 +295,7 @@ export const hasBaseline = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
 
 export const ORDINAL = (
   domain?: string[],
-  measure?: Measure,
+  measure?: SpaceMeasure,
   anonymous?: boolean
 ): UnderlyingSpace => ({
   kind: "ordinal",
@@ -299,14 +316,26 @@ export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
 export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
   isPOSITION(space) || isORDINAL(space);
 
-/** Read the measure of any space, or undefined for the measureless kind
- *  (UNDEFINED). Both CONTINUOUS (unit) and ORDINAL (grouping field) carry one. */
-export const spaceMeasure = (
+/** Read the lossless measure state used by internal composition folds. */
+export const spaceMeasureState = (
   space: UnderlyingSpace | undefined
-): Measure | undefined =>
+): SpaceMeasure =>
   space && (isCONTINUOUS(space) || isORDINAL(space))
     ? space.measure
     : undefined;
+
+/**
+ * Read the public singleton measure of a space. `UNDEFINED`, a measureless
+ * space, and an internally mixed space all project to `undefined`; internal
+ * composition must use {@link spaceMeasureState} so a later fold cannot
+ * accidentally resurrect one of a mixed space's constituent measures.
+ */
+export const spaceMeasure = (
+  space: UnderlyingSpace | undefined
+): Measure | undefined => {
+  const measure = spaceMeasureState(space);
+  return measure === MIXED_MEASURE ? undefined : measure;
+};
 
 /**
  * Unify two measures as TYPES (the Stage-1 guard). Undefined is permissive —
@@ -317,10 +346,17 @@ export const spaceMeasure = (
  * we throw loudly instead.
  */
 export const mergeMeasures = (
-  a: Measure | undefined,
-  b: Measure | undefined,
+  a: SpaceMeasure,
+  b: SpaceMeasure,
   context?: string
 ): Measure | undefined => {
+  if (a === MIXED_MEASURE || b === MIXED_MEASURE) {
+    throw new Error(
+      `Cannot unify underlying spaces with a mixed measure${
+        context ? ` (${context})` : ""
+      }. A permissive composition already combined incompatible measures.`
+    );
+  }
   if (a === undefined) return b;
   if (b === undefined) return a;
   if (a === b) return a;
@@ -334,18 +370,22 @@ export const mergeMeasures = (
 };
 
 /**
- * Like {@link mergeMeasures}, but a conflict *forgets* (returns undefined)
- * instead of throwing. Used where composing differently-measured spaces is
- * legitimate — e.g. stacking two different fields' SIZEs: the composed extent
- * is real but carries no single unit.
+ * Like {@link mergeMeasures}, but a conflict produces the absorbing
+ * {@link MIXED_MEASURE} state instead of throwing. Used where composing
+ * differently-measured spaces is legitimate — e.g. stacking two different
+ * fields' SIZEs: the composed extent is real but carries no single public unit.
+ *
+ * With `undefined` as the identity and `MIXED_MEASURE` as the absorbing top,
+ * this operation is associative, commutative, and idempotent.
  */
 export const forgetOnConflict = (
-  a: Measure | undefined,
-  b: Measure | undefined
-): Measure | undefined => {
+  a: SpaceMeasure,
+  b: SpaceMeasure
+): SpaceMeasure => {
+  if (a === MIXED_MEASURE || b === MIXED_MEASURE) return MIXED_MEASURE;
   if (a === undefined) return b;
   if (b === undefined) return a;
-  return a === b ? a : undefined;
+  return a === b ? a : MIXED_MEASURE;
 };
 
 /**
@@ -353,7 +393,7 @@ export const forgetOnConflict = (
  * conflict). The array form of the pairwise unify-as-types guard.
  */
 export const mergeAllMeasures = (
-  ms: (Measure | undefined)[],
+  ms: readonly SpaceMeasure[],
   context?: string
 ): Measure | undefined =>
   ms.reduce<Measure | undefined>(
@@ -362,13 +402,10 @@ export const mergeAllMeasures = (
   );
 
 /**
- * Fold an array of measures with {@link forgetOnConflict} (a conflict forgets
- * to undefined). The array form of the permissive composition merge.
+ * Fold an array of measures with {@link forgetOnConflict}. A conflict remains
+ * the absorbing {@link MIXED_MEASURE} state so permutations and nested folds
+ * cannot change or resurrect the result. Call {@link spaceMeasure} on the
+ * containing space for the public `Measure | undefined` projection.
  */
-export const forgetAllMeasures = (
-  ms: (Measure | undefined)[]
-): Measure | undefined =>
-  ms.reduce<Measure | undefined>(
-    (acc, m) => forgetOnConflict(acc, m),
-    undefined
-  );
+export const forgetAllMeasures = (ms: readonly SpaceMeasure[]): SpaceMeasure =>
+  ms.reduce<SpaceMeasure>((acc, m) => forgetOnConflict(acc, m), undefined);
