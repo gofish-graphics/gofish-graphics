@@ -467,6 +467,14 @@ $$
 \right].
 $$
 
+The node set is total over ordinary known-size members of the Frame body; an
+implementation MUST NOT omit an unconstrained child and fold it back in after the
+solve. A member with neither pins nor relations is a singleton free component. If
+its intrinsic or data semantics require a particular origin—such as baseline zero—
+normalization emits that requirement as a pin. Geometry whose construction consumes
+already placed source boxes is a later derived-geometry task and is outside this
+known-size placement set.
+
 Its scalar occupied extent is the difference between those endpoints. The kernel
 MUST NOT identify $\bot$ with the occupied point interval $[0,0]$: an enclosing
 Frame policy may map empty content to a zero box extent, but that is a later policy

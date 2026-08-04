@@ -410,10 +410,17 @@ choice, nonlinear coordinate maps, or custom silhouettes.
 these bounds with its cells and checks the coherence law directly. Production's
 rank-two placement solver already materializes the authoritative positioned cells,
 but currently writes them into mutable nodes and discards the solve result; Layer
-then reads child boxes back and folds them again. The safe migration is to return
-the covered-cell bounds from that solve and union only children the placement
-program did not cover. Layer's special painted-y fold is deliberately separate:
-it summarizes post-scope painted geometry, not ordinary placement intervals.
+then reads child boxes back and folds them again. That partial coverage is an
+implementation artifact, not a semantic category to preserve. The target migration
+makes every ordinary known-size Frame-body node a placement participant on both
+axes. A node with neither relations nor pins is a singleton free component; when
+intrinsic or data semantics require its baseline at zero, normalization emits that
+as an explicit pin. The solve therefore returns the complete ordinary body hull and
+the post-hoc Layer fold disappears. Geometry that genuinely requires completed
+source boxes—such as a connector—is instead an explicit later derived-geometry
+task, not a “residual child.” Layer's special painted-y fold is also deliberately
+separate: it summarizes post-scope painted geometry, not ordinary placement
+intervals.
 
 ### Placed references lower to constants
 
