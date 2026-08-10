@@ -194,6 +194,7 @@ export {
   PREVIOUS_LAYER_MARKS,
 } from "./ast/marks/chart";
 export type { ConstrainableMark } from "./ast/marks/chart";
+export { compose } from "./ast/marks/compose";
 export type {
   Mark,
   Operator,

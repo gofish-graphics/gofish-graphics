@@ -19,6 +19,7 @@ import {
 // component thunks get the same two-regime treatment as ChartBuilder/
 // LayerBuilder.render. See its doc-comment for the machinery.
 import { renderWithInteraction } from "../../interaction/renderTerminal";
+import { expandComposedOperator } from "./compose";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -585,7 +586,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     return new ChartBuilder(
       this.data,
       this.options,
-      [...this.operators, ...ops],
+      [...this.operators, ...ops.flatMap(expandComposedOperator)],
       this.finalMark,
       this.layerContext,
       this.nodeZOrder,
