@@ -33,15 +33,19 @@ Use `compose` to package a sequence of operators as one reusable operator.
 The operators retain the same left-to-right order they have in `.flow()`:
 
 ```ts
-const waffle = compose(
-  derive((rows) => rows.flatMap((row) => repeat(row, "count"))),
-  derive((rows) => chunk(rows, 10)),
-  spread({ dir: "y", reverse: true }),
-  spread({ dir: "x", alignment: "end" })
-);
+const waffle = ({ count, columns }) =>
+  compose(
+    derive((rows) => rows.flatMap((row) => repeat(row, count))),
+    derive((rows) => chunk(rows, columns)),
+    spread({ dir: "y", reverse: true }),
+    spread({ dir: "x", alignment: "end" })
+  );
 
 chart(batches)
-  .flow(spread({ by: "category", dir: "x", alignment: "end" }), waffle)
+  .flow(
+    spread({ by: "category", dir: "x", alignment: "end" }),
+    waffle({ count: "count", columns: 10 })
+  )
   .mark(bottleUnit);
 ```
 
