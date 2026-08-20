@@ -172,7 +172,11 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   name: { type: t.string, doc: 'Layer name, from `.name("...")`.' },
   label: { type: t.ref("LabelIR") },
   constraints: { type: t.array(t.ref("ConstraintIR")) },
-  zOrder: { type: t.number },
+  // Widened to a full channel slot (constant OR a `field(...)` accessor,
+  // e.g. `field("site").map({...}, {default: 0})`, resolved per-instance
+  // against the mark's bound datum) — a callback never round-trips, so it
+  // never reaches the wire. See `expectZOrder` in validate.ts.
+  zOrder: { type: t.channel("number") },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,

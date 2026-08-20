@@ -676,6 +676,7 @@ const FIELD_OP_NAMES = [
   "mean",
   "count",
   "distinct",
+  "map",
 ] as const;
 
 /** One op in a `field(...)` pipeline. Rejects an unrecognized op name
@@ -743,6 +744,17 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
             'bin "thresholds" must be a number or an array of numbers when present',
         });
       }
+      return;
+    case "map":
+      if (!isObject(value.mapping)) {
+        ctx.errors.push({
+          path: `${path}.mapping`,
+          message: `map "mapping" must be an object, got ${typeNameOf(value.mapping)}`,
+        });
+      }
+      // `default` may be any value, including `null` — its mere PRESENCE on
+      // the wire is meaningful (see fieldExpr.ts's `map()`), so it is
+      // intentionally not checked here beyond being an object member.
       return;
     default:
       // reverse/dropNulls/normalize/sum/mean/count/distinct carry no extra fields.
@@ -847,7 +859,7 @@ function walkRefMark(
   });
   optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "label", path, ctx, walkLabel);
-  optionalField(node, "zOrder", path, ctx, expectNumber);
+  optionalField(node, "zOrder", path, ctx, expectZOrder);
   optionalField(node, "translate", path, ctx, walkTranslate);
   if (ctx.strict) {
     rejectUnknown(
@@ -953,7 +965,7 @@ function walkCutMark(
   optionalField(node, "size", path, ctx, walkCutSize);
   optionalField(node, "inset", path, ctx, expectNumber);
   optionalField(node, "name", path, ctx, expectNameOrToken);
-  optionalField(node, "zOrder", path, ctx, expectNumber);
+  optionalField(node, "zOrder", path, ctx, expectZOrder);
   optionalField(node, "translate", path, ctx, walkTranslate);
   if (ctx.strict) {
     rejectUnknown(
@@ -999,7 +1011,7 @@ function walkCombinatorMark(
   optionalField(node, "constraints", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkConstraint)
   );
-  optionalField(node, "zOrder", path, ctx, expectNumber);
+  optionalField(node, "zOrder", path, ctx, expectZOrder);
   optionalField(node, "translate", path, ctx, walkTranslate);
   if (ctx.strict) {
     rejectUnknown(
@@ -1034,7 +1046,7 @@ function walkLeafMark(
   optionalField(node, "constraints", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkConstraint)
   );
-  optionalField(node, "zOrder", path, ctx, expectNumber);
+  optionalField(node, "zOrder", path, ctx, expectZOrder);
   optionalField(node, "translate", path, ctx, walkTranslate);
   // Channel-valued props are unrestricted in v0 (mirrors widget IR).
   // Strict mode does NOT reject unknown fields on leaf marks, because the
@@ -1315,6 +1327,26 @@ function expectNumber(value: unknown, path: string, ctx: Context): void {
       message: `expected number, got ${typeNameOf(value)}`,
     });
   }
+}
+
+/**
+ * A mark-level `.zOrder(...)` value: a constant, or a `field(...)` accessor
+ * (e.g. `field("site").map({...}, {default: 0})`) resolved per-instance
+ * against the mark's bound datum (`resolveZOrderValue` in
+ * gofish-graphics' createOperator.ts) — a callback never round-trips, so it
+ * never reaches the wire. Not used for the CHART-level `zOrder` (`walkChart`
+ * above), which stays a plain constant.
+ */
+function expectZOrder(value: unknown, path: string, ctx: Context): void {
+  if (typeof value === "number") return;
+  if (isObject(value) && value.type === "field") {
+    walkFieldAccessor(value, path, ctx);
+    return;
+  }
+  ctx.errors.push({
+    path,
+    message: `expected number or field(...) accessor, got ${typeNameOf(value)}`,
+  });
 }
 
 function expectStringOrNumber(

@@ -597,7 +597,15 @@ export type FieldOpIR =
   | { op: "sum" }
   | { op: "mean" }
   | { op: "count" }
-  | { op: "distinct" };
+  | { op: "distinct" }
+  | {
+      op: "map";
+      /** Partial discrete mapping, keyed by the field's (stringified) values. */
+      mapping: Record<string, unknown>;
+      /** Value for an unmapped key. Presence on the wire (vs. omission) is
+       *  itself meaningful — see gofish-graphics' `fieldExpr.ts` `map()`. */
+      default?: unknown;
+    };
 
 /** A post-scale color transform carried by a datum value, applied AFTER the
  *  datum maps through its color scale — the color analog of {@link

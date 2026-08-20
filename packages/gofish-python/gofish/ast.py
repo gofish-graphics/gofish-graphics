@@ -6,6 +6,20 @@ import uuid
 T = TypeVar("T")
 
 
+class _NoDefault:
+    """Sentinel distinguishing an omitted `default=` from an explicit
+    `default=None` — mirrors polars' `no_default` (`replace_strict`). See
+    `FieldAccessor.map()`: on the wire, omitting `default` means the
+    `"default"` key is absent entirely; passing `default=None` still emits
+    `"default": None`, a real (present) fallback distinct from omission."""
+
+    def __repr__(self) -> str:
+        return "no_default"
+
+
+no_default = _NoDefault()
+
+
 class Operator:
     """Base class for chart operators."""
 
@@ -318,8 +332,10 @@ class Mark:
         self._datum_set: bool = False
         self._key: Optional[str] = None
         # Default z-order hint (sorted within siblings inside `layer`'s
-        # render). Mirrors JS `node._zOrder` (`.zOrder(n)`).
-        self._z_order: Optional[float] = None
+        # render). Mirrors JS `node._zOrder` (`.zOrder(n)`). A `field(...)`
+        # accessor is resolved per-instance at reconstruction/render time;
+        # this container itself doesn't evaluate it.
+        self._z_order: Optional[Union[float, "FieldAccessor"]] = None
         self._translate: Optional[dict] = None
 
     def _copy_meta(self, target: "Mark") -> "Mark":
@@ -372,12 +388,17 @@ class Mark:
         new_mark._name = name_or_token
         return new_mark
 
-    def z_order(self, value: float) -> "Mark":
+    def z_order(self, value: Union[float, "FieldAccessor"]) -> "Mark":
         """Set the default z-order hint for this mark.
 
         Within a single layer's render, marks are sorted by `(z_order, index)`
         before painting. Lower values paint first (further back). Mirrors
         JS `node.zOrder(n)`.
+
+        `value` may also be a `field(...)` accessor (e.g.
+        `field("site").map({...}, default=0)`), resolved per-instance
+        against the mark's bound datum — data-driven paint order that, unlike
+        a raw callable, is serializable and round-trips through IR.
 
         For *relational* paint order ("this above that"), use
         `Constraint.z_above(a, b)` / `Constraint.z_below(a, b)` inside the
@@ -2544,6 +2565,42 @@ class FieldAccessor(dict):
         """Fold the group's rows to the number of distinct values of this
         field. Valid only in a value (size/pos) slot."""
         return self._with_op({"op": "distinct"})
+
+    def map(
+        self,
+        mapping: Dict[Any, Any],
+        default: Any = no_default,
+    ) -> "FieldAccessor":
+        """A partial discrete mapping, keyed by this field's own values — a
+        keyed projection into a NEW domain, e.g.
+        ``field("site").map({"Morris": 1, "Grand Rapids": 1}, default=0)``.
+
+        Elementwise: each row's value at this field is looked up in
+        `mapping`; a miss becomes `default` when given, else `None` (each
+        consuming surface then applies its own default — a label skips a
+        `None` result, `z_order` falls back to base paint order). `default`
+        may itself be `None` — a real, present default, distinct from
+        omitting the argument entirely (which leaves misses as `None`). Use
+        the module-level sentinel `no_default` (the parameter's own default)
+        to detect "omitted" if you're wrapping this method.
+
+        `mapping` must be a plain dict, not a callable: this construct
+        exists specifically because function accessors have no IR spelling
+        and can't cross the Python bridge. For an arbitrary computed
+        transform, use `derive()` instead.
+
+        Semantics mirror polars' `replace_strict(mapping, default=...)`;
+        named after pandas' `Series.map(dict)`.
+        """
+        if callable(mapping):
+            raise TypeError(
+                "field(...).map() takes a plain mapping dict, not a "
+                "callable — use derive() for arbitrary transforms."
+            )
+        op: dict = {"op": "map", "mapping": mapping}
+        if default is not no_default:
+            op["default"] = default
+        return self._with_op(op)
 
 
 def field(name: str, measure: Optional[str] = None) -> FieldAccessor:

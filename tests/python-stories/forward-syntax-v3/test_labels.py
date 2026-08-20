@@ -178,6 +178,28 @@ def story_heatmap_with_labels():
     )
 
 
+# ─── conditional group callout (field(...).map(), #796) ─────────────────────
+# `map()` is a partial mapping — only "Lake B" has an entry, so only its
+# group gets the callout text; every other group's accessor evaluates to
+# None (no default given) and the label elaborator skips it.
+
+def story_label_on_spread_conditional():
+    return (
+        chart(SEAFOOD)
+        .flow(
+            spread(by="lake", dir="x", spacing=50).label(
+                field("lake").map({"Lake B": "Best catch!"}),
+                position="outset-top",
+                fontSize=13,
+                color="#c0392b",
+            ),
+            stack(by="species", dir="x"),
+        )
+        .mark(rect(h="count", fill="species")),
+        {"w": 500, "h": 300, "axes": False},
+    )
+
+
 # ─── label on stack operator (per-group, #702) ──────────────────────────────
 
 def story_label_on_stack_operator():

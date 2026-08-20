@@ -167,6 +167,21 @@ group's rows) produces gets stamped with that leaf's own subdata, and
   ).mark(rect(h="count"))
   ```
 
+- **A `field(...).map()` partial mapping** labels only some groups: keys
+  with an entry produce text, and a group whose accessor evaluates to
+  `None` is skipped entirely — no empty text node. See the
+  [field-expression pipeline](/python/api/operators/spread#field-expression-pipeline):
+
+  ```python
+  chart(seafood).flow(
+      spread(by="lake", dir="x").label(
+          field("lake").map({"Lake B": "Best catch!"}),
+          position="outset-top",
+      ),
+      stack(by="species", dir="x"),
+  ).mark(rect(h="count", fill="species"))
+  ```
+
 ```python
 chart(data).flow(
     stack(by="class", dir="y").label("class", position="center")
@@ -179,3 +194,30 @@ chart(data).flow(
 stack(by="class", dir="y").translate(y=8).label("class")
 stack(by="class", dir="y").label("class").translate(y=8)
 ```
+
+## Paint order — `.z_order(value)` {#z-order}
+
+`.z_order(value)` sets the mark's paint-order hint: higher values paint
+**later** (on top). Within a layer, children are painted in `(z_order,
+document order)` order. `value` is a constant or a
+[`field(...)`](/python/api/operators/spread#field-expression-pipeline)
+accessor resolved per-instance against the datum the mark is bound to —
+data-driven paint order with no per-datum callback (Python has no callback
+form here; a `field(...).map()` covers the discrete cases):
+
+```python
+# Constant: raise this whole mark above its siblings.
+rect(h="count").z_order(1)
+
+# Data-driven: raise the emphasized sites' areas over the rest. `.map()` is
+# a partial mapping — unmapped sites get the `default`.
+ribbon(opacity=0.7).z_order(
+    field("site").map({"Morris": 1, "Grand Rapids": 1}, default=0)
+)
+```
+
+A `field(...)` z-order whose `.map()` misses (no `default` given) evaluates
+to `None`, which falls back to the base paint order — the same as not calling
+`.z_order()` on that instance. For _relational_ paint order ("this above
+that"), use `Constraint.z_above(a, b)` / `Constraint.z_below(a, b)` inside
+the enclosing layer's `.constrain(...)` instead.

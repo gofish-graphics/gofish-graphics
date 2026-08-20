@@ -198,6 +198,29 @@ on what you're labeling:
 See [`.label()` on operators](/js/api/core/mark#operator-label) for the full
 semantics.
 
+### Conditional labels (label only some groups)
+
+To call out **one** group and leave the rest unlabeled, map the `by` field
+through a partial mapping with
+[`field(...).map()`](/js/api/operators/spread#field-expression-pipeline):
+only keys with an entry produce text, and a group whose accessor evaluates to
+`undefined` is skipped entirely — no empty text node, no placeholder:
+
+```ts
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 50 }).label(
+      field("lake").map({ "Lake B": "Best catch!" }),
+      { position: "outset-top", fontSize: 13, color: "#c0392b" }
+    ),
+    stack({ by: "species", dir: "x" })
+  )
+  .mark(rect({ h: "count", fill: "species" }));
+```
+
+Unlike a function accessor that returns `""` for the other groups, `.map()`
+serializes — the spec round-trips through IR and works from Python.
+
 ## Custom label text
 
 Pass a function instead of a field name for computed labels.

@@ -1342,6 +1342,21 @@ own tag, `shareMeasure(base, byName)` — see
 above for why a share is a distinct unit (0–1, not the base measure's own
 units) that must never silently union with it.
 
+**A third family: `.map(mapping, {default?})`, elementwise rather than
+folding.** `.map()` doesn't belong to either slot above — it's a VALUE op
+(valid wherever an aggregate is, since it's a serializable alternative to a
+function accessor on a label or `.zOrder()`, not just a value channel), but
+it doesn't fold rows to a singleton. It's a partial discrete mapping keyed by
+the field's own (stringified) values: an own-property lookup in `mapping`
+(so `{}`'s inherited members never match), falling back to `opts.default`
+when the option is present — even `default: null` counts as present — else
+to `undefined`. `evalFieldValues`'s pipeline loop applies it in place before
+any aggregate runs, so `field("site").map({...}).sum()` maps first and folds
+second, and `getFieldOps`/the domain-vs-aggregate split (`isDomainOp`,
+`isAggregateOp`) both treat `map` as neither, dispatching it through its own
+branch. `splitEntries` (`datumProjection.ts`) rejects `map` on a `by` slot
+with the same "value op, not a domain op" error as an aggregate.
+
 ## Axis inference
 
 Conceptually, axis inference splits into two independent questions:

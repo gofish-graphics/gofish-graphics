@@ -371,14 +371,23 @@ A modifier's `apply(node, layerContext, datum, ...args)` receives the
 factory saw — so a modifier can produce a _data-driven_ value rather than a
 constant. `nameModifier` / `labelModifier` / `constrainModifier` ignore it, but
 `zOrderModifier` uses it: `.zOrder(value)` takes a `ZOrderValue<T> = number |
-((datum: T) => number)` and, when handed a callback, evaluates it against this
-datum to set each produced node's paint-order hint. That is what lets paint
-order be data-driven (e.g. raise one category over the rest) without splitting a
-mark into separately-named layers — the callback runs once per replicated
-instance, and the [bake pass](/internals/layout/coord-flattening) already orders
-each layer's children by `(zOrder, index)`. A constant hint round-trips through
-the IR; a callback can't be serialized, so its `tag` hook drops it from the
-emitted IR (the same as a function `.label` accessor).
+((datum: T) => number) | FieldExpr | FieldExprWire` and, when handed a
+callback, evaluates it against this datum to set each produced node's
+paint-order hint. That is what lets paint order be data-driven (e.g. raise
+one category over the rest) without splitting a mark into separately-named
+layers — the callback runs once per replicated instance, and the [bake
+pass](/internals/layout/coord-flattening) already orders each layer's
+children by `(zOrder, index)`. A constant hint round-trips through the IR; a
+callback can't be serialized, so its `tag` hook drops it from the emitted IR
+(the same as a function `.label` accessor). A `field(...)` accessor sits
+between the two: like a callback it's resolved per-instance
+(`resolveZOrderValue` projects the same scalar off the datum that
+`projectPath` would, runs it through the field's own op pipeline via
+`evalFieldValues` — so `.map(...)` applies identically to zOrder as to a
+value channel — and coerces the result to a number), but like a constant
+it's serializable, so `tag` round-trips it (`value.toJSON()` for a live
+`FieldExpr`, the wire form verbatim for an already-deserialized one) instead
+of dropping it.
 
 The **export terminals** — `render`, `toSVG`, `toSVGElement`, `save`,
 `toDisplayList` — are the dual of modifiers: where a modifier mutates the

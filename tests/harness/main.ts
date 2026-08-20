@@ -296,6 +296,28 @@ function isTokenSentinel(v: any): v is TokenSentinel {
   );
 }
 
+/** Is `v` a reconstructable `.zOrder(...)` value from the wire: a constant,
+ *  or a `field(...)` wire object (a callback never round-trips). Mirrors the
+ *  identical helper in `packages/gofish-graphics/src/serialize/fromJSON.ts` —
+ *  this harness rebuilds a `ChartBuilder` through its OWN switch rather than
+ *  calling the registry, so both need the same reapplication logic. */
+function isZOrderSpec(v: unknown): boolean {
+  return (
+    typeof v === "number" ||
+    (v !== null && typeof v === "object" && (v as any).type === "field")
+  );
+}
+
+/** Reapply a reconstructed mark-level `.zOrder(...)` spec, when present and
+ *  the mark supports it. A field-expr wire is passed straight through — the
+ *  mark's own `.zOrder()` evaluates it against the bound datum per-instance. */
+function applyZOrderSpec(mark: any, spec: { zOrder?: unknown }): any {
+  if (isZOrderSpec(spec.zOrder) && typeof mark.zOrder === "function") {
+    return mark.zOrder(spec.zOrder);
+  }
+  return mark;
+}
+
 /**
  * Wrap a Mark so its resolved GoFishNode gets `.scope()` called on it —
  * matches what JS `createMark` does for any component-defined mark. The
@@ -714,12 +736,7 @@ function mapMark(
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
     }
-    if (
-      typeof spec.zOrder === "number" &&
-      typeof (mark as any).zOrder === "function"
-    ) {
-      mark = (mark as any).zOrder(spec.zOrder);
-    }
+    mark = applyZOrderSpec(mark, spec);
     return mark;
   }
 
@@ -782,12 +799,7 @@ function mapMark(
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
     }
-    if (
-      typeof spec.zOrder === "number" &&
-      typeof (mark as any).zOrder === "function"
-    ) {
-      mark = (mark as any).zOrder(spec.zOrder);
-    }
+    mark = applyZOrderSpec(mark, spec);
     return mark;
   }
 
@@ -831,12 +843,7 @@ function mapMark(
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);
   }
-  if (
-    typeof spec.zOrder === "number" &&
-    typeof (mark as any).zOrder === "function"
-  ) {
-    mark = (mark as any).zOrder(spec.zOrder);
-  }
+  mark = applyZOrderSpec(mark, spec);
   // `bind_data(d, key)` (Treemap-style) pre-binds a datum so the JS-side
   // mark factory is invoked as `mark(d, key)`. Wrap last so name/label
   // chains take effect on the underlying mark first.

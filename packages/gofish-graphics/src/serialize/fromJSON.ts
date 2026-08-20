@@ -82,6 +82,28 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
   );
 }
 
+/** Is `v` a reconstructable `.zOrder(...)` value from the wire: a constant,
+ *  or a `field(...)` wire object (a callback never round-trips — see
+ *  `zOrderModifier`'s `tag` in createOperator.ts). Shared by the three
+ *  reapplication sites below (cut, combinator, plain mark). */
+function isZOrderSpec(v: unknown): boolean {
+  return (
+    typeof v === "number" ||
+    (v !== null && typeof v === "object" && (v as any).type === "field")
+  );
+}
+
+/** Reapply a reconstructed `.zOrder(...)` spec onto `mark`, when present and
+ *  the mark supports it. A field-expr wire is passed straight through — the
+ *  mark's own `.zOrder()` (`zOrderModifier`) evaluates it against the bound
+ *  datum per-instance, the same as a live `FieldExpr`. */
+function applyZOrderSpec(mark: any, spec: { zOrder?: unknown }): any {
+  if (isZOrderSpec(spec.zOrder) && typeof mark.zOrder === "function") {
+    return mark.zOrder(spec.zOrder);
+  }
+  return mark;
+}
+
 // ---------------------------------------------------------------------------
 // Bridge-sentinel unwrapping
 // ---------------------------------------------------------------------------
@@ -502,12 +524,7 @@ export function mapMark(
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
     }
-    if (
-      typeof spec.zOrder === "number" &&
-      typeof (mark as any).zOrder === "function"
-    ) {
-      mark = (mark as any).zOrder(spec.zOrder);
-    }
+    mark = applyZOrderSpec(mark, spec);
     return mark;
   }
 
@@ -552,12 +569,7 @@ export function mapMark(
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
     }
-    if (
-      typeof spec.zOrder === "number" &&
-      typeof (mark as any).zOrder === "function"
-    ) {
-      mark = (mark as any).zOrder(spec.zOrder);
-    }
+    mark = applyZOrderSpec(mark, spec);
     return mark;
   }
 
@@ -601,12 +613,7 @@ export function mapMark(
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);
   }
-  if (
-    typeof spec.zOrder === "number" &&
-    typeof (mark as any).zOrder === "function"
-  ) {
-    mark = (mark as any).zOrder(spec.zOrder);
-  }
+  mark = applyZOrderSpec(mark, spec);
   if ("__datum" in spec) {
     const boundDatum = spec.__datum;
     const boundKey = spec.__key ?? undefined;
