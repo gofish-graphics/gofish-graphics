@@ -105,13 +105,13 @@ function discoverPythonStories(): PythonStory[] {
 /**
  * Python files (relative to TESTS_DIR) whose JS source story is **file-level
  * exempt** in `.python-sync-exempt`. A Python port may still exist and be
- * committed (e.g. NestedMosaicChart's fluent-pipeline port, which can't
- * cross the derive RPC because of its function fill), but an exempt story is
- * excluded from the byte-parity gate — so we skip capturing it rather than
- * emit a snapshot that `compare-python` would (correctly) flag as a
- * mismatch. Stories that only need the byte-diff skipped (the algorithm
- * genuinely diverges but the port IS captured/IR-validated, e.g. ViolinPlot's
- * scipy vs. fast-kde KDE) use the per-export `file::Export` tier instead —
+ * committed (e.g. a story whose JS uses a v1/v2-only feature the Python
+ * wrapper doesn't yet expose), but an exempt story is excluded from the
+ * byte-parity gate — so we skip capturing it rather than emit a snapshot
+ * that `compare-python` would (correctly) flag as a mismatch. Stories that
+ * only need the byte-diff skipped (the algorithm genuinely diverges but the
+ * port IS captured/IR-validated, e.g. ViolinPlot's scipy vs. fast-kde KDE)
+ * use the per-export `file::Export` tier instead —
  * see `loadExportExemptParityPaths` in compare-python.ts, which skips only
  * the byte diff for those.
  */
@@ -524,7 +524,7 @@ async function main() {
       );
 
       // Skip stories whose JS source is file-level parity-exempt — the port
-      // isn't expressible at all (e.g. NestedMosaicChart's function fill).
+      // isn't expressible at all (e.g. a v1/v2-only feature).
       if (exemptPythonFiles.has(story.file)) {
         console.log("SKIP (JS story is parity-exempt)");
         skipped++;

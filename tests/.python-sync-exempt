@@ -11,14 +11,6 @@
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
 # IR bridge.
 #
-# NestedMosaicChart was ported under #433, but the story was rewritten (#675,
-# then #700) to the fluent `chart().flow(stack(size: field("count").normalize()))`
-# pipeline with a 2-D function fill (`survived == "No" ? gray : classColor[class]`).
-# A function channel can't cross the derive RPC, so it is now exempt — the
-# pure-spec mosaics (atom/Mosaic and Forward Syntax Mosaic Chart) ARE ported
-# and byte-parity-validated.
-packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
-
 # Per-export exemption — PolarText constructs a raw custom coordinate
 # transform inline ({ type, transform: ([r, theta]) => ..., domain }), an
 # arbitrary JS closure rather than one of the IR's named coord transforms

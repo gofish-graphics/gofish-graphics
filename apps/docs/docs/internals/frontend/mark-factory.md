@@ -90,6 +90,13 @@ Two are wired up today, both defined at `src/ast/channels.ts`:
 | `"size"`  | `number \| (keyof T & string) \| Value` | string → `inferSize` (sums field across data); number → pass-through |
 | `"color"` | `string \| (keyof T & string) \| Value` | string → `inferColor` (color palette lookup if field, else literal)  |
 
+`inferColor` is `async` (a function accessor is awaited before being wrapped as
+a `Value`) so a plain sync `fill: (d) => ...` and the harness's Python-bridge
+arrow for `fill: { __gofish_lambda: id }` both resolve the same way — the same
+"await is a no-op on non-Promises" trick `inferRaw` uses for `text`'s content
+channel. `createMark`'s channel loop (`withGoFish.ts`) and `createOperator`'s
+`applyChannels`/`runChannel` both `await` it.
+
 If your prop should be a position offset (mean rather than sum), see the
 `inferPos` helper — `createOperator` uses it via channel annotations of its
 own; `createMark` could grow a `"pos"` channel the same way if a future shape
@@ -126,9 +133,11 @@ Walking `withGoFish.ts:431-477`:
    - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)
    - `"size"` channel → `inferSize(markValue, data)`. If `markValue` is a
      string, sum that field across `data`; if a number, use as-is.
-   - `"color"` channel → `inferColor(markValue, data)`. If the string matches
-     a field in the first datum, wrap it as a `Value` so the color scale
-     picks it up; otherwise treat the string as a literal color.
+   - `"color"` channel → `await inferColor(markValue, data)`. If the string
+     matches a field in the first datum, wrap it as a `Value` so the color
+     scale picks it up; otherwise treat the string as a literal color. A
+     function accessor is awaited, so this is also where the Python wrapper's
+     `rect(fill=lambda d: ...)` bridge resolves.
    - **Coordinate-space axis aliases** (`theta`/`r`/`thetaSize`/`rSize`, the
      `KNOWN_ALIAS_KEYS`) aren't declared channels, but carry the same value
      semantics as the canonical dims they resolve to, so `createMark` infers

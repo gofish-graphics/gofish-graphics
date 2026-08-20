@@ -240,16 +240,21 @@ export const inferPos = inferNumeric(meanBy);
  * - string matching a field in data[0]: wraps field value as a Value.
  * - string not matching a field: passes through as a literal color.
  * - function: called on data[0] and wraps the result as a Value.
+ *
+ * Async (like `inferRaw`) so a callable accessor may return a Promise —
+ * needed for a rect's `fill: (d) => ...` when the harness has swapped in the
+ * async Python-bridge arrow for a `{ __gofish_lambda }` sentinel. Awaiting a
+ * non-Promise is a no-op, so plain sync accessors are unaffected.
  */
-export const inferColor = <T extends Record<string, any>>(
+export const inferColor = async <T extends Record<string, any>>(
   accessor:
     | string
-    | ((d: T) => string)
+    | ((d: T) => string | Promise<string>)
     | FieldAccessor
     | LiteralValue
     | undefined,
   data: T[]
-): MaybeValue<string> | undefined => {
+): Promise<MaybeValue<string> | undefined> => {
   if (accessor === undefined) return undefined;
   if (isLiteral(accessor)) return accessor.value as string;
   if (isField(accessor)) {
@@ -259,7 +264,7 @@ export const inferColor = <T extends Record<string, any>>(
   }
   if (typeof accessor === "function") {
     return data.length > 0 && data[0] != null
-      ? value(accessor(data[0]))
+      ? value(await accessor(data[0]))
       : undefined;
   }
   if (data.length > 0 && data[0] != null && accessor in data[0]) {
