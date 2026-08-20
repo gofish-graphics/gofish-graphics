@@ -178,6 +178,16 @@ async function main() {
       stdio: "inherit",
     });
 
+    // --ignore-scripts also skips gofish-ir's `prepare`, but the harness
+    // imports gofish-ir via its built dist/ — build it explicitly (when the
+    // base ref has the package at all).
+    if (existsSync(join(wtPath, "packages/gofish-ir/package.json"))) {
+      execSync("pnpm --filter gofish-ir build", {
+        cwd: wtPath,
+        stdio: "inherit",
+      });
+    }
+
     console.log(`\n=== Capturing ${baseRef} (${baseShort}) ===\n`);
     baseResult = await captureStories({
       harnessDir: join(wtPath, "tests/harness"),

@@ -57,8 +57,18 @@ const EXEMPT_FILE = join(TESTS_DIR, ".python-sync-exempt");
 // Kept in lockstep by hand — both are small and rarely change together.
 // ---------------------------------------------------------------------------
 
-/** CamelCase / spaced / underscored → kebab-case. */
+/** CamelCase / spaced / underscored → kebab-case.
+ *
+ * "GoTree" (the gofish-gotree package's title segment on every one of its
+ * story titles, e.g. "GoTree / Gallery / arc-tree") is a single proper-noun
+ * token, not two English words — the general CamelCase-split rule below
+ * would otherwise mangle it to "go-tree", diverging from the package's own
+ * "gotree" name (and from the tests/python-stories/gotree/ convention).
+ * Declared exception, not a generalizable rule: no other title segment
+ * needs this. Kept in lockstep with tests/scripts/path-mapping.ts's toKebab
+ * (this file's header explains why that one isn't imported directly). */
 function toKebab(s: string): string {
+  if (s.trim() === "GoTree") return "gotree";
   return s
     .replace(/([a-z])([A-Z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
@@ -87,7 +97,11 @@ function computeMapJsToPython(jsFileRelToRepo: string): string {
   }
 
   if (title) {
-    const segments = title.split("/").map(toKebab);
+    // Trim each segment before kebab-casing — gofish-gotree's story titles
+    // put spaces around "/" ("GoTree / Gallery / arc-tree"), which without
+    // trimming leaves stray leading/trailing dashes (" Gallery " → "-gallery-")
+    // and breaks the resulting path. Mirrors path-mapping.ts's titleToStoryId.
+    const segments = title.split("/").map((seg) => toKebab(seg.trim()));
     const dirPath = segments.slice(0, -1).join("/");
     const basePart = segments[segments.length - 1].replace(/-/g, "_");
     return `tests/python-stories/${dirPath}/test_${basePart}.py`;

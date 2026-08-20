@@ -13,6 +13,7 @@
     "apache-arrow": "^14.0.0",
     "solid-js": "^1.9.5",
     "gofish-graphics": "workspace:*",
+    "gofish-gotree": "workspace:*",
     "gofish-ir": "workspace:*"
   },
   "devDependencies": {

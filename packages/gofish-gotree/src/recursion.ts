@@ -46,7 +46,7 @@ const nameMark = (mark: any, pathName: string) => {
 export function renderSubtree(node: HierarchyNode<any>, spec: GoTreeSpec): any {
   const datum = toDatum(node);
   const pathName = nodePath(node);
-  const nodeMark = nameMark(spec.node!(datum), pathName);
+  const nodeMark = nameMark(spec.node!(datum, pathName), pathName);
 
   if (!node.children?.length) return nodeMark;
 

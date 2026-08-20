@@ -22,6 +22,7 @@ import {
   serializeSVG,
   type ChartBuilder,
 } from "gofish-graphics";
+import { reconstructGotreeTree } from "gofish-gotree";
 import type { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
 
@@ -248,6 +249,65 @@ function makeDeriveBridge(model: WidgetModel): Serialize.DeriveBridge {
 }
 
 // ---------------------------------------------------------------------------
+// gotree-tree mark bridge (#792)
+// ---------------------------------------------------------------------------
+
+/**
+ * Adapt gofish-gotree's `applyLambda(id, args)` (one lambda call, arbitrary
+ * positional args, one resolved result) onto the widget's
+ * `Serialize.DeriveBridge.applyLambda(id, rows)` (rows-in/rows-out over an
+ * Arrow transport — each row independently mapped to its own result).
+ *
+ * A gotree lambda call — resolving one node-template channel (`args = [row]`)
+ * or one link's options (`args = [srcRow, tgtRow]`) — is a SINGLE Python call
+ * with those args positional, not a batch of independent per-row calls. The
+ * two conventions don't line up, so this wraps `args` as the payload of one
+ * single-row batch call: `{ __gofish_args: args }`. This is a deliberate
+ * shortcut (see repo CLAUDE.md's "declared shortcut" allowance) — the
+ * Python-side lambda dispatcher for gotree-registered callables must
+ * recognize `row.__gofish_args` and invoke the user's callable with those
+ * values positionally (`fn(*row["__gofish_args"])`); ordinary derive/channel
+ * lambdas elsewhere are unaffected, since they never send this wrapper.
+ */
+function makeGotreeApplyLambda(
+  bridge: Serialize.DeriveBridge
+): (id: string, args: any[]) => Promise<any> {
+  return async (id: string, args: any[]) => {
+    const [result] = await bridge.applyLambda(id, [{ __gofish_args: args }]);
+    if (result && typeof result === "object") {
+      const keys = Object.keys(result);
+      if (keys.length === 1) return result[keys[0]];
+    }
+    return result;
+  };
+}
+
+/**
+ * The `markBridges` map passed to every `Serialize.mapMark`/`buildChart`
+ * call — currently just `"gotree-tree"` (#792). `ctx.mapMark` recurses back
+ * into this same widget's `Serialize.mapMark` (bound to this render's
+ * bridge/token-resolver), so a gotree node template can itself contain any
+ * other mark IR, including a nested gotree-tree.
+ */
+function makeMarkBridges(
+  bridge: Serialize.DeriveBridge,
+  resolveToken: Serialize.TokenResolver
+): Serialize.MarkBridges {
+  // `bridges` closes over itself (via the `mapMark` callback below) so a
+  // gotree node template that itself nests another gotree-tree resolves
+  // through the SAME bridge map, arbitrarily deep — no duplicated wiring.
+  const bridges: Serialize.MarkBridges = {
+    "gotree-tree": (spec: any) =>
+      reconstructGotreeTree(spec, {
+        mapMark: (markIR: any) =>
+          Serialize.mapMark(markIR, bridge, resolveToken, undefined, bridges),
+        applyLambda: makeGotreeApplyLambda(bridge),
+      }),
+  };
+  return bridges;
+}
+
+// ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
 
@@ -290,13 +350,20 @@ function renderLayer(
   }
 
   const resolveToken = Serialize.makeTokenResolver();
+  const markBridges = makeMarkBridges(bridge, resolveToken);
   // A tier is a chart (ChartBuilder) or a component-level annotation
   // (raw-mark → a Mark). Build each accordingly; the builder chain stacks
   // them via `.layer()`, which accepts either.
   const childTiers = spec.charts.map((childSpec: any, i: number) => {
     if (childSpec && childSpec.type === "raw-mark") {
       log(`Building raw-mark tier ${i}`);
-      return Serialize.mapMark(childSpec.mark, bridge, resolveToken) as any;
+      return Serialize.mapMark(
+        childSpec.mark,
+        bridge,
+        resolveToken,
+        undefined,
+        markBridges
+      ) as any;
     }
     const b64 = arrowDict[String(i)] || "";
     const data = decodeArrowB64(b64);
@@ -305,7 +372,8 @@ function renderLayer(
       childSpec as ChartSpec,
       data,
       bridge,
-      resolveToken
+      resolveToken,
+      markBridges
     );
   });
 
@@ -354,7 +422,14 @@ function renderRawMark(
 
   log("Building raw mark...");
   const resolveToken = Serialize.makeTokenResolver();
-  const mark = Serialize.mapMark(spec.mark, bridge, resolveToken) as any;
+  const markBridges = makeMarkBridges(bridge, resolveToken);
+  const mark = Serialize.mapMark(
+    spec.mark,
+    bridge,
+    resolveToken,
+    undefined,
+    markBridges
+  ) as any;
   const renderOptions: RenderOptions = {
     w: model.get("width"),
     h: model.get("height"),
@@ -397,7 +472,14 @@ function renderChart(
 
   log("Building chart...");
   const resolveToken = Serialize.makeTokenResolver();
-  const node = Serialize.buildChart(chartSpec, data, bridge, resolveToken);
+  const markBridges = makeMarkBridges(bridge, resolveToken);
+  const node = Serialize.buildChart(
+    chartSpec,
+    data,
+    bridge,
+    resolveToken,
+    markBridges
+  );
 
   const renderOptions: RenderOptions = {
     w: model.get("width"),

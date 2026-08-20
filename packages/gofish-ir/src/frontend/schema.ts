@@ -410,7 +410,8 @@ export type MarkIR =
   | CombinatorMarkIR
   | RefMarkIR
   | OffsetMarkIR
-  | CutMarkIR;
+  | CutMarkIR
+  | GotreeTreeIR;
 
 export type LeafMarkType =
   | "rect"
@@ -533,6 +534,76 @@ export interface CutMarkIR extends BaseIRNode {
   zOrder?: number;
   translate?: TranslateIR;
 }
+
+/**
+ * `gotree-tree` mark (issue #792) — a serialized gotree hierarchy
+ * visualization. Python builds a `GoTreeSpec` and calls gotree's `tree()`;
+ * on the JS side the reconstruction logic lives in `gofish-gotree` (not
+ * here or in gofish-graphics — that dependency would create a workspace
+ * cycle) and is INJECTED into the deserializer as a `markBridges` entry
+ * keyed `"gotree-tree"` (mirrors the existing `DeriveBridge` precedent in
+ * gofish-graphics' `serialize/registry.ts`).
+ *
+ * Row shape for field/lambda resolution at each hierarchy node:
+ * `{ ...d.data (children key omitted), depth, height, width, value }` —
+ * `depth`/`height`/`width`/`value` come from gotree's `HierarchyDatum` and
+ * OVERRIDE same-named fields already present on the raw tree data. Both the
+ * Python emitter and the JS reconstructor must honor this collision rule.
+ */
+export interface GotreeTreeIR extends BaseIRNode {
+  type: "gotree-tree";
+  /** The nested tree data: `{ name?, value?, children?: [...], ...extra }`. */
+  data: Record<string, unknown>;
+  /**
+   * Per-node mark template — channels may be literals, `FieldAccessor`s,
+   * `DatumValue`s, or `{__gofish_lambda}` sentinels, resolved per row at
+   * deserialize time. Omitted → gotree's `DEFAULT_NODE`. The whole-factory
+   * fallback (`{type: "mark-fn", lambdaId}`) is already a `MarkIR` leaf
+   * variant, so no separate union arm is needed for it here.
+   */
+  node?: MarkIR;
+  /**
+   * Per-edge link styling. `"none"` suppresses links; a lambda sentinel
+   * receives `(srcRow, tgtRow)` and returns a `GotreeLinkOptionsIR` dict —
+   * resolved eagerly at deserialize time (gotree's edge-collection callback
+   * is synchronous, so lambda RPCs can't run inside it; see gofish-gotree's
+   * `serialize.ts`).
+   */
+  link?: "none" | GotreeLinkOptionsIR | BridgeLambdaSentinel;
+  /** Combiner for parent ↔ children-group. */
+  parentChild?: GotreeCombinerIR;
+  /** Combiner for the sibling group. */
+  sibling?: GotreeCombinerIR;
+  /** Reuses the existing coord IR shape (e.g. `{type: "polar", ...}`) — see
+   *  `resolveCoordConfig`/`resolveOptions` in gofish-graphics' fromJSON.ts. */
+  coord?: Record<string, unknown>;
+}
+
+/** `GoTreeSpec.link`'s object form — mirrors gofish-gotree's `LinkOptions`
+ *  (`packages/gofish-gotree/src/spec.ts`). */
+export interface GotreeLinkOptionsIR {
+  curve?: "straight" | "bezier" | "orthogonal" | "arc";
+  stroke?: string;
+  strokeWidth?: number;
+  opacity?: number;
+}
+
+/**
+ * A gotree parent-child/sibling combiner. Mirrors gofish-gotree's
+ * `SpreadOptions` / `DistributeOptions` / `NestOptions` / `CombineOptions`
+ * (`packages/gofish-gotree/src/helpers.ts`) and its depth-indexed
+ * `alternate(...)` (depth % length indexing over a fixed combiner list).
+ * `options` stays a loosely-typed bag here — like other combinator
+ * `options` in this schema — rather than re-deriving each helper's full
+ * field set; the real helper functions validate their own opts at
+ * reconstruction time.
+ */
+export type GotreeCombinerIR =
+  | { kind: "spread"; options: Record<string, unknown> }
+  | { kind: "distribute"; options: Record<string, unknown> }
+  | { kind: "nest"; options: Record<string, unknown> }
+  | { kind: "combine"; options: Record<string, unknown> }
+  | { kind: "alternate"; combiners: GotreeCombinerIR[] };
 
 // ---------------------------------------------------------------------------
 // Channel values
@@ -711,12 +782,16 @@ export function isOffsetMarkIR(mark: MarkIR): mark is OffsetMarkIR {
 export function isCutMarkIR(mark: MarkIR): mark is CutMarkIR {
   return mark.type === "cut";
 }
+export function isGotreeTreeIR(mark: MarkIR): mark is GotreeTreeIR {
+  return mark.type === "gotree-tree";
+}
 export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
   return (
     !isCombinatorMarkIR(mark) &&
     !isRefMarkIR(mark) &&
     !isOffsetMarkIR(mark) &&
-    !isCutMarkIR(mark)
+    !isCutMarkIR(mark) &&
+    !isGotreeTreeIR(mark)
   );
 }
 
