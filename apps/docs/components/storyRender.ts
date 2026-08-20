@@ -27,6 +27,9 @@ const storyModules: Record<string, () => Promise<unknown>> = import.meta.env.SSR
       ...import.meta.glob(
         "../../../packages/gofish-gotree/stories/**/*.stories.tsx"
       ),
+      ...import.meta.glob(
+        "../../../packages/gofish-neo/stories/**/*.stories.tsx"
+      ),
     };
 
 /** Harness story id — mirrors tests/harness + storyExamples.ts. */

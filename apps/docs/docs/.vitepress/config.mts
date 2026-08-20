@@ -9,7 +9,7 @@ import vueJsx from "@vitejs/plugin-vue-jsx";
 import solidPlugin from "vite-plugin-solid";
 import { loadStoryExamples } from "./data/storyExamples";
 import { readdirSync, readFileSync } from "fs";
-import { dirname, join, relative } from "path";
+import { dirname, join, relative, resolve } from "path";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
 
@@ -225,6 +225,19 @@ export default defineConfig({
         { find: /^solid-js\/web$/, replacement: SOLID_WEB_CLIENT },
         { find: /^solid-js\/jsx-runtime$/, replacement: SOLID_CORE_CLIENT },
         { find: /^solid-js$/, replacement: SOLID_CORE_CLIENT },
+        // gofish-gotree and gofish-neo aren't prebuilt (no dist/) in the docs
+        // CI job — only gofish-graphics gets a `pnpm build` step there. Bare
+        // imports of these two (gofish-neo's confusionMatrix.tsx imports
+        // `gofish-gotree`; its RadialConfusionMatrix story imports it too)
+        // resolve straight to source, mirroring tests/harness/vite.config.ts.
+        {
+          find: /^gofish-gotree$/,
+          replacement: resolve(GOFISH_PKG_DIR, "../gofish-gotree/src/index.ts"),
+        },
+        {
+          find: /^gofish-neo$/,
+          replacement: resolve(GOFISH_PKG_DIR, "../gofish-neo/src/index.ts"),
+        },
       ],
     },
     plugins: [
@@ -235,9 +248,11 @@ export default defineConfig({
       // owns only the library package's .ts(x) sources and its .stories.tsx files.
       // `generate: "dom"` forces DOM codegen even in the SSR bundle (the stories
       // only execute client-side, so SSR-flavoured codegen is never needed).
-      vueJsx({ exclude: [/packages\/gofish-(graphics|gotree)\/.*\.[jt]sx?$/] }),
+      vueJsx({
+        exclude: [/packages\/gofish-(graphics|gotree|neo)\/.*\.[jt]sx?$/],
+      }),
       solidPlugin({
-        include: [/packages\/gofish-(graphics|gotree)\/.*\.[jt]sx?$/],
+        include: [/packages\/gofish-(graphics|gotree|neo)\/.*\.[jt]sx?$/],
         solid: { generate: "dom", hydratable: false },
       }),
       // vue-jsx's config() narrows vite's esbuild to `/\.ts$/` (it expects to own

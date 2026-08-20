@@ -43,6 +43,21 @@ export default defineConfig({
       : undefined,
     alias: {
       "gofish-graphics": gofishAlias,
+      // gofish-gotree and gofish-neo are never built (no dist/) in the CI jobs
+      // that spin up this harness (visual-test, bench, docs' capture-gallery-
+      // thumbnails step) — only gofish-graphics gets a prerelease build there.
+      // Bare imports of these two packages (e.g. gofish-neo's confusionMatrix.tsx
+      // importing `gofish-gotree`) resolve straight to source instead, same as
+      // the gofishAlias above. Unconditional (not BENCH_PROD-gated): bench only
+      // instruments gofish-graphics.
+      "gofish-gotree": resolve(
+        __dirname,
+        "../../packages/gofish-gotree/src/index.ts"
+      ),
+      "gofish-neo": resolve(
+        __dirname,
+        "../../packages/gofish-neo/src/index.ts"
+      ),
     },
   },
 });

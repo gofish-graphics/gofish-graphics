@@ -1,9 +1,10 @@
 /**
  * storyExamples.ts — build-time data layer for the docs example gallery.
  *
- * Scans `packages/gofish-graphics/stories/**\/*.stories.tsx` for story exports
- * tagged `tags: ["gallery"]` with `parameters.gallery.{title,description}`, and
- * for each one synthesizes a standalone, runnable TypeScript snippet by
+ * Scans `packages/gofish-graphics/stories/**\/*.stories.tsx` (and the same under
+ * `packages/gofish-gotree/stories/` and `packages/gofish-neo/stories/`) for story
+ * exports tagged `tags: ["gallery"]` with `parameters.gallery.{title,description}`,
+ * and for each one synthesizes a standalone, runnable TypeScript snippet by
  * transforming the story's source:
  *
  *   - library imports (`../../src/lib`, `../../src/color`, `clock`, …)  → `"gofish-graphics"`
@@ -55,10 +56,11 @@ export interface StoryExample {
   isFallback: boolean;
   /**
    * true when the live Sandpack editor should be suppressed for this example.
-   * Set for gofish-gotree examples: that package isn't published to npm yet, so
-   * the in-browser editor can't resolve `import ... from "gofish-gotree"`. The
-   * static example page still renders the chart. Re-enable once the package is
-   * published (see the npm-publish tracking issue).
+   * Set for gofish-gotree and gofish-neo examples: neither package is published
+   * to npm yet, so the in-browser editor can't resolve `import ... from
+   * "gofish-gotree"` / `"gofish-neo"`. The static example page still renders
+   * the chart. Re-enable once the packages are published (see the npm-publish
+   * tracking issue).
    */
   noLiveEditor?: boolean;
 }
@@ -80,6 +82,13 @@ const GOFISH_PKG_JSON = join(
 const GOTREE_STORIES_DIR = join(REPO_ROOT, "packages/gofish-gotree/stories");
 const GOTREE_SRC_DIR = join(REPO_ROOT, "packages/gofish-gotree/src");
 const GOTREE_DATA_MODULE = join(GOTREE_STORIES_DIR, "data"); // stories/data.ts
+
+// Same shape for the gofish-neo hierarchical-confusion-matrix package: stories
+// import the algebra from `../src` (rewritten to the bare "gofish-neo" package)
+// and sample data from `./data`.
+const NEO_STORIES_DIR = join(REPO_ROOT, "packages/gofish-neo/stories");
+const NEO_SRC_DIR = join(REPO_ROOT, "packages/gofish-neo/src");
+const NEO_DATA_MODULE = join(NEO_STORIES_DIR, "data"); // stories/data.ts
 
 const ASSET_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"];
 
@@ -142,12 +151,14 @@ function classifyModule(spec: string, storyFile: string): ImportTarget {
 
   if (spec.startsWith(".")) {
     const absolute = resolve(dirname(storyFile), spec);
-    // Dataset modules: gofish-graphics' src/data, or the gotree stories' data.ts
+    // Dataset modules: gofish-graphics' src/data, or the gotree/neo stories' data.ts
     if (
       absolute.startsWith(DATA_DIR + "/") ||
       absolute.startsWith(DATA_DIR) ||
       absolute === GOTREE_DATA_MODULE ||
-      absolute.startsWith(GOTREE_DATA_MODULE + "/")
+      absolute.startsWith(GOTREE_DATA_MODULE + "/") ||
+      absolute === NEO_DATA_MODULE ||
+      absolute.startsWith(NEO_DATA_MODULE + "/")
     ) {
       // resolve to the actual .ts file path
       const modulePath = resolveModuleFile(absolute);
@@ -168,6 +179,10 @@ function classifyModule(spec: string, storyFile: string): ImportTarget {
       absolute.startsWith(GOTREE_SRC_DIR + "/")
     ) {
       return { kind: "keep", module: "gofish-gotree" };
+    }
+    // gofish-neo algebra imports (`../src`) → the bare package name.
+    if (absolute === NEO_SRC_DIR || absolute.startsWith(NEO_SRC_DIR + "/")) {
+      return { kind: "keep", module: "gofish-neo" };
     }
     // A local helper module next to the story — cannot be made standalone.
     return { kind: "local" };
@@ -917,7 +932,11 @@ let cache: StoryExample[] | undefined;
 export function loadStoryExamples(): StoryExample[] {
   if (cache) return cache;
 
-  const files = [...walk(STORIES_DIR), ...walk(GOTREE_STORIES_DIR)].sort();
+  const files = [
+    ...walk(STORIES_DIR),
+    ...walk(GOTREE_STORIES_DIR),
+    ...walk(NEO_STORIES_DIR),
+  ].sort();
   const examples: StoryExample[] = [];
   const seenIds = new Map<string, string>();
 
@@ -972,8 +991,11 @@ export function loadStoryExamples(): StoryExample[] {
         datasetCode: result.datasetCode,
         npmDeps: computeNpmDeps(result.code, result.datasetCode),
         isFallback: result.isFallback,
-        // gofish-gotree isn't on npm yet → the in-browser editor can't resolve it.
-        noLiveEditor: storyFile.startsWith(GOTREE_STORIES_DIR),
+        // gofish-gotree/gofish-neo aren't on npm yet → the in-browser editor
+        // can't resolve them.
+        noLiveEditor:
+          storyFile.startsWith(GOTREE_STORIES_DIR) ||
+          storyFile.startsWith(NEO_STORIES_DIR),
       });
     }
   }
