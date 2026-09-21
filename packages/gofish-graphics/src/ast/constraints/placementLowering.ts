@@ -21,7 +21,13 @@ import { lowerNestPlacement } from "./nest";
 import { PlacementProgramLowerer } from "./placementProgramLowerer";
 import type { PositionConstraint } from "./position";
 import { isPositionInterval, lowerPositionPlacement } from "./position";
-import { axisIndex, type Axis, type ConstraintPosScales } from "./shared";
+import {
+  axisIndex,
+  axisName,
+  placementKey,
+  type Axis,
+  type ConstraintPosScales,
+} from "./shared";
 import { pxOf, type AxisMap } from "../domain";
 import type { AnchorProgram } from "./placementFacts";
 
@@ -46,9 +52,6 @@ export type PlacementCoordinate = number | undefined;
 const AXIS_INDICES = [0, 1] as const;
 const POSITION_AXES = ["x", "y"] as const;
 
-const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
-const placementKey = (axis: Axis, name: string): string => `${axis}:${name}`;
-
 export function compilePlacementCoordinate(
   coordinate: PositionValue,
   scale: AxisMap | undefined,
@@ -61,14 +64,6 @@ export function compilePlacementCoordinate(
   if (!isValue(coordinate)) return coordinate;
   if (scale === undefined) return undefined;
   return pxOf(scale, getValue(coordinate)!) + getValueOffset(coordinate);
-}
-
-function resolveCoordinate(
-  coordinate: PositionValue,
-  scale: AxisMap | undefined,
-  axisSize?: number
-): number | undefined {
-  return compilePlacementCoordinate(coordinate, scale, axisSize);
 }
 
 class PlacementOwnershipPlan {
@@ -113,8 +108,7 @@ class PlacementOwnershipPlan {
    *  baseline is fixed at `posScale(0)` by the shared map, so `align` must leave
    *  it where its own scale puts it (a scatter facet panel). Collected at the
    *  layer boundary (a SPACE/scope fact) and handed in; the ownership plan is the
-   *  single authority the align guard consults, in place of the retired
-   *  space-pass `placementOn` reconstruction (Stage 6f). */
+   *  single authority the align guard consults. */
   isDataPositioned(axis: 0 | 1, name: string): boolean {
     return this.dataPositionedSet[axis].has(name);
   }
@@ -145,11 +139,11 @@ class PlacementOwnershipPlan {
       // resolve (an align sources such a spanned target). A point pins one
       // anchor.
       if (isPositionInterval(coordinate)) {
-        const min = resolveCoordinate(coordinate[0], posScales?.[idx]);
-        const max = resolveCoordinate(coordinate[1], posScales?.[idx]);
+        const min = compilePlacementCoordinate(coordinate[0], posScales?.[idx]);
+        const max = compilePlacementCoordinate(coordinate[1], posScales?.[idx]);
         if (min === undefined || max === undefined) continue;
       } else {
-        const value = resolveCoordinate(
+        const value = compilePlacementCoordinate(
           coordinate,
           posScales?.[idx],
           this.sizes[idx]
@@ -196,7 +190,7 @@ export function lowerPlacementConstraints(
   const lowerer = new PlacementProgramLowerer(targets);
   const resolveAxisCoordinate = (axis: Axis, coordinate: PositionValue) => {
     const idx = axisIndex(axis);
-    return resolveCoordinate(coordinate, posScales?.[idx], sizes[idx]);
+    return compilePlacementCoordinate(coordinate, posScales?.[idx], sizes[idx]);
   };
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
   const isPinned = ownership.isPinned.bind(ownership);
@@ -221,51 +215,47 @@ export function lowerPlacementConstraints(
   constraints.forEach((constraint, constraintIndex) => {
     const owner = `${constraint.type}[${constraintIndex}]`;
 
-    if (constraint.type === "position") {
-      // Point axes emit a single pin; interval axes emit both edges (strong
-      // start/end pins) that cell closure resolves into a size.
-      lowerPositionPlacement(constraint, owner, {
-        emitter: lowerer,
-        targets,
-        isInitiallyPlaced,
-        resolveCoordinate: resolveAxisCoordinate,
-      });
-      return;
+    switch (constraint.type) {
+      case "position":
+        // Point axes emit a single pin; interval axes emit both edges (strong
+        // start/end pins) that cell closure resolves into a size.
+        lowerPositionPlacement(constraint, owner, {
+          emitter: lowerer,
+          targets,
+          isInitiallyPlaced,
+          resolveCoordinate: resolveAxisCoordinate,
+        });
+        return;
+      case "align":
+        lowerAlignPlacement(constraint, owner, {
+          emitter: lowerer,
+          targets,
+          posScales,
+          isPinned,
+          isDataPositioned,
+        });
+        return;
+      case "distribute":
+        lowerDistributePlacement(constraint, owner, {
+          emitter: lowerer,
+          targets,
+          isInitiallyPlaced,
+        });
+        return;
+      case "nest":
+        lowerNestPlacement(constraint, owner, lowerer);
+        return;
+      case "grid":
+        lowerGridPlacement(
+          constraint,
+          owner,
+          sizes,
+          lowerer,
+          gridTracks,
+          pinnedByPosition
+        );
+        return;
     }
-
-    if (constraint.type === "align") {
-      lowerAlignPlacement(constraint, owner, {
-        emitter: lowerer,
-        targets,
-        posScales,
-        isPinned,
-        isDataPositioned,
-      });
-      return;
-    }
-
-    if (constraint.type === "distribute") {
-      lowerDistributePlacement(constraint, owner, {
-        emitter: lowerer,
-        targets,
-        isInitiallyPlaced,
-      });
-      return;
-    }
-
-    if (constraint.type === "nest") {
-      lowerNestPlacement(constraint, owner, lowerer);
-      return;
-    }
-
-    lowerGridPlacement(
-      constraint,
-      owner,
-      sizes,
-      lowerer,
-      gridTracks,
-      pinnedByPosition
-    );
   });
 
   return { anchorProgram: lowerer.anchorProgram };

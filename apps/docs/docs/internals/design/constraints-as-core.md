@@ -354,8 +354,8 @@ sub-sums (two independent stacks overlaid); a distribute interleaved with a
 `position`-pinned anchor must solve its sum _relative to_ the pin. The extents
 remain max-plus (longest path through the network), so the solve stays
 well-defined, but the current one-space-per-axis model has no way to say
-"this fragment is a sub-stack" — that wants either sub-domain tagging (the
-existing `ordinalGroupId` field gestures at this) or the measure-keyed
+"this fragment is a sub-stack" — that wants either sub-domain tagging or the
+measure-keyed
 multi-scale-per-axis design, which this would share machinery with. Separately,
 over-constraint needs a decision: today `place()` silently no-ops on the
 second write and spread warns; Bluefish throws with ownership info. Recommend:

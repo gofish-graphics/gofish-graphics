@@ -30,16 +30,17 @@ import * as Monotonic from "../../util/monotonic";
  *
  * Each equation records its `owner` so a double-write on the same key is a
  * named conflict (one owner per key). This is the ownership ledger
- * size-setting constraints write into (size-claims.md "Dimension B"); GoFish's
+ * size-setting constraints write into
+ * (apps/docs/docs/internals/design/size-claims.md "Dimension B"); GoFish's
  * `(intrinsic-local box, translate)` split is bridged at the call site by
  * stamping `min` into the translate and `[0, size]` into the local box.
  *
- * **σ-affine key values (unified-propagation.md, stage 1).** A key's value
+ * **σ-affine key values** (see
+ * apps/docs/docs/internals/design/unified-propagation.md). A key's value
  * is a {@link Monotonic} — `slope·σ + intercept` — not just a number, so the
  * ledger can hold a claim that still depends on its scope's scale factor σ (a
  * bar's `size = count·σ`) and resolve it once σ is solved. A plain `number` is
- * accepted and coerced to a constant (`slope 0`); the all-numeric case (every
- * caller today) behaves exactly as before, and {@link read} evaluates at σ
+ * accepted and coerced to a constant (`slope 0`); {@link read} evaluates at σ
  * (default 0), so a constant reads back as its number. The σ-aware value is
  * {@link readMono}. Equations stay printable via `Monotonic.print`.
  */
@@ -60,7 +61,7 @@ const asMono = (v: BBoxValue): Monotonic.Monotonic =>
   typeof v === "number" ? Monotonic.linear(0, v) : v;
 
 /** Equality of two σ-affine claims. Linear claims are pinned exactly by two
- *  probes; piecewise claims (Stage 6e's `max`-composed track claims) are
+ *  probes; piecewise claims (a grid's `max`-composed track claims) are
  *  compared structurally at every breakpoint. See `Monotonic.approxEqual`. */
 const monoEqual = (
   a: Monotonic.Monotonic,
@@ -136,10 +137,8 @@ export class BBox {
       }
       return undefined;
     }
-    // Reject a second equation that is linearly dependent on the first (e.g.
-    // `min` then `min`): handled above by the same-key check. Distinct keys
-    // are always independent here (the four keys are pairwise independent in
-    // 2 unknowns), so two distinct keys solve the system.
+    // The four keys are pairwise independent in 2 unknowns, so two distinct
+    // keys solve the system.
     this.eqs.push({ key, value: mono, owner });
     if (this.eqs.length === 2) this.solve();
     return undefined;

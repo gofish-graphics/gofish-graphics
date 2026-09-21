@@ -16,6 +16,9 @@ export const group = createOperator<any, GroupOptions>(
       if (!by) throw new Error("group requires opts.by = fieldName");
       return splitEntries(by, d);
     },
+    // Positions nothing, but its `by` is still eligible to split a relational
+    // mark (see `classifyOperator`).
+    arrangement: { kind: "none" },
     serialize: { type: "group" },
   }
 );

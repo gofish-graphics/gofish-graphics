@@ -361,8 +361,8 @@ composes its targets' spaces into the layer's claim on that axis:
   `POSITION([0, Σ])`; constant-sized keyed targets fall back to ORDINAL.
   (A former POSITION's pixel extent at σ=1 is `width.run(1) = b−a`, so the
   unified `width`-based sum subsumes the old separate POSITION-sum branch.)
-- `Constraint.align` contributes the alignment fold (`alignSpaceFold` →
-  `resolveAlignmentSpace`) on its axis — but only for a point-anchor value;
+- `Constraint.align` contributes the alignment fold (`resolveAlignmentSpace`)
+  on its axis — but only for a point-anchor value;
   `"span"`/`"size"` (#726, below) contribute nothing to the space fold, since
   their target is UNDEFINED on that axis by construction.
 - `Constraint.nest` contributes the nesting fold (`nestedSpace`,
@@ -454,7 +454,7 @@ budget**:
 a fold-produced SIZE claim is inverted against the layer's allotted size to
 derive a local scale factor, and distribute-covered fill children are
 proposed slices from the shared proposal plan (`buildDistributeSliceMap`,
-`constraints/proposalPlan.ts`, using `allocateSlices` from
+`constraints/proposalPlan.ts`, using `sliceExtent` from
 `constraints/folds.ts`). When distribute segments overlap on the same child
 axis, they are treated as a placement-relation graph rather than a
 spread-like flex slice, so the ambiguous size proposal is skipped instead of
@@ -707,8 +707,8 @@ via `Monotonic.inverse`. `spread({ glue: true })` (i.e. `stack`) sums
 children's extents into a `POSITION([0, sum])` — the operator commits the
 data-driven magnitudes to an anchored axis. Since the operator/constraint
 unification, these folds have one home: spread's resolver _is_
-`distributeSpaceFold` on the stack axis and `alignSpaceFold` on the cross
-axis — the same functions the constraint path uses (see
+`distributeSpaceFold` on the stack axis and `resolveAlignmentSpace` on the
+cross axis — the same functions the constraint path uses (see
 [The contract](#the-contract)). `layer` and overlay-style operators use
 `unionChildSpaces` (`alignment.ts`), which keeps the symbolic Monotonic
 when every child is a baseline magnitude (`placement: free`) and otherwise

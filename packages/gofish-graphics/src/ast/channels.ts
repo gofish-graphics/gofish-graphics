@@ -27,13 +27,16 @@ export type ChannelType = "size" | "pos" | "color" | "raw";
  * object form adds flags — `entry: true` produces a per-row array instead of
  * an aggregate, used by expand-kind marks (e.g. `cut`) where each datum maps
  * to one output node and the channel value differs per node.
+ *
+ * `C` narrows which channel types are admissible: the operator factory
+ * (marks/createOperator.ts) narrows it to exclude "raw".
  */
-export type ChannelSpec =
-  | ChannelType
-  | { type: ChannelType; entry?: boolean; discrete?: boolean };
+export type ChannelSpec<C extends ChannelType = ChannelType> =
+  | C
+  | { type: C; entry?: boolean; discrete?: boolean };
 
-export type ChannelAnnotations<T> = {
-  [K in keyof T]?: ChannelSpec;
+export type ChannelAnnotations<T, C extends ChannelType = ChannelType> = {
+  [K in keyof T]?: ChannelSpec<C>;
 };
 
 /**
@@ -99,8 +102,8 @@ export type DeriveMarkProps<
 
 /**
  * Resolve a channel's {@link Measure} from its three sources, treating measures
- * as TYPES (issue #266's field/datum/literal trichotomy, completed). The three
- * sources, in checking order:
+ * as TYPES (the field/datum/literal trichotomy). The three sources, in checking
+ * order:
  *   1. Explicit annotation — `field(name, measure)`. A real type claim.
  *   2. Inferred provenance — the {@link getMeasureProvenance} map a transform
  *      like `bin()` attached to the data array. Also a real type claim.
@@ -236,10 +239,43 @@ export const inferSize = inferNumeric(sumBy);
 export const inferPos = inferNumeric(meanBy);
 
 /**
+ * Shared core of the non-aggregating channels ({@link inferColor} /
+ * {@link inferRaw}): resolve an accessor against the FIRST row of `data`.
+ * - "literal": pass the accessor's value through unchanged — a `literal(...)`
+ *   wrapper, or a string that names no field on the row (e.g. a CSS color).
+ * - "row": the value read off the row. The caller wraps it in `value(...)`;
+ *   `inferRaw` awaits it first, so a function accessor may be async.
+ * - "none": there is no usable row to read.
+ */
+function firstRowValue<T extends Record<string, any>>(
+  accessor: string | ((d: T) => any) | FieldAccessor | LiteralValue,
+  data: T[]
+):
+  | { kind: "literal"; value: unknown }
+  | { kind: "row"; value: unknown }
+  | { kind: "none" } {
+  if (isLiteral(accessor)) return { kind: "literal", value: accessor.value };
+  const row = data.length > 0 && data[0] != null ? data[0] : undefined;
+  if (isField(accessor)) {
+    return row === undefined
+      ? { kind: "none" }
+      : { kind: "row", value: row[accessor.name] };
+  }
+  if (typeof accessor === "function") {
+    return row === undefined
+      ? { kind: "none" }
+      : { kind: "row", value: accessor(row) };
+  }
+  if (row !== undefined && accessor in row) {
+    return { kind: "row", value: row[accessor] };
+  }
+  return { kind: "literal", value: accessor };
+}
+
+/**
  * Infer a color value from a field name, function accessor, or literal string.
- * - string matching a field in data[0]: wraps field value as a Value.
- * - string not matching a field: passes through as a literal color.
- * - function: called on data[0] and wraps the result as a Value.
+ * A string that names a field on the data becomes that field's value; one that
+ * doesn't passes through as a literal color.
  */
 export const inferColor = <T extends Record<string, any>>(
   accessor:
@@ -251,30 +287,20 @@ export const inferColor = <T extends Record<string, any>>(
   data: T[]
 ): MaybeValue<string> | undefined => {
   if (accessor === undefined) return undefined;
-  if (isLiteral(accessor)) return accessor.value as string;
-  if (isField(accessor)) {
-    return data.length > 0 && data[0] != null
-      ? value(data[0][accessor.name])
-      : undefined;
-  }
-  if (typeof accessor === "function") {
-    return data.length > 0 && data[0] != null
-      ? value(accessor(data[0]))
-      : undefined;
-  }
-  if (data.length > 0 && data[0] != null && accessor in data[0]) {
-    return value(data[0][accessor]);
-  }
-  return accessor;
+  const resolved = firstRowValue(accessor, data);
+  if (resolved.kind === "none") return undefined;
+  return resolved.kind === "literal"
+    ? (resolved.value as string)
+    : value(resolved.value as string);
 };
 
 /**
  * Infer a raw scalar value from a field name, function accessor, or literal.
- * - number: passed through as a literal.
- * - string matching a field in data[0]: wraps field value as a Value.
- * - string not matching a field: passes through as a literal string.
- * - function: called on data[0] and wraps the result as a Value.
- * No aggregation — suitable for text content, labels, unscaled identifiers.
+ * Same resolution as {@link inferColor} (plus numbers), with no aggregation —
+ * suitable for text content, labels, unscaled identifiers. Async so a callable
+ * accessor may return a Promise: the Python wrapper bridges `text(text=lambda
+ * d: ...)` through the derive-server RPC that way. Awaiting a non-Promise is a
+ * no-op, so plain `(d) => d.amount` accessors work unchanged.
  */
 export const inferRaw = async <T extends Record<string, any>>(
   accessor:
@@ -288,24 +314,30 @@ export const inferRaw = async <T extends Record<string, any>>(
 ): Promise<MaybeValue<string | number> | undefined> => {
   if (accessor === undefined) return undefined;
   if (typeof accessor === "number") return accessor;
-  if (isLiteral(accessor)) return accessor.value as string | number;
-  if (isField(accessor)) {
-    return data.length > 0 && data[0] != null
-      ? value(data[0][accessor.name])
-      : undefined;
-  }
-  if (typeof accessor === "function") {
-    if (data.length > 0 && data[0] != null) {
-      // Awaiting on a non-Promise is a no-op, so this transparently
-      // supports both sync `(d) => d.amount` accessors and async ones
-      // (e.g. the Python-bridge arrow the harness installs for
-      // `text({text: <__gofish_lambda sentinel>})`).
-      return value(await accessor(data[0]));
-    }
-    return undefined;
-  }
-  if (data.length > 0 && data[0] != null && accessor in data[0]) {
-    return value(data[0][accessor]);
-  }
-  return accessor;
+  const resolved = firstRowValue(accessor, data);
+  if (resolved.kind === "none") return undefined;
+  return resolved.kind === "literal"
+    ? (resolved.value as string | number)
+    : value(await resolved.value);
+};
+
+/**
+ * The one channel-type → inference dispatch table, shared by the mark factory
+ * (`buildCreatedMark` in withGoFish.ts) and the operator factory
+ * (`applyChannels` in marks/createOperator.ts).
+ *
+ * `measure` is the channel's resolved {@link Measure}, computed once per
+ * channel from the whole input array (which carries the measure-provenance
+ * symbol even when `data` is a per-entry slice that does not) and passed down
+ * so `inferSize`/`inferPos` don't recompute it per split entry. Only they
+ * consume it.
+ */
+export const CHANNEL_INFER: Record<
+  ChannelType,
+  (val: any, data: any[], measure?: Measure) => any
+> = {
+  size: (val, data, measure) => inferSize(val, data, measure),
+  pos: (val, data, measure) => inferPos(val, data, measure),
+  color: (val, data) => inferColor(val, data),
+  raw: (val, data) => inferRaw(val, data),
 };

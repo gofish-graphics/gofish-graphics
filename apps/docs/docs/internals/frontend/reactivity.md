@@ -105,7 +105,9 @@ thunk under `withInteractiveResolve`, threads `options.interaction = runtime`
 **iff** `hasWork()`, and wires `setRerender` to re-invoke the whole resolve into
 the same container. Three callers share it:
 
-- `ChartBuilder.render` and `LayerBuilder.render` — the v3 chart pipeline. Their
+- `ChartBuilder.render` and `LayerBuilder.render` — the v3 chart pipeline. Both
+  get `render` from the shared terminal registry (`marks/terminals.ts`) with
+  `renderWithInteraction` as their render strategy, and their one shared
   `resolveForRender` runs domain inference + layout over the builder's spec.
 - the low-level `gofish()` terminal (`gofish.tsx`) when handed a **component
   thunk** — `gofish(container, opts, () => node)`, a raw shape/operator

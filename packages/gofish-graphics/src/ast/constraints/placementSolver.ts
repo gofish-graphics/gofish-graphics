@@ -11,6 +11,7 @@ import {
 import type { TrackLayout } from "./grid";
 import {
   axisIndex,
+  axisName,
   type AlignAnchor,
   type Axis,
   type ConstraintPosScales,
@@ -24,7 +25,6 @@ import {
 } from "./placementFacts";
 import { anchorOffset } from "./placementProgramLowerer";
 import {
-  axisName,
   solveAxisProblem,
   type AxisProblem,
   type PlacementConflict,

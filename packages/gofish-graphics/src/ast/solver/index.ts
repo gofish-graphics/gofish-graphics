@@ -1,18 +1,17 @@
 /**
- * The σ-affine layout solver — Phase 0 spike (#39 endgame).
+ * The σ-affine layout solver.
  *
- * Validates the model before any pipeline wiring: a measure's data→screen map on
- * one axis is affine, `screen(d) = origin + σ·d`, with two parameters —
- * **σ = slope** (px per data unit) and **origin/baseline = intercept** (screen
- * position of data-0). Layout is equations in these; key values are σ-affine
+ * The model: a measure's data→screen map on one axis is affine,
+ * `screen(d) = origin + σ·d`, with two parameters — **σ = slope** (px per data
+ * unit) and **origin/baseline = intercept** (screen position of data-0). Layout is equations in these; key values are σ-affine
  * (`Monotonic` = `slope·σ + intercept`, reused from `util/monotonic`), so the
  * system propagates with σ symbolic and resolves it once per scope at the frame
  * equation.
  *
- * This module is standalone (no production pipeline use yet). Its job is to prove
- * the algebra reproduces the geometry the current engine targets on the six paper
- * cases in `tests/solver.test.ts`. Phase 2 runs the real cross-story shadow
- * assertion against the live engine; Phases 3–4 migrate the pipeline onto this.
+ * Standalone and test-only: nothing in the render pipeline imports it. It is a
+ * generalization of the production `BBox` (`constraints/bbox.ts`) with `minCoeff`
+ * — the baseline as a first-class unknown — exercised by the paper cases in
+ * `tests/solver.test.ts`.
  */
 import * as M from "../../util/monotonic";
 

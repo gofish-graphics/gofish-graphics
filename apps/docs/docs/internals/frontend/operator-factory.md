@@ -279,7 +279,7 @@ translation wrapper around the produced node.
 
 `stack({ by: "class", dir: "y" }).label(accessor, options?)` labels each
 **group** the split produces, rather than each mark instance. It is not
-built on the `createModifier`/`attachModifiers` system section 8 describes
+built on the `ModifierConfig`/`attachModifiers` system section 8 describes
 (that system decorates a _mark_; the operator form needs to affect the
 _execution_ of a still-being-called operator, after `.label()` has already
 returned). Instead:
@@ -345,7 +345,7 @@ The two factories are siblings:
 
 Both use channel annotations to encode opts; both produce mark types
 supporting `.name(...)` and `.label(...)` chaining. That chaining is wired by
-the **modifier factory** that also lives in this file — `createModifier` +
+the **modifier factory** that also lives in this file — `ModifierConfig` +
 `attachModifiers` — a single config-driven system shared by `nameableMark`
 (combinator marks), `createMark` (leaf marks), and `makeConstrainableMark`
 (layer / Porter-Duff marks, which add `.constrain()`). `.name(...)` also
@@ -387,12 +387,15 @@ a final `GoFishNode` and calls through to that node's method, ending the chain.
 They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
 `attachTerminals(target, resolveNode)`, where each surface supplies only its own
 node-resolution strategy (a combinator mark resolves by calling itself with
-`undefined`; a `withGoFish` promise resolves by awaiting). Both `attachModifiers`
-here and `addRenderMethod` in `withGoFish.ts` call `attachTerminals`, so the set
-of terminals is defined once — adding one (as `toDisplayList` was) touches a
-single list and lands on every surface at once, instead of being hand-rolled per
-surface (which previously left `toDisplayList` off the combinator surface
-entirely).
+`undefined`; a `withGoFish` promise resolves by awaiting). The chart surfaces go
+through the same list via `attachBuilderTerminals(target, resolveForRender,
+render)`, which lets a surface also prepare the render options (`ChartBuilder`
+and `LayerBuilder` merge in the chart-level `axes`/`color` config) and drive
+`render` through its own strategy (`renderWithInteraction`). So the set of
+terminals is defined once — adding one (as `toDisplayList` was) touches a single
+list and lands on every surface at once, instead of being hand-rolled per
+surface (which previously left `toDisplayList` off the combinator surface and
+off `LayerBuilder` entirely).
 
 A second flavor, `attachTransformModifiers`, handles methods that map a mark to
 a _different_ mark rather than mutating its nodes — e.g. `image(...).cut(opts)`

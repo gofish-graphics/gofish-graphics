@@ -56,10 +56,6 @@ type RelationComponents = {
 
 export const TOLERANCE = 1e-6;
 
-export const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
-export const placementKey = (axis: Axis, name: string): string =>
-  `${axis}:${name}`;
-
 function buildRelationGraph(
   relations: PlacementRelation[]
 ): Map<NodeId, RelationEdge[]> {
@@ -103,10 +99,11 @@ function solveRelationComponents(
     const component = components.length;
     const nodes: NodeId[] = [];
     const queue: NodeId[] = [start];
+    let head = 0;
     relative.set(start, 0);
     componentOf.set(start, component);
-    while (queue.length > 0) {
-      const current = queue.shift()!;
+    while (head < queue.length) {
+      const current = queue[head++];
       nodes.push(current);
       for (const edge of adjacency.get(current) ?? []) {
         const expected = relative.get(current)! + edge.delta;
@@ -137,7 +134,7 @@ function solveRelationComponents(
  * each relation component's offset; a component with no pin falls back to the
  * distribute sequence-origin (its first `distribute[`-owned source) or a
  * normalized origin (its minimum coordinate at 0). This is the general half of
- * the placement solver, unchanged from the pre-extraction `solveAxis`.
+ * the placement solver.
  */
 export function solveAxisProblem(
   axis: Axis,
@@ -189,9 +186,9 @@ export function solveAxisProblem(
       });
       continue;
     }
-    const min = Math.min(
-      ...components[component].map((node) => relative.get(node) ?? 0)
-    );
+    let min = Infinity;
+    for (const node of components[component])
+      min = Math.min(min, relative.get(node) ?? 0);
     offsets.set(component, {
       value: -min,
       owner: "normalized-origin",

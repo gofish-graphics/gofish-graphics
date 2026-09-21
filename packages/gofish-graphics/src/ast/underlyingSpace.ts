@@ -2,7 +2,6 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-// import { ContinuousDomain } from "./domain";
 import { interval, Interval } from "../util/interval";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
 import * as Monotonic from "../util/monotonic";
@@ -11,44 +10,6 @@ import { nice as d3Nice } from "d3-array";
 
 export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
 
-/**
- * A data-driven extent on one shared scale. Collapses the former POSITION /
- * SIZE / DIFFERENCE trichotomy (issue #586): the extent is always a `width`
- * Monotonic in σ, and the only surviving distinction is the `anchor` a
- * constructor is given — the builder input that says whether, and at what data
- * coordinate, the extent commits an absolute position:
- *
- *   - `anchor: "free"` — a BASELINE MAGNITUDE (the old `SIZE`): a sized-but-
- *     unplaced extent with a local baseline at 0 but no committed position. Its
- *     position is not yet assigned but CAN be (a baseline-align anchors it → a
- *     numeric anchor; a middle-align makes it `"impossible"`). Builds no
- *     posScale; composes as a magnitude (measures FORGET on conflict), scales
- *     with a parent `transform.scale`, and is never niced.
- *   - `anchor: number` — ANCHORED (the old `POSITION`): the position IS assigned.
- *     The number is the DOMAIN MIN — the data-space coordinate of the extent's
- *     low edge (which may be 0!), NOT a zero point. Builds a posScale, is niced
- *     per σ-scope when an axis views it ({@link niceContinuous}, issue #659),
- *     renders an absolute axis over `[anchor, anchor + width.run(1)]`. Measures
- *     unify as TYPES (THROW on a clash) — a count axis must not silently merge
- *     with millimeters.
- *   - `anchor: "impossible"` — UNANCHORED (the old `DIFFERENCE`): an absolute
- *     position is impossible — only differences are meaningful (a centered /
- *     difference extent). No posScale; renders a delta axis over
- *     `[0, width.run(1)]`. Produced by middle-align, which drops the anchor;
- *     absorbing — alignment never re-anchors it.
- *
- * The subtlety #586's first cut got wrong: a baseline magnitude (`"free"`) is
- * NOT the same as a data axis anchored at 0 (`anchor: 0`) — the former builds no
- * posScale and forgets measures, the latter does the opposite. Conflating them
- * via "anchored at 0" silently dropped the unit-clash guard and over-niced; the
- * distinct `undefined`/`"delta"` domain states keep them apart. A former
- * DIFFERENCE width `w` is `linear(w, 0)` with domain `"delta"`; a former
- * POSITION `[a,b]` is `width = linear(b-a, 0)` with domain `[a,b]`.
- *
- * The stored fields are just `width` + `dataDomain` (+ measure, etc.). The
- * abstract PLACEMENT ({@link Placement}) is a DERIVED VIEW of `dataDomain`'s
- * shape — {@link spacePlacement} — not stored state.
- */
 /**
  * The abstract PLACEMENT of an extent — the missing "baseline" half of the
  * σ-affine box solve, lifted to the underlying-space pass (the `width` Monotonic
@@ -64,12 +25,12 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  *   - `"conflict"` (⊤) — no single position is possible (old DIFFERENCE; also
  *     the eventual home for disagreeing aligns).
  *
- * "space as abstract interpretation" (#586 follow-up): placement is the LAYOUT
- * fact (is this extent positioned) — the abstract baseline half of the σ-affine
- * solve, all that bottom-up space resolution can know before pixels exist. It is
- * a bare determinacy lattice, in bijection with the shape of `dataDomain`
- * (`undefined ↔ free`, interval ↔ determined, `"delta"` ↔ conflict), so it is a
- * derived read ({@link spacePlacement}) rather than stored state. See the spec. */
+ * Placement is the LAYOUT fact (is this extent positioned) — the abstract
+ * baseline half of the σ-affine solve, all that bottom-up space resolution can
+ * know before pixels exist. It is a bare determinacy lattice, in bijection with
+ * the shape of `dataDomain` (`undefined ↔ free`, interval ↔ determined,
+ * `"delta"` ↔ conflict), so it is a derived read ({@link spacePlacement})
+ * rather than stored state. */
 export type Placement = "free" | "determined" | "conflict";
 
 /** The DATA-space fact: the `[min,max]` data interval of an anchored axis
@@ -89,6 +50,33 @@ export const spacePlacement = (space: CONTINUOUS_TYPE): Placement =>
       ? "conflict"
       : "determined";
 
+/**
+ * A data-driven extent on one shared scale: always a `width` Monotonic in σ,
+ * plus the data coordinate (if any) at which it commits an absolute position.
+ * The three cases are the three named constructors:
+ *
+ *   - {@link SIZE} — a BASELINE MAGNITUDE: sized but unplaced, with a local
+ *     baseline at 0. Its position is not yet assigned but CAN be (a baseline-
+ *     align anchors it; a middle-align makes it a DIFFERENCE). Builds no
+ *     posScale; composes as a magnitude (measures FORGET on conflict), scales
+ *     with a parent `transform.scale`, and is never niced.
+ *   - {@link POSITION} — ANCHORED: the position IS assigned, and `dataDomain`'s
+ *     min is the data-space coordinate of the extent's low edge (which may be
+ *     0!), NOT a zero point. Builds a posScale, is niced per σ-scope when an
+ *     axis views it ({@link niceContinuous}), renders an absolute axis over its
+ *     domain. Measures unify as TYPES (THROW on a clash) — a count axis must
+ *     not silently merge with millimeters.
+ *   - {@link DIFFERENCE} — UNANCHORED: an absolute position is impossible, only
+ *     differences are meaningful. No posScale; renders a delta axis over
+ *     `[0, width.run(1)]`. Produced by middle-align, and absorbing — alignment
+ *     never re-anchors it.
+ *
+ * A baseline magnitude is NOT a data axis anchored at 0: the former builds no
+ * posScale and forgets measures, the latter does the opposite. The distinct
+ * `undefined` / `"delta"` / interval `dataDomain` states are what keep them
+ * apart, and the abstract {@link Placement} is a derived view of that shape
+ * ({@link spacePlacement}), not stored state.
+ */
 export type CONTINUOUS_TYPE = {
   kind: "continuous";
   /** Abstract SIZE: the σ-affine extent `slope·σ + intercept`. */
@@ -97,8 +85,6 @@ export type CONTINUOUS_TYPE = {
    *  the abstract placement (read via {@link spacePlacement}). See
    *  {@link DataDomain}. */
   dataDomain: DataDomain;
-  spacing?: number;
-  ordinalGroupId?: string;
   /** The measure (unit) of this axis. Spaces unify per measure — see
    *  {@link mergeMeasures}. Undefined = "no claim" (permissive). */
   measure?: Measure;
@@ -107,8 +93,6 @@ export type CONTINUOUS_TYPE = {
 
 export type ORDINAL_TYPE = {
   kind: "ordinal";
-  spacing?: number;
-  ordinalGroupId?: string;
   domain?: string[]; // Top-level category keys for axis labels
   /** The measure (the grouping field, e.g. "lake") this ordinal axis encodes —
    *  the discrete analogue of a CONTINUOUS space's {@link CONTINUOUS_TYPE.measure}.
@@ -127,8 +111,6 @@ export type ORDINAL_TYPE = {
 
 export type UNDEFINED_TYPE = {
   kind: "undefined";
-  spacing?: number;
-  ordinalGroupId?: string;
 };
 
 export type UnderlyingSpace = CONTINUOUS_TYPE | ORDINAL_TYPE | UNDEFINED_TYPE;
@@ -348,6 +330,12 @@ export const forgetOnConflict = (
   return a === b ? a : undefined;
 };
 
+/** Fold an array of measures with a pairwise merge. */
+const foldMeasures = (
+  ms: (Measure | undefined)[],
+  merge: (a: Measure | undefined, b: Measure | undefined) => Measure | undefined
+): Measure | undefined => ms.reduce(merge, undefined);
+
 /**
  * Fold an array of measures with {@link mergeMeasures} (throws on a real
  * conflict). The array form of the pairwise unify-as-types guard.
@@ -356,10 +344,7 @@ export const mergeAllMeasures = (
   ms: (Measure | undefined)[],
   context?: string
 ): Measure | undefined =>
-  ms.reduce<Measure | undefined>(
-    (acc, m) => mergeMeasures(acc, m, context),
-    undefined
-  );
+  foldMeasures(ms, (acc, m) => mergeMeasures(acc, m, context));
 
 /**
  * Fold an array of measures with {@link forgetOnConflict} (a conflict forgets
@@ -367,8 +352,4 @@ export const mergeAllMeasures = (
  */
 export const forgetAllMeasures = (
   ms: (Measure | undefined)[]
-): Measure | undefined =>
-  ms.reduce<Measure | undefined>(
-    (acc, m) => forgetOnConflict(acc, m),
-    undefined
-  );
+): Measure | undefined => foldMeasures(ms, forgetOnConflict);

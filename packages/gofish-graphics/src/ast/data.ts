@@ -105,11 +105,6 @@ export const isDiscretePosition = (value: unknown): value is DiscretePosition =>
 
 export type PositionValue = MaybeValue<number> | DiscretePosition;
 
-/** The datum wrapper's WIRE shape — what the Python bridge emits and what the
- *  {@link getValue} / {@link getMeasure} casts read. `offset` is a pixel
- *  offset added AFTER the datum maps through its scale ("a fixed standoff
- *  from a data position"); set via `datum(v).offset(px)` in JS or
- *  `datum(v) + px` in Python, read with {@link getValueOffset}. */
 /**
  * A post-scale color transform carried by a datum value, applied AFTER the
  * datum maps through its color scale ("this category's color, lightened"). The
@@ -119,6 +114,11 @@ export type PositionValue = MaybeValue<number> | DiscretePosition;
  */
 export type ColorOp = { op: "lighten" | "darken"; amount: number };
 
+/** The datum wrapper's WIRE shape — what the Python bridge emits and what the
+ *  {@link getValue} / {@link getMeasure} casts read. `offset` is a pixel
+ *  offset added AFTER the datum maps through its scale ("a fixed standoff
+ *  from a data position"); set via `datum(v).offset(px)` in JS or
+ *  `datum(v) + px` in Python, read with {@link getValueOffset}. */
 type DatumValue = {
   type: "datum";
   datum: any;
@@ -201,6 +201,21 @@ export const value = <T>(datum: T, measure?: Measure): DatumValueImpl =>
 export const datum = value;
 
 /**
+ * The field-accessor WIRE shape (what `field(...)` serializes to and what a
+ * deserialized IR/Python-bridge accessor looks like as a plain object). `ops`
+ * is the field-expression pipeline — see {@link FieldOp} and
+ * `fieldExpr.ts`'s `FieldExpr` class, which `field(...)` actually returns so
+ * `.sort()`/`.bin()`/`.mean()`/etc. can chain while still serializing to this
+ * shape via `toJSON`.
+ */
+export type FieldAccessor = {
+  type: "field";
+  name: string;
+  measure?: Measure;
+  ops?: FieldOp[];
+};
+
+/**
  * `field(name, measure?)` is an explicit field-accessor wrapper. The channel
  * inference functions (`inferSize` / `inferPos` / `inferColor` / `inferRaw`)
  * recognize the tag and resolve it to a per-row value, identical to passing a
@@ -212,23 +227,8 @@ export const datum = value;
  * three measure sources `resolveMeasure` (channels.ts) checks: a bare string
  * accessor's field-name is only a *weak default*, whereas this annotation (and
  * `bin()`'s {@link MEASURE_PROVENANCE}) is a hard claim that triggers a type
- * error if it contradicts inferred provenance. Issue #266 is the field/datum/
- * literal trichotomy this completes.
+ * error if it contradicts inferred provenance.
  */
-/**
- * The field-accessor WIRE shape (what `field(...)` serializes to and what a
- * deserialized IR/Python-bridge accessor looks like as a plain object). `ops`
- * is the field-expression pipeline (#700 Phase 1) — see {@link FieldOp} and
- * `fieldExpr.ts`'s `FieldExpr` class, which `field(...)` actually returns so
- * `.sort()`/`.bin()`/`.mean()`/etc. can chain while still serializing to this
- * shape via `toJSON`.
- */
-export type FieldAccessor = {
-  type: "field";
-  name: string;
-  measure?: Measure;
-  ops?: FieldOp[];
-};
 export const field = (name: string, measure?: Measure): FieldExpr =>
   new FieldExpr(name, measure);
 export const isField = (v: unknown): v is FieldAccessor =>

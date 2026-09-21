@@ -30,29 +30,6 @@ export const aesthetic = (value: any): AestheticDomain => ({
   value,
 });
 
-export const canUnifyDomains = (domains: Domain[]) => {
-  const first = domains[0];
-  if (first === undefined || first.type !== "continuous") return false;
-  return domains.every(
-    (domain) =>
-      domain !== undefined &&
-      domain.type === "continuous" &&
-      domain.measure === first.measure
-  );
-};
-
-export const unifyContinuousDomains = (
-  domains: ContinuousDomain[]
-): ContinuousDomain => {
-  const measure = domains[0].measure;
-  const mins = domains.map((domain) => domain.value[0]);
-  const maxs = domains.map((domain) => domain.value[1]);
-  return continuous({
-    measure,
-    value: [Math.min(...mins), Math.max(...maxs)],
-  });
-};
-
 /** One continuous axis's data→pixel affine map, with the intercept explicit
  *  instead of closed over a function: `px(d) = pxMin + sigma·(d − domainMin)`.
  *  `sigma` is the map's own slope (px per data unit). By construction it is the

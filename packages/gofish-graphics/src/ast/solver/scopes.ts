@@ -1,27 +1,21 @@
 /**
- * The σ-scope registry (#39 endgame, Stage 6b) — the ONE place σ / posScale is
- * derived.
+ * The σ-scope registry — the ONE place σ / posScale is derived.
  *
  * Every continuous axis is one affine map per σ-scope, `px(d) = pxMin + σ·(d −
  * domainMin)`, and σ is solved once per scope at the frame equation
- * `content(σ) = allocated` (`Monotonic.inverse`). Before Stage 6b that inversion
- * lived, hand-ordered, at four+ sites (the render root, a self-scaled axis, a
- * composed-constraint budget, a `shared` scope, and a coord boundary), with the
- * #618 propagate-vs-re-root guard hand-written to stop an intermediate from
- * re-rooting. This module makes those a SINGLE mechanism:
+ * `content(σ) = allocated` (`Monotonic.inverse`). One mechanism covers every
+ * site:
  *
  *   - **scope roots solve** — the render root, an axis with an explicit pixel
  *     size (self-scaling region), a composed-constraint budget that roots its
  *     own scope, a `shared` operator, a coord boundary — each calls
  *     {@link ScopeRegistry.solveSize} / {@link ScopeRegistry.solvePosition};
- *   - **everyone else INHERITS** — the #618 guard is now the structural rule
- *     "not a root → inherit": a non-root site simply does not call the solve, so
- *     the inherited σ propagates unchanged.
+ *   - **everyone else INHERITS** — "not a root → inherit": a non-root site
+ *     simply does not call the solve, so the inherited σ propagates unchanged.
+ *     This is the structural rule that stops an intermediate from re-rooting.
  *
- * The arithmetic is exactly what the sites ran inline (`Monotonic.inverse` for
- * the slope, `posScaleFromSpace` for the anchored map), so the numbers are
- * bit-identical; the registry adds the single choke-point plus, behind
- * `GOFISH_DUMP_SCOPES`, a printable dump of every scope's frame equation.
+ * Behind `GOFISH_DUMP_SCOPES` the registry also prints every scope's frame
+ * equation.
  */
 import * as Monotonic from "../../util/monotonic";
 import { posScaleFromSpace, type AxisMap } from "../domain";
@@ -69,7 +63,7 @@ interface ScopeEntry extends ScopeMeta {
 }
 
 /** Whether the scope dump is on. Off (and near-zero-cost) in prod. */
-const dumpEnabled = (): boolean => envFlag("GOFISH_DUMP_SCOPES");
+const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
 
 /**
  * Per-render record of every σ-scope solved. Lives on the {@link RenderSession}
@@ -89,8 +83,7 @@ export class ScopeRegistry {
    * Solve σ for a SIZE frame at a scope root: invert `content(σ) = allocated`.
    * `frame` is the σ-affine width `Monotonic` (a space's `width`, or a composed
    * distribute size domain). Returns the slope, or `undefined` when the frame
-   * cannot determine σ (slope 0) — the caller keeps applying its own fallback,
-   * exactly as before.
+   * cannot determine σ (slope 0) — the caller applies its own fallback.
    */
   solveSize(
     meta: ScopeMeta,
@@ -99,7 +92,7 @@ export class ScopeRegistry {
     opts?: { tolerance?: number; lowerBound?: number; upperBoundGuess?: number }
   ): number | undefined {
     const sigma = frame.inverse(allocated, opts);
-    if (dumpEnabled())
+    if (DUMP_SCOPES)
       this.entries.push({
         ...meta,
         allocated,
@@ -123,7 +116,7 @@ export class ScopeRegistry {
     allocated: number
   ): AxisMap | undefined {
     const map = posScaleFromSpace(space, allocated);
-    if (map !== undefined && dumpEnabled()) {
+    if (map !== undefined && DUMP_SCOPES) {
       const dom =
         space && space.dataDomain && space.dataDomain !== "delta"
           ? `[${space.dataDomain.min},${space.dataDomain.max}]`
@@ -140,8 +133,8 @@ export class ScopeRegistry {
   }
 
   /**
-   * The #582 equal-measure recentering, modeled as a named post-solve scope
-   * operation (Stage 6c). When x and y carry the SAME unit of measure, "1 unit
+   * Equal-measure recentering, modeled as a named post-solve scope
+   * operation. When x and y carry the SAME unit of measure, "1 unit
    * on x" and "1 unit on y" are the same quantity, so their data→pixel scales
    * must be EQUAL — a circle stays circular. The two axes' independently-solved
    * scopes are therefore collapsed into ONE shared σ (the binding, smaller
@@ -150,9 +143,9 @@ export class ScopeRegistry {
    * (content stays origin-anchored — SIZE-slack centering is deferred).
    *
    * This is the ONE place a post-solve σ adjustment happens, so it lives on the
-   * registry (not inlined in `gofish.tsx`): every slope a render produces is now
+   * registry (not inlined in `gofish.tsx`): every slope a render produces is
    * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a `recenter`
-   * entry per axis) rather than the pre-recentering root σ. Mutates `posScales`
+   * entry per axis). Mutates `posScales`
    * / `rootScaleFactors` in place; a no-op unless both axes have a continuous
    * scale to equate.
    */
@@ -178,7 +171,7 @@ export class ScopeRegistry {
       } else {
         rootScaleFactors[axis] = shared;
       }
-      if (dumpEnabled())
+      if (DUMP_SCOPES)
         this.entries.push({
           kind: "recenter",
           rootKey,
@@ -197,7 +190,7 @@ export class ScopeRegistry {
   /** Print one line per scope: root kind/key, axis, allocated px, the frame
    *  equation, the solved σ, and whether an anchored map is present. */
   dump(): void {
-    if (!dumpEnabled() || this.entries.length === 0) return;
+    if (!DUMP_SCOPES || this.entries.length === 0) return;
     for (const e of this.entries) {
       console.log(
         `[scope] ${e.kind} key=${e.rootKey} axis=${e.axis === 0 ? "x" : "y"} ` +

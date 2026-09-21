@@ -20,11 +20,15 @@
 // `pluck` is the un-collapsed sibling — the full set of distinct values — for
 // when you genuinely want "every possible value" rather than a scalar key.
 import toPath from "lodash/toPath";
-import { bin as d3bin } from "d3-array";
 import sumBy from "lodash/sumBy";
 import { GoFishRef } from "./_ref";
 import { isField, type FieldAccessor } from "./data";
-import { getFieldOps, type FieldOp } from "./fieldExpr";
+import {
+  getFieldOps,
+  normalizeNotSupportedError,
+  type FieldOp,
+} from "./fieldExpr";
+import { binRows } from "./transforms";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
 function eqKey(v: unknown): string {
@@ -88,6 +92,14 @@ export function projectPath(obj: unknown, path: string): unknown {
  *  {@link splitEntries}). */
 export type SplitBy = string | ((r: any) => unknown) | FieldAccessor;
 
+/** The field name a `by`-style selector names, or `undefined` when it names
+ *  none (a key function). The one reading of "which field did this group by",
+ *  shared by every site that needs it. */
+export function fieldNameOf(by: unknown): string | undefined {
+  if (typeof by === "string") return by;
+  return isField(by) ? by.name : undefined;
+}
+
 /**
  * The mutable cell `ChartBuilder` writes the computed default split/travel
  * direction into (issue #752's default-grouping rule — see
@@ -121,8 +133,7 @@ export type InferredRelational = {
  *  honest `unknown` produced by projection + homogeneity collapse. */
 export function splitKeyFn(by: SplitBy): (r: any) => string | number {
   if (typeof by === "function") return by as (r: any) => string | number;
-  const path = isField(by) ? by.name : by;
-  const segments = toPath(path);
+  const segments = toPath(fieldNameOf(by)!);
   return (r: any) => {
     const values = projectValues(r, segments);
     return (values.length === 1 ? values[0] : undefined) as string | number;
@@ -139,9 +150,8 @@ function compareKeys(a: string | number, b: string | number): number {
   return String(a).localeCompare(String(b));
 }
 
-/** Bin `d` by the numeric field `fieldName`, mirroring `runBin` in
- *  transforms.ts (d3-array, default 10 thresholds). REPLACES the base
- *  grouping — entries are keyed by each bin's start (ascending). Empty bins
+/** Bin `d` by the numeric field `fieldName` (via {@link binRows}). REPLACES the
+ *  base grouping — entries are keyed by each bin's start (ascending). Empty bins
  *  are dropped to match `Map.groupBy` semantics (a group with zero rows isn't
  *  represented as a key there either). */
 function binEntries<T extends Record<string, any>>(
@@ -149,18 +159,9 @@ function binEntries<T extends Record<string, any>>(
   d: T[],
   thresholds: number | number[] | undefined
 ): Map<number, T[]> {
-  const th = thresholds ?? 10;
-  const binnerBase = d3bin<T, number>().value(
-    (row) => row[fieldName] as number
-  );
-  const binner = Array.isArray(th)
-    ? binnerBase.thresholds(th as number[])
-    : binnerBase.thresholds(th as number);
-  const bins = binner(d.filter((row) => row[fieldName] != null));
   const entries = new Map<number, T[]>();
-  for (const b of bins) {
-    if (b.x0 === undefined || b.length === 0) continue; // drop empty bins
-    entries.set(b.x0, [...b]);
+  for (const b of binRows(fieldName, d, thresholds)) {
+    if (b.rows.length > 0) entries.set(b.start, b.rows);
   }
   return entries;
 }
@@ -215,7 +216,7 @@ export function splitEntries<T extends Record<string, any>>(
   by: SplitBy,
   d: T[]
 ): Map<string | number, T[]> {
-  const ops: FieldOp[] = getFieldOps(by);
+  const ops = getFieldOps(by);
   let rows = d;
   if (ops.some((op) => op.op === "dropNulls")) {
     if (!isField(by)) {
@@ -258,9 +259,7 @@ export function splitEntries<T extends Record<string, any>>(
             `(e.g. rect({ h: field(...).${op.op}() })), not on \`by\`.`
         );
       case "normalize":
-        throw new Error(
-          "field(...).normalize() is only supported on an operator's size channel"
-        );
+        throw normalizeNotSupportedError();
     }
   }
   return entries;
@@ -268,14 +267,9 @@ export function splitEntries<T extends Record<string, any>>(
 
 /** Which axes a scatter-family opts object positions: `x`/`y` true when a
  *  plain point value or a full range (`Min`+`Max`) is given for that axis.
- *  Shared by `Scatter`'s own `hasX`/`hasY` guard (`graphicalOperators/
- *  scatter.tsx`) and `chartBuilder.ts`'s `classifyOperator` (which reads the
- *  SAME opts shape off a scatter operator's `__serialize.opts` to classify
- *  it for the relational-mark default-split rule — issue #752) so the two
- *  don't drift. Lives in this leaf module (no dependency on either caller)
- *  rather than being exported from `scatter.tsx`: that module imports
- *  `createOperator.ts`, which imports back from `chartBuilder.ts` — a
- *  `chartBuilder.ts -> scatter.tsx` runtime import would cycle. */
+ *  Shared by `Scatter`'s own `hasX`/`hasY` guard and the `arrangement`
+ *  declaration the scatter operator hands `createOperator` (both in
+ *  `graphicalOperators/scatter.tsx`) so the two don't drift. */
 export function scatterPositions(opts: {
   x?: unknown;
   xMin?: unknown;
