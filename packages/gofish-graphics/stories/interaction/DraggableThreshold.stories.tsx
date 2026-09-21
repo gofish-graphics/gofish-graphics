@@ -82,7 +82,7 @@ export const Default: StoryObj<Args> = {
           // The stamped datum is the spread group (one row per cat), so sum the
           // count to get this bar's value.
           fill: live((d) => {
-            dr.active();
+            dr.isActive();
             const total = sumBy(d as { count: number }[], "count");
             return total > cut() ? "#d62728" : "#6b9bd1";
           }),
