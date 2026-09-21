@@ -9,17 +9,37 @@ export type TransformedBoundingBox = BoundingBox & {
 /**
  * Samples points from a bounding box in coordinate space for transformation.
  * For polar/clock coordinates, includes additional samples to capture curved edges.
+ *
+ * `gridSamples` switches to a full (gridSamples+1)² lattice over the box. That is
+ * what a MAP PROJECTION needs: it curves in both axes at once, so an extremum of
+ * the projected box can sit strictly inside the box (Equal Earth is widest at the
+ * equator), which the boundary-only sample set below would miss. `geo`'s `fit`
+ * passes it; the affine and polar warps do not, their extremes being on the
+ * boundary.
  */
-function sampleBoundingBoxPoints(
+export function sampleBoundingBoxPoints(
   minX: number,
   maxX: number,
   minY: number,
   maxY: number,
-  coordTransform: CoordinateTransform
+  coordTransform: CoordinateTransform,
+  gridSamples?: number
 ): [number, number][] {
   const width = maxX - minX;
   const height = maxY - minY;
   const samples: [number, number][] = [];
+
+  if (gridSamples !== undefined) {
+    for (let i = 0; i <= gridSamples; i++) {
+      for (let j = 0; j <= gridSamples; j++) {
+        samples.push([
+          minX + (width * i) / gridSamples,
+          minY + (height * j) / gridSamples,
+        ]);
+      }
+    }
+    return samples;
+  }
 
   // Sample corners
   samples.push([minX, minY]);
@@ -29,7 +49,9 @@ function sampleBoundingBoxPoints(
 
   // Sample along edges - more samples for better accuracy with polar coordinates
   const numSamples =
-    coordTransform.type === "clock" || coordTransform.type === "polar" ? 50 : 20;
+    coordTransform.type === "clock" || coordTransform.type === "polar"
+      ? 50
+      : 20;
   for (let i = 0; i <= numSamples; i++) {
     const t = i / numSamples;
     // Bottom edge
@@ -67,7 +89,8 @@ export function computeTransformedBoundingBox(
   maxX: number,
   minY: number,
   maxY: number,
-  coordTransform: CoordinateTransform
+  coordTransform: CoordinateTransform,
+  gridSamples?: number
 ): TransformedBoundingBox {
   // Sample points from the bounding box
   const samples = sampleBoundingBoxPoints(
@@ -75,7 +98,8 @@ export function computeTransformedBoundingBox(
     maxX,
     minY,
     maxY,
-    coordTransform
+    coordTransform,
+    gridSamples
   );
 
   // Transform all samples to screen space

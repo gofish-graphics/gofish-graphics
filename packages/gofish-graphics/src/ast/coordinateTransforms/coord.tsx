@@ -58,7 +58,47 @@ export type CoordinateTransform = {
    * Default 0 (filled disc). `coord.layout` insets the radial range by this.
    */
   innerRadius?: number;
+  /**
+   * A data window this space imposes on an axis, replacing the union of its
+   * children's POSITION domains (e.g. `geo`'s explicit lon/lat box). `null`
+   * leaves that axis to the children.
+   */
+  dataWindow?: [IntervalLib.Interval | null, IntervalLib.Interval | null];
+  /**
+   * How the space turns its pixel allocation into the coordinate budget its
+   * children lay out in. Absent ⇒ the polar-family rule: an angular budget
+   * (`domain[0].size`) by a radial budget (half the shorter side, less padding
+   * and the donut hole).
+   *
+   * A space whose coordinate units ARE its data units (`geo`: degrees)
+   * implements this instead. It is handed the resolved data window and returns
+   * the budget in those units plus the transform that maps the budget onto the
+   * pixel box — which is what makes the children's position scale the identity
+   * in data units, with no nicing, zero inclusion or padding, since the domain
+   * and the range then have the same width by construction.
+   */
+  fit?: (args: {
+    size: [number, number];
+    padding: number;
+    window: [IntervalLib.Interval, IntervalLib.Interval];
+  }) => {
+    budget: [number, number];
+    transform: (point: [number, number]) => [number, number];
+    /**
+     * The window's extent in PIXELS under `transform` — the very measurement
+     * `fit` already had to take to compute its scale factor, handed back so the
+     * framed screen bbox below is the same box the fit was computed against.
+     * Measuring it a second time out here would not give the same answer: a
+     * projection's extremum can sit strictly inside the window (Equal Earth is
+     * widest at the equator), which the boundary-only sampler misses, so the
+     * centering would be computed against a box smaller than what is drawn.
+     */
+    extent: { width: number; height: number };
+  };
 };
+
+/** The two axes, for the loops that walk both. */
+const AXES = [0, 1] as const;
 
 /** Union all child ORDINAL spaces on `axis` into one ORDINAL, carrying the
  *  grouping measure (FORGET on a clash) so a polar category axis names itself
@@ -102,9 +142,27 @@ export const coord = createNodeOperator(
     children: GoFishAST[]
   ) => {
     const dims = elaborateDims(fancyDims);
+    // THE discriminator: does this space frame its own window? A `fit`-ted space
+    // (geo) lays out in a data window, so its budget IS the frame — which decides
+    // the budget rule, the box, the culling frame and whether the polar overlays
+    // apply. One test, so those four cannot drift apart. (`coordTransform.fit` is
+    // re-tested where the call needs the narrowing.)
+    const framesOwnWindow = coordTransform.fit !== undefined;
     const spaceRef: { current: Size<UnderlyingSpace> | null } = {
       current: null,
     };
+    // The transform as `layout` resolved it — the donut-hole radial shift, or a
+    // `fit`-ted space's budget-to-pixels map. `lower` must warp content through
+    // exactly the transform the layout measured against, so it is stashed here
+    // rather than rebuilt from `renderData` (the fitted map is a closure, not
+    // data). Defaults to the declared transform until layout runs.
+    const transformRef: { current: CoordinateTransform } = {
+      current: coordTransform,
+    };
+    // The coordinate budget `layout` handed the children, for a FRAMED space
+    // (one that declares its own window — see `cull` in `lower`). Null for the
+    // polar family, whose budget is the content, not a frame.
+    const frameRef: { current: [number, number] | null } = { current: null };
 
     const coordNode = new GoFishNode(
       {
@@ -114,6 +172,11 @@ export const coord = createNodeOperator(
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => {
+          // A space may DECLARE its own data window per axis (geo's lon/lat
+          // box), in which case it replaces the children's union — the window
+          // is the frame the user asked for, not a summary of what is in it.
+          const declared = coordTransform.dataWindow;
+
           let xSpace = UNDEFINED;
           const xChildrenPositionSpaces = children.filter((child) =>
             isPOSITION(child[0])
@@ -129,9 +192,9 @@ export const coord = createNodeOperator(
             const xPos = xChildrenPositionSpaces
               .map((child) => child[0])
               .filter(isPOSITION);
-            const domain = IntervalLib.unionAll(
-              ...xPos.map((s) => continuousInterval(s)!)
-            );
+            const domain =
+              declared?.[0] ??
+              IntervalLib.unionAll(...xPos.map((s) => continuousInterval(s)!));
             // A coord transform maps these data positions into its own fixed
             // coordinate space (e.g. angle/radius). Cross-unit unions are the
             // transform's business, not the marginal-style corruption the guard
@@ -157,9 +220,9 @@ export const coord = createNodeOperator(
             const yPos = yChildrenPositionSpaces
               .map((child) => child[1])
               .filter(isPOSITION);
-            const domain = IntervalLib.unionAll(
-              ...yPos.map((s) => continuousInterval(s)!)
-            );
+            const domain =
+              declared?.[1] ??
+              IntervalLib.unionAll(...yPos.map((s) => continuousInterval(s)!));
             // See the x branch: coord maps into its own coordinate space, so
             // forget on cross-unit conflict rather than throwing.
             const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
@@ -180,24 +243,78 @@ export const coord = createNodeOperator(
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
           const [origW, origH] = size;
-          // Angular budget = the transform's domain[0] size (CentralAngle), not a
-          // hardcoded 2π. Radial budget = outer radius minus the inner-radius inset
-          // (donut hole): children lay out in r ∈ [0, outerR − innerR] and are
-          // shifted out by innerR at transform time (see `effectiveTransform`).
-          const outerR = Math.min(origW, origH) / 2 - padding;
-          const innerR = (coordTransform.innerRadius ?? 0) * outerR;
-          const angularBudget = coordTransform.domain[0].size ?? 2 * Math.PI;
-          size = [angularBudget, outerR - innerR];
-          // The radius shift for the donut hole. At innerR=0 this is exactly
-          // `coordTransform`, so the default disc is unchanged.
-          const effectiveTransform: CoordinateTransform =
-            innerR > 0
-              ? {
-                  ...coordTransform,
-                  transform: ([theta, r]: [number, number]) =>
-                    coordTransform.transform([theta, r + innerR]),
-                }
-              : coordTransform;
+          // The coordinate budget children lay out in, and the transform that
+          // maps it to pixels. Two rules, chosen by whether the space supplies
+          // its own `fit`:
+          //
+          //  - polar family (no `fit`): an angular budget — the transform's
+          //    domain[0] size (CentralAngle) — by a radial budget of the outer
+          //    radius less the inner-radius inset (donut hole). Children lay out
+          //    in r ∈ [0, outerR − innerR] and are shifted out by innerR at
+          //    transform time.
+          //  - a `fit`-ted space (geo): the budget is in DATA units, so the
+          //    space is handed its resolved data window and returns both the
+          //    budget and the map from it onto the pixel box.
+          let budget: [number, number];
+          let effectiveTransform: CoordinateTransform;
+          /** A fitted space's own measurement of its window in pixels — the box
+           *  the framed screen bbox below IS (see `fit`'s `extent`). */
+          let fittedExtent: { width: number; height: number } | undefined;
+          // `framesOwnWindow`, re-tested so TS narrows `fit` for the call below.
+          if (coordTransform.fit) {
+            const windowOf = (axis: 0 | 1): IntervalLib.Interval => {
+              const resolved = spaceRef.current?.[axis];
+              const declared = coordTransform.dataWindow?.[axis];
+              const iv =
+                declared ??
+                (resolved !== undefined
+                  ? continuousInterval(resolved)
+                  : undefined);
+              if (iv === undefined || iv.max === iv.min) {
+                throw new Error(
+                  `[gofish] the "${coordTransform.type}" coordinate space has no ` +
+                    `data window on ${axis === 0 ? "x" : "y"}: nothing in scope ` +
+                    `carries a position there, and none was declared.`
+                );
+              }
+              return iv;
+            };
+            const fitted = coordTransform.fit({
+              size: [origW, origH],
+              padding,
+              window: [windowOf(0), windowOf(1)],
+            });
+            budget = fitted.budget;
+            fittedExtent = fitted.extent;
+            effectiveTransform = {
+              ...coordTransform,
+              transform: fitted.transform,
+            };
+          } else {
+            const outerR = Math.min(origW, origH) / 2 - padding;
+            const innerR = (coordTransform.innerRadius ?? 0) * outerR;
+            budget = [
+              coordTransform.domain[0].size ?? 2 * Math.PI,
+              outerR - innerR,
+            ];
+            // The radius shift for the donut hole. At innerR=0 this is exactly
+            // `coordTransform`, so the default disc is unchanged.
+            effectiveTransform =
+              innerR > 0
+                ? {
+                    ...coordTransform,
+                    transform: ([theta, r]: [number, number]) =>
+                      coordTransform.transform([theta, r + innerR]),
+                  }
+                : coordTransform;
+          }
+          transformRef.current = effectiveTransform;
+          // `fit` is THE discriminator for "this space frames its own window"
+          // (see `frameRef`): a fitted space's budget IS the frame, the polar
+          // family's budget is its content. `dataWindow` is only the carrier of
+          // a DECLARED window — its presence says nothing about framing.
+          frameRef.current = framesOwnWindow ? budget : null;
+          size = budget;
           // Fit the subtree into the coordinate budget, exactly as the ROOT
           // fits content to the canvas (gofish.tsx) — here the budget plays the
           // role of the canvas. A baseline-magnitude (data SIZE) axis scales by
@@ -262,8 +379,8 @@ export const coord = createNodeOperator(
             }
             return [1, undefined];
           };
-          const [sfX, psX] = fitAxis(0, angularBudget);
-          const [sfY, psY] = fitAxis(1, outerR - innerR);
+          const [sfX, psX] = fitAxis(0, budget[0]);
+          const [sfY, psY] = fitAxis(1, budget[1]);
           const childPlaceables = children.map((child) =>
             child.layout(size, [axisScale(sfX, psX), axisScale(sfY, psY)])
           );
@@ -284,6 +401,13 @@ export const coord = createNodeOperator(
             rMax: number;
           } | null = null;
 
+          // A space with a declared window (geo's lon/lat box) is FRAMED by that
+          // window: its box is the window's projected extent, not the union of
+          // whatever its children happen to draw. A country outside the window
+          // still draws, and overhangs the box — the SVG viewport clips it, the
+          // way a map frame does. Without this the frame would silently zoom out
+          // to fit the rest of the world. Decided BEFORE the loop so a fitted
+          // space never pays for the per-child screen bboxes it would discard.
           childPlaceables.forEach((childPlaceable) => {
             const coordMinX = childPlaceable.dims[0].min!;
             const coordMaxX = childPlaceable.dims[0].max!;
@@ -311,16 +435,33 @@ export const coord = createNodeOperator(
               coordSpaceBbox.rMax = Math.max(coordSpaceBbox.rMax, coordMaxY);
             }
 
-            const transformedBbox = computeTransformedBoundingBox(
-              coordMinX,
-              coordMaxX,
-              coordMinY,
-              coordMaxY,
-              effectiveTransform
-            );
-
-            screenBbox = union(screenBbox, transformedBbox);
+            if (!framesOwnWindow) {
+              screenBbox = union(
+                screenBbox,
+                computeTransformedBoundingBox(
+                  coordMinX,
+                  coordMaxX,
+                  coordMinY,
+                  coordMaxY,
+                  effectiveTransform
+                )
+              );
+            }
           });
+
+          if (framesOwnWindow) {
+            // The fitted space already measured this exact box (that measurement
+            // IS its scale factor), and its transform puts the window's low
+            // corner at the origin — so take its answer rather than re-sampling
+            // with a different sampler. `fit` is what makes `framesOwnWindow`
+            // true, so `fittedExtent` is always set here.
+            screenBbox = {
+              minX: 0,
+              maxX: fittedExtent!.width,
+              minY: 0,
+              maxY: fittedExtent!.height,
+            };
+          }
 
           const {
             minX: screenBboxMinX,
@@ -393,9 +534,6 @@ export const coord = createNodeOperator(
             renderData: {
               coordinateSpaceBbox: coordSpaceBbox,
               contentOffset: [translateX, translateY] as [number, number],
-              // Absolute donut-hole inset (px). render rebuilds the same radial
-              // shift so display objects, grid and axis all sit past the hole.
-              innerRadius: innerR,
             },
           };
         },
@@ -414,20 +552,11 @@ export const coord = createNodeOperator(
           const contentToPixel: ToPixel = ([cx, cy]) =>
             outer([coordTx + offsetX + cx, coordTy + offsetY + cy]);
 
-          // Donut-hole radial shift (renderData.innerRadius) so content, grid,
-          // and axis all sit past the hole; at innerR=0 this is coordTransform.
-          // Angular budget = the transform's CentralAngle (domain[0].size) so a
-          // sub-2π sweep tiles ticks correctly. Mirrors the render.
-          const innerR =
-            (renderData as { innerRadius?: number })?.innerRadius ?? 0;
-          const effectiveTransform: CoordinateTransform =
-            innerR > 0
-              ? {
-                  ...coordTransform,
-                  transform: ([theta, r]: [number, number]) =>
-                    coordTransform.transform([theta, r + innerR]),
-                }
-              : coordTransform;
+          // The transform layout resolved: the donut-hole radial shift (so
+          // content, grid and axis all sit past the hole) or a `fit`-ted space's
+          // budget-to-pixels map. Angular budget = the transform's CentralAngle
+          // (domain[0].size) so a sub-2π sweep tiles ticks correctly.
+          const effectiveTransform = transformRef.current;
           const angularBudget = coordTransform.domain[0].size ?? 2 * Math.PI;
 
           // Overlay primitive helpers (all in coord-local y-up coords).
@@ -476,10 +605,41 @@ export const coord = createNodeOperator(
           // preserves the incoming y-parity — the active flip scope
           // (`session.flip`) is unchanged (issue #629; coord self-normalization
           // is a Stage-1 concern).
+          // A FRAMED space (one declaring its own window, e.g. `geo`'s lon/lat
+          // box) draws only what falls inside the frame: a flattened item whose
+          // coordinate-space box lies wholly outside the budget is skipped, the
+          // way a map frame excludes the continents it is not showing. An item
+          // only PARTLY outside is still drawn whole and overhangs the frame —
+          // cutting it needs a polygon clipper, and nothing else needs one yet.
+          const frame = frameRef.current;
+          const outsideFrame = (d: {
+            node: GoFishAST;
+            transform: { translate: (number | undefined)[] };
+          }): boolean => {
+            if (!frame) return false;
+            const dims = (d.node as GoFishNode).intrinsicDims;
+            if (!dims) return false;
+            for (const axis of AXES) {
+              const iv = dims[axis];
+              if (iv?.min === undefined || iv?.size === undefined) return false;
+              const lo = (d.transform.translate[axis] ?? 0) + iv.min;
+              const hi = lo + iv.size;
+              if (
+                !IntervalLib.overlaps(
+                  { min: lo, max: hi },
+                  { min: 0, max: frame[axis] }
+                )
+              )
+                return true;
+            }
+            return false;
+          };
+
           session.toPixel = contentToPixel;
           try {
             for (const child of children) {
               for (const d of flattenLayout(child)) {
+                if (outsideFrame(d)) continue;
                 items.push(
                   ...d.node.INTERNAL_lower(effectiveTransform, d.transform)
                 );
@@ -487,6 +647,20 @@ export const coord = createNodeOperator(
             }
           } finally {
             session.toPixel = outer;
+          }
+
+          // The grid + axis overlays below are the POLAR family's: they read
+          // `domain` as (theta, r) and tile ticks across `angularBudget`
+          // radians. A fitted space's budget is a DATA window in its own units
+          // (geo: degrees), so those overlays would draw rings at 2π radians of
+          // longitude. Say so rather than emitting that.
+          if (framesOwnWindow && (axes || grid)) {
+            throw new Error(
+              `[gofish] axes are not supported under a fitted ("${coordTransform.type}") ` +
+                `space yet: its coordinate budget is a data window, not (theta, r), so the ` +
+                `polar ring/grid overlay would draw at 2π. Leave axes and grid off until a ` +
+                `geo graticule lands.`
+            );
           }
 
           // Grid lines (rare; grid defaults off). Lines port faithfully; the
