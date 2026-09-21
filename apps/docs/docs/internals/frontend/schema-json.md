@@ -2089,7 +2089,7 @@ for the API.
       }
     },
     "PolygonMark": {
-      "description": "A closed polygon defined by explicit local-coordinate points (y-up). No dims channels — the bbox is computed from `points`.",
+      "description": "A closed polygon defined by local-coordinate points (y-up), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2098,21 +2098,28 @@ for the API.
           "const": "polygon"
         },
         "points": {
-          "type": "array",
-          "items": {
-            "type": "array",
-            "minItems": 2,
-            "maxItems": 2,
-            "prefixItems": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "number"
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
               }
-            ]
-          },
-          "description": "Vertex list, at least 3 points."
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap)."
         },
         "fill": {
           "type": "string",
