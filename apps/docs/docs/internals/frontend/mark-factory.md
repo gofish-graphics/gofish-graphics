@@ -149,13 +149,22 @@ Walking `withGoFish.ts:431-477`:
 
 A `color` or `raw` channel value may be a `live(...)` reactive callback (the
 [reactivity layer](/internals/frontend/reactivity)); `channels.ts` widens those
-two channel unions to accept a `LiveValue`. When the channel loop sees one, it
-does two things: it evaluates the callback **once, untracked and under the
+two channel unions to accept a `LiveValue`. One helper does the split for every
+mark factory — `splitLiveChannels(opts, datum)` in `interaction/live.ts` — and it
+does two things: it evaluates each live callback **once, untracked and under the
 `inLiveEval` flag**, to get the resolve-time value the pipeline measures and
 infers scales with (so its input reads wire event dispatch but do _not_ become
-pipeline dependencies), and it stashes the raw callback on the produced node as
-`__gfLive[channel]`. Lowering (`_node.ts`) later bakes that callback, bound to the
-node's datum, into the paint-time side table so paint re-evaluates it reactively.
+pipeline dependencies), and it hands back the raw callbacks to stamp on the
+produced node as `__gfLive[channel]`. Lowering (`_node.ts`) later bakes each
+callback, bound to the node's datum, into the paint-time side table so paint
+re-evaluates it reactively.
+
+The split has one implementation and two callers: `createMark`'s channel loop,
+and `createRelationalMark` — which needs the two halves separately (which
+channels are live is known at construction, before any datum exists), so the
+helper is composed from `liveChannelsOf` and `withLiveStatics`. `withLiveStatics` is also where the `LiveValue` arm leaves the
+TYPE: it returns `StripLive<O>`, which is why `line`/`ribbon`'s `produce` reads
+`o.fill` and `o.opacity` straight through instead of casting each channel back.
 
 ### What an operator accepts as a child
 
@@ -169,7 +178,8 @@ that knows all the shapes. Four get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
 - a **mark** (a function) — invoked with `undefined` data, which is how a bare
-  `rect({ … })` becomes a node inside `spreadX([...])`;
+  `rect({ … })` becomes a node inside `spreadX([...])`, and how a control mark
+  (`slider(...)`) is rebuilt on every resolve;
 - a **thunk** (sequential form only) — called, then reified again;
 - a **v3 builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
   — resolved through its own `resolve()`. A `LayerBuilder` must go through its
@@ -312,6 +322,27 @@ forms:
   band per species; see "Default grouping" below). A refs-bag chart spells
   the same split structurally instead, via an upstream `group()`.
 
+### A connector's datum, and its `live()` channels
+
+A leaf mark carries the row it was drawn from. A connector threads a whole
+group, so its datum is **the group**: each field of its operands' data,
+projected with homogeneity collapse (`groupDatumOf`). A path through one
+species' daily positions collapses `species` to that species and `day` to
+`undefined` — which is exactly what a channel callback should see, and what
+`pointer().datum()` hands back when that path is hovered.
+
+`live(...)` channels on a connector are treated exactly as a leaf mark's, by one
+path: `liveChannelsOf` collects them and the factory stamps them on each produced
+node, where `INTERNAL_lower` bakes them into the datum-bound paint slots, so a
+later pulse patches the attribute with no re-resolve; and the opts `produce` is
+built from are the author's opts with each live channel replaced by its value at
+the connector's datum (`withLiveStatics`). That resolve-time read is also what
+REGISTERS the input with the interaction runtime, and it is what makes the FIRST
+paint already draw the right thing. (The factory used to delete the live channels
+from the opts first, on the theory that the connector would fall back to its own
+defaults; `withLiveStatics` put them straight back, so the deletion only ever hid
+them from the serialized opts.)
+
 ### zBelow-by-default paint order
 
 Every node a relational mark produces, in every call form above, is tagged
@@ -337,6 +368,11 @@ plus a connector tier —
 ```
 .mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
 ```
+
+The anchor tier is invisible in the strong sense: a `blank` node lowers to no
+display items at all (see [Render Pass 4](/internals/layout/passes)), so the one
+anchor per row costs layout and a `selectAll` target but no DOM element and no
+hit-test entry.
 
 `anchor(opts)` is exactly `opts`'s `{w, h, emX, emY}` subset (`pickAnchorOpts`
 in chart.ts) — the rest (fill, stroke, curve, `along`, …) stays on the

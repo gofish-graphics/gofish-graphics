@@ -9,7 +9,7 @@ import {
 } from "../graphicalOperators/connect";
 import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
-import type { MaybeValue, Value } from "../data";
+import { getValue, type MaybeValue, type Value } from "../data";
 import type { FieldExpr } from "../fieldExpr";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
@@ -18,10 +18,16 @@ import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
 import { inferColor } from "../channels";
-import { rect as generatedRect } from "../shapes/rect";
+import {
+  liveChannelsOf,
+  withLiveStatics,
+  type LiveValue,
+  type StripLive,
+} from "../../interaction/live";
+import { rect as generatedRect, baseBlank } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import { Mark, Operator } from "../types";
-import { createMark, type NameableMark } from "../withGoFish";
+import { addRenderMethod, createMark, type NameableMark } from "../withGoFish";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
@@ -94,6 +100,29 @@ export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
   return mapOperator(fn, { type: "derive", opts: {} });
 }
 
+/**
+ * `filter(pred)` — keep the rows a predicate accepts. The flow operator beside
+ * `derive`: same place in the pipeline, but it says what it does, so the common
+ * case (`derive((rows) => rows.filter(...))`) stops being spelled as an
+ * arbitrary transform.
+ *
+ * `pred` is a plain row predicate `(row) => boolean`, or a field predicate
+ * built by `field("day").between(lo, hi)` — which is just such a function, so
+ * there is one thing to implement.
+ *
+ * Non-array data passes through untouched: a `filter` in a scope whose datum is
+ * a single row (or a ref) has nothing to filter, and throwing there would make
+ * the operator unusable in a nested pipeline.
+ *
+ * Serialization: the predicate is a live JS callback, so this operator IS a
+ * `derive` — it is defined as one below, and so carries `derive`'s
+ * `{ type: "derive" }` tag on the wire.
+ */
+export function filter<T>(pred: (row: T) => boolean): Operator<T[], T[]> {
+  return derive<T[], T[]>((d) => (Array.isArray(d) ? d.filter(pred) : d));
+}
+
+// return an array of copies of `d` repeated `d.field` times
 export const repeat = <T, K extends keyof T>(
   d: T,
   field: K & (T[K] extends number ? K : never)
@@ -249,6 +278,7 @@ export const circle = createMark(
     fill?: MaybeValue<string>;
     stroke?: MaybeValue<string>;
     strokeWidth?: number;
+    opacity?: MaybeValue<number>;
   }) => {
     const size = typeof p.r === "number" ? p.r * 2 : p.r;
     return Ellipse({
@@ -258,9 +288,12 @@ export const circle = createMark(
       fill: p.fill,
       stroke: p.stroke,
       strokeWidth: p.strokeWidth,
+      // `opacity` is a RAW channel, so a per-datum accessor has already been
+      // evaluated against the row and wrapped; `Ellipse` paints a plain number.
+      opacity: p.opacity === undefined ? undefined : getValue(p.opacity),
     });
   },
-  { r: "size", fill: "color", stroke: "color" },
+  { r: "size", fill: "color", stroke: "color", opacity: "raw" },
   {
     type: "circle",
     shape: (o) => ({
@@ -268,6 +301,9 @@ export const circle = createMark(
       fill: o.fill,
       stroke: o.stroke,
       strokeWidth: o.strokeWidth,
+      // A callback opacity is a live JS value with nothing to put on the wire,
+      // so only a literal one is serialized (the same reason `derive` is opaque).
+      ...(typeof o.opacity === "number" ? { opacity: o.opacity } : {}),
     }),
   }
 );
@@ -495,7 +531,7 @@ function resolveGroupFill<O extends RelationalMarkOptions>(
 
 export function createRelationalMark<O extends RelationalMarkOptions>(
   type: string,
-  produce: (opts: O, children: GoFishAST[]) => any
+  produce: (opts: StripLive<O>, children: GoFishAST[]) => any
 ) {
   function relational(
     options: O | undefined,
@@ -506,14 +542,79 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
     options?: O,
     children?: GoFishAST[]
   ): GoFishNode | Mark<any> {
+    // `live(...)` channels on a connector are ALSO registered as paint slots:
+    // the paint layer calls the thunk in attribute position on every paint, so
+    // a later pulse patches the attribute without a re-resolve. That is what
+    // `liveChannelsOf` is collected for here — it is stamped on each produced
+    // node, where `INTERNAL_lower` bakes it into the datum-bound paint slots.
+    // The opts the connector is BUILT from are the same ones a leaf mark is
+    // built from: each `live(...)` replaced by its value at resolve time (see
+    // `resolveLive` below), so the first paint already draws the right thing.
     const opts = (options ?? {}) as O;
+    const liveChannels = liveChannelsOf(opts);
+    /** The datum of the GROUP a connector threads: each field of its operands'
+     *  data, projected with homogeneity collapse. A path through one species'
+     *  days collapses `species` to that species and `day` to undefined, which
+     *  is what a channel callback — and `pointer().datum()` on hover — should
+     *  see. Undefined when the operands carry no data. */
+    const groupDatumOf = (
+      operands: GoFishAST[]
+    ): Record<string, unknown> | undefined => {
+      const datums = operands
+        .map((o) => (o as any).datum)
+        .filter((d) => d !== undefined);
+      if (datums.length === 0) return undefined;
+      const keys = new Set<string>();
+      const collectKeys = (d: unknown): void => {
+        if (Array.isArray(d)) d.forEach(collectKeys);
+        else if (d !== null && typeof d === "object")
+          for (const k of Object.keys(d)) keys.add(k);
+      };
+      collectKeys(datums);
+      if (keys.size === 0) return undefined;
+      const group: Record<string, unknown> = {};
+      for (const k of keys) group[k] = projectPath(datums, k);
+      return group;
+    };
+    /** The opts `produce` is built from: each `live(...)` channel replaced by
+     *  its value at the connector's datum (the same substitution a leaf mark's
+     *  channels get — see `withLiveStatics`). */
+    const resolveLive = (o: O, datum: unknown): StripLive<O> =>
+      withLiveStatics(o, liveChannels, datum);
+    /** Tag a produced connector with its operands, the datum it carries, and
+     *  the paint-time thunks for its live channels. */
+    const finish = (
+      node: GoFishNode,
+      operands: GoFishAST[],
+      datum: unknown
+    ): GoFishNode => {
+      tagRelationalOperands(node, operands);
+      if (datum !== undefined && (node as any).datum === undefined)
+        (node as any).datum = datum;
+      if (liveChannels)
+        (node as any).__gfLive = { ...(node as any).__gfLive, ...liveChannels };
+      return node;
+    };
 
     // Low-level combinator form: connect the given children directly.
     if (children !== undefined) {
-      return tagRelationalOperands(
-        produce(opts, children) as GoFishNode,
-        children
-      );
+      // The children may be a PROMISE of an array rather than an array: `For`
+      // is async, so the low-level `line(opts, For(rows, ...))` form hands one
+      // in. `produce` awaits it internally; the group datum and the operand
+      // tagging are read off the children too, so they have to await it as
+      // well. The result stays a thenable carrying the node methods, which is
+      // what this form already returned (`produce` is itself async).
+      return addRenderMethod(
+        (async () => {
+          const operands = await children;
+          const datum = groupDatumOf(operands);
+          return finish(
+            (await produce(resolveLive(opts, datum), operands)) as GoFishNode,
+            operands,
+            datum
+          );
+        })()
+      ) as unknown as GoFishNode;
     }
 
     // Pairwise `{ from, to }` form: one connector per row.
@@ -539,12 +640,11 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
                   `{ from: selectAll(...) }) in the flow first.`
               );
             }
-            const node = tagRelationalOperands(
-              (await produce(opts, [a, b])) as GoFishNode,
-              [a, b]
+            return finish(
+              (await produce(resolveLive(opts, row), [a, b])) as GoFishNode,
+              [a, b],
+              row
             );
-            (node as any).datum = row;
-            return node;
           })
         );
         return Layer({}, segments);
@@ -585,9 +685,14 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
               Array.isArray(group) ? group : [group]
             ) as GoFishRef[];
             const groupOpts = resolveGroupFill(type, baseOpts, groupRefs);
-            return tagRelationalOperands(
-              (await produce(groupOpts, groupRefs)) as GoFishNode,
-              groupRefs
+            const datum = groupDatumOf(groupRefs);
+            return finish(
+              (await produce(
+                resolveLive(groupOpts, datum),
+                groupRefs
+              )) as GoFishNode,
+              groupRefs,
+              datum
             );
           })
         );
@@ -597,9 +702,11 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
       // Unsplit: one connector through the whole bag, treated as a single
       // group for `resolveGroupFill` (see its doc comment for the paint fix).
       const groupOpts = resolveGroupFill(type, baseOpts, d);
-      return tagRelationalOperands(
-        (await produce(groupOpts, d)) as GoFishNode,
-        d
+      const datum = groupDatumOf(d);
+      return finish(
+        (await produce(resolveLive(groupOpts, datum), d)) as GoFishNode,
+        d,
+        datum
       );
     };
     const result = nameableMark(mark);
@@ -611,11 +718,11 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
 }
 
 export type LineOptions = {
-  fill?: MaybeValue<string>;
-  stroke?: MaybeValue<string>;
-  strokeWidth?: number;
+  fill?: MaybeValue<string> | LiveValue;
+  stroke?: MaybeValue<string> | LiveValue;
+  strokeWidth?: number | LiveValue;
   strokeDasharray?: string;
-  opacity?: number;
+  opacity?: number | LiveValue;
   mixBlendMode?: "normal" | "multiply";
   // Screen-space path shape, as a factory call (`straight()`, `bezier()`,
   // `catmullRom()`, `orthogonal()`, `arc({ direction })`, `perfectArrows({ bow })`,
@@ -672,10 +779,10 @@ export const line = createRelationalMark<LineOptions>("line", (o, children) =>
 );
 
 export type RibbonOptions = {
-  fill?: MaybeValue<string>;
-  stroke?: MaybeValue<string>;
-  strokeWidth?: number;
-  opacity?: number;
+  fill?: MaybeValue<string> | LiveValue;
+  stroke?: MaybeValue<string> | LiveValue;
+  strokeWidth?: number | LiveValue;
+  opacity?: number | LiveValue;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
   // Screen-space path shape for the band edges (`straight()` | `bezier()`).
@@ -723,7 +830,14 @@ export const ribbon = createRelationalMark<RibbonOptions>(
     )
 );
 
-// blank() mark creates invisible guides for positioning
+/**
+ * `blank()` — an invisible positioning guide. It takes part in layout, carries
+ * a datum, anchors refs (`selectAll`) and seeds the color scale exactly as a
+ * `rect` does, and it emits NOTHING to the display list: no SVG element, no
+ * hit-test entry. That is unconditional — `fill`/`stroke`/`rx`/`ry` reach the
+ * color scale and the layout only; there is no option that makes a blank
+ * paint. See `Blank` in `shapes/rect.tsx` for how the rule is enforced.
+ */
 export function blank<T extends Record<string, any>>({
   emX,
   emY,
@@ -739,9 +853,9 @@ export function blank<T extends Record<string, any>>({
   emX?: boolean;
   emY?: boolean;
   // Same channel-value shapes rect's "size" channel accepts (see
-  // `DeriveMarkProps` in channels.ts) — blank() delegates straight to
-  // `rect` below, so a field name, `Value<number>`, or `field(...)`
-  // pipeline (e.g. `field("count").sum()`) evaluates identically.
+  // `DeriveMarkProps` in channels.ts) — blank() runs the same channel
+  // encoding as `rect` below, so a field name, `Value<number>`, or
+  // `field(...)` pipeline (e.g. `field("count").sum()`) evaluates identically.
   w?: number | (keyof T & string) | Value<number> | FieldExpr;
   h?: number | (keyof T & string) | Value<number> | FieldExpr;
   rx?: number;
@@ -751,8 +865,9 @@ export function blank<T extends Record<string, any>>({
   strokeWidth?: number;
   debug?: boolean;
 } = {}): Mark<T | T[] | { item: T | T[]; key: number | string }> {
-  // blank is essentially a transparent/zero-size rect
-  const mark = generatedRect<T>({
+  // A rect's dims/layout/datum with rect's paint removed (and `{ type:
+  // "blank" }` on the wire) — see `Blank` / `baseBlank` in shapes/rect.tsx.
+  return baseBlank<T>({
     emX,
     emY,
     w,
@@ -764,13 +879,6 @@ export function blank<T extends Record<string, any>>({
     stroke,
     strokeWidth,
   });
-  // Override the rect-emitted tag — blank should appear as { type: "blank" }
-  // on the wire even though it delegates to rect internally.
-  (mark as any).__serialize = {
-    type: "blank",
-    opts: { emX, emY, w, h, rx, ry, fill, debug, stroke, strokeWidth },
-  };
-  return mark;
 }
 
 /* ---- mark-combinator forms for layer and Porter-Duff operators ---- */

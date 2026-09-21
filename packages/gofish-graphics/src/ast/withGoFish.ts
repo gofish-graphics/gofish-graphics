@@ -28,7 +28,7 @@ import {
   type ZOrderValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
-import { isLive, evalLiveStatic, type LiveValue } from "../interaction/live";
+import { splitLiveChannels } from "../interaction/live";
 import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -496,16 +496,16 @@ function buildCreatedMark(
     const shapeProps: Record<string, any> = {};
     // `live(...)` channels: the pipeline renders (and measures) the accessor's
     // resolve-time value; the paint layer re-evaluates it reactively per frame
-    // via the datum-bound thunk baked at lower time.
-    let liveChannels: Record<string, LiveValue> | undefined;
-    for (const propName of Object.keys(markOpts)) {
+    // via the datum-bound thunk baked at lower time. One split, shared with
+    // every other mark factory — see `splitLiveChannels`.
+    const { static: resolvedOpts, live: liveChannels } = splitLiveChannels(
+      markOpts,
+      d
+    );
+    for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
-      let markValue = markOpts[propName];
-      if (isLive(markValue)) {
-        (liveChannels ??= {})[propName] = markValue;
-        markValue = evalLiveStatic(markValue, d);
-      }
+      const markValue = resolvedOpts[propName];
 
       let channelType: ChannelType | undefined =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
