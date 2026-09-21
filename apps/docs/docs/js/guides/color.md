@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # Color
 
 GoFish provides two color scale types: **palettes** for categorical data and **gradients** for continuous data. Pass them as the `color` option to `chart()`.

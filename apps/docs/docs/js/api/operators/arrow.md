@@ -1,3 +1,7 @@
+---
+order: 90
+---
+
 # arrow
 
 Draws a curved, arrowheaded connector from the first child to the second.
@@ -44,30 +48,18 @@ arrow({
 named elements placed by an earlier tier: the arrow runs **from the first child
 to the second**. Fewer than two children renders nothing.
 
-## Visual props
+## Parameters
 
-| Option        | Type      | Default   | Description                                                                        |
-| ------------- | --------- | --------- | ---------------------------------------------------------------------------------- |
-| `stroke`      | `string`  | `"black"` | Color of the arrow's line and head (and start dot, if shown)                       |
-| `strokeWidth` | `number`  | `3`       | Line width; also scales the arrowhead and the start dot                            |
-| `start`       | `boolean` | `false`   | Draw a filled dot at the start (source) point — useful for pointer/reference edges |
+::: gofish-ref arrow
+:::
 
 ## Curve shape
 
 The arrow's path is a quadratic bezier whose bow and routing come straight from
 [perfect-arrows](https://github.com/steveruizok/perfect-arrows)'
-`getBoxToBoxArrow`. These options are passed through unchanged:
-
-| Option       | Type      | Default | Description                                                                                           |
-| ------------ | --------- | ------- | ----------------------------------------------------------------------------------------------------- |
-| `bow`        | `number`  | `0.2`   | Baseline curvature. `0` is a straight line; higher values bow the arc further from center.            |
-| `stretch`    | `number`  | `0.5`   | How much the bow grows as the endpoints get closer (and shrinks as they get farther apart).           |
-| `stretchMin` | `number`  | `40`    | Distance (px) below which `stretch` has its full effect.                                              |
-| `stretchMax` | `number`  | `420`   | Distance (px) above which `stretch` has no effect.                                                    |
-| `padStart`   | `number`  | `5`     | Gap (px) between the source box and the start of the line.                                            |
-| `padEnd`     | `number`  | `20`    | Gap (px) between the end of the line and the target box — leave room for the arrowhead.               |
-| `flip`       | `boolean` | `false` | Flip which side the arrow bows toward.                                                                |
-| `straights`  | `boolean` | `true`  | Allow perfectly straight lines when the endpoints are axis-aligned (instead of forcing a slight bow). |
+`getBoxToBoxArrow`. The `bow`, `stretch`, `stretchMin`, `stretchMax`,
+`padStart`, `padEnd`, `flip`, and `straights` options above are passed through
+to it unchanged.
 
 ## Examples
 

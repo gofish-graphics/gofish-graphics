@@ -1,3 +1,7 @@
+---
+order: 10
+---
+
 # rect
 
 Draws a rectangle for each data item. The most common mark — bars, stacked
@@ -24,25 +28,15 @@ rect(*, x=None, cx=None, x2=None, w=None, emX=None,
      rx=None, ry=None, aspectRatio=None, key=None) -> Mark
 ```
 
-Closed signature — no catch-all `**kwargs`. An unrecognized keyword is a
-`TypeError` at the call site, not a value that silently serializes and gets
-dropped on the floor at render (the class of bug that motivated closing it —
-see [Frontend IR](/internals/frontend/serialization#generating-the-python-factory-layer)).
+Closed signature — no catch-all `**kwargs`. An unrecognized keyword raises a
+`TypeError` at the call site instead of being accepted and then quietly ignored
+at render time, which is the class of bug that motivated closing it (see
+[Frontend IR](/internals/frontend/serialization#generating-the-python-factory-layer)).
 
 ## Parameters
 
-| Parameter                          | Type           | Description                                                                   |
-| ---------------------------------- | -------------- | ----------------------------------------------------------------------------- |
-| `w`, `h`                           | `int` \| `str` | Width / height — a constant or a field name                                   |
-| `fill`                             | `str`          | Fill color — a constant or a field name                                       |
-| `stroke`                           | `str`          | Stroke color                                                                  |
-| `strokeWidth`                      | `int`          | Stroke width in pixels                                                        |
-| `opacity`                          | `float`        | Opacity, `0`–`1`                                                              |
-| `filter`                           | `str`          | Raw SVG filter attribute                                                      |
-| `rx`, `ry`                         | `int`          | Corner radii                                                                  |
-| `aspectRatio`                      | `float`        | `w`/`h` ratio to enforce; the data-driven axis wins when both are data-driven |
-| `x`, `y`, `cx`, `cy`, `x2`, `y2`   | `int` \| `str` | Explicit position accessors                                                   |
-| `theta`, `thetaSize`, `r`, `rSize` | `int` \| `str` | Polar coord-space aliases for `x`/`w`/`y`/`h`                                 |
+::: gofish-ref rect
+:::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark). To attach a
 text label, chain [`.label(accessor, ...)`](/python/api/core/mark#labeling-a-mark)

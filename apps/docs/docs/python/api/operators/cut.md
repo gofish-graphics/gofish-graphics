@@ -1,3 +1,7 @@
+---
+order: 110
+---
+
 # cut
 
 Slices a single source shape (an [`image`](/python/api/marks/rect) or

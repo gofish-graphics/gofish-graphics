@@ -51,4 +51,5 @@ chart(batches)
 
 Composed fragments may be nested. `compose()` with no arguments is an identity
 operator. When a fragment is added to `.flow()`, GoFish expands it into its
-constituent operators so serialization preserves the original operator IR.
+constituent operators, so a composed flow behaves exactly like the same
+operators written out one by one.

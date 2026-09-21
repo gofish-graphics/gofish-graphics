@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # GoTree
 
 `gofish-gotree` is a declarative grammar for tree visualizations, embedded inside
@@ -6,7 +10,7 @@ GoFish. It ships as a separate workspace package — install and import it along
 
 ```ts
 import { tree, spread, nest } from "gofish-gotree";
-import { gofish, circle } from "gofish-graphics";
+import { GoFish, circle } from "gofish-graphics";
 ```
 
 A single function — `tree(spec, data)` — produces a tree visualization. Varying the
@@ -113,7 +117,7 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
   uniformly.
 - A function `(source, target) => LinkOptions` — per-edge styling.
 
-```ts
+```ts no-check
 link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 }
 ```
 
@@ -139,7 +143,7 @@ Returns a combiner that distributes the children along an axis. Used as
 (with the y-up swap, parent ends at high y / top of screen for `dir: "y"`). Used as
 `sibling`, it spreads N children along `dir`.
 
-```ts
+```ts no-check
 parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
 sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
 ```
@@ -152,7 +156,7 @@ intrinsic dims plus `2 * padding` symmetrically per constrained axis; inner is
 centered inside outer. Missing axis (e.g. `{x: 8}` only) leaves the other axis
 unconstrained.
 
-```ts
+```ts no-check
 parentChild: nest({ x: 10, y: 10 }),   // box-in-box
 ```
 
@@ -167,7 +171,7 @@ the general form: it picks one constraint **per axis** independently, which is
 exactly GoTree's `Layout(x, y)` model. Each axis takes `"align"`,
 `"distribute"`, or `"nest"` (string shorthand) or the object form with knobs:
 
-```ts
+```ts no-check
 parentChild: combine({
   x: "nest",                                  // outer grows to wrap inner on x
   y: { kind: "distribute", spacing: 40 },     // parent/group stacked on y
@@ -241,7 +245,7 @@ selection is opt-in.
 Any function with shape `(children: any[]) => any` works. For example, a sibling
 combiner that adds a small label below each spread group:
 
-```ts
+```ts no-check
 import { Layer, StackY } from "gofish-graphics";
 
 sibling: (kids) => StackY({ spacing: 8 }, [
@@ -277,7 +281,7 @@ and ignores bbox widths, matching the geometry polar expects. With
 `anchor: "edge"` (the default), shape bboxes accumulate into the cartesian-x
 span and overflow polar's `[0, 2π]` theta domain — making the tree spiral.
 
-```ts
+```ts no-check
 parentChild: spread({ dir: "y", spacing: 40,         anchor: "middle" }), // r units
 sibling:     spread({ dir: "x", spacing: Math.PI/3,  anchor: "middle" }), // radians
 coord:       polar(),

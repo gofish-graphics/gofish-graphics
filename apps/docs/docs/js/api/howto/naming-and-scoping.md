@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # How to name and scope
 
 When you build composable components — a `stackSlot` that itself contains a `box` and a `value` text; a `heapObject` that contains many `elmTuple`s — the names you give to inner nodes have to _not_ collide across instances. gofish has two complementary mechanisms for this:
@@ -75,7 +79,7 @@ export const stackSlot = createMark(({ variable, value }: StackSlotProps) => {
 
 You can also call `.scope()` directly on any node if you're working without `createMark`:
 
-```ts
+```ts no-check
 return Spread(...).scope();
 ```
 

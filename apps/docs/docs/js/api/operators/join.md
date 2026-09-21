@@ -1,3 +1,7 @@
+---
+order: 150
+---
+
 # join
 
 One-to-many **equi-join** of the incoming rows against another data table on a
@@ -51,10 +55,8 @@ join(right, { on });
 
 ## Parameters
 
-| Parameter | Type       | Description                                                          |
-| --------- | ---------- | -------------------------------------------------------------------- |
-| `right`   | `object[]` | The right-hand table — an array of row objects, inlined into the IR. |
-| `on`      | `string`   | The shared key field matched between the incoming rows and `right`.  |
+::: gofish-ref join
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/js/api/core/flow).
 
@@ -66,9 +68,10 @@ Returns an `Operator` for use inside [`.flow()`](/js/api/core/flow).
   no left-outer "keep unmatched with nulls" mode).
 - **Column merge** — output rows are `{ ...left, ...right }`; on a column-name
   clash the `right` value wins.
-- **Inlined right table** — `right` travels in the IR as JSON, so a chart using
-  `join` serializes and round-trips without a bridge (contrast `derive`, whose
-  function body cannot serialize).
+- **Copied right table** — the `right` rows are copied into the chart itself, so
+  a chart using `join` can be [exported](/js/api/core/export) and read back
+  whole. A `derive` cannot: a function is not data, so its body does not survive
+  the round trip.
 
 ## join vs. resolve
 

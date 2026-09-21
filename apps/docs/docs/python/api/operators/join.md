@@ -1,3 +1,7 @@
+---
+order: 150
+---
+
 # join
 
 One-to-many **equi-join** of the incoming rows against another data table on a
@@ -46,10 +50,8 @@ join(right, *, on) -> Operator
 
 ## Parameters
 
-| Parameter | Type                     | Description                                                                                                                                      |
-| --------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `right`   | `list[dict]` / dataframe | The right-hand table — row dicts, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/) supports (pandas, polars, pyarrow, ...). |
-| `on`      | `str`                    | The shared key field matched between the incoming rows and `right`.                                                                              |
+::: gofish-ref join
+:::
 
 A dataframe `right` is converted to records automatically. Returns an
 `Operator` for use inside [`.flow()`](/python/api/core/flow).
@@ -62,9 +64,10 @@ A dataframe `right` is converted to records automatically. Returns an
   no left-outer "keep unmatched with nulls" mode).
 - **Column merge** — output rows are `{**left, **right}`; on a column-name clash
   the `right` value wins.
-- **Inlined right table** — `right` travels in the IR as JSON, so a chart using
-  `join` serializes and round-trips without a bridge (contrast `derive`, whose
-  function body cannot serialize).
+- **Copied right table** — the `right` rows are copied into the chart itself, so
+  a chart using `join` needs nothing from your kernel once it is built. A
+  `derive` does: its function has to run, so the chart calls back into Python
+  every time it renders.
 
 ## join vs. resolve
 

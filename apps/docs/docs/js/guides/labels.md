@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # Labels
 
 Add text labels to marks using the `.label()` method. Labels are laid out like any other shape — they position themselves relative to the mark they describe, contrast against fill colors automatically, and occupy real space in the layout (a label near the chart edge makes room for itself instead of being clipped).
@@ -202,7 +206,7 @@ semantics.
 
 Pass a function instead of a field name for computed labels.
 
-```ts
+```ts no-check
 // Function accessor — receives the datum, returns display text
 .mark(
   rect({ w: "proportion", fill: "sex" })
@@ -212,7 +216,7 @@ Pass a function instead of a field name for computed labels.
 
 ## Examples
 
-```ts
+```ts no-check
 // Outset labels on a bar chart, one bar per lake — "count" is a real per-row
 // field, so a bare string label needs a group total, not a bare field read
 .mark(rect({ h: "count" }).label(field("count").sum()))

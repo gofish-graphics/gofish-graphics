@@ -1,3 +1,7 @@
+---
+order: 60
+---
+
 # blank
 
 An invisible mark. `blank` takes up space and can be positioned and named like
@@ -26,9 +30,8 @@ blank(w=None, h=None, **options) -> Mark
 
 ## Parameters
 
-| Parameter | Type                                                         | Description                                                                                                        |
-| --------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `w`, `h`  | `int` \| `float` \| `str` \| `FieldAccessor` \| `datum(...)` | Width / height — a constant, a field name, or a `field(...)` pipeline like `field("count").sum()` for an aggregate |
+::: gofish-ref blank
+:::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 

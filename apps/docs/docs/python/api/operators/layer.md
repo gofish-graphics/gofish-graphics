@@ -1,3 +1,7 @@
+---
+order: 70
+---
+
 # layer
 
 Overlays multiple children in the same coordinate space without any layout offset.
@@ -27,13 +31,8 @@ sibling relational mark like [`line`](/python/api/marks/line) / `ref`.
 
 ## Parameters
 
-| Option              | Type      | Description                         |
-| ------------------- | --------- | ----------------------------------- |
-| `coord`             | transform | Coordinate transform for this layer |
-| `w`                 | `float`   | Override width                      |
-| `h`                 | `float`   | Override height                     |
-| `transform.scale.x` | `float`   | Scale factor for x axis             |
-| `transform.scale.y` | `float`   | Scale factor for y axis             |
+::: gofish-ref layer
+:::
 
 ## Z-ordering
 

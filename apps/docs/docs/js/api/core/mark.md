@@ -167,9 +167,8 @@ This replaces the older pattern of manually stamping `node.datum` before
 calling `node.label(...)` on an already-resolved chart (see the "Label on
 Spread" story for the equivalent hand-rolled version). As with mark-level
 `.label`, a string or `field(...)` accessor round-trips through the
-[IR](/internals/python/bridge) — a `field(...)` accessor serializes as its
-own `{type: "field", name, ops}` wire object; a function accessor can't be
-serialized and is dropped with a console warning.
+[IR](/internals/python/bridge); a function accessor does not, and is dropped
+with a console warning.
 
 `.label()` and `.translate()` chain in either order:
 

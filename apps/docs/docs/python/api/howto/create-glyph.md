@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # How to create a glyph
 
 A **glyph** is a composite visual element built from multiple shapes. Instead of

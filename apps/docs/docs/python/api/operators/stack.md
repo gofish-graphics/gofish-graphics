@@ -1,3 +1,7 @@
+---
+order: 20
+---
+
 # stack
 
 Stacks groups edge-to-edge along an axis with no gap between them — `spread`
@@ -29,13 +33,8 @@ low-level form behind the v1 `stackX`/`stackY` operators).
 
 ## Parameters
 
-| Parameter   | Type                                     | Description                                                                                                                                                                                                                                                                                                                       |
-| ----------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`        | `str` \| `field(...)` \| `Callable`      | Field, dotted path, [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor, or callable to partition by. Omit to stack per row. Path-aware (use `"datum.field"` after a selection); see [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by).                                        |
-| `dir`       | `"x"` \| `"y"`                           | **Required.** Axis to stack along.                                                                                                                                                                                                                                                                                                |
-| `alignment` | `str`                                    | Cross-axis alignment of the stacked groups.                                                                                                                                                                                                                                                                                       |
-| `w`, `h`    | `int` \| `str`                           | Fixed pixel size, or a field name sizing this operator's own box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                                                                                                          |
-| `size`      | `int` \| `str` \| `field(...)` \| `list` | Per-entry stack-axis extent — a field name, a `field(...)` accessor, or an explicit list. `size=field("count").normalize()` makes the stacking axis a **space-filling spine** (the mosaic/marimekko conditional axis). See [`spread` → Space-filling spines](/python/api/operators/spread#space-filling-spines-mosaic-marimekko). |
+::: gofish-ref stack
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

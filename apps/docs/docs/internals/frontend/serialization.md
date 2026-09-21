@@ -345,7 +345,7 @@ bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
 of those files the doc comment marks as "stays hand-written below").
 Constraints likewise stay authored.
 
-Three consumers read the table:
+Four consumers read the table:
 
 - **`validate.ts`** interprets it generically — a single walk over each
   descriptor's resolved fields instead of a per-type imperative switch.
@@ -375,6 +375,18 @@ unknown`) even though they aren't really open on the JS side (a mark's
   Python wrapper from the same table — see
   [§ Generating the Python factory layer](#generating-the-python-factory-layer)
   below.
+- **The docs site** generates every API reference page's options table
+  from it. A page under `apps/docs/docs/{js,python}/api/` writes
+  `::: gofish-ref rect` under its `## Parameters` heading, and the
+  container (`docs/.vitepress/markdown-it-gofish-ref.ts`) renders the
+  construct's `doc` line plus an Option/Type/Default/Description table —
+  JS field names and a TS-ish type on a JS page, `py` kwarg names and a
+  Python type on a Python page, with the shared groups (`boxDims`,
+  `paint`) folded into a collapsed block. So an option's one-line
+  description lives in its `doc` string and reaches the reader and the
+  generated Python docstring from there. `apps/docs/scripts/check-api-coverage.mjs`
+  closes the loop in CI: every construct in the table has a page in both
+  languages, and every name a page references is a real construct.
 
 ## The JSON Schema
 

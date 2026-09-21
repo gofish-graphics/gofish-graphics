@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # How to create a chart
 
 GoFish uses a builder pattern to create charts. You chain four methods together:
@@ -6,7 +10,7 @@ GoFish uses a builder pattern to create charts. You chain four methods together:
 
 ## Basic pattern
 
-```python
+```python no-check
 chart(data) \
     .flow(operators...) \
     .mark(visual_mark) \
@@ -58,7 +62,7 @@ spatially. The main operators are:
 - [`scatter(by=..., x=..., y=...)`](/python/api/operators/scatter) — positions
   items by x/y coordinates
 
-```python
+```python no-check
 .flow(spread(by="category", dir="x"))
 ```
 
@@ -80,7 +84,7 @@ include:
 
 Mark options can use fixed values or reference data fields:
 
-```python
+```python no-check
 .mark(rect(h="value", fill="category"))
 ```
 
@@ -92,7 +96,7 @@ field, and `fill="category"` maps the fill color to the `category` field.
 `.render()` renders the chart, returning a widget that auto-displays in a
 notebook:
 
-```python
+```python no-check
 .render(w=400, h=300)
 ```
 

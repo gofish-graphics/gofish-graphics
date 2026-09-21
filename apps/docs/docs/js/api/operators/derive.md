@@ -1,3 +1,7 @@
+---
+order: 130
+---
+
 # derive
 
 Transforms data before it reaches the next operator or mark. The function receives the current data group and returns a new one.
@@ -24,9 +28,11 @@ derive(fn);
 
 ## Parameters
 
-| Parameter | Type                              | Description                       |
-| --------- | --------------------------------- | --------------------------------- |
-| `fn`      | `(d: T[]) => T[] \| Promise<T[]>` | Function that transforms the data |
+`derive` takes one positional argument and no options.
+
+| Parameter | Type                        | Description                                                                                                                                                               |
+| --------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fn`      | `(d: T) => U \| Promise<U>` | **Required.** Receives the data at this point in the flow (inside `.flow()`, the current group's rows) and returns what the rest of the pipeline sees. It may be `async`. |
 
 ## Examples
 

@@ -1,3 +1,7 @@
+---
+order: 50
+---
+
 # group
 
 Partitions data by a field and wraps each partition's mark in a frame. Useful when you want a per-group enclosure that you can then style or reference, without imposing any spread/stack layout.
@@ -10,9 +14,8 @@ group({ by });
 
 ## Parameters
 
-| Option | Type                                      | Description                                                                                                                                     |
-| ------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`   | `string \| FieldExpr \| (item) => string` | **Required.** Field, lodash path, [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor, or accessor function to group by |
+::: gofish-ref group
+:::
 
 ## Example
 

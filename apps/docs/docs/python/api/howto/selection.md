@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # How to use selection
 
 Selection lets you connect marks across charts — for example, drawing a line
@@ -91,7 +95,7 @@ Because the selected stream is now refs (not raw records), you re-encode by the
 :::
 
 ```python
-from gofish import layer, chart, spread, stack, derive, group, rect, area, selectAll
+from gofish import layer, chart, spread, stack, derive, group, rect, ribbon, selectAll
 
 layer([
     chart(seafood)

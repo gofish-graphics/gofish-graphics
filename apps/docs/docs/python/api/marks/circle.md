@@ -1,3 +1,7 @@
+---
+order: 20
+---
+
 # circle
 
 Draws a circle for each data item. The mark for scatter plots, bubble charts,
@@ -17,19 +21,13 @@ chart(catch_locations, axes=True).flow(scatter(by="lake", x="x", y="y")).mark(
 ## Signature
 
 ```python
-circle(r=None, fill=None, stroke=None, strokeWidth=None, opacity=None,
-       debug=None) -> Mark
+circle(r=None, fill=None, stroke=None, strokeWidth=None, debug=None) -> Mark
 ```
 
 ## Parameters
 
-| Parameter     | Type           | Description                             |
-| ------------- | -------------- | --------------------------------------- |
-| `r`           | `int` \| `str` | Radius — a constant or a field name     |
-| `fill`        | `str`          | Fill color — a constant or a field name |
-| `stroke`      | `str`          | Stroke color                            |
-| `strokeWidth` | `int`          | Stroke width in pixels                  |
-| `opacity`     | `float`        | Opacity, `0`–`1`                        |
+::: gofish-ref circle
+:::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark). To attach a
 text label, chain [`.label(accessor, ...)`](/python/api/core/mark#labeling-a-mark)

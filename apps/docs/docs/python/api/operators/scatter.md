@@ -1,3 +1,7 @@
+---
+order: 40
+---
+
 # scatter
 
 Positions groups by `x` and `y` data fields rather than packing them along an
@@ -31,12 +35,8 @@ scatter(*, by=None, **options) -> Operator
 
 ## Parameters
 
-| Parameter                      | Type                                | Description                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`                           | `str` \| `field(...)` \| `Callable` | Field, dotted path, [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor, or callable to group by — groups are placed at their **mean** x/y. Omit to position per row. Path-aware (use `"datum.field"` after a selection); see [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by). |
-| `x`, `y`                       | `str`                               | Field-name accessors for position. At least one is required.                                                                                                                                                                                                                                                                        |
-| `xMin`, `xMax`, `yMin`, `yMax` | `str`                               | Range accessors — a group spans `[min, max]` in data space.                                                                                                                                                                                                                                                                         |
-| `alignment`                    | `str`                               | `"start"`, `"middle"`, `"end"`, or `"baseline"`.                                                                                                                                                                                                                                                                                    |
+::: gofish-ref scatter
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

@@ -1,3 +1,7 @@
+---
+order: 130
+---
+
 # derive
 
 Transforms the data mid-pipeline with an arbitrary **Python function**. This is
@@ -27,9 +31,11 @@ derive(fn) -> DeriveOperator
 
 ## Parameters
 
-| Parameter | Type       | Description                                                    |
-| --------- | ---------- | -------------------------------------------------------------- |
-| `fn`      | `callable` | A function that receives the current data and returns new data |
+`derive` takes one positional argument and no options.
+
+| Parameter | Type       | Description                                                                                                                                                                                        |
+| --------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fn`      | `Callable` | **Required.** Receives the current group's rows and returns the new ones — a list of dicts, `None`, or a dataframe from any backend [narwhals](https://narwhals-dev.github.io/narwhals/) supports. |
 
 Returns a `DeriveOperator` for use inside [`.flow()`](/python/api/core/flow).
 

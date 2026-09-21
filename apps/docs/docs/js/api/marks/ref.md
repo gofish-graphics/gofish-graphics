@@ -1,3 +1,7 @@
+---
+order: 100
+---
+
 # ref
 
 References another node so later marks can reuse its position or bounding box — the basis for overlays, connectors, and arrows.
