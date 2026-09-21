@@ -6,6 +6,8 @@ order: 60
 
 Creates invisible positioning guides. Use blank when you need to define positions for other marks (like `line` or `ribbon`) without rendering visible shapes.
 
+A blank draws nothing at all: it takes part in layout, carries its datum, can be named and selected with `selectAll`, and feeds the color scale, but it produces no SVG element and no hover target. That is unconditional — there is no option that makes a blank paint.
+
 ::: gofish
 
 ```js

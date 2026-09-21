@@ -766,7 +766,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   blank: leafMark("blank", {
-    doc: "An invisible sizing/positioning guide — a transparent rect with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).",
+    doc: "An invisible sizing/positioning guide — a rect that emits no display items at all, with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).",
     fields: {
       emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
       emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
