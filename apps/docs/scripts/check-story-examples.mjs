@@ -210,7 +210,13 @@ async function main() {
     const synErrs = transpiles(ex.code, `${ex.id}.tsx`);
     if (synErrs.length) issues.push(`transpile: ${synErrs[0]}`);
 
-    if (!/\.render\(/.test(ex.code)) issues.push("missing .render(");
+    // The snippet has to actually draw into the container. Two spellings do
+    // that: a builder's `.render(container, …)` and the low-level terminal
+    // `GoFish(container, …)` (which a composition with no `chart()` at its root
+    // uses — e.g. a chart laid out beside its controls).
+    if (!/\.render\(|\bGoFish\(/.test(ex.code)) {
+      issues.push("missing .render( / GoFish(");
+    }
 
     const badImports = checkImports(ex.code);
     if (badImports.length) issues.push(`bad imports: ${badImports.join(", ")}`);

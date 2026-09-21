@@ -528,7 +528,10 @@ export default defineConfig({
         },
         {
           text: "Reactivity",
-          items: [{ text: "Reactivity & Interaction", link: "/js/reactivity" }],
+          items: [
+            { text: "Reactivity & Interaction", link: "/js/reactivity" },
+            { text: "Controls", link: "/js/controls" },
+          ],
         },
         {
           text: "GoTree",
