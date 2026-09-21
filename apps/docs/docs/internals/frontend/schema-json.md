@@ -1566,7 +1566,7 @@ for the API.
       }
     },
     "CircleMark": {
-      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth) — position it via `spread`/`scatter`.",
+      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity) — position it via `spread`/`scatter`.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1590,6 +1590,11 @@ for the API.
           "type": "number",
           "description": "Stroke width in pixels.",
           "default": 0
+        },
+        "opacity": {
+          "type": "number",
+          "description": "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
+          "default": 1
         },
         "debug": {
           "type": "boolean"
@@ -2164,7 +2169,7 @@ for the API.
       }
     },
     "BlankMark": {
-      "description": "An invisible sizing/positioning guide — a transparent rect with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).",
+      "description": "An invisible sizing/positioning guide — a rect that emits no display items at all, with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,

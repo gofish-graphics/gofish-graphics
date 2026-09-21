@@ -263,7 +263,7 @@ day.step; // 1
 
 The whole behavior is one equation:
 
-```ts
+```ts no-check
 t() = scale(domain → [0, duration]).invert(elapsed)
 ```
 
@@ -490,7 +490,7 @@ chart(birds)
 A trail is the same thing over a window. The clock read goes in the predicate
 itself, so the window follows the playhead:
 
-```ts
+```ts no-check
 .flow(
   filter((d) => between(day() - d.day, 0, 20, { closed: "left" })),
   scatter({ x: "lon", y: "lat" })
