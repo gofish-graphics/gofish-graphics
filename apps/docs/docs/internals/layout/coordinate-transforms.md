@@ -9,7 +9,7 @@ status: draft
 # Authoring Coordinate Transforms
 
 GoFish ships several coordinate systems — `linear`, `polar`, `bipolar`,
-`arcLengthPolar`, `wavy`, `clock` — and they are pluggable. This essay will be a
+`arcLengthPolar`, `wavy`, `clock`, `geo` — and they are pluggable. This essay will be a
 contributor guide to the `CoordinateTransform` interface and how to add a new one.
 
 ## Planned contents

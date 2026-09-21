@@ -739,12 +739,12 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   polygon: leafMark("polygon", {
-    doc: "A closed polygon defined by explicit local-coordinate points (y-up). No dims channels — the bbox is computed from `points`.",
+    doc: "A closed polygon defined by local-coordinate points (y-up), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
     fields: {
       points: {
-        type: t.array(t.tuple(t.number, t.number)),
+        type: t.union(t.array(t.tuple(t.number, t.number)), t.string),
         required: true,
-        doc: "Vertex list, at least 3 points.",
+        doc: "Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).",
       },
       fill: { type: t.string, default: "black", doc: "Fill color." },
       stroke: { type: t.string, doc: "Stroke color. Defaults to `fill`." },

@@ -84,6 +84,25 @@ coord-local flatten walked children in array order, so a gotree link's `.zOrder(
 LOCAL to each layer, exactly as in the root bake (below); only the leaf/boundary rules
 differ between the two flatteners.
 
+### How the topological order is computed
+
+`topoSortByZOrder` is Kahn's algorithm. Each `zAbove` / `zBelow` constraint becomes an
+edge between two paint units, and the sort repeatedly emits the smallest unit that has
+no unsatisfied edge left pointing at it, where "smallest" means lowest `(zOrder,
+index)`. Ordering the unconstrained majority by `(zOrder, index)` is what makes the
+result identical to the plain sort when there are no constraints at all.
+
+The ready set is a binary min-heap, and that choice matters for large charts. A layer
+can hold tens of thousands of paint units: the bird-migration map has 26,280 point
+anchors and 72 line connectors under one `geo` coord, and each connector contributes a
+`zBelow` constraint per anchor. An earlier version kept the ready set as an array that
+was re-sorted and `shift`ed on every emission, which is quadratic in the number of
+units — that one sort took about 7.4 seconds of a 9 second render. The heap makes it
+`O(n log n + edges)`, about 140 ms for the same chart, and picks exactly the same unit
+at every step, so nothing about what is drawn over what changed. Adjacency sets are
+allocated lazily for the same reason: nearly every unit in a chart that size has no
+edges at all.
+
 Two design notes from the source worth knowing:
 
 - **Translation undefined ≠ translation zero.** Flattening reads `translate?.[0] ?? 0`,
@@ -237,6 +256,61 @@ re-root (it propagates the inherited σ — see the scale-root scoping gate in
 nested grouping of the same data-driven children (see
 [Layout & Render Passes](/internals/layout/passes)).
 
+## Two budget rules: polar, and a space that lays out in data units
+
+The paragraph above describes the polar family, where the budget is synthetic:
+radians on one axis and pixels of radius on the other, with the data mapped onto
+it. A `geo` space is not like that. Its coordinate units _are_ its data units —
+degrees — so the map a child sees has to be the identity in degrees, with no
+nicing, no zero included and no padding.
+
+Rather than special-case that, a transform may supply two things:
+
+- **`dataWindow`** — a data interval per axis that REPLACES the union of the
+  children's POSITION domains in `coord.resolveUnderlyingSpace`. A window is the
+  frame the author asked for, not a summary of what happens to be inside it. It
+  is only ever read as that window: whether a space frames itself is `fit`'s
+  business, never `dataWindow`'s presence (see below).
+- **`fit`** — given the coord's pixel allocation, its padding and the resolved
+  window, it returns the budget the children lay out in, the transform from that
+  budget to pixels, and the window's EXTENT in pixels under that transform.
+  `geo`'s returns the window's span in degrees, and a transform that projects
+  `windowMin + u` and scales the projected extent into the box with ONE factor,
+  so the map keeps its aspect ratio. The extent is the measurement that factor
+  came from, handed back rather than recomputed: `fit` measures the window on a
+  24x24 lattice, because a projection curves in both axes and an extremum can sit
+  strictly inside the window (Equal Earth is widest at the equator), which the
+  boundary-only sampler `computeTransformedBoundingBox` uses by default would
+  miss. Measuring the same window twice with two samplers gave two answers, and
+  the framed box below was the smaller one.
+
+The identity-in-degrees scale then falls out of the existing machinery rather
+than being asserted: `fitAxis` maps the resolved domain (the window) onto
+`[0, budget]`, and the window's width IS the budget, so the slope is 1. A coord
+scope never nices (see `niceContinuous`), so nothing rounds the domain either.
+
+A transform with a `fit` is also **framed**, and `fit !== undefined` is the ONE
+test for that — used by the budget rule, by the box, and by the culling frame
+alike, so the three cannot drift apart. Its box is the window's projected
+extent — the `extent` its own `fit` reported — instead of the union of what its
+children drew (so `layout` skips the per-child screen-bbox accumulation it would
+throw away), and `lower` skips any
+flattened item whose coordinate-space box lies wholly outside the budget — so a
+chart of the Americas is not silently zoomed out to fit Asia. An item only
+partly outside is still drawn whole and hangs over the frame; cutting it would
+need a polygon clipper, which does not exist yet.
+
+`layout` stashes the transform it resolved (the donut-hole shift, or the fitted
+map) in a closure ref that `lower` reads, because a fitted map is a closure and
+cannot ride `renderData` as the old `innerRadius` number did. `geo` memoizes its
+`fit` on the pixel box, the padding and the window, so a re-render at the same
+size hands back the SAME closure instead of a fresh one per frame.
+
+The axis and grid overlays `coord.lower` draws are the polar family's: they read
+`domain` as (theta, r) and tile ticks across the angular budget. Under a fitted
+space those would draw rings at 2π radians of longitude, so `lower` throws there
+instead — a geo graticule is its own piece of work.
+
 ## Current limitations
 
 `flattenLayout` is still evolving. The source carries TODOs, and the surrounding
@@ -246,7 +320,8 @@ from the transform's `domain[0].size` (so `polar({ centralAngle })` gives a part
 and insets the radial range by the transform's **`innerRadius`** (a donut hole as a
 fraction of the outer radius), building an `effectiveTransform` that shifts `r` by the
 inner radius; the axis/grid renderers read the same budget instead of `2π`. What remains
-polar-shaped is the assumption that axis 0 is angular and axis 1 radial. The
+polar-shaped is the assumption, in the no-`fit` branch and in the axis and grid
+renderers, that axis 0 is angular and axis 1 radial. The
 `connect`-as-leaf
 rule is explicitly called a hack: `connect` is excluded from flattening so it can keep
 rendering in coordinate space, where a cleaner design would have `connect` emit a child
