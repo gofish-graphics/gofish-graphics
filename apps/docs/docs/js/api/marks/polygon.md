@@ -1,3 +1,7 @@
+---
+order: 70
+---
+
 # polygon
 
 Draws a closed polygon from explicit local-coordinate points. Useful for
@@ -32,13 +36,8 @@ polygon({ points, fill?, stroke?, strokeWidth?, opacity = 1 })
 
 ## Parameters
 
-| Option        | Type                 | Default   | Description                                                                |
-| ------------- | -------------------- | --------- | -------------------------------------------------------------------------- |
-| `points`      | `[number, number][]` | —         | Vertices in local coordinates. GoFish is y-up: `[0, 0]` is the bottom-left |
-| `fill`        | `string`             | `"black"` | Fill color                                                                 |
-| `stroke`      | `string`             | `fill`    | Stroke color (defaults to `fill`)                                          |
-| `strokeWidth` | `number`             | `0`       | Stroke width                                                               |
-| `opacity`     | `number`             | `1`       | Opacity, `0`–`1` (applies to fill and stroke)                              |
+::: gofish-ref polygon
+:::
 
 ## Coordinates
 

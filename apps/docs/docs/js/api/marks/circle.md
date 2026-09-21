@@ -1,3 +1,7 @@
+---
+order: 20
+---
+
 # circle
 
 Draws a circle for each data item. A convenience wrapper around `rect` with equal width/height and full border radius.
@@ -20,13 +24,8 @@ circle({ r?, fill?, stroke?, strokeWidth?, debug? })
 
 ## Parameters
 
-| Option        | Type      | Description                                 |
-| ------------- | --------- | ------------------------------------------- |
-| `r`           | `number`  | Radius of the circle                        |
-| `fill`        | `string`  | Fill color or field name for color encoding |
-| `stroke`      | `string`  | Stroke color                                |
-| `strokeWidth` | `number`  | Stroke width (default `0`)                  |
-| `debug`       | `boolean` | Log debug info to console                   |
+::: gofish-ref circle
+:::
 
 ## Examples
 

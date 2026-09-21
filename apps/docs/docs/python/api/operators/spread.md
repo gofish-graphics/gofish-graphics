@@ -1,3 +1,7 @@
+---
+order: 10
+---
+
 # spread
 
 Partitions the data and lays the groups out along an axis, with a gap between
@@ -22,15 +26,8 @@ spread(*, by=None, dir, **options) -> Operator
 
 ## Parameters
 
-| Parameter   | Type                                     | Description                                                                                                                                                                                                                                                                                                  |
-| ----------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `by`        | `str` \| `field(...)` \| `Callable`      | Field, dotted path, [`field(...)`](#field-expression-pipeline) accessor, or callable to partition by (see [path-aware `by`](#path-aware-by)). Omit to spread per row.                                                                                                                                        |
-| `dir`       | `"x"` \| `"y"`                           | **Required.** Axis to lay groups out along.                                                                                                                                                                                                                                                                  |
-| `spacing`   | `int`                                    | Gap between groups in pixels. Ignored when `glue=True`.                                                                                                                                                                                                                                                      |
-| `alignment` | `str`                                    | Cross-axis alignment of the groups.                                                                                                                                                                                                                                                                          |
-| `glue`      | `bool`                                   | Glue children together: collapse data-driven sizes into a single positional axis at this level. [`stack`](/python/api/operators/stack) sets this.                                                                                                                                                            |
-| `w`, `h`    | `int` \| `str`                           | Fixed pixel size, or a field name sizing this operator's own box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                                                                                     |
-| `size`      | `int` \| `str` \| `field(...)` \| `list` | Per-entry stack-axis extent — a field name, a [`field(...)`](#field-expression-pipeline) accessor, or an explicit list with one value per split entry. `size=field("count").normalize()` makes the stack axis a **space-filling spine**. See [Space-filling spines](#space-filling-spines-mosaic-marimekko). |
+::: gofish-ref spread
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

@@ -1,10 +1,14 @@
+---
+handwritten: true
+---
+
 # How to create a chart
 
 GoFish uses a builder pattern to create charts. You chain four methods together: `chart`, `flow`, `mark`, and `render`.
 
 ## Basic pattern
 
-```ts
+```ts no-check
 chart(data)
   .flow(operators...)
   .mark(visualMark)
@@ -48,7 +52,7 @@ chart(data, { coord: clock() });
 - `stack(field, options)` — stacks items edge-to-edge along a shared scale
 - `scatter(field, options)` — positions items by x/y coordinates
 
-```ts
+```ts no-check
 .flow(spread({ by: "category",  dir: "x" }))
 ```
 
@@ -67,7 +71,7 @@ See [How to pick a layout operator](/js/api/howto/operators) for guidance on cho
 
 Mark options can use fixed values or reference data fields:
 
-```ts
+```ts no-check
 .mark(rect({ h: "value", fill: "category" }))
 ```
 
@@ -77,7 +81,7 @@ Here `h: "value"` means the rectangle height comes from each item's `value` fiel
 
 `.render()` renders the chart into a DOM element:
 
-```ts
+```ts no-check
 .render(container, { w: 400, h: 300, axes: true })
 ```
 

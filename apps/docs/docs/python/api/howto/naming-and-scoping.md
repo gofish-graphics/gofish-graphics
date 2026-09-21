@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # How to name and scope
 
 When you build composable components — a `stack_slot` that itself contains a

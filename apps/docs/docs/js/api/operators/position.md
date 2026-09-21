@@ -1,3 +1,7 @@
+---
+order: 80
+---
+
 # position
 
 Sets a single child's **min-corner** `(x, y)` offset in the parent's coordinate
@@ -26,13 +30,10 @@ position({ x?, y?, key? }, [child]);
 one** child; passing more is not meaningful (the operator only tracks one
 child's box).
 
-## Options
+## Parameters
 
-| Option | Type     | Default     | Description                                       |
-| ------ | -------- | ----------- | ------------------------------------------------- |
-| `x`    | `number` | `undefined` | Min-corner x offset, in the parent's coordinates. |
-| `y`    | `number` | `undefined` | Min-corner y offset, in the parent's coordinates. |
-| `key`  | `string` | `undefined` | Internal per-node key override.                   |
+::: gofish-ref position
+:::
 
 ## Notes
 

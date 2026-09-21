@@ -1,3 +1,7 @@
+---
+order: 70
+---
+
 # polygon
 
 Draws a closed polygon from explicit local-coordinate points. Useful for
@@ -32,13 +36,8 @@ Keyword-only (matches every existing call site, which already passes
 
 ## Parameters
 
-| Parameter     | Type                | Default   | Description                                                                |
-| ------------- | ------------------- | --------- | -------------------------------------------------------------------------- |
-| `points`      | `list[list[float]]` | —         | Vertices in local coordinates. GoFish is y-up: `[0, 0]` is the bottom-left |
-| `fill`        | `str`               | `"black"` | Fill color                                                                 |
-| `stroke`      | `str`               | `fill`    | Stroke color (defaults to `fill`)                                          |
-| `strokeWidth` | `int`               | `0`       | Stroke width                                                               |
-| `opacity`     | `float`             | `1`       | Opacity, `0`–`1` (applies to fill and stroke)                              |
+::: gofish-ref polygon
+:::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark). Call
 [`.name()`](/python/api/core/mark) on the result to make it referenceable via

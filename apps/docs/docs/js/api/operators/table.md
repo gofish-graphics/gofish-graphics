@@ -1,3 +1,7 @@
+---
+order: 30
+---
+
 # table
 
 Groups data by two fields and lays out groups in a 2D grid — one axis per field. The primary operator for heatmaps and other grid-based visualizations.
@@ -40,11 +44,8 @@ table({ by: { x, y }, spacing?, numCols? })
 
 ## Parameters
 
-| Option    | Type                         | Description                                                        |
-| --------- | ---------------------------- | ------------------------------------------------------------------ |
-| `by`      | `{ x: string; y: string }`   | Two fields whose unique values become columns and rows             |
-| `spacing` | `number \| [number, number]` | Gap between cells (single number, or `[xSpacing, ySpacing]` tuple) |
-| `numCols` | `number`                     | Override the inferred column count                                 |
+::: gofish-ref table
+:::
 
 ## Examples
 

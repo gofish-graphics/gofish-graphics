@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # First Steps
 
 GoFish is a JavaScript library for making bespoke graphics.
@@ -95,7 +99,7 @@ chart(alphabet);
 The `flow` method is where you specify _graphical operators_. Graphical operators transform your
 dataset (usually by applying a `groupBy`) and specify layout.
 
-```ts
+```ts no-check
 .flow(spread({ by: "letter",  dir: "x" }))
 ```
 
@@ -107,7 +111,7 @@ horizontally thanks the `dir: x` option.
 Lastly we call the `mark` method to specify the shapes we place in each of the regions created by
 the `spread` operator.
 
-```ts
+```ts no-check
 .mark(rect({ h: "frequency" }))
 ```
 

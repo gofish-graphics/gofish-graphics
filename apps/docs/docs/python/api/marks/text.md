@@ -1,3 +1,7 @@
+---
+order: 80
+---
+
 # text
 
 Draws a text label for each data item. Used for value labels on bars, point
@@ -27,22 +31,8 @@ Keyword-only (matches every existing call site, which already passes
 
 ## Parameters
 
-| Parameter                                                | Type           | Description                                                                                                                                  |
-| -------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `text`                                                   | `str` \| `int` | The string to render — a constant, a field name, or a `(row) -> str` callable                                                                |
-| `fill`                                                   | `str`          | Fill color — a constant or a field name                                                                                                      |
-| `stroke`, `strokeWidth`                                  | `str`, `int`   | Outline color / width                                                                                                                        |
-| `filter`                                                 | `str`          | Raw SVG filter attribute                                                                                                                     |
-| `fontSize`                                               | `int` \| `str` | Font size in pixels (default 12)                                                                                                             |
-| `fontFamily`                                             | `str`          | Font family (default `"system-ui, sans-serif"`)                                                                                              |
-| `fontStyle`                                              | `str`          | CSS font style, e.g. `"italic"`                                                                                                              |
-| `fontWeight`                                             | `int` \| `str` | CSS font weight, e.g. `300`, `700`, `"bold"`                                                                                                 |
-| `debugBoundingBox`                                       | `bool`         | Draw the text's bounding box (for layout debugging)                                                                                          |
-| `rotate`                                                 | `int`          | Rotation in degrees about the text anchor                                                                                                    |
-| `textAnchor`                                             | `str`          | `"start"` \| `"middle"` \| `"end"` — which end of the text sits at its own local origin, the point `rotate` pivots about (default `"start"`) |
-| `x`, `cx`, `x2`, `w`, `emX`, `y`, `cy`, `y2`, `h`, `emY` | `int` \| `str` | Box-geometry position channels (position the text anchor)                                                                                    |
-| `theta`, `thetaSize`, `r`, `rSize`                       | `int` \| `str` | Polar coord-space aliases for `x`/`w`/`y`/`h`                                                                                                |
-| `key`                                                    | `str`          | Internal per-node key override                                                                                                               |
+::: gofish-ref text
+:::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 

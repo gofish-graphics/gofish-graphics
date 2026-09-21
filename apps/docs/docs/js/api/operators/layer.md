@@ -1,3 +1,7 @@
+---
+order: 70
+---
+
 # layer
 
 Overlays multiple children in the same coordinate space without any layout offset.
@@ -23,13 +27,8 @@ layer(options?, [child1, child2, ...])
 
 ## Parameters
 
-| Option              | Type                  | Description                         |
-| ------------------- | --------------------- | ----------------------------------- |
-| `coord`             | `CoordinateTransform` | Coordinate transform for this layer |
-| `w`                 | `number`              | Override width                      |
-| `h`                 | `number`              | Override height                     |
-| `transform.scale.x` | `number`              | Scale factor for x axis             |
-| `transform.scale.y` | `number`              | Scale factor for y axis             |
+::: gofish-ref layer
+:::
 
 ## Z-ordering
 

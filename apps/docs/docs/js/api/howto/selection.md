@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # How to use selection
 
 Selection lets you connect marks across charts—for example, drawing a line

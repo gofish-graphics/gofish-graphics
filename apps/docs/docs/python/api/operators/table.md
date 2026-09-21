@@ -1,3 +1,7 @@
+---
+order: 30
+---
+
 # table
 
 Groups data by two fields and lays the groups out in a 2D grid — one axis per
@@ -40,11 +44,8 @@ table(*, by, **options) -> Operator
 
 ## Parameters
 
-| Parameter | Type                       | Description                                                     |
-| --------- | -------------------------- | --------------------------------------------------------------- |
-| `by`      | `dict`                     | A dict with `x` and `y` keys naming the two fields              |
-| `spacing` | `int` \| `tuple[int, int]` | Gap between cells — a single number or `(x_spacing, y_spacing)` |
-| `numCols` | `int`                      | Override the inferred column count                              |
+::: gofish-ref table
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # Tutorial: From a Rectangle to a Polar Ribbon
 
 Welcome to GoFish! In this tutorial we'll start with a rectangle and gradually
@@ -220,7 +224,7 @@ export const seafood: SeafoodData[] = [
 The dataset we'll work with in this tutorial is counts of the number of fish caught in different
 lakes.
 
-```ts
+```ts no-check
 type SeafoodData = {
   lake: "Lake A" | "Lake B" | "Lake C" | "Lake D" | "Lake E" | "Lake F";
   species: "Bass" | "Trout" | "Catfish" | "Perch" | "Salmon";

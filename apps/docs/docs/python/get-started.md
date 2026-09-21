@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # First Steps
 
 GoFish for Python is a thin wrapper over the GoFish graphics engine. You write

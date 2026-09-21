@@ -1,3 +1,7 @@
+---
+order: 30
+---
+
 # ellipse
 
 Draws an ellipse. Unlike `circle`, allows independent control of width and height.
@@ -21,14 +25,8 @@ ellipse({ w?, h?, fill?, stroke?, strokeWidth?, opacity = 1 })
 
 ## Parameters
 
-| Option        | Type               | Description                                          |
-| ------------- | ------------------ | ---------------------------------------------------- |
-| `w`           | `number \| string` | Width — number for fixed, field name to encode data  |
-| `h`           | `number \| string` | Height — number for fixed, field name to encode data |
-| `fill`        | `string`           | Fill color or field name for color encoding          |
-| `stroke`      | `string`           | Stroke color (defaults to `fill`)                    |
-| `strokeWidth` | `number`           | Stroke width (default `0`)                           |
-| `opacity`     | `number`           | Opacity, `0`–`1` (default `1`)                       |
+::: gofish-ref ellipse
+:::
 
 ## Examples
 

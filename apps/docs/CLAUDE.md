@@ -87,6 +87,51 @@ The `::: gofish` container has four modes:
 
 The GoFish library supports multiple coordinate systems (cartesian, polar, wavy) through the `coord` parameter in Frame components.
 
+#### API reference options tables come from the descriptor table
+
+An API reference page does **not** hand-write its options table. It writes
+
+```markdown
+## Parameters
+
+::: gofish-ref rect
+:::
+```
+
+and the `gofish-ref` container (`docs/.vitepress/markdown-it-gofish-ref.ts`)
+generates the `Option | Type | Default | Description` table from the construct
+descriptor table in `packages/gofish-ir/src/frontend/descriptors.ts` — the same
+single source the generated Python factory layer
+(`packages/gofish-python/gofish/_generated.py`) comes from.
+
+- **An option's description lives in the descriptor's `doc` string, and its
+  default in `default`.** Fixing or adding a description means editing
+  `descriptors.ts` and re-running `pnpm --filter gofish-python gen` (the
+  docstrings of the generated Python factories change too). Never re-add a
+  hand-written options table to a page; prose _around_ the block (semantics,
+  examples, notes) stays hand-written as usual.
+- The name is the factory name: the wire `type`, or the descriptor's `pyName`
+  for the renamed compositing operators (`intersect`, `exclude`, `subtract`,
+  `paint`). Several names in one block render one titled subsection each
+  (`::: gofish-ref intersect exclude subtract paint mask`). An unknown name
+  throws and fails the build.
+- JS pages get the JS field names and a TS-ish type; Python pages get the `py`
+  kwarg names and a Python type. The language comes from the page's path.
+- Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
+  their own open subsection ("Box dimensions", "Paint"), below the table of the
+  construct's own fields.
+- `pnpm check-api-coverage` (`scripts/check-api-coverage.mjs`) asserts that every
+  descriptor construct has a `gofish-ref` block under both `docs/js/api/` and
+  `docs/python/api/`, and that every name used is a real construct. It reads the
+  built table, so `pnpm --filter gofish-ir build` runs first in CI. Constructs
+  with no user-facing factory (`mark-fn`, `over`) are allowlisted in the script.
+- The **Marks / Operators / Coordinates** sidebar subgroups are generated from
+  the files in `docs/<lang>/api/{marks,operators,coords}/`
+  (`collectApiSidebarGroup` in `config.mts`): a page's label is its frontmatter
+  `title` or its H1, and pages sort by frontmatter `order` then alphabetically.
+  Adding a page is enough to list it; set `order` to place it. Core / Color /
+  Constraints / Selection stay hand-listed.
+
 #### Dual-Language Docs (JavaScript + Python)
 
 The site documents both the JavaScript and Python APIs, one folder per language:

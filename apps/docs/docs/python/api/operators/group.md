@@ -1,3 +1,7 @@
+---
+order: 50
+---
+
 # group
 
 Partitions the data by a field and wraps each partition in its own frame,
@@ -24,9 +28,8 @@ group(*, by, **options) -> Operator
 
 ## Parameters
 
-| Parameter | Type                                | Description                                                                                                                                 |
-| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`      | `str` \| `field(...)` \| `Callable` | **Required.** Field, dotted path, [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor, or callable to group by. |
+::: gofish-ref group
+:::
 
 For the simple case — one ribbon or stream band per group, re-partitioning the
 marks a chart already drew — reach for a bare `.layer(ribbon(...))` instead,

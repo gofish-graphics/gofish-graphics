@@ -62,8 +62,17 @@ jobs:
       - name: Check internals wiki back-links
         run: pnpm --filter docs check-backlinks
 
+      - name: Check gallery story examples
+        run: pnpm --filter docs check-story-examples
+
+      - name: Check handwritten docs code snippets
+        run: pnpm --filter docs check-doc-snippets
+
       - name: Build gofish-ir
         run: pnpm --filter gofish-ir build
+
+      - name: Check API reference coverage
+        run: pnpm --filter docs check-api-coverage
 
       - name: Check Frontend IR JSON Schema docs page is in sync
         run: pnpm --filter docs check-ir-schema

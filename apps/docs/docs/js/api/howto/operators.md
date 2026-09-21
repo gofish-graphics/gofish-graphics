@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # How to pick a layout operator
 
 GoFish provides three layout operators for positioning marks: **spread**, **stack**, and **scatter**. Each serves a different purpose.
@@ -78,7 +82,7 @@ Now the rectangles stack on top of each other: A starts at 0, B starts at 30, C 
 
 Divides space into separate regions for each group, with optional gaps between them.
 
-```ts
+```ts no-check
 .flow(spread({ by: "category",  dir: "x", spacing: 8 }))
 ```
 
@@ -99,7 +103,7 @@ chart(data)
 
 Arranges items along a continuous shared scale, with each item starting where the previous one ended.
 
-```ts
+```ts no-check
 .flow(stack({ by: "weather",  dir: "y" }))
 ```
 
@@ -117,7 +121,7 @@ chart(data)
 
 Groups data by a field and positions each group at the mean x/y coordinates of its members.
 
-```ts
+```ts no-check
 .flow(scatter({ by: "species",  x: "bill_length", y: "flipper_length" }))
 ```
 
@@ -135,7 +139,7 @@ chart(penguins)
 
 You can chain multiple operators in `.flow()` to create nested layouts:
 
-```ts
+```ts no-check
 // First spread by category (with gaps), then stack within each category
 .flow(
   spread({ by: "category",  dir: "x", spacing: 16 }),

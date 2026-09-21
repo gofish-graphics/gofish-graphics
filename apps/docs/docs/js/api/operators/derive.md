@@ -1,3 +1,7 @@
+---
+order: 130
+---
+
 # derive
 
 Transforms data before it reaches the next operator or mark. The function receives the current data group and returns a new one.
@@ -24,9 +28,14 @@ derive(fn);
 
 ## Parameters
 
-| Parameter | Type                              | Description                       |
-| --------- | --------------------------------- | --------------------------------- |
-| `fn`      | `(d: T[]) => T[] \| Promise<T[]>` | Function that transforms the data |
+`derive` takes one positional argument, `fn` — a
+`(d: T[]) => T[] | Promise<T[]>` function that transforms the data. The
+serialized IR carries a bridge handle instead of the function body, so the
+fields below are what a producer writes on the wire, not what you pass by
+hand:
+
+::: gofish-ref derive
+:::
 
 ## Examples
 

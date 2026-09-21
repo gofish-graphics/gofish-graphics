@@ -1,3 +1,7 @@
+---
+order: 140
+---
+
 # resolve
 
 Dereference reference columns into the drawn nodes they name. For each row,
@@ -49,11 +53,8 @@ resolve(cols, *, from_, key=None) -> Operator
 
 ## Parameters
 
-| Parameter | Type        | Description                                                                                                                            |
-| --------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `cols`    | `list[str]` | The columns whose values are references to resolve in place.                                                                           |
-| `from_`   | `GoFishRef` | A [`selectAll(layerName)`](/python/api/marks/ref) of the layer whose nodes the columns are matched against.                            |
-| `key`     | `str`       | Optional. The field on the `from_` nodes to match against. Defaults to the field those nodes were grouped by (e.g. `scatter(by=...)`). |
+::: gofish-ref resolve
+:::
 
 `from_` carries a trailing underscore because `from` is a reserved word in
 Python; it maps to the `from` wire key. Returns an `Operator` for use inside

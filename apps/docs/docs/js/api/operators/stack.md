@@ -1,3 +1,7 @@
+---
+order: 20
+---
+
 # stack
 
 Shorthand for [`spread`](/js/api/operators/spread)`({ glue: true })`. Children
@@ -29,6 +33,9 @@ stack({ dir, ... }, [m1, m2, ...])
 ```
 
 ## Parameters
+
+::: gofish-ref stack
+:::
 
 Same as [`spread`](/js/api/operators/spread) without `spacing` or `glue` —
 `stack` always glues, so neither is configurable. Its `by` is the same

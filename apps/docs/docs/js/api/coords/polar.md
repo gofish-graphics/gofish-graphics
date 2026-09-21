@@ -1,3 +1,7 @@
+---
+order: 10
+---
+
 # polar
 
 Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps to angle (theta) and the y-axis maps to radius.
@@ -34,13 +38,8 @@ polar(options?: {
 All optional; the defaults reproduce a centered, full-circle disc starting at 12
 o'clock and going clockwise.
 
-| Option         | Default  | Description                                                   |
-| -------------- | -------- | ------------------------------------------------------------- |
-| `innerRadius`  | `0`      | Donut hole as a fraction `[0,1)` of the outer radius.         |
-| `centralAngle` | `2π`     | Total angular sweep in radians (use `<2π` for a partial fan). |
-| `startAngle`   | `π/2`    | Angle (radians) where θ=0 sits (`π/2` = 12 o'clock).          |
-| `direction`    | `-1`     | `+1` counter-clockwise, `-1` clockwise.                       |
-| `center`       | `[0, 0]` | Screen-space center offset.                                   |
+::: gofish-ref polar
+:::
 
 ## Axis aliases
 

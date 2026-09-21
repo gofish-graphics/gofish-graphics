@@ -245,10 +245,22 @@ export const boxDims: FieldGroup = group({
 export const paint: FieldGroup = group({
   fill: ch.color("Fill color, or a field name for a color scale."),
   stroke: ch.color("Stroke color. Defaults to `fill`."),
-  strokeWidth: { type: t.number, default: 0 },
-  opacity: { type: t.number, default: 1 },
+  strokeWidth: { type: t.number, default: 0, doc: "Stroke width in pixels." },
+  opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
   filter: { type: t.string, doc: "Raw SVG filter attribute." },
 });
+
+/** The shared groups above, with the heading a docs consumer shows them under.
+ *  Membership is tested by FieldSpec identity (`resolveFields` copies the same
+ *  spec objects), so a docs table can split a construct's own fields from the
+ *  groups it includes — see `markdown-it-gofish-ref.ts` in apps/docs. */
+export const SHARED_FIELD_GROUPS: ReadonlyArray<{
+  label: string;
+  fields: FieldGroup;
+}> = [
+  { label: "Box dimensions", fields: boxDims },
+  { label: "Paint", fields: paint },
+];
 
 // ---------------------------------------------------------------------------
 // Operators (all 9) — grounded in schema.ts interfaces + validate.ts's
@@ -326,12 +338,21 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
       },
-      sharedScale: { type: t.boolean, default: false },
+      sharedScale: {
+        type: t.boolean,
+        default: false,
+        doc: "Share one scale across all children.",
+      },
       anchor: {
         type: t.enum("edge", "start", "middle", "end", "baseline"),
         default: "edge",
+        doc: "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
       },
-      reverse: { type: t.boolean, default: false },
+      reverse: {
+        type: t.boolean,
+        default: false,
+        doc: "Reverse the children's order along dir.",
+      },
       glue: {
         type: t.boolean,
         default: false,
@@ -375,13 +396,26 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.boolean,
         doc: "Spread-parity passthrough; stack always glues regardless.",
       },
-      alignment: { type: t.string, default: "baseline" },
-      sharedScale: { type: t.boolean, default: false },
+      alignment: {
+        type: t.string,
+        default: "baseline",
+        doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
+      },
+      sharedScale: {
+        type: t.boolean,
+        default: false,
+        doc: "Share one scale across all children.",
+      },
       anchor: {
         type: t.enum("edge", "start", "middle", "end", "baseline"),
         default: "edge",
+        doc: "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
       },
-      reverse: { type: t.boolean, default: false },
+      reverse: {
+        type: t.boolean,
+        default: false,
+        doc: "Reverse the children's order along dir.",
+      },
       axes: { type: t.ref("AxesOptions") },
       // Data-driven extent + space-filling spine — see `spread` above.
       w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
@@ -422,8 +456,12 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Cross-axis alignment for the axis without an explicit position.",
       },
       axes: { type: t.ref("AxesOptions") },
-      w: ch.num(),
-      h: ch.num(),
+      w: ch.num(
+        "Fixed cross-axis extent, or a field name sizing this operator's own box from data."
+      ),
+      h: ch.num(
+        "Fixed cross-axis extent, or a field name sizing this operator's own box from data."
+      ),
     },
   }),
 
@@ -471,15 +509,31 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       // `w`/`h` — matching the `ScatterOperator` precedent in schema.ts and
       // confirmed by the real Python story that grounds this entry
       // (atom/titanic-unit-dots, which sizes with `h: "fare"`).
-      w: ch.num(),
-      h: ch.num(),
+      w: ch.num(
+        "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+      ),
+      h: ch.num(
+        "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+      ),
       by: {
         type: t.union(t.string, t.ref("FieldAccessor")),
         doc: "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.",
       },
-      paddingInner: { type: t.number, default: 0 },
-      paddingOuter: { type: t.number, default: 0 },
-      round: { type: t.boolean, default: true },
+      paddingInner: {
+        type: t.number,
+        default: 0,
+        doc: "Padding between sibling rectangles.",
+      },
+      paddingOuter: {
+        type: t.number,
+        default: 0,
+        doc: "Padding around the outer edge of the treemap.",
+      },
+      round: {
+        type: t.boolean,
+        default: true,
+        doc: "Round pixel positions and sizes.",
+      },
       tile: {
         type: t.enum(
           "squarify",
@@ -490,8 +544,13 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
           "squarifyCircle"
         ),
         default: "squarify",
+        doc: "Tiling strategy.",
       },
-      sort: { type: t.enum("asc", "desc", "none"), default: "desc" },
+      sort: {
+        type: t.enum("asc", "desc", "none"),
+        default: "desc",
+        doc: "Sort leaves by weight before layout.",
+      },
       size: ch.num(
         "Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group."
       ),
@@ -543,9 +602,13 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     doc: "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth) — position it via `spread`/`scatter`.",
     fields: {
       r: ch.num("Radius; becomes w=h=2r on the underlying ellipse."),
-      fill: ch.color(),
-      stroke: ch.color("Defaults to `fill`."),
-      strokeWidth: { type: t.number },
+      fill: ch.color("Fill color, or a field name for a color scale."),
+      stroke: ch.color("Stroke color. Defaults to `fill`."),
+      strokeWidth: {
+        type: t.number,
+        default: 0,
+        doc: "Stroke width in pixels.",
+      },
       debug: {
         type: t.boolean,
         doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
@@ -557,10 +620,14 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     doc: "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).",
     include: [boxDims],
     fields: {
-      fill: ch.color(),
-      stroke: ch.color("Defaults to `fill`."),
-      strokeWidth: { type: t.number },
-      opacity: { type: t.number, default: 1 },
+      fill: ch.color("Fill color, or a field name for a color scale."),
+      stroke: ch.color("Stroke color. Defaults to `fill`."),
+      strokeWidth: {
+        type: t.number,
+        default: 0,
+        doc: "Stroke width in pixels.",
+      },
+      opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
       aspectRatio: {
         type: t.number,
         doc: "w/h ratio to enforce. When both dims are data-driven, the constraining axis is used.",
@@ -576,9 +643,13 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     doc: "A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.",
     include: [boxDims],
     fields: {
-      fill: ch.color(),
-      stroke: ch.color("Defaults to `fill`."),
-      strokeWidth: { type: t.number },
+      fill: ch.color("Fill color, or a field name for a color scale."),
+      stroke: ch.color("Stroke color. Defaults to `fill`."),
+      strokeWidth: {
+        type: t.number,
+        default: 0,
+        doc: "Stroke width in pixels.",
+      },
       debug: {
         type: t.boolean,
         doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
@@ -596,12 +667,23 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         required: true,
         doc: "Text content (raw channel — a literal, field name, or accessor).",
       },
-      fill: ch.color(),
-      stroke: ch.color(),
-      strokeWidth: { type: t.number },
+      fill: {
+        ...ch.color("Fill color, or a field name for a color scale."),
+        default: "black",
+      },
+      stroke: ch.color("Stroke color."),
+      strokeWidth: {
+        type: t.number,
+        default: 0,
+        doc: "Stroke width in pixels.",
+      },
       filter: { type: t.string, doc: "Raw SVG filter attribute." },
-      fontSize: { type: t.number, default: 12 },
-      fontFamily: { type: t.string, default: "system-ui, sans-serif" },
+      fontSize: { type: t.number, default: 12, doc: "Font size in pixels." },
+      fontFamily: {
+        type: t.string,
+        default: "system-ui, sans-serif",
+        doc: "Font family.",
+      },
       fontStyle: {
         type: t.string,
         doc: 'Raw CSS font-style (e.g. "italic").',
@@ -610,7 +692,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.union(t.number, t.string),
         doc: 'CSS font-weight (e.g. 300, 700, "bold").',
       },
-      debugBoundingBox: { type: t.boolean, default: false },
+      debugBoundingBox: {
+        type: t.boolean,
+        default: false,
+        doc: "Draw the text's bounding box, for layout debugging.",
+      },
       rotate: {
         type: t.number,
         default: 0,
@@ -631,8 +717,12 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       key: { type: t.string, doc: "Internal per-node key override." },
       href: { type: t.string, required: true, doc: "Image URL or data URI." },
       filter: { type: t.string, doc: "Raw SVG filter attribute." },
-      opacity: { type: t.number },
-      preserveAspectRatio: { type: t.string, default: "xMidYMid meet" },
+      opacity: { type: t.number, doc: "Opacity, 0 to 1." },
+      preserveAspectRatio: {
+        type: t.string,
+        default: "xMidYMid meet",
+        doc: "Raw SVG preserveAspectRatio value.",
+      },
       debug: {
         type: t.boolean,
         doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
@@ -648,10 +738,18 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         required: true,
         doc: "Vertex list, at least 3 points.",
       },
-      fill: { type: t.string, default: "black" },
-      stroke: { type: t.string, doc: "Defaults to `fill`." },
-      strokeWidth: { type: t.number },
-      opacity: { type: t.number, default: 1 },
+      fill: { type: t.string, default: "black", doc: "Fill color." },
+      stroke: { type: t.string, doc: "Stroke color. Defaults to `fill`." },
+      strokeWidth: {
+        type: t.number,
+        default: 0,
+        doc: "Stroke width in pixels.",
+      },
+      opacity: {
+        type: t.number,
+        default: 1,
+        doc: "Opacity, 0 to 1, applied to both fill and stroke.",
+      },
       debug: {
         type: t.boolean,
         doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
@@ -662,15 +760,15 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   blank: leafMark("blank", {
     doc: "An invisible sizing/positioning guide — a transparent rect with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).",
     fields: {
-      emX: { type: t.boolean },
-      emY: { type: t.boolean },
-      w: { ...ch.num(), default: 0 },
-      h: { ...ch.num(), default: 0 },
-      rx: { type: t.number },
-      ry: { type: t.number },
-      fill: ch.color(),
-      stroke: { type: t.string },
-      strokeWidth: { type: t.number },
+      emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
+      emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
+      w: { ...ch.num("Width."), default: 0 },
+      h: { ...ch.num("Height."), default: 0 },
+      rx: { type: t.number, doc: "Corner radius, x." },
+      ry: { type: t.number, doc: "Corner radius, y." },
+      fill: ch.color("Fill color. A blank draws nothing unless given one."),
+      stroke: { type: t.string, doc: "Stroke color." },
+      strokeWidth: { type: t.number, doc: "Stroke width in pixels." },
       debug: {
         type: t.boolean,
         doc: "Dev-only console.log flag. Genuinely serializes on the wire today (found while grounding this table) but carries no rendering meaning.",
@@ -682,19 +780,26 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     doc: "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
     fields: {
       fill: ch.str(),
-      stroke: { type: t.string },
-      strokeWidth: { type: t.number },
+      stroke: { type: t.string, doc: "Line color." },
+      strokeWidth: {
+        type: t.number,
+        default: 1,
+        doc: "Line thickness in pixels.",
+      },
       strokeDasharray: {
         type: t.string,
         doc: 'Raw SVG stroke-dasharray (e.g. "12") for a dashed line.',
       },
-      opacity: { type: t.number },
-      mixBlendMode: { type: t.enum("normal", "multiply") },
+      opacity: { type: t.number, doc: "Opacity, 0 to 1." },
+      mixBlendMode: {
+        type: t.enum("normal", "multiply"),
+        doc: "Blend mode where connectors overlap.",
+      },
       curve: {
         type: t.any,
         doc: 'Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = "auto" (catmullRom on a homogeneous continuous connection axis, else straight).',
       },
-      dir: { type: t.enum("x", "y") },
+      dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       source: {
         type: t.any,
         doc: "Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword.",
@@ -736,11 +841,19 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     doc: "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
     fields: {
       fill: ch.str(),
-      stroke: { type: t.string },
-      strokeWidth: { type: t.number, default: 0 },
-      opacity: { type: t.number },
-      mixBlendMode: { type: t.enum("normal", "multiply"), default: "normal" },
-      dir: { type: t.enum("x", "y") },
+      stroke: { type: t.string, doc: "Stroke color." },
+      strokeWidth: {
+        type: t.number,
+        default: 0,
+        doc: "Stroke width in pixels.",
+      },
+      opacity: { type: t.number, doc: "Opacity, 0 to 1." },
+      mixBlendMode: {
+        type: t.enum("normal", "multiply"),
+        default: "normal",
+        doc: "Blend mode where bands overlap.",
+      },
+      dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
         type: t.any,
         doc: 'Screen-space band-edge shape (straight() | bezier()). Omitted = "auto" (bezier).',
@@ -803,7 +916,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     doc: "Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.",
     include: [boxDims],
     fields: {
-      key: { type: t.string },
+      key: { type: t.string, doc: "Internal per-node key override." },
       transform: {
         type: t.object({
           scale: {
@@ -825,21 +938,40 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   enclose: combinatorMark("enclose", {
     doc: "Draw a rounded-rect enclosure around the union of the children's bboxes, padded by `padding`.",
     fields: {
-      padding: { type: t.number, default: 2 },
-      rx: { type: t.number, default: 2 },
-      ry: { type: t.number, default: 2 },
-      fill: { type: t.string, default: "none" },
-      stroke: { type: t.string, default: "#D1D9E2" },
-      strokeWidth: { type: t.number, default: 1 },
-      strokeDasharray: { type: t.string },
-      opacity: { type: t.number, default: 1 },
+      padding: {
+        type: t.number,
+        default: 2,
+        doc: "Pixels of slack between the children's bbox union and the drawn enclosure.",
+      },
+      rx: { type: t.number, default: 2, doc: "Corner radius, x." },
+      ry: { type: t.number, default: 2, doc: "Corner radius, y." },
+      fill: {
+        type: t.string,
+        default: "none",
+        doc: "Fill color of the enclosure.",
+      },
+      stroke: {
+        type: t.string,
+        default: "#D1D9E2",
+        doc: "Stroke color of the enclosure.",
+      },
+      strokeWidth: {
+        type: t.number,
+        default: 1,
+        doc: "Stroke width in pixels.",
+      },
+      strokeDasharray: {
+        type: t.string,
+        doc: 'Raw SVG stroke-dasharray (e.g. "4 2") for a dashed enclosure.',
+      },
+      opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
     },
   }),
 
   position: combinatorMark("position", {
     doc: "Set a single child's min-corner (x, y) in parent coordinates — an absolute-offset placement primitive, NOT center-anchored. Unlike `enclose`'s convex-hull styling, `position` draws nothing of its own; it exists for cases (e.g. the Topology story's combinator trees) that need to place one child precisely without `enclose`'s fill/stroke/hull limits.",
     fields: {
-      key: { type: t.string },
+      key: { type: t.string, doc: "Internal per-node key override." },
       x: ch.num("Min-corner x offset."),
       y: ch.num("Min-corner y offset."),
     },
@@ -848,16 +980,56 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   arrow: combinatorMark("arrow", {
     doc: "A perfect-arrows box-to-box arrow between exactly two children.",
     fields: {
-      bow: { type: t.number, default: 0.2 },
-      stretch: { type: t.number, default: 0.5 },
-      stretchMin: { type: t.number, default: 40 },
-      stretchMax: { type: t.number, default: 420 },
-      padStart: { type: t.number, default: 5 },
-      padEnd: { type: t.number, default: 20 },
-      flip: { type: t.boolean, default: false },
-      straights: { type: t.boolean, default: true },
-      stroke: { type: t.string, default: "black" },
-      strokeWidth: { type: t.number, default: 3 },
+      bow: {
+        type: t.number,
+        default: 0.2,
+        doc: "Baseline curvature. 0 is a straight line; higher values bow the arc further from center.",
+      },
+      stretch: {
+        type: t.number,
+        default: 0.5,
+        doc: "How much the bow grows as the endpoints get closer, and shrinks as they get farther apart.",
+      },
+      stretchMin: {
+        type: t.number,
+        default: 40,
+        doc: "Distance in pixels below which stretch has its full effect.",
+      },
+      stretchMax: {
+        type: t.number,
+        default: 420,
+        doc: "Distance in pixels above which stretch has no effect.",
+      },
+      padStart: {
+        type: t.number,
+        default: 5,
+        doc: "Gap in pixels between the source box and the start of the line.",
+      },
+      padEnd: {
+        type: t.number,
+        default: 20,
+        doc: "Gap in pixels between the end of the line and the target box, leaving room for the arrowhead.",
+      },
+      flip: {
+        type: t.boolean,
+        default: false,
+        doc: "Flip which side the arrow bows toward.",
+      },
+      straights: {
+        type: t.boolean,
+        default: true,
+        doc: "Allow a perfectly straight line when the endpoints are axis-aligned, instead of forcing a slight bow.",
+      },
+      stroke: {
+        type: t.string,
+        default: "black",
+        doc: "Color of the arrow's line and head, and of the start dot when shown.",
+      },
+      strokeWidth: {
+        type: t.number,
+        default: 3,
+        doc: "Line width; also scales the arrowhead and the start dot.",
+      },
       start: {
         type: t.boolean,
         default: false,
@@ -875,7 +1047,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     doc: "Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.",
     fields: {
       ...resolveFields(OPERATORS.treemap),
-      key: { type: t.string },
+      key: { type: t.string, doc: "Internal per-node key override." },
     },
   }),
 
@@ -888,6 +1060,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       blendMode: {
         type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
         default: "color",
+        doc: "Blend used where the two regions combine.",
       },
     },
   }),
@@ -898,6 +1071,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       blendMode: {
         type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
         default: "color",
+        doc: "Blend used where the two regions combine.",
       },
     },
   }),
@@ -908,6 +1082,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       blendMode: {
         type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
         default: "color",
+        doc: "Blend used where the two regions combine.",
       },
     },
   }),
@@ -918,6 +1093,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       blendMode: {
         type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
         default: "color",
+        doc: "Blend used where the two regions combine.",
       },
     },
   }),
@@ -928,6 +1104,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       blendMode: {
         type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
         default: "color",
+        doc: "Blend used where the two regions combine.",
       },
     },
   }),
@@ -944,21 +1121,28 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 // dispatch; they don't need JSON Schema $defs yet (per the design doc).
 // ---------------------------------------------------------------------------
 
+// The `py` names are the snake_case convention Python's polar()/clock()
+// already used before this table existed; the field names stay the camelCase
+// wire keys. Both the generated `_polar_config` and the docs options table read
+// them from here.
 const polarFields: FieldGroup = group({
   innerRadius: {
     type: t.number,
     default: 0,
     doc: "Donut hole as a fraction [0,1) of the outer radius.",
+    py: "inner_radius",
   },
   centralAngle: {
     type: t.number,
     default: 2 * Math.PI,
     doc: "Total angular sweep in radians.",
+    py: "central_angle",
   },
   startAngle: {
     type: t.number,
     default: Math.PI / 2,
     doc: "Angle (radians) of θ=0.",
+    py: "start_angle",
   },
   direction: {
     type: t.number,
@@ -988,7 +1172,11 @@ export const COORDS: Record<string, ConstructDescriptor> = {
   bipolar: coordTransform("bipolar", {
     doc: "Bipolar coordinates from two foci. JS takes `fociDistance` positionally, not as an options object.",
     fields: {
-      fociDistance: { type: t.number, default: 100 },
+      fociDistance: {
+        type: t.number,
+        default: 100,
+        doc: "Distance in pixels between the two foci.",
+      },
     },
   }),
   arcLengthPolar: coordTransform("arcLengthPolar", {

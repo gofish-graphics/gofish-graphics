@@ -1,3 +1,7 @@
+---
+order: 10
+---
+
 # rect
 
 Draws a rectangle for each data item.
@@ -20,15 +24,8 @@ rect({ w?, h?, fill?, stroke?, strokeWidth = 0, rx?, ry? })
 
 ## Parameters
 
-| Option        | Type               | Description                                          |
-| ------------- | ------------------ | ---------------------------------------------------- |
-| `w`           | `number \| string` | Width — number for fixed, field name to encode data  |
-| `h`           | `number \| string` | Height — number for fixed, field name to encode data |
-| `fill`        | `string`           | Fill color or field name for color encoding          |
-| `stroke`      | `string`           | Stroke color (defaults to `fill`)                    |
-| `strokeWidth` | `number`           | Stroke width                                         |
-| `rx`          | `number`           | Horizontal border radius                             |
-| `ry`          | `number`           | Vertical border radius                               |
+::: gofish-ref rect
+:::
 
 Chain [`.label(accessor, ...)`](/js/guides/labels) on the returned mark to
 attach a text label — there is no `label` option here.

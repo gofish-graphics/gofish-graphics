@@ -2,6 +2,7 @@ import { defineConfig } from "vitepress";
 import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import matter from "gray-matter";
 import gofish from "./markdown-it-gofish";
+import gofishRef from "./markdown-it-gofish-ref";
 import wikilink, { type WikiTarget } from "./markdown-it-wikilink";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
@@ -124,6 +125,36 @@ function collectWikiTargets(): Map<string, WikiTarget> {
   };
   walk(join(docsDir, "internals"));
   return targets;
+}
+
+/**
+ * The Marks / Operators / Coordinates sidebar subgroups, generated from the
+ * files in `docs/<lang>/api/<dir>/`. A page's label is its frontmatter `title`
+ * or its H1, and pages sort by frontmatter `order` then alphabetically — so the
+ * curated order (spread before stack, rect before circle) lives in the pages
+ * themselves rather than in a hand-kept list here. Core / Color / Constraints /
+ * Selection stay hand-listed: they are small and not descriptor-driven.
+ */
+function collectApiSidebarGroup(lang: "js" | "python", dir: string) {
+  const full = join(docsDir, lang, "api", dir);
+  const pages = readdirSync(full, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith(".md"))
+    .map((e) => {
+      const src = readFileSync(join(full, e.name), "utf-8");
+      const { data, content } = matter(src);
+      const h1 = content.match(/^#\s+(.+)$/m);
+      const slug = e.name.replace(/\.md$/, "");
+      return {
+        text:
+          typeof data.title === "string"
+            ? data.title
+            : (h1?.[1]?.trim() ?? slug),
+        order: typeof data.order === "number" ? data.order : 999,
+        link: `/${lang}/api/${dir}/${slug}`,
+      };
+    })
+    .sort((a, b) => a.order - b.order || a.text.localeCompare(b.text));
+  return pages.map(({ text, link }) => ({ text, link }));
 }
 
 function collectInternalsSidebar() {
@@ -359,6 +390,9 @@ export default defineConfig({
     codeTransformers: [transformerTwoslash()],
     config: (md) => {
       gofish(md);
+      // `::: gofish-ref <name>` → the construct's options table, generated
+      // from the gofish-ir descriptor table.
+      gofishRef(md);
       // `[[slug]]` wiki links between internals essays → resolved internal links.
       wikilink(md, collectWikiTargets());
       md.use(container, "gofish-live", {
@@ -449,43 +483,12 @@ export default defineConfig({
             {
               text: "Marks",
               collapsed: true,
-              items: [
-                { text: "rect", link: "/js/api/marks/rect" },
-                { text: "circle", link: "/js/api/marks/circle" },
-                { text: "ellipse", link: "/js/api/marks/ellipse" },
-                { text: "line", link: "/js/api/marks/line" },
-                { text: "ribbon", link: "/js/api/marks/ribbon" },
-                { text: "blank", link: "/js/api/marks/blank" },
-                { text: "polygon", link: "/js/api/marks/polygon" },
-                { text: "text", link: "/js/api/marks/text" },
-                { text: "image", link: "/js/api/marks/image" },
-                { text: "ref", link: "/js/api/marks/ref" },
-              ],
+              items: collectApiSidebarGroup("js", "marks"),
             },
             {
               text: "Operators",
               collapsed: true,
-              items: [
-                { text: "spread", link: "/js/api/operators/spread" },
-                { text: "stack", link: "/js/api/operators/stack" },
-                { text: "table", link: "/js/api/operators/table" },
-                { text: "scatter", link: "/js/api/operators/scatter" },
-                { text: "group", link: "/js/api/operators/group" },
-                { text: "treemap", link: "/js/api/operators/treemap" },
-                { text: "layer", link: "/js/api/operators/layer" },
-                { text: "position", link: "/js/api/operators/position" },
-                { text: "arrow", link: "/js/api/operators/arrow" },
-                {
-                  text: "region compositing",
-                  link: "/js/api/operators/region-compositing",
-                },
-                { text: "cut", link: "/js/api/operators/cut" },
-                { text: "offset", link: "/js/api/operators/offset" },
-                { text: "derive", link: "/js/api/operators/derive" },
-                { text: "resolve", link: "/js/api/operators/resolve" },
-                { text: "join", link: "/js/api/operators/join" },
-                { text: "log", link: "/js/api/operators/log" },
-              ],
+              items: collectApiSidebarGroup("js", "operators"),
             },
             {
               text: "Color",
@@ -519,10 +522,7 @@ export default defineConfig({
             {
               text: "Coordinates",
               collapsed: true,
-              items: [
-                { text: "polar", link: "/js/api/coords/polar" },
-                { text: "clock", link: "/js/api/coords/clock" },
-              ],
+              items: collectApiSidebarGroup("js", "coords"),
             },
           ],
         },
@@ -578,46 +578,12 @@ export default defineConfig({
             {
               text: "Marks",
               collapsed: true,
-              items: [
-                { text: "rect", link: "/python/api/marks/rect" },
-                { text: "circle", link: "/python/api/marks/circle" },
-                { text: "ellipse", link: "/python/api/marks/ellipse" },
-                { text: "line", link: "/python/api/marks/line" },
-                { text: "ribbon", link: "/python/api/marks/ribbon" },
-                { text: "blank", link: "/python/api/marks/blank" },
-                { text: "polygon", link: "/python/api/marks/polygon" },
-                { text: "text", link: "/python/api/marks/text" },
-                { text: "image", link: "/python/api/marks/image" },
-                { text: "ref", link: "/python/api/marks/ref" },
-              ],
+              items: collectApiSidebarGroup("python", "marks"),
             },
             {
               text: "Operators",
               collapsed: true,
-              items: [
-                { text: "spread", link: "/python/api/operators/spread" },
-                { text: "stack", link: "/python/api/operators/stack" },
-                { text: "table", link: "/python/api/operators/table" },
-                { text: "scatter", link: "/python/api/operators/scatter" },
-                { text: "group", link: "/python/api/operators/group" },
-                { text: "treemap", link: "/python/api/operators/treemap" },
-                { text: "layer", link: "/python/api/operators/layer" },
-                {
-                  text: "position",
-                  link: "/python/api/operators/position",
-                },
-                { text: "arrow", link: "/python/api/operators/arrow" },
-                { text: "derive", link: "/python/api/operators/derive" },
-                {
-                  text: "region compositing",
-                  link: "/python/api/operators/region-compositing",
-                },
-                { text: "cut", link: "/python/api/operators/cut" },
-                { text: "offset", link: "/python/api/operators/offset" },
-                { text: "resolve", link: "/python/api/operators/resolve" },
-                { text: "join", link: "/python/api/operators/join" },
-                { text: "log", link: "/python/api/operators/log" },
-              ],
+              items: collectApiSidebarGroup("python", "operators"),
             },
             {
               text: "Color",
@@ -654,10 +620,7 @@ export default defineConfig({
             {
               text: "Coordinates",
               collapsed: true,
-              items: [
-                { text: "polar", link: "/python/api/coords/polar" },
-                { text: "clock", link: "/python/api/coords/clock" },
-              ],
+              items: collectApiSidebarGroup("python", "coords"),
             },
           ],
         },

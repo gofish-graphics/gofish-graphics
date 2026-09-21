@@ -371,25 +371,17 @@ for (const name of ["line", "ribbon"]) {
 }
 
 // --- Coord transforms --------------------------------------------------------
-// Python's existing polar()/clock() spell every option in snake_case
-// (inner_radius, central_angle, ...) — preserve that exact convention rather
-// than the descriptor's camelCase field names, which are wire keys only.
+// Python's polar()/clock() spell every option in snake_case (inner_radius,
+// central_angle, ...) rather than the descriptor's camelCase field names, which
+// are wire keys only. That convention rides the descriptor's `py` keys, so the
+// docs options table spells them the same way.
 parts.push(
   "\n# --- Coord transforms ---------------------------------------------------------\n"
 );
-const POLAR_PY_NAMES: Record<string, string> = {
-  innerRadius: "inner_radius",
-  centralAngle: "central_angle",
-  startAngle: "start_angle",
-  direction: "direction",
-  center: "center",
-};
 {
   const d = COORDS["polar"];
-  const ents = Object.entries(d.fields).map(
-    ([wire, spec]) =>
-      [POLAR_PY_NAMES[wire] ?? wire, wire, spec] as [string, string, FieldSpec]
-  );
+  // The snake_case kwarg names ride the descriptor's `py` keys.
+  const ents = entries(d.fields);
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const docLines = ents
     .map(([py, , spec]) => docLine(py, spec))

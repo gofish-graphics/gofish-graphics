@@ -1,3 +1,7 @@
+---
+order: 40
+---
+
 # scatter
 
 Positions children at per-group means (when `by` is given) or per-item (when `by` is omitted).
@@ -27,12 +31,8 @@ scatter({ by?, x?, y?, xMin?, xMax?, yMin?, yMax?, alignment? })
 
 ## Parameters
 
-| Option                      | Type                                         | Description                                                                                                                                                                                                                                                                                                 |
-| --------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`                        | `string \| FieldExpr \| (item) => string`    | Field, lodash path, [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor, or function to group by; omit for per-item scatter. Path-aware (use `"datum.field"` after a [selection](/js/api/selection/ref)) — see [`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by) |
-| `x`, `y`                    | `string \| number`                           | Field name for position, or fixed pixel value                                                                                                                                                                                                                                                               |
-| `xMin`/`xMax`/`yMin`/`yMax` | `string`                                     | Range form — children span `[xMin, xMax]` (or y) in data space                                                                                                                                                                                                                                              |
-| `alignment`                 | `"start" \| "middle" \| "end" \| "baseline"` | Alignment on axes scatter doesn't position                                                                                                                                                                                                                                                                  |
+::: gofish-ref scatter
+:::
 
 At least one of `x`, `y`, the `xMin`/`xMax` pair, or the `yMin`/`yMax` pair is required.
 

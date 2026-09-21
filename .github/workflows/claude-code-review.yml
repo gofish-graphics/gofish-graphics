@@ -44,12 +44,19 @@ jobs:
             In addition to the standard review, perform a documentation-sync check.
             Per CLAUDE.md, user-facing API changes and new/changed features must be
             documented in the same PR:
-            - If this PR changes a public API surface in packages/gofish-graphics/src/
-              (exported names, function signatures, option shapes, default behaviors) or
-              adds/changes a user-facing feature, verify the matching page under
-              apps/docs/docs/js/ was updated in this PR (signature, examples, and any
-              equivalences tables). For Python API changes in packages/gofish-python/,
-              verify the mirror page under apps/docs/docs/python/.
+            - If this PR changes a public construct's options in
+              packages/gofish-ir/src/frontend/descriptors.ts, the reference options tables
+              under apps/docs/docs/{js,python}/api/ are generated from it: verify the
+              `doc`/`default` fields were updated rather than the tables by hand. If a call
+              shape or behavior changed, verify that page's handwritten Signature block and
+              prose were updated too. Builder methods, color helpers, constraints and
+              selection pages are fully handwritten and must be updated in the same PR,
+              with the Python mirror page under apps/docs/docs/python/.
+            - Pages with `handwritten: true` frontmatter are the maintainer's own prose. Do
+              not flag missing prose updates there, and do flag it if this PR rewrote,
+              expanded, or restructured that prose; code-block and factual corrections are
+              the only allowed edits. If an API change left a handwritten page stale, the
+              expected outcome is a GitHub issue plus a note in the PR description.
             - If a changed source file has a `// <gofish-wiki>` / @wiki comment block,
               verify the internals essay it names (apps/docs/docs/internals/) was updated
               in the same PR.

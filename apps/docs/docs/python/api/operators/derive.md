@@ -1,3 +1,7 @@
+---
+order: 130
+---
+
 # derive
 
 Transforms the data mid-pipeline with an arbitrary **Python function**. This is
@@ -27,9 +31,13 @@ derive(fn) -> DeriveOperator
 
 ## Parameters
 
-| Parameter | Type       | Description                                                    |
-| --------- | ---------- | -------------------------------------------------------------- |
-| `fn`      | `callable` | A function that receives the current data and returns new data |
+`derive` takes one positional argument, `fn` — a callable that receives the
+current group's rows and returns the new ones. The serialized IR carries a
+bridge handle instead of the function body, so the fields below are what a
+producer writes on the wire, not what you pass by hand:
+
+::: gofish-ref derive
+:::
 
 Returns a `DeriveOperator` for use inside [`.flow()`](/python/api/core/flow).
 

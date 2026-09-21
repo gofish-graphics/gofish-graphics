@@ -1,3 +1,7 @@
+---
+order: 20
+---
+
 # clock
 
 A polar coordinate system oriented like a clock face. 0° is at 12 o'clock (top) and angles increase clockwise. Ideal for pie charts, donut charts, and radial visualizations.
@@ -27,6 +31,9 @@ clock(
 ```
 
 ## Parameters
+
+::: gofish-ref clock
+:::
 
 `clock()` is a [`polar()`](/python/api/coords/polar) preset and accepts the same
 options — `inner_radius`, `central_angle`, `start_angle`, `direction`, `center` —

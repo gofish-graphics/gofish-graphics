@@ -1,3 +1,7 @@
+---
+order: 150
+---
+
 # join
 
 One-to-many **equi-join** of the incoming rows against another data table on a
@@ -51,10 +55,8 @@ join(right, { on });
 
 ## Parameters
 
-| Parameter | Type       | Description                                                          |
-| --------- | ---------- | -------------------------------------------------------------------- |
-| `right`   | `object[]` | The right-hand table — an array of row objects, inlined into the IR. |
-| `on`      | `string`   | The shared key field matched between the incoming rows and `right`.  |
+::: gofish-ref join
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/js/api/core/flow).
 
