@@ -4,7 +4,7 @@ order: 20
 
 # circle
 
-Draws a circle for each data item. A convenience wrapper around `rect` with equal width/height and full border radius.
+Draws a circle for each data item. A convenience wrapper around `ellipse` with equal width and height.
 
 ::: gofish
 

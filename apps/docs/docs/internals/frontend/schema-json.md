@@ -864,7 +864,7 @@ for the API.
         },
         "from": {
           "type": "string",
-          "description": "Layer name whose nodes the columns are resolved against (a selectAll)."
+          "description": "The `selectAll(layerName)` of a prior layer whose nodes the columns are matched against."
         },
         "key": {
           "type": "string",
@@ -961,14 +961,17 @@ for the API.
         },
         "sharedScale": {
           "type": "boolean",
+          "description": "Share one scale across all children.",
           "default": false
         },
         "anchor": {
           "enum": ["edge", "start", "middle", "end", "baseline"],
+          "description": "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
           "default": "edge"
         },
         "reverse": {
           "type": "boolean",
+          "description": "Reverse the children's order along dir.",
           "default": false
         },
         "glue": {
@@ -1042,18 +1045,22 @@ for the API.
         },
         "alignment": {
           "type": "string",
+          "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
         },
         "sharedScale": {
           "type": "boolean",
+          "description": "Share one scale across all children.",
           "default": false
         },
         "anchor": {
           "enum": ["edge", "start", "middle", "end", "baseline"],
+          "description": "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
           "default": "edge"
         },
         "reverse": {
           "type": "boolean",
+          "description": "Reverse the children's order along dir.",
           "default": false
         },
         "axes": {
@@ -1178,10 +1185,12 @@ for the API.
           "$ref": "#/$defs/AxesOptions"
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fixed cross-axis extent, or a field name sizing this operator's own box from data."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fixed cross-axis extent, or a field name sizing this operator's own box from data."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -1304,11 +1313,21 @@ for the API.
         "type": {
           "const": "treemap"
         },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge (y-up: bottom) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+        },
         "w": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
         },
         "by": {
           "oneOf": [
@@ -1323,14 +1342,17 @@ for the API.
         },
         "paddingInner": {
           "type": "number",
+          "description": "Padding between sibling rectangles.",
           "default": 0
         },
         "paddingOuter": {
           "type": "number",
+          "description": "Padding around the outer edge of the treemap.",
           "default": 0
         },
         "round": {
           "type": "boolean",
+          "description": "Round pixel positions and sizes.",
           "default": true
         },
         "tile": {
@@ -1342,10 +1364,12 @@ for the API.
             "slicedice",
             "squarifyCircle"
           ],
+          "description": "Tiling strategy.",
           "default": "squarify"
         },
         "sort": {
           "enum": ["asc", "desc", "none"],
+          "description": "Sort leaves by weight before layout.",
           "default": "desc"
         },
         "size": {
@@ -1488,10 +1512,12 @@ for the API.
         },
         "strokeWidth": {
           "type": "number",
+          "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
           "type": "number",
+          "description": "Opacity, 0 to 1.",
           "default": 1
         },
         "filter": {
@@ -1553,14 +1579,17 @@ for the API.
           "description": "Radius; becomes w=h=2r on the underlying ellipse."
         },
         "fill": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale."
         },
         "stroke": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Defaults to `fill`."
+          "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number"
+          "type": "number",
+          "description": "Stroke width in pixels.",
+          "default": 0
         },
         "debug": {
           "type": "boolean"
@@ -1651,17 +1680,21 @@ for the API.
           "description": "Radial extent alias (polar coord's h)."
         },
         "fill": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale."
         },
         "stroke": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Defaults to `fill`."
+          "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number"
+          "type": "number",
+          "description": "Stroke width in pixels.",
+          "default": 0
         },
         "opacity": {
           "type": "number",
+          "description": "Opacity, 0 to 1.",
           "default": 1
         },
         "aspectRatio": {
@@ -1757,14 +1790,17 @@ for the API.
           "description": "Radial extent alias (polar coord's h)."
         },
         "fill": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale."
         },
         "stroke": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Defaults to `fill`."
+          "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number"
+          "type": "number",
+          "description": "Stroke width in pixels.",
+          "default": 0
         },
         "debug": {
           "type": "boolean"
@@ -1863,13 +1899,18 @@ for the API.
           "description": "Text content (raw channel — a literal, field name, or accessor)."
         },
         "fill": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale.",
+          "default": "black"
         },
         "stroke": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color."
         },
         "strokeWidth": {
-          "type": "number"
+          "type": "number",
+          "description": "Stroke width in pixels.",
+          "default": 0
         },
         "filter": {
           "type": "string",
@@ -1877,10 +1918,12 @@ for the API.
         },
         "fontSize": {
           "type": "number",
+          "description": "Font size in pixels.",
           "default": 12
         },
         "fontFamily": {
           "type": "string",
+          "description": "Font family.",
           "default": "system-ui, sans-serif"
         },
         "fontStyle": {
@@ -1900,6 +1943,7 @@ for the API.
         },
         "debugBoundingBox": {
           "type": "boolean",
+          "description": "Draw the text's bounding box, for layout debugging.",
           "default": false
         },
         "rotate": {
@@ -2013,10 +2057,12 @@ for the API.
           "description": "Raw SVG filter attribute."
         },
         "opacity": {
-          "type": "number"
+          "type": "number",
+          "description": "Opacity, 0 to 1."
         },
         "preserveAspectRatio": {
           "type": "string",
+          "description": "Raw SVG preserveAspectRatio value.",
           "default": "xMidYMid meet"
         },
         "debug": {
@@ -2070,17 +2116,21 @@ for the API.
         },
         "fill": {
           "type": "string",
+          "description": "Fill color.",
           "default": "black"
         },
         "stroke": {
           "type": "string",
-          "description": "Defaults to `fill`."
+          "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number"
+          "type": "number",
+          "description": "Stroke width in pixels.",
+          "default": 0
         },
         "opacity": {
           "type": "number",
+          "description": "Opacity, 0 to 1, applied to both fill and stroke.",
           "default": 1
         },
         "debug": {
@@ -2116,33 +2166,42 @@ for the API.
           "const": "blank"
         },
         "emX": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
         },
         "emY": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
+          "description": "Width.",
           "default": 0
         },
         "h": {
           "$ref": "#/$defs/ChannelValue",
+          "description": "Height.",
           "default": 0
         },
         "rx": {
-          "type": "number"
+          "type": "number",
+          "description": "Corner radius, x."
         },
         "ry": {
-          "type": "number"
+          "type": "number",
+          "description": "Corner radius, y."
         },
         "fill": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color. A blank draws nothing unless given one."
         },
         "stroke": {
-          "type": "string"
+          "type": "string",
+          "description": "Stroke color."
         },
         "strokeWidth": {
-          "type": "number"
+          "type": "number",
+          "description": "Stroke width in pixels."
         },
         "debug": {
           "type": "boolean"
@@ -2177,29 +2236,36 @@ for the API.
           "const": "line"
         },
         "fill": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "A line's path is never filled. `fill` is the channel the shared color scale reads, so a field name colors each line by group, and it is the line color when `stroke` is omitted."
         },
         "stroke": {
-          "type": "string"
+          "type": "string",
+          "description": "Line color."
         },
         "strokeWidth": {
-          "type": "number"
+          "type": "number",
+          "description": "Line thickness in pixels.",
+          "default": 1
         },
         "strokeDasharray": {
           "type": "string",
           "description": "Raw SVG stroke-dasharray (e.g. \"12\") for a dashed line."
         },
         "opacity": {
-          "type": "number"
+          "type": "number",
+          "description": "Opacity, 0 to 1."
         },
         "mixBlendMode": {
-          "enum": ["normal", "multiply"]
+          "enum": ["normal", "multiply"],
+          "description": "Blend mode where connectors overlap."
         },
         "curve": {
           "description": "Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = \"auto\" (catmullRom on a homogeneous continuous connection axis, else straight)."
         },
         "dir": {
-          "enum": ["x", "y"]
+          "enum": ["x", "y"],
+          "description": "Connection axis."
         },
         "source": {
           "description": "Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword."
@@ -2268,24 +2334,30 @@ for the API.
           "const": "ribbon"
         },
         "fill": {
-          "$ref": "#/$defs/ChannelValue"
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color of the band, or a field name for a color scale. Omitted, the band takes the color of the marks it connects."
         },
         "stroke": {
-          "type": "string"
+          "type": "string",
+          "description": "Stroke color."
         },
         "strokeWidth": {
           "type": "number",
+          "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number"
+          "type": "number",
+          "description": "Opacity, 0 to 1."
         },
         "mixBlendMode": {
           "enum": ["normal", "multiply"],
+          "description": "Blend mode where bands overlap.",
           "default": "normal"
         },
         "dir": {
-          "enum": ["x", "y"]
+          "enum": ["x", "y"],
+          "description": "Connection axis."
         },
         "curve": {
           "description": "Screen-space band-edge shape (straight() | bezier()). Omitted = \"auto\" (bezier)."

@@ -31,8 +31,11 @@ const IR_DIST = resolve(REPO_ROOT, "packages/gofish-ir/dist/frontend/index.js");
  *  - `over`: internal-only union compositing, not exported from lib.ts (the
  *    public spelling is `layer`), kept only so the deserializer can dispatch
  *    the wire type.
+ *  - `derive`: its user-facing argument is a function, which the descriptor
+ *    cannot describe (the descriptor models the bridge handle the function
+ *    becomes), so `derive`'s page writes its one-parameter table by hand.
  */
-const ALLOWLIST = new Set(["mark-fn", "over"]);
+const ALLOWLIST = new Set(["mark-fn", "over", "derive"]);
 
 const LANGS = ["js", "python"];
 

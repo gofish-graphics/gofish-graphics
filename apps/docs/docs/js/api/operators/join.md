@@ -68,9 +68,10 @@ Returns an `Operator` for use inside [`.flow()`](/js/api/core/flow).
   no left-outer "keep unmatched with nulls" mode).
 - **Column merge** — output rows are `{ ...left, ...right }`; on a column-name
   clash the `right` value wins.
-- **Inlined right table** — `right` travels in the IR as JSON, so a chart using
-  `join` serializes and round-trips without a bridge (contrast `derive`, whose
-  function body cannot serialize).
+- **Copied right table** — the `right` rows are copied into the chart itself, so
+  a chart using `join` can be [exported](/js/api/core/export) and read back
+  whole. A `derive` cannot: a function is not data, so its body does not survive
+  the round trip.
 
 ## join vs. resolve
 

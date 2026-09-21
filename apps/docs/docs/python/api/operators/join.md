@@ -64,9 +64,10 @@ A dataframe `right` is converted to records automatically. Returns an
   no left-outer "keep unmatched with nulls" mode).
 - **Column merge** — output rows are `{**left, **right}`; on a column-name clash
   the `right` value wins.
-- **Inlined right table** — `right` travels in the IR as JSON, so a chart using
-  `join` serializes and round-trips without a bridge (contrast `derive`, whose
-  function body cannot serialize).
+- **Copied right table** — the `right` rows are copied into the chart itself, so
+  a chart using `join` needs nothing from your kernel once it is built. A
+  `derive` does: its function has to run, so the chart calls back into Python
+  every time it renders.
 
 ## join vs. resolve
 

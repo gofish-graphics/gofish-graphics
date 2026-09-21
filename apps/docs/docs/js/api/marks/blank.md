@@ -48,6 +48,6 @@ blank({ w?, h?, fill?, stroke?, strokeWidth?, rx?, ry?, debug? })
 // Blank with height encoding for area charts
 .mark(blank({ h: "value" }).name("bars"))
 
-// Debug mode to see blank positions
+// Log each blank's key and datum to the console (it still draws nothing)
 .mark(blank({ debug: true }).name("guides"))
 ```

@@ -28,14 +28,11 @@ derive(fn);
 
 ## Parameters
 
-`derive` takes one positional argument, `fn` — a
-`(d: T[]) => T[] | Promise<T[]>` function that transforms the data. The
-serialized IR carries a bridge handle instead of the function body, so the
-fields below are what a producer writes on the wire, not what you pass by
-hand:
+`derive` takes one positional argument and no options.
 
-::: gofish-ref derive
-:::
+| Parameter | Type                        | Description                                                                                                                                                               |
+| --------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fn`      | `(d: T) => U \| Promise<U>` | **Required.** Receives the data at this point in the flow (inside `.flow()`, the current group's rows) and returns what the rest of the pipeline sees. It may be `async`. |
 
 ## Examples
 

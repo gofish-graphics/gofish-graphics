@@ -176,7 +176,7 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,
-    doc: "Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.",
+    doc: "Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.",
   },
 });
 
@@ -205,7 +205,7 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,
-    doc: "Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.",
+    doc: "Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.",
   },
 });
 
@@ -292,7 +292,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
       from: {
         type: t.string,
-        doc: "Layer name whose nodes the columns are resolved against (a selectAll).",
+        doc: "The `selectAll(layerName)` of a prior layer whose nodes the columns are matched against.",
         py: "from_",
       },
       key: {
@@ -504,11 +504,19 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   treemap: operator("treemap", {
     doc: "d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.",
     fields: {
-      // Unlike the combinator form (whose low-level `TreemapProps` spreads
-      // the full 14-key `boxDims` group), the v3-operator IR only carries
-      // `w`/`h` — matching the `ScatterOperator` precedent in schema.ts and
-      // confirmed by the real Python story that grounds this entry
-      // (atom/titanic-unit-dots, which sizes with `h: "fare"`).
+      // Both forms take the same `TreemapProps`, which spreads `FancyDims` —
+      // `Treemap` runs the whole bag through `elaborateDims`, so the box's
+      // position (`x`/`y`) and size (`w`/`h`) are both real options. Only
+      // `w`/`h` carry channel annotations (`createOperator`'s `channels`), so
+      // those two resolve data-driven values; `x`/`y` pass through as literals.
+      // The polar aliases (theta/r/...) are deliberately NOT here: `Treemap`
+      // never calls `extractAliasCandidates`, so they would not resolve.
+      x: ch.num(
+        "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+      ),
+      y: ch.num(
+        "Top/bottom edge (y-up: bottom) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+      ),
       w: ch.num(
         "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
       ),
@@ -593,7 +601,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       // the hand-written Python wrapper already exposes it on all four.
       debug: {
         type: t.boolean,
-        doc: "Dev-only console.log flag. Genuinely serializes on the wire today but is stripped before layout (FACTORY_ONLY_KEYS) — carries no rendering meaning.",
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
       },
     },
   }),
@@ -611,7 +619,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       debug: {
         type: t.boolean,
-        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
       },
     },
   }),
@@ -634,7 +642,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       debug: {
         type: t.boolean,
-        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
       },
     },
   }),
@@ -652,7 +660,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       debug: {
         type: t.boolean,
-        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
       },
     },
   }),
@@ -725,7 +733,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       debug: {
         type: t.boolean,
-        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
       },
     },
   }),
@@ -752,7 +760,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       debug: {
         type: t.boolean,
-        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
       },
     },
   }),
@@ -771,7 +779,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       strokeWidth: { type: t.number, doc: "Stroke width in pixels." },
       debug: {
         type: t.boolean,
-        doc: "Dev-only console.log flag. Genuinely serializes on the wire today (found while grounding this table) but carries no rendering meaning.",
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
       },
     },
   }),
@@ -779,7 +787,13 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   line: leafMark("line", {
     doc: "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
     fields: {
-      fill: ch.str(),
+      // Center mode paints `fill: "none"` on the path (connect.tsx's
+      // `mode === "center" ? "none" : ...`), but `fill` is still the channel the
+      // color scale reads (`color: isValue(fill) ? fill : stroke`) and the
+      // stroke's fallback (`stroke ?? fill ?? "black"`).
+      fill: ch.color(
+        "A line's path is never filled. `fill` is the channel the shared color scale reads, so a field name colors each line by group, and it is the line color when `stroke` is omitted."
+      ),
       stroke: { type: t.string, doc: "Line color." },
       strokeWidth: {
         type: t.number,
@@ -840,7 +854,9 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   ribbon: leafMark("ribbon", {
     doc: "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
     fields: {
-      fill: ch.str(),
+      fill: ch.color(
+        "Fill color of the band, or a field name for a color scale. Omitted, the band takes the color of the marks it connects."
+      ),
       stroke: { type: t.string, doc: "Stroke color." },
       strokeWidth: {
         type: t.number,
@@ -917,6 +933,20 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     include: [boxDims],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
+      // A real `layer` option, not a chart-only one: `layer({ coord }, children)`
+      // delegates to the `coord` transform (layer.tsx's `options.coord !== undefined`
+      // branch), and the deserializer resolves a coord config out of the combinator
+      // options (`resolveOptions` in serialize/fromJSON.ts).
+      coord: {
+        type: t.any,
+        doc: "Coordinate transform (`polar()`, `clock()`, `wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.",
+      },
+      // Rides the same `...restDims` passthrough into `coord(...)`, so it is a
+      // real option of the coord-bearing form only (a plain layer ignores it).
+      axes: {
+        type: t.ref("AxesOptions"),
+        doc: "Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.",
+      },
       transform: {
         type: t.object({
           scale: {

@@ -31,13 +31,11 @@ derive(fn) -> DeriveOperator
 
 ## Parameters
 
-`derive` takes one positional argument, `fn` — a callable that receives the
-current group's rows and returns the new ones. The serialized IR carries a
-bridge handle instead of the function body, so the fields below are what a
-producer writes on the wire, not what you pass by hand:
+`derive` takes one positional argument and no options.
 
-::: gofish-ref derive
-:::
+| Parameter | Type       | Description                                                                                                                                                                                        |
+| --------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fn`      | `Callable` | **Required.** Receives the current group's rows and returns the new ones — a list of dicts, `None`, or a dataframe from any backend [narwhals](https://narwhals-dev.github.io/narwhals/) supports. |
 
 Returns a `DeriveOperator` for use inside [`.flow()`](/python/api/core/flow).
 

@@ -397,6 +397,12 @@ export interface TreemapOperator
   size?: ChannelValue;
   flipY?: boolean;
   leafIntrinsicRadiusField?: string;
+  /** Position of the box the treemap tiles into, in the parent's space. Both
+   *  forms spread `FancyDims` into `elaborateDims`, so the box's position is as
+   *  real an option as its size — unlike `w`/`h` these carry no channel
+   *  annotation, so they are pixel literals. */
+  x?: ChannelValue;
+  y?: ChannelValue;
   w?: ChannelValue;
   h?: ChannelValue;
 }

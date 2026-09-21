@@ -21,8 +21,7 @@ chart(catch_locations, axes=True).flow(scatter(by="lake", x="x", y="y")).mark(
 ## Signature
 
 ```python
-circle(r=None, fill=None, stroke=None, strokeWidth=None, opacity=None,
-       debug=None) -> Mark
+circle(r=None, fill=None, stroke=None, strokeWidth=None, debug=None) -> Mark
 ```
 
 ## Parameters

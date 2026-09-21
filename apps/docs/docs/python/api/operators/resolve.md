@@ -57,8 +57,8 @@ resolve(cols, *, from_, key=None) -> Operator
 :::
 
 `from_` carries a trailing underscore because `from` is a reserved word in
-Python; it maps to the `from` wire key. Returns an `Operator` for use inside
-[`.flow()`](/python/api/core/flow).
+Python; the JavaScript API spells the same option `from`. Returns an `Operator`
+for use inside [`.flow()`](/python/api/core/flow).
 
 ## Semantics
 

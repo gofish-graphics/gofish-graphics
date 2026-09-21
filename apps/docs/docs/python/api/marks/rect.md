@@ -28,10 +28,10 @@ rect(*, x=None, cx=None, x2=None, w=None, emX=None,
      rx=None, ry=None, aspectRatio=None, key=None) -> Mark
 ```
 
-Closed signature — no catch-all `**kwargs`. An unrecognized keyword is a
-`TypeError` at the call site, not a value that silently serializes and gets
-dropped on the floor at render (the class of bug that motivated closing it —
-see [Frontend IR](/internals/frontend/serialization#generating-the-python-factory-layer)).
+Closed signature — no catch-all `**kwargs`. An unrecognized keyword raises a
+`TypeError` at the call site instead of being accepted and then quietly ignored
+at render time, which is the class of bug that motivated closing it (see
+[Frontend IR](/internals/frontend/serialization#generating-the-python-factory-layer)).
 
 ## Parameters
 
