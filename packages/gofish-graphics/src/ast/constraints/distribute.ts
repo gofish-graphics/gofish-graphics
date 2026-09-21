@@ -29,8 +29,8 @@ export interface DistributeOptions {
    *    between facing edges (content-dependent).
    *  - `"start" | "middle" | "end" | "baseline"`: fixed-pitch anchor chaining —
    *    `anchor[i+1] = anchor[i] + spacing` — spacing is a fixed,
-   *    content-independent anchor-to-anchor pitch. `"middle"` is the old
-   *    center-to-center mode. */
+   *    content-independent anchor-to-anchor pitch (`"middle"` is
+   *    center-to-center). */
   anchor?: AlignAnchor | "edge";
   order?: "forward" | "reverse";
   /** Stack semantics: glue children together (sizes sum into a POSITION at the
@@ -69,13 +69,13 @@ export const createDistributeConstraint = (
   measure: options.measure,
 });
 
+/** `children` in placement order — reversed for `order: "reverse"`. The result
+ *  is read-only: the forward case is the caller's own array. */
 export function distributeChildrenInPlacementOrder(
   constraint: DistributeConstraint,
   children: readonly ConstraintRef[] = constraint.children
-): ConstraintRef[] {
-  return constraint.order === "reverse"
-    ? [...children].reverse()
-    : [...children];
+): readonly ConstraintRef[] {
+  return constraint.order === "reverse" ? [...children].reverse() : children;
 }
 
 export function distributePlacementAnchors(
@@ -124,9 +124,8 @@ export function lowerDistributePlacement(
     }
   }
   for (let i = 1; i < ordered.length; i++) {
-    // A chain edge whose endpoints both arrived pre-positioned was a
-    // consistency check/no-op in the legacy walk (not an owning relation).
-    // Preserve that boundary: confluence governs the unknown positions.
+    // A chain edge whose endpoints both arrived pre-positioned is a consistency
+    // check, not an owning relation: confluence governs the unknown positions.
     if (
       isInitiallyPlaced(constraint.dir, ordered[i - 1].name) &&
       isInitiallyPlaced(constraint.dir, ordered[i].name)
@@ -209,10 +208,10 @@ export function distributeSpaceFold(
 
   const namedKeys = keys.filter((k): k is string => k !== undefined);
   const spacing = opts.glue ? 0 : opts.spacing;
-  // A "free" baseline magnitude (old SIZE) composes its Monotonic + spacing; an
-  // anchored data-positioned child (old POSITION) sums its data widths WITHOUT
-  // spacing. They are kept distinct — collapsing both into the magnitude path
-  // wrongly injected spacing into already-positioned extents.
+  // A "free" baseline magnitude composes its Monotonic + spacing; an anchored
+  // data-positioned child sums its data widths WITHOUT spacing. The two paths
+  // stay distinct: collapsing them injects spacing into already-positioned
+  // extents.
   const allSize = targetSpaces.every(isBaselineMagnitude);
   const allPosition = targetSpaces.every(isPOSITION);
   const widthAt1 = (s: UnderlyingSpace): number =>

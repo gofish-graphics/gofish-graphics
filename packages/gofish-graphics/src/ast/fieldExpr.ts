@@ -2,10 +2,10 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-// Field-expression pipeline syntax (#700 Phase 1): `field("name")` returns a
-// chainable expression — like a Polars column expression — where each method
-// appends one op to an ordered pipeline. Order matters: `.bin().sort()` bins
-// first, then sorts the resulting bins.
+// Field-expression pipeline syntax: `field("name")` returns a chainable
+// expression — like a Polars column expression — where each method appends one
+// op to an ordered pipeline. Order matters: `.bin().sort()` bins first, then
+// sorts the resulting bins.
 //
 // Two disjoint slots consume the pipeline:
 //   - DOMAIN ops (`sort`/`reverse`/`bin`/`dropNulls`) apply to a `by` grouping key — see
@@ -179,8 +179,8 @@ export class FieldExpr {
  * `getValueOffset`/`getValueColorOps` in data.ts. Non-field accessors (a bare
  * string, a function, a number, a literal) carry no ops.
  */
-export function getFieldOps(accessor: unknown): FieldOp[] {
-  if (accessor instanceof FieldExpr) return [...accessor._ops];
+export function getFieldOps(accessor: unknown): readonly FieldOp[] {
+  if (accessor instanceof FieldExpr) return accessor._ops;
   if (
     accessor !== null &&
     typeof accessor === "object" &&
@@ -192,12 +192,9 @@ export function getFieldOps(accessor: unknown): FieldOp[] {
   return [];
 }
 
-/** Aggregate op names — valid only on a value (size/pos) channel slot. */
-const AGGREGATE_OPS = new Set(["sum", "mean", "count", "distinct"]);
 /** Domain op names — valid only on a `by` (grouping) slot. */
 const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);
 
-export const isAggregateOp = (op: FieldOp): boolean => AGGREGATE_OPS.has(op.op);
 export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);
 
 /**

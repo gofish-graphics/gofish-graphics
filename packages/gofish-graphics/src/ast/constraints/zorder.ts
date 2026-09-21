@@ -8,7 +8,8 @@ import type { ConstraintRef } from "./shared";
  *
  * These do not position; they only constrain paint order. They are resolved
  * by `layer.tsx`'s render via a topological sort over the children flattened
- * across non-component nested layers — see notes/nested-layer-tiers.md.
+ * across non-component nested layers — see
+ * apps/docs/docs/internals/design/constraint-semantics.md.
  *
  * `zBelow(a, b)` is equivalent to `zAbove(b, a)`; both are provided so the
  * spec reads naturally either way.

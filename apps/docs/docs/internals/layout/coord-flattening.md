@@ -122,8 +122,8 @@ which the render entry maps over directly.
   behind the whole chart. A global flatten would regroup, e.g., all connectors before
   all marks across sibling layers (the pulley diagram and the connected-scatter line
   both broke this way, [#607](https://github.com/gofish-graphics/gofish-graphics/issues/607)).
-  So at each transparent layer `bake` orders its children with the same
-  `paintOrder.ts` helpers `layer` uses — `flattenForZOrder` (which keeps components
+  So at each transparent layer `bake` orders its children with the
+  `paintOrder.ts` helpers — `flattenForZOrder` (which keeps components
   whole and hoists only plain nested layers) then a `(zOrder, index)` sort or a
   `topoSortByZOrder` over its own `zAbove` / `zBelow` constraints — and only then
   descends into each unit, so a component keeps its internal order. Transforms still

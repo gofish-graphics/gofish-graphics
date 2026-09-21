@@ -152,9 +152,8 @@ export type Anchor = "min" | "max" | "center" | "baseline";
  * `max → start + |size|`, `baseline → 0` (the origin). center/max are DERIVED
  * here, never read from a separately-stored anchor — so every site that needs them
  * agrees: the two placement paths (`place()` / `setExtent`'s rank-1 pin), the
- * `dims` getters (GoFishNode + GoFishRef), and `displayDims`. That removed the
- * asymmetric-box divergence that reverted the earlier `place()→setExtent` reroute
- * (#39 stage 2).
+ * `dims` getters (GoFishNode + GoFishRef), and `displayDims`. Deriving them here
+ * is what keeps an asymmetric box from diverging between those paths.
  *
  * Pure arithmetic on `(start, size)` — works in any frame. `|size|` is the
  * MAGNITUDE: a negative bar stores a signed size with `start` (its `min`) carrying
@@ -177,6 +176,42 @@ export const localAnchorPoint = (
       return 0;
   }
 };
+
+/**
+ * `anchor`'s point in a box's LOCAL frame, or `undefined` while the box does not
+ * determine it: `center`/`max` are derived from `(min, size)` so they need both,
+ * `min`/`baseline` need only `min`. The `undefined`-preserving read shared by
+ * `GoFishNode.localAnchor` and `GoFishRef.localAnchor`.
+ */
+export const localAnchorOf = (
+  intrinsic: Interval | undefined,
+  anchor: Anchor
+): number | undefined => {
+  if (!anchorDetermined(intrinsic, anchor)) return undefined;
+  return localAnchorPoint(anchor, intrinsic!.min!, intrinsic!.size ?? 0);
+};
+
+/** Does the local box determine `anchor`'s point? See {@link localAnchorOf}. */
+export const anchorDetermined = (
+  intrinsic: Interval | undefined,
+  anchor: Anchor
+): boolean =>
+  intrinsic?.min !== undefined &&
+  (anchor === "center" || anchor === "max"
+    ? intrinsic.size !== undefined
+    : true);
+
+/**
+ * The parent-frame translate that lands the box's `anchor` at `value` — the one
+ * placement arithmetic `GoFishNode._pinAnchor` and `GoFishRef.place`/`pinAnchor`
+ * share. Unplaced/unsized components read 0.
+ */
+export const translateForAnchor = (
+  intrinsic: Interval | undefined,
+  anchor: Anchor,
+  value: number
+): number =>
+  value - localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
 
 export const elaborateDirection = (direction: FancyDirection): Direction => {
   switch (direction) {
@@ -246,7 +281,7 @@ export type FancyTransform = { translate?: FancyPosition; scale?: FancySize };
  * into absolute per-axis display dims, DERIVING center/max from `(min, size)`
  * (the same relation as {@link localAnchorPoint} / the `dims` getter). Mirrors
  * the getter but with `?? 0` fallbacks — an unplaced/unsized anchor reads 0,
- * which is what a shape `_render` wants for drawing. Shapes share this instead
+ * which is what a shape's `lower` wants for drawing. Shapes share this instead
  * of each re-deriving center/max from a separately-stored anchor.
  */
 export const displayDims = (
@@ -269,10 +304,10 @@ export const displayDims = (
  * A node's render-side translate offset as a concrete `[tx, ty]` tuple, with the
  * `?? 0` fallback every shape/operator lower body wants for drawing (an unplaced
  * axis draws at the origin). The read of a BAKED absolute transform each
- * self-drawing boundary (coord, connect, enclose) applies to its own geometry;
- * the pure translate-only containers (box/layer, offset) no longer compose it
- * into a closure — they flatten their subtree to absolute coordinates via
- * `bakeChildren` (#39 stage 6d). Scale is left to the callers that compose it.
+ * self-drawing boundary (coord, connect, enclose) applies to its own geometry.
+ * The pure translate-only containers (box/layer, offset) instead flatten their
+ * subtree to absolute coordinates via `bakeChildren`. Scale is left to the
+ * callers that compose it.
  */
 export const displayTranslate = (transform?: {
   translate?: (number | undefined)[];
@@ -290,7 +325,7 @@ export const displayTranslate = (transform?: {
  * from a separately-stored anchor, and only once the box is both placed AND sized.
  *
  * This is the `undefined`-preserving sibling of {@link displayDims}: same
- * derivation, but `displayDims` substitutes `?? 0` because a shape `_render`
+ * derivation, but `displayDims` substitutes `?? 0` because a shape's `lower`
  * wants a concrete number to draw with.
  */
 export const combineDims = (

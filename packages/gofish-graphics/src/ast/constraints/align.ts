@@ -11,28 +11,8 @@ import type {
   ConstraintRef,
 } from "./shared";
 import { axisIndex } from "./shared";
-import type { UnderlyingSpace } from "../underlyingSpace";
 import { isUNDEFINED } from "../underlyingSpace";
-import { resolveAlignmentSpace } from "../graphicalOperators/alignment";
 import type { PlacementFactEmitter } from "./placementFacts";
-
-/**
- * PROTOTYPE (issue #475): the align constraint's *space-resolution*
- * contribution — the cross-axis half of the spread reduction. Defers entirely
- * to spread's own `resolveAlignmentSpace`, so the fold is the same one spread
- * uses (anchored for start/end/baseline; `middle` drops the anchor → unanchored;
- * union otherwise). `AlignAnchor` and spread's `Alignment` share the same string
- * vocabulary, so the anchor passes through unchanged.
- *
- * Only the uniform-anchor form is handled (a single string, not a per-child
- * array): a heterogeneous anchor array has no single spread equivalent.
- */
-export function alignSpaceFold(
-  targetSpaces: UnderlyingSpace[],
-  anchor: AlignAnchor
-): UnderlyingSpace {
-  return resolveAlignmentSpace(targetSpaces, anchor);
-}
 
 /**
  * Value spec for one axis of an `align` constraint. A single anchor
@@ -87,12 +67,10 @@ function normalizedAnchors(
  * the guard that leaves self-positioned children (a scatter facet panel) where
  * their own data scale puts them, instead of moving them to the shared baseline.
  *
- * Stage 6f: this no longer reconstructs the space-pass `free/determined/conflict`
- * lattice by calling a `placementOn` method on the target during lowering. The
- * fact "this (node, axis) is anchored to a POSITION scope" is collected ONCE at
- * the layer boundary (a member of the shared data→pixel map — its baseline is
- * `posScale(0)`, not free to slide) and handed to the ownership plan, which is
- * the single authority the align guard now consults (`isDataPositioned`). It is
+ * The fact "this (node, axis) is anchored to a POSITION scope" is collected
+ * ONCE at the layer boundary (a member of the shared data→pixel map — its
+ * baseline is `posScale(0)`, not free to slide) and handed to the ownership
+ * plan, the single authority this guard consults (`isDataPositioned`). It is
  * only meaningful where a data scale exists on the axis (`posScales[axis]`) and
  * the anchor is not `middle` (a center alignment resolves against the box, not a
  * scale origin).
@@ -210,7 +188,7 @@ export function lowerAlignPlacement(
     }));
     const idx = axisIndex(axis);
 
-    // Preserve legacy align's two-phase semantics:
+    // Two-phase semantics:
     // 1. the first already-placed target can define the shared baseline;
     // 2. already-placed or data-positioned targets are not themselves moved.
     //
@@ -271,19 +249,18 @@ export function lowerAlignPlacement(
       return;
     }
 
-    const aligned = movable;
-    for (let i = 1; i < aligned.length; i++) {
+    for (let i = 1; i < movable.length; i++) {
       emitter.relate({
         axis,
-        from: { name: aligned[0].child.name, anchor: aligned[0].anchor },
-        to: { name: aligned[i].child.name, anchor: aligned[i].anchor },
+        from: { name: movable[0].child.name, anchor: movable[0].anchor },
+        to: { name: movable[i].child.name, anchor: movable[i].anchor },
         gap: 0,
         owner,
       });
     }
     emitter.include({
       axis,
-      name: aligned[0].child.name,
+      name: movable[0].child.name,
       owner,
     });
   };

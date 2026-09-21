@@ -29,14 +29,14 @@ export const mirrorY = (flip: FlipScope, gy: number): number =>
  * chain that the scenegraph expresses position with is folded into the single
  * `transform` here, so render can consume the list directly.
  *
- * This is the real form of the long-stubbed `DisplayObject`: the representation
- * render reads *after* all layout/placement is resolved.
+ * This is the representation render reads *after* all layout/placement is
+ * resolved.
  *
- * For now an entry still references its source {@link GoFishAST} as the renderer
- * — each mark's draw logic (rect/ellipse/text/path/…) still lives in its
- * `_render`, invoked via `INTERNAL_render(coordinateTransform, transform)` with
- * this baked `transform` as an override. The end-state (stage 3-D D3) is fully
- * self-contained primitives with no `node` back-reference.
+ * An entry still references its source {@link GoFishAST}: each mark's draw logic
+ * (rect/ellipse/text/path/…) lives in its `lower`, invoked via
+ * `INTERNAL_lower(coordinateTransform, transform)` with this baked `transform`
+ * as an override. The end-state is fully self-contained primitives with no
+ * `node` back-reference.
  */
 export type DisplayObject = {
   node: GoFishAST;

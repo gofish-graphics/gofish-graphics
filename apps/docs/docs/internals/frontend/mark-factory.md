@@ -156,7 +156,6 @@ infers scales with (so its input reads wire event dispatch but do _not_ become
 pipeline dependencies), and it stashes the raw callback on the produced node as
 `__gfLive[channel]`. Lowering (`_node.ts`) later bakes that callback, bound to the
 node's datum, into the paint-time side table so paint re-evaluates it reactively.
-`circle` (in `marks/chart.ts`) gives its `fill` the same live-only treatment.
 
 ## `.name()`, `.label()`, `.zOrder()`, and `.translate()`
 
@@ -194,7 +193,7 @@ labeling, or positioning one mark never affects another.
 
 These methods are not hand-rolled here. `createMark` calls `nameableMark`,
 which is one application of the shared **modifier factory** in
-`createOperator.ts`: a `createModifier({ name, apply, tag? })` config plus
+`createOperator.ts`: a `ModifierConfig` (`{ name, apply, tag? }`) plus
 `attachModifiers(base, configs)`. `apply(node, layerContext, datum, ...args)`
 mutates each produced node (once per node — every slice for an expand mark like
 `cut`) and receives the per-instance datum, so a modifier like `.zOrder` can
@@ -385,9 +384,9 @@ so travel is x, and vice versa; else the innermost flow tier that positions
 anchors) and a path tier (the innermost tier positioning along the travel
 axis). `along`, when given, replaces this whole resolution: `findTierIndexByAlong`
 (chartBuilder.ts) scans the flow tiers for one whose `by` names the given
-field (`tierFieldName` matches a string `by` on itself, a `field(...)`
-accessor on `.name`, and never a function-form `by` — the design note's
-"Matching" clause), and throws, naming the field and the flow's available
+field (`fieldNameOf` in datumProjection.ts matches a string `by` on itself, a
+`field(...)` accessor on `.name`, and never a function-form `by` — the design
+note's "Matching" clause), and throws, naming the field and the flow's available
 keys, if none match. The matched tier's travel axis mirrors
 `classifyOperator`'s own arrangement/value split (`alongTravelAxis`): an
 arrangement tier (`spread`/`stack`) travels its own `dir`; anything else
@@ -400,8 +399,11 @@ term of a synthesized composite split key (`ChartBuilder`'s
 `computeDefaultBy`, built from `splitKeyFn` in datumProjection.ts — the same
 projection-through-`GoFishRef.datum` helper `splitEntries` uses, so
 string/field/function `by` forms behave identically to a real operator `by`).
-One subtlety `chartBuilder.ts`'s `classifyOperator` has to resolve that the
-design note's step-3 prose doesn't spell out: a `spread`/`stack` tier's `dir`
+Each operator declares how it arranges its groups (`createOperator`'s
+`arrangement` config, read back by `chartBuilder.ts`'s `classifyOperator`), so
+an operator that declares nothing simply takes no part in the rule. One
+subtlety that declaration has to resolve, which the design note's step-3 prose
+doesn't spell out: a `spread`/`stack` tier's `dir`
 is the axis it _lays its groups out along_, so a bare fallback (no `h`/`w`,
 no explicit `dir` anywhere) resolves the travel axis to that SAME axis
 (walking the arrangement is the natural path); a `scatter`'s `x`/`y` are

@@ -2,13 +2,6 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-/* 
-1. Supports direct and data style.
-
-2. Supports `v` syntax. (TODO)
-
-*/
-
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
 import { GoFishNode } from "./_node";
@@ -18,12 +11,10 @@ import _, { ListOfRecursiveArraysOrValues } from "lodash";
 import { ChartBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
 import {
+  CHANNEL_INFER,
   ChannelAnnotations,
+  ChannelType,
   DeriveMarkProps,
-  inferSize,
-  inferPos,
-  inferColor,
-  inferRaw,
   inferEntrySize,
 } from "./channels";
 import {
@@ -42,9 +33,6 @@ import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
 import { attachTerminals } from "./marks/terminals";
 
-/**
- * Options for rendering a GoFish node
- */
 export interface RenderOptions {
   w?: number;
   h?: number;
@@ -86,10 +74,8 @@ type GoFishChildrenInputWithThunks =
     >
   | null;
 
-/**
- * A Promise-like object that also has chainable methods from GoFishNode.
- * This allows calling .render(), .name(), .setKey(), .setShared() on promises returned by withGoFish.
- */
+/** A Promise-like object that also carries GoFishNode's chainable methods, so
+ *  `.render()` / `.name()` / … work on the promises withGoFish returns. */
 export interface PromiseWithRender<T> extends Promise<T> {
   render(
     container: HTMLElement,
@@ -117,24 +103,24 @@ export interface PromiseWithRender<T> extends Promise<T> {
   scope(): PromiseWithRender<T>;
 }
 
-/**
- * Type guard to check if a value has a render method like GoFishNode
- */
-function hasRenderMethod(value: any): value is GoFishNode {
-  return value instanceof GoFishNode && typeof value.render === "function";
-}
-
-/**
- * Type guard to check if value is a ChartBuilder
- */
 function isChartBuilder(value: any): value is ChartBuilder<any, any> {
   return value instanceof ChartBuilder;
 }
 
-/**
- * Wraps a Promise to add chainable methods that proxy to GoFishNode.
- * This allows calling .render(), .name(), .setKey(), .setShared() on promises.
- */
+/** The GoFishNode methods `addRenderMethod` republishes on a promise: each one
+ *  applies to the resolved node and rewraps the result. */
+const CHAINABLE_NODE_METHODS = [
+  "name",
+  "scope",
+  "label",
+  "setKey",
+  "setShared",
+  "constrain",
+  "zOrder",
+] as const;
+
+/** Wrap a Promise so GoFishNode's chainable methods and the export terminals
+ *  can be called on it directly. */
 export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
   // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
   // from the shared registry, so adding one touches a single list. The promise
@@ -142,98 +128,22 @@ export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
   // See terminals.ts.
   attachTerminals(promise, async () => {
     const result = await promise;
-    if (hasRenderMethod(result)) return result;
+    if (result instanceof GoFishNode) return result;
     throw new Error(
       "Cannot call an export terminal on this result. Only GoFishNode instances support export."
     );
   });
 
-  // Add chainable methods that return new PromiseWithRender
-  (promise as any).name = function (
-    name: string | Token
-  ): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.name(name) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).scope = function (): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.scope() as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).label = function (
-    accessor: LabelAccessor,
-    options?: LabelOptions
-  ): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.label(accessor, options) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).setKey = function (key: string): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.setKey(key) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).setShared = function (
-    shared: [boolean, boolean]
-  ): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.setShared(shared) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).constrain = function (
-    fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
-  ): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.constrain(fn) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).zOrder = function (value: number): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.zOrder(value) as T;
-        }
-        return result;
-      })
-    );
-  };
+  for (const method of CHAINABLE_NODE_METHODS) {
+    (promise as any)[method] = (...args: any[]) =>
+      addRenderMethod(
+        promise.then((result) =>
+          result instanceof GoFishNode
+            ? ((result as any)[method](...args) as T)
+            : result
+        )
+      );
+  }
 
   return promise as PromiseWithRender<T>;
 }
@@ -257,20 +167,17 @@ async function flattenAndAwaitPromises<T>(
     return [];
   }
 
-  // If it's a promise, await it first
   if (value instanceof Promise) {
     const resolved = await value;
     return flattenAndAwaitPromises(resolved);
   }
 
-  // If it's a ChartBuilder, preserve it (don't resolve here)
-  // ChartBuilder instances should be resolved sequentially in reifyChildrenSequentially
-  // For non-sequential contexts, they'll be resolved when processed
+  // A ChartBuilder is preserved, not resolved here: the caller resolves it
+  // (sequentially, in `reifyChildrenSequentially`) once its context is known.
   if (isChartBuilder(value)) {
     return [value as T];
   }
 
-  // If it's an array, recursively await all elements
   if (Array.isArray(value)) {
     const awaited = await Promise.all(
       value.map((item) => flattenAndAwaitPromises(item))
@@ -278,7 +185,6 @@ async function flattenAndAwaitPromises<T>(
     return _.flattenDeep(awaited) as T[];
   }
 
-  // Otherwise, return as single-element array
   return [value as T];
 }
 
@@ -295,17 +201,16 @@ export async function reifyChildrenSequentially(
   )[],
   layerContext?: LayerContext
 ): Promise<GoFishAST[]> {
-  // if the child is a thunked promise, it must be resolved before the next child is resolved
+  // A thunked promise must resolve before the next child is resolved.
   const resolved: GoFishAST[] = [];
   const sharedLayerContext = layerContext ?? {};
 
   for (const child of children) {
     if (typeof child === "function") {
-      // It's a thunk or mark — call it (marks receive undefined as data)
+      // A thunk or mark — call it (marks receive undefined as data).
       const result = (child as any)(undefined);
       const resolvedChild = result instanceof Promise ? await result : result;
       if (resolvedChild != null) {
-        // If it's a ChartBuilder, resolve it
         if (isChartBuilder(resolvedChild)) {
           const node = await resolvedChild
             .withLayerContext(sharedLayerContext)
@@ -316,11 +221,9 @@ export async function reifyChildrenSequentially(
         }
       }
     } else if (isChartBuilder(child)) {
-      // If it's a ChartBuilder, resolve it sequentially
       const node = await child.withLayerContext(sharedLayerContext).resolve();
       resolved.push(node);
     } else {
-      // It's already a GoFishAST, add it directly
       resolved.push(child);
     }
   }
@@ -328,11 +231,29 @@ export async function reifyChildrenSequentially(
   return resolved;
 }
 
-/* 
-- Flattens deeply nested children
-- Allows opts to be optional
-- Supports arrays where individual elements can be promises
-*/
+/**
+ * Parse a node operator's `(opts?, children?)` / `(children)` overload. Both
+ * factories below share it, so the two call shapes are defined once.
+ */
+function parseOperatorArgs<T extends Record<string, any>, C>(
+  args: any[],
+  fnName: string
+): { opts: T; children: C | undefined } {
+  if (args.length > 2) {
+    throw new Error(
+      `${fnName}: Expected 0, 1, or 2 arguments, got ${args.length}`
+    );
+  }
+  if (args.length === 2)
+    return { opts: args[0] ?? ({} as T), children: args[1] };
+  return { opts: {} as T, children: args.length === 1 ? args[0] : undefined };
+}
+
+/**
+ * Turn a low-level `(opts, children) => node` function into an operator that
+ * flattens deeply nested children, awaits promises anywhere in them, and lets
+ * `opts` be omitted.
+ */
 export function createNodeOperator<T extends Record<string, any>, R>(
   func: (opts: T, children: GoFishAST[]) => R
 ): {
@@ -341,32 +262,19 @@ export function createNodeOperator<T extends Record<string, any>, R>(
 } {
   return function (...args: any[]): PromiseWithRender<Awaited<R>> {
     const promise = (async () => {
-      let opts: T;
-      let children: GoFishChildrenInput | undefined;
-      if (args.length === 2) {
-        opts = args[0] ?? ({} as T);
-        children = args[1];
-      } else if (args.length === 1) {
-        opts = {} as T;
-        children = args[0];
-      } else if (args.length === 0) {
-        opts = {} as T;
-        children = undefined;
-      } else {
-        throw new Error(
-          `createNodeOperator: Expected 0, 1, or 2 arguments, got ${args.length}`
-        );
-      }
-      // Flatten nested structures and await all promises
+      const { opts, children } = parseOperatorArgs<T, GoFishChildrenInput>(
+        args,
+        "createNodeOperator"
+      );
       const flattened = await flattenAndAwaitPromises<
         GoFishAST | Promise<GoFishAST> | ChartBuilder<any, any> | Mark<any>
       >(children);
       const layerContext: LayerContext = {};
-      // Resolve marks (functions), ChartBuilder instances, and filter out promises
+      // Resolve marks (functions) and ChartBuilder instances; a mark is called
+      // with undefined data to produce its node.
       const resolvedAll = await Promise.all(
         flattened.map(async (child) => {
           if (typeof child === "function") {
-            // It's a mark — call with undefined to produce a GoFishNode
             return await (child as Mark<any>)(undefined as any);
           }
           if (isChartBuilder(child)) {
@@ -386,13 +294,9 @@ export function createNodeOperator<T extends Record<string, any>, R>(
 }
 
 /**
- * Sequential version of withGoFish that supports thunks (functions) in children.
- * Processes thunks sequentially (one at a time) rather than in parallel.
- *
- * - Flattens deeply nested children
- * - Allows opts to be optional
- * - Supports arrays where individual elements can be promises or thunks
- * - Processes thunks sequentially to ensure proper execution order
+ * Like {@link createNodeOperator}, but children may also be thunks, and they
+ * are processed one at a time rather than in parallel — a child that reads a
+ * name registered by an earlier sibling needs that order.
  */
 export function createNodeOperatorSequential<T extends Record<string, any>, R>(
   func: (opts: T, children: GoFishAST[]) => R
@@ -405,23 +309,12 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 } {
   return function (...args: any[]): PromiseWithRender<Awaited<R>> {
     const promise = (async () => {
-      let opts: T;
-      let children: GoFishChildrenInputWithThunks | undefined;
-      if (args.length === 2) {
-        opts = args[0] ?? ({} as T);
-        children = args[1];
-      } else if (args.length === 1) {
-        opts = {} as T;
-        children = args[0];
-      } else if (args.length === 0) {
-        opts = {} as T;
-        children = undefined;
-      } else {
-        throw new Error(
-          `createNodeOperatorSequential: Expected 0, 1, or 2 arguments, got ${args.length}`
-        );
-      }
-      // First phase: flatten nested structures and await promises, preserving thunks, marks, and ChartBuilder instances
+      const { opts, children } = parseOperatorArgs<
+        T,
+        GoFishChildrenInputWithThunks
+      >(args, "createNodeOperatorSequential");
+      // First phase: flatten and await, preserving thunks, marks, and
+      // ChartBuilder instances for the sequential second phase.
       const flattenedWithThunks = await flattenAndAwaitPromises<
         | GoFishAST
         | (() => GoFishAST | Promise<GoFishAST>)
@@ -429,7 +322,6 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
         | Mark<any>
       >(children);
       const layerContext: LayerContext = {};
-      // Second phase: process thunks and ChartBuilder instances sequentially
       const resolvedChildren = await reifyChildrenSequentially(
         flattenedWithThunks,
         layerContext
@@ -472,6 +364,26 @@ export type NameableMark<T> = Mark<T> & {
 };
 
 /**
+ * Mark-factory IR serialization config — passed as the optional third
+ * argument to `createMark`. A string is shorthand for `{ type: <string> }`.
+ *
+ * The factory tags each produced mark with `__serialize: { type, opts }`
+ * so the frontend-IR emitter (gofish-graphics/serialize/toJSON) can
+ * reconstruct the mark on the wire.
+ */
+export type MarkSerializeConfig<P = any> =
+  | string
+  | {
+      /** IR discriminator (lowercase to match the wire format), e.g. "rect". */
+      type: string;
+      /**
+       * Optional shape function. Default: copy `markOpts` verbatim. Use to
+       * strip non-serializable fields or rename keys.
+       */
+      shape?: (opts: P) => Record<string, unknown>;
+    };
+
+/**
  * Creates a high-level mark from a low-level shape function plus optional
  * channel annotations. Channel annotations describe how each prop encodes data:
  * - "size":  accepts `number | keyof T`, uses inferSize
@@ -493,26 +405,6 @@ export type NameableMark<T> = Mark<T> & {
  * in a chart, each produced node is registered for `ref("layerName")` /
  * `selectAll("layerName")`.
  */
-/**
- * Mark-factory IR serialization config — passed as the optional third
- * argument to `createMark`. A string is shorthand for `{ type: <string> }`.
- *
- * The factory tags each produced mark with `__serialize: { type, opts }`
- * so the frontend-IR emitter (gofish-graphics/serialize/toJSON) can
- * reconstruct the mark on the wire.
- */
-export type MarkSerializeConfig<P = any> =
-  | string
-  | {
-      /** IR discriminator (lowercase to match the wire format), e.g. "rect". */
-      type: string;
-      /**
-       * Optional shape function. Default: copy `markOpts` verbatim. Use to
-       * strip non-serializable fields or rename keys.
-       */
-      shape?: (opts: P) => Record<string, unknown>;
-    };
-
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>
 ): (props: P) => NameableMark<P>;
@@ -585,6 +477,8 @@ function buildCreatedMark(
     // single value. The object form `{type, entry: true}` produces a
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
+    // `CHANNEL_INFER.raw` is async so a callable accessor may return a Promise
+    // — the Python wrapper bridges `text(text=lambda d: ...)` that way.
     const shapeProps: Record<string, any> = {};
     // `live(...)` channels: the pipeline renders (and measures) the accessor's
     // resolve-time value; the paint layer re-evaluates it reactively per frame
@@ -599,7 +493,7 @@ function buildCreatedMark(
         markValue = evalLiveStatic(markValue, d);
       }
 
-      let channelType =
+      let channelType: ChannelType | undefined =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
       // Coordinate-space axis aliases aren't declared channels, but they carry
       // the same value semantics as the canonical dims they resolve to: a
@@ -617,17 +511,11 @@ function buildCreatedMark(
         shapeProps[propName] = markValue;
       } else if (isEntry && channelType === "size") {
         shapeProps[propName] = inferEntrySize(markValue, data);
-      } else if (channelType === "size") {
-        shapeProps[propName] = inferSize(markValue, data);
-      } else if (channelType === "pos") {
-        shapeProps[propName] = inferPos(markValue, data);
-      } else if (channelType === "color") {
-        shapeProps[propName] = inferColor(markValue, data);
-      } else if (channelType === "raw") {
-        // `inferRaw` is async so that callable accessors may return a
-        // Promise — used by the Python wrapper to bridge `text(text=
-        // lambda d: ...)` through the derive-server RPC.
-        shapeProps[propName] = await inferRaw(markValue, data);
+      } else if (channelType !== undefined) {
+        shapeProps[propName] = await CHANNEL_INFER[channelType](
+          markValue,
+          data
+        );
       } else {
         shapeProps[propName] = markValue;
       }

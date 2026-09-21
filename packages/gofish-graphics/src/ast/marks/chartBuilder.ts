@@ -10,15 +10,18 @@ import { ref } from "../shapes/ref";
 import { isField } from "../data";
 import {
   splitKeyFn,
-  scatterPositions,
+  fieldNameOf,
   type SplitBy,
   type InferredRelational,
 } from "../datumProjection";
-// The shared interactive render terminal now lives in the interaction layer
-// (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too —
-// component thunks get the same two-regime treatment as ChartBuilder/
-// LayerBuilder.render. See its doc-comment for the machinery.
+// The shared interactive render terminal lives in the interaction layer
+// (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too.
 import { renderWithInteraction } from "../../interaction/renderTerminal";
+import {
+  attachBuilderTerminals,
+  type RenderOptions,
+  type TerminalMethods,
+} from "./terminals";
 import { expandComposedOperator } from "./compose";
 
 /**
@@ -210,27 +213,14 @@ export function stashLayerName(mark: object, layerName: unknown): void {
  * Summary: a fused relational mark (`line`/`ribbon`) with no explicit `by`
  * gets a default split computed from the flow it fuses over, and its
  * `Connect` direction gets the computed travel axis. The computation lives
- * here (not in chart.ts, which this module is imported FROM) because it
- * needs `this.operators` — the flow tiers — which only `ChartBuilder` has in
- * hand.
+ * here (not in chart.ts, which this module is imported FROM) because it needs
+ * the flow tiers, which only `ChartBuilder` has in hand.
  *
  * `InferredRelational` (the cell this computation writes into) lives in
- * `datumProjection.ts`, not here or in chart.ts — a type-only import creates
- * no runtime cycle, so both modules that need the shape (chart.ts tags every
- * relational mark with a cell of it; this module computes into it) import
- * the same declaration instead of keeping structurally-identical copies.
+ * `datumProjection.ts` so both modules that need the shape (chart.ts tags
+ * every relational mark with a cell of it; this module computes into it)
+ * import the same declaration — a type-only import creates no runtime cycle.
  */
-
-/** The field name a flow tier's `by` groups on, for matching against an
- *  explicit `along`. A string `by` names itself; a `field(...)` accessor
- *  names `.name`; a function-form `by` never matches (see the design note's
- *  "Matching" clause — a function receives the raw bag element, not a
- *  field). */
-function tierFieldName(by: SplitBy | undefined): string | undefined {
-  if (typeof by === "string") return by;
-  if (isField(by)) return by.name;
-  return undefined;
-}
 
 /** The `__relationalFusable` descriptor shape this module reads/writes —
  *  see `tagRelationalFusable` in chart.ts, which builds and tags every
@@ -245,21 +235,18 @@ export type RelationalFusable = {
 };
 
 /** How one flow tier (`spread`/`stack`/`scatter`/`group`/other) relates to
- *  the travel-axis rule, read off `op.__serialize` (verbatim opts — see
- *  `createOperator.ts`).
+ *  the travel-axis rule. Each operator DECLARES its own class through
+ *  `createOperator`'s `arrangement` config, which tags the built operator with
+ *  `__arrangement`; a tier that declares nothing is "none".
  *   - "arrangement" (spread/stack): `dir` is the axis the tier LAYS ITS
  *     GROUPS OUT ALONG — walking that sequence IS a natural path, so a
  *     connector traveling along `dir` reads as "connect consecutive groups
  *     of this spread". A bare fallback (no h/w, no explicit dir anywhere)
- *     resolves to this SAME axis. This is a resolution the design note's
- *     prose states as a general "one axis positioned -> travel the OTHER
- *     axis" rule, which is right for scatter's continuous x/y (see "value"
- *     below) but wrong for spread/stack's dir — literally applying "other
- *     axis" there would draw the layered-area story's ribbon travelling
- *     vertically through a single horizontally-spread tier, which the
- *     design note's own worked example (and "Intended?" column) rejects.
- *     This resolution is the one validated against that example; flagged
- *     here since the note's step-3 prose doesn't spell out the distinction.
+ *     resolves to this SAME axis. NOT the design note's general "one axis
+ *     positioned -> travel the OTHER axis" rule, which holds for scatter's
+ *     continuous x/y (see "value" below) but would send the layered-area
+ *     ribbon travelling vertically through a single horizontally-spread
+ *     tier — rejected by that note's own worked example.
  *   - "value" (scatter): `x`/`y` are literal per-item coordinates, i.e. a
  *     continuous VALUE channel exactly like an anchor's `h`/`w` — so the
  *     travel axis is the axis it does NOT position (mirrors step 2's h/w
@@ -268,33 +255,19 @@ export type RelationalFusable = {
  *     — for group specifically — may still carry a `by` that's eligible to
  *     split.
  */
-type OperatorClass = {
+export type OperatorClass = {
   kind: "arrangement" | "value" | "none";
   positions: { x: boolean; y: boolean };
   by?: SplitBy;
 };
 
 function classifyOperator(op: Operator<any, any>): OperatorClass {
-  const tag = (op as any).__serialize as
-    | { type: string; opts: Record<string, any> }
-    | undefined;
-  if (!tag) return { kind: "none", positions: { x: false, y: false } };
-  const { type, opts } = tag;
-  if (type === "spread" || type === "stack") {
-    const dir: "x" | "y" | undefined = opts.dir;
-    return {
-      kind: "arrangement",
-      positions: { x: dir === "x", y: dir === "y" },
-      by: opts.by,
-    };
-  }
-  if (type === "scatter") {
-    return { kind: "value", positions: scatterPositions(opts), by: opts.by };
-  }
-  if (type === "group") {
-    return { kind: "none", positions: { x: false, y: false }, by: opts.by };
-  }
-  return { kind: "none", positions: { x: false, y: false } };
+  return (
+    ((op as any).__arrangement as OperatorClass | undefined) ?? {
+      kind: "none",
+      positions: { x: false, y: false },
+    }
+  );
 }
 
 /** A field name or `field(...)` accessor — a data-driven h/w — as opposed to
@@ -353,21 +326,23 @@ function findPathTierIndex(
 }
 
 /** Explicit `along`: pin the path tier to the flow tier whose `by` names the
- *  given field (see `tierFieldName`), instead of inferring it. Throws a loud
- *  error naming the field and the flow's available keys when no tier
- *  matches — `along` never silently falls back to inference. */
+ *  given field, instead of inferring it. A function-form `by` names no field
+ *  and so never matches (the design note's "Matching" clause — a function
+ *  receives the raw bag element, not a field). Throws a loud error naming the
+ *  field and the flow's available keys when no tier matches — `along` never
+ *  silently falls back to inference. */
 function findTierIndexByAlong(
   classified: OperatorClass[],
   along: string,
   markType: string
 ): number {
   for (let i = classified.length - 1; i >= 0; i--) {
-    if (tierFieldName(classified[i].by) === along) return i;
+    if (fieldNameOf(classified[i].by) === along) return i;
   }
   const available = Array.from(
     new Set(
       classified
-        .map((cls) => tierFieldName(cls.by))
+        .map((cls) => fieldNameOf(cls.by))
         .filter((n): n is string => n !== undefined)
     )
   );
@@ -457,12 +432,9 @@ function computeDefaultBy(
  * `along` picks the path tier (mirrored by checking `fusable.opts.dir` first
  * below, same as step 1 of the inferred path).
  *
- * Classifies every flow tier ONCE (`classified = operators.map(classifyOperator)`)
- * and threads that array through the rest of the resolution — `innermostPositioning`/
- * `flowOrderTravelAxis`/`findPathTierIndex`/`findTierIndexByAlong`/`alongTravelAxis`/
- * `computeDefaultBy` all take the precomputed classification instead of
- * re-running `classifyOperator` (which re-parses each operator's
- * `__serialize` tag) 2-4 times per tier over one resolution.
+ * Classifies every flow tier once and threads that array through the rest of
+ * the resolution: the helpers below all take the precomputed classification,
+ * never the raw operators.
  */
 function applyDefaultRelational(
   fusable: RelationalFusable,
@@ -514,31 +486,55 @@ function rejectAlongWithoutFlow(
 
 /* ---- END default grouping for relational marks ---- */
 
-export class ChartBuilder<TInput, TOutput = TInput> {
-  private readonly data: TInput;
-  private readonly options?: ChartOptions;
-  private readonly operators: Operator<any, any>[] = [];
-  private readonly finalMark?: Mark<TOutput>;
-  private readonly layerContext: LayerContext;
-  private readonly nodeZOrder?: number;
-  private readonly nodeName?: string;
+/** The chart-level config a builder threads through to every terminal. */
+type RenderMeta = { axes?: AxesOptions; colorConfig?: ColorConfig };
 
-  constructor(
-    data: TInput,
-    options?: ChartOptions,
-    operators: Operator<any, any>[] = [],
-    finalMark?: Mark<TOutput>,
-    layerContext: LayerContext = {},
-    nodeZOrder?: number,
-    nodeName?: string
-  ) {
-    this.data = data;
-    this.options = options;
-    this.operators = operators;
-    this.finalMark = finalMark;
-    this.layerContext = layerContext;
-    this.nodeZOrder = nodeZOrder;
-    this.nodeName = nodeName;
+/**
+ * The base both builder surfaces extend: it supplies the export terminals
+ * (`render`, `toSVG`, `toSVGElement`, `save`, `toDisplayList`) from the shared
+ * registry, attached once to this prototype and inherited by each subclass. A
+ * subclass provides only the two pieces `resolveForRender` needs — how to
+ * resolve itself to a node, and the chart-level config to render it with.
+ *
+ * The methods are `declare`d (their bodies come from `attachBuilderTerminals`
+ * below) so the terminal list stays defined in exactly one place.
+ */
+abstract class RenderableBuilder {
+  abstract resolve(): Promise<GoFishNode>;
+  abstract renderMeta(): RenderMeta;
+
+  declare render: TerminalMethods["render"];
+  declare toSVG: TerminalMethods["toSVG"];
+  declare toSVGElement: TerminalMethods["toSVGElement"];
+  declare save: TerminalMethods["save"];
+  declare toDisplayList: TerminalMethods["toDisplayList"];
+}
+
+/** Everything a `ChartBuilder` carries. The builder is immutable: every
+ *  chaining method copies this state with one field changed (`with`). */
+type ChartBuilderState<TInput, TOutput> = {
+  data: TInput;
+  options?: ChartOptions;
+  operators: Operator<any, any>[];
+  finalMark?: Mark<TOutput>;
+  layerContext: LayerContext;
+  nodeZOrder?: number;
+  nodeName?: string;
+};
+
+export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
+  private readonly state: ChartBuilderState<TInput, TOutput>;
+
+  constructor(state: ChartBuilderState<TInput, TOutput>) {
+    super();
+    this.state = state;
+  }
+
+  /** A copy of this builder with some state replaced. */
+  private with(
+    patch: Partial<ChartBuilderState<TInput, TOutput>>
+  ): ChartBuilder<TInput, TOutput> {
+    return new ChartBuilder({ ...this.state, ...patch });
   }
 
   // flow accumulates operators and returns a new builder for chaining
@@ -583,15 +579,12 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     op7: Operator<T6, T7>
   ): ChartBuilder<TInput, T7>;
   flow(...ops: Operator<any, any>[]): ChartBuilder<TInput, any> {
-    return new ChartBuilder(
-      this.data,
-      this.options,
-      [...this.operators, ...ops.flatMap(expandComposedOperator)],
-      this.finalMark,
-      this.layerContext,
-      this.nodeZOrder,
-      this.nodeName
-    );
+    return this.with({
+      operators: [
+        ...this.state.operators,
+        ...ops.flatMap(expandComposedOperator),
+      ],
+    });
   }
 
   // mark stores the mark and returns a new builder for chaining. A nested
@@ -630,15 +623,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
           ? mark.withData(d)
           : mark
         ).withLayerContext(layerContext ?? {})) as Mark<TOutput>;
-      return new ChartBuilder(
-        this.data,
-        this.options,
-        this.operators,
-        finalMark,
-        this.layerContext,
-        this.nodeZOrder,
-        this.nodeName
-      );
+      return this.with({ finalMark });
     }
 
     // Only fuse when this chart's data is genuine per-row data that still
@@ -648,24 +633,19 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     // ribbon connects the existing bars) or an empty-scope `chart()` tier
     // inheriting the previous tier's marks inside `.layer(...)` — has nothing
     // to anchor: the incoming data already IS (or will become) the refs bag
-    // the connector reads. `hasOwnFlow()` (`usesPreviousLayerMarks()` /
-    // `dataIsRefs(this.data)`) is exactly "this chart was built from genuine
-    // row data flowing through `this.operators`" — see its doc comment,
-    // shared with the `.layer()` fusion guard below (defense in depth:
-    // `ensureNamedMark` bypasses this method entirely, but a future direct
-    // `.mark()` call could still see an already-refs shape).
+    // the connector reads. `hasOwnFlow()` is exactly "this chart was built
+    // from genuine row data flowing through its own operators" — see its doc
+    // comment, shared with the `.layer()` fusion guard below.
     const fusable = (mark as any)?.__relationalFusable as
       | RelationalFusable
       | undefined;
     if (fusable && this.hasOwnFlow()) {
       // Default grouping (issue #752): this mark fuses over THIS chart's own
-      // flow (real row data, not a refs bag — `dataNeedsAnchors` already
-      // guarantees that), so a default split/travel-direction can be
-      // computed from `this.operators`. `markOpts` still carries `h`/`w`
-      // here — the anchor tier `fusable.makeAnchor()` below hasn't split
-      // them off yet — so no separate anchor-opts lookup is needed (they're
-      // the same object). See `applyDefaultRelational`'s doc comment.
-      applyDefaultRelational(fusable, this.operators, undefined);
+      // flow, so a default split/travel-direction can be computed from its
+      // operators. The mark's own opts still carry `h`/`w` here — the anchor
+      // tier `fusable.makeAnchor()` below hasn't split them off yet — so no
+      // separate anchor-opts argument is needed (they're the same object).
+      applyDefaultRelational(fusable, this.state.operators, undefined);
       return this.mark(fusable.makeAnchor() as unknown as Mark<TOutput>).layer(
         mark as Mark<any>
       );
@@ -692,15 +672,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       );
     }
 
-    return new ChartBuilder(
-      this.data,
-      this.options,
-      this.operators,
-      mark,
-      this.layerContext,
-      this.nodeZOrder,
-      this.nodeName
-    );
+    return this.with({ finalMark: mark });
   }
 
   /**
@@ -710,15 +682,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
    * `selectAll(name)` / `ref(name)`. Mirrors the `.name(...)` wrapper on marks.
    */
   name(layerName: string): ChartBuilder<TInput, TOutput> {
-    return new ChartBuilder(
-      this.data,
-      this.options,
-      this.operators,
-      this.finalMark,
-      this.layerContext,
-      this.nodeZOrder,
-      layerName
-    );
+    return this.with({ nodeName: layerName });
   }
 
   /**
@@ -741,22 +705,19 @@ export class ChartBuilder<TInput, TOutput = TInput> {
    * `Mark` tagged `__relationalFusable` by `createRelationalMark` — e.g.
    * `.mark(blank({h})).layer(ribbon({}))`) always consumes THIS tier's
    * produced marks as the bag it connects (see the class doc on
-   * `LayerBuilder`), so a default split/travel-direction can be computed
-   * from `this.operators` here too — the SAME computation `.mark()`'s fusion
-   * rewrite runs, just over an explicit two-tier `.mark(anchor).layer(R(...))`
-   * instead of the `.mark(R(...))` sugar that elaborates to it. `anchorOpts`
-   * is `this.finalMark`'s own `__serialize.opts` (e.g. `blank({h:"count"})`'s
-   * opts) so step 2 of the travel-axis rule can see a data-driven `h`/`w`
-   * that lives on the anchor rather than on the connector.
+   * `LayerBuilder`), so a default split/travel-direction is computed from
+   * this tier's flow here too — the SAME computation `.mark()`'s fusion
+   * rewrite runs, just over the explicit two-tier form instead of the
+   * `.mark(R(...))` sugar that elaborates to it. `anchorOpts` is the
+   * `__serialize.opts` of this tier's own mark (e.g. `blank({h:"count"})`) so
+   * step 2 of the travel-axis rule can see a data-driven `h`/`w` that lives
+   * on the anchor rather than on the connector.
    *
-   * Guarded to THIS tier's own flow, not a nested one: `hasOwnFlow()` is true
-   * exactly when `this` was built from genuine row data flowing through
-   * `this.operators` — the same "current chart's own flow" boundary
-   * `.mark()`'s fusion guard uses. A `chart().flow(group({by})).mark(line())`
-   * tier passed as `child` is a `ChartBuilder`, not a bare `Mark`, so the
-   * `typeof child === "function"` check already excludes it — that nested
-   * idiom (the pre-#752 way to write this) stays untouched, per the design
-   * note's explicit scope boundary.
+   * Guarded to THIS tier's own flow, not a nested one (`hasOwnFlow()`, the
+   * same boundary `.mark()`'s fusion guard uses). A
+   * `chart().flow(group({by})).mark(line())` tier passed as `child` is a
+   * `ChartBuilder`, not a bare `Mark`, so the `typeof child === "function"`
+   * check already excludes it — that nested idiom stays untouched.
    */
   layer(child: LayerTier): LayerBuilder {
     if (
@@ -765,10 +726,10 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.hasOwnFlow()
     ) {
       const fusable = (child as any).__relationalFusable as RelationalFusable;
-      const anchorOpts = (this.finalMark as any)?.__serialize?.opts as
+      const anchorOpts = (this.state.finalMark as any)?.__serialize?.opts as
         | Record<string, any>
         | undefined;
-      applyDefaultRelational(fusable, this.operators, anchorOpts);
+      applyDefaultRelational(fusable, this.state.operators, anchorOpts);
     } else if (
       typeof child === "function" &&
       (child as any).__relationalFusable !== undefined
@@ -785,34 +746,26 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   /** True when this builder is an empty `Chart()` scope (its data defers to the
    *  previous tier's marks). Used by `LayerBuilder` to wire the chain. */
   usesPreviousLayerMarks(): boolean {
-    return (this.data as unknown) === PREVIOUS_LAYER_MARKS;
+    return (this.state.data as unknown) === PREVIOUS_LAYER_MARKS;
   }
 
   /** True when this builder was built from genuine row data flowing through
-   *  `this.operators` — i.e. NOT an empty-scope `Chart()` tier
-   *  (`usesPreviousLayerMarks()`) and NOT already a refs bag
-   *  (`dataIsRefs(this.data)`, e.g. `chart(selectAll(...))` or
+   *  its own operators — i.e. NOT an empty-scope `Chart()` tier
+   *  (`usesPreviousLayerMarks()`) and NOT already a refs bag (`dataIsRefs`,
+   *  e.g. `chart(selectAll(...))` or
    *  `LayerBuilder.resolve()`'s `withData(prevRefs)`). This is the "current
    *  chart's own flow" boundary shared by both relational-mark default-
    *  grouping fusion guards (issue #752): `.mark()`'s (fuse a bare relational
    *  mark into an anchor + connector) and `.layer()`'s (compute the default
    *  split/travel-direction for a bare relational-mark tier). */
   private hasOwnFlow(): boolean {
-    return !this.usesPreviousLayerMarks() && !dataIsRefs(this.data);
+    return !this.usesPreviousLayerMarks() && !dataIsRefs(this.state.data);
   }
 
   /** A copy of this builder with its data replaced — used by `LayerBuilder` to
    *  bind an empty `Chart()` scope to `selectAll(previousTierMarkName)`. */
   withData(data: TInput): ChartBuilder<TInput, TOutput> {
-    return new ChartBuilder(
-      data,
-      this.options,
-      this.operators,
-      this.finalMark,
-      this.layerContext,
-      this.nodeZOrder,
-      this.nodeName
-    );
+    return this.with({ data });
   }
 
   /** Ensure this tier's mark carries a name so a later tier can `selectAll` its
@@ -822,85 +775,56 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     builder: ChartBuilder<TInput, TOutput>;
     name: string;
   } {
-    if (this.finalMark === undefined) {
+    if (this.state.finalMark === undefined) {
       throw new Error(
         ".layer(Chart()): the previous tier has no .mark() to inherit — add a " +
           "mark to the previous tier, or give the layer's Chart() its own data."
       );
     }
-    const existing = (this.finalMark as any)?.__layerName;
+    const existing = (this.state.finalMark as any)?.__layerName;
     if (typeof existing === "string" && existing.length > 0) {
       return { builder: this, name: existing };
     }
-    const named = (this.finalMark as any).name(autoName) as Mark<TOutput>;
-    // Construct the renamed builder DIRECTLY (mirroring the plain-mark branch
-    // of `mark()`) rather than calling `this.mark(named)`. This tier's
-    // `finalMark` CAN still be a still-tagged `__relationalFusable` mark here:
-    // `LayerBuilder.resolve()` calls `tier.withData(prevRefs)` on an
-    // empty-scope tier before calling `ensureNamedMark`, which sets `data` to
-    // a plain `Array` of already-resolved `GoFishRef`s — a shape `dataIsRefs`
-    // covers, but renaming must not depend on the guard staying in sync with
-    // every refs-bag shape `LayerBuilder` can produce. `.name()` propagates
-    // tags, so `named` still carries `__relationalFusable`, and re-entering
-    // `mark(named)` here would return a `LayerBuilder` — breaking this
-    // method's `ChartBuilder`-returning contract with a lying cast, and
-    // blowing up later in `resolve()` (`tier.withLayerContext is not a
-    // function`). Building the `ChartBuilder` directly sidesteps `mark()`'s
-    // fusion logic entirely, which is correct: fusion was already decided
-    // (and skipped) when this mark was first attached.
+    const named = (this.state.finalMark as any).name(autoName) as Mark<TOutput>;
+    // Swap the mark in directly instead of re-entering `mark()`: `named` can
+    // still carry `__relationalFusable`, and fusion was already decided (and
+    // skipped) when this mark was first attached.
+    return { builder: this.with({ finalMark: named }), name: autoName };
+  }
+
+  /** The chart-level config every terminal threads through to the node.
+   *  `LayerBuilder` delegates to the root tier's, so a `.layer()` chain
+   *  inherits it. */
+  renderMeta(): RenderMeta {
     return {
-      builder: new ChartBuilder(
-        this.data,
-        this.options,
-        this.operators,
-        named,
-        this.layerContext,
-        this.nodeZOrder,
-        this.nodeName
-      ),
-      name: autoName,
+      axes: this.state.options?.axes,
+      colorConfig: this.state.options?.color,
     };
   }
 
-  /** The render-time metadata threaded from the root tier: resolved axes/color
-   *  config. `LayerBuilder` uses this so a `.layer()` chart inherits the root
-   *  axes/color config. Axis titles are inferred downstream from each resolved
-   *  space's `measure` (see `gofish`), so no field-name hint is threaded here. */
-  renderMeta(): {
-    axes?: AxesOptions;
-    colorConfig?: ColorConfig;
-  } {
-    return {
-      axes: this.options?.axes,
-      colorConfig: this.options?.color,
-    };
-  }
-
-  // resolve creates the node; named marks register their nodes into layerContext when invoked
+  /** Build this chart's node. Named marks tag themselves during resolution
+   *  and are collected into `layerContext` by the post-resolve walk below. */
   async resolve(): Promise<GoFishNode> {
-    if (!this.finalMark) {
+    if (!this.state.finalMark) {
       throw new Error("Cannot resolve: no mark specified. Call .mark() first.");
     }
 
-    // Apply all operators to the mark
-    let composedMark = this.finalMark as Mark<any>;
-    for (const op of this.operators.toReversed()) {
+    let composedMark = this.state.finalMark as Mark<any>;
+    for (const op of this.state.operators.toReversed()) {
       composedMark = await op(composedMark);
     }
 
     // Resolve a ref/selectAll used as chart data just before calling mark
-    let data = this.data;
+    let data = this.state.data;
     if (data instanceof GoFishRef) {
-      data = resolveRefData(data, this.layerContext) as any;
+      data = resolveRefData(data, this.state.layerContext) as any;
     }
 
-    // Create the node; named marks tag themselves for the post-resolve
-    // collection pass below.
-    const node = await Frame(this.options ?? {}, [
+    const node = await Frame(this.state.options ?? {}, [
       (
         await resolveMarkResult(
-          composedMark(data as any, undefined, this.layerContext),
-          this.layerContext
+          composedMark(data as any, undefined, this.state.layerContext),
+          this.state.layerContext
         )
       ).setShared([true, true]),
     ]);
@@ -910,34 +834,27 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     // Promise.all preserves child order in its return array), so this is
     // deterministic regardless of how individual async legs (e.g. a Python
     // `derive` RPC) interleaved at resolution time.
-    collectLayerRegistrations(node, this.layerContext);
+    collectLayerRegistrations(node, this.state.layerContext);
 
     // Embed colorConfig on the node so it survives .resolve() inside Layer
-    if (this.options?.color) {
-      (node as any).colorConfig = this.options.color;
+    if (this.state.options?.color) {
+      (node as any).colorConfig = this.state.options.color;
     }
 
-    let result: GoFishNode = node;
+    const result: GoFishNode = node;
 
-    // y-up is no longer a chart-vs-not flag: orientation is a PER-SCOPE property
-    // resolved at bake time (issue #629). Each topmost continuous-y node (a value
-    // axis) is mirrored about its own placed band, while an ordinal category axis
-    // stays y-down — so a vertical bar chart flips, a horizontal one reads
-    // top-down, and a chart composed inside a `gofish([...])`/`.layer()` gets the
-    // same per-scope treatment for free. See `bake`'s `declaredYUp` and #629.
-
-    if (this.nodeZOrder !== undefined) {
-      result.zOrder(this.nodeZOrder);
+    if (this.state.nodeZOrder !== undefined) {
+      result.zOrder(this.state.nodeZOrder);
     }
 
     // A user-chained `.name(...)` names the resolved node so it's a valid
     // `.constrain(...)` target on an enclosing layer (looked up by `_name`)
     // and resolvable via cross-chart `selectAll`/`ref`. `stashLayerName` keeps
     // serialize detection consistent with named marks.
-    if (this.nodeName !== undefined) {
-      result.name(this.nodeName);
-      stashLayerName(this, this.nodeName);
-      const entry = (this.layerContext[this.nodeName] ??= {
+    if (this.state.nodeName !== undefined) {
+      result.name(this.state.nodeName);
+      stashLayerName(this, this.state.nodeName);
+      const entry = (this.state.layerContext[this.state.nodeName] ??= {
         data: [],
         nodes: [],
       });
@@ -954,103 +871,11 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 
   withLayerContext(layerContext: LayerContext): ChartBuilder<TInput, TOutput> {
-    return new ChartBuilder(
-      this.data,
-      this.options,
-      this.operators,
-      this.finalMark,
-      layerContext,
-      this.nodeZOrder,
-      this.nodeName
-    );
+    return this.with({ layerContext });
   }
 
   zOrder(value: number): ChartBuilder<TInput, TOutput> {
-    return new ChartBuilder(
-      this.data,
-      this.options,
-      this.operators,
-      this.finalMark,
-      this.layerContext,
-      value,
-      this.nodeName
-    );
-  }
-
-  // The chart-level options every terminal threads through to the node:
-  // resolved axes/color config. Axis titles are inferred downstream from each
-  // resolved space's `measure` (see `gofish`) — both continuous (channel field)
-  // and ordinal (grouping field) spaces carry one — so no field-name hint is
-  // threaded from the builder anymore.
-  private async resolveForRender<T extends Record<string, unknown>>(
-    options: T
-  ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
-    const node = await this.resolve();
-    return {
-      node,
-      options: {
-        // y-up is decided by the root render from the resolved y space (a
-        // CONTINUOUS value axis flips, an ORDINAL category axis reads
-        // top-down) — not forced here. See issue #143/#16.
-        ...options,
-        axes: this.options?.axes,
-        colorConfig: this.options?.color,
-      },
-    };
-  }
-
-  // render calls resolve and then renders. Resolution always runs under the
-  // ambient interactive context so the reactive surface (live() channels, input
-  // reads in derive()) can register during resolve; a chart where nothing
-  // registers renders down the static path untouched.
-  async render(
-    container: Parameters<GoFishNode["render"]>[0],
-    options: Omit<Parameters<GoFishNode["render"]>[1], "axes">
-  ): Promise<ReturnType<GoFishNode["render"]>> {
-    return renderWithInteraction(
-      () => this.resolveForRender(options),
-      container
-    );
-  }
-
-  /** Resolve and render to a standalone SVG markup string. */
-  async toSVG(
-    options: Omit<Parameters<GoFishNode["toSVG"]>[0], "axes"> = {}
-  ): Promise<string> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.toSVG(opts);
-  }
-
-  /**
-   * Resolve and emit the post-layout display list (render IR) at `options`'s
-   * viewport — the analogue of {@link toJSON} (frontend IR) for the solved,
-   * positioned output. See {@link toDisplayList}.
-   */
-  async toDisplayList(
-    options: Omit<Parameters<GoFishNode["toDisplayList"]>[0], "axes"> = {}
-  ): ReturnType<GoFishNode["toDisplayList"]> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.toDisplayList(opts);
-  }
-
-  /** Resolve and render to a detached `<svg>` element. */
-  async toSVGElement(
-    options: Omit<Parameters<GoFishNode["toSVGElement"]>[0], "axes"> = {}
-  ): Promise<SVGSVGElement> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.toSVGElement(opts);
-  }
-
-  /**
-   * Resolve, render, and save to `filename` (format inferred from the
-   * extension — `.svg` today). Browser downloads; Node writes the file.
-   */
-  async save(
-    filename: string,
-    options: Omit<Parameters<GoFishNode["save"]>[1], "axes"> = {}
-  ): Promise<void> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.save(filename, opts);
+    return this.with({ nodeZOrder: value });
   }
 }
 
@@ -1082,13 +907,12 @@ export function chart<T>(
   const resolvedOptions = emptyScope
     ? (dataOrOptions as ChartOptions | undefined)
     : options;
-  return new ChartBuilder<any, any>(
-    resolvedData,
-    resolvedOptions,
-    [],
-    undefined,
-    {}
-  );
+  return new ChartBuilder<any, any>({
+    data: resolvedData,
+    options: resolvedOptions,
+    operators: [],
+    layerContext: {},
+  });
 }
 
 const CHART_OPTION_KEYS = new Set([
@@ -1133,8 +957,10 @@ export type LayerTier = ChartBuilder<any, any> | Mark<any> | GoFishNode;
  * registrations land before the next tier's scope is read (mirrors the
  * manual `layer([...])` form).
  */
-export class LayerBuilder {
-  constructor(private readonly tiers: LayerTier[]) {}
+export class LayerBuilder extends RenderableBuilder {
+  constructor(private readonly tiers: LayerTier[]) {
+    super();
+  }
 
   /** Stack another tier; every tier is offered the previous tier's marks as
    *  scope (see the class doc for how consumption is decided). */
@@ -1223,55 +1049,47 @@ export class LayerBuilder {
     return result;
   }
 
-  private async resolveForRender<T extends Record<string, unknown>>(
-    options: T
-  ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
-    const node = await this.resolve();
-    const meta = this.rootChart().renderMeta();
-    // Thread axes/color from the root tier so a `.layer()` chart inherits the
-    // root config. Axis titles derive downstream from each resolved space's
-    // `measure`, so no field-name hint is threaded here.
-    return {
-      node,
-      options: {
-        // y-up is decided by the root render from the resolved y space — see
-        // the sibling resolveForRender and issue #143/#16.
-        ...options,
-        axes: (options as any).axes ?? meta.axes,
-        colorConfig: meta.colorConfig,
-      },
-    };
-  }
-
-  async render(
-    container: Parameters<GoFishNode["render"]>[0],
-    options: Parameters<GoFishNode["render"]>[1]
-  ): Promise<ReturnType<GoFishNode["render"]>> {
-    return renderWithInteraction(
-      () => this.resolveForRender(options ?? {}),
-      container
-    );
-  }
-
-  async toSVG(
-    options: Parameters<GoFishNode["toSVG"]>[0] = {}
-  ): Promise<string> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.toSVG(opts);
-  }
-
-  async toSVGElement(
-    options: Parameters<GoFishNode["toSVGElement"]>[0] = {}
-  ): Promise<SVGSVGElement> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.toSVGElement(opts);
-  }
-
-  async save(
-    filename: string,
-    options: Parameters<GoFishNode["save"]>[1] = {}
-  ): Promise<void> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.save(filename, opts);
+  /** The render-time config threaded from the root tier, so a `.layer()`
+   *  chart inherits the root chart's axes/color options. */
+  renderMeta(): RenderMeta {
+    return this.rootChart().renderMeta();
   }
 }
+
+/**
+ * Resolve a builder surface and prepare its render options: `axes` passed to a
+ * terminal wins, falling back to the chart's own `axes` option (see
+ * apps/docs/docs/js/api/core/render.md). Axis titles are inferred downstream
+ * from each resolved space's `measure` (see `gofish`) — both continuous
+ * (channel field) and ordinal (grouping field) spaces carry one — so no
+ * field-name hint is threaded from the builder. y-up is likewise decided by
+ * the root render from the resolved y space (a CONTINUOUS value axis flips, an
+ * ORDINAL category axis reads top-down), not forced here (issue #143/#16).
+ */
+async function resolveForRender(
+  this: RenderableBuilder,
+  options: RenderOptions
+) {
+  const node = await this.resolve();
+  const meta = this.renderMeta();
+  return {
+    node,
+    options: {
+      ...options,
+      axes: (options.axes as AxesOptions | undefined) ?? meta.axes,
+      colorConfig: meta.colorConfig,
+    },
+  };
+}
+
+// Define the export terminals declared on `RenderableBuilder`, once, from the
+// shared registry, so both builder surfaces expose the same set. `render` goes
+// through `renderWithInteraction` so resolution runs under the ambient
+// interactive context and the reactive surface (live() channels, input reads in
+// derive()) can register; a chart where nothing registers renders down the
+// static path untouched. See terminals.ts.
+attachBuilderTerminals(
+  RenderableBuilder.prototype,
+  resolveForRender,
+  renderWithInteraction
+);

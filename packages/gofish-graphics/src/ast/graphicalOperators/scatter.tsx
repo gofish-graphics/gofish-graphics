@@ -198,5 +198,7 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
     else if (typeof yMax === "string") fields.y = yMax;
     return fields;
   },
+  // `x`/`y` are literal per-item coordinates — a continuous value channel.
+  arrangement: { kind: "value", positions: scatterPositions },
   serialize: { type: "scatter" },
 });

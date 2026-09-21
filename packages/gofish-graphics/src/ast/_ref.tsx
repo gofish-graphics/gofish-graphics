@@ -1,58 +1,25 @@
-import type { JSX } from "solid-js";
 import {
   Anchor,
   Dimensions,
   Direction,
-  elaborateDims,
   elaborateDirection,
-  elaboratePosition,
-  elaborateSize,
-  elaborateTransform,
-  FancyDims,
   FancyDirection,
-  FancyPosition,
-  FancySize,
-  FancyTransform,
-  combineDims,
-  localAnchorPoint,
-  Position,
   Size,
   Transform,
+  anchorDetermined,
+  combineDims,
+  localAnchorOf,
+  translateForAnchor,
 } from "./dims";
-import { Domain, type AxisScale } from "./domain";
+import type { AxisScale } from "./domain";
 import { GoFishNode } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
-import { ORDINAL, POSITION, UnderlyingSpace } from "./underlyingSpace";
-import type { RenderSession } from "./_node";
+import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
+import type { Placeable, RenderSession } from "./_node";
 import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
-
-/* TODO: resolveMeasures and layout feel pretty similar... */
-
-export type Placeable = {
-  dims: Dimensions;
-  localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
-  place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
-};
-
-export type Measure = (
-  shared: Size<boolean>,
-  // scaleFactors: Size<number | undefined>,
-  size: Size,
-  children: GoFishNode[]
-) => (scaleFactors: Size) => FancySize;
-
-export type Layout = (
-  shared: Size<boolean>,
-  size: Size,
-  scaleFactors: Size<number | undefined>,
-  children: {
-    layout: (size: Size, scaleFactors: Size<number | undefined>) => Placeable;
-  }[],
-  measurement: (scaleFactors: Size) => Size
-) => { intrinsicDims: FancyDims; transform: FancyTransform };
 
 export class GoFishRef {
   public type: string = "ref";
@@ -75,7 +42,6 @@ export class GoFishRef {
    *  should not rely on this field. */
   public transform?: Transform;
   public shared: Size<boolean>;
-  private measurement!: (scaleFactors: Size) => Size;
   public readonly selection?: string | Token | (Token | string | number)[];
   private directNode?: GoFishNode;
   private selectedNode?: GoFishNode;
@@ -260,23 +226,13 @@ export class GoFishRef {
     this.selectedNode?.embed(direction);
   }
 
-  /* TODO: what should the default be? */
   public resolveUnderlyingSpace(): Size<UnderlyingSpace> {
     return (
       this.selectedNode?.resolveUnderlyingSpace() ?? [ORDINAL([]), ORDINAL([])]
     );
   }
 
-  /* TODO: I'm not really sure what this should do */
-  public measure(size: Size): (scaleFactors: Size) => Size {
-    const measurement = (scaleFactors: Size) =>
-      // elaborateSize(this._measure(this.shared, size, this.children)(scaleFactors));
-      size;
-    this.measurement = measurement;
-    return measurement;
-  }
-
-  public layout(size: Size, _scales?: Size<AxisScale | undefined>): Placeable {
+  public layout(_size: Size, _scales?: Size<AxisScale | undefined>): Placeable {
     if (!this.selectedNode) {
       throw new Error("Selected node not found");
     }
@@ -284,11 +240,9 @@ export class GoFishRef {
     // Find the least common ancestor between this ref and the selected node
     const lca = findLeastCommonAncestor(this, this.selectedNode);
 
-    // Stage 3-C (#39): accumulate the LEDGER-DERIVED translate, so ref geometry
-    // survives retiring the direct translate writes. `projectedTranslate` is
-    // polymorphic across the union — a node returns its ledger projection (==
-    // written field where solved, else the fallback); a ref has no ledger so it
-    // returns its computed transform directly.
+    // Accumulate the LEDGER-DERIVED translate. `projectedTranslate` is
+    // polymorphic across the union: a node returns its ledger projection, a ref
+    // (which has no ledger) its computed transform.
     const translateOf = (n: GoFishAST, dir: Direction): number =>
       n.projectedTranslate(dir) ?? 0;
 
@@ -330,7 +284,7 @@ export class GoFishRef {
     return combineDims(this.intrinsicDims, this.transform);
   }
 
-  /** The ref's origin as a `Placeable.projectedTranslate` (#39). A ref has no
+  /** The ref's origin as a `Placeable.projectedTranslate`. A ref has no
    *  ledger, so the projection IS its computed `transform.translate` — exposing
    *  it lets every translate reader (the coord bake, `_ref` accumulation,
    *  baseline align) call `projectedTranslate` polymorphically across the
@@ -340,15 +294,10 @@ export class GoFishRef {
   }
 
   public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
-    const dir = elaborateDirection(axis);
-    const intrinsic = this.intrinsicDims?.[dir];
-    if (intrinsic?.min === undefined) return undefined;
-    if (
-      (anchor === "center" || anchor === "max") &&
-      intrinsic.size === undefined
-    )
-      return undefined;
-    return localAnchorPoint(anchor, intrinsic.min, intrinsic.size ?? 0);
+    return localAnchorOf(
+      this.intrinsicDims?.[elaborateDirection(axis)],
+      anchor
+    );
   }
 
   public place(
@@ -358,35 +307,30 @@ export class GoFishRef {
   ): void {
     const dir = elaborateDirection(axis);
     const intrinsic = this.intrinsicDims?.[dir];
-    const localMin = intrinsic?.min;
-    const size = intrinsic?.size;
-
-    // center/max are DERIVED from (min, size) (mirrors GoFishNode.place): they're
-    // determined only when both are; min/baseline need only min. When not
-    // determined, only the local min is recordable (center/max aren't stored).
-    const determined =
-      anchor === "center" || anchor === "max"
-        ? localMin !== undefined && size !== undefined
-        : localMin !== undefined;
-    if (!determined) {
+    // Until the anchor's local point is determined, only the local min is
+    // recordable (mirrors GoFishNode.place).
+    if (!anchorDetermined(intrinsic, anchor)) {
       if (anchor === "min") this.intrinsicDims![dir].min = value;
       return;
     }
-
-    this.transform!.translate![dir] =
-      value - localAnchorPoint(anchor, localMin ?? 0, size ?? 0);
+    this.transform!.translate![dir] = translateForAnchor(
+      intrinsic,
+      anchor,
+      value
+    );
   }
 
   /** Authoritative placement counterpart to `GoFishNode.pinAnchor`. A ref has no
    *  bbox ledger, so overriding means directly replacing its computed translate. */
   public pinAnchor(axis: FancyDirection, value: number, anchor: Anchor): void {
     const dir = elaborateDirection(axis);
-    const intrinsic = this.intrinsicDims?.[dir];
     this.transform ??= { translate: [undefined, undefined] };
     this.transform.translate ??= [undefined, undefined];
-    this.transform.translate[dir] =
-      value -
-      localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
+    this.transform.translate[dir] = translateForAnchor(
+      this.intrinsicDims?.[dir],
+      anchor,
+      value
+    );
   }
 
   /** Refs are placement stand-ins; they draw nothing, so they lower to no

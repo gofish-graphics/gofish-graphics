@@ -12,7 +12,7 @@ import {
   niceContinuous,
   type UnderlyingSpace,
 } from "../underlyingSpace";
-import { allocateSlices } from "./folds";
+import { sliceExtent } from "./folds";
 import type { ScopeRegistry } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
@@ -114,16 +114,16 @@ export function buildDistributeSliceMap(
 
   for (const segment of segments) {
     if (ambiguousAxes.has(segment.dAxis)) continue;
-    const slices = allocateSlices(
+    const slice = sliceExtent(
       size[segment.dAxis],
       segment.spacing,
       segment.order.length
     );
-    segment.order.forEach((name, i) => {
+    for (const name of segment.order) {
       const cur = out.get(name) ?? ([size[0], size[1]] as Size);
-      cur[segment.dAxis] = slices[i];
+      cur[segment.dAxis] = slice;
       out.set(name, cur);
-    });
+    }
   }
 
   return out.size === 0 ? undefined : out;
@@ -132,8 +132,8 @@ export function buildDistributeSliceMap(
 /** Choose the concrete size proposed to one child in a layer.
  *
  * Priority is explicit and single-owner:
- *   1. grid: each cell is proposed ITS (column, row) track's extent (Stage 6e —
- *      resolved by the unified max rule in `resolveGridTracks`), keyed by name;
+ *   1. grid: each cell is proposed ITS (column, row) track's extent (resolved by
+ *      the unified max rule in `resolveGridTracks`), keyed by name;
  *   2. distribute: owns only the named child axes it sliced;
  *   3. default layer box: unconstrained/fill proposal is the full layer size.
  *
@@ -205,7 +205,7 @@ export function buildChildScalePlan(
   // presentation adjustment whose demand comes from axis views, so axis-less
   // content stays at the honest raw scale.
   axisDemand: Size<boolean>,
-  // Stage 6b: the ONE σ-solve site. Every scale this plan roots is derived
+  // The ONE σ-solve site. Every scale this plan roots is derived
   // through the registry (so `GOFISH_DUMP_SCOPES` sees it and the numbers have a
   // single source); `rootKey` labels the owning layer node in the dump.
   scopes: ScopeRegistry,
@@ -263,8 +263,7 @@ export function buildChildScalePlan(
     for (const axis of [0, 1] as const) {
       const dom = constraintBudget.sizeDomain[axis];
       if (dom === undefined || !Number.isFinite(layerSize[axis])) continue;
-      // Structural σ-scope rule (Stage 6b — the former #618 propagate-vs-re-root
-      // guard, made structural): ONLY A SCOPE ROOT SOLVES. This budget roots a
+      // Structural σ-scope rule: ONLY A SCOPE ROOT SOLVES. This budget roots a
       // scope on the axis unless an ancestor scope already owns it — i.e. an
       // inherited σ is present AND this layer introduced no pixel scope of its
       // own (no self-scaled space). In that INTERMEDIATE case the inherited σ has
@@ -273,7 +272,7 @@ export function buildChildScalePlan(
       // re-derive-equal cases produce the same σ (no-op); the divergent case is
       // an equal-slice budget under a coord, where the distribute axis IS the
       // σ-scaled axis — a nested group would otherwise silently re-derive a
-      // smaller σ (#618).
+      // smaller σ.
       const rootsScope =
         inheritedScaleFactors?.[axis] === undefined ||
         selfScaledSpaces[axis] !== undefined;
@@ -325,13 +324,10 @@ export function buildChildScalePlan(
 /** Select the layer's single grid constraint, if any.
  *
  * A grid resolves its tracks under the unified max rule (`resolveGridTracks`)
- * and now GENUINELY COMPOSES with sibling constraints (Stage 6e): its per-track
- * claim participates in sizing, and its cell-center pins solve jointly with any
- * align/position/z-order on the same layer. The Stage-3 containment throw (which
- * rejected any non-z-order sibling because the grid used to bypass the space and
- * size folds) is therefore gone. The at-most-one-grid rule stays: two track
- * partitions on one layer would be source-order-sensitive, so it is still an
- * error. */
+ * composes with sibling constraints: its per-track claim participates in
+ * sizing, and its cell-center pins solve jointly with any align/position/z-order
+ * on the same layer. At most one grid per layer: two track partitions on one
+ * layer would be source-order-sensitive, so a second one is an error. */
 export function selectGridConstraint(
   constraints: readonly ConstraintSpec[]
 ): GridConstraint | undefined {

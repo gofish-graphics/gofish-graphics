@@ -2,7 +2,7 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import { sumBy, v, type Curve } from "../../lib";
+import { sumBy, type Curve } from "../../lib";
 import {
   connect as Connect,
   type AnchorSpec,
@@ -17,24 +17,23 @@ import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
-import { inferSize, inferColor } from "../channels";
-import { isLive, evalLiveStatic, type LiveValue } from "../../interaction/live";
+import { inferColor } from "../channels";
 import { rect as generatedRect } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import { Mark, Operator } from "../types";
-import type { NameableMark } from "../withGoFish";
+import { createMark, type NameableMark } from "../withGoFish";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
   nameableMark,
   attachModifiers,
-  createModifier,
+  tagCombinator,
   nameModifier,
   labelModifier,
   zOrderModifier,
   LayerContext,
 } from "./createOperator";
-import type { ZOrderValue } from "./createOperator";
+import type { ModifierConfig, ZOrderValue } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
@@ -70,25 +69,31 @@ export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
 /* Data Transformation Operators */
+
+/**
+ * The shape every data-transformation operator shares: map the incoming data
+ * with `fn`, hand the result to the mark, and carry an IR-serialization tag.
+ * `fn` receives the layer context so it can resolve refs (see `resolve`).
+ */
+function mapOperator<T, U>(
+  fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
+  serialize: { type: string; opts: Record<string, unknown> }
+): Operator<T, U> {
+  const op: Operator<T, U> = async (mark: Mark<U>) =>
+    (async (d: T, key?: string | number, layerContext?: LayerContext) =>
+      mark(await fn(d, layerContext), key, layerContext)) as Mark<T>;
+  (op as any).__serialize = serialize;
+  return op;
+}
+
 export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
-  const op: Operator<T, U> = async (mark: Mark<U>) => {
-    return (async (
-      d: T,
-      key?: string | number,
-      layerContext?: LayerContext
-    ) => {
-      return mark(await fn(d), key, layerContext);
-    }) as Mark<T>;
-  };
   // The function body is not serializable; the frontend-IR emitter sees
   // an opaque `{ type: "derive" }`. The Python-bridge widget emits its own
   // `{ type: "derive", lambdaId }` shape; pure-JS callers leave the
   // payload empty.
-  (op as any).__serialize = { type: "derive", opts: {} };
-  return op;
+  return mapOperator(fn, { type: "derive", opts: {} });
 }
 
-// return an array of copies of `d` repeated `d.field` times
 export const repeat = <T, K extends keyof T>(
   d: T,
   field: K & (T[K] extends number ? K : never)
@@ -110,25 +115,17 @@ export const normalize = <T, K extends keyof T>(
 };
 
 export function log<T>(prefix?: string): Operator<T, T> {
-  const op: Operator<T, T> = async (mark: Mark<T>) => {
-    return (async (
-      d: T,
-      key?: string | number,
-      layerContext?: LayerContext
-    ) => {
+  return mapOperator<T, T>(
+    (d) => {
       if (prefix) {
         console.log(prefix, d);
       } else {
         console.log(d);
       }
-      return mark(d, key, layerContext);
-    }) as Mark<T>;
-  };
-  (op as any).__serialize = {
-    type: "log",
-    opts: prefix !== undefined ? { prefix } : {},
-  };
-  return op;
+      return d;
+    },
+    { type: "log", opts: prefix !== undefined ? { prefix } : {} }
+  );
 }
 
 /**
@@ -147,12 +144,8 @@ export function resolve(
   cols: string[],
   opts: { from: GoFishRef; key?: string }
 ): Operator<any[], any[]> {
-  const op: Operator<any[], any[]> = async (mark: Mark<any[]>) => {
-    return (async (
-      rows: any[],
-      key?: string | number,
-      layerContext?: LayerContext
-    ) => {
+  return mapOperator<any[], any[]>(
+    (rows, layerContext) => {
       const resolved = resolveRefData(opts.from, layerContext ?? {});
       const refs = Array.isArray(resolved) ? resolved : [resolved];
       const matchField = (r: GoFishRef): string => {
@@ -170,7 +163,7 @@ export function resolve(
       const byKey = new Map<unknown, GoFishRef>();
       for (const r of refs) byKey.set(projectPath(r.datum, matchField(r)), r);
 
-      const out = rows.map((row) => {
+      return rows.map((row) => {
         const next: Record<string, any> = { ...row };
         for (const c of cols) {
           const matched = byKey.get(row[c]);
@@ -185,21 +178,19 @@ export function resolve(
         }
         return next;
       });
-      return mark(out, key, layerContext);
-    }) as Mark<any[]>;
-  };
-  (op as any).__serialize = {
-    type: "resolve",
-    opts: {
-      cols,
-      // `from` is a selectAll(layerName); serialize the layer name it selects.
-      ...(typeof opts.from.selection === "string"
-        ? { from: opts.from.selection }
-        : {}),
-      ...(opts.key !== undefined ? { key: opts.key } : {}),
     },
-  };
-  return op;
+    {
+      type: "resolve",
+      opts: {
+        cols,
+        // `from` is a selectAll(layerName); serialize the layer name it selects.
+        ...(typeof opts.from.selection === "string"
+          ? { from: opts.from.selection }
+          : {}),
+        ...(opts.key !== undefined ? { key: opts.key } : {}),
+      },
+    }
+  );
 }
 
 /**
@@ -223,12 +214,8 @@ export function join<
   L extends Record<string, any>,
   R extends Record<string, any>,
 >(right: R[], opts: { on: string }): Operator<L[], (L & R)[]> {
-  const op: Operator<L[], (L & R)[]> = async (mark: Mark<(L & R)[]>) => {
-    return (async (
-      left: L[],
-      key?: string | number,
-      layerContext?: LayerContext
-    ) => {
+  return mapOperator<L[], (L & R)[]>(
+    (left) => {
       const leftRows = Array.isArray(left) ? left : left == null ? [] : [left];
       const rightByKey = new Map<unknown, R[]>();
       for (const r of right) {
@@ -243,81 +230,47 @@ export function join<
           joined.push({ ...l, ...r });
         }
       }
-      return mark(joined, key, layerContext);
-    }) as Mark<L[]>;
-  };
-  (op as any).__serialize = {
-    type: "join",
-    opts: { on: opts.on, right },
-  };
-  return op;
+      return joined;
+    },
+    { type: "join", opts: { on: opts.on, right } }
+  );
 }
 
 /* END Data Transformation Operators */
 
-export function circle<T extends Record<string, any>>({
-  r,
-  fill,
-  stroke,
-  strokeWidth,
-  debug,
-}: {
-  r?: number;
-  fill?: string | keyof T | LiveValue;
-  stroke?: string;
-  strokeWidth?: number;
-  debug?: boolean;
-}): Mark<T> & {
-  name(layerName: string | Token): Mark<T>;
-  label(accessor: LabelAccessor, options?: LabelOptions): Mark<T>;
-} {
-  const base: Mark<T> = async (
-    d: T,
-    key?: string | number,
-    _layerContext?: LayerContext
-  ) => {
-    if (debug) console.log("circle", key, d);
-    // scatter passes an array of items; unwrap to first element for field lookup
-    const datum: Record<string, any> = Array.isArray(d) ? (d as any[])[0] : d;
-    // `live(...)` fill: the pipeline renders the resolve-time value (evaluated
-    // untracked so its input reads wire events but aren't pipeline deps); paint
-    // re-evaluates it reactively via the datum-bound thunk baked at lower time.
-    let liveFill: LiveValue | undefined;
-    let staticFill: string | keyof T | undefined = fill as
-      | string
-      | keyof T
-      | undefined;
-    if (isLive(fill)) {
-      liveFill = fill;
-      staticFill = evalLiveStatic(fill, d) as string | undefined;
-    }
-    const resolvedFill =
-      typeof staticFill === "string" && datum && staticFill in datum
-        ? v(datum[staticFill as string])
-        : (staticFill as Value<string> | undefined);
-    const resolvedStroke =
-      typeof stroke === "string" && datum && stroke in datum
-        ? v(datum[stroke as string])
-        : (stroke as Value<string> | undefined);
-    const node = Ellipse({
-      w: typeof r === "number" ? r * 2 : inferSize(r, d),
-      h: typeof r === "number" ? r * 2 : inferSize(r, d),
+/**
+ * A circle: an ellipse with a 1:1 aspect ratio, sized by RADIUS. A numeric `r`
+ * is a pixel radius (so the ellipse is `2r` across); a data-driven `r` is a
+ * size channel, and its aggregated value is the ellipse's extent directly.
+ */
+export const circle = createMark(
+  (p: {
+    r?: MaybeValue<number>;
+    fill?: MaybeValue<string>;
+    stroke?: MaybeValue<string>;
+    strokeWidth?: number;
+  }) => {
+    const size = typeof p.r === "number" ? p.r * 2 : p.r;
+    return Ellipse({
+      w: size,
+      h: size,
       aspectRatio: 1,
-      fill: resolvedFill,
-      stroke: resolvedStroke,
-      strokeWidth,
-    }).name(key?.toString() ?? "");
-    node.datum = d;
-    if (liveFill) node.__gfLive = { fill: liveFill };
-    return node;
-  };
-  const result = nameableMark(base);
-  (result as any).__serialize = {
+      fill: p.fill,
+      stroke: p.stroke,
+      strokeWidth: p.strokeWidth,
+    });
+  },
+  { r: "size", fill: "color", stroke: "color" },
+  {
     type: "circle",
-    opts: { r, fill, stroke, strokeWidth },
-  };
-  return result;
-}
+    shape: (o) => ({
+      r: o.r,
+      fill: o.fill,
+      stroke: o.stroke,
+      strokeWidth: o.strokeWidth,
+    }),
+  }
+);
 
 // `ref(name)` is the universal singular reference — usable inline in a layout
 // (resolved at layout time) and as chart data (resolved at build time against
@@ -603,10 +556,10 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
 
     // Bag form: applied to a `GoFishRef[]` (e.g. `selectAll(...)`), with an
     // optional split into one connector per group. The split is read HERE,
-    // at bag-arrival (invocation) time, off `inferred` — never off `opts`,
-    // since relational marks have no explicit split option anymore (`by` is
-    // gone; `along` only ever NAMES the path tier, it never spells the split
-    // itself). `ChartBuilder` computes the split (and travel direction)
+    // at bag-arrival (invocation) time, off `inferred` — never off `opts`:
+    // relational marks have no explicit split option, and `along` only NAMES
+    // the path tier, it never spells the split itself. `ChartBuilder` computes
+    // the split (and travel direction)
     // AFTER this mark is constructed, from the rest of the flow assembled in
     // `.mark()`/`.layer()`, and writes it into `inferred`, a cell disjoint
     // from `opts` (see `tagRelationalFusable`'s doc comment). `opts.dir`, if
@@ -861,14 +814,14 @@ export type ConstrainableMark<T> = Mark<T> & {
  * constrained mark drops its IR-serialize tag (constrained marks aren't
  * serialized), matching the pre-factory behavior.
  */
-const constrainModifier = createModifier<
-  [fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]]
->({
+const constrainModifier = {
   name: "constrain",
   apply: (node, _layerContext, _datum, fn) => {
     node.constrain(fn);
   },
-});
+} satisfies ModifierConfig<
+  [fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]]
+>;
 
 function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
   return attachModifiers(base, [
@@ -931,14 +884,7 @@ export function layer<T>(
     (node as any).datum = d;
     return node;
   };
-  const result = makeConstrainableMark(base);
-  (result as any).__serialize = {
-    type: "layer",
-    opts,
-    __combinator: true,
-    children: marks,
-  };
-  return result;
+  return tagCombinator(makeConstrainableMark(base), "layer", opts, marks);
 }
 
 function makePorterDuffCombinator(
@@ -972,22 +918,14 @@ function makePorterDuffCombinator(
       (node as any).datum = d;
       return node;
     };
-    const result = nameableMark(base);
-    (result as any).__serialize = {
-      type: irType,
-      opts,
-      __combinator: true,
-      children: marks,
-    };
-    return result;
+    return tagCombinator(nameableMark(base), irType, opts, marks);
   }
   return fn;
 }
 
-// The second arg is the IR/serialize *wire* type — kept at the original
-// Porter-Duff strings ("atop"/"over"/"inside"/"xor"/"out"/"mask") so the
-// serialize bridge and IR schema are untouched. Only the JS-facing names
-// were renamed (Figma-inspired, #196/#202).
+// The second arg is the IR/serialize *wire* type: the Porter-Duff strings
+// ("atop"/"over"/"inside"/"xor"/"out"/"mask"), which the serialize bridge and
+// IR schema use. Only the JS-facing names are Figma-style.
 export const paint = makePorterDuffCombinator(Paint, "atop");
 // `over` combinator is internal (deserializer only) — not exported from lib.
 export const over = makePorterDuffCombinator(Over, "over");

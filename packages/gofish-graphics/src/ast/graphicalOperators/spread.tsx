@@ -240,6 +240,12 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
         ? { x: name }
         : { y: name };
   },
+  // `dir` is the axis this operator lays its groups out along (`stack` is
+  // `spread({glue: true})`, so it inherits this).
+  arrangement: {
+    kind: "arrangement",
+    positions: ({ dir }) => ({ x: dir === "x", y: dir === "y" }),
+  },
   serialize: { type: "spread" },
 });
 

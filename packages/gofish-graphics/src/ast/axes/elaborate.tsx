@@ -975,7 +975,7 @@ const TITLE_CONTENT_GAP = 8; // gap between a title and the full content bbox
 const TITLE_CONTENT_NAME = "__titleContent";
 const X_TITLE_ANCHOR_NAME = "__xTitleAnchor";
 const Y_TITLE_ANCHOR_NAME = "__yTitleAnchor";
-export const X_TITLE_NAME = "__xAxisTitle";
+const X_TITLE_NAME = "__xAxisTitle";
 const Y_TITLE_NAME = "__yAxisTitle";
 
 /** The x-axis title: horizontal text below the plot. The customization seam
@@ -1026,7 +1026,9 @@ export function yAxisTitle(text: string, yUp = true): GoFishNode {
  * makes for its swatch column.
  *
  * The caller owns the "is there any title at all?" guard; this always wraps and
- * returns the new root.
+ * returns the new root, along with the x-title node itself — the orchestrator
+ * needs that identity to decide whether the title's box takes part in the
+ * chrome y-mirror (see `xTitleSeatsFar` in `gofish.tsx`).
  */
 export async function elaborateAxisTitles(
   node: GoFishNode,
@@ -1039,7 +1041,7 @@ export async function elaborateAxisTitles(
     /** Per-dim axis side, so each title follows its axis to the same edge. */
     sides?: ["start" | "end", "start" | "end"];
   }
-): Promise<GoFishNode> {
+): Promise<{ node: GoFishNode; xTitleNode?: GoFishNode }> {
   const {
     xTitle,
     yTitle,
@@ -1049,7 +1051,8 @@ export async function elaborateAxisTitles(
     sides = ["start", "start"],
   } = opts;
 
-  return wrapPreservingIdentity(node, async (content) => {
+  let xTitleNode: GoFishNode | undefined;
+  const wrapped = await wrapPreservingIdentity(node, async (content) => {
     content.name(TITLE_CONTENT_NAME);
 
     const refs: GoFishNode[] = [];
@@ -1059,7 +1062,8 @@ export async function elaborateAxisTitles(
       refs.push(
         (ref(anchorNode) as any).name(X_TITLE_ANCHOR_NAME) as GoFishNode
       );
-      titles.push(xAxisTitle(xTitle));
+      xTitleNode = xAxisTitle(xTitle);
+      titles.push(xTitleNode);
     }
     if (yTitle !== undefined) {
       const anchorNode = anchors[1] ?? plotNode;
@@ -1142,4 +1146,5 @@ export async function elaborateAxisTitles(
     root._scopeTransparent = true;
     return root;
   });
+  return { node: wrapped, xTitleNode };
 }

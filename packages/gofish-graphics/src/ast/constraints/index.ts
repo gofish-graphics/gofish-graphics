@@ -1,6 +1,5 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable } from "../_node";
-import { isToken, type Token } from "../createName";
 import {
   getMeasure,
   getValue,
@@ -27,12 +26,13 @@ import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, TrackLayout } from "./grid";
 import {
+  childNameKey,
   isPlacedOn,
   type ConstraintPosScales,
   type ConstraintRef,
 } from "./shared";
 import { solvePlacementConstraints } from "./placementSolver";
-import { shadowCheckConstraint, solverCheckEnabled } from "../solver/shadow";
+import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
 
 export type {
   Axis,
@@ -133,11 +133,8 @@ export function collectConstraintRefs(
     // GoFishNode and GoFishRef carry `_name`, so a named ref (used as a
     // cross-tier stand-in) is a valid constraint target too.
     for (const child of cs) {
-      const raw = (child as { _name?: string | Token })._name;
-      if (raw) {
-        const name = isToken(raw) ? raw.__tag : raw;
-        if (!(name in refs)) refs[name] = { name };
-      }
+      const name = childNameKey(child);
+      if (name && !(name in refs)) refs[name] = { name };
     }
     // Phase 2: recurse into non-component plain layers (refs have no children).
     for (const child of cs) {
@@ -264,13 +261,13 @@ export function applyConstraints(
       | GridConstraint => !isZOrderConstraint(constraint)
   );
 
-  // Solver shadow (#39, disposable observe→assert): snapshot each child's
+  // Solver shadow (observe→assert): snapshot each child's
   // per-axis placement BEFORE the solve — only when the check is on, so
   // production pays nothing — so each constraint's shadow can tell a child it
   // packed from one that arrived pre-positioned. The rank-2 solve places every
   // target at once (no per-constraint apply boundary), so the checks run once
   // AFTER the solve against the settled positions.
-  const prePlaced = solverCheckEnabled()
+  const prePlaced = SOLVER_CHECK
     ? new Map<string, [boolean, boolean]>(
         [...nameToPlaceable].map(([name, p]) => [
           name,
@@ -306,8 +303,7 @@ export function applyConstraints(
         targets,
         posScales,
         targetPrePlaced,
-        nameToPlaceable,
-        sizes
+        nameToPlaceable
       );
     }
   }

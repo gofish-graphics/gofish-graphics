@@ -14,7 +14,8 @@ import type { PlacementFactEmitter } from "./placementFacts";
  * holds symmetrically on each constrained axis, and `inner` is centered inside
  * `outer` there. Padding is always known, so the unknown per axis is *which*
  * side is derived — dispatched by the layer's nest pre-pass on which side
- * carries the size (see `layer.tsx` and size-claims.md "Dimension B"):
+ * carries the size (see `layer.tsx` and
+ * apps/docs/docs/internals/design/size-claims.md "Dimension B"):
  *   - inner sized, outer not → INSIDE_OUT: `outer = inner + 2·padding` (boxes
  *     that shrink-wrap their content).
  *   - outer sized (or neither: the layer sizes outer) → OUTSIDE_IN:
@@ -72,22 +73,16 @@ export function lowerNestPlacement(
   emitter: PlacementFactEmitter
 ): void {
   const [outer, inner] = constraint.children;
-  if (constraint.x !== undefined)
+  for (const axis of ["x", "y"] as const) {
+    if (constraint[axis] === undefined) continue;
     emitter.relate({
-      axis: "x",
+      axis,
       from: { name: outer.name, anchor: "middle" },
       to: { name: inner.name, anchor: "middle" },
       gap: 0,
       owner,
     });
-  if (constraint.y !== undefined)
-    emitter.relate({
-      axis: "y",
-      from: { name: outer.name, anchor: "middle" },
-      to: { name: inner.name, anchor: "middle" },
-      gap: 0,
-      owner,
-    });
+  }
 }
 
 /**

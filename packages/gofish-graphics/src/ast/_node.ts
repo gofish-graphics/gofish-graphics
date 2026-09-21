@@ -6,7 +6,6 @@
 // @wiki Architecture Overview — /internals/overview/architecture
 // </gofish-wiki>
 
-import type { JSX } from "solid-js";
 // Type-only (erased) so no runtime cycle with solver/scopes.ts, which imports
 // RenderSession from here.
 import type { ScopeRegistry } from "./solver/scopes";
@@ -23,18 +22,17 @@ import {
   FancySize,
   FancyTransform,
   combineDims,
+  localAnchorOf,
   localAnchorPoint,
+  anchorDetermined,
+  translateForAnchor,
   Size,
   Transform,
   AliasResolution,
   buildAliasMap,
 } from "./dims";
 import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
-import type {
-  AxesOptions,
-  GoFishExportOptions,
-  GoFishRenderOptions,
-} from "./gofish";
+import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
@@ -50,7 +48,6 @@ import {
   getMeasure,
 } from "./data";
 import { color6 } from "../color";
-import * as Monotonic from "../util/monotonic";
 import {
   isCONTINUOUS,
   isDIFFERENCE,
@@ -104,25 +101,10 @@ export type RenderSession = {
    *  boundary's own scope, seeded into its child re-bake so descendants inherit it
    *  unless they open their own. Set by `lowerToDisplayList` per baked entry. */
   flip?: FlipScope;
-  /** The σ-scope registry (#39 Stage 6b): the one place σ / posScale is derived,
+  /** The σ-scope registry: the one place σ / posScale is derived,
    *  shared by every scope root in this render. Created on first use
    *  (`getScopeRegistry`). */
   scopes?: ScopeRegistry;
-};
-
-export type ScaleFactorFunction = Monotonic.Monotonic;
-
-export const findScaleFactor = (
-  sizeDomain: ScaleFactorFunction,
-  targetValue: number,
-  options: {
-    tolerance?: number;
-    maxIterations?: number;
-    lowerBound?: number;
-    upperBoundGuess?: number;
-  }
-): number => {
-  return sizeDomain.inverse(targetValue, options) ?? 0;
 };
 
 export type Placeable = {
@@ -131,7 +113,7 @@ export type Placeable = {
    *  me". Exposed so the `baseline` align anchor can read a target's origin. */
   transform?: Transform;
   /** The node's origin (`baseline`) as a ledger projection — `transform.translate`
-   *  where written, else derived from the ledger (#39 stage 3). The `baseline`
+   *  where written, else derived from the ledger. The `baseline`
    *  align anchor reads this so it survives retiring the translate writes; `ref`
    *  stand-ins omit it (they keep a computed `transform`). */
   projectedTranslate?: (dir: Direction) => number | undefined;
@@ -141,7 +123,7 @@ export type Placeable = {
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox keys (the size-setting primitive
-   *  #39 — `span` and an authoritative `position` pin go through it). Optional
+   *  — `span` and an authoritative `position` pin go through it). Optional
    *  because not every placeable shape implements it (a `ref` stand-in doesn't);
    *  it is only ever invoked on real `GoFishNode` constraint targets. */
   setExtent?: (
@@ -149,7 +131,7 @@ export type Placeable = {
     owned: Partial<Record<BBoxKey, number>>,
     owner?: string
   ) => void;
-  /** Authoritative override pin (#39): land `anchor` at `value`, rebuilding the
+  /** Authoritative override pin: land `anchor` at `value`, rebuilding the
    *  ledger when the axis already self-placed (the write-once `place()` can't).
    *  Handles `baseline` too, so a scatter override never bypasses the ledger.
    *  Optional for the same reason as `setExtent` (a `ref` stand-in omits it). */
@@ -216,8 +198,7 @@ export type Layout = (
 
 /** Map a GoFish y-up display point to a final y-down absolute SVG pixel. The one
  *  transform a `lower` body needs: it folds in both the per-shape `scale(1,-1)`
- *  and the root flip the now-deleted legacy render relied on. Set once per emit
- *  on the render session. */
+ *  and the root flip. Set once per emit on the render session. */
 export type ToPixel = (p: [number, number]) => [number, number];
 
 /**
@@ -254,7 +235,7 @@ export type ResolveUnderlyingSpace = (
   constraints: ConstraintSpec[]
 ) => FancySize<UnderlyingSpace>;
 
-/** Dev gate (#39, placement pass): set `GOFISH_CONFLICT_CHECK=1` to surface
+/** Dev gate: set `GOFISH_CONFLICT_CHECK=1` to surface
  *  OVER-DETERMINATION the `BBox` ledger detects but the placement commit silently
  *  absorbs — a single owner writing inconsistent keys on an axis (the
  *  authority-independent half of "conflicts → named"). Off / zero-cost in prod. */
@@ -372,13 +353,12 @@ export class GoFishNode {
    *  mark builders at resolve. Baked into the `liveSlots` side table at lower
    *  time; undefined on the static path. */
   public __gfLive?: Record<string, LiveValue>;
-  // private inferDomains: (childDomains: Size<Domain>[]) => FancySize<Domain | undefined>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   private _layout: Layout;
-  /** Per-primitive IR lowering (see {@link Lower}). Optional during the
-   *  render→lower migration; once every factory supplies one, `_render` is
-   *  removed and this becomes the single draw description. */
+  /** Per-primitive IR lowering (see {@link Lower}) — the node's sole draw
+   *  description. Absent on operators that never lower themselves (their
+   *  children are lowered directly); lowering such a node throws. */
   private _lower?: Lower;
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
@@ -431,18 +411,13 @@ export class GoFishNode {
    *  with no frame passes through unmirrored. `{baseY, height}` mirrors
    *  `FlipScope`. */
   public _chromeFrame?: { baseY: number; height: number };
-  /** Persistent per-axis bbox ledger (#39 stage 2). Records the box-key
-   *  equations that determine this node's box, so it mirrors the authoritative
-   *  `(intrinsicDims, transform)`: `layout()` seeds the self-layout size (+ a
-   *  self-placed absolute min), `_pinAnchor` records the absolute anchor a pin
-   *  lands at, and a rank-2 `setExtent` resets the axis to its determining
-   *  keys (overriding the self-layout seed). Lazily created (the hot single
-   *  pin / `place()` path allocates only on first touch). As of stage 2 the
-   *  `dims` getter READS from this ledger wherever an axis is fully solved
-   *  (falling back to the `(intrinsicDims, transform)` split otherwise); render
-   *  still reads the split directly, so `(intrinsicDims, transform)` stays
-   *  written. Making the split a projection of the ledger (dropping the
-   *  redundant writes) is the remaining stage-3 work. */
+  /** Persistent per-axis bbox ledger: the box-key equations that determine this
+   *  node's box. `layout()` seeds the self-layout size (+ a self-placed absolute
+   *  min), `_pinAnchor` records the absolute anchor a pin lands at, and a rank-2
+   *  `setExtent` resets the axis to its determining keys (overriding the
+   *  self-layout seed). Lazily created, so the hot single pin / `place()` path
+   *  allocates only on first touch. The `dims` getter reads this wherever an axis
+   *  is fully solved, falling back to the `(intrinsicDims, transform)` split. */
   private _bbox?: [BBox?, BBox?];
   /** Per-axis scope annotation: `true` = this node is a scale scope (it solves
    *  σ from its own box and hands it to descendants via a fresh array — claim
@@ -537,7 +512,6 @@ export class GoFishNode {
       key,
       type,
       args,
-      // inferDomains,
       resolveUnderlyingSpace,
       layout,
       lower,
@@ -547,7 +521,6 @@ export class GoFishNode {
       key?: string;
       type: string;
       args?: any;
-      // inferDomains: (childDomains: Size<Domain>[]) => FancySize<Domain | undefined>;
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
       layout: Layout;
       lower?: Lower;
@@ -556,9 +529,7 @@ export class GoFishNode {
     },
     children: GoFishAST[]
   ) {
-    // Generate unique ID
     this.uid = `node-${GoFishNode.uidCounter++}`;
-    // this.inferDomains = inferDomains;
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
     this._layout = layout;
     this._lower = lower;
@@ -573,13 +544,18 @@ export class GoFishNode {
     this.color = color;
   }
 
-  private collectColorValues(out: any[]): void {
+  /** Collect the distinct color values in this subtree, in first-seen order.
+   *  `seen` is the membership index for `out` (which keeps the order). */
+  private collectColorValues(out: any[], seen: Set<any> = new Set()): void {
     if (this.color !== undefined && isValue(this.color)) {
       const val = getValue(this.color);
-      if (!out.includes(val)) out.push(val);
+      if (!seen.has(val)) {
+        seen.add(val);
+        out.push(val);
+      }
     }
     this.children.forEach((child) => {
-      if (child instanceof GoFishNode) child.collectColorValues(out);
+      if (child instanceof GoFishNode) child.collectColorValues(out, seen);
     });
   }
 
@@ -728,18 +704,6 @@ export class GoFishNode {
   }
 
   /**
-   * Top-down walk that marks which nodes should render axes.
-   *
-   * `claimed` maps each dimension an ancestor already owns to a SIGNATURE of
-   * what claimed it: an ordinal axis records `"o:<keys>"`, a continuous axis (or
-   * an explicit override) records {@link AXIS_CLAIM_OPAQUE}. The signature lets
-   * ordinal axes NEST — a node claims its own ordinal axis even under an ancestor
-   * ordinal, as long as it's a DIFFERENT grouping (a finer level), so a
-   * grouped/faceted chart renders one ordinal axis per grouping level (per
-   * facet). Continuous axes stay single-owner (root-most wins): a descendant
-   * continuous axis on an already-claimed dim defers to the chart-level scale.
-   */
-  /**
    * Top-down pass that resolves coordinate-space axis aliases (e.g. polar
    * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` channels of each
    * mark's `dims`. Mirrors {@link resolveAxes}: it carries the `active` alias
@@ -791,12 +755,11 @@ export class GoFishNode {
   }
 
   /**
-   * Top-down pass that authors each dim's `embedded` flag — the flag the shape
-   * `_render` switches on to draw a mark as point (0 embedded axes) / line (1) /
+   * Top-down pass that authors each dim's `embedded` flag — the flag a shape's
+   * `lower` switches on to draw a mark as point (0 embedded axes) / line (1) /
    * area (2). It is the **sole author** of `embedded`, except an explicit
    * `emX`/`emY` (or `connect`'s `embed()`), which lock the flag to `true` and are
-   * never recomputed here. Replaces the construction-time `inferEmbedded` the
-   * shape factories used to apply (which couldn't see the axis).
+   * never recomputed here.
    *
    * Two routes by which a dim's edges become coordinate-space positions (so a
    * coord warps the extent):
@@ -807,8 +770,7 @@ export class GoFishNode {
    *   *position* measure — the measure of wherever the box sits in coord space
    *   (its `min`/`center`/`max`, whichever is a data value). A *foreign*-measure
    *   size (a scatter bubble's area at a positioned center, area ≠ position
-   *   measure) stays ink — drawn flat at the mapped center. This is the #534
-   *   payoff: the size now carries the source measure to compare.
+   *   measure) stays ink — drawn flat at the mapped center.
    *
    *   The discriminator is mark-LOCAL (size-vs-position on the same dim), not
    *   read from the coord: a polar coord *forgets* its axis measure (its
@@ -854,15 +816,26 @@ export class GoFishNode {
     });
   }
 
+  /**
+   * Top-down walk that marks which nodes should render axes.
+   *
+   * `claimed` maps each dimension an ancestor already owns to a SIGNATURE of
+   * what claimed it: an ordinal axis records `"o:<keys>"`, a continuous axis (or
+   * an explicit override) records {@link AXIS_CLAIM_OPAQUE}. The signature lets
+   * ordinal axes NEST — a node claims its own ordinal axis even under an ancestor
+   * ordinal, as long as it's a DIFFERENT grouping (a finer level), so a
+   * grouped/faceted chart renders one ordinal axis per grouping level (per
+   * facet). Continuous axes stay single-owner (root-most wins): a descendant
+   * continuous axis on an already-claimed dim defers to the chart-level scale.
+   */
   public resolveAxes(
     claimed: Map<0 | 1, string> = new Map(),
     enabled: Set<0 | 1> = new Set([0, 1])
   ): void {
-    // Note: a `layer` is treated like any other node below — it claims the
-    // axis for its own (unioned) space ONCE, so overlaid children share a single
-    // axis instead of each drawing its own (the elaboration pass then wraps the
-    // layer). Per-child axes still happen via explicit operator `axes:` overrides
-    // (e.g. faceted scatter), which the override branch honors regardless.
+    // A `layer` is treated like any other node: it claims the axis for its own
+    // (unioned) space ONCE, so overlaid children share a single axis. Per-child
+    // axes still happen via explicit operator `axes:` overrides, which the
+    // override branch honors regardless.
 
     // Coordinate-transform nodes (polar, clock, bipolar, etc.) manage their
     // own coordinate space; Cartesian axes make no sense for them or their
@@ -914,7 +887,14 @@ export class GoFishNode {
       return;
     }
 
-    const next = new Map(claimed);
+    // Copy-on-claim: most nodes claim nothing, so they pass `claimed` itself
+    // down. Every read below is of `claimed`, never of `next`, so deferring the
+    // copy is observationally identical.
+    let next = claimed;
+    const claim = (dim: 0 | 1, sig: string): void => {
+      if (next === claimed) next = new Map(claimed);
+      next.set(dim, sig);
+    };
     const space = this._underlyingSpace;
     for (const dim of [0, 1] as (0 | 1)[]) {
       const override =
@@ -971,7 +951,7 @@ export class GoFishNode {
             claimSig = shared.sig;
           }
         }
-        next.set(dim, claimSig); // claim regardless — false blocks children too
+        claim(dim, claimSig); // claim regardless — false blocks children too
       } else if (
         enabled.has(dim) &&
         space &&
@@ -993,7 +973,7 @@ export class GoFishNode {
           this.axisDemand[dim] = true;
           (this.hoistedAxisSpace ??= [undefined, undefined])[dim] =
             shared.space;
-          next.set(dim, shared.sig);
+          claim(dim, shared.sig);
         }
       } else if (enabled.has(dim) && space && !isUNDEFINED(space[dim])) {
         // A baseline magnitude ("free") owns no guide yet — only an anchored
@@ -1027,7 +1007,7 @@ export class GoFishNode {
           if (dim === 0) this.axis.x = true;
           else this.axis.y = true;
           this.axisDemand[dim] = true;
-          next.set(dim, sig);
+          claim(dim, sig);
         }
       }
     }
@@ -1082,9 +1062,6 @@ export class GoFishNode {
   }
 
   public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
-    // Axes are no longer drawn here: they are elaborated into ordinary shapes +
-    // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
-    // so the layout engine has no axis-specific budget/baseline machinery.
     this._allocatedSize = size; // frame extent for the y-up flip scope (#629)
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
@@ -1098,14 +1075,11 @@ export class GoFishNode {
     this.transform = elaborateTransform(transform);
     this.renderData = renderData;
 
-    // Stage 1 (#39): seed the per-axis ledger from this node's own layout. The
-    // `size` is frame-invariant; if the node also self-placed (`translate`
-    // defined), record the absolute `min` too, so a self-placing shape's ledger
-    // is fully determined and matches `combineDims`. While unplaced (`translate`
-    // undefined) only `size` is recorded — rank-1, `min`/`center`/`max` read
-    // `undefined`, the same "not yet placed" state `combineDims` encodes. The
-    // ledger is recorded only; `dims`/render still read `(intrinsicDims,
-    // transform)` until stage 2.
+    // Seed the per-axis ledger from this node's own layout: the `size` is
+    // frame-invariant, and a self-placed node (`translate` defined) also records
+    // the absolute `min`. While unplaced only `size` is recorded — rank-1, so
+    // `min`/`center`/`max` read `undefined`, the "not yet placed" state
+    // `combineDims` encodes.
     for (const dir of [0, 1] as const) {
       const id = this.intrinsicDims?.[dir];
       if (id?.size === undefined && id?.min === undefined) continue;
@@ -1116,29 +1090,21 @@ export class GoFishNode {
       const tr = this.transform?.translate?.[dir];
       if (tr !== undefined && id?.min !== undefined)
         this._addEquation(ledger, dir, "min", tr + id.min);
-      // Stage 3 (#39): the ledger now records the operator's self-placement
-      // (`min = translate + localMin`), so retire the redundant written translate
-      // — wholesale, at the one wrapper every operator `_layout` flows through,
-      // instead of editing each operator. The parent's later `place()` then
-      // short-circuits on the solved ledger, not the cleared translate.
+      // The ledger now records the self-placement (`min = translate + localMin`),
+      // so the redundant written translate is retired: the parent's later
+      // `place()` short-circuits on the solved ledger, not on the translate.
       this._clearTranslateIfSolved(dir);
     }
     return this;
   }
 
   public get dims(): Dimensions {
-    // Stage 2 (#39): the persistent per-axis ledger is the geometry AUTHORITY
-    // wherever it is fully solved (rank 2) — `dims` derives its absolute
-    // `(min, size)` from the ledger and re-derives center/max via
-    // `localAnchorPoint`, exactly as `combineDims` does. Where the ledger is
-    // under-determined or absent, fall back to the `(intrinsicDims, transform)`
-    // split (`combineDims`). The split is still WRITTEN by every mutator (render
-    // reads it directly via `INTERNAL_render`/`displayDims`), so this flips only
-    // `dims`-getter consumers (constraints, align/distribute, layer bbox fold) —
-    // never pixels-from-render. The two agree for every solved node (was proven by
-    // the now-retired stage-1 ledger mirror across all stories), so this is REAL=0.
-    // The split is only the fallback for an under-determined axis, so derive it
-    // lazily — a fully-solved node (the common post-layout case) never pays for it.
+    // The persistent per-axis ledger is the geometry AUTHORITY wherever it is
+    // fully solved (rank 2): `dims` derives its absolute `(min, size)` from the
+    // ledger and re-derives center/max via `localAnchorPoint`, exactly as
+    // `combineDims` does. An under-determined or absent ledger falls back to the
+    // `(intrinsicDims, transform)` split, derived lazily so a fully-solved node
+    // never pays for it.
     let split: Dimensions | undefined;
     const fromSplit = (dir: Direction) =>
       (split ??= combineDims(this.intrinsicDims, this.transform))[dir];
@@ -1153,18 +1119,15 @@ export class GoFishNode {
         max: localAnchorPoint("max", min, size),
         size,
         // `embedded` is a layout-fold flag, never a ledger key — read it from
-        // the local box (see the stage-2 invariants in the essay).
+        // the local box.
         embedded: this.intrinsicDims?.[dir]?.embedded,
       };
     });
   }
 
-  /** Stage 3-B (#39): the node's parent-frame offset (`transform.translate`) as
-   *  a DERIVED VIEW of the ledger — `ledger.min − localMin` on a fully solved
-   *  axis, else the written `transform.translate` (the unplaced/under-determined
-   *  fallback). This reproduces what `place()`/`_pinAnchor`/`setExtent` write
-   *  today (proven exact by the now-retired ledger mirror across all stories), so a
-   *  later increment can stop writing the field and read this instead. Uses the
+  /** The node's parent-frame offset (`transform.translate`) as a DERIVED VIEW of
+   *  the ledger — `ledger.min − localMin` on a fully solved axis, else the written
+   *  `transform.translate` (the unplaced/under-determined fallback). Uses the
    *  CURRENT `intrinsicDims.min` (a rank-2 `setExtent` resets it to 0), never a
    *  stale local box. */
   private _projectTranslate(dir: Direction): number | undefined {
@@ -1175,19 +1138,19 @@ export class GoFishNode {
     return min - (this.intrinsicDims?.[dir]?.min ?? 0);
   }
 
-  /** Stage 3 (#39): "is this axis already placed?" — read the LEDGER (a defined
-   *  `min` means positioned), not the written `transform.translate`, which is
-   *  retired where solved. The placement-state predicate `place()`'s short-circuit
-   *  and `_pinAnchor`'s override check share. */
+  /** "Is this axis already placed?" — read the LEDGER (a defined `min` means
+   *  positioned), not the written `transform.translate`, which is retired where
+   *  solved. Shared by `place()`'s short-circuit and `_pinAnchor`'s override
+   *  check. */
   private _isPlacedOn(dir: Direction): boolean {
     return this._bbox?.[dir]?.read("min") !== undefined;
   }
 
-  /** Stage 3 (#39): the single reconciliation every ledger write does — once the
-   *  position is recorded, the ledger is the authority on a solved axis, so CLEAR
-   *  the redundant written translate (the split becomes a projection, not a stale
-   *  mirror). An under-determined axis keeps its written fallback (left untouched).
-   *  Shared by the `layout()` seed, `_pinAnchor`, and rank-2 `setExtent`. */
+  /** The single reconciliation every ledger write does: on a solved axis the
+   *  ledger is the authority, so CLEAR the redundant written translate (the split
+   *  becomes a projection, not a stale mirror). An under-determined axis keeps its
+   *  written fallback. Shared by the `layout()` seed, `_pinAnchor`, and rank-2
+   *  `setExtent`. */
   private _clearTranslateIfSolved(dir: Direction): void {
     if (this._bbox?.[dir]?.solved && this.transform?.translate)
       this.transform.translate[dir] = undefined;
@@ -1209,35 +1172,25 @@ export class GoFishNode {
       reportConflict(this.type, dir as 0 | 1, conflict);
   }
 
-  /** Public read of {@link _projectTranslate} for cross-node geometry. `_ref`
-   *  accumulates the parent-frame translate up/down the tree to position a ref;
-   *  reading the ledger-derived value (== the written field today) keeps refs
-   *  working once stage 3-C retires the direct translate writes. */
+  /** Public read of {@link _projectTranslate} for cross-node geometry: `_ref`
+   *  accumulates the parent-frame translate up/down the tree to position a ref. */
   public projectedTranslate(dir: Direction): number | undefined {
     return this._projectTranslate(dir);
   }
 
   public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
-    const dir = elaborateDirection(axis);
-    const intrinsic = this.intrinsicDims?.[dir];
-    if (intrinsic?.min === undefined) return undefined;
-    if (
-      (anchor === "center" || anchor === "max") &&
-      intrinsic.size === undefined
-    )
-      return undefined;
-    return localAnchorPoint(anchor, intrinsic.min, intrinsic.size ?? 0);
+    return localAnchorOf(
+      this.intrinsicDims?.[elaborateDirection(axis)],
+      anchor
+    );
   }
 
   private get _displayTransform(): Transform | undefined {
     const tx = this._projectTranslate(0);
     const ty = this._projectTranslate(1);
     // Derive a transform whenever the ledger supplies a translate OR one was
-    // written — so render still sees the position once a mutator records it in
-    // the ledger but stops writing `transform` (stage 3 retiring the writes,
-    // starting with rank-2 `setExtent`). Returns undefined only for a node with
-    // neither (an unplaced leaf). Inert today: a solved ledger still coincides
-    // with a written transform until the first write is retired.
+    // written, so lowering sees the position either way. Undefined only for a
+    // node with neither (an unplaced leaf).
     if (tx === undefined && ty === undefined && !this.transform)
       return undefined;
     return { translate: [tx, ty], scale: this.transform?.scale };
@@ -1249,22 +1202,10 @@ export class GoFishNode {
     anchor: Anchor = "min"
   ): void {
     const dir = elaborateDirection(axis);
-    const intrinsic = this.intrinsicDims?.[dir];
-    const localMin = intrinsic?.min;
-    const size = intrinsic?.size;
-
-    // Is this anchor's local point determined yet? `center`/`max` are DERIVED
-    // from `(min, size)`, so they need both; `min`/`baseline` need only the local
-    // `min`. When not determined, the only thing place() can record is the local
-    // `min` (the lone stored anchor — `center`/`max` aren't stored); `baseline`
-    // can't resolve its origin without `localMin`, so it no-ops here (when
-    // determined it IS recorded, as the absolute min the origin implies — see
-    // `_pinAnchor`).
-    const determined =
-      anchor === "center" || anchor === "max"
-        ? localMin !== undefined && size !== undefined
-        : localMin !== undefined;
-    if (!determined) {
+    // Until the anchor's local point is determined (see `anchorDetermined`), the
+    // only thing place() can record is the local `min` — `center`/`max` aren't
+    // stored, and `baseline` can't resolve its origin without a local `min`.
+    if (!anchorDetermined(this.intrinsicDims?.[dir], anchor)) {
       if (anchor === "min") this.intrinsicDims![dir].min = value;
       return;
     }
@@ -1282,7 +1223,7 @@ export class GoFishNode {
   /**
    * Write a node's per-axis extent from OWNED bbox keys (min/max/center/size)
    * — the bbox-backed primitive that `span` and an authoritative `position` pin
-   * share (#39). Two or more owned keys DETERMINE the box (size included — the
+   * share. Two or more owned keys DETERMINE the box (size included — the
    * size-setting case, e.g. span's two edges), so the local box is reset to
    * `[0, size]` and the translate to the absolute min. A single owned key is a
    * position pin: the size comes from the node's own layout (the second
@@ -1292,14 +1233,11 @@ export class GoFishNode {
    * (the origin) is not a bbox key, so a baseline pin still uses `place()`.
    *
    * The rank-2 solve writes through the PERSISTENT per-axis ledger
-   * ({@link _bbox}) so it mirrors the node's authoritative geometry — a
+   * ({@link _bbox}) so it mirrors the node's authoritative geometry: a
    * determining constraint resets the axis (overriding the self-layout seed),
-   * matching the local-frame reset below. As of stage 2 the `dims` getter reads
-   * from this ledger where solved; the remaining #39 step is to make `place()`
-   * and render read it too, retiring the redundant `(intrinsicDims, transform)`
-   * writes (stage 3). Cross-call
-   * over-determination detection (two constraints fighting over one axis) waits
-   * on the authority model — a self-layout default vs a hard constraint pin.
+   * matching the local-frame reset below. Cross-call over-determination
+   * detection (two constraints fighting over one axis) waits on the authority
+   * model — a self-layout default vs a hard constraint pin.
    */
   public setExtent(
     axis: FancyDirection,
@@ -1312,7 +1250,6 @@ export class GoFishNode {
     ).filter((e): e is [BBoxKey, number] => e[1] !== undefined);
     if (keys.length === 0) return;
 
-    const intrinsic = this.intrinsicDims?.[dir];
     const sizeOwned = keys.length >= 2;
 
     if (!sizeOwned) {
@@ -1349,13 +1286,13 @@ export class GoFishNode {
       min: 0,
       size,
     };
-    // Stage 3 (#39): translate is derived from the solved ledger now, not written
-    // here; clear any stale prior value (see `_clearTranslateIfSolved`).
+    // Translate is derived from the solved ledger, not written here; clear any
+    // stale prior value (see `_clearTranslateIfSolved`).
     this._clearTranslateIfSolved(dir);
   }
 
   /**
-   * Authoritative override pin (#39): land `anchor` at `value`, REBUILDING the
+   * Authoritative override pin: land `anchor` at `value`, REBUILDING the
    * ledger when the axis was already self-placed — which the write-once `place()`
    * cannot do. The public face of {@link _pinAnchor}, shared by an authoritative
    * `position` pin (scatter repositioning a self-placed glyph). Handles EVERY
@@ -1383,15 +1320,13 @@ export class GoFishNode {
     // mutates it.
     const override = this._isPlacedOn(dir);
 
-    // Stage 3 (#39): record the pin into the ledger so it represents EVERY
-    // anchor — including `baseline`, the one that was missing. A `baseline` pin
-    // sets the box's local-0 ORIGIN (not a min/max/center edge); record the
-    // absolute min that origin implies — screen-min = origin + localMin =
-    // value + intrinsicDims.min — so `_projectTranslate`/`dims` derive a
-    // baseline-placed node's geometry like any other anchor. That closes the gap
-    // the σ-affine model is built on (origin = the intercept). A `setExtent`
-    // rank-1 / re-placement OVERRIDE rebuilds the axis ledger (a new position),
-    // re-seeding the frame-invariant size.
+    // Record the pin into the ledger so it represents EVERY anchor, `baseline`
+    // included. A `baseline` pin sets the box's local-0 ORIGIN (not a
+    // min/max/center edge), so record the absolute min that origin implies —
+    // screen-min = origin + localMin = value + intrinsicDims.min — and
+    // `_projectTranslate`/`dims` derive its geometry like any other anchor. A
+    // `setExtent` rank-1 / re-placement OVERRIDE rebuilds the axis ledger (a new
+    // position), re-seeding the frame-invariant size.
     this._bbox ??= [undefined, undefined];
     if (override || !this._bbox[dir]) this._bbox[dir] = new BBox();
     const ledger = this._bbox[dir]!;
@@ -1408,14 +1343,12 @@ export class GoFishNode {
     // written translate has its stale value cleared too, not left to diverge);
     // on an under-determined axis (size unknown) the write stays as the readers'
     // fallback. See `_clearTranslateIfSolved`.
-    this.ensureTranslate()[dir] =
-      value -
-      localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
+    this.ensureTranslate()[dir] = translateForAnchor(intrinsic, anchor, value);
     this._clearTranslateIfSolved(dir);
   }
 
   /**
-   * Write ONLY this axis's size (#726, align `"size"`) — no bbox ledger, no
+   * Write ONLY this axis's size (align `"size"`) — no bbox ledger, no
    * translate write. Overwrites whatever the node's own layout computed for
    * `size` (e.g. a bare rect's baked `DEFAULT_RECT_SIZE`) in place, so a
    * subsequent position write (a companion align, or the parent-seed
@@ -1533,8 +1466,8 @@ export class GoFishNode {
     throw new Error("Render session not set");
   }
 
-  /** Non-throwing session lookup for the layout-path σ-scope registry (Stage 6b):
-   *  the full `gofish()` flow always sets a session before layout, but a
+  /** Non-throwing session lookup for the layout-path σ-scope registry: the full
+   *  `gofish()` flow always sets a session before layout, but a
    *  standalone `node.layout(...)` (some coord/confluence tests) has none — then
    *  the scope solve just uses a throwaway registry with identical arithmetic. */
   public tryGetRenderSession(): RenderSession | undefined {
@@ -1547,54 +1480,8 @@ export class GoFishNode {
       : undefined;
   }
 
-  public render(
-    container: HTMLElement,
-    {
-      w,
-      h,
-      x,
-      y,
-      transform,
-      debug = false,
-      defs,
-      axes = false,
-      colorConfig,
-      padding,
-      yUp,
-      interaction,
-    }: {
-      w?: number;
-      h?: number;
-      x?: number;
-      y?: number;
-      transform?: { x?: number; y?: number };
-      debug?: boolean;
-      defs?: JSX.Element[];
-      axes?: AxesOptions;
-      colorConfig?: ColorConfig;
-      padding?: number;
-      yUp?: boolean;
-      interaction?: import("../interaction/runtime").InteractionRuntime;
-    }
-  ) {
-    return gofish(
-      container,
-      {
-        w,
-        h,
-        x,
-        y,
-        transform,
-        debug,
-        defs,
-        axes,
-        colorConfig,
-        padding,
-        yUp,
-        interaction,
-      },
-      this
-    );
+  public render(container: HTMLElement, options: GoFishRenderOptions) {
+    return gofish(container, options, this);
   }
 
   /**
@@ -1681,229 +1568,105 @@ export class GoFishNode {
   }
 }
 
-export const findPathToRoot = (node: GoFishNode): GoFishNode[] => {
-  const path: GoFishNode[] = [];
-  let current: GoFishNode | undefined = node;
-  while (current) {
-    path.push(current);
-    current = current.parent;
-  }
-  return path;
-};
-
-export const findLeastCommonAncestor = (
-  node1: GoFishNode,
-  node2: GoFishNode
-): GoFishNode => {
-  const path1 = findPathToRoot(node1);
-  const path2 = findPathToRoot(node2);
-
-  let i = path1.length - 1;
-  let j = path2.length - 1;
-  while (i >= 0 && j >= 0 && path1[i] === path2[j]) {
-    i--;
-    j--;
-  }
-  return path1[i + 1];
-};
-
 const isGoFishNode = (node: GoFishNode | GoFishAST): node is GoFishNode => {
   return "intrinsicDims" in node && "transform" in node && "dims" in node;
 };
 
-export const debugNodeTree = (
-  node: GoFishNode | GoFishAST,
-  indent: string = ""
-): void => {
-  // Get the name for display (handle both GoFishNode and GoFishRef)
-  const nodeName = isGoFishNode(node) ? node._name : node.name;
-
-  // Create a group for this node
-  console.group(
-    `${indent}Node: ${node.type}${nodeName ? ` (${nodeName})` : ""}`
-  );
-
-  // Only print GoFishNode specific properties
-  if (isGoFishNode(node)) {
-    // Print intrinsic dimensions
-    if (node.intrinsicDims) {
-      console.group(`${indent}Intrinsic Dimensions`);
-      node.intrinsicDims.forEach(
-        (
-          dim: { min?: number; center?: number; max?: number; size?: number },
-          i: number
-        ) => {
-          console.log(
-            `${i === 0 ? "Width" : "Height"}: ${JSON.stringify(
-              {
-                min: dim.min,
-                center: dim.center,
-                max: dim.max,
-                size: dim.size,
-              },
-              null,
-              2
-            )}`
-          );
-        }
-      );
-      console.groupEnd();
-    }
-
-    // Print transform
-    if (node.transform) {
-      console.log(
-        `${indent}Transform: ${JSON.stringify(
-          {
-            translate: node.transform.translate,
-          },
-          null,
-          2
-        )}`
-      );
-    }
-
-    // Print combined dimensions
-    console.log(
-      `${indent}Combined Dimensions: ${JSON.stringify(node.dims, null, 2)}`
-    );
-  }
-
-  // Print children
-  if ("children" in node && node.children && node.children.length > 0) {
-    console.group(`${indent}Children`);
-    node.children.forEach((child) => {
-      debugNodeTree(child, indent + "    ");
-    });
-    console.groupEnd();
-  }
-
-  console.groupEnd();
+const nodeLabel = (node: GoFishNode | GoFishAST): string => {
+  const name = isGoFishNode(node) ? node._name : node.name;
+  return `${node.type}${name ? ` (${name})` : ""}`;
 };
 
-export const debugUnderlyingSpaceTree = (
+/** One line per node, plus optional detail lines printed inside the node's
+ *  console group. The shared shape every debug tree printer below formats into. */
+type TreeLine = { label: string; details?: string[] };
+
+/** Depth-first console printer shared by the debug tree dumps: a node with
+ *  children (or detail lines) opens a console group, everything else is a
+ *  single line. */
+const walkTree = (
   node: GoFishNode | GoFishAST,
+  format: (node: GoFishNode | GoFishAST) => TreeLine,
   indent: string = ""
 ): void => {
-  // Get the underlying space for this node
-  const underlyingSpace = node.resolveUnderlyingSpace();
-
-  // Format the underlying space for display
-  const formatUnderlyingSpace = (
-    space: UnderlyingSpace | Size<UnderlyingSpace>
-  ): string => {
-    const fmt = (s: UnderlyingSpace): string => {
-      if (isCONTINUOUS(s)) {
-        const placement = spacePlacement(s);
-        return placement === "determined"
-          ? `position(${toJSON(continuousInterval(s)!)})`
-          : placement === "free"
-            ? `size(${s.width.run(1)})`
-            : `difference(${s.width.run(1)})`;
-      } else if (isORDINAL(s)) {
-        return `ordinal(${s.domain})`;
-      } else if (isUNDEFINED(s)) {
-        return `undefined`;
-      } else {
-        return "unknown";
-      }
-    };
-    return Array.isArray(space) ? `[${space.map(fmt).join(", ")}]` : fmt(space);
-  };
-
-  // Get the name for display (handle both GoFishNode and GoFishRef)
-  const nodeName = isGoFishNode(node) ? node._name : node.name;
-  const hasChildren =
-    "children" in node && node.children && node.children.length > 0;
-
-  // Create a group for this node only if it has children
-  if (hasChildren) {
-    console.group(
-      `${indent}${node.type}${nodeName ? ` (${nodeName})` : ""} → ${formatUnderlyingSpace(underlyingSpace)}`
-    );
-  } else {
-    console.log(
-      `${indent}${node.type}${nodeName ? ` (${nodeName})` : ""} → ${formatUnderlyingSpace(underlyingSpace)}`
-    );
-  }
-
-  // Print children
-  if (hasChildren) {
-    node.children.forEach((child) => {
-      debugUnderlyingSpaceTree(child, indent + "  ");
-    });
-    console.groupEnd();
-  }
+  const { label, details } = format(node);
+  const children = ("children" in node ? node.children : undefined) ?? [];
+  const grouped = children.length > 0 || (details?.length ?? 0) > 0;
+  if (grouped) console.group(`${indent}${label}`);
+  else console.log(`${indent}${label}`);
+  details?.forEach((line) => console.log(`${indent}${line}`));
+  children.forEach((child) => walkTree(child, format, indent + "  "));
+  if (grouped) console.groupEnd();
 };
 
-export const debugInputSceneGraph = (
-  node: GoFishNode | GoFishAST,
-  indent: string = ""
-): void => {
-  // Get the name for display (handle both GoFishNode and GoFishRef)
-  const nodeName = isGoFishNode(node) ? node._name : node.name;
-  const hasChildren =
-    "children" in node && node.children && node.children.length > 0;
-
-  // Format args for display
-  const formatArgs = (args: any): string => {
-    if (args === undefined || args === null) {
-      return "";
-    }
-
-    const formatValue = (val: any): string => {
-      if (
-        typeof val === "object" &&
-        val !== null &&
-        "type" in val &&
-        val.type === "datum"
-      ) {
-        return `v(${JSON.stringify(val.datum)})`;
-      } else if (Array.isArray(val)) {
-        const formattedArray = val.map(formatValue);
-        return `[${formattedArray.join(", ")}]`;
-      } else if (typeof val === "object" && val !== null) {
-        const formattedObj = Object.entries(val).map(
-          ([key, nestedVal]) => `${key}: ${formatValue(nestedVal)}`
+export const debugNodeTree = (node: GoFishNode | GoFishAST): void =>
+  walkTree(node, (n) => {
+    const details: string[] = [];
+    if (isGoFishNode(n)) {
+      n.intrinsicDims?.forEach((dim, i) => {
+        details.push(
+          `${i === 0 ? "Width" : "Height"}: ${JSON.stringify({
+            min: dim.min,
+            center: dim.center,
+            max: dim.max,
+            size: dim.size,
+          })}`
         );
-        return `{${formattedObj.join(", ")}}`;
-      }
-      return JSON.stringify(val);
-    };
-
-    try {
-      if (Array.isArray(args)) {
-        const formattedArray = args.map(formatValue);
-        return ` [${formattedArray.join(", ")}]`;
-      } else if (typeof args === "object") {
-        const formattedObj = Object.entries(args).map(
-          ([key, val]) => `${key}: ${formatValue(val)}`
-        );
-        return ` {${formattedObj.join(", ")}}`;
-      } else {
-        return ` ${formatValue(args)}`;
-      }
-    } catch {
-      return ` [Object]`;
+      });
+      if (n.transform)
+        details.push(`Transform: ${JSON.stringify(n.transform.translate)}`);
+      details.push(`Combined Dimensions: ${JSON.stringify(n.dims)}`);
     }
-  };
+    return { label: `Node: ${nodeLabel(n)}`, details };
+  });
 
-  // Create a group for this node only if it has children
-  if (hasChildren) {
-    console.group(
-      `${indent}${node.type}${nodeName ? ` (${nodeName})` : ""}${isGoFishNode(node) ? formatArgs(node.args) : ""}`
-    );
-  } else {
-    console.log(
-      `${indent}${node.type}${nodeName ? ` (${nodeName})` : ""}${isGoFishNode(node) ? formatArgs(node.args) : ""}`
-    );
+const formatSpace = (s: UnderlyingSpace): string => {
+  if (isCONTINUOUS(s)) {
+    const placement = spacePlacement(s);
+    return placement === "determined"
+      ? `position(${toJSON(continuousInterval(s)!)})`
+      : placement === "free"
+        ? `size(${s.width.run(1)})`
+        : `difference(${s.width.run(1)})`;
   }
+  if (isORDINAL(s)) return `ordinal(${s.domain})`;
+  if (isUNDEFINED(s)) return `undefined`;
+  return "unknown";
+};
 
-  // Print children
-  if (hasChildren) {
-    node.children.forEach((child) => {
-      debugInputSceneGraph(child, indent + "  ");
-    });
-    console.groupEnd();
+export const debugUnderlyingSpaceTree = (node: GoFishNode | GoFishAST): void =>
+  walkTree(node, (n) => ({
+    label: `${nodeLabel(n)} → [${n.resolveUnderlyingSpace().map(formatSpace).join(", ")}]`,
+  }));
+
+const formatArgValue = (val: any): string => {
+  if (
+    typeof val === "object" &&
+    val !== null &&
+    "type" in val &&
+    val.type === "datum"
+  ) {
+    return `v(${JSON.stringify(val.datum)})`;
+  }
+  if (Array.isArray(val)) return `[${val.map(formatArgValue).join(", ")}]`;
+  if (typeof val === "object" && val !== null) {
+    return `{${Object.entries(val)
+      .map(([key, nested]) => `${key}: ${formatArgValue(nested)}`)
+      .join(", ")}}`;
+  }
+  return JSON.stringify(val);
+};
+
+const formatArgs = (args: any): string => {
+  if (args === undefined || args === null) return "";
+  try {
+    return ` ${formatArgValue(args)}`;
+  } catch {
+    return ` [Object]`;
   }
 };
+
+export const debugInputSceneGraph = (node: GoFishNode | GoFishAST): void =>
+  walkTree(node, (n) => ({
+    label: `${nodeLabel(n)}${isGoFishNode(n) ? formatArgs(n.args) : ""}`,
+  }));

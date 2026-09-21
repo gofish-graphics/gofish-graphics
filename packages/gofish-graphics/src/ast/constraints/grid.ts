@@ -9,18 +9,17 @@
 // cell pinned to its (column, row) track intersection. It's the elaboration
 // target for `table` — `layer(cells).constrain(grid(...))`.
 //
-// **The unified sizing rule (Stage 6e).** Per axis, a track's extent is set by
+// **The unified sizing rule.** Per axis, a track's extent is set by
 // ONE rule — the (max, +) fold every other operator already uses:
 //
 //   track claim   = Monotonic.max(claims of the cells in that track)
 //   grid claim    = Monotonic.add(track claims) + gaps          (the σ-frame LHS)
 //
 // A claim-less ("fill") cell contributes nothing to its track. This subsumes
-// today's equal-flex box-division: an all-fill grid has no track claims, so the
-// leftover (allocated − gaps) splits equally among the tracks — bit-identical to
-// the former `sliceExtent`. Content-sized tracks emerge automatically when cells
-// carry size claims (a track sizes to its widest cell). Fill tracks share
-// whatever the claimed tracks leave over, equally.
+// equal-flex box-division: an all-fill grid has no track claims, so the leftover
+// (allocated − gaps) splits equally among the tracks. Content-sized tracks
+// emerge automatically when cells carry size claims (a track sizes to its widest
+// cell). Fill tracks share whatever the claimed tracks leave over, equally.
 //
 // `resolveGridTracks` is the single site that runs this rule; both the layout
 // budget (each cell is proposed its track's extent) and the placement (each cell
@@ -200,13 +199,7 @@ function resolveAxisTracks(
     );
   }
 
-  const starts: number[] = [];
-  let cursor = 0;
-  for (let i = 0; i < n; i++) {
-    starts.push(cursor);
-    cursor += extents[i] + spacing;
-  }
-  return { starts, extents };
+  return layoutTrack(extents, spacing);
 }
 
 /** Resolve both axes' tracks for a grid laid into `size`, under the unified
@@ -296,37 +289,35 @@ export type GridCellPlacement = {
   center: [number, number];
 };
 
-/** Cell centers from resolved tracks (Stage 6e) — or, when `tracks` is omitted,
- *  the equal box-division fallback used by the direct-solver tests. */
+/** Equal box-division tracks: every column/row gets the same slice of `size`.
+ *  The fallback for `gridCellPlacements` when no resolved tracks are handed in. */
+function equalTracks(
+  c: GridConstraint,
+  size: readonly [number, number]
+): [TrackLayout, TrackLayout] {
+  const numRows = numRowsOf(c);
+  const colExtent = sliceExtent(size[0], c.xSpacing, c.numCols);
+  const rowExtent = sliceExtent(size[1], c.ySpacing, numRows);
+  return [
+    layoutTrack(
+      Array.from({ length: c.numCols }, () => colExtent),
+      c.xSpacing
+    ),
+    layoutTrack(
+      Array.from({ length: numRows }, () => rowExtent),
+      c.ySpacing
+    ),
+  ];
+}
+
+/** Cell centers from resolved tracks — or, when `tracks` is omitted, the equal
+ *  box-division fallback used by the direct-solver tests. */
 export function gridCellPlacements(
   c: GridConstraint,
   size: readonly [number, number],
   tracks?: [TrackLayout, TrackLayout]
 ): GridCellPlacement[] {
-  const [cols, rows] =
-    tracks ??
-    ([
-      {
-        extents: Array.from({ length: c.numCols }, () =>
-          sliceExtent(size[0], c.xSpacing, c.numCols)
-        ),
-        starts: Array.from(
-          { length: c.numCols },
-          (_, j) =>
-            j * (sliceExtent(size[0], c.xSpacing, c.numCols) + c.xSpacing)
-        ),
-      },
-      {
-        extents: Array.from({ length: numRowsOf(c) }, () =>
-          sliceExtent(size[1], c.ySpacing, numRowsOf(c))
-        ),
-        starts: Array.from(
-          { length: numRowsOf(c) },
-          (_, r) =>
-            r * (sliceExtent(size[1], c.ySpacing, numRowsOf(c)) + c.ySpacing)
-        ),
-      },
-    ] as [TrackLayout, TrackLayout]);
+  const [cols, rows] = tracks ?? equalTracks(c, size);
   return c.children.map((child, index) => {
     const column = index % c.numCols;
     const row = Math.floor(index / c.numCols);
@@ -373,8 +364,8 @@ export function lowerGridPlacement(
 /**
  * A grid's axes are categorical: ORDINAL over the columns (x) and rows (y).
  * Keys come from `colKeys`/`rowKeys`, else the representative cells' keys —
- * first-row cells for columns, first-column cells for rows (matching the legacy
- * table). `cells` are the layer's children in row-major order.
+ * first-row cells for columns, first-column cells for rows. `cells` are the
+ * layer's children in row-major order.
  */
 export function gridSpaces(
   c: GridConstraint,

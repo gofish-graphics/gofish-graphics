@@ -114,7 +114,7 @@ export async function toJSONRawMark(
 // Walkers
 // ---------------------------------------------------------------------------
 
-/** Internal-private read of ChartBuilder's fields. */
+/** Internal-private read of ChartBuilder's state. */
 interface ChartBuilderInternals {
   data: unknown;
   options?: AnyObject;
@@ -126,7 +126,7 @@ interface ChartBuilderInternals {
 function chartBuilderInternals(
   chart: ChartBuilder<any>
 ): ChartBuilderInternals {
-  const c = chart as any;
+  const c = (chart as any).state;
   return {
     data: c.data,
     options: c.options,

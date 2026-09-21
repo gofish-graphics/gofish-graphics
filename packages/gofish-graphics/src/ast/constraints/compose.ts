@@ -10,7 +10,7 @@
 //
 //   claim(axis) = max-union over {
 //     each distribute(dir = axis):   its summed fold (Σ extent + spacing)   — series
-//     each align(spec on axis):      its overlay fold (alignSpaceFold)      — overlay
+//     each align(spec on axis):      its overlay fold (resolveAlignmentSpace) — overlay
 //     each child covered by neither: its raw extent                        — overlay
 //   }
 //
@@ -24,7 +24,7 @@
 // ORDINAL track axes — see constraints/grid.ts — not composed here.)
 //
 // The align fold is load-bearing, not cosmetic: in a bar chart (distribute on x,
-// bars aligned on y) it is `alignSpaceFold` that turns the bars' SIZE heights
+// bars aligned on y) it is `resolveAlignmentSpace` that turns the bars' SIZE heights
 // into the y data-axis POSITION domain. Only the uniform-string anchor folds (a
 // per-child anchor array has no single overlay form); its children then fall to
 // the raw-extent path.
@@ -48,18 +48,25 @@ import {
   isUNDEFINED,
   spaceMeasure,
 } from "../underlyingSpace";
-import { unionChildSpaces } from "../graphicalOperators/alignment";
+import {
+  resolveAlignmentSpace,
+  unionChildSpaces,
+} from "../graphicalOperators/alignment";
 import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
 import type { Measure } from "../data";
-import { distributeSpaceFold, type DistributeConstraint } from "./distribute";
-import { alignSpaceFold, type AlignConstraint } from "./align";
+import {
+  distributeChildrenInPlacementOrder,
+  distributeSpaceFold,
+  type DistributeConstraint,
+} from "./distribute";
+import { type AlignConstraint } from "./align";
 import { isPositionInterval, type PositionConstraint } from "./position";
-type AlignAnchor = "start" | "middle" | "end" | "baseline";
+import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
 
 /** A position constraint whose coordinates are *purely* interval form (at least
- *  one interval axis, no point axis). This is span's old regime: it size-sets
- *  its axis without blocking composition. A position carrying any *point*
+ *  one interval axis, no point axis). It size-sets its axis without blocking
+ *  composition. A position carrying any *point*
  *  coordinate is conservatively NOT span-like — it bails composition to the
  *  layer's default union (the distribute-relative-to-a-pin solve is deferred). */
 const isPureIntervalPosition = (c: ConstraintSpec): c is PositionConstraint =>
@@ -67,26 +74,6 @@ const isPureIntervalPosition = (c: ConstraintSpec): c is PositionConstraint =>
   (c.x === undefined || isPositionInterval(c.x)) &&
   (c.y === undefined || isPositionInterval(c.y)) &&
   (isPositionInterval(c.x) || isPositionInterval(c.y));
-
-const axisIndex = (axis: "x" | "y"): 0 | 1 => (axis === "x" ? 0 : 1);
-
-const childNameKey = (node: GoFishAST): string | undefined => {
-  if (typeof node !== "object" || node === null || !("_name" in node)) {
-    return undefined;
-  }
-  const name = node._name;
-  if (name === undefined) return undefined;
-  return typeof name === "string" ? name : name.__tag;
-};
-
-const buildNameIndex = (childNodes: GoFishAST[]): Map<string, number> => {
-  const m = new Map<string, number>();
-  for (let i = 0; i < childNodes.length; i++) {
-    const name = childNameKey(childNodes[i]);
-    if (name !== undefined && !m.has(name)) m.set(name, i);
-  }
-  return m;
-};
 
 /** One distribute's slice of the layout budget: equal shares of the axis size
  *  among its covered children (consumed by `layer.tsx`'s `layout`). */
@@ -219,7 +206,7 @@ export function composeConstraintSpaces(
   if (distributes.length + aligns.length + spans.length !== constraints.length)
     return undefined;
   // No series and no interval position → a pure overlay. Align-only composition
-  // WOULD fold (alignSpaceFold converts SIZE→POSITION), but for a pure overlay
+  // WOULD fold (resolveAlignmentSpace converts SIZE→POSITION), but for a pure overlay
   // that conversion only changes the layer's reported space (e.g. a legend's),
   // so defer it: fall to the default union. (An interval position on the other
   // axis makes it not an overlay, so the align fold runs.)
@@ -242,7 +229,7 @@ export function composeConstraintSpaces(
       (node as { _syntheticKey?: boolean })._syntheticKey === true
     );
   };
-  const idxOf = (refs: { name: string }[]): number[] | undefined => {
+  const idxOf = (refs: readonly { name: string }[]): number[] | undefined => {
     const out = refs.map((r) => indexByName.get(r.name));
     return out.every((i): i is number => i !== undefined) ? out : undefined;
   };
@@ -258,8 +245,7 @@ export function composeConstraintSpaces(
   };
   const segments: Seg[] = [];
   for (const d of distributes) {
-    const ordered =
-      d.order === "reverse" ? [...d.children].reverse() : d.children;
+    const ordered = distributeChildrenInPlacementOrder(d);
     const idx = idxOf(ordered);
     if (idx === undefined) return undefined;
     segments.push({
@@ -339,7 +325,9 @@ export function composeConstraintSpaces(
     }
     for (const a of als) {
       a.idx.forEach((i) => covered.add(i));
-      const fold = alignSpaceFold(
+      // `resolveAlignmentSpace` is spread's own cross-axis fold: anchored for
+      // start/end/baseline, unanchored for `middle`, union otherwise.
+      const fold = resolveAlignmentSpace(
         a.idx.map((i) => childSpaces[i][axis]),
         a.anchor
       );
@@ -353,10 +341,10 @@ export function composeConstraintSpaces(
       fragments.length > 0 ? unionChildSpaces(fragments, axis) : UNDEFINED;
     // This axis is covered by an align/distribute, so the FOLD is authoritative
     // — set it even when UNDEFINED, to OVERRIDE (suppress) the layer's default
-    // `unionChildSpaces`. The bespoke spread always reported its cross-axis fold
-    // (`resolveAlignmentSpace`), and for ORDINAL children that fold is UNDEFINED
-    // (no axis). Letting the default union win instead resurrects an ORDINAL —
-    // e.g. the waffle's row index leaks a spurious "Lake B-N" y-axis. (axisSize
+    // `unionChildSpaces`. For ORDINAL children the cross-axis fold
+    // (`resolveAlignmentSpace`) is UNDEFINED (no axis); letting the default
+    // union win instead resurrects an ORDINAL — e.g. the waffle's row index
+    // leaks a spurious "Lake B-N" y-axis. (axisSize
     // pads the off-axis with UNDEFINED, so `spaces[axis]` only ever carries this
     // axis's contribution.)
     spaces[axis] = composed;

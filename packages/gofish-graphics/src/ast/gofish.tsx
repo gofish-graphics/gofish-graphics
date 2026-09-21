@@ -15,14 +15,7 @@ import {
   type RenderSession,
 } from "./_node";
 import type { GoFishAST } from "./_ast";
-import {
-  posScaleFromSpace,
-  axisScale,
-  posFn,
-  type AxisMap,
-  type AxisScale,
-} from "./domain";
-import { bake } from "./coordinateTransforms/bake";
+import { axisScale, posFn, type AxisMap, type AxisScale } from "./domain";
 import { lowerToDisplayList, makeToPixelFor } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
@@ -47,11 +40,7 @@ import {
   perfEnabled,
   perfSetCount,
 } from "./perf";
-import {
-  elaborateAxes,
-  elaborateAxisTitles,
-  X_TITLE_NAME,
-} from "./axes/elaborate";
+import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import { getScopeRegistry, type EqualMeasureAxis } from "./solver/scopes";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
@@ -127,32 +116,31 @@ export type AxisOptions =
       labelAngle?: number | number[];
     };
 
-/** Per-dim axis `side` AS AUTHORED — `undefined` where the caller did not specify
- *  one, so the elaboration can tell an explicit `"start"` (literal frame-relative
- *  seating) apart from the default (a continuous x-axis defaults to the bottom). */
-export function resolveAxisSides(
-  axes: AxesOptions | undefined
-): ["start" | "end" | undefined, "start" | "end" | undefined] {
-  const sideOf = (o: AxisOptions | undefined): "start" | "end" | undefined =>
-    o && typeof o === "object" ? o.side : undefined;
-  if (axes && typeof axes === "object") return [sideOf(axes.x), sideOf(axes.y)];
+/** Read one `AxisOptions` field per dim, AS AUTHORED — `undefined` wherever the
+ *  caller did not specify it, so an elaboration can tell an explicit value apart
+ *  from the default (e.g. an explicit `side: "start"` vs. a continuous x-axis
+ *  defaulting to the bottom). */
+function perDimAxisOption<K extends keyof Extract<AxisOptions, object>>(
+  axes: AxesOptions | undefined,
+  key: K
+): [Extract<AxisOptions, object>[K], Extract<AxisOptions, object>[K]] {
+  const read = (o: AxisOptions | undefined) =>
+    o && typeof o === "object" ? o[key] : undefined;
+  if (axes && typeof axes === "object") return [read(axes.x), read(axes.y)];
   return [undefined, undefined];
 }
 
-/** Per-dim `labelAngle` AS AUTHORED — `undefined` where unset, matching
- *  `resolveAxisSides`'s shape. A `number` applies to every tier; a
- *  `number[]` is per-tier, innermost first (see `AxisOptions.labelAngle`). */
-export function resolveAxisLabelAngles(
+export const resolveAxisSides = (
   axes: AxesOptions | undefined
-): [number | number[] | undefined, number | number[] | undefined] {
-  const angleOf = (
-    o: AxisOptions | undefined
-  ): number | number[] | undefined =>
-    o && typeof o === "object" ? o.labelAngle : undefined;
-  if (axes && typeof axes === "object")
-    return [angleOf(axes.x), angleOf(axes.y)];
-  return [undefined, undefined];
-}
+): ["start" | "end" | undefined, "start" | "end" | undefined] =>
+  perDimAxisOption(axes, "side");
+
+/** A `number` applies to every tier; a `number[]` is per-tier, innermost first
+ *  (see `AxisOptions.labelAngle`). */
+export const resolveAxisLabelAngles = (
+  axes: AxesOptions | undefined
+): [number | number[] | undefined, number | number[] | undefined] =>
+  perDimAxisOption(axes, "labelAngle");
 
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
 // which needs a concrete canvas to scale data into (see the per-axis comment in
@@ -187,28 +175,18 @@ function resolveAxisTitles(
   };
 }
 
-/** True if `node` or any descendant satisfies `pred`. Shared depth-first walk
- *  behind the whole-subtree y-up triggers below. */
-const subtreeHas = (
-  node: GoFishNode,
-  pred: (n: GoFishNode) => boolean
-): boolean => {
-  if (pred(node)) return true;
-  const kids = node.children as (GoFishNode | unknown)[] | undefined;
-  if (kids)
-    for (const k of kids)
-      if (k instanceof GoFishNode && subtreeHas(k, pred)) return true;
-  return false;
-};
-
 /** True if `node` or any descendant is a `coord` node (polar/clock/wavy). A
  *  coordinate system flips its own scope (`resolveNodeFlip` in bake), so the
  *  chart-level chrome must follow it to the visual edge even when the root y is
  *  UNDEFINED (a pie's `count` has no cartesian y). The right convention for
  *  polar/coord is still open (#662); until then the presence of one anywhere is a
- *  chrome-mirror trigger, exactly as the pre-#629 global flip treated it. */
-const subtreeHasCoord = (node: GoFishNode): boolean =>
-  subtreeHas(node, (n) => (n as { type?: string }).type === "coord");
+ *  chrome-mirror trigger. */
+const subtreeHasCoord = (node: GoFishNode): boolean => {
+  if (node.type === "coord") return true;
+  for (const k of node.children ?? [])
+    if (k instanceof GoFishNode && subtreeHasCoord(k)) return true;
+  return false;
+};
 
 export async function layout(
   {
@@ -227,7 +205,6 @@ export async function layout(
     y?: number;
     transform?: { x?: number; y?: number };
     debug?: boolean;
-    defs?: JSX.Element[];
     axes?: AxesOptions;
     yUp?: boolean;
   },
@@ -257,15 +234,12 @@ export async function layout(
   // Note: callers must await `document.fonts.ready` before invoking
   // `layout()`. The public `gofish()` entry handles this; standalone
   // callers of `layout()` are responsible for the wait themselves.
+
   if (debug) {
     console.log("🌳 Input Scene Graph:");
     debugInputSceneGraph(child);
   }
 
-  // const domainAST = child.inferDomain();
-  // const sizeThatFitsAST = domainAST.sizeThatFits();
-  // const layoutAST = sizeThatFitsAST.layout();
-  // return render({ width, height, transform }, layoutAST);
   const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
@@ -302,6 +276,24 @@ export async function layout(
     undefined,
   ];
 
+  // Re-resolve after an elaboration pass rewrote `child`. The inserted nodes
+  // need the session and name resolution (a `ref()` stand-in resolves its
+  // target here, or layout throws "Selected node not found"), and because
+  // `resolveUnderlyingSpace` memoizes while a rewrite moves keys onto fresh
+  // wrappers, every cached space is cleared and recomputed from scratch.
+  //
+  // `withColorScale` is for the AXIS pass only: the color scale must be final
+  // before the legend pass consumes it, and the later passes insert chrome with
+  // non-literal fills ("gray" titles, swatches) that would otherwise be folded
+  // into the palette as if they were data values.
+  const reresolve = (n: GoFishNode, withColorScale = false) => {
+    if (contexts?.session) n.setRenderSession(contexts.session);
+    if (withColorScale) n.resolveColorScale();
+    n.resolveNames();
+    n.clearUnderlyingSpace();
+    n.resolveUnderlyingSpace();
+  };
+
   // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
   const __tAxes = perfNow();
   if (axes) {
@@ -334,14 +326,7 @@ export async function layout(
     titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
       child = elaborated.node;
-      if (contexts?.session) child.setRenderSession(contexts.session);
-      child.resolveColorScale();
-      child.resolveNames();
-      // The rewrite inserted new nodes (wrappers + axis shapes) and moved keys
-      // onto wrappers; `resolveUnderlyingSpace` memoizes, so clear every node's
-      // cached space and recompute the whole tree from scratch.
-      child.clearUnderlyingSpace();
-      child.resolveUnderlyingSpace();
+      reresolve(child, true);
     }
   }
 
@@ -353,10 +338,7 @@ export async function layout(
   const labelRes = await elaborateLabels(child, { yUp });
   if (labelRes.changed) {
     child = labelRes.node;
-    if (contexts?.session) child.setRenderSession(contexts.session);
-    child.resolveNames();
-    child.clearUnderlyingSpace();
-    child.resolveUnderlyingSpace();
+    reresolve(child);
   }
 
   // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
@@ -460,6 +442,9 @@ export async function layout(
   // captured pre-elaboration). An axis whose space carries no measure (e.g. a
   // magnitude whose measures forgot on conflict) simply gets no title.
   const { xTitle, yTitle } = resolveAxisTitles(axes, titleMeasures);
+  // The elaborated x-title node, when there is one — the chrome-frame stamp
+  // below needs its identity to exempt a far-seated title from the box-mirror.
+  let xTitleNode: GoFishNode | undefined;
   if (xTitle !== undefined || yTitle !== undefined) {
     // The x-axis title is authored at the SAME abstract side as its axis LINE, so
     // the two stay together and land at the same visual edge (#143/#16/#629):
@@ -479,7 +464,7 @@ export async function layout(
       xTitleSeatsFar ? "end" : (baseSides[0] ?? "start"),
       baseSides[1] ?? "start",
     ];
-    child = await elaborateAxisTitles(child, {
+    const titled = await elaborateAxisTitles(child, {
       xTitle,
       yTitle,
       anchors: titleAnchors,
@@ -487,13 +472,9 @@ export async function layout(
       yUp: chromeYUp,
       sides: titleSides,
     });
-    if (contexts?.session) child.setRenderSession(contexts.session);
-    // The title pass introduces `ref()` stand-ins (to the axis line / plot) that
-    // resolve their `selectedNode` during name resolution — without this they'd
-    // throw "Selected node not found" at layout time. Mirror the axes block:
-    // re-resolve names, then underlying space (memoized — only the new nodes).
-    child.resolveNames();
-    child.resolveUnderlyingSpace();
+    child = titled.node;
+    xTitleNode = titled.xTitleNode;
+    reresolve(child);
   }
 
   // Legend elaboration: turn the color scale into an ordinary subtree seated
@@ -523,8 +504,7 @@ export async function layout(
       chromeFlipsY
     );
     legendAdded = true;
-    if (contexts?.session) child.setRenderSession(contexts.session);
-    child.resolveUnderlyingSpace(); // memoized: computes only the new nodes
+    reresolve(child);
   }
   perfAdd("axes", perfNow() - __tAxes);
 
@@ -759,7 +739,7 @@ export async function layout(
         // edge directly and the title was authored to match (see `titleSides`), so
         // mirroring it here would lift it back above the line. Every other chrome
         // node (y-title, legend, colorbar) still mirrors.
-        if (n._name === X_TITLE_NAME && xTitleSeatsFar) return;
+        if (xTitleSeatsFar && n === xTitleNode) return;
         n._chromeFrame = frame;
         return;
       }
@@ -795,17 +775,7 @@ export async function layout(
   // a whole (`rootFlipsWhole`: a continuous-y chart, or the global `yUp`),
   // the canvas mirror sends authored max-past-finalH to the visual TOP and
   // authored negative min to the visual BOTTOM; on an unflipped root the
-  // authored directions ARE the painted ones, so the attribution swaps. The
-  // historical mapping was the flipped one unconditionally ("top ←
-  // max − finalH"), which mis-sided an unflipped chart's spill — harmless
-  // while every unflipped y-spill was small chrome absorbed into `pad` on
-  // either side (`reserve()`'s floor), but real content past the given
-  // canvas (elaborated labels below fixed-pitch rows, a ridgeline's painted
-  // amplitude) got its reserve on the wrong edge: a phantom gap on one side
-  // and clipping on the other. The painted-truth rule subsumes the former
-  // `_pitchPaintedTopSpill` special case (the ridgeline amplitude stamp) —
-  // an unflipped root's negative min is always painted-TOP content and its
-  // max-past-finalH painted-bottom, whatever produced them.
+  // authored directions ARE the painted ones, so the attribution swaps.
   const layoutMaxOverhang = Math.max(0, child.dims[1].max! - finalH);
   const layoutMinOverhang = Math.max(0, -child.dims[1].min!);
   const topOverhang = rootFlipsWhole ? layoutMaxOverhang : layoutMinOverhang;
@@ -917,7 +887,6 @@ export async function runLayout(
     y,
     transform,
     debug = false,
-    defs,
     axes = false,
     colorConfig,
   } = options;
@@ -962,7 +931,7 @@ export async function runLayout(
     }
 
     return await layout(
-      { w, h, x, y, transform, debug, defs, axes, yUp: options.yUp },
+      { w, h, x, y, transform, debug, axes, yUp: options.yUp },
       child,
       contexts
     );
@@ -979,12 +948,10 @@ export async function runLayout(
  *  magnitude axes. */
 const continuousDomain = (
   us?: UnderlyingSpace
-): [number, number] | undefined =>
-  us?.kind === "continuous" &&
-  us.dataDomain !== undefined &&
-  us.dataDomain !== "delta"
-    ? [us.dataDomain.min, us.dataDomain.max]
-    : undefined;
+): [number, number] | undefined => {
+  const iv = us && continuousInterval(us);
+  return iv ? [iv.min, iv.max] : undefined;
+};
 
 /** Build the `<svg>` JSX element from already-computed layout data. */
 function renderLayout(
@@ -1077,9 +1044,8 @@ export const gofish = (
 
   const [layoutData] = createResource(() => runLayout(options, child));
 
-  // Render to the provided container
   const dispose = solidRender(() => {
-    // used to handle async rendering of derived data
+    // Suspense covers the async layout resource (derived data resolves in it).
     return (
       <Suspense fallback={<div>Loading...</div>}>
         {(() => {
@@ -1289,12 +1255,11 @@ export const render = (
 ): JSX.Element => {
   const pad = svgPadding ?? PADDING;
 
-  // Chrome (axis tick/label rows, titles, the legend column) is now elaborated
-  // into ordinary shapes that live in the node tree; `render()` only sizes the
-  // SVG around their measured extent — no chart-chrome special cases remain.
-  // Content seated beyond the canvas by a constraint (e.g. marginal histogram
-  // bands above/right of a scatter) is measured the same way, via the per-side
-  // overhangs — including the new top and non-legend right gutters.
+  // Chrome (axis tick/label rows, titles, the legend column) is elaborated into
+  // ordinary shapes that live in the node tree; `render()` only sizes the SVG
+  // around their measured extent. Content seated beyond the canvas by a
+  // constraint (e.g. marginal histogram bands above/right of a scatter) is
+  // measured the same way, via the per-side overhangs.
   //
   // Reserve enough on each gutter side to clear the measured overhang plus a
   // little breathing room from the SVG edge. The `o > 0` guard keeps a chart
