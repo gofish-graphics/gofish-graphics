@@ -25,8 +25,8 @@ export type { FieldAccessor, LiteralValue } from "./ast/data";
 // (`.sort()`, `.bin()`, `.normalize()`, aggregates); `FieldOp` is one step of
 // its serialized `ops` pipeline. Exported so consumers can type against the
 // value the operator docs describe.
-export { FieldExpr } from "./ast/fieldExpr";
-export type { FieldOp } from "./ast/fieldExpr";
+export { FieldExpr, between } from "./ast/fieldExpr";
+export type { FieldOp, BetweenOptions } from "./ast/fieldExpr";
 // Measure-provenance tagging: how a data transform (e.g. `bin`) declares that
 // its output columns are in a source field's units. The deserializer re-applies
 // it to RPC-returned rows (the array symbol can't cross the bridge).
@@ -166,6 +166,7 @@ export { image } from "./ast/shapes/image";
 export {
   chart,
   derive,
+  filter,
   resolve,
   join,
   rect,
@@ -225,15 +226,34 @@ export type {
 
 // Reactive interaction layer (JS-only; no Python/IR bridge). Signals live
 // OUTSIDE the layout pipeline — see src/interaction/ and the reactivity docs.
-export { live, pointer, drag, wheel, timer, signal } from "./interaction";
+export {
+  live,
+  pointer,
+  drag,
+  click,
+  wheel,
+  timer,
+  signal,
+  slider,
+  button,
+} from "./interaction";
 export type {
   LiveValue,
   Pointer,
   Drag,
   DragOptions,
+  Click,
+  ClickOptions,
+  SliderOptions,
+  ButtonOptions,
+  Control,
+  FrameBoxReader,
   Wheel,
   WheelOptions,
   Timer,
   TimerOptions,
+  TimerValues,
   Signal,
+  SvgPoint,
+  SvgBox,
 } from "./interaction";

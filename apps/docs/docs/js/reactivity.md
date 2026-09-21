@@ -82,7 +82,7 @@ form is what makes a component reactive:
 import { GoFish, spreadX, rect, live, wheel, timer } from "gofish-graphics";
 
 const n = wheel({ range: [1, 8], initial: 3, round: true });
-const t = timer({ interval: 500 });
+const t = timer({ domain: [0, 1], step: 1, duration: 1000 }); // 0, 1, 0, 1, …
 
 // A thunk: reading n() here (outside live) makes it a pipeline dependency, so a
 // scroll re-runs the whole component and re-lays-out.
@@ -94,7 +94,7 @@ GoFish(container, { w: 460, h: 260 }, () => {
       rect({
         w: 48,
         h: 70 + i * 18,
-        fill: live(() => (t() % 2 === 0 ? "#6b9bd1" : "#3a6ea5")),
+        fill: live(() => (t() === 0 ? "#6b9bd1" : "#3a6ea5")),
       })
     )
   );
@@ -140,7 +140,15 @@ datum by _invoking_ it with an object: `rect({ … })(box)`.
 Import the inputs and `live` from `gofish-graphics`:
 
 ```ts
-import { live, pointer, drag, wheel, timer, signal } from "gofish-graphics";
+import {
+  live,
+  pointer,
+  drag,
+  click,
+  wheel,
+  timer,
+  signal,
+} from "gofish-graphics";
 ```
 
 Each input is a small object of accessor functions. Reading an accessor during
@@ -153,20 +161,40 @@ const p = pointer();
 p.pos(); // { x, y } in svg pixels, or undefined when off the chart
 p.dataPos(); // { x?, y? } in data coordinates; per-axis
 p.datum(); // the datum of the mark under the pointer (hit-test)
-p.down(); // true while the primary button is held over the chart
+p.isDown(); // true while the primary button is held over the chart
+p.nodeBox(id); // { x, y, w, h } in svg px: where that node landed on screen
 ```
 
 ### `drag(options?)`
 
 ```ts
-const d = drag({ hitTest: (pt) => pt.y > 40 }); // optional: where a drag may start
-d.active(); // true while a drag is in progress
+const d = drag({ hitTest: (pt, hit) => pt.y > 40 }); // optional: where a drag may start
+d.isActive(); // true while a drag is in progress
 d.origin(); // pointer-down position (svg px)
 d.current(); // latest position (svg px)
 d.delta(); // current − origin (svg px)
 d.originData(); // origin in data coordinates
 d.currentData(); // current in data coordinates
+d.nodeBox(id); // { x, y, w, h } in svg px: where that node landed on screen
 ```
+
+`hitTest` receives the pointer-down position **and** the display item under it
+(`hit.id` is the node's `data-gf-id`, `hit.datum` its datum), so a control can
+claim drags that start on its own nodes and ignore everything else.
+
+`nodeBox(id)` answers the other half of that question — not "what did I press?"
+but "where is my own node?". Give it a node's uid (`hit.id`, or the uid of a node
+you built yourself) and you get that node's box in svg pixels, read off the frame
+the chart last published, so a control can map a pointer position onto its own
+geometry without measuring anything in the DOM. This is how the
+[slider](/js/controls) turns a press on its track into a value. It is general
+frame state, not drag state, so `pointer()` and `click()` expose the same
+accessor. Three things to know: the box **is not a signal** (it is frame state,
+replaced wholesale by each render, so a new box wakes nothing on its own — read it
+from an effect that a pointer or drag signal already woke); it needs the input to be
+[attached](#data-space-reads-need-an-attached-input), like the data-space reads;
+and it returns `undefined` for a node that is not in the current frame or whose
+primitive carries no box of its own (a `text` or a `path`).
 
 The data-space variants (`dataPos`, `originData`, `currentData`) convert pixels
 back to data values using the chart's scales, **per axis**: each returns
@@ -175,6 +203,28 @@ scale — an ordinal/band axis (e.g. a category axis) has no data coordinate, so
 that axis comes back `undefined`. The whole result is `undefined` only when no
 axis converts (or the pointer is off the chart). See the
 [caveat below](#data-space-reads-need-an-attached-input).
+
+### `click(options?)`
+
+A click is neither a pointer state nor a drag: it is the pair press-then-release
+on the same target. `click()` counts them.
+
+```ts
+const picks = click(); // optional: { hitTest: (pt, hit) => boolean }
+picks.count(); // how many clicks so far — enough to drive a button
+picks.isArmed(); // true between a press and its release (the "held" state)
+picks.nodeBox(id); // as on pointer()/drag(): where that node landed on screen
+```
+
+It counts rather than accumulating a table of clicks. Treating an input as a
+dataset you could chart is a real design, tracked as issue #830, and is not
+guessed at here.
+
+`hitTest` decides which targets count, from the pointer position and the display
+item under it (`hit.id` is the node's `data-gf-id`, `hit.datum` its datum). It is
+also the acceptance test on release, so a control made of several nodes (a box
+plus its caption) reads as one target. Without it, a click commits only when the
+release is over the very node the press hit.
 
 ### `wheel(options)`
 
@@ -193,20 +243,72 @@ bins.set(20); // set it directly
 the midpoint); `round` snaps to integers (for bin/item counts); `sensitivity`
 scales raw scroll delta.
 
-### `timer(options?)`
+### `timer(options?)` {#timer-options}
+
+A timer is a **scale from a data domain onto wall-clock time, read backward**.
+You say which values you want and how long one pass through them should take,
+and reading the timer gives you a value of your data — a day, a year, a
+category — rather than a count of ticks:
 
 ```ts
-const t = timer({ interval: 400 }); // ms per tick; default 16 (~60fps)
-t(); // current tick count; lazy-starts the timer on first read
-t.stop(); // pause
-t.start(); // resume
+const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
+day(); // a day number: 1, 2, 3, … 365 over ten seconds, then round again
+day.set(200); // seek, in days
+day.pause();
+day.play();
+day.isPlaying(); // true while it is running
+day.domain; // [1, 365]
+day.step; // 1
 ```
 
-Useful for animation and for exercising both regimes deterministically.
+The whole behavior is one equation:
+
+```ts
+t() = scale(domain → [0, duration]).invert(elapsed)
+```
+
+| Option     | Meaning                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `domain`   | `[lo, hi]` (two numbers) is continuous; any other array is a band over those values, emitted one at a time. Omitted: `[0, duration]`. |
+| `duration` | Milliseconds for one pass through the domain. Default 5000.                                                                           |
+| `step`     | Quantize a continuous domain to `lo + k*step`, rounding down. Ignored for a band domain.                                              |
+| `loop`     | Wrap at the end (default `true`). When `false` the clock stops at the end of the domain.                                              |
+| `playing`  | Start playing (default `true`). `false` starts paused at the domain's start.                                                          |
+
+A band domain is the shape Observable's Scrubber uses, and the one Animated
+Vega-Lite gives a time encoding by default:
+
+```ts
+const season = timer({ domain: ["spring", "summer", "fall", "winter"] });
+season(); // "spring", then "summer", …
+```
+
+With no domain at all you get the degenerate case, a plain elapsed-milliseconds
+clock: `timer({ duration: 1000 })` counts 0 to 1000 and repeats.
+
+`.set(v)` seeks in domain units and does **not** change whether the clock is
+playing — a scrubber decides that for itself, usually by pausing on pointer-down.
+
+A value that does not change writes nothing, so a quantized clock costs one
+re-render per step, not one per frame.
+
+A quantized domain — a band, or `[lo, hi]` with a `step` — gives every one of its
+values an equal share of the loop, the last one included: a 365-day year over ten
+seconds spends the final 1/365 of each pass on day 365, and `set(365)` then reads
+back as 365. A continuous domain with no `step` is the one case where the ends
+meet: `lo` and `hi` are the same instant of a looping sweep, the way 0° and 360°
+are the same angle, so `hi` is approached at the instant before the wrap rather
+than emitted. Give the domain a `step` if you need the high end as a value of its
+own.
 
 A `timer()` is **not** tied to any chart's lifetime: it runs until you call
-`.stop()`. Re-rendering a chart (or replacing it in its container) does not stop
-a timer you started, so stop it yourself when you no longer need it.
+`.pause()`. Re-rendering a chart (or replacing it in its container) does not stop
+a timer you started, so pause it yourself when you no longer need it.
+
+::: tip Naming
+Methods that do something are verbs (`play`, `pause`, `set`); boolean readables
+are `isX` (`timer().isPlaying()`, `drag().isActive()`, `pointer().isDown()`).
+:::
 
 ### `signal(init)`
 
@@ -226,6 +328,11 @@ it is **invisible** to the pipeline: reading it in a `derive()` or a layout
 channel will not schedule a re-run. If a parameter affects layout, use gofish's
 `signal()`.
 :::
+
+## Controls
+
+`slider` and `button` are controls built out of these inputs, as ordinary marks
+you lay out with the ordinary operators. See [Controls](/js/controls).
 
 ## Examples
 
@@ -309,7 +416,7 @@ chart(data, { axes: true })
       // Reading `dr` here also attaches the drag input to this chart, so
       // currentData() can use the chart's scales.
       fill: live((d) => {
-        dr.active();
+        dr.isActive();
         const total = sumBy(d, "count"); // d is the spread group — aggregate
         return total > cut() ? "#d62728" : "#6b9bd1";
       }),
@@ -327,35 +434,72 @@ chart(data, { axes: true })
 Read a `timer()` inside `live()` to pulse a fill without re-laying-out:
 
 ```ts
-const t = timer({ interval: 400 });
+// Two states, 400ms each
+const t = timer({ domain: [0, 1], step: 1, duration: 800 });
 
 chart(base, { axes: true })
   .flow(spread({ by: "cat", dir: "x" }))
   .mark(
     rect({
       h: "count",
-      fill: live(() => (t() % 2 === 0 ? "#6b9bd1" : "#d62728")),
+      fill: live(() => (t() === 0 ? "#6b9bd1" : "#d62728")),
     })
   )
   .render(container, { w: 400, h: 300 });
 ```
 
-…or read it inside `derive()` to grow the data each tick (a full re-run per tick,
-coalesced to one per frame):
+…or read it inside `derive()` to re-shape the data as it advances (a full re-run
+per new value, coalesced to one per frame):
 
 ```ts
-const t = timer({ interval: 500 });
 const WINDOW = 20;
+// The window's right edge, in the series' own index units.
+const head = timer({
+  domain: [0, series.length - 1],
+  step: 1,
+  duration: series.length * 500,
+});
 
 chart(series, { axes: true })
   .flow(
-    // slide a rolling window over the real series each tick → full re-run
-    derive((rows) => rows.slice(Math.max(0, t() - WINDOW + 1), t() + 1)),
+    // slide a rolling window over the real series → full re-run
+    derive((rows) => rows.slice(Math.max(0, head() - WINDOW + 1), head() + 1)),
     spread({ by: "t", dir: "x" })
   )
   .mark(rect({ h: "count", fill: "#6b9bd1" }))
   .render(container, { w: 500, h: 300 });
 ```
+
+### Animating a filter
+
+Because the timer's value is a value of your data, playing a chart through time
+is an ordinary [`filter`](/js/api/operators/filter):
+
+```ts
+const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
+
+chart(birds)
+  .flow(
+    filter((d) => d.day === day()),
+    scatter({ x: "lon", y: "lat" })
+  )
+  .mark(circle({ r: 3, fill: "species" }))
+  .render(container, { w: 600, h: 600 });
+```
+
+A trail is the same thing over a window. The clock read goes in the predicate
+itself, so the window follows the playhead:
+
+```ts
+.flow(
+  filter((d) => between(day() - d.day, 0, 20, { closed: "left" })),
+  scatter({ x: "lon", y: "lat" })
+)
+.mark(circle({ r: 3, fill: "species", opacity: (d) => (d.day === day() ? 1 : 0.1) }))
+```
+
+Note that the filtered rows are the ones the scales see; see
+[filter › Domains are inferred from what survives](/js/api/operators/filter#domains-are-inferred-from-what-survives).
 
 ## Caveats
 
