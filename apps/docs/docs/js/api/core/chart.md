@@ -29,14 +29,15 @@ never mistaken for data.
 
 ## Parameters
 
-| Parameter       | Type                  | Description                                                                                                                                                                  |
-| --------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`          | `T`                   | The dataset to visualize                                                                                                                                                     |
-| `options.w`     | `number`              | Width hint for the chart frame                                                                                                                                               |
-| `options.h`     | `number`              | Height hint for the chart frame                                                                                                                                              |
-| `options.coord` | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
-| `options.color` | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
-| `options.axes`  | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
+| Parameter        | Type                  | Description                                                                                                                                                                  |
+| ---------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`           | `T`                   | The dataset to visualize                                                                                                                                                     |
+| `options.w`      | `number`              | Width hint for the chart frame                                                                                                                                               |
+| `options.h`      | `number`              | Height hint for the chart frame                                                                                                                                              |
+| `options.coord`  | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
+| `options.color`  | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
+| `options.axes`   | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
+| `options.legend` | `boolean`             | Whether to draw the color-scale legend. Default `true`. See [Legend](#legend) below.                                                                                         |
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 
@@ -64,6 +65,21 @@ Each axis title defaults to the field that dimension encodes (e.g. `count` for
 to show the axis with no title. Manual `axis: true/false` overrides on individual
 operators within the chart are still respected when `axes: true`. See
 [render › Axes](/js/api/core/render#axes) for live examples.
+
+## Legend
+
+When a chart's marks color by a field, GoFish resolves a color scale and draws
+it beside the plot: a swatch column for a categorical scale, a colorbar for a
+gradient. `legend: false` suppresses that chrome. The marks keep their colors —
+only the legend goes away.
+
+```ts
+chart(data, { legend: false });
+```
+
+Use it when the legend would cost more than it explains: a map colored by 72
+species, where the swatch column would take more room than the map itself, or a
+chart whose colors are already labeled in place.
 
 ## Equal scale from a shared measure
 
