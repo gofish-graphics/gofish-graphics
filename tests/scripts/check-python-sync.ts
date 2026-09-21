@@ -28,6 +28,7 @@ import {
   readdirSync,
 } from "fs";
 import { join, dirname, relative } from "path";
+import ts from "typescript";
 import { mapJsToPython } from "./path-mapping.js";
 export { mapJsToPython } from "./path-mapping.js";
 
@@ -133,6 +134,10 @@ function isExportExempt(
 //     `Chart`→`chart` / `Layer`→`layer` rename in a JS story has no Python
 //     counterpart, since Python was always lowercase. Canonicalizing the case
 //     before comparing folds those renames out.
+//   - **Comments and whitespace** — a Python story mirrors the spec, not the
+//     prose around it, so a comment-only edit needs no Python change.
+//     Tokenizing with the TypeScript scanner drops comments without touching
+//     string contents (a `//` inside a URL string survives).
 // ---------------------------------------------------------------------------
 
 function stripStorybookChrome(source: string): string {
@@ -156,13 +161,29 @@ function stripStorybookChrome(source: string): string {
   return out.join("\n");
 }
 
+/** The source as a whitespace-separated token stream, comments dropped. */
+function stripComments(source: string): string {
+  const scanner = ts.createScanner(
+    ts.ScriptTarget.Latest,
+    /* skipTrivia */ true,
+    ts.LanguageVariant.JSX,
+    source
+  );
+  const tokens: string[] = [];
+  while (scanner.scan() !== ts.SyntaxKind.EndOfFileToken) {
+    tokens.push(scanner.getTokenText());
+  }
+  return tokens.join(" ");
+}
+
 /** Fold the lowercased v3 aliases so a pure casing rename is spec-neutral. */
 function canonicalizeApiCasing(source: string): string {
   return source.replace(/\bChart\b/g, "chart").replace(/\bLayer\b/g, "layer");
 }
 
 /** True when the file's change between baseRef's merge-base and HEAD touches
- * only spec-neutral content (Storybook chrome and/or `Chart`/`Layer` casing). */
+ * only spec-neutral content (Storybook chrome, `Chart`/`Layer` casing,
+ * comments, whitespace). */
 function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
   try {
     const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {
@@ -176,7 +197,7 @@ function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
     });
     const headContent = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
     const normalize = (s: string) =>
-      canonicalizeApiCasing(stripStorybookChrome(s));
+      stripComments(canonicalizeApiCasing(stripStorybookChrome(s)));
     return normalize(baseContent) === normalize(headContent);
   } catch {
     return false; // can't prove it — fall through to the strict check
@@ -540,7 +561,7 @@ for (const jsFile of modifiedJs) {
         pythonFile,
         changeType: "modified",
         status: "ok",
-        message: `Only spec-neutral content changed (Storybook chrome / Chart·Layer casing) — no Python update needed`,
+        message: `Only spec-neutral content changed (Storybook chrome / Chart·Layer casing / comments) — no Python update needed`,
       });
       console.log(`  OK (spec-neutral): ${jsFile}`);
       continue;
