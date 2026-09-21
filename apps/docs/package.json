@@ -10,7 +10,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "gallery:thumbnails": "pnpm --filter @gofish/tests capture-gallery",
     "docs:dev": "pnpm run docs:types && vitepress dev docs",
-    "docs:build": "pnpm run gallery:thumbnails && pnpm run docs:types && NODE_OPTIONS=--max-old-space-size=8192 vitepress build docs",
+    "docs:build": "pnpm run gallery:thumbnails && pnpm run docs:types && NODE_OPTIONS=--max-old-space-size=12288 vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "docs:types": "typedoc",
     "sync-backlinks": "node scripts/sync-backlinks.mjs sync",
