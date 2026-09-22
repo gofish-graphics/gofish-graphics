@@ -1,0 +1,45 @@
+# The summary bot (a GitHub App used by weekly-summary.yml) has an installation
+# token with repo-wide contents write, and GitHub cannot scope a credential to a
+# folder. This workflow is a required check on main, and it is what keeps the
+# bot's PRs limited to adding files under summaries/. The app must not be
+# granted the Workflows permission, so it cannot edit this guard in its own PR.
+name: Bot PR Guard
+on: pull_request
+
+jobs:
+  bot-pr-guard:
+    name: bot-pr-guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check bot PR paths
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          SUMMARY_BOT_LOGIN: ${{ vars.SUMMARY_BOT_LOGIN }}
+        run: |
+          set -euo pipefail
+          if [ -n "$SUMMARY_BOT_LOGIN" ] && [ "$AUTHOR_LOGIN" = "$SUMMARY_BOT_LOGIN" ]; then
+            FILES=$(gh pr diff --name-only "$PR_NUMBER")
+            if [ -z "$FILES" ]; then
+              echo "::error::PR #$PR_NUMBER by $AUTHOR_LOGIN changes no files."
+              exit 1
+            fi
+            BAD=$(grep -Ev '^summaries/[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$' <<< "$FILES" || true)
+            if [ -n "$BAD" ]; then
+              echo "::error::$AUTHOR_LOGIN may only change summaries/YYYY-MM-DD.md, but PR #$PR_NUMBER also changes: $(paste -sd ' ' - <<< "$BAD")"
+              exit 1
+            fi
+            echo "✅ PR #$PR_NUMBER by $AUTHOR_LOGIN only changes summaries:"
+            echo "$FILES"
+          elif [ "$AUTHOR_TYPE" = "Bot" ] && [ -z "$SUMMARY_BOT_LOGIN" ]; then
+            echo "::error::The bot PR guard is not configured: set the SUMMARY_BOT_LOGIN repository variable to the summary bot's login (<app-slug>[bot]). Bot PRs fail until it is set."
+            exit 1
+          else
+            echo "Not a summary bot PR; nothing to check."
+          fi

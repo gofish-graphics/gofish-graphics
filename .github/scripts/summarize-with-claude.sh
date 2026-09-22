@@ -3,7 +3,8 @@ set -e
 
 # Script to generate a weekly summary using Claude API
 # Expects prs.txt to exist in the current directory
-# Outputs summary to summary.txt
+# Outputs summary to summary.md (plain Markdown, reusable for Discord,
+# release notes, the website, etc.)
 
 # Check if required file exists
 if [ ! -f prs.txt ]; then
@@ -46,7 +47,7 @@ CONTRIBUTOR_CALLOUTS=$(
     }
     END {
       for (a in seen) {
-        printf("- %s: <%s|PR #%s> - %s\n", a, firstUrl[a], firstPr[a], firstTitle[a])
+        printf("- %s: [PR #%s](%s) - %s\n", a, firstPr[a], firstUrl[a], firstTitle[a])
       }
     }
   ' prs.txt | sort
@@ -61,7 +62,7 @@ PR_COUNT=$(grep -c '^### PR #' prs.txt || true)
 
 # Build the prompt template
 read -r -d '' PROMPT_TEMPLATE <<'ENDPROMPT' || true
-You are summarizing a week of development on GoFish, a charting library for data visualization. Create a Slack-friendly weekly update.
+You are summarizing a week of development on GoFish, a charting library for data visualization. Create a short weekly update in plain Markdown (it will be posted to Discord and may be reused for release notes).
 
 ## Merged PRs from the last 7 days:
 PRS_PLACEHOLDER
@@ -72,19 +73,19 @@ PR_COUNT_PLACEHOLDER
 ## Contributor coverage requirements (MUST follow):
 CONTRIBUTOR_CALLOUTS_PLACEHOLDER
 
-Write a concise weekly summary using Slack mrkdwn format (NOT standard Markdown):
-- Use *single asterisks* for bold (Slack does NOT support **double asterisks**)
-- Use *Section Name* for section headers (Slack does NOT support # or ## headers)
-- Use • or - for bullet points
-- Use _underscores_ for italics if needed
-- When mentioning any PR in the summary, format it as a hyperlink using the URL from the data above: <PR_URL|PR #NUMBER> (e.g. <https://github.com/gofish-graphics/gofish-graphics/pull/123|PR #123>)
+Write a concise weekly summary in standard Markdown:
+- Use `## Section Name` for section headers
+- Use **double asterisks** for bold and _underscores_ for italics if needed
+- Use `- ` for bullet points
+- When mentioning any PR in the summary, format it as a Markdown link using the URL from the data above: [PR #NUMBER](PR_URL) (e.g. [PR #123](https://github.com/gofish-graphics/gofish-graphics/pull/123))
 - Contributor coverage is REQUIRED: every contributor listed above must be called out by name with at least one specific contribution.
-- In *Highlights*, explicitly mention the number of PRs that landed this week using the PR count above.
+- In the Highlights section, explicitly mention the number of PRs that landed this week using the PR count above.
+- Do not add a title line above the first section; one is added when the summary is posted.
 
-Structure your response as:
-1. *Highlights* - 2-3 sentence overview of the main thrust of work this week
-2. *What changed* - Group related changes by theme (e.g., "API improvements", "Bug fixes", "Documentation"). Use bullet points, keep each brief.
-3. *Contributor shout-outs* - One bullet per contributor, each explicitly naming the person and one concrete contribution (preferably linked PR).
+Structure your response as three sections, in this order:
+1. `## Highlights` - 2-3 sentence overview of the main thrust of work this week
+2. `## What changed` - Group related changes by theme (e.g., "API improvements", "Bug fixes", "Documentation"). Use bullet points, keep each brief.
+3. `## Contributor shout-outs` - One bullet per contributor, each explicitly naming the person and one concrete contribution (preferably linked PR).
 
 Keep the tone casual and informative. Use emoji sparingly. Total length should be readable in ~30 seconds.
 ENDPROMPT
@@ -106,8 +107,8 @@ fi
 PAYLOAD=$(jq -n \
   --arg prompt "$PROMPT" \
   '{
-    "model": "claude-opus-4-6",
-    "max_tokens": 2048,
+    "model": "claude-opus-5-5",
+    "max_tokens": 16000,
     "messages": [{"role": "user", "content": $prompt}]
   }'
 )
@@ -125,7 +126,9 @@ if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
   exit 1
 fi
 
-SUMMARY=$(echo "$RESPONSE" | jq -r '.content[0].text // "Failed to generate summary"' || echo "Failed to generate summary")
+# Opus 5.5 always thinks, so content[0] may be a thinking block; join the
+# text blocks instead of assuming the first block is the answer.
+SUMMARY=$(echo "$RESPONSE" | jq -r '[.content[]? | select(.type == "text") | .text] | join("") | if . == "" then "Failed to generate summary" else . end' || echo "Failed to generate summary")
 
 if [ -z "$SUMMARY" ] || [ "$SUMMARY" = "Failed to generate summary" ]; then
   echo "Failed to extract summary from API response"
@@ -168,7 +171,7 @@ MISSING_CALLOUTS=$(
     }
   ' prs.txt | sort | while IFS=$'\t' read -r author pr url title; do
     if ! grep -iqE "(^|[^[:alnum:]_])${author}([^[:alnum:]_]|$)" <<< "$SUMMARY"; then
-      printf -- "- %s: Shipped %s (%s).\n" "$author" "<${url}|PR #${pr}>" "$title"
+      printf -- "- %s: Shipped %s (%s).\n" "$author" "[PR #${pr}](${url})" "$title"
     fi
   done
 )
@@ -176,12 +179,12 @@ MISSING_CALLOUTS=$(
 if [ -n "$MISSING_CALLOUTS" ]; then
   SUMMARY="${SUMMARY}
 
-*Contributor shout-outs (added for full coverage)*
+## Contributor shout-outs (added for full coverage)
 ${MISSING_CALLOUTS}"
 fi
 
 # Save to file to avoid escaping issues
-echo "$SUMMARY" > summary.txt
+echo "$SUMMARY" > summary.md
 
 echo "Summary generated successfully!"
-cat summary.txt
+cat summary.md
