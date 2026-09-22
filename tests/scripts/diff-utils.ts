@@ -14,6 +14,7 @@ import {
 import { join, dirname } from "path";
 import { diffLines } from "diff";
 import DMP from "diff-match-patch";
+import { storyToPath } from "./path-mapping.js";
 
 /**
  * Character-level diff backed by Google's diff-match-patch with a per-pair
@@ -141,31 +142,7 @@ export function collectDiffs(): DiffEntry[] {
     }
   }
 
-  // Parity diffs
-  if (existsSync(PYTHON_DIR)) {
-    const pyFiles = listHtmlFiles(PYTHON_DIR);
-    for (const file of pyFiles) {
-      const jsPath = join(JS_DIR, file);
-      if (!existsSync(jsPath)) continue;
-      const pyContent = readFileSync(join(PYTHON_DIR, file), "utf-8");
-      const jsContent = readFileSync(jsPath, "utf-8");
-      if (pyContent !== jsContent) {
-        const pngFile = file.replace(/\.html$/, ".png");
-        const beforePng = join(JS_DIR, pngFile);
-        const afterPng = join(PYTHON_DIR, pngFile);
-        entries.push({
-          path: file,
-          kind: "parity",
-          status: "pending",
-          beforeDom: jsContent,
-          afterDom: pyContent,
-          beforeScreenshotPath: existsSync(beforePng) ? beforePng : null,
-          afterScreenshotPath: existsSync(afterPng) ? afterPng : null,
-          diffPercent: null,
-        });
-      }
-    }
-  }
+  entries.push(...collectParityDiffs());
 
   return entries;
 }
@@ -208,60 +185,75 @@ export function collectRemovedStories(): DiffEntry[] {
 }
 
 // ---------------------------------------------------------------------------
-// Collect parity diffs: Python output vs JS baselines
+// Collect parity diffs: Python output vs the JS capture
 // ---------------------------------------------------------------------------
 
 /**
- * Compares Python DOM output (`PYTHON_DIR`) against JS baselines (`BASELINE_DOM`).
- * Used by the parity review site — does NOT re-capture JS.
+ * Compares Python DOM output (`PYTHON_DIR`) against the JS capture of the
+ * same commit (`JS_DIR`), not against the accepted baselines. Parity asks
+ * whether a Python port renders what its JS story renders now, which does
+ * not depend on whether a JS change has passed visual review yet. A Python
+ * story with no JS capture is a parity failure too (`beforeDom` null).
+ *
+ * This is the one parity comparison: compare.ts, compare-python.ts, the
+ * review server, and the parity review site all use it. It does not apply
+ * export-level exemptions; gates filter with `loadExportExemptParityPaths()`.
  */
 export function collectParityDiffs(): DiffEntry[] {
   const entries: DiffEntry[] = [];
   if (!existsSync(PYTHON_DIR)) return entries;
 
-  const pyFiles = listHtmlFiles(PYTHON_DIR);
-  for (const file of pyFiles) {
-    const baselinePath = join(BASELINE_DOM, file);
-    const pythonPath = join(PYTHON_DIR, file);
+  for (const file of listHtmlFiles(PYTHON_DIR)) {
+    const jsContent = readOptional(join(JS_DIR, file));
+    const pythonContent = readFileSync(join(PYTHON_DIR, file), "utf-8");
+    if (pythonContent === jsContent) continue;
 
-    const baselineContent = readOptional(baselinePath);
-    const pythonContent = readFileSync(pythonPath, "utf-8");
-
-    if (baselineContent === null) {
-      // No JS baseline yet — treat as a parity failure (same as compare-python.ts)
-      const pngFile = file.replace(/\.html$/, ".png");
-      const afterPng = join(PYTHON_DIR, pngFile);
-      entries.push({
-        path: file,
-        kind: "parity",
-        status: "pending",
-        beforeDom: null,
-        afterDom: pythonContent,
-        beforeScreenshotPath: null,
-        afterScreenshotPath: existsSync(afterPng) ? afterPng : null,
-        diffPercent: null,
-      });
-      continue;
-    }
-
-    if (pythonContent !== baselineContent) {
-      const pngFile = file.replace(/\.html$/, ".png");
-      const beforePng = join(BASELINE_SCREENSHOTS, pngFile);
-      const afterPng = join(PYTHON_DIR, pngFile);
-      entries.push({
-        path: file,
-        kind: "parity",
-        status: "pending",
-        beforeDom: baselineContent,
-        afterDom: pythonContent,
-        beforeScreenshotPath: existsSync(beforePng) ? beforePng : null,
-        afterScreenshotPath: existsSync(afterPng) ? afterPng : null,
-        diffPercent: null,
-      });
-    }
+    const pngFile = file.replace(/\.html$/, ".png");
+    const beforePng = join(JS_DIR, pngFile);
+    const afterPng = join(PYTHON_DIR, pngFile);
+    entries.push({
+      path: file,
+      kind: "parity",
+      status: "pending",
+      beforeDom: jsContent,
+      afterDom: pythonContent,
+      beforeScreenshotPath: existsSync(beforePng) ? beforePng : null,
+      afterScreenshotPath: existsSync(afterPng) ? afterPng : null,
+      diffPercent: null,
+    });
   }
 
   return entries;
+}
+
+/**
+ * Per-export parity exemptions (`file.stories.tsx::ExportName` lines in
+ * .python-sync-exempt), as DOM paths without the `.html` suffix. A
+ * file-level exemption skips Python capture entirely (capture-python-dom.ts),
+ * so its DOM never reaches a parity gate. A per-export exemption is still
+ * captured and IR-validated but must not be byte-gated (e.g. CroissantStack:
+ * the Python port renders identically but can't reproduce the JS croissant
+ * recipe's per-slice spacer rects through the flat IR cut expansion). The
+ * DOM path is keyed by Storybook title and export name, shared by JS and
+ * Python capture (see path-mapping.storyToPath).
+ */
+export function loadExportExemptParityPaths(): Set<string> {
+  const exempt = new Set<string>();
+  const exemptFile = join(ROOT, "tests/.python-sync-exempt");
+  if (!existsSync(exemptFile)) return exempt;
+  for (const raw of readFileSync(exemptFile, "utf-8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const sep = line.indexOf("::");
+    if (sep === -1) continue; // file-level: handled at capture time
+    const jsFile = line.slice(0, sep);
+    const exportName = line.slice(sep + 2);
+    const title = readOptional(join(ROOT, jsFile))?.match(
+      /title:\s*["'](.+?)["']/
+    )?.[1];
+    if (title) exempt.add(storyToPath(title, exportName));
+  }
+  return exempt;
 }
 
 // ---------------------------------------------------------------------------

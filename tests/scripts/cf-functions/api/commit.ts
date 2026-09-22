@@ -49,7 +49,7 @@ interface CommitBody {
   /** PR head SHA — used to update the Visual Diff Review commit status. */
   headSha?: string;
   /** Workflow run id — if provided, rerun-failed-jobs is triggered post-commit
-   *  so visual-test re-runs against the new baselines and python-parity gets to run. */
+   *  so the cheap visual-test compare job re-runs against the new baselines. */
   runId?: string;
 }
 
@@ -361,9 +361,10 @@ async function handleCommit(
 
   // Best-effort post-commit actions: flip the Visual Diff Review status to
   // success (so the PR's checks reflect the action immediately) and rerun the
-  // failed workflow jobs (so visual-test re-runs against the new baselines
-  // and python-parity, blocked on visual-test, finally executes). Failures
-  // here are non-fatal — the snapshot commit already succeeded.
+  // failed workflow jobs, which re-runs the cheap `visual-test` compare job
+  // against the newly accepted baselines (it reuses the JS capture artifact
+  // from the first attempt, so nothing is captured again). Failures here are
+  // non-fatal — the snapshot commit already succeeded.
   const postCommitWarnings: string[] = [];
 
   if (prHeadSha) {
