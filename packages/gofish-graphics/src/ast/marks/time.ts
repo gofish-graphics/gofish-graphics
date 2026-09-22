@@ -31,6 +31,7 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
+import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
 import type { InterpolationMethod } from "../../interpolate";
 
@@ -76,18 +77,28 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * group a band of x; a sequence gives each group a band of time, so keyframe
  * `i` owns `[t_i, t_{i+1})` and the chart draws whichever band the playhead is
  * in. The others keep their boxes and their data — which is what holds the
- * axes still — and emit nothing, by the same rule the tween uses on the
- * keyframes it reads. So a sequence on its own already animates: it holds a
- * frame, then jumps to the next one, exactly as Animated Vega-Lite's band
- * scale on time does. A `time.transition()` layered over it hides every
- * keyframe (all of them, including the held one) and draws the moving mark
- * instead, so the two compose with no option to set.
+ * axes still — and paint nothing. So a sequence on its own already animates: it
+ * holds a frame, then jumps to the next one, exactly as Animated Vega-Lite's
+ * band scale on time does.
+ *
+ * Which band is showing is a PAINT-time fact, like a transition's playhead and
+ * for the same reason: every keyframe group is laid out either way — it has to
+ * be, or the domains would move — so the clock changes nothing above the marks
+ * it shows and hides. The hold is therefore a live opacity on the keyframes'
+ * own items (`INTERNAL_visibleWhile`), read per frame in paint position, and
+ * the chart is laid out once however long it plays.
+ *
+ * A `time.transition()` layered over it takes the keyframes over completely:
+ * they emit no items at all (`INTERNAL_emitNothing`), so there is nothing left
+ * to show or hide and the two compose with nothing to coordinate.
  *
  * The operator also owns the chart's clock, and builds it lazily: the domain
  * is the field's own range, which is not known until the data has been split,
- * so the first read of the playhead is what creates the timer. One `sequence`
- * call is one clock, so two charts on a page keep their own time — unless
- * `on` hands them the same one.
+ * so the first read of the playhead is what creates the timer (a read the
+ * operator makes through `readLive`, which creates and registers the clock
+ * without making it a pipeline dependency). One `sequence` call is one clock,
+ * so two charts on a page keep their own time — unless `on` hands them the
+ * same one.
  */
 export function sequence(opts: SequenceOptions) {
   let domain: [number, number] | undefined;
@@ -119,10 +130,15 @@ export function sequence(opts: SequenceOptions) {
   // no state to keep.
   const operator = createOperator<any, SequenceOptions>(
     (_o, children) => {
-      // READ DURING RESOLVE, exactly like a transition's playhead: the clock
-      // is a pipeline dependency of this chart, so every value it emits
-      // re-resolves the spec and re-picks the keyframe held below.
-      hold(children, tier.clock());
+      // Read ONCE, HERE, and only for what a resolve-time read is for: this is
+      // where the clock is lazily built (the domain is known by now) and where
+      // it registers with the chart's interaction runtime, which is installed
+      // around resolve and nowhere else. `readLive` is what keeps it
+      // paint-time — untracked and flagged, so the clock wires up for events
+      // without becoming a pipeline dependency (see `src/interaction/live.ts`).
+      readLive(tier.clock);
+      // WHICH keyframe is held is then decided per frame, in paint position.
+      hold(children, tier.clock);
       return Frame({}, children);
     },
     {
@@ -179,8 +195,8 @@ export type TransitionOptions = {
    *  `timer`) or a fixed number. Normally the transition reads the clock the
    *  flow's `time.sequence(...)` owns; `at` hands it one instead, so a chart
    *  with a plain `group({ by })` and a raw `timer(...)` plays the same way.
-   *  Read during resolve, exactly like the sequence's clock, so the playhead
-   *  is a pipeline dependency. */
+   *  Read at PAINT time: a moving value patches the mark's attributes rather
+   *  than re-resolving the chart. A plain number holds it still. */
   at?: (() => number) | number;
   /** How the run is read between keyframes. `"auto"` smooths a numeric time
    *  field with a Catmull-Rom through the whole run — the temporal reading of
@@ -234,11 +250,13 @@ export const transition = createRelationalMark<TransitionOptions>(
           `static path through the marks, use line({ along: "year" }).`
       );
     }
-    // READ DURING RESOLVE, not inside `live()`: the playhead is a pipeline
-    // dependency, so every value the clock emits re-resolves the chart and
-    // re-runs this interpolation against freshly placed keyframes. That is
-    // the expensive reading (a whole re-resolve per tick) and the honest one
-    // — incremental layout is issue #674.
+    // The playhead is handed to the tween AS A THUNK, not read here: a
+    // transition's run is a layout-time fact and its playhead a paint-time
+    // one, so the clock is read once as the tween node is built (for a value
+    // to lower, and to register the clock) and then per frame in paint
+    // position, patching one mark's attributes instead of re-resolving. See
+    // `tween.tsx` for why that is sound — the tween is the leaf case of
+    // subtree containment (issue #674).
     const playhead = o.at ?? tier?.clock;
     if (playhead === undefined) {
       throw new Error(
@@ -248,11 +266,10 @@ export const transition = createRelationalMark<TransitionOptions>(
           `transition read the clock it owns.`
       );
     }
-    const t = typeof playhead === "function" ? playhead() : playhead;
     const knots = children.map((child) => knotOf(child, by));
     return tween(
       {
-        t,
+        at: playhead,
         knots,
         method: resolveMethod(o.curve),
         ease: o.ease,
@@ -277,19 +294,21 @@ function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
 }
 
 /**
- * Show the keyframe whose band the playhead is in, and hide the rest.
+ * Show the keyframe whose band the playhead is in, and hide the rest — as a
+ * standing rule per keyframe, not a decision taken once.
  *
  * The band rule is the step rule: keyframe `i` owns `[t_i, t_{i+1})`, the last
  * keyframe owns everything after it, and a playhead before the run holds the
  * first — the same reading `interpolateStep` gives a run of values, which is
  * why a sequence alone and a `curve: "step"` transition draw the same picture.
  *
- * A hidden keyframe keeps its box, its datum and its anchoring role and emits
- * no display items, the rule `INTERNAL_emitNothing` states. It is applied down
- * the whole subtree because the rule replaces one node's lowering, and it is
- * the marks INSIDE a keyframe group that would otherwise draw.
+ * Each keyframe gets a THUNK that says whether it is the held one, and the
+ * playhead is read inside it, at paint (`INTERNAL_visibleWhile`). A hidden
+ * keyframe keeps its box, its datum and its anchoring role, exactly as before;
+ * what changed is only when the question is asked. It is applied down the whole
+ * subtree because it is the marks INSIDE a keyframe group that draw.
  */
-function hold(children: GoFishAST[], t: number): void {
+function hold(children: GoFishAST[], playhead: () => number): void {
   // Each child is one group, and the operator stamped it with its group key —
   // the value of `by` this keyframe is, which is the knot.
   const knots = children.map((child) => Number((child as GoFishNode).key));
@@ -297,17 +316,18 @@ function hold(children: GoFishAST[], t: number): void {
     (a, b) => a - b
   );
   if (bands.length === 0) return;
-  const held = bands.reduce((best, k) => (k <= t ? k : best), bands[0]);
+  const heldAt = (t: number): number =>
+    bands.reduce((best, k) => (k <= t ? k : best), bands[0]);
   children.forEach((child, i) => {
-    if (knots[i] !== held) hideSubtree(child);
+    showSubtreeWhile(child, () => knots[i] === heldAt(playhead()));
   });
 }
 
-/** Make a node and everything under it draw nothing. */
-function hideSubtree(node: GoFishAST): void {
+/** Make a node and everything under it paint only while `visible()` holds. */
+function showSubtreeWhile(node: GoFishAST, visible: () => boolean): void {
   if (!(node instanceof GoFishNode)) return;
-  node.INTERNAL_emitNothing();
-  for (const child of node.children) hideSubtree(child);
+  node.INTERNAL_visibleWhile(visible);
+  for (const child of node.children) showSubtreeWhile(child, visible);
 }
 
 /** One keyframe's time value, read off the mark's own datum. */

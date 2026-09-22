@@ -36,6 +36,7 @@ import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
+import { readLive } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
@@ -353,6 +354,9 @@ export class GoFishNode {
    *  mark builders at resolve. Baked into the `liveSlots` side table at lower
    *  time; undefined on the static path. */
   public __gfLive?: Record<string, LiveValue>;
+  /** Paint-time visibility (see {@link INTERNAL_visibleWhile}); undefined on
+   *  the static path. */
+  public __gfVisible?: () => boolean;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   private _layout: Layout;
@@ -1397,6 +1401,33 @@ export class GoFishNode {
   }
 
   /**
+   * Make this node's items show only while `visible()` says so, as a PAINT-time
+   * fact: the items are lowered either way, and their opacity is patched per
+   * frame from the same live-slot side table a `live()` channel uses.
+   *
+   * This is the other half of the pair with {@link INTERNAL_emitNothing}, and
+   * the difference is which tier decides. A node that must not draw AT ALL
+   * (`blank()`, a `ref`, a keyframe a transition has taken over) is hidden by
+   * construction, at resolve. A node whose drawing comes and goes with a signal
+   * — a `time.sequence`'s keyframe groups, where the clock picks which band is
+   * showing — cannot be, because a resolve-time answer would make the signal a
+   * pipeline dependency and put the whole chart through layout on every tick.
+   * The layout is the same either way (every keyframe is placed, which is what
+   * holds the axes still), so only the painting changes, and only the painting
+   * is patched.
+   *
+   * Emitting nothing WINS over this: a node whose `_lower` returns no items has
+   * nothing to patch, so the two compose with no coordination.
+   *
+   * The limitation is the live channels' own: the item the runtime records for
+   * hit-testing is the one lowered at resolve, so a hidden node still answers
+   * to a pointer. See /internals/frontend/reactivity.
+   */
+  public INTERNAL_visibleWhile(visible: () => boolean): void {
+    this.__gfVisible = visible;
+  }
+
+  /**
    * Lower this node and its subtree into display-list items: call this node's
    * `_lower`, then append the lowered label. `transformOverride` is the baked
    * absolute transform from the bake pass.
@@ -1452,6 +1483,20 @@ export class GoFishNode {
         slots[channel] = () => accessor(datum);
       }
       for (const item of items) setLiveSlots(item, slots);
+    }
+    // Paint-time visibility (see `INTERNAL_visibleWhile`): the item keeps the
+    // opacity it was lowered with while it is showing, and goes to 0 while it
+    // is not. The STATIC value is read here, so a headless lowering and a
+    // screenshot show exactly what the live chart shows at that playhead; the
+    // slot then patches the one attribute per frame.
+    const visible = this.__gfVisible;
+    if (visible) {
+      const showing = readLive(visible);
+      for (const item of items) {
+        const own = item.style?.opacity ?? 1;
+        if (!showing) item.style = { ...item.style, opacity: 0 };
+        setLiveSlots(item, { opacity: () => (visible() ? own : 0) });
+      }
     }
     return items;
   }

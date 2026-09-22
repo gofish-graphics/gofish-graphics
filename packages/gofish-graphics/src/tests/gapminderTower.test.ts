@@ -80,13 +80,20 @@ type Circle = {
 
 /** Every visible ellipse in a display list, in a canonical order so two
  *  spellings that emit the same picture in a different order still compare
- *  equal. */
+ *  equal.
+ *
+ *  "Visible" has to be read off the item, because a `time.sequence` hides the
+ *  keyframes it is not holding at PAINT time: every keyframe is lowered, and
+ *  the ones whose band the playhead is outside carry opacity 0 (the static
+ *  value of the live slot that patches them per frame — see
+ *  `GoFishNode.INTERNAL_visibleWhile`). So a sequence alone lowers every year
+ *  and draws one, and this is where "draws one" is decided. */
 function circles(doc: any): Circle[] {
   const out: Circle[] = [];
   const walk = (n: any): void => {
     if (Array.isArray(n)) return n.forEach(walk);
     if (n === null || typeof n !== "object") return;
-    if (n.kind === "ellipse") {
+    if (n.kind === "ellipse" && n.style?.opacity !== 0) {
       out.push({
         cx: n.cx,
         cy: n.cy,

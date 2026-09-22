@@ -127,9 +127,12 @@ export type InferredRelational = {
 };
 
 /** The temporal tier a `time.sequence(...)` contributes to a flow: the field
- *  whose values are the keyframes, plus the clock the sequence owns. Reading
- *  `clock()` during resolve registers the playhead as a pipeline dependency,
- *  which is what makes the chart re-resolve on every value it emits. */
+ *  whose values are the keyframes, plus the clock the sequence owns. The clock
+ *  is read at PAINT time by everything that reads it — the sequence's own hold
+ *  and a `time.transition()`'s playhead alike — so a value it emits patches
+ *  attributes rather than re-resolving the chart. Whoever reads it during
+ *  resolve does so through `readLive`, to build and register it without making
+ *  it a pipeline dependency. */
 export type TimeTier = {
   by: string;
   clock: () => number;

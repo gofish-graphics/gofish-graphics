@@ -168,6 +168,17 @@ re-lower, no re-layout. A `"text"` slot is special-cased to override text
 _content_ (the box keeps its resolve-time measure). String/headless backends
 (`displayListToSVG`) snapshot a live value by calling the thunk once, untracked.
 
+A slot named after one of the item's own **geometry** fields (`x`, `y`, `w`,
+`h`, `cx`, `cy`, `rx`, `ry`, `d`) overrides that field instead of a style key,
+through the same call-in-attribute-position path. Geometry is live for the same
+reason paint is — the value is a paint-time fact while the box it sits in is a
+layout-time one — and it carries the same obligation that live text does: the
+mark claims at layout the room it will use over every value the signal can take,
+because nothing above it is laid out again. The two known limits are also the
+paint channels': a serialized display list and the frame the runtime publishes
+for hit-testing both carry the resolve-time value, so a moving item's recorded
+box is where it started.
+
 The runtime keeps **no** paint role at all. Paint reactivity is entirely between
 the side table, `paintSVG`, and Solid.
 
@@ -357,6 +368,50 @@ runs each widget's Solid `createEffect` inside one `createRoot`, the same wiring
 `dispose()` rather than dropping it. Keeping it inside the widget means no spec
 ever sees it; the principled replacement is a single declarative write primitive,
 designed under #830.
+
+## Animation: containment, twice
+
+The `time` namespace is where the paint regime earns its keep, and both of its
+constructs are worth reading as small cases of the incremental engine below
+rather than as special rules. Neither reads the clock during resolve. Each reads
+it once through `readLive` — to build the clock (a sequence's is lazy, because
+its domain comes from the data) and to register it for events — and then per
+frame, in paint position.
+
+**`time.transition()`** (`tween.tsx`) consumes a run of already-placed keyframes
+and paints the one mark the run passes through at the playhead. Two facts, two
+tiers: which keyframes there are and where layout put them is decided at
+resolve; which point of that run is showing is read at paint, inside live
+geometry slots, so a tick patches four attributes of one item. What licenses the
+split is subtree containment. The node makes no size claim of its own and
+contributes no domain values, so no value it produces can be seen above it; and
+it has no children to place, so "lay this subtree out again" IS "recompute this
+one display item" — which is exactly what a paint-time thunk does. Containment
+asks for one thing in exchange, and the node pays it: its layout box is the
+whole trajectory, the union of the keyframes' placed boxes, not the box it
+occupies at the current playhead. That is the same box a `line` through the same
+keyframes claims.
+
+**`time.sequence()`** is the same argument one step up. Its hold looks like a
+change of structure — a different keyframe group draws — but every group is laid
+out either way, and has to be: that is what makes the axes hold still. So the
+clock decides nothing but which already-placed group is PAINTED, and the hold is
+a live opacity installed on each group's subtree
+(`GoFishNode.INTERNAL_visibleWhile`), with the band rule (`[t_i, t_{i+1})`,
+unchanged) evaluated inside the thunk. A jump costs one opacity write per
+keyframe item; the chart is laid out once however long it plays.
+
+The two compose with nothing to coordinate, and that is the test of the rule
+rather than a happy accident. A transition takes its keyframes over by emitting
+nothing at all for them, and a node with no items has nothing to patch, so the
+sequence's visibility thunks simply find nothing to act on. Neither construct
+has to know the other is there.
+
+The price is the live channels' standing one: what the display list carries, and
+therefore what serialization and the runtime's hit-test frame see, is the value
+lowered at resolve. A keyframe hidden at paint is still in the frame, so it
+still answers to a pointer, and a headless `toDisplayList` shows every keyframe
+with the held one at its own opacity and the rest at 0.
 
 ## Incremental outlook
 

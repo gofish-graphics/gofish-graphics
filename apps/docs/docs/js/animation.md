@@ -209,6 +209,24 @@ asks the transition to do exactly that, so the transition has nothing left to
 add. It is worth having as a curve anyway, because it is the reading the other
 two are measured against.
 
+## What a frame costs
+
+An animated chart is laid out once, however long it plays, and that is true of
+both constructs.
+
+Everything that depends on the year is settled while the chart is being laid
+out: every keyframe is placed, so the run a transition walks is known, and so is
+where each frame's dots sit. The clock is read afterward, while the chart is
+being painted. A new value from it moves the dots a transition draws and changes
+which keyframe a sequence shows, and both of those are changes to attributes of
+marks that are already on the page. Nothing is measured again and nothing is
+placed again.
+
+The one cost worth knowing is what a sequence keeps: it draws every keyframe,
+and hides all but the one it is holding, so a chart of fifty years of data has
+fifty years of marks in the page even though you see one year. They are cheap to
+hide and cheap to show, but they are there, and a pointer can still find them.
+
 ## What the sugar expands to
 
 `time.sequence` and a bare `time.transition()` are short for a longer spec. The

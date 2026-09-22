@@ -376,7 +376,11 @@ signal during resolve), three things change; when it is absent — the common ca
   `paintSVG` looks the item up and, if a slot exists, _calls the thunk in JSX
   attribute position_ (`fill={live.fill()}`), so Solid tracks the signal reads and
   patches only that attribute — no re-lower, no re-layout. A `"text"` slot
-  overrides text content while the box keeps its measured size.
+  overrides text content while the box keeps its measured size, and a slot named
+  after one of the item's own geometry fields (`x`, `y`, `w`, `h`, `cx`, `cy`,
+  `rx`, `ry`, `d`) overrides that field, which is how a mark moves without being
+  laid out again — see [Reactivity](/internals/frontend/reactivity). What the
+  item carries statically is what serialization and hit-testing see.
 - **Frame publication.** Before painting, `render()` publishes the lowered
   `items`, the root `posScales`, and `toPixel` to the runtime as an
   `InteractionFrame`, so hit-testing and data↔px conversions see the current

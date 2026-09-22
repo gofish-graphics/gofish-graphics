@@ -25,6 +25,45 @@ type Style = DisplayList.Style | undefined;
 type LiveSlots = NonNullable<ReturnType<typeof getLiveSlots>>;
 
 /**
+ * The live-slot names that override an item's GEOMETRY rather than its style —
+ * the display item's own field names, so one rule covers every primitive: a
+ * slot called `cx` overrides `cx` on an ellipse, `x` overrides `x` on a rect or
+ * a text anchor, `d` overrides the path string.
+ *
+ * Geometry is live for the same reason paint is: the value is a paint-time
+ * fact, the box it sits in is a layout-time one. A mark whose POSITION moves
+ * reactively must therefore claim the room for everywhere it goes at layout
+ * time (a `time.transition()` claims the whole trajectory its keyframes span),
+ * exactly as live text must fit its resolve-time measure. Two known limits,
+ * both inherited from the live-paint channels: the serialized display list and
+ * the frame the interaction runtime publishes for hit-testing carry the
+ * resolve-time value, so a live item's recorded box is where it started.
+ */
+const GEOMETRY_CHANNELS = new Set([
+  "x",
+  "y",
+  "w",
+  "h",
+  "cx",
+  "cy",
+  "rx",
+  "ry",
+  "d",
+]);
+
+/**
+ * One field of a display item, with its live slot's value in place of the
+ * static one when the item has that slot. MUST be called from inside a JSX
+ * attribute position so Solid tracks the signal reads and patches only that
+ * attribute; reading it eagerly outside would freeze reactivity.
+ */
+const patched = <T,>(
+  live: LiveSlots | undefined,
+  channel: string,
+  value: T
+): T => (live?.[channel] === undefined ? value : (live[channel]() as T));
+
+/**
  * Merge an item's static style with its live channels, evaluating each live
  * thunk. MUST be called from inside a JSX attribute position (via a spread) so
  * Solid tracks the signal reads and patches only that attribute — evaluating it
@@ -34,7 +73,7 @@ type LiveSlots = NonNullable<ReturnType<typeof getLiveSlots>>;
 const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
   let merged: Record<string, unknown> | undefined;
   for (const channel in live) {
-    if (channel === "text") continue;
+    if (channel === "text" || GEOMETRY_CHANNELS.has(channel)) continue;
     (merged ??= { ...(item.style ?? {}) })[channel] = live[channel]();
   }
   return (merged as Style) ?? item.style;
@@ -80,12 +119,12 @@ export function paintSVG(
     case "rect":
       return (
         <rect
-          x={item.x}
-          y={item.y}
-          width={item.w}
-          height={item.h}
-          rx={item.rx}
-          ry={item.ry}
+          x={patched(live, "x", item.x)}
+          y={patched(live, "y", item.y)}
+          width={patched(live, "w", item.w)}
+          height={patched(live, "h", item.h)}
+          rx={patched(live, "rx", item.rx)}
+          ry={patched(live, "ry", item.ry)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
         />
@@ -93,10 +132,10 @@ export function paintSVG(
     case "ellipse":
       return (
         <ellipse
-          cx={item.cx}
-          cy={item.cy}
-          rx={item.rx}
-          ry={item.ry}
+          cx={patched(live, "cx", item.cx)}
+          cy={patched(live, "cy", item.cy)}
+          rx={patched(live, "rx", item.rx)}
+          ry={patched(live, "ry", item.ry)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
         />
@@ -104,7 +143,7 @@ export function paintSVG(
     case "path":
       return (
         <path
-          d={item.d}
+          d={patched(live, "d", item.d)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
         />
@@ -112,8 +151,8 @@ export function paintSVG(
     case "text":
       return (
         <text
-          x={item.x}
-          y={item.y}
+          x={patched(live, "x", item.x)}
+          y={patched(live, "y", item.y)}
           data-gf-id={gfId}
           font-size={
             item.fontSize !== undefined ? `${item.fontSize}px` : undefined
@@ -146,10 +185,10 @@ export function paintSVG(
     case "image":
       return (
         <image
-          x={item.x}
-          y={item.y}
-          width={item.w}
-          height={item.h}
+          x={patched(live, "x", item.x)}
+          y={patched(live, "y", item.y)}
+          width={patched(live, "w", item.w)}
+          height={patched(live, "h", item.h)}
           href={item.href}
           data-gf-id={gfId}
           preserveAspectRatio={

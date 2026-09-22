@@ -14,7 +14,9 @@
  * types must stay pure data (no function values).
  *
  * A channel named "text" overrides the text CONTENT (the box keeps its
- * resolve-time measure); every other channel is a `DisplayList.Style` key.
+ * resolve-time measure); a channel named after one of the item's own geometry
+ * fields (`x`, `y`, `w`, `h`, `cx`, `cy`, `rx`, `ry`, `d`) overrides that
+ * field; every other channel is a `DisplayList.Style` key.
  */
 import type { DisplayList } from "gofish-ir";
 
@@ -22,11 +24,16 @@ export type LiveSlots = Record<string, () => unknown>;
 
 const slots = new WeakMap<DisplayList.DisplayItem, LiveSlots>();
 
+/** Add `record`'s thunks to `item`'s slots. Slots ACCUMULATE, and a later
+ *  channel wins: a node's own `lower` can slot a geometry channel and the
+ *  `live()` channels of its options bag are then merged in over it, without
+ *  either having to know about the other. */
 export function setLiveSlots(
   item: DisplayList.DisplayItem,
   record: LiveSlots
 ): void {
-  slots.set(item, record);
+  const existing = slots.get(item);
+  slots.set(item, existing ? { ...existing, ...record } : record);
 }
 
 export function getLiveSlots(
