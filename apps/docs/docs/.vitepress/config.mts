@@ -448,20 +448,68 @@ export default defineConfig({
           text: "Get Started",
           items: [
             { text: "First Steps", link: "/js/get-started" },
-            { text: "Tutorial", link: "/js/tutorial" },
+            {
+              text: "Tutorials",
+              link: "/js/tutorials/",
+              collapsed: true,
+              items: [
+                {
+                  text: "Fundamentals",
+                  items: [
+                    { text: "Basics", link: "/js/tutorials/basics" },
+                    { text: "Charts", link: "/js/tutorials/charts" },
+                    { text: "Diagrams", link: "/js/tutorials/diagrams" },
+                  ],
+                },
+                {
+                  text: "Going further",
+                  items: [
+                    { text: "Glyphs", link: "/js/tutorials/glyphs" },
+                    {
+                      text: "Pictorial Charts",
+                      link: "/js/tutorials/pictorial-charts",
+                    },
+                    {
+                      text: "Reactivity & Interaction",
+                      link: "/js/tutorials/reactivity",
+                    },
+                    {
+                      text: "Tree Diagrams",
+                      link: "/js/tutorials/tree-diagrams",
+                    },
+                  ],
+                },
+              ],
+            },
             { text: "Examples", link: "/js/examples/" },
           ],
         },
         {
           text: "How To",
           items: [
-            { text: "Create a chart", link: "/js/api/howto/create-chart" },
-            { text: "Create a glyph", link: "/js/api/howto/create-glyph" },
             { text: "Pick a layout operator", link: "/js/api/howto/operators" },
             { text: "Use selection", link: "/js/api/howto/selection" },
             {
               text: "Name and scope",
               link: "/js/api/howto/naming-and-scoping",
+            },
+          ],
+        },
+        {
+          text: "Concepts",
+          items: [
+            { text: "Names and Scope", link: "/js/concepts/names-and-scope" },
+            {
+              text: "Refs and Selection",
+              link: "/js/concepts/refs-and-selection",
+            },
+            {
+              text: "Charts and Diagrams",
+              link: "/js/concepts/two-entry-points",
+            },
+            {
+              text: "Constraints and Operators",
+              link: "/js/concepts/constraints-and-operators",
             },
           ],
         },
@@ -524,18 +572,23 @@ export default defineConfig({
               collapsed: true,
               items: collectApiSidebarGroup("js", "coords"),
             },
+            {
+              text: "Reactivity",
+              collapsed: true,
+              items: [
+                {
+                  text: "Reactivity & Interaction",
+                  link: "/js/reactivity",
+                },
+                { text: "Controls", link: "/js/controls" },
+              ],
+            },
+            {
+              text: "GoTree",
+              collapsed: true,
+              items: [{ text: "tree", link: "/js/gotree" }],
+            },
           ],
-        },
-        {
-          text: "Reactivity",
-          items: [
-            { text: "Reactivity & Interaction", link: "/js/reactivity" },
-            { text: "Controls", link: "/js/controls" },
-          ],
-        },
-        {
-          text: "GoTree",
-          items: [{ text: "tree (separate package)", link: "/js/gotree" }],
         },
       ],
       "/python/": [
@@ -543,15 +596,13 @@ export default defineConfig({
           text: "Get Started",
           items: [
             { text: "First Steps", link: "/python/get-started" },
-            { text: "Tutorial", link: "/python/tutorial" },
+            { text: "Tutorials", link: "/python/tutorials/" },
             { text: "Examples", link: "/python/examples/" },
           ],
         },
         {
           text: "How To",
           items: [
-            { text: "Create a chart", link: "/python/api/howto/create-chart" },
-            { text: "Create a glyph", link: "/python/api/howto/create-glyph" },
             {
               text: "Pick a layout operator",
               link: "/python/api/howto/operators",

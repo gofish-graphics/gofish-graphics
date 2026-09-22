@@ -152,3 +152,12 @@ packages/gofish-graphics/stories/interaction/Widgets.stories.tsx
 # field-bound `points`) have no Python wrapper yet, and exemption is per FILE.
 # Both the wrappers and splitting A out into its own file are tracked as #856.
 packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx
+
+# Tutorials/Basics is the finished example of the docs Basics tutorial: bare
+# marks and operators rendered with no chart() entry point, plus a
+# Constraint.align, the same low-level surface as the bluefish stories.
+packages/gofish-graphics/stories/tutorials/Basics.stories.tsx
+
+# Tutorials/Glyphs is the finished example of the docs Glyphs tutorial: a glyph
+# passed to `.mark()` as a per-group JS function, which cannot cross the bridge.
+packages/gofish-graphics/stories/tutorials/Glyphs.stories.tsx
