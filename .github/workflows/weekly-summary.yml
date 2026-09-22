@@ -21,6 +21,7 @@ jobs:
       # so GITHUB_TOKEN only needs to read.
       contents: read
       pull-requests: read # gh pr list
+      id-token: write # claude-code-action authenticates to GitHub via OIDC
     steps:
       - uses: actions/checkout@v5
         with:
@@ -72,12 +73,26 @@ jobs:
           # Store in file to avoid escaping issues
           echo "$PRS" > prs.txt
 
-      - name: Summarize with Claude
-        id: summary
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Build summary prompt
         run: |
-          bash .github/scripts/summarize-with-claude.sh
+          bash .github/scripts/build-summary-prompt.sh
+
+      # Runs on the maintainer's Claude subscription via the OAuth token, like
+      # the other Claude workflows. Claude reads prompt.md and writes the
+      # summary to summary.md; it gets no tools beyond reading and writing.
+      - name: Summarize with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "Read the file prompt.md in the repository root and follow its instructions exactly."
+          claude_args: |
+            --model claude-opus-5-5
+            --allowedTools "Read,Write"
+            --max-turns 5
+
+      - name: Check summary
+        run: |
+          bash .github/scripts/check-summary.sh
 
       - name: Display summary (always shown)
         run: |
