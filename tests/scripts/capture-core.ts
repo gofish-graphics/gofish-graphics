@@ -30,9 +30,22 @@
  * THIS process via the current `normalize-dom.ts`, so two captures driven from
  * the same invocation are normalized identically — which is what makes the
  * geometry diff platform-stable.
+ *
+ * Capture also runs every story on Playwright's FAKE clock. `timer()` (see
+ * gofish's src/interaction/inputs.ts) measures elapsed time from
+ * `performance.now()` and samples it on a 16ms `setInterval`, so an animated
+ * story used to be captured at whatever frame the machine happened to reach:
+ * the bird-migration panels sweep 365 days in 10s, a slot every ~27ms, and two
+ * runs minutes apart landed on different days. With `clock.install` + `pauseAt`
+ * the page's `Date`, `performance`, timers and rAF are all virtual and frozen,
+ * and each story is then handed the SAME fixed amount of virtual time between
+ * the moment its clock starts and the moment its DOM is read (see the render
+ * loop below). Real work — module loads, dataset fetches, `document.fonts
+ * .ready` — is NOT paid for in virtual time; it is waited out on the real clock
+ * first, which is what keeps the fixed budget meaningful.
  */
 
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import { spawn, type ChildProcess } from "child_process";
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs";
 import { join, dirname } from "path";
@@ -67,6 +80,53 @@ export interface CaptureResult {
   captured: string[];
   failed: { path: string; error: string }[];
   skipped: string[];
+}
+
+/** Wall-clock instant the fake clock is installed at. Any fixed value works;
+ *  what matters is that it is the same on every run and every machine. */
+const CLOCK_EPOCH = Date.UTC(2024, 0, 1, 0, 0, 0);
+/** Where the clock is parked once the page has loaded. The page loads with time
+ *  running normally (a clock paused across module init can deadlock on a
+ *  loader's own timer), then jumps here and stops. */
+const CLOCK_PAUSE_AT = CLOCK_EPOCH + 60_000;
+/** Virtual ms handed to EVERY story after it first paints, in full. It has to
+ *  cover the runner's rAF + 100ms settle with room to spare; beyond that the
+ *  figure is arbitrary, but it must never vary — it is what decides which frame
+ *  of an animation is captured. */
+const VIRTUAL_SETTLE_MS = 512;
+/** Advance in frame-sized steps so rAF-driven work sees frames, not one jump. */
+const VIRTUAL_STEP_MS = 16;
+/** Real ms between polls of a page-side predicate. */
+const REAL_POLL_MS = 20;
+/** How long first paint is waited for on the REAL clock before virtual time is
+ *  handed out anyway. Every story whose render is gated only on real promises
+ *  (loaders, dynamic imports, fonts) paints well inside this; the few that
+ *  await a `requestAnimationFrame` of their own CANNOT paint until the frozen
+ *  clock moves, and they are the ones that spend the whole grace. */
+const PAINT_GRACE_MS = 2_000;
+
+/**
+ * Has the story painted? An `<svg>` under the root is the first moment a
+ * `timer()` can have been read, because the read happens while the pipeline
+ * that emits that SVG runs.
+ *
+ * Polled from NODE, sleeping on the REAL clock: `page.waitForFunction` can't be
+ * used once the fake clock is paused, since its default `polling: 'raf'` is a
+ * frozen `requestAnimationFrame` and a numeric polling interval is a frozen
+ * `setTimeout`, so neither would ever fire.
+ */
+async function waitForPaint(page: Page, graceMs: number): Promise<boolean> {
+  const deadline = Date.now() + graceMs;
+  for (;;) {
+    const painted = await page.evaluate(
+      () =>
+        !!document.querySelector("#stories-root svg") ||
+        window.__STORY_RENDER_DONE__ === true
+    );
+    if (painted) return true;
+    if (Date.now() > deadline) return false;
+    await new Promise((r) => setTimeout(r, REAL_POLL_MS));
+  }
 }
 
 export function startViteServer(
@@ -156,6 +216,10 @@ export async function captureStories(
       const context = await browser!.newContext({
         viewport: { width: 1280, height: 720 },
       });
+      // Install the fake clock BEFORE the first navigation so nothing in the
+      // page ever sees the real one; it keeps running at real speed until the
+      // pause below, so page load is unaffected (see header comment).
+      await context.clock.install({ time: CLOCK_EPOCH });
       const page = await context.newPage();
       page.on("console", (msg) => {
         if (msg.type() === "error") console.error(`[browser] ${msg.text()}`);
@@ -179,6 +243,12 @@ export async function captureStories(
         await context.close();
         throw new Error(`Stories runner failed to initialize: ${runnerError}`);
       }
+      // Warm the webfonts while time still runs, so that a story's own
+      // `await document.fonts.ready` resolves in a microtask rather than after
+      // a real network fetch of unpredictable length.
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      // From here on time only moves when this process says so.
+      await page.clock.pauseAt(CLOCK_PAUSE_AT);
       return { context, page };
     };
 
@@ -210,21 +280,62 @@ export async function captureStories(
       // previous story's raster (see header comment).
       const { context, page } = await openRunnerPage();
       try {
-        const success = await page.evaluate(
-          async (id) => window.__renderStory__(id),
-          story.id
-        );
-        if (!success) {
-          const err = await page.evaluate(() => window.__STORY_RENDER_ERROR__);
-          console.log(`FAILED: ${err}`);
-          result.failed.push({ path, error: String(err) });
-          continue;
+        // Kick the render off but do NOT await it: the runner's tail (a rAF
+        // plus a 100ms settle) can only complete once the paused clock is
+        // given virtual time below, so awaiting here would deadlock.
+        await page.evaluate((id) => {
+          void window.__renderStory__(id);
+        }, story.id);
+
+        // Phase 1 — real time only. Loaders, dynamic imports, fonts and the
+        // gofish render promise are real promises that resolve on their own.
+        // None of that may be charged to virtual time, because an animated
+        // story's clock starts on its FIRST READ inside that render, and
+        // virtual ms spent before that read are ms the animation never sees.
+        // Waiting for first paint here is what pins the budget below to the
+        // same point in every run.
+        await waitForPaint(page, PAINT_GRACE_MS);
+
+        // Phase 2 — the fixed virtual budget, run in full for every story
+        // rather than stopped as soon as `__STORY_RENDER_DONE__` flips. That
+        // is the point: the DOM is always read exactly VIRTUAL_SETTLE_MS of
+        // virtual time past the story's first paint, so an animation lands on
+        // the same frame every run.
+        for (let t = 0; t < VIRTUAL_SETTLE_MS; t += VIRTUAL_STEP_MS) {
+          await page.clock.runFor(VIRTUAL_STEP_MS);
         }
 
-        await page.waitForFunction(
-          () => window.__STORY_RENDER_DONE__ === true,
-          { timeout: 15_000 }
+        // A story that still isn't done wanted more time than the budget —
+        // usually real work it is doing between frames, which this loop pays
+        // for in virtual ms because it can't tell the two apart. Keep going
+        // (a hung story must still fail rather than be captured half-drawn)
+        // but say so: how much virtual time this story got is now a function
+        // of the machine, so an ANIMATED story here would not land on a fixed
+        // frame. A still one is unaffected.
+        if (!(await page.evaluate(() => window.__STORY_RENDER_DONE__))) {
+          const deadline = Date.now() + 15_000;
+          let overrun = 0;
+          while (!(await page.evaluate(() => window.__STORY_RENDER_DONE__))) {
+            if (Date.now() > deadline)
+              throw new Error(
+                `Timed out after 15000ms waiting for ${story.title}/${story.name} to render`
+              );
+            await page.clock.runFor(VIRTUAL_STEP_MS);
+            overrun += VIRTUAL_STEP_MS;
+          }
+          console.warn(
+            `\n    (clock overrun: +${overrun}ms virtual past the ${VIRTUAL_SETTLE_MS}ms budget — fine for a still story, not a fixed frame for an animated one)`
+          );
+        }
+
+        const renderError = await page.evaluate(
+          () => window.__STORY_RENDER_ERROR__
         );
+        if (renderError) {
+          console.log(`FAILED: ${renderError}`);
+          result.failed.push({ path, error: String(renderError) });
+          continue;
+        }
 
         const rawDom = await page.evaluate(() => {
           const root = document.getElementById("stories-root");

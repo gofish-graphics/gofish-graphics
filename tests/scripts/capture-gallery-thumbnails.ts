@@ -181,20 +181,32 @@ async function main() {
           { timeout: 15_000 }
         );
 
-        const svg = await page.$("#stories-root svg");
-        if (!svg) {
+        // Measure the svg in one evaluate and screenshot the page clipped to
+        // that box, rather than holding an element handle: an animated story
+        // replaces its svg every frame, so a handle taken before the
+        // screenshot is detached by the time it is used.
+        const box = await page.evaluate(() => {
+          const svg = document.querySelector("#stories-root svg");
+          if (!svg) return null;
+          const r = svg.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        });
+        if (!box) {
           console.log("SKIP (no svg)");
           failed.push(ex.id);
           continue;
         }
-        const box = await svg.boundingBox();
-        if (!box || box.width <= 0 || box.height <= 0) {
+        if (box.width <= 0 || box.height <= 0) {
           console.log("SKIP (empty box)");
           failed.push(ex.id);
           continue;
         }
 
-        const png = await svg.screenshot({ type: "png", omitBackground: true });
+        const png = await page.screenshot({
+          type: "png",
+          omitBackground: true,
+          clip: box,
+        });
         writeFileSync(join(PUBLIC_DIR, `${ex.id}.png`), png);
         manifest[ex.id] = {
           w: Math.round(box.width),

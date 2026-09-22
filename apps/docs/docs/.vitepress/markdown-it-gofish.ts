@@ -131,10 +131,12 @@ export default function gofish(md) {
         let codeFence = "";
         if (!hidden) {
           codeFence = md.render(`\`\`\`ts\n${example.code}\n\`\`\``);
-          if (example.datasetCode) {
+          // The preview, not the whole dataset — see PREVIEW_ROWS in
+          // data/storyExamples.ts.
+          if (example.datasetPreview) {
             codeFence += md.render(
               `\n<details class="gofish-dataset">\n<summary>Dataset</summary>\n\n` +
-                `\`\`\`ts\n${example.datasetCode}\n\`\`\`\n\n</details>\n`
+                `\`\`\`ts\n${example.datasetPreview}\n\`\`\`\n\n</details>\n`
             );
           }
         }

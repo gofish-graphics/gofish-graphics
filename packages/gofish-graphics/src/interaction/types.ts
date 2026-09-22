@@ -52,6 +52,21 @@ export interface SvgPoint {
   y: number;
 }
 
+/**
+ * One node's on-screen box, in svg-local pixel coordinates — the second thing
+ * the interaction layer READS OFF a published frame (the first being the frame
+ * conversions). A control that must map a pointer position onto its own track
+ * needs to know where layout put that track; the frame already carries it, so
+ * the box is recorded per node uid at publish time rather than measured back
+ * out of the DOM.
+ */
+export interface SvgBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /** Delegated DOM event types the runtime routes to inputs. */
 export type InteractionEventType =
   | "pointermove"

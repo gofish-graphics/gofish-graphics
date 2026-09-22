@@ -219,11 +219,18 @@ function topoSortByZOrder<P>(
     else nameToIndices.set(name, [i]);
   }
 
-  const adj: Set<number>[] = Array.from({ length: n }, () => new Set<number>());
+  // Adjacency is allocated LAZILY: a layer can hold tens of thousands of paint
+  // units while only a handful carry constraints (72 line connectors over
+  // 26,280 point anchors in the bird-migration chart), so eagerly building one
+  // Set per unit is pure overhead.
+  const adj: (Set<number> | undefined)[] = new Array(n);
   const inDegree = new Array<number>(n).fill(0);
   const addEdge = (from: number, to: number) => {
-    if (from === to || adj[from].has(to)) return;
-    adj[from].add(to);
+    if (from === to) return;
+    let out = adj[from];
+    if (out === undefined) adj[from] = out = new Set<number>();
+    if (out.has(to)) return;
+    out.add(to);
     inDegree[to]++;
   };
   for (const c of constraints) {
@@ -239,21 +246,75 @@ function topoSortByZOrder<P>(
     }
   }
 
-  const cmp = (i: number, j: number): number =>
-    items[i].defaultZ - items[j].defaultZ ||
-    items[i].defaultOrder - items[j].defaultOrder;
-  const eligible: number[] = [];
-  for (let i = 0; i < n; i++) if (inDegree[i] === 0) eligible.push(i);
+  // Keys are read once per item: the comparator runs O(n log n) times.
+  const zKey = new Array<number>(n);
+  const orderKey = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    zKey[i] = items[i].defaultZ;
+    orderKey[i] = items[i].defaultOrder;
+  }
+  // `(z, order)` with the item index as a final tiebreak. `order` is already
+  // unique per item (it is the position in the flattened default order), so the
+  // index only makes the comparison a total order on paper, which is what a
+  // heap needs to be deterministic.
+  const less = (i: number, j: number): boolean => {
+    if (zKey[i] !== zKey[j]) return zKey[i] < zKey[j];
+    if (orderKey[i] !== orderKey[j]) return orderKey[i] < orderKey[j];
+    return i < j;
+  };
+
+  // Kahn's algorithm, always emitting the SMALLEST eligible unit by
+  // `(z, order)`. The ready set is a binary min-heap rather than a re-sorted
+  // array: the choice — and so the resulting order — is identical, but a
+  // re-sort plus `shift()` per emission is quadratic in the number of units,
+  // which is the whole cost of a large chart's paint order.
+  const heap: number[] = [];
+  const heapPush = (v: number) => {
+    let i = heap.length;
+    heap.push(v);
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (!less(heap[i], heap[p])) break;
+      const t = heap[p];
+      heap[p] = heap[i];
+      heap[i] = t;
+      i = p;
+    }
+  };
+  const heapPop = (): number => {
+    const top = heap[0];
+    const last = heap.pop()!;
+    if (heap.length > 0) {
+      heap[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < heap.length && less(heap[l], heap[m])) m = l;
+        if (r < heap.length && less(heap[r], heap[m])) m = r;
+        if (m === i) break;
+        const t = heap[m];
+        heap[m] = heap[i];
+        heap[i] = t;
+        i = m;
+      }
+    }
+    return top;
+  };
+
+  for (let i = 0; i < n; i++) if (inDegree[i] === 0) heapPush(i);
 
   const result: PaintItem<P>[] = [];
   const emitted = new Array<boolean>(n).fill(false);
-  while (eligible.length > 0) {
-    eligible.sort(cmp);
-    const i = eligible.shift()!;
+  while (heap.length > 0) {
+    const i = heapPop();
     result.push(items[i]);
     emitted[i] = true;
-    for (const j of adj[i]) {
-      if (--inDegree[j] === 0) eligible.push(j);
+    const out = adj[i];
+    if (out === undefined) continue;
+    for (const j of out) {
+      if (--inDegree[j] === 0) heapPush(j);
     }
   }
 

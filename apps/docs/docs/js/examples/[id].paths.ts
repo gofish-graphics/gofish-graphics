@@ -43,7 +43,10 @@ export default {
         fenceLang: "ts",
         code: ex.code,
         datasetLabel: "dataset.ts",
-        datasetCode: ex.datasetCode,
+        // The preview, not the whole dataset — see PREVIEW_ROWS in
+        // .vitepress/data/storyExamples.ts. The live editor still gets the
+        // full module.
+        datasetCode: ex.datasetPreview,
       });
     });
   },

@@ -453,24 +453,50 @@ export const Rect = ({
   return node;
 };
 
-const baseRect = createMark(
-  Rect,
-  {
-    w: "size",
-    h: "size",
-    x: "pos",
-    y: "pos",
-    l: "pos",
-    r: "pos",
-    t: "pos",
-    b: "pos",
-    cx: "pos",
-    cy: "pos",
-    fill: "color",
-    stroke: "color",
-  },
-  "rect"
-);
+const RECT_CHANNELS = {
+  w: "size",
+  h: "size",
+  x: "pos",
+  y: "pos",
+  l: "pos",
+  r: "pos",
+  t: "pos",
+  b: "pos",
+  cx: "pos",
+  cy: "pos",
+  fill: "color",
+  stroke: "color",
+} as const;
+
+const baseRect = createMark(Rect, RECT_CHANNELS, "rect");
 
 export const rect: typeof baseRect = ((opts: any) =>
   attachCut(baseRect(opts))) as typeof baseRect;
+
+/**
+ * `blank()`'s node: a rect in every respect that matters to the pipeline —
+ * same dims, same underlying-space resolution, same layout, same datum, so it
+ * anchors refs and fuses exactly as a rect does — except that it DRAWS
+ * NOTHING. Invisibility is structural, not a paint style: the node emits no
+ * display items at all (`INTERNAL_emitNothing`), the same rule `GoFishRef`
+ * already follows as a placement stand-in. One rule, no flag — there is no
+ * configuration under which a blank paints, so `fill`/`stroke`/`rx`/`ry` only
+ * ever reach the color scale and the layout, never the canvas.
+ *
+ * This is what keeps an anchor tier free: the blank-fusion rewrite
+ * (`.mark(line(opts))` ⇒ `.mark(blank(anchor)).layer(line(opts))`, see
+ * `marks/chart.ts`) synthesizes one anchor per row, and a 26k-row chart used
+ * to pay for 26k invisible zero-size `<rect>`s in the DOM — and 26k entries in
+ * the interaction hit-test map.
+ */
+export const Blank = (opts: Parameters<typeof Rect>[0]): GoFishNode => {
+  const node = Rect(opts);
+  node.type = "blank";
+  node.INTERNAL_emitNothing();
+  return node;
+};
+
+/** The `blank` mark factory — `marks/chart.ts`'s `blank()` is the typed,
+ *  documented front for this. Same channels as `rect` (a blank's `w`/`h` can be
+ *  data-driven; its `fill` still seeds the unit color scale), IR type `blank`. */
+export const baseBlank = createMark(Blank, RECT_CHANNELS, "blank");

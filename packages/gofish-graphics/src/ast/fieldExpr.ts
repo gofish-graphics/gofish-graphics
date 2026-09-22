@@ -161,6 +161,47 @@ export class FieldExpr {
     return this._withOp({ op: "distinct" });
   }
 
+  /**
+   * A row PREDICATE — not a pipeline op: `field("day").between(lo, hi)` returns
+   * `(row) => boolean`, for `filter(...)`. It is deliberately outside the
+   * op pipeline (`_ops`), because an op belongs to one of the three value slots
+   * (domain / aggregate / normalize) and a predicate belongs to none of them:
+   * it never takes part in grouping, folding or scaling, so shoehorning it in
+   * would need a fourth slot that every evaluation site must learn to ignore.
+   *
+   * The comparison is by VALUE (SQL `RANGE`, polars `is_between`), never by row
+   * count (Vega's window `frame`), and `closed` spells which ends are inclusive
+   * exactly as polars does. A moving window is written as a plain lambda around
+   * the bare `between(v, lo, hi)` below, which is where a `timer()` read belongs.
+   */
+  between(
+    lo: number,
+    hi: number,
+    options?: BetweenOptions
+    // `any` row, not `unknown`: the predicate is handed to `filter(...)`, whose
+    // row type comes from the chart's data, and an `unknown` parameter would
+    // fight every concrete row type at the call site.
+  ): (row: any) => boolean {
+    // The predicate is outside the op pipeline, so an expression carrying ops
+    // would silently drop them (`field("x").bin(10).between(...)` would test the
+    // RAW x). Say so instead of ignoring them.
+    if (this._ops.length > 0) {
+      throw new Error(
+        `field("${this.name}").between(...) does not apply the expression ` +
+          `pipeline (${this._ops.map((o) => o.op).join(", ")}): a predicate is ` +
+          `not a value slot. Filter on the raw field, or derive the binned/` +
+          `sorted column first.`
+      );
+    }
+    return (row: unknown) =>
+      between(
+        (row as Record<string, unknown> | undefined)?.[this.name] as number,
+        lo,
+        hi,
+        options
+      );
+  }
+
   toJSON(): FieldExprWire {
     return {
       type: this.type,
@@ -169,6 +210,34 @@ export class FieldExpr {
       ...(this._ops.length ? { ops: [...this._ops] } : {}),
     };
   }
+}
+
+export type BetweenOptions = {
+  /** Which ends of the interval are inclusive. Default `"both"` — polars
+   *  `is_between`'s `closed` verbatim. */
+  closed?: "both" | "left" | "right" | "none";
+};
+
+/**
+ * `between(v, lo, hi, { closed })` — is `v` inside the interval? `closed`
+ * chooses which ends count, defaulting to `"both"`, after polars' `is_between`.
+ * A window that follows a `timer()` is a plain lambda that reads the clock and
+ * calls this, which is how every caller spells it.
+ *
+ * The closed-on-both-ends case is `contains` in `util/interval.ts`, over an
+ * `Interval` value; this form takes the ends loose because a row predicate has
+ * no interval object to hand.
+ */
+export function between(
+  v: number,
+  lo: number,
+  hi: number,
+  options?: BetweenOptions
+): boolean {
+  const closed = options?.closed ?? "both";
+  const lowOk = closed === "both" || closed === "left" ? v >= lo : v > lo;
+  const highOk = closed === "both" || closed === "right" ? v <= hi : v < hi;
+  return lowOk && highOk;
 }
 
 /**

@@ -9,7 +9,7 @@
  *   - every snippet imports only from "gofish-graphics", "./dataset", bare npm
  *     packages, or local asset files (no leftover `../src/...`, `../helper`,
  *     or `@storybook/html` imports)
- *   - datasetCode (when present) transpiles
+ *   - datasetCode and datasetPreview (when present) transpile
  *
  * Prints a table of id → ok / fallback and exits non-zero on any failure.
  */
@@ -210,7 +210,13 @@ async function main() {
     const synErrs = transpiles(ex.code, `${ex.id}.tsx`);
     if (synErrs.length) issues.push(`transpile: ${synErrs[0]}`);
 
-    if (!/\.render\(/.test(ex.code)) issues.push("missing .render(");
+    // The snippet has to actually draw into the container. Two spellings do
+    // that: a builder's `.render(container, …)` and the low-level terminal
+    // `GoFish(container, …)` (which a composition with no `chart()` at its root
+    // uses — e.g. a chart laid out beside its controls).
+    if (!/\.render\(|\bGoFish\(/.test(ex.code)) {
+      issues.push("missing .render( / GoFish(");
+    }
 
     const badImports = checkImports(ex.code);
     if (badImports.length) issues.push(`bad imports: ${badImports.join(", ")}`);
@@ -218,6 +224,15 @@ async function main() {
     if (ex.datasetCode) {
       const dsErrs = transpiles(ex.datasetCode, `${ex.id}.dataset.ts`);
       if (dsErrs.length) issues.push(`dataset transpile: ${dsErrs[0]}`);
+    }
+
+    // The shortened dataset is what the pages show, so it has to parse too.
+    if (ex.datasetPreview) {
+      const prevErrs = transpiles(
+        ex.datasetPreview,
+        `${ex.id}.dataset-preview.ts`
+      );
+      if (prevErrs.length) issues.push(`dataset preview: ${prevErrs[0]}`);
     }
 
     if (!ex.storyId) issues.push("missing storyId");

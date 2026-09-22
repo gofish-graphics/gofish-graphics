@@ -1385,6 +1385,18 @@ export class GoFishNode {
   }
 
   /**
+   * Make this node draw nothing: it keeps its dims, its layout, its datum and
+   * its ref-anchoring role, but contributes no display items. Every lower path
+   * goes through {@link INTERNAL_lower}, so replacing the lowering — rather than
+   * consulting a "visible" flag at paint — makes the node invisible everywhere by
+   * construction. `blank()` is built this way (`shapes/rect.tsx`); `GoFishRef`
+   * draws nothing for the same reason.
+   */
+  public INTERNAL_emitNothing(): void {
+    this._lower = () => [];
+  }
+
+  /**
    * Lower this node and its subtree into display-list items: call this node's
    * `_lower`, then append the lowered label. `transformOverride` is the baked
    * absolute transform from the bake pass.

@@ -154,17 +154,19 @@ def story_drop_nulls():
 
 def story_binned_ribbon_histogram():
     # Same binning as story_binned_spread, but with ribbon(...) instead of
-    # rect(...): a relational mark's anchor-tier `h` now accepts a
-    # field(...) pipeline the same way a leaf mark's "size" channel does.
+    # rect(...): a relational mark's anchor-tier `h` accepts a field(...)
+    # pipeline the same way a leaf mark's "size" channel does.
     # ribbon(h=field("age").count()) placed directly in .mark() position
     # blank-fuses to .mark(blank(h=field("age").count())) +
     # .layer(ribbon()) — the anchor blank evaluates the expression per bin,
     # and the connector bands the resulting bin-tops into an area
-    # histogram. Bins with zero rows are dropped rather than rendered as
-    # zero-height gaps, so the band visibly skips them — see #763.
+    # histogram. The anchors are points (no `w`): a ribbon spans the gap
+    # between consecutive anchors' facing edges, so the spacing is what
+    # gives the band its width. Bins with zero rows are dropped rather than
+    # rendered as zero-height gaps, so the band visibly skips them — see #763.
     return (
         chart(_BIN_DATA)
-        .flow(spread(by=field("age").bin(), dir="x", spacing=0))
-        .mark(ribbon(w=30, h=field("age").count(), fill="steelblue")),
+        .flow(spread(by=field("age").bin(), dir="x", spacing=40))
+        .mark(ribbon(h=field("age").count(), fill="steelblue")),
         {"w": 500, "h": 250, "axes": True},
     )

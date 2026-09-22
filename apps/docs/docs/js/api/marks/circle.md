@@ -19,7 +19,7 @@ gf.chart([{ size: 40 }])
 ## Signature
 
 ```ts
-circle({ r?, fill?, stroke?, strokeWidth?, debug? })
+circle({ r?, fill?, stroke?, strokeWidth?, opacity?, debug? })
 ```
 
 ## Parameters
@@ -38,4 +38,7 @@ circle({ r?, fill?, stroke?, strokeWidth?, debug? })
 
 // Named for use with selectAll()
 .mark(circle({ r: 8 }).name("points"))
+
+// Per-datum opacity: fade everything but the current day
+.mark(circle({ r: 3, fill: "species", opacity: (d) => (d.day === day() ? 1 : 0.1) }))
 ```

@@ -1317,6 +1317,19 @@ error rather than silently doing the wrong thing:
   `evalFieldValues` in `fieldExpr.ts`. A domain op or a second aggregate
   reaching a value slot throws (the fold happens once).
 
+`.between(lo, hi, { closed })` is deliberately **not** an op. It returns a row
+predicate `(row) => boolean` for the `filter` flow operator, and a predicate
+belongs to none of the three slots: it never decides which groups exist, never
+folds a group to a value, and never scales anything. Giving it an op would mean
+a fourth slot that every evaluation site had to learn to ignore. For the same
+reason it THROWS when the expression carries ops: `field("x").bin(10).between(...)`
+would have tested the raw `x`, silently. `closed` is polars' `is_between`
+argument, comparing by value (SQL `RANGE`) rather than by row count (Vega's
+window `frame`). The bounds are plain numbers; a window that follows a `timer()`
+is a lambda around the bare-value form, exported as
+`between(v, lo, hi, { closed })` — which is also the loose-ends spelling of
+`contains` in `util/interval.ts`.
+
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
 called `sumBy`/`meanBy` over the raw per-row values; it now instead calls

@@ -51,3 +51,67 @@ export const isLive = (v: unknown): v is LiveValue =>
  */
 export const evalLiveStatic = (accessor: LiveValue, datum: unknown): unknown =>
   untrack(() => runInLiveEval(() => accessor(datum)));
+
+/**
+ * The `live(...)` channels of an options bag, keyed by channel name — or
+ * `undefined` when there are none (the overwhelmingly common case, so callers
+ * skip the per-node `__gfLive` stamp on a cheap null check).
+ *
+ * This is the one place that asks "which of these channels are live?". A mark
+ * factory needs the answer at construction time, before any datum exists, so it
+ * is separate from evaluating them.
+ */
+export const liveChannelsOf = (
+  opts: Record<string, unknown>
+): Record<string, LiveValue> | undefined => {
+  let live: Record<string, LiveValue> | undefined;
+  for (const channel of Object.keys(opts)) {
+    const value = opts[channel];
+    if (isLive(value)) (live ??= {})[channel] = value;
+  }
+  return live;
+};
+
+/**
+ * An options bag whose `live(...)` channels have been substituted away: no
+ * channel can still hold a `LiveValue`. `withLiveStatics` is what produces one,
+ * and saying so in the type is what lets its consumers (a connector's `produce`,
+ * a leaf mark's channel encoding) read each channel straight through instead of
+ * casting the `LiveValue` arm back off one by one.
+ */
+export type StripLive<O> = { [K in keyof O]: Exclude<O[K], LiveValue> };
+
+/**
+ * `opts` with each live channel replaced by its resolve-time value at `datum`.
+ * Reading a live channel here is also what REGISTERS its input with the
+ * interaction runtime, so this is the single point where that happens for a
+ * mark's channels — and the single point where the `LiveValue` arm is discharged
+ * from the type.
+ */
+export const withLiveStatics = <O extends Record<string, unknown>>(
+  opts: O,
+  live: Record<string, LiveValue> | undefined,
+  datum: unknown
+): StripLive<O> =>
+  (live
+    ? {
+        ...opts,
+        ...Object.fromEntries(
+          Object.entries(live).map(([k, v]) => [k, evalLiveStatic(v, datum)])
+        ),
+      }
+    : opts) as StripLive<O>;
+
+/**
+ * Split an options bag at one datum: the live channels to stamp on the produced
+ * node as paint-time thunks, and the bag the pipeline builds from, with each of
+ * those channels replaced by its resolve-time value. The one-shot form of
+ * `liveChannelsOf` + `withLiveStatics`, for a factory that has its datum in hand.
+ */
+export const splitLiveChannels = <O extends Record<string, unknown>>(
+  opts: O,
+  datum: unknown
+): { static: StripLive<O>; live: Record<string, LiveValue> | undefined } => {
+  const live = liveChannelsOf(opts);
+  return { static: withLiveStatics(opts, live, datum), live };
+};

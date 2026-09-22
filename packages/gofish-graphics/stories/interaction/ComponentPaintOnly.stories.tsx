@@ -46,7 +46,7 @@ export const Default: StoryObj<Args> = {
     setInterval(() => setOn((v) => !v), 700);
 
     // A gofish timer(), read ONLY inside live() → drives paint pulses only.
-    const t = timer({ interval: 450 });
+    const t = timer({ domain: [0, 1], step: 1, duration: 900 });
 
     const node = layer([
       spreadX({ spacing: 18 }, [
@@ -58,7 +58,7 @@ export const Default: StoryObj<Args> = {
         rect({
           w: 90,
           h: 130,
-          fill: live(() => (t() % 2 === 0 ? "#2ca02c" : "#9467bd")),
+          fill: live(() => (t() === 0 ? "#2ca02c" : "#9467bd")),
         }),
         // A plain static fill for contrast — never re-evaluated.
         rect({ w: 90, h: 130, fill: "#e0a030" }),
