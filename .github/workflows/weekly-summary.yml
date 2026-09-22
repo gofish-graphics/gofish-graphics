@@ -5,7 +5,7 @@ on:
   workflow_dispatch: # Allow manual triggers
     inputs:
       dry_run:
-        description: "Dry run mode (skip Slack posting, output to logs)"
+        description: "Dry run mode (skip Discord posting, output to logs)"
         required: false
         default: "false"
         type: choice
@@ -78,7 +78,7 @@ jobs:
         run: |
           echo "## 📋 Generated Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          cat summary.txt >> $GITHUB_STEP_SUMMARY
+          cat summary.md >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
 
@@ -86,28 +86,30 @@ jobs:
           echo "=========================================="
           echo "GENERATED SUMMARY:"
           echo "=========================================="
-          cat summary.txt
+          cat summary.md
           echo "=========================================="
 
-      - name: Post to Slack
+      - name: Post to Discord
         if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.dry_run != 'true') }}
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.GOFISH_SLACK_CHANNEL_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TITLE: "# 🐟 GoFish Weekly Update (${{ steps.dates.outputs.lower_label }} → ${{ steps.dates.outputs.upper_label }})"
         run: |
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "⚠️  SLACK_WEBHOOK_URL secret not set. Skipping Slack post."
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "⚠️  DISCORD_WEBHOOK_URL secret not set. Skipping Discord post."
             exit 0
           fi
 
-          # A Slack "section" block's text field is capped at 3000 chars, so a long
-          # summary (a big PR week) must be split across multiple section blocks or
-          # Slack rejects the whole payload with "invalid_blocks". Chunk at line
-          # boundaries, staying under 2900 to leave headroom, and hard-wrap any
-          # single line that is itself too long.
+          # A Discord message's content field is capped at 2000 chars, so a long
+          # summary (a big PR week) must be split across several messages or
+          # Discord rejects the post. Prepend the title, then chunk at line
+          # boundaries, staying under 1900 to leave headroom, and hard-wrap any
+          # single line that is itself too long. When a chunk would end on a
+          # header line, carry that header over to start the next chunk instead.
           jq -n \
-            --arg header "🐟 GoFish Weekly Update (${{ steps.dates.outputs.lower_label }} → ${{ steps.dates.outputs.upper_label }})" \
-            --rawfile summary summary.txt \
-            --argjson max 2900 \
+            --arg title "$TITLE" \
+            --rawfile summary summary.md \
+            --argjson max 1900 \
             '
               def chunk($limit):
                 reduce (./"\n")[] as $line ({chunks: [], cur: ""};
@@ -117,36 +119,49 @@ jobs:
                       if (.cur | length) == 0 then .cur = $p
                       elif ((.cur | length) + 1 + ($p | length)) <= $limit
                         then .cur = .cur + "\n" + $p
-                      else .chunks += [.cur] | .cur = $p
+                      else
+                        (.cur / "\n") as $ls
+                        | if ($ls | length) > 1 and ($ls[-1] | startswith("#"))
+                             and (($ls[-1] | length) + 1 + ($p | length)) <= $limit
+                          then .chunks += [$ls[:-1] | join("\n")] | .cur = $ls[-1] + "\n" + $p
+                          else .chunks += [.cur] | .cur = $p
+                          end
                       end))
                 | .chunks + (if (.cur | length) > 0 then [.cur] else [] end);
-              {
-                blocks: (
-                  [ {type: "header", text: {type: "plain_text", text: $header, emoji: true}},
-                    {type: "divider"} ]
-                  + ($summary | chunk($max) | map({type: "section", text: {type: "mrkdwn", text: .}}))
-                )
-              }' > payload.json
+              ($title + "\n\n" + $summary) | chunk($max)
+            ' > chunks.json
 
-          # Slack incoming webhooks return HTTP 200 with body "ok" on success, and an
-          # HTTP 4xx with an error body (e.g. "invalid_blocks") on rejection. curl does
-          # not fail on an error *body*, so check the status/body explicitly — otherwise
-          # a rejected post leaves the job green and the failure goes unnoticed.
-          HTTP_CODE=$(curl -sS -X POST "$SLACK_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            --data @payload.json \
-            -w "%{http_code}" -o slack_response.txt)
-          RESPONSE=$(cat slack_response.txt)
-          echo "Slack responded HTTP $HTTP_CODE: $RESPONSE"
+          # Post one message per chunk, in order. With ?wait=true Discord returns
+          # HTTP 200 and the created message; on rejection it returns a 4xx with
+          # an error body. curl does not fail on an error status, so check it
+          # explicitly; otherwise a rejected post leaves the job green and the
+          # failure goes unnoticed. allowed_mentions.parse = [] keeps a summary
+          # from ever pinging @everyone, roles, or users.
+          COUNT=$(jq 'length' chunks.json)
+          for i in $(seq 0 $((COUNT - 1))); do
+            jq -c --argjson i "$i" \
+              '{content: .[$i], allowed_mentions: {parse: []}}' \
+              chunks.json > payload.json
+            HTTP_CODE=$(curl -sS -X POST "$DISCORD_WEBHOOK_URL?wait=true" \
+              -H "Content-Type: application/json" \
+              --data @payload.json \
+              -w "%{http_code}" -o discord_response.txt)
+            RESPONSE=$(cat discord_response.txt)
+            echo "Discord responded HTTP $HTTP_CODE for message $((i + 1))/$COUNT"
 
-          if [ "$HTTP_CODE" != "200" ] || [ "$RESPONSE" != "ok" ]; then
-            echo "::error::Slack rejected the weekly summary (HTTP $HTTP_CODE): $RESPONSE"
-            exit 1
-          fi
-          echo "✅ Weekly summary posted to Slack."
+            if [ "${HTTP_CODE:0:1}" != "2" ]; then
+              echo "::error::Discord rejected the weekly summary (HTTP $HTTP_CODE): $RESPONSE"
+              exit 1
+            fi
+            # Stay clear of the webhook rate limit between messages.
+            if [ "$i" -lt $((COUNT - 1)) ]; then
+              sleep 1
+            fi
+          done
+          echo "✅ Weekly summary posted to Discord ($COUNT message(s))."
 
       - name: Dry run notice
         if: ${{ inputs.dry_run == 'true' }}
         run: |
-          echo "✅ DRY RUN MODE: Summary generated but NOT posted to Slack"
-          echo "To post to Slack, run the workflow with dry_run set to 'false'"
+          echo "✅ DRY RUN MODE: Summary generated but NOT posted to Discord"
+          echo "To post to Discord, run the workflow with dry_run set to 'false'"
