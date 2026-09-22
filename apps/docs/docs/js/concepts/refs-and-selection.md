@@ -1,5 +1,10 @@
 # Refs and Selection
 
+::: warning Under construction
+This page is a first draft. The ideas are right, but the prose has not been
+written properly yet and may change shape.
+:::
+
 A **ref** is a reference to a mark that is already part of the scene. It is not
 a copy of that mark and it is not a second drawing of it. It is a way for one
 part of a picture to talk about another part: where it ended up, how big it is,

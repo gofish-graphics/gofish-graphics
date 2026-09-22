@@ -1,5 +1,10 @@
 # Constraints and Operators
 
+::: warning Under construction
+This page is a first draft. The ideas are right, but the prose has not been
+written properly yet and may change shape.
+:::
+
 GoFish has two ways to say where something goes, and they answer different
 questions.
 

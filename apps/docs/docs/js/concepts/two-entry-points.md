@@ -1,5 +1,10 @@
 # Charts and Diagrams
 
+::: warning Under construction
+This page is a first draft. The ideas are right, but the prose has not been
+written properly yet and may change shape.
+:::
+
 Most visualization libraries are built for charts, and most diagramming
 libraries are built for diagrams. GoFish draws both, and it does so without
 having two engines inside it. There is one substrate and there are two ways in.

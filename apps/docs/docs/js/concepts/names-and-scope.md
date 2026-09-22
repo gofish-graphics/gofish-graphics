@@ -1,5 +1,10 @@
 # Names and Scope
 
+::: warning Under construction
+This page is a first draft. The ideas are right, but the prose has not been
+written properly yet and may change shape.
+:::
+
 A name in GoFish is a handle. You give one to a mark with `.name(...)`, and
 some other piece of the picture uses it to say where that mark should sit or
 what should point at it. Names are how a constraint says "center the label on
