@@ -194,6 +194,33 @@ The builder case is the reverse direction of `.layer(node)`, which has always
 accepted low-level nodes: a chart composes inside an operator (`spreadY([map,
 controls])`) exactly as a node composes inside a chart.
 
+### What an operator accepts as a child
+
+The other half of `withGoFish.ts` is `createNodeOperator` /
+`createNodeOperatorSequential`, which every low-level operator (`layer`,
+`spreadX`, `Frame`, …) is built from. They flatten the children array, await its
+promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
+shared by both loops: a thunk is called, and whatever comes out — like every other
+child — goes to `resolveMarkResult` (`marks/chartBuilder.ts`), the single place
+that knows all the shapes. Four get in:
+
+- an already-built node (or a `GoFishRef`) — used as is;
+- a **mark** (a function) — invoked with `undefined` data, which is how a bare
+  `rect({ … })` becomes a node inside `spreadX([...])`;
+- a **thunk** (sequential form only) — called, then reified again;
+- a **v3 builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
+  — resolved through its own `resolve()`. A `LayerBuilder` must go through its
+  own, not the root tier's: that is where a root `coord` is hoisted around every
+  tier, so resolving the tiers by hand would drop the shared projection.
+
+The dependency runs one way — `withGoFish` and `createOperator` import from
+`chartBuilder`, never the reverse — which is why `resolveMarkResult` lives there
+rather than being duplicated as a local builder-child dispatch on this side.
+
+The builder case is the reverse direction of `.layer(node)`, which has always
+accepted low-level nodes: a chart composes inside an operator (`spreadY([map,
+controls])`) exactly as a node composes inside a chart.
+
 ## `.name()`, `.label()`, `.zOrder()`, and `.translate()`
 
 `createMark` returns a `NameableMark`, which is the base mark plus chainable

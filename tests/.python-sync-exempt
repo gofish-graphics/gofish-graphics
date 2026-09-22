@@ -147,7 +147,8 @@ packages/gofish-graphics/stories/interaction/Widgets.stories.tsx
 # The animated bird-migration panels — exempt for the same reason as the other
 # interaction stories above. The panels are driven by `timer()`, `live()` and a
 # `filter(...)` predicate written as a JS closure over the clock, none of which
-# cross the derive RPC. Panel A (the static species lines) IS a pure spec and
-# could be ported on its own, but exemption is per FILE and the five panels are
-# one file; splitting A out into its own story file is tracked as issue #856.
+# cross the derive RPC. Panel A (the static species lines) IS a pure spec, but
+# the constructs it needs (the `geo` coordinate transform and `polygon`'s
+# field-bound `points`) have no Python wrapper yet, and exemption is per FILE.
+# Both the wrappers and splitting A out into its own file are tracked as #856.
 packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx
