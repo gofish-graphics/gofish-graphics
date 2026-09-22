@@ -455,6 +455,10 @@ export default defineConfig({
                 { text: "Basics", link: "/js/tutorials/basics" },
                 { text: "Charts", link: "/js/tutorials/charts" },
                 { text: "Diagrams", link: "/js/tutorials/diagrams" },
+                {
+                  text: "Pictorial Charts",
+                  link: "/js/tutorials/pictorial-charts",
+                },
               ],
             },
             { text: "Examples", link: "/js/examples/" },
@@ -470,6 +474,24 @@ export default defineConfig({
             {
               text: "Name and scope",
               link: "/js/api/howto/naming-and-scoping",
+            },
+          ],
+        },
+        {
+          text: "Concepts",
+          items: [
+            { text: "Names and Scope", link: "/js/concepts/names-and-scope" },
+            {
+              text: "Refs and Selection",
+              link: "/js/concepts/refs-and-selection",
+            },
+            {
+              text: "Charts and Diagrams",
+              link: "/js/concepts/two-entry-points",
+            },
+            {
+              text: "Constraints and Operators",
+              link: "/js/concepts/constraints-and-operators",
             },
           ],
         },

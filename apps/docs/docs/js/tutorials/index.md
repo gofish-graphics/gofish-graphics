@@ -5,49 +5,71 @@ title: Tutorials
 # Tutorials
 
 Charts and diagrams are built out of the same pieces in GoFish: a handful of
-marks, and graphical operators that arrange them. **Basics** teaches those
-pieces, and every other tutorial here depends on it and nothing else. So start
-with Basics, then take the rest in whatever order you like.
+marks, and graphical operators that arrange them. Basics teaches those pieces,
+so start there, and everything else builds on it.
 
-<TutorialGrid>
+## Fundamentals
 
-<TutorialCard title="Basics" href="/js/tutorials/basics" requires="Start here" blurb="Draw shapes and arrange them with graphical operators, the two ideas everything else is built from.">
+<TutorialGrid :cols="3">
+
+<TutorialCard title="Basics" href="/js/tutorials/basics">
 
 ::: gofish story:tutorials-basics--basics hidden
 :::
 
 </TutorialCard>
 
-<TutorialCard title="Charts" href="/js/tutorials/charts" requires="Builds on Basics" blurb="Grow a bar chart into a stacked bar chart, a ribbon chart, and finally a polar ribbon chart.">
+<TutorialCard title="Charts" href="/js/tutorials/charts">
 
 ::: gofish example:polar-ribbon-chart hidden
 :::
 
 </TutorialCard>
 
-<TutorialCard title="Diagrams" href="/js/tutorials/diagrams" requires="Builds on Basics" blurb="Lay out boxes, labels, and arrows to draw a memory diagram of a running program.">
+<TutorialCard title="Diagrams" href="/js/tutorials/diagrams">
 
 ::: gofish example:python-tutor-memory-diagram hidden
 :::
 
 </TutorialCard>
 
-<TutorialCard title="Reactivity &amp; Interaction" href="/js/reactivity" requires="Builds on Basics" note="JavaScript only" blurb="Make a visualization respond to the pointer, the wheel, a drag, or a timer.">
+</TutorialGrid>
+
+## Going further
+
+<TutorialGrid :cols="3">
+
+<TutorialCard title="Pictorial Charts" href="/js/tutorials/pictorial-charts">
+
+::: gofish example:bottle-fill-chart hidden
+:::
+
+</TutorialCard>
+
+<TutorialCard title="Reactivity &amp; Interaction" href="/js/reactivity" pointer="52% 41%">
 
 ::: gofish story:interaction-draggable-threshold--default hidden
 :::
 
 </TutorialCard>
 
-<TutorialCard title="GoTree" href="/js/gotree" requires="Builds on Basics" note="Separate package" blurb="Use the companion tree grammar to draw node-link diagrams, nested boxes, sunbursts, and more.">
+<TutorialCard title="Tree Diagrams" href="/js/gotree">
 
 ::: gofish story:gotree-node-link--nodelink hidden
+:::
+
+::: gofish story:gotree-gallery-treemap--treemap hidden
+:::
+
+::: gofish story:gotree-gallery-sunburst--sunburst hidden
+:::
+
+::: gofish story:gotree-gallery-indentedtree--indentedtree hidden
 :::
 
 </TutorialCard>
 
 </TutorialGrid>
 
-New to GoFish? [First Steps](/js/get-started) installs the library and gets a
-chart on the screen in a couple of minutes. When you want to read finished specs
-instead of building one up, walk the [examples](/js/examples/).
+New to GoFish? [First Steps](/js/get-started) gets a chart on the screen in a
+couple of minutes.
