@@ -82,7 +82,10 @@ vocabulary rather than a `dir: "t"` on the spatial operators, and the namespace
 is that decision made visible at the import site — `spread` and `line` stay
 spatial readings, and their temporal twins are reached through `time.`. Like the
 rest of the reactive layer, it is JavaScript-only: a sequence owns a `timer()`
-clock, which is a live signal with no Python bridge.
+clock, which is a live signal with no Python bridge. `interpolate` sits beside
+it as a bare name rather than inside the namespace, because it is not a temporal
+construct at all: it is a pure function over rows, the data-space reading a
+`derive` hands an ordinary chart.
 
 ## Planned contents
 

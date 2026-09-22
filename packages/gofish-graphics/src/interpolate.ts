@@ -115,3 +115,107 @@ export function interpolateRun(
 export function knotOrder(knots: number[]): number[] {
   return knots.map((_, i) => i).sort((a, b) => knots[a] - knots[b]);
 }
+
+export type InterpolateOptions = {
+  /** The field the rows are keyed by in time — the playhead's own units. */
+  along: string;
+  /** The field that says which rows are the same thing at different times.
+   *  One output row comes back per value of it. */
+  key: string;
+  /** Where to read the run, in `along`'s units. */
+  at: number;
+  /** How a run is read between its keyframes. Default `"catmullRom"`, the
+   *  same default `time.transition()` takes for the same reason (the field is
+   *  numeric, so the run is a sample of something continuous). */
+  method?: InterpolationMethod;
+  /** Which fields to interpolate. By default every field whose value is a
+   *  finite number at every keyframe of the run, apart from `along` and
+   *  `key`. */
+  fields?: string[];
+};
+
+/**
+ * Read a table of keyframes at one moment, in DATA space: one row per `key`,
+ * with its numeric fields evaluated at `at` and `along` set to `at`.
+ *
+ * This is the upstream reading of what `time.transition()` does downstream.
+ * The transition interpolates PLACED GEOMETRY — the boxes layout produced —
+ * and this interpolates the DATA that geometry came from, leaving the whole
+ * pipeline to run over the result. The two agree whenever the path through
+ * layout is affine in the interpolated quantities, which a fixed-domain
+ * scatter is; see the animation design note, §4.1. They part company as soon
+ * as it is not, for example when a scale's domain is inferred from the frame's
+ * own rows, or when the mark's size comes from an aggregate of them.
+ *
+ * Non-numeric fields (a country's name, its region) are not blended — they are
+ * copied from the keyframe nearest `at`, the same rule the transition uses for
+ * a mark's paint.
+ */
+export function interpolate<T extends Record<string, unknown>>(
+  rows: readonly T[],
+  { along, key, at, method = "catmullRom", fields }: InterpolateOptions
+): Record<string, unknown>[] {
+  // Key order is first appearance, so the output is a deterministic function
+  // of the input rather than of a hash's iteration order.
+  const runs = new Map<unknown, T[]>();
+  for (const row of rows) {
+    const k = row[key];
+    const run = runs.get(k);
+    if (run === undefined) runs.set(k, [row]);
+    else run.push(row);
+  }
+
+  const out: Record<string, unknown>[] = [];
+  for (const [k, run] of runs) {
+    const sorted = [...run].sort((a, b) => Number(a[along]) - Number(b[along]));
+    const knots = sorted.map((r) => Number(r[along]));
+    if (knots.some((v) => !Number.isFinite(v))) {
+      throw new Error(
+        `[gofish] interpolate(): "${along}" is the playhead's own units, so ` +
+          `every row needs a number in it — ${JSON.stringify(k)} has a row ` +
+          `whose "${along}" is not one.`
+      );
+    }
+
+    // Which fields get blended. Every field of the run is considered so a
+    // column that only some rows carry still comes out.
+    const names = new Set<string>();
+    for (const r of sorted) for (const f of Object.keys(r)) names.add(f);
+    const blended =
+      fields !== undefined
+        ? new Set(fields)
+        : new Set(
+            [...names].filter(
+              (f) =>
+                f !== along &&
+                f !== key &&
+                sorted.every(
+                  (r) => typeof r[f] === "number" && Number.isFinite(r[f])
+                )
+            )
+          );
+
+    // The keyframe a non-numeric field is copied from: the nearest in time,
+    // which is the value that was actually true closest to `at`.
+    const nearest = sorted.reduce(
+      (best, _r, i) =>
+        Math.abs(knots[i] - at) < Math.abs(knots[best] - at) ? i : best,
+      0
+    );
+
+    const row: Record<string, unknown> = { ...sorted[nearest] };
+    for (const f of names) {
+      if (!blended.has(f)) continue;
+      row[f] = interpolateRun(
+        knots,
+        sorted.map((r) => Number(r[f])),
+        at,
+        method
+      );
+    }
+    row[along] = at;
+    row[key] = k;
+    out.push(row);
+  }
+  return out;
+}

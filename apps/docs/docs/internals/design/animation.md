@@ -613,6 +613,22 @@ One slice of §5's table exists: the `time` namespace
   uses): they keep their boxes and their data, and emit no display items and
   no hit-test targets.
 
+Both halves of the inference can also be written out, and the four-level
+desugaring tower that results is the surface's own proof of §4.1. `along` names
+the keyframes' time field and `at` supplies the playhead, so level 1 spells the
+key and the path tier as a `.layer(chart(selectAll(...)).flow(group({by})))`
+tier (the same expansion `line` has), and level 2 replaces the sequence with a
+plain `group({by})` plus a raw `timer` — there is nothing left of `sequence`
+once both halves are explicit, because superimposing the keyframes IS `group`.
+Level 3 drops the relational mark and interpolates in data space instead
+(`interpolate(rows, {along, key, at})`, the pure function beside the geometry
+evaluator in `src/interpolate.ts`), keeping the keyframes as `blank()` for
+domain inference only. Levels 0-2 agree exactly because they are rewrites;
+level 3 agrees because the fixed-domain scatter satisfies §4.1's affineness
+condition, and would not otherwise. The four are asserted equal (at a midpoint
+playhead and at an exact keyframe) by `src/tests/gapminderTower.test.ts`, and
+drawn side by side by the `Gapminder Tower` stories.
+
 Everything else in §§5-9 is unbuilt: clip composition (sequence/parallel/
 stagger), timing constraints, lifecycle (enter/exit), segues, and reveals.
 The transition also paints only its keyframes' own shape, and supports

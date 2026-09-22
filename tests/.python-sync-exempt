@@ -169,3 +169,10 @@ packages/gofish-graphics/stories/tutorials/Glyphs.stories.tsx
 # stories in the file (SpatialTwin, Frame1955) ARE pure specs, but exemption is
 # per FILE and all four are one file (same trade-off as issue #856).
 packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx
+
+# The Gapminder desugaring tower — exempt for the same reason. Every level in
+# it holds a clock: levels 0 and 1 through `time.sequence(...)`, levels 2 and 3
+# through a raw `timer()` the spec closes over. Level 3 additionally reads the
+# clock inside a `derive(...)` closure, which is the one shape the derive RPC
+# cannot carry.
+packages/gofish-graphics/stories/animated-vega-lite/GapminderTower.stories.tsx

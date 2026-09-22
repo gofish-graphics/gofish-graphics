@@ -205,6 +205,10 @@ export { compose } from "./ast/marks/compose";
 // bare names beside the spatial operators.
 export { time } from "./ast/marks/time";
 export type { SequenceOptions, TransitionOptions } from "./ast/marks/time";
+// The data-space reading of a transition: read a table of keyframes at one
+// moment and hand the result to an ordinary chart. See `src/interpolate.ts`.
+export { interpolate } from "./interpolate";
+export type { InterpolateOptions, InterpolationMethod } from "./interpolate";
 export type {
   Mark,
   Operator,

@@ -125,6 +125,20 @@ export function sequence(opts: SequenceOptions) {
 }
 
 export type TransitionOptions = {
+  /** The field the keyframes are keyed by in time, i.e. where each keyframe
+   *  sits on the playhead's axis. It is the same role `along` names on a
+   *  spatial connector, and it is normally inferred from the flow's
+   *  `time.sequence(...)`; writing it out is what the desugaring tower's
+   *  level 1 does. An explicit `along` wins over the inferred one, and is
+   *  read off each keyframe's own datum either way. */
+  along?: string;
+  /** The playhead, in `along`'s own units — a signal (`() => number`, e.g. a
+   *  `timer`) or a fixed number. Normally the transition reads the clock the
+   *  flow's `time.sequence(...)` owns; `at` hands it one instead, so a chart
+   *  with a plain `group({ by })` and a raw `timer(...)` plays the same way.
+   *  Read during resolve, exactly like the sequence's clock, so the playhead
+   *  is a pipeline dependency. */
+  at?: (() => number) | number;
   /** How the run is read between keyframes. `"auto"` smooths a numeric time
    *  field with a Catmull-Rom through the whole run — the temporal reading of
    *  `connect`'s auto rule, and the same curve the spatial twin's `line`
@@ -149,16 +163,29 @@ export type TransitionOptions = {
  * spatial connector, and the split is that tier's complement — here one run
  * per country, which is Animated Vega-Lite's `key`, inferred rather than
  * written down.
+ *
+ * Every inferred piece can also be written out, which is what the desugaring
+ * tower in `apps/docs/docs/js/animation.md` does: `along` names the time
+ * field, `at` supplies the playhead, and a `.layer(chart(selectAll(...)))`
+ * tier with its own `group({ by })` spells the split. The sugar and the
+ * spelled-out form resolve to the same geometry.
  */
 export const transition = createRelationalMark<TransitionOptions>(
   "time.transition",
   (o, children, inferred) => {
     const tier = inferred.time;
-    if (tier === undefined) {
+    // Both halves of "which run, read where" can be written out instead of
+    // inferred: `along` names the keyframes' time field and `at` supplies the
+    // playhead. Explicit wins, and either one alone is enough to drop the
+    // other's half of the sequence.
+    const by = o.along ?? tier?.by;
+    if (by === undefined) {
       throw new Error(
         `[gofish] time.transition(): this chart has no time.sequence(...) in ` +
           `its flow, so there are no keyframes to move between. Add one — ` +
-          `\`.flow(time.sequence({ by: "year" }), ...)\` — or, if you meant a ` +
+          `\`.flow(time.sequence({ by: "year" }), ...)\` — or name the ` +
+          `keyframes' time field yourself with ` +
+          `\`time.transition({ along: "year", at: clock })\`. If you meant a ` +
           `static path through the marks, use line({ along: "year" }).`
       );
     }
@@ -167,8 +194,17 @@ export const transition = createRelationalMark<TransitionOptions>(
     // re-runs this interpolation against freshly placed keyframes. That is
     // the expensive reading (a whole re-resolve per tick) and the honest one
     // — incremental layout is issue #674.
-    const t = tier.clock();
-    const knots = children.map((child) => knotOf(child, tier.by));
+    const playhead = o.at ?? tier?.clock;
+    if (playhead === undefined) {
+      throw new Error(
+        `[gofish] time.transition({ along: "${by}" }): nothing says where the ` +
+          `playhead is. Give it a clock — \`at: timer({ domain, duration })\` ` +
+          `— or put a time.sequence({ by: "${by}" }) in the flow and let the ` +
+          `transition read the clock it owns.`
+      );
+    }
+    const t = typeof playhead === "function" ? playhead() : playhead;
+    const knots = children.map((child) => knotOf(child, by));
     return tween(
       {
         t,

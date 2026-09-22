@@ -482,15 +482,23 @@ function applyDefaultRelational(
   // path tier) runs unchanged.
   const timeTier = fusable.temporal ? findTimeTier(operators) : undefined;
   if (fusable.temporal) {
-    if (timeTier === undefined) {
+    // A written-out `at` (a raw clock) replaces the sequence's own, and a
+    // written-out `along` replaces the field it names, so a flow of plain
+    // `group(...)` tiers is enough once both are spelled. Only when NEITHER
+    // half is written down does the transition need a sequence to read.
+    const spelledOut =
+      fusable.opts.at !== undefined && fusable.opts.along !== undefined;
+    if (timeTier === undefined && !spelledOut) {
       throw new Error(
         `${fusable.type}(): this chart's flow has no time.sequence(...), so ` +
           `there are no keyframes to move between. Add one — ` +
-          `\`.flow(time.sequence({ by: "year" }), ...)\` — or use ` +
+          `\`.flow(time.sequence({ by: "year" }), ...)\` — or write the two ` +
+          `halves out yourself with ` +
+          `\`${fusable.type}({ along: "year", at: clock })\` — or use ` +
           `line({ along: "year" }) for a static path through the marks.`
       );
     }
-    fusable.inferred.time = timeTier;
+    if (timeTier !== undefined) fusable.inferred.time = timeTier;
   }
   const along =
     ((fusable.opts as any).along as string | undefined) ?? timeTier?.by;
@@ -522,10 +530,20 @@ function applyDefaultRelational(
  *  see the design note's "Matching" clause). `applyDefaultRelational` is
  *  never reached on these paths, so `along` would otherwise silently no-op;
  *  call this wherever fusion is skipped but the mark could still carry
- *  `along`. */
+ *  `along`.
+ *
+ *  A TEMPORAL connector is exempt, and that is a difference in what the word
+ *  names rather than an exception to the rule. On a spatial connector `along`
+ *  names a tier of the flow, which a refs-bag chart does not have. On
+ *  `time.transition()` it names the field each keyframe's own datum carries
+ *  its time in, which the refs carry with them, so it still does exactly its
+ *  job over a bag of already-placed marks. */
 function rejectAlongWithoutFlow(
-  fusable: { type: string; opts: Record<string, any> } | undefined
+  fusable:
+    | { type: string; opts: Record<string, any>; temporal?: boolean }
+    | undefined
 ): void {
+  if (fusable?.temporal) return;
   if (fusable && fusable.opts.along !== undefined) {
     throw new Error(
       `${fusable.type}({ along: "${fusable.opts.along}" }): along names a ` +
@@ -800,6 +818,35 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       );
     }
     return new LayerBuilder([this, child]);
+  }
+
+  /** This tier's own temporal tier: the last `time.sequence(...)` in its flow,
+   *  or `undefined`. Read by `LayerBuilder` so later tiers can inherit it. */
+  timeTier(): TimeTier | undefined {
+    return findTimeTier(this.state.operators);
+  }
+
+  /**
+   * Offer this tier the enclosing chart's temporal tier.
+   *
+   * A layered tier already sees the previous tier's MARKS as its scope; the
+   * clock those marks are keyframes of is part of the same scope, and a tier
+   * written as `chart(selectAll("kf")).flow(group({by})).mark(time.transition())`
+   * has no flow of its own to find it in. So `LayerBuilder` hands it down, the
+   * same way it hands down the refs bag. A tier that owns a sequence of its
+   * own keeps it, and a transition given an explicit `at` ignores this
+   * anyway (see `time.transition`), so an inherited tier never overrides
+   * something written down.
+   */
+  adoptTimeTier(tier: TimeTier | undefined): void {
+    if (tier === undefined) return;
+    if (this.timeTier() !== undefined) return;
+    const fusable = (this.state.finalMark as any)?.__relationalFusable as
+      | RelationalFusable
+      | undefined;
+    if (fusable?.temporal && fusable.inferred.time === undefined) {
+      fusable.inferred.time = tier;
+    }
   }
 
   /** True when this builder is an empty `Chart()` scope (its data defers to the
@@ -1097,6 +1144,11 @@ export class LayerBuilder extends RenderableBuilder {
     // inference then sees all the tiers' positions at once.
     const rootMeta = this.rootChart().renderMeta();
     const hoistedCoord = rootMeta.coord;
+    // The root tier's clock, offered to every later tier the way the previous
+    // tier's marks are (see `ChartBuilder.adoptTimeTier`): a transition
+    // layered over a sequence's keyframes is inside that sequence's chart,
+    // even when it is written as a nested `chart(selectAll(...))` pipeline.
+    const rootTimeTier = this.rootChart().timeTier();
     // The previous tier's marks, as a `GoFishRef[]` bag — offered uniformly to
     // every tier (see class doc). `undefined` before any tier has produced
     // named nodes (the root tier, or after a producer with no name).
@@ -1110,6 +1162,7 @@ export class LayerBuilder extends RenderableBuilder {
 
       if (tier instanceof ChartBuilder) {
         if (i === 0 && hoistedCoord !== undefined) tier = tier.withoutCoord();
+        if (i > 0) tier.adoptTimeTier(rootTimeTier);
         if (tier.usesPreviousLayerMarks()) {
           if (prevRefs === undefined) {
             throw new Error(

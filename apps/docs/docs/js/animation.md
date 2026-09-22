@@ -107,6 +107,91 @@ Numbers interpolate; paint does not. A dot's position and size move between
 keyframes, and its fill is read off the keyframe it is nearest, because a
 country's color is its color.
 
+## What the sugar expands to
+
+`time.sequence` and a bare `time.transition()` are short for a longer spec. The
+longer spec is worth reading once, because it says out loud what the short one
+is inferring.
+
+The chart at the top of this page is level 0. Level 1 writes out the key and the
+field the keyframes are keyed by. It is the same expansion a bare `line()` gets:
+name the marks, select them back into a tier of their own, group by the field
+you want one moving mark per, and name the time field with `along`.
+
+```ts
+chart(gapminder, { legend: false })
+  .flow(
+    time.sequence({ by: "year", duration: 5000 }),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(circle({ r: 4, fill: "country" }).name("kf"))
+  .layer(
+    chart(selectAll("kf"))
+      .flow(group({ by: "country" }))
+      .mark(time.transition({ along: "year" }))
+  )
+  .render(container, { w: 500, h: 400, axes: true });
+```
+
+Level 2 writes out the clock. Once `along` and `at` are both spelled out there
+is nothing left of `time.sequence` to keep, because laying the keyframes on top
+of one another is what `group({ by: "year" })` already does, and the clock the
+sequence owned is now a `timer` you hold yourself.
+
+```ts
+const year = timer({ domain: [1955, 2005], duration: 5000 });
+
+chart(gapminder, { legend: false })
+  .flow(
+    group({ by: "year" }),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(circle({ r: 4, fill: "country" }).name("kf"))
+  .layer(
+    chart(selectAll("kf"))
+      .flow(group({ by: "country" }))
+      .mark(time.transition({ along: "year", at: year }))
+  )
+  .render(container, { w: 500, h: 400, axes: true });
+```
+
+Level 3 gives up the moving mark altogether. `interpolate` reads the whole table
+at the playhead's moment and hands back one row per country, and an ordinary
+scatter draws those rows. The keyframes stay, drawn as `blank()`, because they
+are what the axes get their domains from. Without them the scales would be
+inferred from one moment's rows and the chart would rescale as it played.
+
+```ts
+const year = timer({ domain: [1955, 2005], duration: 5000 });
+
+chart(gapminder, { legend: false })
+  .flow(
+    group({ by: "year" }),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(blank())
+  .layer(
+    chart(gapminder)
+      .flow(
+        derive((rows) =>
+          interpolate(rows, { along: "year", key: "country", at: year() })
+        ),
+        scatter({ by: "country", x: "fertility", y: "life_expect" })
+      )
+      .mark(circle({ r: 4, fill: "country" }))
+  )
+  .render(container, { w: 500, h: 400, axes: true });
+```
+
+The first three levels are one computation with different amounts of it
+inferred, so they draw the same picture down to the pixel. The fourth is a
+different computation. It interpolates the data and runs the whole pipeline over
+the result, where the others interpolate the geometry the pipeline already
+produced. It agrees with the others here because the path from a row to a placed
+circle is a straight-line map once the domains are fixed. It stops agreeing when
+that path bends, for example when a scale's domain is read off one moment's rows
+instead of all of them, or when a mark's size comes from a count of them.
+
 ## Options
 
 ### `time.sequence(options)`
@@ -121,14 +206,31 @@ country's color is its color.
 
 ### `time.transition(options?)`
 
-| Option        | Type                                 | Default    | Meaning                                                |
-| ------------- | ------------------------------------ | ---------- | ------------------------------------------------------ |
-| `curve`       | `"auto" \| "linear" \| "catmullRom"` | `"auto"`   | How the run is read between keyframes.                 |
-| `ease`        | `(u: number) => number`              | none       | A time warp inside one keyframe interval, on `[0, 1]`. |
-| `fill`        | `string`                             | keyframe's | Paint for the moving mark.                             |
-| `stroke`      | `string`                             | `fill`     | Outline color.                                         |
-| `strokeWidth` | `number`                             | `0`        | Outline width.                                         |
-| `opacity`     | `number`                             | `1`        | Opacity of the moving mark.                            |
+| Option        | Type                                 | Default    | Meaning                                                         |
+| ------------- | ------------------------------------ | ---------- | --------------------------------------------------------------- |
+| `along`       | `string`                             | inferred   | The field the keyframes are keyed by in time.                   |
+| `at`          | `(() => number) \| number`           | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
+| `curve`       | `"auto" \| "linear" \| "catmullRom"` | `"auto"`   | How the run is read between keyframes.                          |
+| `ease`        | `(u: number) => number`              | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
+| `fill`        | `string`                             | keyframe's | Paint for the moving mark.                                      |
+| `stroke`      | `string`                             | `fill`     | Outline color.                                                  |
+| `strokeWidth` | `number`                             | `0`        | Outline width.                                                  |
+| `opacity`     | `number`                             | `1`        | Opacity of the moving mark.                                     |
+
+### `interpolate(rows, options)`
+
+Reads a table of keyframes at one moment and returns one row per key, with its
+numeric fields evaluated at that moment and `along` set to it. Fields that are
+not numbers are copied from the nearest keyframe, for the same reason a
+transition does not blend paint.
+
+| Option   | Type                       | Default        | Meaning                                                        |
+| -------- | -------------------------- | -------------- | -------------------------------------------------------------- |
+| `along`  | `string`                   | none           | The field the rows are keyed by in time.                       |
+| `key`    | `string`                   | none           | The field saying which rows are the same thing at other times. |
+| `at`     | `number`                   | none           | Where to read the run, in `along`'s units.                     |
+| `method` | `"linear" \| "catmullRom"` | `"catmullRom"` | How a run is read between its keyframes.                       |
+| `fields` | `string[]`                 | every number   | Which fields to interpolate.                                   |
 
 ## What is not built yet
 
