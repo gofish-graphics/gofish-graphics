@@ -46,6 +46,30 @@ has reached. The keyframe marks themselves are not painted. They are the
 scaffolding the moving mark is computed from, so they keep their boxes and their
 data but draw nothing and cannot be hovered.
 
+## A sequence on its own
+
+A sequence animates without a transition. A `spread` gives each group a band of
+x, and a sequence gives each group a band of time, so a keyframe holds from its
+own year until the next year arrives and then the chart jumps to the next
+frame. Only the keyframe whose band the playhead is in is drawn. The rest keep
+their boxes and their data, which is what holds the axes still, and draw
+nothing.
+
+```ts
+chart(gapminder, { legend: false })
+  .flow(
+    time.sequence({ by: "year", duration: 5000 }),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(circle({ r: 4, fill: "country" }))
+  .render(container, { w: 500, h: 400, axes: true });
+```
+
+That is the animation Animated Vega-Lite gets from a band scale on time, and it
+is all a sequence means. What a transition adds is the movement between the
+frames: instead of holding a country's 1955 dot for five years and then moving
+it to 1960 in one jump, it walks the dot there.
+
 ## Time is an axis
 
 Every temporal construct is a spatial one read on time. The animation above has
@@ -92,6 +116,45 @@ want it, in the field's own units. This is what a screenshot needs.
 time.sequence({ by: "year", playing: false, at: 1975 });
 ```
 
+## Sharing a clock
+
+A sequence builds its own clock, which is enough when the chart is the only
+thing that needs to know what time it is. When something else needs the same
+playhead, build the clock yourself and hand it to the sequence with `on`.
+
+```ts
+const year = timer({ domain: [1955, 2005], duration: 5000 });
+
+chart(gapminder, { legend: false })
+  .flow(
+    time.sequence({ by: "year", on: year }),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(circle({ r: 4, fill: "country" }))
+  .layer(time.transition())
+  .layer(
+    chart([{ fertility: 7.5, life_expect: 83 }])
+      .flow(scatter({ x: "fertility", y: "life_expect" }))
+      .mark(
+        text({
+          text: live(() => String(Math.floor(year()))),
+          fontSize: 48,
+          fill: "#ccc",
+        }).zOrder(-1)
+      )
+  )
+  .render(container, { w: 500, h: 400, axes: true });
+```
+
+The readout is a tier of its own holding one row, whose fields are the position
+the label sits at, so the chart's own x and y scales place it and it stays put
+when the chart is resized. A raw `timer` has to be told its domain, which is
+the one thing a sequence would have read off the field itself.
+
+Several charts on one clock play in lockstep the same way. The clock owns its
+domain, its duration and whether it is running, so `duration`, `loop`,
+`playing` and `at` are errors alongside `on`.
+
 ## Between the keyframes
 
 The knots of the interpolation are the data's own time values. Years five apart
@@ -101,11 +164,50 @@ run plays at an even speed. Every keyframe is passed through exactly.
 `curve` says how the run is read between them. The default, `"auto"`, smooths
 the whole run with a Catmull-Rom spline, which is the same curve the spatial
 twin's `line` draws through the same points. `"linear"` moves straight from each
-keyframe to the next.
+keyframe to the next. `"step"` does not move at all: the mark holds one
+keyframe's value until the next keyframe's own time arrives, and then jumps.
 
 Numbers interpolate; paint does not. A dot's position and size move between
 keyframes, and its fill is read off the keyframe it is nearest, because a
-country's color is its color.
+country's color is its color. Under `"step"` the fill comes from the previous
+keyframe rather than the nearest one, so the whole mark is the frame the curve
+is holding.
+
+## Comparing curves
+
+The three curves are easiest to read side by side, at one moment, on one clock.
+
+```ts
+const year = timer({ domain: [1955, 2005], duration: 10000 });
+
+const panel = (curve) =>
+  chart(gapminder, { legend: false, padding: 0 })
+    .flow(
+      time.sequence({ by: "year", on: year }),
+      scatter({ by: "country", x: "fertility", y: "life_expect" })
+    )
+    .mark(circle({ r: 4, fill: "country" }))
+    .layer(time.transition({ curve }));
+
+GoFish(container, { w: 1160, h: 400, legend: false, axes: true }, () =>
+  spreadX({ spacing: 16 }, [
+    Frame({ w: 240, h: 280 }, [panel("step")]),
+    Frame({ w: 240, h: 280 }, [panel("linear")]),
+    Frame({ w: 240, h: 280 }, [panel("catmullRom")]),
+  ])
+);
+```
+
+Held halfway between the 1955 and 1960 keyframes, a country's dot sits at its
+1955 position under `"step"`, exactly halfway between the two under `"linear"`,
+and a little off that straight line under `"catmullRom"`, where the spline is
+already bending toward 1965.
+
+`"step"` therefore draws the same picture as no transition at all. A sequence
+already holds each keyframe until the next one's time arrives, and a step curve
+asks the transition to do exactly that, so the transition has nothing left to
+add. It is worth having as a curve anyway, because it is the reading the other
+two are measured against.
 
 ## What the sugar expands to
 
@@ -203,19 +305,20 @@ instead of all of them, or when a mark's size comes from a count of them.
 | `loop`     | `boolean` | `true`  | Start over at the end.                                     |
 | `playing`  | `boolean` | `true`  | Start the clock. `false` holds the chart still.            |
 | `at`       | `number`  | none    | Where the playhead starts, in the field's units.           |
+| `on`       | `Timer`   | own     | A clock to play on. Rules out the four options above.      |
 
 ### `time.transition(options?)`
 
-| Option        | Type                                 | Default    | Meaning                                                         |
-| ------------- | ------------------------------------ | ---------- | --------------------------------------------------------------- |
-| `along`       | `string`                             | inferred   | The field the keyframes are keyed by in time.                   |
-| `at`          | `(() => number) \| number`           | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
-| `curve`       | `"auto" \| "linear" \| "catmullRom"` | `"auto"`   | How the run is read between keyframes.                          |
-| `ease`        | `(u: number) => number`              | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
-| `fill`        | `string`                             | keyframe's | Paint for the moving mark.                                      |
-| `stroke`      | `string`                             | `fill`     | Outline color.                                                  |
-| `strokeWidth` | `number`                             | `0`        | Outline width.                                                  |
-| `opacity`     | `number`                             | `1`        | Opacity of the moving mark.                                     |
+| Option        | Type                                           | Default    | Meaning                                                         |
+| ------------- | ---------------------------------------------- | ---------- | --------------------------------------------------------------- |
+| `along`       | `string`                                       | inferred   | The field the keyframes are keyed by in time.                   |
+| `at`          | `(() => number) \| number`                     | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
+| `curve`       | `"auto" \| "step" \| "linear" \| "catmullRom"` | `"auto"`   | How the run is read between keyframes.                          |
+| `ease`        | `(u: number) => number`                        | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
+| `fill`        | `string`                                       | keyframe's | Paint for the moving mark.                                      |
+| `stroke`      | `string`                                       | `fill`     | Outline color.                                                  |
+| `strokeWidth` | `number`                                       | `0`        | Outline width.                                                  |
+| `opacity`     | `number`                                       | `1`        | Opacity of the moving mark.                                     |
 
 ### `interpolate(rows, options)`
 
@@ -224,13 +327,13 @@ numeric fields evaluated at that moment and `along` set to it. Fields that are
 not numbers are copied from the nearest keyframe, for the same reason a
 transition does not blend paint.
 
-| Option   | Type                       | Default        | Meaning                                                        |
-| -------- | -------------------------- | -------------- | -------------------------------------------------------------- |
-| `along`  | `string`                   | none           | The field the rows are keyed by in time.                       |
-| `key`    | `string`                   | none           | The field saying which rows are the same thing at other times. |
-| `at`     | `number`                   | none           | Where to read the run, in `along`'s units.                     |
-| `method` | `"linear" \| "catmullRom"` | `"catmullRom"` | How a run is read between its keyframes.                       |
-| `fields` | `string[]`                 | every number   | Which fields to interpolate.                                   |
+| Option   | Type                                 | Default        | Meaning                                                        |
+| -------- | ------------------------------------ | -------------- | -------------------------------------------------------------- |
+| `along`  | `string`                             | none           | The field the rows are keyed by in time.                       |
+| `key`    | `string`                             | none           | The field saying which rows are the same thing at other times. |
+| `at`     | `number`                             | none           | Where to read the run, in `along`'s units.                     |
+| `method` | `"step" \| "linear" \| "catmullRom"` | `"catmullRom"` | How a run is read between its keyframes.                       |
+| `fields` | `string[]`                           | every number   | Which fields to interpolate.                                   |
 
 ## What is not built yet
 

@@ -16,7 +16,7 @@
  */
 
 /** How a run is read between its knots. */
-export type InterpolationMethod = "linear" | "catmullRom";
+export type InterpolationMethod = "step" | "linear" | "catmullRom";
 
 /** Locate `t` in an ascending knot array: the index `i` of the segment
  *  `[knots[i], knots[i+1]]` containing `t`, and the local fraction `u` in
@@ -48,6 +48,29 @@ export function interpolateLinear(
   if (knots.length === 1) return values[0];
   const { i, u } = locate(knots, t);
   return values[i] + (values[i + 1] - values[i]) * u;
+}
+
+/**
+ * Step evaluation: nothing moves between keyframes. The value is the one the
+ * PREVIOUS keyframe set, held until the next keyframe's own time arrives, and
+ * then it jumps. This is d3's `curveStepAfter` read on a time axis, and it is
+ * what a keyframe means when it is a band rather than a knot: keyframe `i`
+ * owns `[t_i, t_{i+1})`.
+ *
+ * A playhead before the run holds the first value, and one at or after the
+ * last knot holds the last, which is the same clamping the other methods do.
+ */
+export function interpolateStep(
+  knots: number[],
+  values: number[],
+  t: number
+): number {
+  if (knots.length === 0) return NaN;
+  if (knots.length === 1) return values[0];
+  const { i, u } = locate(knots, t);
+  // `locate` only reports `u === 1` past the end of the run; inside a segment
+  // the fraction is strictly below 1, so the previous keyframe's value holds.
+  return u >= 1 ? values[i + 1] : values[i];
 }
 
 /**
@@ -104,6 +127,7 @@ export function interpolateRun(
   t: number,
   method: InterpolationMethod
 ): number {
+  if (method === "step") return interpolateStep(knots, values, t);
   return method === "linear"
     ? interpolateLinear(knots, values, t)
     : interpolateCatmullRom(knots, values, t);
@@ -126,7 +150,9 @@ export type InterpolateOptions = {
   at: number;
   /** How a run is read between its keyframes. Default `"catmullRom"`, the
    *  same default `time.transition()` takes for the same reason (the field is
-   *  numeric, so the run is a sample of something continuous). */
+   *  numeric, so the run is a sample of something continuous). `"step"` does
+   *  not blend at all: each keyframe's values hold until the next one's time
+   *  arrives. */
   method?: InterpolationMethod;
   /** Which fields to interpolate. By default every field whose value is a
    *  finite number at every keyframe of the run, apart from `along` and
@@ -149,7 +175,8 @@ export type InterpolateOptions = {
  *
  * Non-numeric fields (a country's name, its region) are not blended — they are
  * copied from the keyframe nearest `at`, the same rule the transition uses for
- * a mark's paint.
+ * a mark's paint. Under `"step"` they come from the previous keyframe instead,
+ * which is the one the method is holding.
  */
 export function interpolate<T extends Record<string, unknown>>(
   rows: readonly T[],
@@ -195,15 +222,20 @@ export function interpolate<T extends Record<string, unknown>>(
             )
           );
 
-    // The keyframe a non-numeric field is copied from: the nearest in time,
-    // which is the value that was actually true closest to `at`.
-    const nearest = sorted.reduce(
-      (best, _r, i) =>
-        Math.abs(knots[i] - at) < Math.abs(knots[best] - at) ? i : best,
-      0
-    );
+    // The keyframe a non-numeric field is copied from. Normally the nearest
+    // in time, which is the value that was actually true closest to `at`;
+    // under `"step"` the PREVIOUS one, so every field of the row — blended or
+    // copied — comes from the keyframe the step method is holding.
+    const source =
+      method === "step"
+        ? knots.reduce((best, k, i) => (k <= at ? i : best), 0)
+        : sorted.reduce(
+            (best, _r, i) =>
+              Math.abs(knots[i] - at) < Math.abs(knots[best] - at) ? i : best,
+            0
+          );
 
-    const row: Record<string, unknown> = { ...sorted[nearest] };
+    const row: Record<string, unknown> = { ...sorted[source] };
     for (const f of names) {
       if (!blended.has(f)) continue;
       row[f] = interpolateRun(

@@ -28,6 +28,7 @@ import { createRelationalMark } from "./chart";
 import { Frame } from "../graphicalOperators/frame";
 import { tween } from "../graphicalOperators/tween";
 import { GoFishAST } from "../_ast";
+import { GoFishNode } from "../_node";
 import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import type { MaybeValue } from "../data";
@@ -48,7 +49,18 @@ export type SequenceOptions = {
   /** Where the playhead starts, in the field's units (e.g. `at: 1975`).
    *  Defaults to the first keyframe. */
   at?: number;
+  /** A clock to play on, instead of the one the sequence would have built.
+   *  Hand it a `timer(...)` when something outside the sequence has to read
+   *  the same playhead — a year readout beside the chart, or a second chart
+   *  that has to move in lockstep with this one. The clock then owns its own
+   *  domain and its own playback, so `duration`, `loop`, `playing` and `at`
+   *  are errors alongside it. */
+  on?: Timer<number>;
 };
+
+/** The options a sequence's own clock is built from — the ones a supplied
+ *  `on` clock owns instead. */
+const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
 
 /**
  * `time.sequence({ by })` — one keyframe per value of `by`, played through.
@@ -60,14 +72,39 @@ export type SequenceOptions = {
  * It is `spread` with the spacing taken away, which is what "spread on t"
  * looks like when it is drawn in two dimensions.
  *
+ * Every keyframe is laid out, and one of them is SHOWN. A spread gives each
+ * group a band of x; a sequence gives each group a band of time, so keyframe
+ * `i` owns `[t_i, t_{i+1})` and the chart draws whichever band the playhead is
+ * in. The others keep their boxes and their data — which is what holds the
+ * axes still — and emit nothing, by the same rule the tween uses on the
+ * keyframes it reads. So a sequence on its own already animates: it holds a
+ * frame, then jumps to the next one, exactly as Animated Vega-Lite's band
+ * scale on time does. A `time.transition()` layered over it hides every
+ * keyframe (all of them, including the held one) and draws the moving mark
+ * instead, so the two compose with no option to set.
+ *
  * The operator also owns the chart's clock, and builds it lazily: the domain
  * is the field's own range, which is not known until the data has been split,
  * so the first read of the playhead is what creates the timer. One `sequence`
- * call is one clock, so two charts on a page keep their own time.
+ * call is one clock, so two charts on a page keep their own time — unless
+ * `on` hands them the same one.
  */
 export function sequence(opts: SequenceOptions) {
   let domain: [number, number] | undefined;
-  let clock: Timer<number> | undefined;
+  let clock: Timer<number> | undefined = opts.on;
+
+  if (opts.on !== undefined) {
+    const owned = CLOCK_OPTIONS.filter((k) => opts[k] !== undefined);
+    if (owned.length > 0) {
+      throw new Error(
+        `[gofish] time.sequence({ by: "${opts.by}", on }): the clock owns ` +
+          `${owned.map((k) => `\`${k}\``).join(", ")}. A supplied clock has ` +
+          `its own domain, duration and play state, so set them on the ` +
+          `\`timer(...)\` instead — or drop \`on\` and let the sequence build ` +
+          `a clock of its own.`
+      );
+    }
+  }
 
   /** Record the field's range as the flow splits, so the clock is built from
    *  the data rather than from a hand-written domain. */
@@ -81,7 +118,13 @@ export function sequence(opts: SequenceOptions) {
   // `observe`; every other operator is a module-level factory because it has
   // no state to keep.
   const operator = createOperator<any, SequenceOptions>(
-    (_o, children) => Frame({}, children),
+    (_o, children) => {
+      // READ DURING RESOLVE, exactly like a transition's playhead: the clock
+      // is a pipeline dependency of this chart, so every value it emits
+      // re-resolves the spec and re-picks the keyframe held below.
+      hold(children, tier.clock());
+      return Frame({}, children);
+    },
     {
       split: ({ by }, d) => {
         const entries = splitEntries(by, d);
@@ -143,8 +186,10 @@ export type TransitionOptions = {
    *  field with a Catmull-Rom through the whole run — the temporal reading of
    *  `connect`'s auto rule, and the same curve the spatial twin's `line`
    *  draws through the same points. `"linear"` moves straight from each
-   *  keyframe to the next. */
-  curve?: "auto" | "linear" | "catmullRom";
+   *  keyframe to the next. `"step"` does not move between them at all: the
+   *  mark holds one keyframe's value until the next keyframe's own time
+   *  arrives, and then jumps — the same picture the keyframes alone draw. */
+  curve?: "auto" | "step" | "linear" | "catmullRom";
   /** Time warp inside one keyframe interval, `u -> u'` on `[0, 1]`. */
   ease?: (u: number) => number;
   fill?: MaybeValue<string>;
@@ -227,7 +272,42 @@ export const transition = createRelationalMark<TransitionOptions>(
  *  conclusion `connect`'s auto rule reaches for a continuous connection axis,
  *  and the reason a transition traces the curve its spatial twin draws. */
 function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
+  if (curve === "step") return "step";
   return curve === "linear" ? "linear" : "catmullRom";
+}
+
+/**
+ * Show the keyframe whose band the playhead is in, and hide the rest.
+ *
+ * The band rule is the step rule: keyframe `i` owns `[t_i, t_{i+1})`, the last
+ * keyframe owns everything after it, and a playhead before the run holds the
+ * first — the same reading `interpolateStep` gives a run of values, which is
+ * why a sequence alone and a `curve: "step"` transition draw the same picture.
+ *
+ * A hidden keyframe keeps its box, its datum and its anchoring role and emits
+ * no display items, the rule `INTERNAL_emitNothing` states. It is applied down
+ * the whole subtree because the rule replaces one node's lowering, and it is
+ * the marks INSIDE a keyframe group that would otherwise draw.
+ */
+function hold(children: GoFishAST[], t: number): void {
+  // Each child is one group, and the operator stamped it with its group key —
+  // the value of `by` this keyframe is, which is the knot.
+  const knots = children.map((child) => Number((child as GoFishNode).key));
+  const bands = [...new Set(knots.filter(Number.isFinite))].sort(
+    (a, b) => a - b
+  );
+  if (bands.length === 0) return;
+  const held = bands.reduce((best, k) => (k <= t ? k : best), bands[0]);
+  children.forEach((child, i) => {
+    if (knots[i] !== held) hideSubtree(child);
+  });
+}
+
+/** Make a node and everything under it draw nothing. */
+function hideSubtree(node: GoFishAST): void {
+  if (!(node instanceof GoFishNode)) return;
+  node.INTERNAL_emitNothing();
+  for (const child of node.children) hideSubtree(child);
 }
 
 /** One keyframe's time value, read off the mark's own datum. */

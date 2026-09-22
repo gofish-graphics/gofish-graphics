@@ -177,6 +177,75 @@ async function level3(rows: any[], at: number) {
     .toDisplayList({ w: W, h: H, axes: true });
 }
 
+/** The sequence with nothing layered over it. A sequence is a band scale on
+ *  time, so it holds one keyframe until the next one's year arrives — which is
+ *  an animation already, and the same one a `curve: "step"` transition plays. */
+async function sequenceAlone(rows: any[], at: number) {
+  return chart(rows, { legend: false })
+    .flow(
+      time.sequence({ by: "year", duration: 5000, playing: false, at }),
+      scatter(SCATTER)
+    )
+    .mark(circle({ r: 4, fill: "country" }))
+    .toDisplayList({ w: W, h: H, axes: true });
+}
+
+/** The sugar with the step curve: the moving mark holds the previous
+ *  keyframe's geometry instead of interpolating toward the next. */
+async function stepTransition(rows: any[], at: number) {
+  return chart(rows, { legend: false })
+    .flow(
+      time.sequence({ by: "year", duration: 5000, playing: false, at }),
+      scatter(SCATTER)
+    )
+    .mark(circle({ r: 4, fill: "country" }))
+    .layer(time.transition({ curve: "step" }))
+    .toDisplayList({ w: W, h: H, axes: true });
+}
+
+/** The step reading of an animated sequence, checked where it has something to
+ *  say: strictly between two keyframes. */
+async function checkStep(gapminder: any[]): Promise<void> {
+  const at = 1957.5;
+  console.log(`\n## playhead ${at} — the sequence's own band`);
+  const alone = circles(await sequenceAlone(gapminder, at));
+  const stepped = circles(await stepTransition(gapminder, at));
+  const smooth = circles(await level0(gapminder, at));
+
+  ok(
+    "a sequence alone draws one circle per country",
+    alone.length === new Set(gapminder.map((d) => d.country)).size,
+    `${alone.length} circles`
+  );
+  const diff = firstDifference(alone, stepped);
+  ok("a sequence alone matches a step transition", diff === undefined, diff);
+  ok(
+    "and both differ from the default curve",
+    firstDifference(alone, smooth) !== undefined
+  );
+
+  // The band's own claim: nothing moves inside `[1955, 1960)`, and the frame
+  // changes the instant 1960 arrives. Compared against the sequence itself at
+  // other playheads, so both sides share one set of inferred domains.
+  const onKeyframe = circles(await sequenceAlone(gapminder, 1955));
+  const lateInBand = circles(await sequenceAlone(gapminder, 1959.9));
+  const nextBand = circles(await sequenceAlone(gapminder, 1960));
+  ok(
+    "the held frame is the band's own keyframe",
+    firstDifference(alone, onKeyframe) === undefined,
+    firstDifference(alone, onKeyframe)
+  );
+  ok(
+    "nothing moves inside the band",
+    firstDifference(alone, lateInBand) === undefined,
+    firstDifference(alone, lateInBand)
+  );
+  ok(
+    "and it jumps when the next keyframe arrives",
+    firstDifference(alone, nextBand) !== undefined
+  );
+}
+
 async function main(): Promise<void> {
   const gapminder = (await (data as any)["gapminder.json"]()) as any[];
   console.log("\n# Gapminder desugaring tower — one geometry, four spellings");
@@ -206,6 +275,8 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  await checkStep(gapminder);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

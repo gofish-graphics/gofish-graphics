@@ -145,20 +145,27 @@ export const tween = createNodeOperator(
           const w = channel((b) => b[0].max! - b[0].min!);
           const h = channel((b) => b[1].max! - b[1].min!);
 
-          // The paint the moving mark inherits from its keyframes: whichever
-          // keyframe the playhead is nearest. Paint is not interpolated — a
-          // country's color is its color — so it is READ OFF a keyframe
-          // rather than blended (the same value at every keyframe here, since
-          // the run is one key's).
-          const nearest =
+          // The paint and the shape the moving mark inherits from its
+          // keyframes. Neither is interpolated — a country's color is its
+          // color — so both are READ OFF one keyframe rather than blended
+          // (the same value at every keyframe here, since the run is one
+          // key's). Which one: normally the keyframe the playhead is nearest,
+          // but under `"step"` the PREVIOUS one, so the whole mark — position,
+          // size, paint, shape — is the keyframe the method is holding rather
+          // than a held position wearing the next keyframe's paint.
+          const source =
             order[
-              sortedKnots.reduce(
-                (best, k, i) =>
-                  Math.abs(k - t) < Math.abs(sortedKnots[best] - t) ? i : best,
-                0
-              )
+              method === "step"
+                ? sortedKnots.reduce((best, k, i) => (k <= t ? i : best), 0)
+                : sortedKnots.reduce(
+                    (best, k, i) =>
+                      Math.abs(k - t) < Math.abs(sortedKnots[best] - t)
+                        ? i
+                        : best,
+                    0
+                  )
             ];
-          const keyframeColor = (children[nearest] as any)?.color;
+          const keyframeColor = (children[source] as any)?.color;
 
           return {
             intrinsicDims: [
@@ -171,7 +178,7 @@ export const tween = createNodeOperator(
               cy,
               w,
               h,
-              shape: keyframes[nearest]?.type ?? "ellipse",
+              shape: keyframes[source]?.type ?? "ellipse",
               keyframeColor,
             },
           };

@@ -11,7 +11,9 @@
 import {
   interpolateLinear,
   interpolateCatmullRom,
+  interpolateStep,
   interpolateRun,
+  interpolate,
   knotOrder,
 } from "../interpolate";
 
@@ -46,6 +48,41 @@ console.log("# linear: piecewise between the bracketing keyframes");
   ok("clamps before the run", near(interpolateLinear(knots, values, 1900), 10));
   ok("clamps after the run", near(interpolateLinear(knots, values, 2100), 100));
   ok("a single keyframe holds", near(interpolateLinear([1955], [7], 1990), 7));
+}
+
+console.log("# step: holds the previous keyframe, then jumps");
+{
+  const knots = [1955, 1960, 1965];
+  const values = [10, 20, 100];
+  ok("hits the first knot", near(interpolateStep(knots, values, 1955), 10));
+  ok(
+    "holds the first value across its whole band",
+    near(interpolateStep(knots, values, 1957.5), 10) &&
+      near(interpolateStep(knots, values, 1959.999), 10)
+  );
+  ok(
+    "jumps exactly at the next knot",
+    near(interpolateStep(knots, values, 1960), 20)
+  );
+  ok(
+    "holds the second value across its band",
+    near(interpolateStep(knots, values, 1964), 20)
+  );
+  ok("hits the last knot", near(interpolateStep(knots, values, 1965), 100));
+  ok("clamps before the run", near(interpolateStep(knots, values, 1900), 10));
+  ok("clamps after the run", near(interpolateStep(knots, values, 2100), 100));
+  ok("a single keyframe holds", near(interpolateStep([1955], [7], 1990), 7));
+  ok("empty run is NaN", Number.isNaN(interpolateStep([], [], 0)));
+  // The step run only ever takes values the run actually contains — the
+  // property that makes it the same picture the keyframes alone draw.
+  const taken = new Set<number>();
+  for (let t = 1950; t <= 1970; t += 0.25)
+    taken.add(interpolateStep(knots, values, t));
+  ok(
+    "takes no value that is not a keyframe's",
+    [...taken].every((v) => values.includes(v)),
+    `got ${[...taken].join(", ")}`
+  );
 }
 
 console.log("# catmullRom: passes through every keyframe");
@@ -133,10 +170,43 @@ console.log("# interpolateRun dispatch and knotOrder");
     "dispatches catmullRom",
     near(interpolateRun([0, 10], [0, 10], 5, "catmullRom"), 5)
   );
+  ok("dispatches step", near(interpolateRun([0, 10], [0, 10], 5, "step"), 0));
   ok(
     "sorts an out-of-order run",
     JSON.stringify(knotOrder([1965, 1955, 1960])) === JSON.stringify([1, 2, 0])
   );
+}
+
+console.log("# interpolate(rows): step reads the previous keyframe's row");
+{
+  const rows = [
+    { year: 1955, country: "A", life: 50, note: "early" },
+    { year: 1960, country: "A", life: 60, note: "late" },
+  ];
+  const [stepped] = interpolate(rows, {
+    along: "year",
+    key: "country",
+    at: 1957.5,
+    method: "step",
+  });
+  ok("holds the numeric field", near(stepped.life as number, 50));
+  // Non-numeric fields follow the method: at 1957.5 the NEAREST keyframe is a
+  // tie that resolves to 1955 anyway, so push the playhead past the midpoint,
+  // where nearest and previous genuinely disagree.
+  const [late] = interpolate(rows, {
+    along: "year",
+    key: "country",
+    at: 1959,
+    method: "step",
+  });
+  ok("copies the previous keyframe's text", late.note === "early");
+  const [smooth] = interpolate(rows, {
+    along: "year",
+    key: "country",
+    at: 1959,
+  });
+  ok("the default still blends", near(smooth.life as number, 58));
+  ok("and copies the nearest keyframe's text", smooth.note === "late");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
