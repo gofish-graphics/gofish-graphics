@@ -161,3 +161,11 @@ packages/gofish-graphics/stories/tutorials/Basics.stories.tsx
 # Tutorials/Glyphs is the finished example of the docs Glyphs tutorial: a glyph
 # passed to `.mark()` as a per-group JS function, which cannot cross the bridge.
 packages/gofish-graphics/stories/tutorials/Glyphs.stories.tsx
+
+# The Gapminder animation panels — exempt for the same reason as the bird
+# migration panels above. The `Animated` and `Paused1975` stories are driven by
+# `time.sequence(...)`, which owns a `timer()` clock: a live JS signal with no
+# Python/IR bridge, so the spec cannot cross the derive RPC. The two static
+# stories in the file (SpatialTwin, Frame1955) ARE pure specs, but exemption is
+# per FILE and all four are one file (same trade-off as issue #856).
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx

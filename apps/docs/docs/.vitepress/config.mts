@@ -581,6 +581,7 @@ export default defineConfig({
                   link: "/js/reactivity",
                 },
                 { text: "Controls", link: "/js/controls" },
+                { text: "Animation", link: "/js/animation" },
               ],
             },
             {

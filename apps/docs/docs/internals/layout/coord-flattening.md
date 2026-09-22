@@ -69,8 +69,8 @@ function descend(
 
 When the recursion reaches a **leaf**, it writes the accumulated transform back onto
 the node and returns it as a one-element list. A node counts as a leaf when it has no
-children — or when it is a `connect` or `box` node, which are deliberately treated as
-opaque (see the caveats below). Internal nodes `flatMap` the recursion over their
+children — or when it is a relational node (`connect`, `tween`) or a `box` node, which
+are deliberately treated as opaque (see the caveats below). Internal nodes `flatMap` the recursion over their
 children, so the whole tree bottoms out into a single flat array.
 
 The recursion does **not** visit children in raw array order — it orders them first
@@ -128,7 +128,7 @@ which the render entry maps over directly.
   children" is a **bake boundary**: it emits a single `DisplayObject` and renders its
   own subtree internally. These are the space-remappers (`coord`), the compositors
   (`over` / `atop` / `in` / `out` / `xor` / `mask`), and the cross-child self-drawers
-  (`connect` / `arrow` / `enclose` / `box`), plus any label-bearing node. So `coord`
+  (`connect` / `tween` / `arrow` / `enclose` / `box`), plus any label-bearing node. So `coord`
   stays a boundary — `bake` never recurses _through_ a coordinate transform (which
   would compose a single global translate across a space remap); `coord` keeps doing
   its own coord-local `flattenLayout` inside. The bake is **boundary-recursive**. (The
@@ -226,11 +226,12 @@ it is wrapped:
   lowers each leaf under that leaf's own scope's `toPixel`. So a continuous-y bar chart inside
   an `enclose` still flips, while an ordinal neighbor beside it stays y-down. Single-orientation
   content inherits the boundary's flip and lowers byte-identically to the old single-map descent.
-- **Relational connectors adopt their operands' scope.** A `connect` (the node behind
-  `line`/`ribbon`) paints its _operands'_ geometry, but it lives as a sibling tier outside
+- **Relational nodes adopt their operands' scope.** A `connect` (the node behind
+  `line`/`ribbon`) or a `tween` (the node behind `time.transition()`) paints its
+  _operands'_ geometry, but it lives as a sibling tier outside
   their subtrees — so when no scope is active at its own altitude it used to lower unflipped
   even though its operands mirror inside their own scopes (per-row scopes under a fixed-pitch
-  distribute), drawing the band upside-down and displaced. `connectOperandFlip` handles the
+  distribute), drawing the band upside-down and displaced. `relationalOperandFlip` handles the
   **single-scope case**: when every operand lowers under the same scope (reconstructed by
   re-running the scope decision along each operand's ancestor path below its common ancestor
   with the connector), the connector adopts it. Operands under _different_ scopes (or none)

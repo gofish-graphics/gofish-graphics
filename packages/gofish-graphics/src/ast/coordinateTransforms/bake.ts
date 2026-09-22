@@ -34,6 +34,21 @@ const bakeTranslate = (node: GoFishAST): [number, number] => [
   is self-contained primitives with no `node` back-reference.
 */
 
+/**
+ * The RELATIONAL nodes: the ones that paint their operands' resolved geometry
+ * rather than containing marks of their own. `connect` (behind `line` and
+ * `ribbon`) draws the path through a run of marks; `tween` (behind
+ * `time.transition()`) draws the mark the run passes through at the current
+ * playhead. Their children are refs to marks that live elsewhere in the tree,
+ * so the bake must treat them as leaves — flattening through one would drop
+ * its own geometry and re-emit the marks it is derived from — and they own no
+ * y-orientation scope, so they adopt their operands' (see
+ * {@link relationalOperandFlip}).
+ */
+const RELATIONAL_TYPES = new Set(["connect", "tween"]);
+const isRelational = (node: GoFishAST): boolean =>
+  RELATIONAL_TYPES.has((node as { type?: string }).type ?? "");
+
 export const flattenLayout = (
   node: GoFishAST,
   transform: [number, number] = [0, 0],
@@ -47,14 +62,15 @@ export const flattenLayout = (
   // MUTATING node.transform — render reads it via INTERNAL_render's transform
   // override, so the scenegraph's parent-relative transforms stay intact.
 
-  /* TODO: `connect` is a hack to get the operator to render in coordinate spaces
-       A more principled way to do this would be to have "connect" produce a child path mark.
+  /* TODO: the relational types are a hack to get the operator to render in
+       coordinate spaces. A more principled way to do this would be to have
+       them produce a child mark.
   */
   if (
     !("children" in node) ||
     !node.children ||
     node.children.length === 0 ||
-    node.type === "connect" ||
+    isRelational(node) ||
     node.type === "box"
   ) {
     const [ownTx, ownTy] = bakeTranslate(node);
@@ -142,7 +158,7 @@ const BAKE_BOUNDARY_TYPES = new Set([
   "out",
   "xor",
   "mask",
-  "connect",
+  ...RELATIONAL_TYPES,
   "arrow",
   "enclose",
   "box",
@@ -246,7 +262,7 @@ const scopeBox = (node: GoFishAST, composedTy: number): FlipScope => {
  *  wrapping in a bake boundary) can never change which scope a subtree lowers
  *  under. */
 /** Would `node` OPEN a y-up flip scope if none were active? The open condition
- *  shared by {@link resolveNodeFlip} (the main walk) and {@link connectOperandFlip}
+ *  shared by {@link resolveNodeFlip} (the main walk) and {@link relationalOperandFlip}
  *  (re-running the scope decision along an operand's ancestor path) — the single
  *  centralized copy of the condition. A `coord` opens its own scope (it fixes its
  *  own orientation convention). This `type === "coord"` string dispatch is a
@@ -274,8 +290,9 @@ const resolveNodeFlip = (
 };
 
 /**
- * The #657 SINGLE-SCOPE case: a relational connector (`connect` — the node
- * behind `line`/`ribbon`) paints its OPERANDS' geometry, but it lives as a
+ * The #657 SINGLE-SCOPE case: a relational node (`connect` behind
+ * `line`/`ribbon`, `tween` behind `time.transition()`) paints its OPERANDS'
+ * geometry, but it lives as a
  * sibling tier outside their subtrees, so when no scope is active at its own
  * altitude it lowers unflipped even though its operands mirror inside their own
  * scopes (e.g. per-row scopes under a fixed-pitch distribute) — drawing the
@@ -291,7 +308,7 @@ const resolveNodeFlip = (
  * main walk assigns the operands themselves). Returns the shared scope, or
  * `undefined` when there isn't exactly one.
  */
-const connectOperandFlip = (
+const relationalOperandFlip = (
   node: GoFishNode,
   composedTy: number
 ): FlipScope | undefined => {
@@ -455,13 +472,13 @@ export const bake = (
     const incomingFlip = ambient ? ambientFlip : flip;
     let nodeFlip = resolveNodeFlip(node, composedTranslate[1], incomingFlip);
     // A relational connector with no scope of its own adopts its operands'
-    // unique scope (#657 single-scope case — see `connectOperandFlip`).
+    // unique scope (#657 single-scope case — see `relationalOperandFlip`).
     if (
       nodeFlip === undefined &&
       node instanceof GoFishNode &&
-      (node as { type?: string }).type === "connect"
+      isRelational(node)
     ) {
-      nodeFlip = connectOperandFlip(node, composedTranslate[1]);
+      nodeFlip = relationalOperandFlip(node, composedTranslate[1]);
     }
 
     if (!isTransparent(node)) {

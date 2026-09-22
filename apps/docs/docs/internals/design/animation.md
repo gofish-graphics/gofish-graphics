@@ -8,7 +8,8 @@ status: speculative
 # An animation grammar: time as the third axis
 
 > **Status: design exploration.** Conceptual model and syntax, deliberately
-> ahead of implementation (which is confined to Appendix A). Synthesizes
+> ahead of implementation (cost model in Appendix A; the one slice that is
+> actually built is Appendix B). Synthesizes
 > issues [#54](https://github.com/gofish-graphics/gofish-graphics/issues/54) (spread in time),
 > [#211](https://github.com/gofish-graphics/gofish-graphics/issues/211) (`motion()`/`tween`),
 > the reactivity substrate ([#671](https://github.com/gofish-graphics/gofish-graphics/pull/671)),
@@ -579,6 +580,43 @@ sequencing — this is deliberately a sketch, not a plan:
 - **Cross-language:** any new constructs cross the Python/IR bridge like
   everything else (descriptor table, registry, harness — the standard
   checklist).
+
+## Appendix B: what is built (first version, issue #831)
+
+One slice of §5's table exists: the `time` namespace
+(`src/ast/marks/time.ts`), a scene animation over a fixed structure.
+
+- `time.sequence({ by, duration, loop, playing, at })` is the operator form of
+  **spread on t**. It splits the flow by a numeric field and lays every
+  keyframe group out in ONE shared frame, so the x/y domains are inferred over
+  all of them and the axes hold still. It owns the chart's clock (a `timer()`
+  over the field's own range, built lazily because the domain is not known
+  until the data has been split).
+- `time.transition({ curve, ease, … })` is **a connection mark on t**, built
+  with `createRelationalMark` like `line` and `ribbon`. Its path tier is the
+  sequence's field (resolved through the same `along` slot, from the
+  `__timeTier` tag the sequence stamps on its operator) and its split is that
+  tier's complement, so Animated Vega-Lite's `key` is inferred rather than
+  written. It reads the playhead during RESOLVE, so every value the clock
+  emits re-resolves the chart — §4's upstream reading, at the price Appendix A
+  predicts (about 20 ms per frame for the 682-row Gapminder scatter, so
+  roughly 50 fps before any DOM work).
+- Interpolation (`src/interpolate.ts`) runs over the operands' resolved
+  geometry with **knots at the data's own time values**, linear or non-uniform
+  Catmull-Rom (Barry-Goldman). That is the §4.2 note taken literally: the
+  parameterization is the data's, not chord length, so an uneven run of years
+  plays at an even speed. On a fixed-domain scatter the σ-affine commutativity
+  of §4.1 holds exactly, and the rendered dot matches the data-space
+  interpolation mapped through the scales to floating-point precision.
+- The keyframe marks are **paint-hidden** in §2.1's sense, through the
+  existing structural rule (`INTERNAL_emitNothing`, the same one `blank()`
+  uses): they keep their boxes and their data, and emit no display items and
+  no hit-test targets.
+
+Everything else in §§5-9 is unbuilt: clip composition (sequence/parallel/
+stagger), timing constraints, lifecycle (enter/exit), segues, and reveals.
+The transition also paints only its keyframes' own shape, and supports
+ellipses and rects.
 
 ## Sources
 

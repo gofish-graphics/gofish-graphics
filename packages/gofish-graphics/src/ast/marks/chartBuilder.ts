@@ -13,6 +13,7 @@ import {
   fieldNameOf,
   type SplitBy,
   type InferredRelational,
+  type TimeTier,
 } from "../datumProjection";
 // The shared interactive render terminal lives in the interaction layer
 // (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too.
@@ -248,7 +249,22 @@ export type RelationalFusable = {
   inferred: InferredRelational;
   anchorKeys: string[];
   makeAnchor: () => Mark<any>;
+  /** A temporal connector (`time.transition()`) — see `applyDefaultRelational`. */
+  temporal?: boolean;
 };
+
+/** The flow's temporal tier: the last `time.sequence(...)` in it. A sequence
+ *  tags its operator with the tier (field plus clock) it contributes — the
+ *  temporal counterpart of the `__arrangement` tag every spatial operator
+ *  declares, and read here for the same reason: only `ChartBuilder` has the
+ *  flow tiers in hand. */
+function findTimeTier(operators: Operator<any, any>[]): TimeTier | undefined {
+  for (let i = operators.length - 1; i >= 0; i--) {
+    const tier = (operators[i] as any).__timeTier as TimeTier | undefined;
+    if (tier !== undefined) return tier;
+  }
+  return undefined;
+}
 
 /** How one flow tier (`spread`/`stack`/`scatter`/`group`/other) relates to
  *  the travel-axis rule. Each operator DECLARES its own class through
@@ -458,7 +474,26 @@ function applyDefaultRelational(
   anchorOpts: Record<string, any> | undefined
 ): void {
   if (fusable.inferred.resolved) return;
-  const along = (fusable.opts as any).along as string | undefined;
+  // A TEMPORAL connector threads the flow's time tier, which is the one thing
+  // it cannot infer from the spatial arrangement: the sequence positions
+  // nothing in x or y. So the time tier names the path tier — the same job
+  // `along` does for a spatial connector, which is why it resolves into the
+  // same variable and the rest of the rule (split = the complement of the
+  // path tier) runs unchanged.
+  const timeTier = fusable.temporal ? findTimeTier(operators) : undefined;
+  if (fusable.temporal) {
+    if (timeTier === undefined) {
+      throw new Error(
+        `${fusable.type}(): this chart's flow has no time.sequence(...), so ` +
+          `there are no keyframes to move between. Add one — ` +
+          `\`.flow(time.sequence({ by: "year" }), ...)\` — or use ` +
+          `line({ along: "year" }) for a static path through the marks.`
+      );
+    }
+    fusable.inferred.time = timeTier;
+  }
+  const along =
+    ((fusable.opts as any).along as string | undefined) ?? timeTier?.by;
   const classified = operators.map(classifyOperator);
 
   let travelAxis: "x" | "y" | undefined;

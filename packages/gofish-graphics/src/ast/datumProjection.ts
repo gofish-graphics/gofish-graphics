@@ -117,6 +117,22 @@ export type InferredRelational = {
   by?: SplitBy;
   dir?: "x" | "y";
   resolved?: boolean;
+  /** The flow's temporal tier, for a TEMPORAL relational mark
+   *  (`time.transition()`). A spatial connector threads a tier of the flow
+   *  that lays marks out in space; a temporal one threads the tier that lays
+   *  them out in time, so the same cell carries the clock the mark reads and
+   *  the field its keyframes are keyed by. Undefined for every spatial
+   *  connector. */
+  time?: TimeTier;
+};
+
+/** The temporal tier a `time.sequence(...)` contributes to a flow: the field
+ *  whose values are the keyframes, plus the clock the sequence owns. Reading
+ *  `clock()` during resolve registers the playhead as a pipeline dependency,
+ *  which is what makes the chart re-resolve on every value it emits. */
+export type TimeTier = {
+  by: string;
+  clock: () => number;
 };
 
 /** Build the grouping key-function for a single split. Exists so that path

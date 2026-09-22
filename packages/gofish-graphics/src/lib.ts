@@ -198,6 +198,13 @@ export {
 } from "./ast/marks/chart";
 export type { ConstrainableMark } from "./ast/marks/chart";
 export { compose } from "./ast/marks/compose";
+// Animation (JS-only, like the rest of the reactive layer: a sequence owns a
+// clock, which is a live signal and does not cross the Python bridge).
+// Exported as ONE namespace object so the temporal vocabulary reads as its
+// own surface — `time.sequence` / `time.transition` — rather than as two more
+// bare names beside the spatial operators.
+export { time } from "./ast/marks/time";
+export type { SequenceOptions, TransitionOptions } from "./ast/marks/time";
 export type {
   Mark,
   Operator,
