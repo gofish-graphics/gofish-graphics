@@ -142,3 +142,9 @@ packages/gofish-graphics/stories/interaction/TimerPulse.stories.tsx
 packages/gofish-graphics/stories/interaction/ComponentPaintOnly.stories.tsx
 packages/gofish-graphics/stories/interaction/ComponentLayoutReactive.stories.tsx
 packages/gofish-graphics/stories/interaction/ComponentPointer.stories.tsx
+# The bird-migration panels. Panel A is a pure spec, so it could be ported on
+# its own — but the constructs it needs (the `geo` coordinate transform and
+# `polygon`'s field-bound `points`) have no Python wrapper yet, and adding them
+# is the whole cross-language round trip rather than a story port. Tracked,
+# together with the rest of the panels' constructs, as issue #856.
+packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx

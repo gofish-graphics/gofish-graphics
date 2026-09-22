@@ -234,7 +234,7 @@ export const MARK_MAP: Record<
   petal: (opts) => petal(opts),
   text: (opts) => (text as any)(opts),
   image: (opts) => (image as any)(opts),
-  polygon: (opts) => polygon(opts as any) as unknown as Mark<any>,
+  polygon: (opts) => polygon(opts as any),
 };
 
 // Re-export Frontend namespace for convenience.

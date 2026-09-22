@@ -328,12 +328,12 @@ def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
             _kw[_k] = _channel(_v)
     return Mark("image", **_kw)
 
-def polygon(*, debug: Optional[bool] = None, points: List[Any], fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """A closed polygon defined by explicit local-coordinate points (y-up). No dims channels — the bbox is computed from `points`.
+def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+    """A closed polygon defined by local-coordinate points (y-up), given literally or read from a field. No dims channels — the bbox is computed from `points`.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
-        points: Vertex list, at least 3 points.
+        points: Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).
         fill: Fill color. Default "black".
         stroke: Stroke color. Defaults to `fill`.
         strokeWidth: Stroke width in pixels. Default 0.

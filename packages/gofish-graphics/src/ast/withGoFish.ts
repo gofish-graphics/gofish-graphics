@@ -8,8 +8,11 @@ import { GoFishNode } from "./_node";
 import type { AxesOptions } from "./gofish";
 import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
-import { ChartBuilder } from "./marks/chart";
+import { ChartBuilder, LayerBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
+// Direct from chartBuilder (not the `chart` barrel): the one-way dependency
+// rule is createOperator/withGoFish → chartBuilder, never the reverse.
+import { resolveMarkResult } from "./marks/chartBuilder";
 import {
   CHANNEL_INFER,
   ChannelAnnotations,
@@ -46,10 +49,17 @@ export interface RenderOptions {
 }
 
 /**
- * A single child element: a GoFishAST node, a promise of one, or a mark (function).
- * Marks are resolved by calling them with `undefined` (no data) to produce a node.
+ * A single child element: a GoFishAST node, a promise of one, a mark (function),
+ * or a v3 builder (`chart(...).mark(...)`, with or without `.layer(...)` tiers).
+ * Marks are resolved by calling them with `undefined` (no data) to produce a
+ * node; builders are resolved through their own `resolve()`.
  */
-type GoFishChild = GoFishAST | Promise<GoFishAST> | Mark<any>;
+type GoFishChild =
+  | GoFishAST
+  | Promise<GoFishAST>
+  | Mark<any>
+  | ChartBuilder<any, any>
+  | LayerBuilder;
 
 /**
  * Children input type that can be a recursive structure, a promise of it, or null.
@@ -103,8 +113,35 @@ export interface PromiseWithRender<T> extends Promise<T> {
   scope(): PromiseWithRender<T>;
 }
 
-function isChartBuilder(value: any): value is ChartBuilder<any, any> {
-  return value instanceof ChartBuilder;
+/**
+ * Type guard to check if a value has a render method like GoFishNode
+ */
+function hasRenderMethod(value: any): value is GoFishNode {
+  return value instanceof GoFishNode && typeof value.render === "function";
+}
+
+/**
+ * Reify one operator child into a node. A child is a thunk/mark, a v3 BUILDER
+ * (a single-tier `chart(...).mark(...)` or a layered `....layer(...)`), a
+ * thenable, or an already-built node; `resolveMarkResult` is the one place that
+ * knows all four, so both child loops below go through here. A thunk is called
+ * with just the datum slot (`undefined`), as it always has been, and whatever
+ * it returns is reified in turn.
+ *
+ * `null`/`undefined` (a thunk that opted out) comes back as `undefined` and is
+ * dropped by the caller.
+ */
+async function reifyChild(
+  child: unknown,
+  layerContext: LayerContext
+): Promise<GoFishAST | undefined> {
+  if (typeof child === "function") {
+    const result = await (child as any)(undefined);
+    if (result == null) return undefined;
+    return resolveMarkResult(result, layerContext);
+  }
+  if (child == null) return undefined;
+  return resolveMarkResult(child as any, layerContext);
 }
 
 /** The GoFishNode methods `addRenderMethod` republishes on a promise: each one
@@ -172,11 +209,8 @@ async function flattenAndAwaitPromises<T>(
     return flattenAndAwaitPromises(resolved);
   }
 
-  // A ChartBuilder is preserved, not resolved here: the caller resolves it
-  // (sequentially, in `reifyChildrenSequentially`) once its context is known.
-  if (isChartBuilder(value)) {
-    return [value as T];
-  }
+  // A chart/layer builder falls through to the single-value case below, which
+  // preserves it unresolved — resolution is the child loops' business.
 
   if (Array.isArray(value)) {
     const awaited = await Promise.all(
@@ -197,6 +231,7 @@ export async function reifyChildrenSequentially(
     | GoFishAST
     | (() => GoFishAST | Promise<GoFishAST>)
     | ChartBuilder<any, any>
+    | LayerBuilder
     | Mark<any>
   )[],
   layerContext?: LayerContext
@@ -206,26 +241,8 @@ export async function reifyChildrenSequentially(
   const sharedLayerContext = layerContext ?? {};
 
   for (const child of children) {
-    if (typeof child === "function") {
-      // A thunk or mark — call it (marks receive undefined as data).
-      const result = (child as any)(undefined);
-      const resolvedChild = result instanceof Promise ? await result : result;
-      if (resolvedChild != null) {
-        if (isChartBuilder(resolvedChild)) {
-          const node = await resolvedChild
-            .withLayerContext(sharedLayerContext)
-            .resolve();
-          resolved.push(node);
-        } else {
-          resolved.push(resolvedChild);
-        }
-      }
-    } else if (isChartBuilder(child)) {
-      const node = await child.withLayerContext(sharedLayerContext).resolve();
-      resolved.push(node);
-    } else {
-      resolved.push(child);
-    }
+    const node = await reifyChild(child, sharedLayerContext);
+    if (node != null) resolved.push(node);
   }
 
   return resolved;
@@ -267,21 +284,17 @@ export function createNodeOperator<T extends Record<string, any>, R>(
         "createNodeOperator"
       );
       const flattened = await flattenAndAwaitPromises<
-        GoFishAST | Promise<GoFishAST> | ChartBuilder<any, any> | Mark<any>
+        | GoFishAST
+        | Promise<GoFishAST>
+        | ChartBuilder<any, any>
+        | LayerBuilder
+        | Mark<any>
       >(children);
       const layerContext: LayerContext = {};
       // Resolve marks (functions) and ChartBuilder instances; a mark is called
       // with undefined data to produce its node.
       const resolvedAll = await Promise.all(
-        flattened.map(async (child) => {
-          if (typeof child === "function") {
-            return await (child as Mark<any>)(undefined as any);
-          }
-          if (isChartBuilder(child)) {
-            return await child.withLayerContext(layerContext).resolve();
-          }
-          return child;
-        })
+        flattened.map((child) => reifyChild(child, layerContext))
       );
       const flatChildren = resolvedAll.filter(
         (child): child is GoFishAST =>
@@ -319,6 +332,7 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
         | GoFishAST
         | (() => GoFishAST | Promise<GoFishAST>)
         | ChartBuilder<any, any>
+        | LayerBuilder
         | Mark<any>
       >(children);
       const layerContext: LayerContext = {};

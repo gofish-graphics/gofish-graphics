@@ -45,7 +45,7 @@ export type LayerContext = {
  * createOperator imports from chartBuilder, never the other direction.
  */
 export async function resolveMarkResult(
-  raw: ReturnType<Mark<any>>,
+  raw: ReturnType<Mark<any>> | LayerBuilder,
   layerContext?: LayerContext
 ): Promise<GoFishNode> {
   // Mark functions are typed as sync-returning, but async marks are a
@@ -56,6 +56,14 @@ export async function resolveMarkResult(
     raw = await (raw as unknown as Promise<ReturnType<Mark<any>>>);
   }
   if (raw instanceof ChartBuilder)
+    return raw.withLayerContext(layerContext ?? {}).resolve();
+  // A `.mark(<relational mark>)` chart elaborates to `.mark(anchor).layer(R)`,
+  // i.e. a LayerBuilder — so a chart pipeline handed anywhere a mark is taken
+  // (a `.layer(...)` tier, a `layer([...])` child) can be one. It resolves to
+  // its own stacked node; its tiers share the ENCLOSING scope's layer context
+  // (its own, when there is none), so a `.name(...)` inside it is findable from
+  // outside — exactly as for a ChartBuilder tier.
+  if (raw instanceof LayerBuilder)
     return raw.withLayerContext(layerContext ?? {}).resolve();
   if (typeof raw === "function")
     return resolveMarkResult(
@@ -487,7 +495,14 @@ function rejectAlongWithoutFlow(
 /* ---- END default grouping for relational marks ---- */
 
 /** The chart-level config a builder threads through to every terminal. */
-type RenderMeta = { axes?: AxesOptions; colorConfig?: ColorConfig };
+type RenderMeta = {
+  axes?: AxesOptions;
+  colorConfig?: ColorConfig;
+  /** The root tier's coordinate space, read by `LayerBuilder.resolve` so it can
+   *  HOIST it over every tier rather than let the root tier keep it. */
+  coord?: CoordinateTransform;
+  padding?: number;
+};
 
 /**
  * The base both builder surfaces extend: it supplies the export terminals
@@ -799,7 +814,28 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     return {
       axes: this.state.options?.axes,
       colorConfig: this.state.options?.color,
+      coord: this.state.options?.coord,
+      padding: this.state.options?.padding,
     };
+  }
+
+  /** The chart options to hand `Frame`. `Frame` picks out what it needs
+   *  (`coord`/`axes`/`padding`, plus the dims when there is no `coord` and it
+   *  falls through to `layer`), so this is the whole bag rather than a
+   *  hand-copied key list — a list the layered path used to keep separately and
+   *  would silently drop a newly added chart option from. Both the single-tier
+   *  path and `LayerBuilder`'s hoisted frame read it. */
+  frameOptions(): ChartOptions {
+    return this.state.options ?? {};
+  }
+
+  /** A copy without the `coord` option. `LayerBuilder` uses this to HOIST the
+   *  root tier's coordinate space over EVERY tier (see `LayerBuilder.resolve`),
+   *  so the root tier itself must not build a second one around its own mark. */
+  withoutCoord(): ChartBuilder<TInput, TOutput> {
+    if (this.state.options?.coord === undefined) return this;
+    const { coord: _coord, ...rest } = this.state.options;
+    return this.with({ options: rest });
   }
 
   /** Build this chart's node. Named marks tag themselves during resolution
@@ -820,7 +856,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       data = resolveRefData(data, this.state.layerContext) as any;
     }
 
-    const node = await Frame(this.state.options ?? {}, [
+    const node = await Frame(this.frameOptions(), [
       (
         await resolveMarkResult(
           composedMark(data as any, undefined, this.state.layerContext),
@@ -938,7 +974,11 @@ function isChartOptions(x: unknown): x is ChartOptions {
  * bare `Mark` (or an already-resolved `GoFishNode`) is a *mark tier* — a
  * component-level, datumless annotation overlay.
  */
-export type LayerTier = ChartBuilder<any, any> | Mark<any> | GoFishNode;
+export type LayerTier =
+  | ChartBuilder<any, any>
+  | LayerBuilder
+  | Mark<any>
+  | GoFishNode;
 
 /**
  * A stack of chart tiers built by chaining `.layer(...)`. The previous tier's
@@ -958,14 +998,33 @@ export type LayerTier = ChartBuilder<any, any> | Mark<any> | GoFishNode;
  * manual `layer([...])` form).
  */
 export class LayerBuilder extends RenderableBuilder {
-  constructor(private readonly tiers: LayerTier[]) {
+  constructor(
+    private readonly tiers: LayerTier[],
+    /** The registry this builder's tiers register their names into. Empty (its
+     *  own) unless an enclosing scope handed one down — see
+     *  {@link withLayerContext}. */
+    private readonly layerContext?: LayerContext
+  ) {
     super();
+  }
+
+  /**
+   * Resolve into an ENCLOSING scope's registry, the same way a `ChartBuilder`
+   * tier does: the tiers still share ONE context (that is what makes each
+   * tier's names visible to the next), but it is the caller's, so a
+   * `.name(...)` inside this builder is findable from outside it — by a
+   * sibling's `ref`/`selectAll`, or by the operator that took this builder as a
+   * child. Without it a `LayerBuilder` used where a mark is taken would drop
+   * its registrations on the floor.
+   */
+  withLayerContext(layerContext: LayerContext): LayerBuilder {
+    return new LayerBuilder(this.tiers, layerContext);
   }
 
   /** Stack another tier; every tier is offered the previous tier's marks as
    *  scope (see the class doc for how consumption is decided). */
   layer(child: LayerTier): LayerBuilder {
-    return new LayerBuilder([...this.tiers, child]);
+    return new LayerBuilder([...this.tiers, child], this.layerContext);
   }
 
   /** The root tier is always a `ChartBuilder` (`.layer` is a method on one), but
@@ -982,8 +1041,16 @@ export class LayerBuilder extends RenderableBuilder {
   }
 
   async resolve(): Promise<GoFishNode> {
-    const sharedContext: LayerContext = {};
+    const sharedContext: LayerContext = this.layerContext ?? {};
     const nodes: GoFishNode[] = [];
+    // The root tier's coordinate space is the CHART's space, not that one
+    // tier's: a basemap under `geo(...)` and the paths layered over it must
+    // share one projection, or the layer would be positioned in pixels against
+    // a map it knows nothing about. So it is hoisted here — stripped from the
+    // root tier and wrapped around every tier's nodes — and the coord's domain
+    // inference then sees all the tiers' positions at once.
+    const rootMeta = this.rootChart().renderMeta();
+    const hoistedCoord = rootMeta.coord;
     // The previous tier's marks, as a `GoFishRef[]` bag — offered uniformly to
     // every tier (see class doc). `undefined` before any tier has produced
     // named nodes (the root tier, or after a producer with no name).
@@ -996,6 +1063,7 @@ export class LayerBuilder extends RenderableBuilder {
       const hasNext = i < this.tiers.length - 1;
 
       if (tier instanceof ChartBuilder) {
+        if (i === 0 && hoistedCoord !== undefined) tier = tier.withoutCoord();
         if (tier.usesPreviousLayerMarks()) {
           if (prevRefs === undefined) {
             throw new Error(
@@ -1041,8 +1109,14 @@ export class LayerBuilder extends RenderableBuilder {
         prevRefs = undefined;
       }
     }
-    const result = await Layer({}, nodes);
-    const { colorConfig } = this.rootChart().renderMeta();
+    const stack = await Layer({}, nodes);
+    // The hoisted coordinate space wraps the whole stack, so every tier is laid
+    // out in it and its domain inference sees all of their positions at once.
+    const result =
+      hoistedCoord !== undefined
+        ? await Frame(this.rootChart().frameOptions(), [stack])
+        : stack;
+    const { colorConfig } = rootMeta;
     if (colorConfig) {
       (result as any).colorConfig = colorConfig;
     }

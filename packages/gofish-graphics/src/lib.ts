@@ -43,6 +43,8 @@ export { polar_DEPRECATED } from "./ast/coordinateTransforms/polar_DEPRECATED";
 export { arcLengthPolar } from "./ast/coordinateTransforms/arcLengthPolar";
 export { bipolar } from "./ast/coordinateTransforms/bipolar";
 export { wavy } from "./ast/coordinateTransforms/wavy";
+export { geo } from "./ast/coordinateTransforms/geo";
+export type { Projection, GeoOptions } from "./ast/coordinateTransforms/geo";
 
 // Main API
 export { gofish as GoFish } from "./ast/gofish";

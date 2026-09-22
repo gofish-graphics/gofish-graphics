@@ -24,7 +24,7 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 
-const { chart, group, scatter, circle, line, ribbon, text, selectAll } =
+const { chart, group, scatter, circle, line, ribbon, text, selectAll, Layer } =
   GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -166,6 +166,53 @@ async function main() {
     "fused path: ribbon({ h }) over raw row data produced a node",
     fusedRibbonNode !== undefined && fusedRibbonNode !== null
   );
+
+  console.log(
+    "\n# A LayerBuilder used as an operator child registers its names in the ENCLOSING scope"
+  );
+
+  // `resolveMarkResult` threads the caller's layer context into a ChartBuilder
+  // child (`withLayerContext`); a LayerBuilder child used to drop it and resolve
+  // into a private registry of its own, so a `.name(...)` inside it was invisible
+  // from outside and a sibling's `selectAll` threw `Layer "bars" not found`.
+  // `Layer(...)` resolves its children sequentially, so the second child's
+  // selection is read after the first child has registered its names.
+  const crossTier = (producerHasSecondTier: boolean) => {
+    const root = chart(data, { w: 200, h: 200 })
+      .flow(scatter({ by: "id", x: "x", y: "y" }))
+      .mark(circle({ r: 3, fill: "steelblue" }).name("bars"));
+    return Layer({}, [
+      // A ChartBuilder child, or the same chain with a `.layer(...)` tier on it
+      // — which makes it a LayerBuilder instead.
+      producerHasSecondTier ? root.layer(text({ text: "caption" })) : root,
+      // A sibling that can only resolve if "bars" reached the shared registry.
+      chart(selectAll("bars")).mark(line({ strokeWidth: 1 })),
+    ]);
+  };
+  for (const [label, hasSecondTier] of [
+    ["ChartBuilder", false],
+    ["LayerBuilder", true],
+  ] as const) {
+    let crossTierNode: any;
+    let crossTierThrew: unknown;
+    try {
+      crossTierNode = await crossTier(hasSecondTier);
+    } catch (e) {
+      crossTierThrew = e;
+    }
+    check(
+      `a sibling's selectAll() finds a name registered inside a ${label} child`,
+      crossTierThrew === undefined,
+      crossTierThrew instanceof Error
+        ? crossTierThrew.message
+        : String(crossTierThrew)
+    );
+    check(
+      `the cross-tier selection produced a node (${label} producer)`,
+      crossTierNode != null && crossTierNode.children?.length === 2,
+      String(crossTierNode?.children?.length)
+    );
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
