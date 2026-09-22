@@ -87,7 +87,13 @@ Storybook story headlessly and writes a PNG you can `Read`.
   diff against a baseline. Pixel-diff regression testing is the separate
   `pnpm test:visual` flow; do not run `update-baselines` here (baselines are
   CI-Linux-specific and drift on Mac).
-- `capture-one` uses Vite port 3002, so it won't collide with a running
-  `pnpm storybook` (6006) or the full `capture-js` harness (3001).
+- `capture-one` uses Vite port 3002 (override with `CAPTURE_ONE_PORT`), so it
+  won't collide with a running `pnpm storybook` (6006) or the full `capture-js`
+  harness (3001).
+- `capture-one` renders through the same code as the batch capture
+  (`tests/scripts/capture-core.ts`): a fresh browser context and a fake clock
+  with a fixed amount of virtual time per story. Its `.html` is byte-identical
+  to the batch capture's, and an animated story is always captured at the same
+  frame, not wherever it had got to when the page was read.
 - If the user is also running `pnpm storybook`, they can watch the same story
   live in the browser while you iterate; the capture is just how *you* see it.

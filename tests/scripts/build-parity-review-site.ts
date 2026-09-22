@@ -397,8 +397,8 @@ for (const diff of parityDiffs) {
   const pair = pairById.get(fileId);
   const domMessage =
     diff.beforeDom !== null
-      ? "DOM output does not match JS baseline"
-      : "No JS baseline exists yet";
+      ? "DOM output does not match the JS capture"
+      : "No JS capture for this story";
   const hasDomDiff = diff.beforeDom !== null;
   const hasScreenshots = diff.afterScreenshotPath !== null;
 
@@ -410,7 +410,7 @@ for (const diff of parityDiffs) {
       pair.exports.find((e) => jsExportToKebab(e.name) === exportSlug);
     if (exp) {
       // A parity-exempt export (file- or export-level) is captured + IR-
-      // validated but intentionally NOT byte-gated against the JS baseline —
+      // validated but intentionally NOT byte-gated against the JS capture —
       // compare-python.ts SKIPs it rather than failing. A DOM mismatch on such
       // an export must therefore stay in the "exempt" warning bucket, not flip
       // to a parity-mismatch failure (which is why the gate passed while this
@@ -418,7 +418,7 @@ for (const diff of parityDiffs) {
       // viewable, but keep the warning status/category.
       if (exp.category === "exempt") {
         exp.message =
-          "Parity-exempt — captured Python DOM differs from the JS baseline " +
+          "Parity-exempt — captured Python DOM differs from the JS capture " +
           "(intentionally not byte-gated)";
         exp.hasDomDiff = hasDomDiff;
         exp.hasScreenshots = hasScreenshots;
@@ -913,7 +913,7 @@ const html = `<!DOCTYPE html>
           <div id="sbs-view" class="active">
             <div id="sbs-grid">
               <div class="sshot-panel">
-                <div class="sshot-panel-header">JS (baseline)</div>
+                <div class="sshot-panel-header">JS</div>
                 <div class="sshot-panel-body" id="sbs-js-body">
                   <div class="sshot-missing">No JS screenshot</div>
                 </div>
@@ -939,7 +939,7 @@ const html = `<!DOCTYPE html>
       <!-- DOM diff -->
       <div id="dom-diff-section" style="display:none;">
         <div id="dom-diff-toggle">
-          <span id="dom-diff-arrow">▶</span> DOM Diff (Python vs JS Baseline)
+          <span id="dom-diff-arrow">▶</span> DOM Diff (Python vs JS)
         </div>
         <div id="dom-diff-content"></div>
       </div>

@@ -129,8 +129,9 @@ const meta = {
   /** The orphan branch that receives accepted snapshots. */
   snapshotBranch: `snapshots/${codeBranch}`,
   /** Workflow run id, used by the commit endpoint to trigger rerun-failed-jobs
-   *  after Commit Accepted, so visual-test re-runs against the new baselines
-   *  and python-parity (blocked on visual-test) is allowed to run. */
+   *  after Commit Accepted. That re-runs only the cheap `visual-test` compare
+   *  job against the newly accepted baselines; it reuses the JS capture that
+   *  the first attempt uploaded as an artifact. */
   runId: process.env.REVIEW_RUN_ID ?? "",
 };
 
