@@ -40,7 +40,7 @@ import {
   time,
   timer,
 } from "../../src/lib";
-import { interpolateRun } from "../../src/interpolate";
+import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
 
 const meta: Meta = {
@@ -231,6 +231,14 @@ const CURVES: { caption: string; curve: Reading }[] = [
   { caption: "catmullRom (default)", curve: "catmullRom" },
 ];
 
+/** The three-panel cut: the step panel is left out because it is the same
+ *  picture as the sequence alone. */
+const CURVES_THREE: { caption: string; curve: Reading }[] = [
+  { caption: "no interpolation", curve: null },
+  { caption: "linear", curve: "linear" },
+  { caption: "catmullRom", curve: "catmullRom" },
+];
+
 /** One panel of the comparison: the same animated scatter, read one way, on a
  *  clock it shares with the other three.
  *
@@ -322,11 +330,7 @@ export const CurvesThree: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    curvesRow(container, args, gapminder, year, [
-      { caption: "no interpolation", curve: null },
-      { caption: "linear", curve: "linear" },
-      { caption: "catmullRom", curve: "catmullRom" },
-    ]);
+    curvesRow(container, args, gapminder, year, CURVES_THREE);
 
     return container;
   },
@@ -521,18 +525,11 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
       const u = s / SPARK_PER_INTERVAL;
       const t = knots[i] + span * u;
       // Position and velocity are continuous across a knot, so the shared
-      // endpoint is emitted once, by the interval on its left. The position
-      // is read from the library's own evaluator rather than from the jet, so
-      // the curve drawn here is the curve the transition follows by
-      // construction and not merely by agreement.
+      // endpoint is emitted once, by the interval on its left.
       if (i === 0 || s > 0) {
-        at(
-          "position",
-          "catmullRom",
-          t,
-          interpolateRun(knots, values, t, "catmullRom")
-        );
-        at("velocity", "catmullRom", t, catmullRomJet(knots, values, i, t)[1]);
+        const [position, velocity] = catmullRomJet(knots, values, i, t);
+        at("position", "catmullRom", t, position);
+        at("velocity", "catmullRom", t, velocity);
       }
       // Acceleration has two values at a knot. Sample just inside both ends
       // of the interval instead, which takes the one-sided limits and leaves
@@ -549,6 +546,23 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
   }
   return out;
 };
+
+/** The samples, spread by method and placed at `(t, value)`, marked with an
+ *  invisible circle for the curve or the dot to be layered over. Both of
+ *  `sparkRow`'s charts are this one, so they infer the same scales.
+ *
+ *  The samples are marked with the SAME invisible circle in both, and only
+ *  then threaded. A mark claims room for its own width, so a chart of 2.5px
+ *  circles insets its plot by 2.5px and a chart of sizeless marks does not —
+ *  and the dot would then ride a few pixels off the curve wherever the curve
+ *  is steep. */
+const sparkSamples = (samples: Sample[]) =>
+  chart(samples, { legend: false, axes: false, padding: 0 })
+    .flow(
+      spread({ by: "method", dir: "x", spacing: SPARK_GAP, axes: false }),
+      scatter({ by: "t", x: "t", y: "value", axes: false })
+    )
+    .mark(circle({ r: 2.5, opacity: 0 }));
 
 /**
  * One quantity's pair of sparklines, and the dot that walks them.
@@ -584,17 +598,7 @@ const sparkRow = (samples: Sample[], clock: any) =>
   // coordinate frame owns its space, so no Cartesian axis is drawn inside one.
   Frame({ w: SPARK_W, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
     Frame({ w: SPARK_W, h: SPARK_H_PX }, [
-      chart(samples, { legend: false, axes: false, padding: 0 })
-        .flow(
-          spread({ by: "method", dir: "x", spacing: SPARK_GAP, axes: false }),
-          scatter({ by: "t", x: "t", y: "value", axes: false })
-        )
-        // The samples are marked with the SAME invisible circle the dot chart
-        // marks them with, and only then threaded. A mark claims room for its
-        // own width, so a chart of 2.5px circles insets its plot by 2.5px and
-        // a chart of sizeless marks does not — and the dot would then ride a
-        // few pixels off the curve wherever the curve is steep.
-        .mark(circle({ r: 2.5, opacity: 0 }))
+      sparkSamples(samples)
         // `curve: "straight"` is not a default worth leaning on here, it is
         // the whole point: an omitted curve is `auto`, and `auto` over a
         // continuous axis smooths with a Catmull-Rom — which would round the
@@ -606,21 +610,15 @@ const sparkRow = (samples: Sample[], clock: any) =>
         .layer(line({ stroke: "#999", strokeWidth: 1, curve: "straight" })),
     ]),
     Frame({ w: SPARK_W, h: SPARK_H_PX }, [
-      chart(samples, { legend: false, axes: false, padding: 0 })
-        .flow(
-          spread({ by: "method", dir: "x", spacing: SPARK_GAP, axes: false }),
-          scatter({ by: "t", x: "t", y: "value", axes: false })
-        )
-        .mark(circle({ r: 2.5, opacity: 0 }))
-        .layer(
-          time.transition({
-            along: "t",
-            at: clock,
-            curve: "linear",
-            fill: "#e4572e",
-            opacity: 1,
-          })
-        ),
+      sparkSamples(samples).layer(
+        time.transition({
+          along: "t",
+          at: clock,
+          curve: "linear",
+          fill: "#e4572e",
+          opacity: 1,
+        })
+      ),
     ]),
   ]);
 
@@ -686,11 +684,7 @@ export const CurvesThreeKinematics: StoryObj<Args> = {
       args,
       gapminder,
       year,
-      [
-        { caption: "no interpolation", curve: null },
-        { caption: "linear", curve: "linear" },
-        { caption: "catmullRom", curve: "catmullRom" },
-      ],
+      CURVES_THREE,
       kinematicsBlock(gapminder, year)
     );
 
@@ -711,22 +705,13 @@ export const CurvesThreeKinematicsPaused: StoryObj<Args> = {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    const year = timer({
-      domain: yearRange(gapminder),
-      duration: 10000,
-      playing: false,
-    });
-    year.set(1957.5);
+    const year = pausedClock(yearRange(gapminder), 10000, 1957.5);
     curvesRow(
       container,
       args,
       gapminder,
       year,
-      [
-        { caption: "no interpolation", curve: null },
-        { caption: "linear", curve: "linear" },
-        { caption: "catmullRom", curve: "catmullRom" },
-      ],
+      CURVES_THREE,
       kinematicsBlock(gapminder, year)
     );
 
@@ -748,12 +733,7 @@ export const CurvesPaused: StoryObj<Args> = {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    const year = timer({
-      domain: yearRange(gapminder),
-      duration: 10000,
-      playing: false,
-    });
-    year.set(1957.5);
+    const year = pausedClock(yearRange(gapminder), 10000, 1957.5);
     curvesRow(container, args, gapminder, year);
 
     return container;

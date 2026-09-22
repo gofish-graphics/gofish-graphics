@@ -484,8 +484,9 @@ function applyDefaultRelational(
   if (fusable.temporal) {
     // A written-out `at` (a raw clock) replaces the sequence's own, and a
     // written-out `along` replaces the field it names, so a flow of plain
-    // `group(...)` tiers is enough once both are spelled. Only when NEITHER
-    // half is written down does the transition need a sequence to read.
+    // `group(...)` tiers is enough once both are spelled. Unless BOTH halves
+    // are written out, the transition needs a sequence to read: with only
+    // `at` written, nothing would name the path tier.
     const spelledOut =
       fusable.opts.at !== undefined && fusable.opts.along !== undefined;
     if (timeTier === undefined && !spelledOut) {
@@ -820,27 +821,23 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     return new LayerBuilder([this, child]);
   }
 
-  /** This tier's own temporal tier: the last `time.sequence(...)` in its flow,
-   *  or `undefined`. Read by `LayerBuilder` so later tiers can inherit it. */
-  timeTier(): TimeTier | undefined {
-    return findTimeTier(this.state.operators);
-  }
-
   /**
-   * Offer this tier the enclosing chart's temporal tier.
+   * Offer this tier the temporal tier of `root`, the enclosing chart's root
+   * tier: the last `time.sequence(...)` in its flow, if any.
    *
    * A layered tier already sees the previous tier's MARKS as its scope; the
    * clock those marks are keyframes of is part of the same scope, and a tier
    * written as `chart(selectAll("kf")).flow(group({by})).mark(time.transition())`
    * has no flow of its own to find it in. So `LayerBuilder` hands it down, the
    * same way it hands down the refs bag. A tier that owns a sequence of its
-   * own keeps it, and a transition given an explicit `at` ignores this
-   * anyway (see `time.transition`), so an inherited tier never overrides
+   * own keeps it (`applyDefaultRelational` sets the tier's own sequence over
+   * whatever was adopted), and a transition given an explicit `at` ignores
+   * this anyway (see `time.transition`), so an inherited tier never overrides
    * something written down.
    */
-  adoptTimeTier(tier: TimeTier | undefined): void {
+  adoptTimeTier(root: ChartBuilder<any, any>): void {
+    const tier = findTimeTier(root.state.operators);
     if (tier === undefined) return;
-    if (this.timeTier() !== undefined) return;
     const fusable = (this.state.finalMark as any)?.__relationalFusable as
       | RelationalFusable
       | undefined;
@@ -1142,13 +1139,9 @@ export class LayerBuilder extends RenderableBuilder {
     // a map it knows nothing about. So it is hoisted here — stripped from the
     // root tier and wrapped around every tier's nodes — and the coord's domain
     // inference then sees all the tiers' positions at once.
-    const rootMeta = this.rootChart().renderMeta();
+    const root = this.rootChart();
+    const rootMeta = root.renderMeta();
     const hoistedCoord = rootMeta.coord;
-    // The root tier's clock, offered to every later tier the way the previous
-    // tier's marks are (see `ChartBuilder.adoptTimeTier`): a transition
-    // layered over a sequence's keyframes is inside that sequence's chart,
-    // even when it is written as a nested `chart(selectAll(...))` pipeline.
-    const rootTimeTier = this.rootChart().timeTier();
     // The previous tier's marks, as a `GoFishRef[]` bag — offered uniformly to
     // every tier (see class doc). `undefined` before any tier has produced
     // named nodes (the root tier, or after a producer with no name).
@@ -1162,7 +1155,12 @@ export class LayerBuilder extends RenderableBuilder {
 
       if (tier instanceof ChartBuilder) {
         if (i === 0 && hoistedCoord !== undefined) tier = tier.withoutCoord();
-        if (i > 0) tier.adoptTimeTier(rootTimeTier);
+        // The root tier's clock, offered to every later tier the way the
+        // previous tier's marks are (see `ChartBuilder.adoptTimeTier`): a
+        // transition layered over a sequence's keyframes is inside that
+        // sequence's chart, even when it is written as a nested
+        // `chart(selectAll(...))` pipeline.
+        if (i > 0) tier.adoptTimeTier(root);
         if (tier.usesPreviousLayerMarks()) {
           if (prevRefs === undefined) {
             throw new Error(

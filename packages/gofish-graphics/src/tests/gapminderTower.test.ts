@@ -127,15 +127,23 @@ function firstDifference(a: Circle[], b: Circle[]): string | undefined {
 
 const SCATTER = { by: "country", x: "fertility", y: "life_expect" };
 
-async function level0(rows: any[], at: number) {
-  return chart(rows, { legend: false })
+/** The paused sequence of keyframes, with `layer` (if any) layered over it.
+ *  The sugar, the sequence alone and the step transition are this one chart
+ *  with a different tier on top. */
+async function sequenceChart(rows: any[], at: number, layer?: any) {
+  const keyframes = chart(rows, { legend: false })
     .flow(
       time.sequence({ by: "year", duration: 5000, playing: false, at }),
       scatter(SCATTER)
     )
-    .mark(circle({ r: 4, fill: "country" }))
-    .layer(time.transition())
-    .toDisplayList({ w: W, h: H, axes: true });
+    .mark(circle({ r: 4, fill: "country" }));
+  return (
+    layer === undefined ? keyframes : keyframes.layer(layer)
+  ).toDisplayList({ w: W, h: H, axes: true });
+}
+
+async function level0(rows: any[], at: number) {
+  return sequenceChart(rows, at, time.transition());
 }
 
 async function level1(rows: any[], at: number) {
@@ -188,26 +196,13 @@ async function level3(rows: any[], at: number) {
  *  time, so it holds one keyframe until the next one's year arrives — which is
  *  an animation already, and the same one a `curve: "step"` transition plays. */
 async function sequenceAlone(rows: any[], at: number) {
-  return chart(rows, { legend: false })
-    .flow(
-      time.sequence({ by: "year", duration: 5000, playing: false, at }),
-      scatter(SCATTER)
-    )
-    .mark(circle({ r: 4, fill: "country" }))
-    .toDisplayList({ w: W, h: H, axes: true });
+  return sequenceChart(rows, at);
 }
 
 /** The sugar with the step curve: the moving mark holds the previous
  *  keyframe's geometry instead of interpolating toward the next. */
 async function stepTransition(rows: any[], at: number) {
-  return chart(rows, { legend: false })
-    .flow(
-      time.sequence({ by: "year", duration: 5000, playing: false, at }),
-      scatter(SCATTER)
-    )
-    .mark(circle({ r: 4, fill: "country" }))
-    .layer(time.transition({ curve: "step" }))
-    .toDisplayList({ w: W, h: H, axes: true });
+  return sequenceChart(rows, at, time.transition({ curve: "step" }));
 }
 
 /** The step reading of an animated sequence, checked where it has something to
@@ -275,11 +270,7 @@ async function main(): Promise<void> {
     );
     for (let i = 1; i < levels.length; i++) {
       const diff = firstDifference(geometries[0], geometries[i]);
-      ok(
-        `${levels[i][0]} matches ${levels[0][0]}`,
-        diff === undefined,
-        diff
-      );
+      ok(`${levels[i][0]} matches ${levels[0][0]}`, diff === undefined, diff);
     }
   }
 

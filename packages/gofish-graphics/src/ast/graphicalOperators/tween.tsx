@@ -58,24 +58,20 @@ import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { Size } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { readLive } from "../../interaction/live";
-import { setLiveSlots } from "../../interaction/liveSlots";
+import { GEOMETRY_CHANNELS, setLiveSlots } from "../../interaction/liveSlots";
 import {
-  interpolateRun,
+  interpolateAt,
   knotOrder,
+  locate,
+  sourceIndex,
   type InterpolationMethod,
 } from "../../interpolate";
+import { bbox, height, unionAll, width } from "../../util/bbox";
+import { targetOf } from "./layer";
 
 /** The shapes a transition can paint. A keyframe's own shape decides: the
  *  emitted mark is the same kind of thing as the marks it moves between. */
 const SUPPORTED_SHAPES = new Set(["ellipse", "rect", "blank"]);
-
-/** The display-item fields a moving mark patches per frame, by shape — the
- *  item's own geometry field names, which is what a live slot is keyed by
- *  (see `paintSVG`'s `GEOMETRY_CHANNELS`). */
-const MOVING_FIELDS: Record<string, string[]> = {
-  ellipse: ["cx", "cy", "rx", "ry"],
-  rect: ["x", "y", "w", "h"],
-};
 
 export type TweenOptions = {
   /** The playhead, in the time field's own units (a year, not a fraction).
@@ -98,9 +94,6 @@ export type TweenOptions = {
   opacity?: number;
 };
 
-/** One keyframe's placed box, as the four edges the run interpolates over. */
-type Box = { xMin: number; xMax: number; yMin: number; yMax: number };
-
 /**
  * The run a tween paints, in time order: everything about it that layout
  * decided. Reading it at a playhead is pure arithmetic over these numbers,
@@ -108,13 +101,16 @@ type Box = { xMin: number; xMax: number; yMin: number; yMax: number };
  */
 type Run = {
   knots: number[];
-  boxes: Box[];
+  /** Each keyframe's placed box, per channel: center and extent on each axis,
+   *  the four quantities the run interpolates. */
+  cx: number[];
+  cy: number[];
+  w: number[];
+  h: number[];
   /** The shape every keyframe of the run is — the shape the moving mark is. */
   shape: string;
   /** Each keyframe's own color channel, for the paint the mark inherits. */
   colors: (MaybeValue<string> | undefined)[];
-  method: InterpolationMethod;
-  ease?: (u: number) => number;
 };
 
 /** The run read at one playhead: the box the moving mark occupies, and which
@@ -135,33 +131,33 @@ type Sample = { cx: number; cy: number; w: number; h: number; source: number };
  * size, paint — is the keyframe the method is holding rather than a held
  * position wearing the next keyframe's paint.
  */
-function sampleRun(run: Run, t: number): Sample {
-  const { knots, boxes, method, ease } = run;
-  let warped = t;
-  if (ease !== undefined && knots.length >= 2) {
-    let i = 0;
-    while (i < knots.length - 2 && knots[i + 1] <= t) i++;
-    const [lo, hi] = [knots[i], knots[i + 1]];
-    if (t > lo && t < hi) warped = lo + ease((t - lo) / (hi - lo)) * (hi - lo);
+function sampleRun(
+  run: Run,
+  t: number,
+  method: InterpolationMethod,
+  ease: ((u: number) => number) | undefined
+): Sample {
+  const { knots } = run;
+  const source = sourceIndex(knots, t, method);
+  // Fewer than two keyframes leaves no segment to locate in; the channel
+  // rule is `interpolateRun`'s (a lone keyframe holds, an empty run is NaN).
+  if (knots.length < 2) {
+    const held = (values: number[]) => (knots.length === 0 ? NaN : values[0]);
+    return {
+      cx: held(run.cx),
+      cy: held(run.cy),
+      w: held(run.w),
+      h: held(run.h),
+      source,
+    };
   }
-
-  const channel = (read: (b: Box) => number) =>
-    interpolateRun(knots, boxes.map(read), warped, method);
-
-  const cx = channel((b) => (b.xMin + b.xMax) / 2);
-  const cy = channel((b) => (b.yMin + b.yMax) / 2);
-  const w = channel((b) => b.xMax - b.xMin);
-  const h = channel((b) => b.yMax - b.yMin);
-
-  const source =
-    method === "step"
-      ? knots.reduce((best, k, i) => (k <= t ? i : best), 0)
-      : knots.reduce(
-          (best, k, i) =>
-            Math.abs(k - t) < Math.abs(knots[best] - t) ? i : best,
-          0
-        );
-  return { cx, cy, w, h, source };
+  let loc = locate(knots, t);
+  if (ease !== undefined && loc.u > 0 && loc.u < 1) {
+    const { i, u } = loc;
+    loc = locate(knots, knots[i] + ease(u) * (knots[i + 1] - knots[i]));
+  }
+  const at = (values: number[]) => interpolateAt(knots, values, loc, method);
+  return { cx: at(run.cx), cy: at(run.cy), w: at(run.w), h: at(run.h), source };
 }
 
 export const tween = createNodeOperator(
@@ -180,16 +176,13 @@ export const tween = createNodeOperator(
   ) => {
     /** The keyframe nodes behind the operands (each operand is a `ref`). */
     const keyframeNodes = (cs: GoFishAST[]): GoFishNode[] =>
-      cs
-        .map((c) => ((c as any).targetNode ?? c) as GoFishNode)
-        .filter((n): n is GoFishNode => n instanceof GoFishNode);
+      cs.map(targetOf).filter((n): n is GoFishNode => n instanceof GoFishNode);
 
     /** The playhead as a function, whether or not it was written as one, and
      *  whether it can change after layout. A plain number cannot, so the node
      *  lowers to a static item and nothing reactive is wired up. */
-    const readPlayhead = (): number =>
-      typeof playhead === "function" ? playhead() : playhead;
     const moves = typeof playhead === "function";
+    const readPlayhead = moves ? playhead : () => playhead;
 
     // The playhead, read ONCE, HERE: the value the node lowers to, and the
     // read that registers the clock with the chart's interaction runtime.
@@ -252,21 +245,18 @@ export const tween = createNodeOperator(
           );
 
           const order = knotOrder(knots);
+          const boxes = order.map((i) => {
+            const [x, y] = placed[i].dims;
+            return bbox(x.min!, x.max!, y.min!, y.max!);
+          });
           const run: Run = {
             knots: order.map((i) => knots[i]),
-            boxes: order.map((i) => {
-              const dims = placed[i].dims;
-              return {
-                xMin: dims[0].min!,
-                xMax: dims[0].max!,
-                yMin: dims[1].min!,
-                yMax: dims[1].max!,
-              };
-            }),
+            cx: boxes.map((b) => (b.minX + b.maxX) / 2),
+            cy: boxes.map((b) => (b.minY + b.maxY) / 2),
+            w: boxes.map(width),
+            h: boxes.map(height),
             shape: keyframes[0]?.type ?? "ellipse",
             colors: order.map((i) => (children[i] as any)?.color),
-            method,
-            ease,
           };
 
           // The box is the whole TRAJECTORY, not the point the mark is at:
@@ -274,19 +264,15 @@ export const tween = createNodeOperator(
           // mark uses over its run. That is what makes the playhead paint-time
           // — nothing above this node can see it move — and it is the same box
           // a `line` through the same keyframes claims.
-          const spans = run.boxes.length > 0;
-          const xMin = Math.min(...run.boxes.map((b) => b.xMin));
-          const xMax = Math.max(...run.boxes.map((b) => b.xMax));
-          const yMin = Math.min(...run.boxes.map((b) => b.yMin));
-          const yMax = Math.max(...run.boxes.map((b) => b.yMax));
+          const trajectory = unionAll(...boxes);
 
           return {
             intrinsicDims: [
-              { min: spans ? xMin : 0, size: spans ? xMax - xMin : 0 },
-              { min: spans ? yMin : 0, size: spans ? yMax - yMin : 0 },
+              { min: trajectory.minX, size: width(trajectory) },
+              { min: trajectory.minY, size: height(trajectory) },
             ],
             transform: { translate: [0, 0] },
-            renderData: { run, t },
+            renderData: { run },
           };
         },
         lower: (
@@ -294,7 +280,7 @@ export const tween = createNodeOperator(
           _children,
           node
         ): DisplayList.DisplayItem[] => {
-          const { run, t } = renderData as { run: Run; t: number };
+          const { run } = renderData as { run: Run };
           const unitScale = node.getRenderSession().scaleContext?.unit;
           // One resolved paint per keyframe, so reading the run at a playhead
           // is an array index rather than a color computation.
@@ -314,11 +300,14 @@ export const tween = createNodeOperator(
           const toLocalPixel = ([px, py]: [number, number]): [number, number] =>
             toPixel([px + tx, py + ty]);
 
+          const datum = node.datum;
+          const role = roleFor(datum);
+
           /** The moving mark as it stands at one playhead. Everything it needs
            *  is either in `run` (layout's) or in this closure (lowering's), so
            *  the paint tier can call it per frame. */
           const build = (at: number): DisplayList.DisplayItem => {
-            const { cx, cy, w, h, source } = sampleRun(run, at);
+            const { cx, cy, w, h, source } = sampleRun(run, at, method, ease);
             const resolvedFill = fills[source];
             const style = lowerStyle({
               fill: resolvedFill,
@@ -335,8 +324,8 @@ export const tween = createNodeOperator(
                 rx: w / 2,
                 ry: h / 2,
                 style,
-                datum: node.datum,
-                role: roleFor(node.datum),
+                datum,
+                role,
               };
             }
             return {
@@ -348,8 +337,8 @@ export const tween = createNodeOperator(
                 toLocalPixel
               ),
               style,
-              datum: node.datum,
-              role: roleFor(node.datum),
+              datum,
+              role,
             };
           };
 
@@ -367,7 +356,8 @@ export const tween = createNodeOperator(
               return cache.item;
             };
             const slots: Record<string, () => unknown> = {};
-            for (const field of MOVING_FIELDS[item.kind] ?? []) {
+            for (const field of GEOMETRY_CHANNELS) {
+              if (!(field in item)) continue;
               slots[field] = () =>
                 (itemAt() as unknown as Record<string, unknown>)[field];
             }

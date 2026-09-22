@@ -33,7 +33,7 @@ import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
-import type { InterpolationMethod } from "../../interpolate";
+import { sourceIndex, type InterpolationMethod } from "../../interpolate";
 
 export type SequenceOptions = {
   /** The data field whose values are the keyframes. Must be numeric: the
@@ -316,10 +316,18 @@ function hold(children: GoFishAST[], playhead: () => number): void {
     (a, b) => a - b
   );
   if (bands.length === 0) return;
-  const heldAt = (t: number): number =>
-    bands.reduce((best, k) => (k <= t ? k : best), bands[0]);
+  // The held band, computed at most once per distinct playhead value and
+  // shared by every keyframe's thunk (the same caching `tween` does).
+  // (`NaN` never equals a playhead, so the first read always computes.)
+  let cache = { t: NaN, held: bands[0] };
+  const held = (): number => {
+    const t = playhead();
+    if (t !== cache.t)
+      cache = { t, held: bands[sourceIndex(bands, t, "step")] };
+    return cache.held;
+  };
   children.forEach((child, i) => {
-    showSubtreeWhile(child, () => knots[i] === heldAt(playhead()));
+    showSubtreeWhile(child, () => knots[i] === held());
   });
 }
 

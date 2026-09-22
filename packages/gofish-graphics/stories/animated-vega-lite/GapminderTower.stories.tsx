@@ -36,8 +36,8 @@ import {
   scatter,
   selectAll,
   time,
-  timer,
 } from "../../src/lib";
+import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
 
 const meta: Meta = {
@@ -58,14 +58,6 @@ const AT = 1957.5;
 /** The year field's own range, which `time.sequence` reads off the data and a
  *  raw `timer` has to be told. */
 const YEARS: [number, number] = [1955, 2005];
-
-/** A paused clock parked at the shared playhead — what levels 2 and 3 use in
- *  place of the one a sequence would have owned. */
-const pausedClock = () => {
-  const clock = timer({ domain: YEARS, duration: 5000, playing: false });
-  clock.set(AT);
-  return clock;
-};
 
 /**
  * Level 0, the sugar. A sequence in the flow and a bare transition layered
@@ -134,7 +126,7 @@ export const L2ExplicitClock: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
-    const year = pausedClock();
+    const year = pausedClock(YEARS, 5000, AT);
 
     chart(gapminder, { legend: false })
       .flow(
@@ -172,7 +164,7 @@ export const L3DataSpace: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
-    const year = pausedClock();
+    const year = pausedClock(YEARS, 5000, AT);
 
     chart(gapminder, { legend: false })
       .flow(

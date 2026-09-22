@@ -84,7 +84,7 @@ function findUnclaimedConnectors(node: GoFishAST, out: GoFishNode[]): void {
 }
 
 /** The node identity of a `GoFishAST` (a ref's target, or the node itself). */
-function targetOf(n: GoFishAST): GoFishNode | undefined {
+export function targetOf(n: GoFishAST): GoFishNode | undefined {
   return n instanceof GoFishRef ? n.targetNode : (n as GoFishNode);
 }
 

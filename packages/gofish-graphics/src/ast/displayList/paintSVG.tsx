@@ -17,39 +17,12 @@
 
 import type { JSX } from "solid-js";
 import { DisplayList } from "gofish-ir";
-import { getLiveSlots } from "../../interaction/liveSlots";
+import { GEOMETRY_CHANNELS, getLiveSlots } from "../../interaction/liveSlots";
 
 type Style = DisplayList.Style | undefined;
 
 /** Live-channel slot table for one item — a per-attribute reactive thunk. */
 type LiveSlots = NonNullable<ReturnType<typeof getLiveSlots>>;
-
-/**
- * The live-slot names that override an item's GEOMETRY rather than its style —
- * the display item's own field names, so one rule covers every primitive: a
- * slot called `cx` overrides `cx` on an ellipse, `x` overrides `x` on a rect or
- * a text anchor, `d` overrides the path string.
- *
- * Geometry is live for the same reason paint is: the value is a paint-time
- * fact, the box it sits in is a layout-time one. A mark whose POSITION moves
- * reactively must therefore claim the room for everywhere it goes at layout
- * time (a `time.transition()` claims the whole trajectory its keyframes span),
- * exactly as live text must fit its resolve-time measure. Two known limits,
- * both inherited from the live-paint channels: the serialized display list and
- * the frame the interaction runtime publishes for hit-testing carry the
- * resolve-time value, so a live item's recorded box is where it started.
- */
-const GEOMETRY_CHANNELS = new Set([
-  "x",
-  "y",
-  "w",
-  "h",
-  "cx",
-  "cy",
-  "rx",
-  "ry",
-  "d",
-]);
 
 /**
  * One field of a display item, with its live slot's value in place of the

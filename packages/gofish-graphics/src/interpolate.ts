@@ -15,15 +15,20 @@
  * reuses the ordering for every channel it interpolates (x, y, width, height).
  */
 
+import { lerp } from "./util";
+
 /** How a run is read between its knots. */
 export type InterpolationMethod = "step" | "linear" | "catmullRom";
+
+/** Where `t` falls in a run: the segment index and the local fraction in it. */
+export type KnotLocation = { i: number; u: number };
 
 /** Locate `t` in an ascending knot array: the index `i` of the segment
  *  `[knots[i], knots[i+1]]` containing `t`, and the local fraction `u` in
  *  `[0, 1]` inside it. `t` outside the run clamps to the first/last segment,
  *  which is what a playhead sitting before the first keyframe (or exactly on
  *  the last) should see: the endpoint value, held. */
-function locate(knots: number[], t: number): { i: number; u: number } {
+export function locate(knots: number[], t: number): KnotLocation {
   const n = knots.length;
   if (t <= knots[0]) return { i: 0, u: 0 };
   if (t >= knots[n - 1]) return { i: n - 2, u: 1 };
@@ -44,10 +49,7 @@ export function interpolateLinear(
   values: number[],
   t: number
 ): number {
-  if (knots.length === 0) return NaN;
-  if (knots.length === 1) return values[0];
-  const { i, u } = locate(knots, t);
-  return values[i] + (values[i + 1] - values[i]) * u;
+  return interpolateRun(knots, values, t, "linear");
 }
 
 /**
@@ -65,12 +67,7 @@ export function interpolateStep(
   values: number[],
   t: number
 ): number {
-  if (knots.length === 0) return NaN;
-  if (knots.length === 1) return values[0];
-  const { i, u } = locate(knots, t);
-  // `locate` only reports `u === 1` past the end of the run; inside a segment
-  // the fraction is strictly below 1, so the previous keyframe's value holds.
-  return u >= 1 ? values[i + 1] : values[i];
+  return interpolateRun(knots, values, t, "step");
 }
 
 /**
@@ -90,12 +87,18 @@ export function interpolateCatmullRom(
   values: number[],
   t: number
 ): number {
-  const n = knots.length;
-  if (n === 0) return NaN;
-  if (n === 1) return values[0];
-  if (n === 2) return interpolateLinear(knots, values, t);
+  return interpolateRun(knots, values, t, "catmullRom");
+}
 
-  const { i, u } = locate(knots, t);
+/** The Barry-Goldman pyramid for segment `i` at local fraction `u`, on a run
+ *  of at least three knots. */
+function catmullRomAt(
+  knots: number[],
+  values: number[],
+  i: number,
+  u: number
+): number {
+  const n = knots.length;
   const t1 = knots[i];
   const t2 = knots[i + 1];
   const p1 = values[i];
@@ -107,17 +110,17 @@ export function interpolateCatmullRom(
   const p3 = i + 2 < n ? values[i + 2] : p2;
 
   const tt = t1 + u * (t2 - t1);
-  // Guard every denominator: a degenerate span collapses that lerp onto its
+  // Guard every denominator: a degenerate span collapses that blend onto its
   // later endpoint, the same rule `locate` uses.
-  const lerp = (a: number, b: number, ta: number, tb: number): number =>
+  const blend = (a: number, b: number, ta: number, tb: number): number =>
     tb === ta ? b : ((tb - tt) * a + (tt - ta) * b) / (tb - ta);
 
-  const a1 = lerp(p0, p1, t0, t1);
-  const a2 = lerp(p1, p2, t1, t2);
-  const a3 = lerp(p2, p3, t2, t3);
-  const b1 = lerp(a1, a2, t0, t2);
-  const b2 = lerp(a2, a3, t1, t3);
-  return lerp(b1, b2, t1, t2);
+  const a1 = blend(p0, p1, t0, t1);
+  const a2 = blend(p1, p2, t1, t2);
+  const a3 = blend(p2, p3, t2, t3);
+  const b1 = blend(a1, a2, t0, t2);
+  const b2 = blend(a2, a3, t1, t3);
+  return blend(b1, b2, t1, t2);
 }
 
 /** Evaluate one channel of a keyframe run at `t`. */
@@ -127,10 +130,57 @@ export function interpolateRun(
   t: number,
   method: InterpolationMethod
 ): number {
-  if (method === "step") return interpolateStep(knots, values, t);
-  return method === "linear"
-    ? interpolateLinear(knots, values, t)
-    : interpolateCatmullRom(knots, values, t);
+  if (knots.length < 2) return knots.length === 0 ? NaN : values[0];
+  return interpolateAt(knots, values, locate(knots, t), method);
+}
+
+/**
+ * Evaluate one channel of a keyframe run at an already-located parameter, so
+ * a caller reading several channels of the same run at the same `t` locates
+ * it once. `knots` must have at least two entries (a shorter run has no
+ * segment to locate in).
+ */
+export function interpolateAt(
+  knots: number[],
+  values: number[],
+  { i, u }: KnotLocation,
+  method: InterpolationMethod
+): number {
+  if (method === "step") {
+    // `locate` only reports `u === 1` past the end of the run; inside a
+    // segment the fraction is strictly below 1, so the previous keyframe's
+    // value holds.
+    return u >= 1 ? values[i + 1] : values[i];
+  }
+  if (method === "linear" || knots.length === 2) {
+    return lerp(values[i], values[i + 1], u);
+  }
+  return catmullRomAt(knots, values, i, u);
+}
+
+/**
+ * The keyframe whose non-blended attributes (a mark's paint, a row's
+ * non-numeric fields) a run shows at `t`. Normally the keyframe nearest `t`
+ * (ties go to the earlier one), which is the value that was actually true
+ * closest to the playhead; under `"step"` the PREVIOUS one — the last knot at
+ * or before `t`, or the first when `t` is before the run — so every attribute
+ * comes from the keyframe the step method is holding. `knots` must be sorted
+ * ascending.
+ */
+export function sourceIndex(
+  knots: number[],
+  t: number,
+  method: InterpolationMethod
+): number {
+  let best = 0;
+  if (method === "step") {
+    for (let i = 0; i < knots.length; i++) if (knots[i] <= t) best = i;
+    return best;
+  }
+  for (let i = 0; i < knots.length; i++) {
+    if (Math.abs(knots[i] - t) < Math.abs(knots[best] - t)) best = i;
+  }
+  return best;
 }
 
 /** Sort a run by its knots, returning the ordering so several channels can be
@@ -184,13 +234,7 @@ export function interpolate<T extends Record<string, unknown>>(
 ): Record<string, unknown>[] {
   // Key order is first appearance, so the output is a deterministic function
   // of the input rather than of a hash's iteration order.
-  const runs = new Map<unknown, T[]>();
-  for (const row of rows) {
-    const k = row[key];
-    const run = runs.get(k);
-    if (run === undefined) runs.set(k, [row]);
-    else run.push(row);
-  }
+  const runs = Map.groupBy(rows, (row) => row[key]);
 
   const out: Record<string, unknown>[] = [];
   for (const [k, run] of runs) {
@@ -226,14 +270,7 @@ export function interpolate<T extends Record<string, unknown>>(
     // in time, which is the value that was actually true closest to `at`;
     // under `"step"` the PREVIOUS one, so every field of the row — blended or
     // copied — comes from the keyframe the step method is holding.
-    const source =
-      method === "step"
-        ? knots.reduce((best, k, i) => (k <= at ? i : best), 0)
-        : sorted.reduce(
-            (best, _r, i) =>
-              Math.abs(knots[i] - at) < Math.abs(knots[best] - at) ? i : best,
-            0
-          );
+    const source = sourceIndex(knots, at, method);
 
     const row: Record<string, unknown> = { ...sorted[source] };
     for (const f of names) {
