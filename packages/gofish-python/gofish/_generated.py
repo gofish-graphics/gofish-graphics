@@ -77,8 +77,8 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
             _kw[_k] = _channel(_v)
     return Mark("rect", **_kw)
 
-def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
-    """A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth) — position it via `spread`/`scatter`.
+def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, **kwargs: Any) -> Mark:
+    """A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity) — position it via `spread`/`scatter`.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
@@ -86,6 +86,7 @@ def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] 
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         strokeWidth: Stroke width in pixels. Default 0.
+        opacity: Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire. Default 1.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -94,6 +95,7 @@ def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] 
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
+        ("opacity", opacity),
     ]:
         if _v is not None:
             _kw[_k] = _channel(_v)
@@ -353,7 +355,7 @@ def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = 
     return Mark("polygon", **_kw)
 
 def blank(*, debug: Optional[bool] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, rx: Optional[float] = None, ry: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
-    """An invisible sizing/positioning guide — a transparent rect with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
+    """An invisible sizing/positioning guide — a rect that emits no display items at all, with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
