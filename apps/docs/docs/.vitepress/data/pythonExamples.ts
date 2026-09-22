@@ -25,7 +25,11 @@
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadStoryExamples, type StoryExample } from "./storyExamples.ts";
+import {
+  loadStoryExamples,
+  PREVIEW_ROWS,
+  type StoryExample,
+} from "./storyExamples.ts";
 import { dedent, indent } from "./textUtils.ts";
 
 export interface PythonExample {
@@ -471,7 +475,20 @@ function buildDatasetCode(names: string[]): string | null {
       if (repr === undefined) {
         const jsonPath = join(LOWLEVEL_DATA_DIR, `${jsonName}.json`);
         const parsed = JSON.parse(readFileSync(jsonPath, "utf-8"));
-        repr = pyRepr(parsed);
+        // Only the head of the data, like the JS side — see PREVIEW_ROWS in
+        // storyExamples.ts. Nothing runs this snippet, so rows it leaves out
+        // cost nothing.
+        if (Array.isArray(parsed) && parsed.length > PREVIEW_ROWS) {
+          const dropped = (parsed.length - PREVIEW_ROWS).toLocaleString(
+            "en-US"
+          );
+          repr = pyRepr(parsed.slice(0, PREVIEW_ROWS)).replace(
+            /\n\]$/,
+            `\n    # … ${dropped} more rows\n]`
+          );
+        } else {
+          repr = pyRepr(parsed);
+        }
         jsonReprCache.set(jsonName, repr);
       }
       parts.push(`${block.name} = ${repr}`);
