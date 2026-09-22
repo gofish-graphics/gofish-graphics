@@ -79,8 +79,8 @@ another, so ten slots can all have a child called `box`. And a component can be
 given a name of its own by the code that uses it, which is what makes arrows
 possible.
 
-[How to create a glyph](/js/api/howto/create-glyph) covers the same territory
-from the chart side, including passing a component to `.mark()`.
+The [Glyphs tutorial](/js/tutorials/glyphs) covers the same territory from the
+chart side, including passing a function to `.mark()`.
 
 ## Composing components
 
@@ -384,7 +384,6 @@ state can never drift apart.
 
 - [How to name and scope](/js/api/howto/naming-and-scoping) for the full rules
   on strings, tokens and paths.
-- [How to create a glyph](/js/api/howto/create-glyph) for using a component as
-  a chart mark.
+- [Glyphs](/js/tutorials/glyphs) for using a component as a chart mark.
 - [Charts](/js/tutorials/charts) if you have not read it yet. It depends only
   on [Basics](/js/tutorials/basics), same as this page.

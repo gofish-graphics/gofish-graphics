@@ -455,6 +455,7 @@ export default defineConfig({
                 { text: "Basics", link: "/js/tutorials/basics" },
                 { text: "Charts", link: "/js/tutorials/charts" },
                 { text: "Diagrams", link: "/js/tutorials/diagrams" },
+                { text: "Glyphs", link: "/js/tutorials/glyphs" },
                 {
                   text: "Pictorial Charts",
                   link: "/js/tutorials/pictorial-charts",
@@ -467,7 +468,6 @@ export default defineConfig({
         {
           text: "How To",
           items: [
-            { text: "Create a glyph", link: "/js/api/howto/create-glyph" },
             { text: "Pick a layout operator", link: "/js/api/howto/operators" },
             { text: "Use selection", link: "/js/api/howto/selection" },
             {
@@ -576,7 +576,6 @@ export default defineConfig({
         {
           text: "How To",
           items: [
-            { text: "Create a glyph", link: "/python/api/howto/create-glyph" },
             {
               text: "Pick a layout operator",
               link: "/python/api/howto/operators",

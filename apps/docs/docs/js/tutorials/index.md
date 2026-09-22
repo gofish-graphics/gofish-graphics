@@ -39,6 +39,13 @@ so start there, and everything else builds on it.
 
 <TutorialGrid :cols="3">
 
+<TutorialCard title="Glyphs" href="/js/tutorials/glyphs">
+
+::: gofish story:tutorials-glyphs--glyphs hidden
+:::
+
+</TutorialCard>
+
 <TutorialCard title="Pictorial Charts" href="/js/tutorials/pictorial-charts">
 
 ::: gofish example:bottle-fill-chart hidden
