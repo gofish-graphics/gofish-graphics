@@ -467,7 +467,6 @@ export default defineConfig({
         {
           text: "How To",
           items: [
-            { text: "Create a chart", link: "/js/api/howto/create-chart" },
             { text: "Create a glyph", link: "/js/api/howto/create-glyph" },
             { text: "Pick a layout operator", link: "/js/api/howto/operators" },
             { text: "Use selection", link: "/js/api/howto/selection" },
@@ -577,7 +576,6 @@ export default defineConfig({
         {
           text: "How To",
           items: [
-            { text: "Create a chart", link: "/python/api/howto/create-chart" },
             { text: "Create a glyph", link: "/python/api/howto/create-glyph" },
             {
               text: "Pick a layout operator",
