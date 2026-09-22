@@ -448,7 +448,15 @@ export default defineConfig({
           text: "Get Started",
           items: [
             { text: "First Steps", link: "/js/get-started" },
-            { text: "Tutorial", link: "/js/tutorial" },
+            {
+              text: "Tutorials",
+              link: "/js/tutorials/",
+              items: [
+                { text: "Basics", link: "/js/tutorials/basics" },
+                { text: "Charts", link: "/js/tutorials/charts" },
+                { text: "Diagrams", link: "/js/tutorials/diagrams" },
+              ],
+            },
             { text: "Examples", link: "/js/examples/" },
           ],
         },
@@ -540,7 +548,7 @@ export default defineConfig({
           text: "Get Started",
           items: [
             { text: "First Steps", link: "/python/get-started" },
-            { text: "Tutorial", link: "/python/tutorial" },
+            { text: "Tutorials", link: "/python/tutorials/" },
             { text: "Examples", link: "/python/examples/" },
           ],
         },

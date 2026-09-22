@@ -2,11 +2,16 @@
 handwritten: true
 ---
 
-# Tutorial: From a Rectangle to a Polar Ribbon
+# Charts: From a Bar Chart to a Polar Ribbon
 
-Welcome to GoFish! In this tutorial we'll start with a rectangle and gradually
+Welcome to GoFish! In this tutorial we'll start with a bar chart and gradually
 turn it into a polar ribbon chart. Along the way, we'll encounter the pieces that make up a GoFish
 chart: shapes, graphical operators, scales, and coordinate transforms.
+
+::: tip Before you start
+This tutorial assumes you've been through [Basics](/js/tutorials/basics), which
+covers shapes and graphical operators.
+:::
 
 ::: gofish example:polar-ribbon-chart hidden
 
@@ -34,8 +39,9 @@ import * as _ from "lodash";
 
 const root = document.getElementById("app");
 
-gf.chart(seafood)
-  .mark(gf.rect({ fill: gf.color.green[5] }))
+gf.chart(seafood, { axes: true })
+  .flow(gf.spread({ by: "lake", dir: "x" }))
+  .mark(gf.rect({ h: "count", fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
 ```
 
@@ -251,34 +257,55 @@ const seafood: SeafoodData[] = [
 ];
 ```
 
-## The Starter Code and Rectangle Shape
+## Anatomy of a GoFish Specification
 
-Let's take a look at the starter code. First, we grab a DOM element that will serve as the container
-we render into:
+A basic GoFish spec has four pieces: `chart`, `flow`, `mark`, and `render`.
 
-```ts
-const root = document.getElementById("app");
+### `chart`: Data
+
+The `chart` function is how you start your specification. It's where you put your data.
+
+```ts no-check
+chart(seafood);
 ```
 
-Next, we render a rectangle into it!
+### `flow`: Graphical Operators
 
-:::gofish
+The `flow` method is where you specify _graphical operators_. Graphical operators transform your
+dataset (usually by applying a `groupBy`) and specify layout.
 
-```ts
-gf.chart(seafood)
-  .mark(gf.rect({ fill: gf.color.green[5] }))
-  .render(root, { w: 500, h: 300 });
+```ts no-check
+.flow(spread({ by: "lake",  dir: "x" }))
 ```
 
-:::
+Here we're using the `spread` operator to create one group per `lake` and we arrange them
+horizontally thanks the `dir: x` option.
 
-`gf.chart()` creates a chart from data. We pass an array with a single object containing the rectangle's
-position and size. Then we use `.mark()` to specify that we want to render `rect` shapes. The `fill` parameter specifies the color.
-We are using a green from GoFish's default color palette for this chart. Try changing `green` to `blue`
-or changing `5` to a higher or lower number.
+### `mark`: Shapes
 
-Finally, we call `.render` to render the chart to the DOM, specifying a width and height for the
-entire graphic. Both `w` and `h` are optional, and an omitted dimension is computed during layout
+Lastly we call the `mark` method to specify the shapes we place in each of the regions created by
+the `spread` operator.
+
+```ts no-check
+.mark(rect({ h: "count" }))
+```
+
+In this case, we created some rectangles whose heights correspond to the `count` values of the
+different lakes. Since we didn't define the width of the rectangle, the `spread` operator and
+`rect` shape work together to infer it for us!
+
+### Rendering
+
+```ts no-check
+chart(seafood, { axes: true }).render(root, { w: 500, h: 300 });
+```
+
+The `render` method draws our chart to the screen! We give it a DOM container to render into (`root`
+in this case) and some options. We've specified the width and height of our chart with `w` and `h`
+(just like on `rect`). We've also told GoFish to create some axes, labels, and legends for us
+automatically by passing `axes: true` in the `chart()` options.
+
+Both `w` and `h` are optional, and an omitted dimension is computed during layout
 per axis. An axis that scales data into pixels — a positional axis (scatter), or a data-driven size
 like bar heights — falls back to a default size. An axis with nothing to scale — a category axis, or
 fixed-size marks — keeps the marks at their natural size and shrinks to fit them. So a bar chart with
@@ -287,8 +314,7 @@ no width gets default-width bars and a chart only as wide as it needs to be.
 ## Bar Chart
 
 The first thing we'll do is compare the number of fish in each lake. We can use a bar chart for
-that. To turn our stack of rectangles into a bar chart, we'll need to take a few steps. First, we'll just create one
-bar for
+that. We'll build it up in a few steps. First, we'll just create one bar for
 each lake in the dataset:
 
 :::gofish

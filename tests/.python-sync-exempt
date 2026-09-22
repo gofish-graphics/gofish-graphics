@@ -148,3 +148,8 @@ packages/gofish-graphics/stories/interaction/ComponentPointer.stories.tsx
 # is the whole cross-language round trip rather than a story port. Tracked,
 # together with the rest of the panels' constructs, as issue #856.
 packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx
+
+# Tutorials/Basics is the finished example of the docs Basics tutorial: bare
+# marks and operators rendered with no chart() entry point, plus a
+# Constraint.align, the same low-level surface as the bluefish stories.
+packages/gofish-graphics/stories/tutorials/Basics.stories.tsx
