@@ -325,7 +325,7 @@ export const CurvesThree: StoryObj<Args> = {
     curvesRow(container, args, gapminder, year, [
       { caption: "no interpolation", curve: null },
       { caption: "linear", curve: "linear" },
-      { caption: "smooth (catmullRom)", curve: "catmullRom" },
+      { caption: "catmullRom", curve: "catmullRom" },
     ]);
 
     return container;
@@ -656,23 +656,6 @@ const kinematicsBlock = (rows: any[], clock: any) => {
         ])
       )
     ),
-    // Two lines, because the acceleration row needs a caveat and the row
-    // label's column is too narrow to carry it. The linear column of that row
-    // is not a graph of a function: linear acceleration is zero everywhere
-    // except for an impulse at each keyframe, and what is drawn is the weight
-    // of each impulse, which is the jump in velocity there. That is a
-    // velocity, not an acceleration, so the two columns of the row are not
-    // the same kind of number even though they share a y scale.
-    text({
-      text: `${SPARK_COUNTRY}, life expectancy: where it is, how fast it is moving, and how fast that is changing`,
-      fontSize: 11,
-      fill: "#888",
-    }),
-    text({
-      text: "acceleration, linear column: impulses, drawn with height = the jump in velocity at that keyframe",
-      fontSize: 11,
-      fill: "#888",
-    }),
   ];
 };
 
@@ -706,7 +689,7 @@ export const CurvesThreeKinematics: StoryObj<Args> = {
       [
         { caption: "no interpolation", curve: null },
         { caption: "linear", curve: "linear" },
-        { caption: "smooth (catmullRom)", curve: "catmullRom" },
+        { caption: "catmullRom", curve: "catmullRom" },
       ],
       kinematicsBlock(gapminder, year)
     );
@@ -742,7 +725,7 @@ export const CurvesThreeKinematicsPaused: StoryObj<Args> = {
       [
         { caption: "no interpolation", curve: null },
         { caption: "linear", curve: "linear" },
-        { caption: "smooth (catmullRom)", curve: "catmullRom" },
+        { caption: "catmullRom", curve: "catmullRom" },
       ],
       kinematicsBlock(gapminder, year)
     );
