@@ -53,14 +53,14 @@ so start there, and everything else builds on it.
 
 </TutorialCard>
 
-<TutorialCard title="Reactivity &amp; Interaction" href="/js/reactivity" pointer="52% 41%">
+<TutorialCard title="Reactivity &amp; Interaction" href="/js/tutorials/reactivity" pointer="52% 41%">
 
 ::: gofish story:interaction-draggable-threshold--default hidden
 :::
 
 </TutorialCard>
 
-<TutorialCard title="Tree Diagrams" href="/js/gotree">
+<TutorialCard title="Tree Diagrams" href="/js/tutorials/tree-diagrams">
 
 ::: gofish story:gotree-node-link--nodelink hidden
 :::

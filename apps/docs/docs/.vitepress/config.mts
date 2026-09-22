@@ -451,14 +451,33 @@ export default defineConfig({
             {
               text: "Tutorials",
               link: "/js/tutorials/",
+              collapsed: true,
               items: [
-                { text: "Basics", link: "/js/tutorials/basics" },
-                { text: "Charts", link: "/js/tutorials/charts" },
-                { text: "Diagrams", link: "/js/tutorials/diagrams" },
-                { text: "Glyphs", link: "/js/tutorials/glyphs" },
                 {
-                  text: "Pictorial Charts",
-                  link: "/js/tutorials/pictorial-charts",
+                  text: "Fundamentals",
+                  items: [
+                    { text: "Basics", link: "/js/tutorials/basics" },
+                    { text: "Charts", link: "/js/tutorials/charts" },
+                    { text: "Diagrams", link: "/js/tutorials/diagrams" },
+                  ],
+                },
+                {
+                  text: "Going further",
+                  items: [
+                    { text: "Glyphs", link: "/js/tutorials/glyphs" },
+                    {
+                      text: "Pictorial Charts",
+                      link: "/js/tutorials/pictorial-charts",
+                    },
+                    {
+                      text: "Reactivity & Interaction",
+                      link: "/js/tutorials/reactivity",
+                    },
+                    {
+                      text: "Tree Diagrams",
+                      link: "/js/tutorials/tree-diagrams",
+                    },
+                  ],
                 },
               ],
             },
@@ -553,15 +572,22 @@ export default defineConfig({
               collapsed: true,
               items: collectApiSidebarGroup("js", "coords"),
             },
+            {
+              text: "Reactivity",
+              collapsed: true,
+              items: [
+                {
+                  text: "Reactivity & Interaction",
+                  link: "/js/reactivity",
+                },
+              ],
+            },
+            {
+              text: "GoTree",
+              collapsed: true,
+              items: [{ text: "tree", link: "/js/gotree" }],
+            },
           ],
-        },
-        {
-          text: "Reactivity",
-          items: [{ text: "Reactivity & Interaction", link: "/js/reactivity" }],
-        },
-        {
-          text: "GoTree",
-          items: [{ text: "tree (separate package)", link: "/js/gotree" }],
         },
       ],
       "/python/": [
