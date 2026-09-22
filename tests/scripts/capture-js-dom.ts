@@ -2,13 +2,13 @@
  * Capture DOM snapshots and screenshots from every Storybook story.
  *
  * Renders the full story corpus headlessly into `tmp/js/` (normalized DOM +
- * PNG screenshots) for comparison against the checked-in baselines.
+ * PNG screenshots). compare.ts diffs it against the snapshot baselines and
+ * compare-python.ts diffs the Python capture against it.
  *
  * The actual capture loop lives in `capture-core.ts` (shared with
- * `capture-diff.ts`): it starts a Vite dev server serving the stories-runner
- * page, navigates Playwright to it once, and renders each story in sequence by
- * calling `window.__renderStory__(id)` — much faster than per-story navigation
- * because there's no page load between stories, just JS execution.
+ * `capture-diff.ts` and `capture-one.ts`): it starts a Vite dev server serving
+ * the stories-runner page and renders each story in a fresh browser context,
+ * so no state leaks from one story to the next.
  */
 
 import { join } from "path";

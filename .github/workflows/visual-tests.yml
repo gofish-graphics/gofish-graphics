@@ -34,25 +34,23 @@ jobs:
               - "tests/**"
               - ".github/workflows/visual-tests.yml"
 
-  visual-test:
+  # Capturing every story is the expensive part of the visual tests.
+  # It runs once here and is uploaded as the `js-dom-capture` artifact, which
+  # two jobs consume in parallel: `visual-test` compares it against the
+  # snapshot baselines, and `python-parity` compares the Python capture
+  # against it. Accepting diffs on the review site re-runs only the cheap
+  # `visual-test` compare job (#871), and parity no longer waits on the
+  # visual review (#872).
+  js-capture:
     needs: changes
     # On push (already path-filtered above) always run; on PRs run only when
     # relevant files changed, otherwise skip (= success for required checks).
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.relevant == 'true' }}
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: write # needed to push to snapshots/main on main push
-      statuses: write # needed to publish review-link commit status
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Setup Git LFS
-        run: git lfs install
 
       # The PythonTutor stories (and several others) use Andale Mono, Verdana,
       # and other MS-core fonts. ubuntu-latest doesn't ship those; without
@@ -113,6 +111,89 @@ jobs:
           fc-match "Verdana" | grep -q "Verdana.ttf" \
             || { echo "FAIL: Verdana resolved to: $(fc-match 'Verdana')"; exit 1; }
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # No gofish-graphics build: the capture harness aliases gofish-graphics
+      # to its source (tests/harness/vite.config.ts), and gofish-ir builds its
+      # dist in its own `prepare` script during install.
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Restore Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
+
+      # Save cache immediately after a successful install rather than relying
+      # on the default end-of-job save. That way the cache is written even if
+      # a later step (e.g. the capture) fails, but NOT written if
+      # the install itself failed (the step is skipped on prior failure).
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # On cache hit, browser binaries are restored but system libraries
+      # (installed via apt by --with-deps) are not. Install just those.
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
+
+      - name: Capture JS DOM snapshots
+        run: pnpm --filter @gofish/tests capture-js
+
+      - name: Upload JS DOM capture
+        uses: actions/upload-artifact@v5
+        with:
+          name: js-dom-capture
+          path: tests/tmp/js
+          if-no-files-found: error
+
+  visual-test:
+    needs: js-capture
+    # A job whose `needs` failed is skipped, and a skipped job counts as
+    # success for required checks. So run whenever js-capture ran at all and
+    # fail explicitly below if it did not succeed; skip only when js-capture
+    # itself was skipped (nothing relevant changed).
+    if: ${{ !cancelled() && needs.js-capture.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write # needed to push to snapshots/main on main push
+      statuses: write # needed to publish review-link commit status
+
+    steps:
+      - name: Fail if the JS capture failed
+        if: needs.js-capture.result != 'success'
+        run: |
+          echo "::error::js-capture finished with '${{ needs.js-capture.result }}'; there is no capture to compare."
+          exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git LFS
+        run: git lfs install
+
       - name: Fetch snapshot baselines
         run: |
           SNAP_BRANCH="snapshots/${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
@@ -151,39 +232,13 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install
 
-      - name: Build gofish-graphics
-        run: pnpm --filter gofish-graphics build
-
-      - name: Restore Playwright browser cache
-        id: playwright-cache
-        uses: actions/cache/restore@v4
+      # Artifacts belong to the workflow run, not the attempt, so the re-run
+      # the review site's accept action triggers still finds this capture.
+      - name: Download JS DOM capture
+        uses: actions/download-artifact@v5
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
-
-      # Save cache immediately after a successful install rather than relying
-      # on the default end-of-job save. That way the cache is written even if
-      # a later step (e.g. visual diff comparison) fails, but NOT written if
-      # the install itself failed (the step is skipped on prior failure).
-      - name: Save Playwright browser cache
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      # On cache hit, browser binaries are restored but system libraries
-      # (installed via apt by --with-deps) are not. Install just those.
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
-
-      - name: Capture JS DOM snapshots
-        run: pnpm --filter @gofish/tests capture-js
+          name: js-dom-capture
+          path: tests/tmp/js
 
       # On PRs: compare against baselines and fail if regressions are detected.
       - name: Compare snapshots (PR only)
@@ -310,24 +365,34 @@ jobs:
               context: 'Visual Diff Review',
             });
 
+  # Compares the Python capture against the JS capture of the same commit,
+  # not against the snapshot baselines, so it runs in parallel with
+  # visual-test and does not wait on the visual review (#872).
   python-parity:
     runs-on: ubuntu-latest
-    needs: visual-test
+    needs: js-capture
+    # Same reasoning as visual-test: never let a failed js-capture turn this
+    # required check into a skipped (= passing) one.
+    if: ${{ !cancelled() && needs.js-capture.result != 'skipped' }}
     permissions:
       pull-requests: write
       statuses: write # needed to publish parity-review-link commit status
 
     steps:
+      - name: Fail if the JS capture failed
+        if: needs.js-capture.result != 'success'
+        run: |
+          echo "::error::js-capture finished with '${{ needs.js-capture.result }}'; there is no capture to compare against."
+          exit 1
+
+      # fetch-depth 0: check-python-sync diffs against origin/main.
       - name: Checkout code
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Setup Git LFS
-        run: git lfs install
-
-      # Match the JS job's font set so the Python harness measures text
-      # against the same actual fonts. See the visual-test job for the
+      # Match the JS capture's font set so the Python harness measures text
+      # against the same actual fonts. See the js-capture job for the
       # full explanation of why we cache .ttf files directly instead of
       # using cache-apt-pkgs-action.
       - name: Restore mscorefonts .ttf cache
@@ -363,30 +428,6 @@ jobs:
           fc-match "Verdana" | grep -q "Verdana.ttf" \
             || { echo "FAIL: Verdana resolved to: $(fc-match 'Verdana')"; exit 1; }
 
-      - name: Fetch snapshot baselines
-        run: |
-          SNAP_BRANCH="snapshots/${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          FOUND=""
-          if git ls-remote --exit-code origin "$SNAP_BRANCH" 2>/dev/null; then
-            FOUND="$SNAP_BRANCH"
-          elif git ls-remote --exit-code origin "snapshots/main" 2>/dev/null; then
-            FOUND="snapshots/main"
-          fi
-          mkdir -p __snapshots__/dom __snapshots__/screenshots
-          if [ -n "$FOUND" ]; then
-            git fetch origin "$FOUND"
-            FETCH_SHA=$(git rev-parse FETCH_HEAD)
-            git worktree add --detach /tmp/snap-baselines "$FETCH_SHA"
-            cd /tmp/snap-baselines && git lfs pull && cd -
-            # Copy SRC contents (SRC/.) into existing DEST so a pre-existing
-            # __snapshots__/dom doesn't end up nested as __snapshots__/dom/dom.
-            [ -d /tmp/snap-baselines/dom ] && cp -r /tmp/snap-baselines/dom/. __snapshots__/dom/
-            [ -d /tmp/snap-baselines/screenshots ] && cp -r /tmp/snap-baselines/screenshots/. __snapshots__/screenshots/
-            git worktree remove --force /tmp/snap-baselines
-          else
-            echo "No snapshot branch found; starting with empty baselines."
-          fi
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -411,8 +452,8 @@ jobs:
       - name: Install Python dependencies
         run: pip install -e packages/gofish-python vega_datasets scipy
 
-      - name: Build gofish-graphics
-        run: pnpm --filter gofish-graphics build
+      # No gofish-graphics build: the Python capture renders through the same
+      # source-aliased Vite harness as js-capture (tests/harness/vite.config.ts).
 
       - name: Restore Playwright browser cache
         id: playwright-cache
@@ -436,6 +477,12 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm --filter @gofish/tests exec playwright install-deps chromium
 
+      - name: Download JS DOM capture
+        uses: actions/download-artifact@v5
+        with:
+          name: js-dom-capture
+          path: tests/tmp/js
+
       - name: Check Python story sync (coverage + spec sync)
         id: sync-check
         if: always()
@@ -457,7 +504,7 @@ jobs:
         if: always()
         run: pnpm test:visual:capture-python
 
-      - name: Compare Python DOM against JS baselines
+      - name: Compare Python DOM against the JS capture
         id: compare-python
         if: always()
         run: pnpm test:visual:compare-python

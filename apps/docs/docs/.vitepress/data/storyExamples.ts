@@ -13,6 +13,9 @@
  *   - `loaders`                                                        → inlined into an async IIFE
  *   - the story scaffolding (`return container`)                       → dropped
  *
+ * A story's dataset is synthesized twice: in full for the live editor, and as
+ * a preview (the first few rows of each array) for the docs pages.
+ *
  * This module is imported at build time by the VitePress data loader
  * (`storyExamples.data.js`) and may also be consumed by markdown-it plugins, so
  * it is synchronous and depends only on `node:fs` / `node:path` / `typescript`
@@ -43,6 +46,12 @@ export interface StoryExample {
   code: string;
   /** generated `./dataset` module content, when the story imports from src/data */
   datasetCode?: string;
+  /**
+   * The same module with every array cut down to its first rows. This is what
+   * the docs pages show; `datasetCode` only goes to the live editor, which has
+   * to run the example.
+   */
+  datasetPreview?: string;
   /**
    * Bare npm packages imported by `code` + `datasetCode` (excluding
    * `gofish-graphics`), mapped to a version. Versions are read from the
@@ -498,6 +507,7 @@ function findConstObject(
 interface TransformResult {
   code: string;
   datasetCode?: string;
+  datasetPreview?: string;
   isFallback: boolean;
 }
 
@@ -694,18 +704,22 @@ function transformStory(
   const code = parts.join("\n\n") + "\n";
 
   const datasetCode = datasetModules.size
-    ? buildDatasetCode([...datasetModules])
+    ? buildDatasetCode([...datasetModules], false)
+    : undefined;
+  const datasetPreview = datasetModules.size
+    ? buildDatasetCode([...datasetModules], true)
     : undefined;
 
   if (forcedFallback) {
     return {
       code: buildFallback(storyFile, parsed, block, argsName, argsMap),
       datasetCode,
+      datasetPreview,
       isFallback: true,
     };
   }
 
-  return { code, datasetCode, isFallback: false };
+  return { code, datasetCode, datasetPreview, isFallback: false };
 }
 
 /**
@@ -801,21 +815,87 @@ function buildFallback(
 // Dataset module synthesis
 // ---------------------------------------------------------------------------
 
-function buildDatasetCode(modulePaths: string[]): string {
+/**
+ * How many rows of each array a dataset preview keeps. Nobody reads a whole
+ * dataset on a docs page, and inlining one costs real build memory: every
+ * example page highlights its dataset with Shiki and ships it in the page
+ * bundle, so a megabyte of rows is a megabyte per page. Five rows show the
+ * shape, which is all the page is for. The full module still goes to the live
+ * editor, which has to run the example.
+ */
+export const PREVIEW_ROWS = 5;
+
+const datasetCache = new Map<string, string>();
+
+function buildDatasetCode(modulePaths: string[], preview: boolean): string {
   const seen = new Set<string>();
   const chunks: string[] = [];
   for (const modulePath of modulePaths.sort()) {
     if (seen.has(modulePath)) continue;
     seen.add(modulePath);
-    chunks.push(inlineDataModule(modulePath));
+    const key = `${preview ? "preview" : "full"}:${modulePath}`;
+    let chunk = datasetCache.get(key);
+    if (chunk === undefined) {
+      chunk = inlineDataModule(modulePath, preview);
+      datasetCache.set(key, chunk);
+    }
+    chunks.push(chunk);
   }
   return chunks.join("\n\n") + "\n";
 }
 
-function inlineDataModule(modulePath: string): string {
+/** `26280` → `26,280`, for the "… N more rows" comment. */
+function formatCount(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
+/**
+ * One edit per array literal that has more rows than the preview keeps: drop
+ * everything after the fifth row and say how many rows went. Arrays inside a
+ * dropped row are dropped with it, so their own edits are discarded as nested.
+ */
+function previewEdits(
+  src: string,
+  sourceFile: ts.SourceFile
+): { start: number; end: number; text: string }[] {
+  const found: { start: number; end: number; text: string }[] = [];
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isArrayLiteralExpression(node) &&
+      node.elements.length > PREVIEW_ROWS
+    ) {
+      const last = node.elements[PREVIEW_ROWS - 1];
+      const dropped = node.elements.length - PREVIEW_ROWS;
+      const rowIndent = lineIndent(src, node.elements[0].getStart(sourceFile));
+      const closeIndent = lineIndent(src, node.getEnd() - 1);
+      found.push({
+        start: last.getEnd(),
+        end: node.getEnd() - 1, // up to the closing `]`
+        text: `,\n${rowIndent}// … ${formatCount(dropped)} more rows\n${closeIndent}`,
+      });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  // Keep only the outermost edit of any nested pair.
+  return found.filter(
+    (e) => !found.some((o) => o !== e && o.start <= e.start && e.end <= o.end)
+  );
+}
+
+/** The leading whitespace of the line `pos` sits on. */
+function lineIndent(src: string, pos: number): string {
+  const lineStart = src.lastIndexOf("\n", pos - 1) + 1;
+  return /^[ \t]*/.exec(src.slice(lineStart, pos))![0];
+}
+
+function inlineDataModule(modulePath: string, preview: boolean): string {
   let src = readFileSync(modulePath, "utf-8");
   const sourceFile = parse(modulePath, src);
   const edits: { start: number; end: number; text: string }[] = [];
+
+  // Cut every array down to its first rows.
+  if (preview) edits.push(...previewEdits(src, sourceFile));
 
   for (const stmt of sourceFile.statements) {
     if (!ts.isImportDeclaration(stmt)) continue;
@@ -829,7 +909,9 @@ function inlineDataModule(modulePath: string): string {
       edits.push({
         start: stmt.getStart(sourceFile),
         end: stmt.getEnd(),
-        text: `const ${localName} = ${jsonText};`,
+        text: `const ${localName} = ${
+          preview ? previewJson(jsonText) : jsonText
+        };`,
       });
     } else if (spec.startsWith(".")) {
       // a relative import into the library source → re-point at the package
@@ -850,6 +932,20 @@ function inlineDataModule(modulePath: string): string {
 
 function resolveJsonPath(modulePath: string, spec: string): string {
   return resolve(dirname(modulePath), spec);
+}
+
+/** The same cut as the array-literal one, for an inlined JSON array. */
+function previewJson(jsonText: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    return jsonText;
+  }
+  if (!Array.isArray(parsed) || parsed.length <= PREVIEW_ROWS) return jsonText;
+  const head = JSON.stringify(parsed.slice(0, PREVIEW_ROWS), null, 2);
+  const dropped = formatCount(parsed.length - PREVIEW_ROWS);
+  return head.replace(/\n\]$/, `,\n  // … ${dropped} more rows\n]`);
 }
 
 // ---------------------------------------------------------------------------
@@ -970,6 +1066,7 @@ export function loadStoryExamples(): StoryExample[] {
         storyId: harnessStoryId(parsed.metaTitle, ex.exportName),
         code: result.code,
         datasetCode: result.datasetCode,
+        datasetPreview: result.datasetPreview,
         npmDeps: computeNpmDeps(result.code, result.datasetCode),
         isFallback: result.isFallback,
         // gofish-gotree isn't on npm yet → the in-browser editor can't resolve it.

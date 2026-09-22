@@ -148,6 +148,24 @@ appends one op to an ordered pipeline. It works in two disjoint places:
 Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
 throws.
 
+One method is neither: `.between(lo, hi, { closed })` returns a **row
+predicate** for [`filter`](/js/api/operators/filter) rather than appending an op,
+because a predicate never takes part in grouping, folding or scaling. For the
+same reason it throws if the expression already carries ops.
+
+```ts
+// Keep the rows whose day falls in (100, 120]
+.flow(filter(field("day").between(100, 120, { closed: "right" })))
+```
+
+`closed` is polars' `is_between` argument: `"both"` (the default), `"left"`,
+`"right"` or `"none"`, choosing which ends of the interval are inclusive. The
+comparison is by **value**, not by row count. `lo` and `hi` are plain numbers.
+
+The same test on a bare value is exported as `between(v, lo, hi, { closed })`,
+which is how a window follows a [`timer()`](/js/reactivity#timer-options): the
+clock read goes in the predicate.
+
 **Sort a stack's groups by another field's total**, instead of data order:
 
 ```ts

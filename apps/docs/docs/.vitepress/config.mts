@@ -580,6 +580,7 @@ export default defineConfig({
                   text: "Reactivity & Interaction",
                   link: "/js/reactivity",
                 },
+                { text: "Controls", link: "/js/controls" },
               ],
             },
             {

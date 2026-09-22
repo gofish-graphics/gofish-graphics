@@ -13,6 +13,7 @@ covers:
   - packages/gofish-graphics/src/interaction/frameScales.ts
   - packages/gofish-graphics/src/interaction/runtime.ts
   - packages/gofish-graphics/src/interaction/renderTerminal.ts
+  - packages/gofish-graphics/src/interaction/widgets.ts
 ---
 
 # Reactivity: signals beside a synchronous pipeline
@@ -189,8 +190,8 @@ layout pipeline:
    out to every registered input, with a `data-gf-id` hit-test resolving the
    display item (and thus datum) under the pointer.
 3. **Hit-testing + frame publication.** `publishFrame` rebuilds an id→item map
-   (uids are minted fresh each resolve) and the data↔px conversions, then
-   notifies inputs.
+   and an id→box map (uids are minted fresh each resolve) and the data↔px
+   conversions, then notifies inputs.
 
 There is **no** caching, no partial layout: any pipeline-dependency change re-runs
 everything. That is the point of v1 — correctness first, with the read-location
@@ -208,11 +209,154 @@ maps into `dataToPx` per axis, and — because every leg is affine — obtains
 inference. This is the recorded-scale invariant: the interaction layer only ever
 _reads off_ what layout already computed.
 
+The same principle covers geometry. `nodeBox(uid)` answers "where did
+layout put that node?" by reading the box the frame already carries for it:
+`publishFrame` records one box per node uid during the same walk that builds the
+hit-test map, folding in any enclosing `group` transform (display items are
+absolute pixels except inside a group, whose children are in its local space).
+Primitives that carry no box of their own — a `path` (an SVG `d` string) and a
+`text` (an anchor plus a string) — are left out rather than guessed at. The
+alternative was reading a rendered element's screen CTM back out of the DOM,
+which would let paint inform layout; this reads off the same recorded frame the
+conversions do, which does not.
+
 A consequence worth stating: an input's data-space reads only work once the input
 is **attached** to a chart, which happens when the input is `registerInput`-ed —
 i.e. when it is read during that chart's resolve. An input read only from outside
 code (a bare `createEffect`) never attaches, so `dataPos()`/`currentData()` return
 `undefined`.
+
+## The timer is a scale, not a tick counter
+
+`timer()` is the odd input: nothing outside it writes it, so it is the one input
+that drives itself. Its model is a **scale from a data domain onto wall-clock
+time, used in the inverse direction**:
+
+```
+t() = scale(domain → [0, duration]).invert(elapsed)
+```
+
+Three consequences fall out of that, all of them in `inputs.ts`:
+
+- **Elapsed is measured, not counted.** `base` holds elapsed as of the last
+  pause or seek and `since` the `performance.now()` reading when the clock last
+  started, so pause, resume and `.set(v)` are exact and a slow frame loses
+  nothing. The `setInterval` period is a module constant (`SAMPLE_MS`, 16 ms) and
+  deliberately not an option: it only decides how often the clock is SAMPLED, and
+  a caller who wants coarser updates says so with a coarser `step`. "Is the clock
+  running" is one signal (`playing`), read through `untrack` internally so the
+  lazy start on first read does not make a spec depend on the play state.
+- **The signal holds the emitted domain value, not elapsed.** A sample that
+  lands on the same value writes nothing, so a quantized clock invalidates once
+  per step rather than once per frame. A 365-day year over ten seconds costs 365
+  pipeline re-runs, not 600.
+- **`.set(v)` is the same scale forward.** Seeking is `elapsed := scale(v)`, and
+  it deliberately leaves the playing state alone: whether a scrub pauses the
+  clock is the widget's decision, not the clock's.
+- **Play state is a readable, so it invalidates like one.** `isPlaying()` is
+  tracked at its read location like every other accessor, so `play()`, `pause()`
+  and the self-pause that ends a non-looping sweep all write it through one
+  helper that invalidates the specs reading it — and only on an actual
+  transition. A spec whose caption says "pause" therefore refreshes on a
+  `play()` from anywhere, not only on the click that happened to invalidate it
+  for another reason.
+
+A **quantized** domain — the band form (`domain: values[]`), or `[lo, hi]` with a
+`step` — is the same equation with a band scale, and one number decides it: the
+count of slots the loop covers (`values.length`, or `⌊(hi − lo)/step⌋ + 1`). Slot
+`k` owns `[k·duration/N, (k+1)·duration/N)` of the period, so `invert` is
+`⌊frac · N⌋` and `scale(v)` is the START of `v`'s slot. Two properties follow, and
+both are the reason the mapping is written this way: the N slots tile the loop
+evenly, so the LAST value is emitted like any other; and `set(v)` then a read
+gives back exactly `v`. Spreading the slots over `[lo, hi]` instead — the
+arithmetic this used to do — gives the last slot zero width, because `elapsed` is
+folded into `[0, duration)` by the loop: `hi` was never reached, and `set(hi)`
+read back as `lo`.
+
+A **continuous** domain with no `step` keeps that fold as its meaning: `lo` and
+`hi` are the same instant of a looping sweep, as 0° and 360° are the same angle,
+so `hi` is approached at the instant before the wrap and not emitted. An author
+who needs the high end as a value of its own gives the domain a `step`.
+
+With no domain the scale is the identity onto `[0, duration]`, which is the plain
+elapsed-milliseconds clock every other library exposes — the degenerate case, not
+a separate mode.
+
+## Controls are marks, not nodes
+
+`widgets.ts` builds `slider` and `button` out of the same three pieces every
+other spec uses: shapes, operators, and an input read during resolve. Three
+constraints decide their shape, and all three are consequences of the
+architecture above rather than widget-specific choices.
+
+**A control is a mark.** The layout pipeline is tree-consuming: lay a node out
+twice and the second pass finds every operand already placed, so it keeps the
+first placement. A control's geometry depends on `value()`, so it must be rebuilt
+per resolve — and a mark _is_ a deferred node constructor, re-invoked by whatever
+operator holds it. So `slider(...)` returns a mark. Its `drag()`/`click()` input
+and its write effect, by contrast, are created **once**, when the widget is made:
+recreating them per resolve would grow the runtime's input list without bound and
+drop a drag that is in flight. This is exactly the split every interactive story
+already follows by hand — inputs outside the spec, reads inside it — packaged so
+a caller cannot get it wrong. It also means the widget must be constructed
+outside the render thunk, and that the thunk form of the terminal is mandatory
+for a composition whose root is not a `chart()`.
+
+**Hit-testing is by uid, not by geometry.** `DragOptions.hitTest` takes the hit
+as well as the point, so a widget can accept exactly the drags that start on the
+nodes it drew: it records the uids of its own two nodes on each build and matches
+`hit.id` against them. The widget still computes no layout of its own — it asks by
+identity, and the surrounding operators stay in charge of placement. Both controls
+are the same three-part scaffold (`control` in `widgets.ts`): an input that only
+accepts its own hits, ONE write effect created once, and a mark that rebuilds the
+picture per resolve, so each widget contributes only geometry and a write.
+
+**The pixel→domain map is absolute, through the frame.** The slider maps
+`current.x` onto the fraction of the handle's travel it fell at, so a press on the
+bare track lands the handle under the pointer and the handle then follows it. It
+gets the track's on-screen box from `nodeBox(track.uid)` — the frame's own
+record of where layout put that node, read off exactly as the conversions are.
+The earlier design mapped `delta.x` from the press instead, because that box was
+not reachable without a screen-CTM read back out of the DOM; recording boxes at
+publish time removed the reason for the indirection, and with it the "clicking the
+bare track does nothing" caveat. The handle's travel is still inset by the handle
+radius (`w - 2r`), which keeps the handle on the track and the control's bbox
+independent of the value, and the mapping uses that same travel so the handle's
+center coincides with the pointer.
+
+**Wrap is a cycle length, not a flag on the clamp.** With `wrap`, the raw
+(unclamped) fraction is mapped and the quantized value folded modulo the cycle.
+The cycle is `span` for a continuous domain — `hi` and `lo` are one point, as for
+an angle — and `span + step` for a quantized one, because a quantized domain has
+`span/step + 1` distinct slots and a cycle over them is that many steps long. Get
+this wrong (fold a quantized domain modulo `span`) and the top value becomes
+unreachable, identified with the bottom one.
+
+**The readout's stability comes from its anchor, not from measurement.** The
+value is a `text` node one gap right of the track, `textAnchor: "end"` at a fixed
+x — and for text, `x` is the _anchor_, so the node's box runs leftward from it.
+The widget is therefore the same width whatever the label says, and a value change
+never jostles its siblings. The reserved slot width is a crude glyph-width
+estimate over the two end labels; it decides only how close a long readout comes
+to the track, and real measurement still happens where it belongs, inside the text
+node at layout.
+
+`click()` is the third pointer-shaped input, and it exists because a click is
+neither a pointer state nor a drag: it is the pair press-then-release on one
+target. It arms on pointerdown and commits on pointerup, accepting the release by
+the same test the press passed (`hitTest` when given, otherwise "the same node"),
+which is what lets a two-node control — a box plus its caption — read as one
+target. It keeps a COUNT, not a table of click rows, so a button is "fire when the
+count grows" rather than a callback registration. Treating an input as a dataset
+(so a click history could itself be charted) is the real design for that, tracked
+as #830.
+
+The one thing not yet expressible declaratively is the **write**: the scaffold
+runs each widget's Solid `createEffect` inside one `createRoot`, the same wiring
+`DraggableThreshold` does by hand, and hands the disposer back on the mark as
+`dispose()` rather than dropping it. Keeping it inside the widget means no spec
+ever sees it; the principled replacement is a single declarative write primitive,
+designed under #830.
 
 ## Incremental outlook
 

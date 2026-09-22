@@ -1,12 +1,15 @@
 /**
  * Timer pulse — the testing story for both regimes, driven by `timer()`.
  *
+ * `timer()` is a scale from a data domain onto wall-clock time, read backward,
+ * so each story states the domain it wants values from and reads them out.
+ *
  * PaintOnly: the timer is read inside a `live()` fill → paint patches only
- * (bars pulse color by tick parity; zero layout re-runs).
+ * (bars alternate as a two-value domain flips; zero layout re-runs).
  *
  * GrowingData: the timer is read inside `derive()` → it is a pipeline
- * dependency, so each tick re-derives the data (a rolling window) and re-runs
- * the whole pipeline (rAF-coalesced).
+ * dependency, so each new value re-derives the data (a rolling window) and
+ * re-runs the whole pipeline (rAF-coalesced).
  *
  * capture-one snapshots a single (early) frame; either variant should render a
  * sane bar chart with no thrown errors.
@@ -47,14 +50,15 @@ export const PaintOnly: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const t = timer({ interval: 400 });
+    // Two states, 400ms each: the clock emits 0, 1, 0, 1, …
+    const t = timer({ domain: [0, 1], step: 1, duration: 800 });
 
     chart(base, { axes: true })
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(
         rect({
           h: "count",
-          fill: live(() => (t() % 2 === 0 ? "#6b9bd1" : "#d62728")),
+          fill: live(() => (t() === 0 ? "#6b9bd1" : "#d62728")),
         })
       )
       .render(container, {
@@ -66,23 +70,31 @@ export const PaintOnly: StoryObj<Args> = {
   },
 };
 
-/** regime 2: timer read inside derive() → each tick re-derives a rolling
- *  window of points and re-runs the whole pipeline. */
+/** regime 2: timer read inside derive() → each new index re-derives a rolling
+ *  window of points and re-runs the whole pipeline. The clock's domain is the
+ *  series' own index range, so reading it gives the window's right edge
+ *  directly, with no wall-clock arithmetic in the spec. */
 export const GrowingData: StoryObj<Args> = {
   args: { w: 500, h: 300 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const t = timer({ interval: 500 });
     const WINDOW = 20;
+    // The right edge of the window, in the series' own index units: half a
+    // second per point over the whole series.
+    const head = timer({
+      domain: [0, SERIES.length - 1],
+      step: 1,
+      duration: SERIES.length * 500,
+    });
 
     chart(SERIES, { axes: true })
       .flow(
-        // regime 2: reading t() in derive() makes it a pipeline dependency.
-        // Each tick slides a rolling window over the real series and re-runs the
-        // whole pipeline.
+        // regime 2: reading head() in derive() makes it a pipeline dependency.
+        // Each new index slides a rolling window over the real series and
+        // re-runs the whole pipeline.
         derive((rows) => {
-          const n = t();
+          const n = head();
           return rows.slice(Math.max(0, n - WINDOW + 1), n + 1);
         }),
         spread({ by: "t", dir: "x" })

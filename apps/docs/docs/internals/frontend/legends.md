@@ -37,7 +37,12 @@ functions a future public API can override.
 `layout()`, _after_ the axis-elaboration block and after the nice-space capture,
 and is gated on a **resolved color scale** (not on the `axes` option — a legend
 appears whenever a color encoding resolved): a non-empty categorical color map,
-or a continuous color scale. It runs after the last `resolveColorScale`,
+or a continuous color scale. The one thing that can veto it is the chart option
+`legend: false`, which suppresses the pass outright — the scale still colors the
+marks, and since `legendAdded` stays false nothing downstream reserves the
+column's width. That is the whole implementation of the option: a chart with 72
+categories can keep its colors and drop a swatch column that would be taller than
+the chart. It runs after the last `resolveColorScale`,
 consuming the already-resolved `scaleContext.unit` (the `color` map for a
 categorical scale, or the `scaleFn` + `domain` for a continuous one), and
 dispatches to `legendColumn` or `legendColorbar` accordingly.

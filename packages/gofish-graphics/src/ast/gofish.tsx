@@ -197,6 +197,7 @@ export async function layout(
     transform,
     debug = false,
     axes = false,
+    legend = true,
     yUp = false,
   }: {
     w?: number;
@@ -206,6 +207,7 @@ export async function layout(
     transform?: { x?: number; y?: number };
     debug?: boolean;
     axes?: AxesOptions;
+    legend?: boolean;
     yUp?: boolean;
   },
   child: GoFishNode | Promise<GoFishNode>,
@@ -485,11 +487,16 @@ export async function layout(
   // scale pass is NOT re-run). The wrapper preserves the content's underlying
   // spaces (unionChildSpaces ignores the legend's UNDEFINED spaces), so the
   // nice spaces captured above remain valid.
+  // `legend: false` (the chart option) suppresses this pass entirely: the
+  // color scale still paints the marks, only the chrome is dropped. Mirrors
+  // `axes: false`, and nothing downstream reserves space for a legend that
+  // was never added (`legendAdded` stays false).
   let legendAdded = false;
   const unitScale = contexts?.session.scaleContext.unit;
   const hasLegend =
-    (isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
-    isContinuousColorScale(unitScale);
+    legend !== false &&
+    ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
+      isContinuousColorScale(unitScale));
   if (hasLegend && unitScale) {
     // The legend entries should read top→bottom. The swatch column is chrome
     // (`_ambientYDown`, #629): its INTERIOR renders in the ambient frame, where a
@@ -816,6 +823,9 @@ export type GoFishRenderOptions = {
   debug?: boolean;
   defs?: JSX.Element[];
   axes?: AxesOptions;
+  /** Whether to elaborate the color-scale legend (swatch column / colorbar).
+   *  Default true; `false` suppresses it. See `ChartOptions.legend`. */
+  legend?: boolean;
   colorConfig?: ColorConfig;
   padding?: number;
   /**
@@ -888,6 +898,7 @@ export async function runLayout(
     transform,
     debug = false,
     axes = false,
+    legend = true,
     colorConfig,
   } = options;
   // Seed the unit color scale by config kind. A gradient is a continuous
@@ -931,7 +942,7 @@ export async function runLayout(
     }
 
     return await layout(
-      { w, h, x, y, transform, debug, axes, yUp: options.yUp },
+      { w, h, x, y, transform, debug, axes, legend, yUp: options.yUp },
       child,
       contexts
     );

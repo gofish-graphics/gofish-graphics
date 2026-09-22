@@ -607,7 +607,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   circle: leafMark("circle", {
-    doc: "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth) — position it via `spread`/`scatter`.",
+    doc: "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity) — position it via `spread`/`scatter`.",
     fields: {
       r: ch.num("Radius; becomes w=h=2r on the underlying ellipse."),
       fill: ch.color("Fill color, or a field name for a color scale."),
@@ -616,6 +616,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.number,
         default: 0,
         doc: "Stroke width in pixels.",
+      },
+      opacity: {
+        type: t.number,
+        default: 1,
+        doc: "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
       },
       debug: {
         type: t.boolean,
@@ -766,7 +771,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   blank: leafMark("blank", {
-    doc: "An invisible sizing/positioning guide — a transparent rect with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).",
+    doc: "An invisible sizing/positioning guide — a rect that emits no display items at all, with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).",
     fields: {
       emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
       emY: { type: t.boolean, doc: "Embed y in the parent's y space." },

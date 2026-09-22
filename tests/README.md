@@ -20,7 +20,7 @@ pnpm test:visual:update
 
 ### Batch Capture (no Storybook build required)
 
-Instead of building a static Storybook and navigating Playwright to each story URL, the system uses a **Vite dev server** that imports all story modules via `import.meta.glob`. A single Playwright page loads the runner, then renders each story in sequence by calling its `render()` function directly — no page navigation between stories. This makes capture very fast (~76 stories in a few seconds).
+Instead of building a static Storybook and navigating Playwright to each story URL, the system uses a **Vite dev server** that imports all story modules via `import.meta.glob`. Each story renders in a fresh browser context that loads the runner page and calls the story's `render()` function directly, so no state leaks from one story to the next. Stories are captured concurrently, a few contexts at a time in one browser (default `min(4, cores)`, override with `CAPTURE_CONCURRENCY`). Logs and outputs are in story order either way.
 
 ### Pipeline
 
@@ -37,12 +37,19 @@ stories/**/*.stories.tsx
         ├──► tmp/js/<path>.html   (normalized DOM)
         └──► tmp/js/<path>.png    (screenshot)
                     │
-                    ▼
-        compare.ts: diff against __snapshots__/dom/
-                    │
-                ┌───┴───┐
-              pass     fail → diff-report.html
+          ┌─────────┴──────────────────────┐
+          ▼                                ▼
+  compare.ts: diff against        compare-python.ts: diff
+  __snapshots__/dom/              tmp/python/ against tmp/js/
+          │                                │
+      ┌───┴───┐                        ┌───┴───┐
+    pass     fail                    pass     fail
+              │
+              ▼
+       diff-report.html
 ```
+
+The regression check compares the JS capture against the accepted baselines. The parity check compares the Python capture against the JS capture of the same commit, not against the baselines, so it does not depend on whether a JS change has been reviewed yet.
 
 ### DOM Normalization
 
@@ -56,13 +63,14 @@ Both JS and Python DOM go through identical normalization (`scripts/normalize-do
 
 ## Commands
 
-| Command                       | Description                                                     |
-| ----------------------------- | --------------------------------------------------------------- |
-| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines              |
-| `pnpm test:visual:update`     | Capture and accept as new baselines                             |
-| `pnpm test:visual`            | Full test: JS capture + Python capture + compare                |
-| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents   |
-| `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM against `<ref>` — no baselines, any OS |
+| Command                       | Description                                                                 |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines                          |
+| `pnpm test:visual:update`     | Capture and accept as new baselines                                         |
+| `pnpm test:visual`            | Full test: JS capture + Python capture + compare                            |
+| `pnpm test:visual:python`     | Capture Python snapshots and compare against the JS capture (needs tmp/js/) |
+| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents               |
+| `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM against `<ref>` — no baselines, any OS             |
 
 ## Local regression signal: `capture-diff`
 
@@ -153,6 +161,14 @@ open tests/tmp/diff-report.html
 # See before/after screenshots → fix the bug → re-run (should pass against existing baselines)
 ```
 
+### CI
+
+The `Visual Tests` workflow splits the work into three jobs:
+
+- `js-capture` captures every story once (the slow part) and uploads `tests/tmp/js/` as the `js-dom-capture` artifact.
+- `visual-test` downloads that artifact and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there commits the new baselines and re-runs only this job, which reuses the capture from the first attempt instead of capturing again.
+- `python-parity` downloads the same artifact, captures the Python stories, and runs `compare-python.ts` against the JS capture. It runs at the same time as `visual-test` and does not wait on the visual review.
+
 ## Python Parity
 
 Every Storybook story should have a Python equivalent in `tests/python-stories/` that produces identical DOM. The Python API calls into the same JS rendering engine via IR, so DOM output should match exactly.
@@ -187,8 +203,10 @@ tests/
     capture-core.ts            # Shared headless-capture engine (Vite + Playwright)
     capture-js-dom.ts          # Batch capture via Vite + Playwright
     capture-diff.ts            # Diff HEAD's DOM vs a base ref (local regression signal)
+    capture-one.ts             # Capture one story (or a filter) to tmp/iterate/ for the iterate-example loop
     capture-python-dom.ts      # Python story capture via harness
-    compare.ts                 # Compare JS vs baselines + Python vs JS
+    compare.ts                 # Compare JS vs baselines (+ Python vs JS unless --js-only)
+    compare-python.ts          # Compare Python vs the JS capture (CI parity gate)
     update-baselines.ts        # Accept current snapshots as baselines
     diff-report.ts             # Generate HTML diff report
     normalize-dom.ts           # DOM normalization pipeline

@@ -95,7 +95,7 @@ function main() {
   // Linux. A local (macOS) run must never publish its captures there — text
   // metrics differ and every text-bearing story would falsely regress.
   // Locally the accept is still useful: __snapshots__/dom feeds the local
-  // parity compare (compare-python.ts).
+  // regression compare (compare.ts).
   if (count > 0) {
     if (process.env.CI) {
       const snapBranch = getSnapshotBranchName();

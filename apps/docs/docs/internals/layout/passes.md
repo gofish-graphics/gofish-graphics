@@ -717,6 +717,20 @@ node reaching it is either a leaf or a **bake boundary** (`coord`, `box`, `conne
 `arrow`, `enclose`, the compositors) that re-walks its own subtree with its absolute
 transform composed in. A node with no `lower()` throws.
 
+**Nodes that draw nothing.** A node can take part in layout without contributing any
+pixels: it keeps its dims, its datum and its role as a `selectAll` anchor, and emits
+an empty fragment. `GoFishRef` (a placement stand-in) has always lowered this way, and
+`blank()` now does too — `Blank` in `src/ast/shapes/rect.tsx` builds a `rect` node,
+renames its type to `blank` and calls `INTERNAL_emitNothing()` (`_node.ts`), which
+replaces the node's lowering with one that returns `[]`. Because every draw path — the
+SVG paint pass, the `toDisplayList` export, and a bake boundary's re-walk of its
+subtree — goes through `INTERNAL_lower`, one rule makes the node invisible everywhere,
+with no "visible" flag for paint to consult and no option that can turn drawing back
+on. This matters at scale: the [blank-fusion
+rewrite](/internals/frontend/mark-factory) synthesizes one anchor `blank` per row, so a
+26,000-row line chart used to emit 26,000 zero-size `<rect>` elements (and 26,000
+entries in the interaction hit-test map) that nobody could see or click.
+
 ### Render Pass 5: Per-Shape Lowering and Painting
 
 Each shape/operator owns a `lower(ctx) → DisplayItem[]` — the extension point that

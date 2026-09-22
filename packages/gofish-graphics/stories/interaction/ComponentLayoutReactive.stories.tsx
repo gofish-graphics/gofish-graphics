@@ -40,7 +40,7 @@ export const Default: StoryObj<Args> = {
     // each scroll re-runs the component spec and re-lays-out.
     const n = wheel({ range: [1, 8], initial: 3, round: true });
     // Read only inside live() → paint pulse, never a pipeline dependency.
-    const t = timer({ interval: 500 });
+    const t = timer({ domain: [0, 1], step: 1, duration: 1000 });
 
     GoFish(container, { w: args.w, h: args.h }, () => {
       const count = n(); // spec read → re-runs on scroll
@@ -50,7 +50,7 @@ export const Default: StoryObj<Args> = {
           rect({
             w: 48,
             h: 70 + i * 18,
-            fill: live(() => (t() % 2 === 0 ? "#6b9bd1" : "#3a6ea5")),
+            fill: live(() => (t() === 0 ? "#6b9bd1" : "#3a6ea5")),
           })
         )
       );

@@ -92,6 +92,14 @@ export type ChartOptions = {
    * are still respected when `axes: true`.
    */
   axes?: AxesOptions;
+  /**
+   * Whether to render the color-scale legend for this chart. Default `true`:
+   * a chart whose marks resolve a categorical or gradient color scale grows a
+   * swatch column / colorbar beside its content. `false` suppresses it — the
+   * colors still come from the scale, only the chrome is dropped (e.g. a
+   * 72-species basemap where a swatch column would eat the canvas).
+   */
+  legend?: boolean;
   /** Extra padding (px) between the polar circle and the SVG edge. Default 30. */
   padding?: number;
 };
@@ -497,6 +505,7 @@ function rejectAlongWithoutFlow(
 /** The chart-level config a builder threads through to every terminal. */
 type RenderMeta = {
   axes?: AxesOptions;
+  legend?: boolean;
   colorConfig?: ColorConfig;
   /** The root tier's coordinate space, read by `LayerBuilder.resolve` so it can
    *  HOIST it over every tier rather than let the root tier keep it. */
@@ -813,6 +822,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   renderMeta(): RenderMeta {
     return {
       axes: this.state.options?.axes,
+      legend: this.state.options?.legend,
       colorConfig: this.state.options?.color,
       coord: this.state.options?.coord,
       padding: this.state.options?.padding,
@@ -957,6 +967,7 @@ const CHART_OPTION_KEYS = new Set([
   "coord",
   "color",
   "axes",
+  "legend",
   "padding",
 ]);
 
@@ -1151,6 +1162,7 @@ async function resolveForRender(
     options: {
       ...options,
       axes: (options.axes as AxesOptions | undefined) ?? meta.axes,
+      legend: (options.legend as boolean | undefined) ?? meta.legend,
       colorConfig: meta.colorConfig,
     },
   };
