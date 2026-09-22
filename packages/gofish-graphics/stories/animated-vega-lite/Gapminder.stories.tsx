@@ -239,24 +239,33 @@ const curvePanel = (rows: any[], clock: any, curve: Reading) => {
 
 /** The whole comparison, on a clock the caller hands in — so the playing and
  *  the paused stories are one picture read at two playheads. */
-const curvesRow = (container: HTMLElement, args: Args, rows: any[], clock: any) =>
-  GoFish(container, { w: args.w, h: args.h, legend: false, axes: true } as any, () =>
-    spreadY({ spacing: 16, alignment: "middle" }, [
-      text({
-        text: live(() => String(Math.floor(clock()))),
-        fontSize: 40,
-        fill: "#ccc",
-      }),
-      spreadX(
-        { spacing: 16, alignment: "end" },
-        CURVES.map(({ caption, curve }) =>
-          spreadY({ spacing: 8, alignment: "middle" }, [
-            text({ text: caption, fontSize: 12, fill: "#555" }),
-            Frame({ w: 240, h: 280 }, [curvePanel(rows, clock, curve)]),
-          ])
-        )
-      ),
-    ])
+const curvesRow = (
+  container: HTMLElement,
+  args: Args,
+  rows: any[],
+  clock: any,
+  readings: { caption: string; curve: Reading }[] = CURVES
+) =>
+  GoFish(
+    container,
+    { w: args.w, h: args.h, legend: false, axes: true } as any,
+    () =>
+      spreadY({ spacing: 16, alignment: "middle" }, [
+        text({
+          text: live(() => String(Math.floor(clock()))),
+          fontSize: 40,
+          fill: "#ccc",
+        }),
+        spreadX(
+          { spacing: 16, alignment: "end" },
+          readings.map(({ caption, curve }) =>
+            spreadY({ spacing: 8, alignment: "middle" }, [
+              text({ text: caption, fontSize: 12, fill: "#555" }),
+              Frame({ w: 240, h: 280 }, [curvePanel(rows, clock, curve)]),
+            ])
+          )
+        ),
+      ])
   );
 
 /**
@@ -282,6 +291,28 @@ export const Curves: StoryObj<Args> = {
     // keyframes, and a slower clock spends longer there.
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
     curvesRow(container, args, gapminder, year);
+
+    return container;
+  },
+};
+
+/**
+ * The three-panel cut for sharing: no interpolation, linear, smooth. The step
+ * panel is left out because it is the same picture as the first one.
+ */
+export const CurvesThree: StoryObj<Args> = {
+  args: { w: 880, h: 400 },
+  loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const gapminder = context.loaded.gapminder as any[];
+
+    const year = timer({ domain: yearRange(gapminder), duration: 10000 });
+    curvesRow(container, args, gapminder, year, [
+      { caption: "no interpolation", curve: null },
+      { caption: "linear", curve: "linear" },
+      { caption: "smooth (catmullRom)", curve: "catmullRom" },
+    ]);
 
     return container;
   },
