@@ -40,10 +40,7 @@ import {
   time,
   timer,
 } from "../../src/lib";
-import {
-  interpolateRun,
-  type InterpolationMethod,
-} from "../../src/interpolate";
+import { interpolateRun } from "../../src/interpolate";
 import data from "vega-datasets";
 
 const meta: Meta = {
@@ -342,13 +339,21 @@ export const CurvesThree: StoryObj<Args> = {
  *  and leave the rest of the run looking flat. */
 const SPARK_COUNTRY = "Jamaica";
 const SPARK_FIELD = "life_expect";
-/** How many samples of the run each sparkline is drawn from. */
-const SPARK_SAMPLES = 120;
-/** The finite-difference step, in years. It is a real step rather than a
- *  vanishing one, so linear's acceleration comes out as a tall narrow pulse
- *  at each keyframe rather than an infinite one, and the smooth reading's
- *  acceleration stays visible beside it on a shared scale. */
-const SPARK_H = 0.5;
+/** How many samples of each KEYFRAME INTERVAL a sparkline is drawn from. The
+ *  sampling is per interval rather than across the whole run so that nothing
+ *  is ever averaged across a keyframe: every quantity here is defined one
+ *  interval at a time, and the ones that jump at a keyframe jump because two
+ *  samples sit on either side of it rather than because a difference reached
+ *  across it. A straight segment needs two samples and a cubic needs a few
+ *  dozen, so the intervals that are straight ask for fewer. */
+const SPARK_PER_INTERVAL = 20;
+/** The nudge, in years, that lets a riser be vertical. A vertical step wants
+ *  two samples at ONE time with two different values, and two such samples
+ *  would collide: the sparkline groups its samples by time, and the moving
+ *  dot's transition would be handed a run with a zero-length interval in it.
+ *  So the second sample is moved a thousandth of a year along instead, which
+ *  is a hundredth of a pixel wide on screen and still strictly increasing. */
+const SPARK_EPS = 1e-3;
 /** One sparkline's box. Two of them plus a gap is one pair of panels — but
  *  the gap is the one the PANELS end up with, not the one they ask for: a
  *  panel's y-axis chrome is drawn outside its box, which pushes the panels
@@ -364,9 +369,6 @@ const SPARK_GAP = PANEL_GAP + PANEL_CHROME;
 const SPARK_W = PANEL_W * 2 + SPARK_GAP;
 const SPARK_LABEL_W = 295;
 
-/** The two readings the sparklines compare, in panel order. */
-const SPARK_METHODS: InterpolationMethod[] = ["linear", "catmullRom"];
-
 /** What is plotted: where the value is, how fast it is moving, and how fast
  *  that is changing. */
 const QUANTITIES = ["position", "velocity", "acceleration"] as const;
@@ -374,17 +376,102 @@ type Quantity = (typeof QUANTITIES)[number];
 
 type Sample = { t: number; method: string; value: number };
 
+/** A value and its first two derivatives with respect to time, carried
+ *  together so one pass down the interpolation computes all three. */
+type Jet = [value: number, velocity: number, acceleration: number];
+
+/** The constant jet of a keyframe's value: it does not depend on time. */
+const jetOf = (v: number): Jet => [v, 0, 0];
+
 /**
- * Sample one country's run under each reading, and difference it twice.
+ * The Barry-Goldman lerp, differentiated twice.
  *
- * The position is the interpolation itself, evaluated at 120 evenly spaced
- * moments of the run. The velocity is a central difference of it and the
- * acceleration a second difference, both at a half-year step — the same
- * quantities the eye is reading when it calls one panel jerky and the other
- * smooth. Linear's velocity is a staircase, constant inside each five-year
- * interval and changing instantly at the keyframes, and its acceleration is
- * therefore a pulse at every keyframe and zero everywhere else. The smooth
- * reading's velocity is continuous and its acceleration is bounded.
+ * `interpolateCatmullRom` builds its value out of nested lerps of the form
+ * `((tb - t)·A + (t - ta)·B) / (tb - ta)`, where `A` and `B` are themselves
+ * lerps and therefore themselves functions of `t`. Each level is linear in
+ * `t`, so differentiating is the product rule and nothing more:
+ *
+ *   L   = ((tb - t)·A  +  (t - ta)·B) / (tb - ta)
+ *   L'  = (-A + (tb - t)·A'  +  B + (t - ta)·B') / (tb - ta)
+ *   L'' = (-2A' + (tb - t)·A''  +  2B' + (t - ta)·B'') / (tb - ta)
+ *
+ * Running the pyramid over jets instead of numbers therefore hands back the
+ * spline's exact velocity and acceleration, not an approximation of them.
+ * A degenerate span collapses onto its later endpoint, the same rule the
+ * library's own lerp uses.
+ */
+const lerpJet = (A: Jet, B: Jet, ta: number, tb: number, t: number): Jet => {
+  if (tb === ta) return B;
+  const w = tb - ta;
+  return [
+    ((tb - t) * A[0] + (t - ta) * B[0]) / w,
+    (-A[0] + (tb - t) * A[1] + B[0] + (t - ta) * B[1]) / w,
+    (-2 * A[1] + (tb - t) * A[2] + 2 * B[1] + (t - ta) * B[2]) / w,
+  ];
+};
+
+/**
+ * The spline, its velocity and its acceleration at `t`, read INSIDE the
+ * interval `[knots[i], knots[i+1]]`.
+ *
+ * The interval is named rather than looked up because the acceleration is
+ * only piecewise continuous: at a knot it has two values, one from the
+ * interval on each side, and which one is wanted is the caller's question.
+ * This is `interpolateCatmullRom` with jets in place of numbers — the same
+ * phantom-neighbor reflection at the ends, the same pyramid.
+ */
+const catmullRomJet = (
+  knots: number[],
+  values: number[],
+  i: number,
+  t: number
+): Jet => {
+  const n = knots.length;
+  const t1 = knots[i];
+  const t2 = knots[i + 1];
+  const p1 = jetOf(values[i]);
+  const p2 = jetOf(values[i + 1]);
+  const t0 = i > 0 ? knots[i - 1] : t1 - (t2 - t1);
+  const p0 = i > 0 ? jetOf(values[i - 1]) : p1;
+  const t3 = i + 2 < n ? knots[i + 2] : t2 + (t2 - t1);
+  const p3 = i + 2 < n ? jetOf(values[i + 2]) : p2;
+
+  const a1 = lerpJet(p0, p1, t0, t1, t);
+  const a2 = lerpJet(p1, p2, t1, t2, t);
+  const a3 = lerpJet(p2, p3, t2, t3, t);
+  const b1 = lerpJet(a1, a2, t0, t2, t);
+  const b2 = lerpJet(a2, a3, t1, t3, t);
+  return lerpJet(b1, b2, t1, t2, t);
+};
+
+/**
+ * One country's run under each reading, with its velocity and acceleration.
+ *
+ * Every polyline here is assembled interval by interval, so that a quantity
+ * which jumps at a keyframe is DRAWN jumping: the sample before the jump and
+ * the sample after it sit a thousandth of a year apart, and the segment
+ * between them is a vertical riser. Nothing is smoothed and nothing is
+ * differenced across a keyframe, because the whole point of the picture is
+ * what happens at the keyframes.
+ *
+ * Under the LINEAR reading the position is a chain of straight segments, so
+ * it is exactly its eleven keyframes. Its velocity is constant inside each
+ * interval, (p₂ − p₁)/(t₂ − t₁), and changes instantly at every keyframe: a
+ * staircase of plateaus joined by vertical risers. Its acceleration is zero
+ * everywhere except at the keyframes, where it is an impulse — infinitely
+ * tall and infinitely brief, with a finite weight equal to the jump in
+ * velocity. An impulse cannot be plotted, so what is drawn is the comb of
+ * weights: a zero line with a vertical spike at each keyframe whose height is
+ * that jump, sign and all. It is a picture OF the impulses, not of a function.
+ *
+ * Under the SMOOTH reading all three are functions. The position is the
+ * spline, the velocity is continuous, and the acceleration is finite but
+ * DISCONTINUOUS at the knots — a Catmull-Rom is only C¹ — so each interval is
+ * sampled just inside its own ends and the intervals are joined by risers,
+ * which is what makes the jumps read as jumps rather than as a steep ramp.
+ * All three come from `catmullRomJet`, the library's own pyramid run over
+ * jets, so the velocity and acceleration are exact derivatives of the very
+ * curve the transition above is following.
  */
 const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
   const run = rows
@@ -393,38 +480,71 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
     .sort((a, b) => a.t - b.t);
   const knots = run.map((r) => r.t);
   const values = run.map((r) => r.v);
-  const t0 = knots[0];
-  const t1 = knots[knots.length - 1];
+  const last = knots.length - 1;
 
   const out: Record<Quantity, Sample[]> = {
     position: [],
     velocity: [],
     acceleration: [],
   };
-  for (const method of SPARK_METHODS) {
-    const p = (t: number) => interpolateRun(knots, values, t, method);
-    // The samples stop one step short of each end of the run: a difference
-    // taken at the very first keyframe would reach outside it, where every
-    // method holds its endpoint value, and report a slowing down that is an
-    // artifact of the reach rather than anything the animation does.
-    const from = t0 + SPARK_H;
-    const to = t1 - SPARK_H;
-    for (let i = 0; i < SPARK_SAMPLES; i++) {
-      const t = from + ((to - from) * i) / (SPARK_SAMPLES - 1);
-      const back = p(t - SPARK_H);
-      const here = p(t);
-      const fwd = p(t + SPARK_H);
-      out.position.push({ t, method, value: here });
-      out.velocity.push({
-        t,
-        method,
-        value: (fwd - back) / (2 * SPARK_H),
-      });
-      out.acceleration.push({
-        t,
-        method,
-        value: (fwd - 2 * here + back) / (SPARK_H * SPARK_H),
-      });
+  const at = (q: Quantity, method: string, t: number, value: number) =>
+    out[q].push({ t, method, value });
+
+  // ── The linear reading ────────────────────────────────────────────────
+  // The velocity of interval i, in years of life expectancy per year.
+  const v = knots
+    .slice(0, last)
+    .map((t, i) => (values[i + 1] - values[i]) / (knots[i + 1] - t));
+
+  for (let i = 0; i <= last; i++) at("position", "linear", knots[i], values[i]);
+
+  for (let i = 0; i < last; i++) {
+    // The plateau. Its left end is nudged past the keyframe for every
+    // interval but the first, so the riser from the previous plateau has a
+    // width to be drawn in rather than two samples at one time.
+    at("velocity", "linear", knots[i] + (i > 0 ? SPARK_EPS : 0), v[i]);
+    at("velocity", "linear", knots[i + 1], v[i]);
+  }
+
+  at("acceleration", "linear", knots[0], 0);
+  for (let i = 1; i < last; i++) {
+    at("acceleration", "linear", knots[i] - SPARK_EPS, 0);
+    at("acceleration", "linear", knots[i], v[i] - v[i - 1]);
+    at("acceleration", "linear", knots[i] + SPARK_EPS, 0);
+  }
+  at("acceleration", "linear", knots[last], 0);
+
+  // ── The smooth reading ────────────────────────────────────────────────
+  for (let i = 0; i < last; i++) {
+    const span = knots[i + 1] - knots[i];
+    for (let s = 0; s <= SPARK_PER_INTERVAL; s++) {
+      const u = s / SPARK_PER_INTERVAL;
+      const t = knots[i] + span * u;
+      // Position and velocity are continuous across a knot, so the shared
+      // endpoint is emitted once, by the interval on its left. The position
+      // is read from the library's own evaluator rather than from the jet, so
+      // the curve drawn here is the curve the transition follows by
+      // construction and not merely by agreement.
+      if (i === 0 || s > 0) {
+        at(
+          "position",
+          "catmullRom",
+          t,
+          interpolateRun(knots, values, t, "catmullRom")
+        );
+        at("velocity", "catmullRom", t, catmullRomJet(knots, values, i, t)[1]);
+      }
+      // Acceleration has two values at a knot. Sample just inside both ends
+      // of the interval instead, which takes the one-sided limits and leaves
+      // the pair of them to be joined by a riser.
+      const tA =
+        t + (s === 0 ? SPARK_EPS : s === SPARK_PER_INTERVAL ? -SPARK_EPS : 0);
+      at(
+        "acceleration",
+        "catmullRom",
+        tA,
+        catmullRomJet(knots, values, i, tA)[2]
+      );
     }
   }
   return out;
@@ -475,7 +595,15 @@ const sparkRow = (samples: Sample[], clock: any) =>
         // a chart of sizeless marks does not — and the dot would then ride a
         // few pixels off the curve wherever the curve is steep.
         .mark(circle({ r: 2.5, opacity: 0 }))
-        .layer(line({ stroke: "#999", strokeWidth: 1 })),
+        // `curve: "straight"` is not a default worth leaning on here, it is
+        // the whole point: an omitted curve is `auto`, and `auto` over a
+        // continuous axis smooths with a Catmull-Rom — which would round the
+        // corners off the staircase and turn the impulses into bumps, drawing
+        // the smooth reading of a picture whose subject is that the two
+        // readings differ. ("straight" is the screen-space path shape; it is
+        // the same idea as `curve: "linear"` on a transition, which names an
+        // interpolation in time rather than a path in space.)
+        .layer(line({ stroke: "#999", strokeWidth: 1, curve: "straight" })),
     ]),
     Frame({ w: SPARK_W, h: SPARK_H_PX }, [
       chart(samples, { legend: false, axes: false, padding: 0 })
@@ -511,7 +639,7 @@ const kinematicsBlock = (rows: any[], clock: any) => {
     // A panel draws its x-axis BELOW its box, in space the layout does not
     // know about, so the row's 16px of breathing room is already spent by the
     // time the sparklines arrive. This empty rect buys the axis its room back.
-    rect({ w: 1, h: 26, fill: "none" }),
+    rect({ w: 1, h: 36, fill: "none" }),
     spreadY(
       { spacing: 8, alignment: "middle" },
       QUANTITIES.map((q) =>
@@ -528,8 +656,20 @@ const kinematicsBlock = (rows: any[], clock: any) => {
         ])
       )
     ),
+    // Two lines, because the acceleration row needs a caveat and the row
+    // label's column is too narrow to carry it. The linear column of that row
+    // is not a graph of a function: linear acceleration is zero everywhere
+    // except for an impulse at each keyframe, and what is drawn is the weight
+    // of each impulse, which is the jump in velocity there. That is a
+    // velocity, not an acceleration, so the two columns of the row are not
+    // the same kind of number even though they share a y scale.
     text({
       text: `${SPARK_COUNTRY}, life expectancy: where it is, how fast it is moving, and how fast that is changing`,
+      fontSize: 11,
+      fill: "#888",
+    }),
+    text({
+      text: "acceleration, linear column: impulses, drawn with height = the jump in velocity at that keyframe",
       fontSize: 11,
       fill: "#888",
     }),
