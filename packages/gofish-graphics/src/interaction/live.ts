@@ -50,7 +50,20 @@ export const isLive = (v: unknown): v is LiveValue =>
  * measures this value; the paint layer re-evaluates the same accessor per frame.
  */
 export const evalLiveStatic = (accessor: LiveValue, datum: unknown): unknown =>
-  untrack(() => runInLiveEval(() => accessor(datum)));
+  readLive(() => accessor(datum));
+
+/**
+ * Read a paint-time value once, at resolve time: untracked and under the
+ * `inLiveEval` flag, so the inputs it reads are wired for events but do NOT
+ * become pipeline dependencies of the chart.
+ *
+ * `evalLiveStatic` is this applied to a `live()` channel. A NODE reaches for it
+ * directly when the paint-time value is its own rather than a channel the user
+ * wrote — `tween` reads the playhead this way, to have a value to lower and to
+ * register the clock, while leaving the per-frame reading to the paint tier.
+ */
+export const readLive = <T>(read: () => T): T =>
+  untrack(() => runInLiveEval(read));
 
 /**
  * The `live(...)` channels of an options bag, keyed by channel name — or

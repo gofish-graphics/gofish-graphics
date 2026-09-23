@@ -17,12 +17,24 @@
 
 import type { JSX } from "solid-js";
 import { DisplayList } from "gofish-ir";
-import { getLiveSlots } from "../../interaction/liveSlots";
+import { GEOMETRY_CHANNELS, getLiveSlots } from "../../interaction/liveSlots";
 
 type Style = DisplayList.Style | undefined;
 
 /** Live-channel slot table for one item — a per-attribute reactive thunk. */
 type LiveSlots = NonNullable<ReturnType<typeof getLiveSlots>>;
+
+/**
+ * One field of a display item, with its live slot's value in place of the
+ * static one when the item has that slot. MUST be called from inside a JSX
+ * attribute position so Solid tracks the signal reads and patches only that
+ * attribute; reading it eagerly outside would freeze reactivity.
+ */
+const patched = <T,>(
+  live: LiveSlots | undefined,
+  channel: string,
+  value: T
+): T => (live?.[channel] === undefined ? value : (live[channel]() as T));
 
 /**
  * Merge an item's static style with its live channels, evaluating each live
@@ -34,7 +46,7 @@ type LiveSlots = NonNullable<ReturnType<typeof getLiveSlots>>;
 const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
   let merged: Record<string, unknown> | undefined;
   for (const channel in live) {
-    if (channel === "text") continue;
+    if (channel === "text" || GEOMETRY_CHANNELS.has(channel)) continue;
     (merged ??= { ...(item.style ?? {}) })[channel] = live[channel]();
   }
   return (merged as Style) ?? item.style;
@@ -80,12 +92,12 @@ export function paintSVG(
     case "rect":
       return (
         <rect
-          x={item.x}
-          y={item.y}
-          width={item.w}
-          height={item.h}
-          rx={item.rx}
-          ry={item.ry}
+          x={patched(live, "x", item.x)}
+          y={patched(live, "y", item.y)}
+          width={patched(live, "w", item.w)}
+          height={patched(live, "h", item.h)}
+          rx={patched(live, "rx", item.rx)}
+          ry={patched(live, "ry", item.ry)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
         />
@@ -93,10 +105,10 @@ export function paintSVG(
     case "ellipse":
       return (
         <ellipse
-          cx={item.cx}
-          cy={item.cy}
-          rx={item.rx}
-          ry={item.ry}
+          cx={patched(live, "cx", item.cx)}
+          cy={patched(live, "cy", item.cy)}
+          rx={patched(live, "rx", item.rx)}
+          ry={patched(live, "ry", item.ry)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
         />
@@ -104,7 +116,7 @@ export function paintSVG(
     case "path":
       return (
         <path
-          d={item.d}
+          d={patched(live, "d", item.d)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
         />
@@ -112,8 +124,8 @@ export function paintSVG(
     case "text":
       return (
         <text
-          x={item.x}
-          y={item.y}
+          x={patched(live, "x", item.x)}
+          y={patched(live, "y", item.y)}
           data-gf-id={gfId}
           font-size={
             item.fontSize !== undefined ? `${item.fontSize}px` : undefined
@@ -146,10 +158,10 @@ export function paintSVG(
     case "image":
       return (
         <image
-          x={item.x}
-          y={item.y}
-          width={item.w}
-          height={item.h}
+          x={patched(live, "x", item.x)}
+          y={patched(live, "y", item.y)}
+          width={patched(live, "w", item.w)}
+          height={patched(live, "h", item.h)}
           href={item.href}
           data-gf-id={gfId}
           preserveAspectRatio={

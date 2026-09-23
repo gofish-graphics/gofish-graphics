@@ -75,6 +75,18 @@ fluent-builder method, the general `chart()`-tier form, and the low-level
 combinator form described above all funnel through it. See
 [`.layer()`](/js/api/core/layer) for the current API.
 
+One export is deliberately not a bare name: `time`, the animation surface, is a
+single namespace object holding `time.sequence` and `time.transition`. The
+animation design note's §9.1 decision is that temporal constructs get their own
+vocabulary rather than a `dir: "t"` on the spatial operators, and the namespace
+is that decision made visible at the import site — `spread` and `line` stay
+spatial readings, and their temporal twins are reached through `time.`. Like the
+rest of the reactive layer, it is JavaScript-only: a sequence owns a `timer()`
+clock, which is a live signal with no Python bridge. `interpolate` sits beside
+it as a bare name rather than inside the namespace, because it is not a temporal
+construct at all: it is a pure function over rows, the data-space reading a
+`derive` hands an ordinary chart.
+
 ## Planned contents
 
 - The three surfaces side by side — the same chart in each.

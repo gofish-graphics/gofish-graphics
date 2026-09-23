@@ -731,6 +731,19 @@ rewrite](/internals/frontend/mark-factory) synthesizes one anchor `blank` per ro
 26,000-row line chart used to emit 26,000 zero-size `<rect>` elements (and 26,000
 entries in the interaction hit-test map) that nobody could see or click.
 
+Its sibling is **`INTERNAL_visibleWhile(visible)`**, and the pair is worth reading
+together because the difference is which tier decides. `INTERNAL_emitNothing` is
+for a node that must never draw, and it answers at resolve. `INTERNAL_visibleWhile`
+is for a node whose drawing comes and goes with a signal — a `time.sequence`'s
+keyframe groups, where the clock picks which band is showing — and it answers at
+paint: the items are lowered either way and their opacity is patched per frame
+through the live-slot side table (see
+[Reactivity](/internals/frontend/reactivity)). A resolve-time answer there would
+make the clock a pipeline dependency and put the whole chart through layout on
+every tick, for a change that alters nothing above the marks themselves.
+Emitting nothing wins over being visible: a node with no items has nothing to
+patch, so the two compose with no coordination.
+
 ### Render Pass 5: Per-Shape Lowering and Painting
 
 Each shape/operator owns a `lower(ctx) → DisplayItem[]` — the extension point that

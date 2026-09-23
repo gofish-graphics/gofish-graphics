@@ -8,7 +8,8 @@ status: speculative
 # An animation grammar: time as the third axis
 
 > **Status: design exploration.** Conceptual model and syntax, deliberately
-> ahead of implementation (which is confined to Appendix A). Synthesizes
+> ahead of implementation (cost model in Appendix A; the one slice that is
+> actually built is Appendix B). Synthesizes
 > issues [#54](https://github.com/gofish-graphics/gofish-graphics/issues/54) (spread in time),
 > [#211](https://github.com/gofish-graphics/gofish-graphics/issues/211) (`motion()`/`tween`),
 > the reactivity substrate ([#671](https://github.com/gofish-graphics/gofish-graphics/pull/671)),
@@ -579,6 +580,72 @@ sequencing — this is deliberately a sketch, not a plan:
 - **Cross-language:** any new constructs cross the Python/IR bridge like
   everything else (descriptor table, registry, harness — the standard
   checklist).
+
+## Appendix B: what is built (first version, issue #831)
+
+One slice of §5's table exists: the `time` namespace
+(`src/ast/marks/time.ts`), a scene animation over a fixed structure.
+
+- `time.sequence({ by, duration, loop, playing, at })` is the operator form of
+  **spread on t**. It splits the flow by a numeric field and lays every
+  keyframe group out in ONE shared frame, so the x/y domains are inferred over
+  all of them and the axes hold still. It owns the chart's clock (a `timer()`
+  over the field's own range, built lazily because the domain is not known
+  until the data has been split).
+- `time.transition({ curve, ease, … })` is **a connection mark on t**, built
+  with `createRelationalMark` like `line` and `ribbon`. Its path tier is the
+  sequence's field (resolved through the same `along` slot, from the
+  `__timeTier` tag the sequence stamps on its operator) and its split is that
+  tier's complement, so Animated Vega-Lite's `key` is inferred rather than
+  written. It reads the playhead at PAINT time: the run it walks is fixed by
+  layout, and the playhead patches the attributes of the one moving item per
+  frame (`src/ast/graphicalOperators/tween.tsx`), so the chart is laid out once
+  however long it plays. That settles which side of §4.2's bright line a
+  transition falls on — the **paint side**, pure geometry of computed layouts,
+  the temporal reading of `curve` rather than of `smooth`. Where the upstream
+  reading belongs is the data-space `interpolate()` beside it, which emits real
+  rows and re-runs the pipeline over them. The sequence's own hold is on the
+  same side, for the same reason: every keyframe group is laid out either way
+  (that is what holds the axes still), so the clock picks which placed group is
+  PAINTED, and the hold is a live opacity per keyframe rather than a re-resolve.
+  Nothing coordinates the two — a transition emits nothing at all for the
+  keyframes it takes over, and a node with no items has nothing to patch.
+- Interpolation (`src/interpolate.ts`) runs over the operands' resolved
+  geometry with **knots at the data's own time values**, linear or non-uniform
+  Catmull-Rom (Barry-Goldman). That is the §4.2 note taken literally: the
+  parameterization is the data's, not chord length, so an uneven run of years
+  plays at an even speed. On a fixed-domain scatter the σ-affine commutativity
+  of §4.1 holds exactly, and the rendered dot matches the data-space
+  interpolation mapped through the scales to floating-point precision.
+- The keyframe marks are **paint-hidden** in §2.1's sense. Which rule does it
+  depends on who is hiding them, and the two differ in exactly the way §2.1
+  wants: a transition takes its keyframes over for good, so it uses the
+  structural rule (`INTERNAL_emitNothing`, the same one `blank()` uses) and they
+  emit no display items and no hit-test targets; a sequence hides the bands it
+  is not holding only for as long as it is not holding them, so it uses the
+  paint-tier rule (`INTERNAL_visibleWhile`) and they keep their items, at
+  opacity 0, hit-test targets included.
+
+Both halves of the inference can also be written out, and the four-level
+desugaring tower that results is the surface's own proof of §4.1. `along` names
+the keyframes' time field and `at` supplies the playhead, so level 1 spells the
+key and the path tier as a `.layer(chart(selectAll(...)).flow(group({by})))`
+tier (the same expansion `line` has), and level 2 replaces the sequence with a
+plain `group({by})` plus a raw `timer` — there is nothing left of `sequence`
+once both halves are explicit, because superimposing the keyframes IS `group`.
+Level 3 drops the relational mark and interpolates in data space instead
+(`interpolate(rows, {along, key, at})`, the pure function beside the geometry
+evaluator in `src/interpolate.ts`), keeping the keyframes as `blank()` for
+domain inference only. Levels 0-2 agree exactly because they are rewrites;
+level 3 agrees because the fixed-domain scatter satisfies §4.1's affineness
+condition, and would not otherwise. The four are asserted equal (at a midpoint
+playhead and at an exact keyframe) by `src/tests/gapminderTower.test.ts`, and
+drawn side by side by the `Gapminder Tower` stories.
+
+Everything else in §§5-9 is unbuilt: clip composition (sequence/parallel/
+stagger), timing constraints, lifecycle (enter/exit), segues, and reveals.
+The transition also paints only its keyframes' own shape, and supports
+ellipses and rects.
 
 ## Sources
 

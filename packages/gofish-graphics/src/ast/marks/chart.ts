@@ -445,13 +445,15 @@ function tagRelationalFusable(
   mark: object,
   type: string,
   opts: Record<string, any>,
-  inferred: InferredRelational
+  inferred: InferredRelational,
+  temporal?: boolean
 ): void {
   const anchorOpts = pickAnchorOpts(opts);
   const fusable: RelationalFusable = {
     type,
     opts,
     inferred,
+    temporal,
     anchorKeys: Object.keys(anchorOpts).filter(
       (k) => anchorOpts[k] !== undefined
     ),
@@ -529,9 +531,20 @@ function resolveGroupFill<O extends RelationalMarkOptions>(
   return resolvedOpts;
 }
 
-export function createRelationalMark<O extends RelationalMarkOptions>(
+export function createRelationalMark<O extends Record<string, unknown>>(
   type: string,
-  produce: (opts: StripLive<O>, children: GoFishAST[]) => any
+  produce: (
+    opts: StripLive<O>,
+    children: GoFishAST[],
+    inferred: InferredRelational
+  ) => any,
+  config: {
+    /** A TEMPORAL connector (`time.transition()`): its path tier is the
+     *  flow's `time.sequence(...)` rather than a spatial tier, so
+     *  `applyDefaultRelational` resolves `along` from the time tier and hands
+     *  the clock down through `inferred.time`. */
+    temporal?: boolean;
+  } = {}
 ) {
   function relational(
     options: O | undefined,
@@ -552,6 +565,11 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
     // `resolveLive` below), so the first paint already draws the right thing.
     const opts = (options ?? {}) as O;
     const liveChannels = liveChannelsOf(opts);
+    /** The cell `ChartBuilder` writes the computed split / travel direction /
+     *  time tier into — see `tagRelationalFusable`'s doc comment. Declared
+     *  here, not inside the bag branch below, because `produce` reads it on
+     *  every branch. */
+    const inferred: InferredRelational = {};
     /** The datum of the GROUP a connector threads: each field of its operands'
      *  data, projected with homogeneity collapse. A path through one species'
      *  days collapses `species` to that species and `day` to undefined, which
@@ -609,7 +627,11 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
           const operands = await children;
           const datum = groupDatumOf(operands);
           return finish(
-            (await produce(resolveLive(opts, datum), operands)) as GoFishNode,
+            (await produce(
+              resolveLive(opts, datum),
+              operands,
+              inferred
+            )) as GoFishNode,
             operands,
             datum
           );
@@ -617,8 +639,13 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
       ) as unknown as GoFishNode;
     }
 
-    // Pairwise `{ from, to }` form: one connector per row.
-    if (opts.from !== undefined && opts.to !== undefined) {
+    // Pairwise `{ from, to }` form: one connector per row. The SPATIAL
+    // connector options (`from`/`to`/`along`) are read off a cast rather than
+    // off `O` itself, because not every relational mark is spatial: a
+    // temporal one (`time.transition()`) has none of them — its path tier is
+    // the flow's `time.sequence(...)` and it has no pairwise form.
+    const spatialOpts = opts as RelationalMarkOptions;
+    if (spatialOpts.from !== undefined && spatialOpts.to !== undefined) {
       if ((opts as any).along !== undefined) {
         throw new Error(
           `${type}({ along: "${(opts as any).along}" }): along names a tier ` +
@@ -626,8 +653,8 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
             `two columns of ref-bearing rows, not a flow — remove \`along\`.`
         );
       }
-      const from = opts.from;
-      const to = opts.to;
+      const from = spatialOpts.from;
+      const to = spatialOpts.to;
       const mark: Mark<any[]> = async (rows: any[]) => {
         const segments = await Promise.all(
           rows.map(async (row) => {
@@ -641,7 +668,11 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
               );
             }
             return finish(
-              (await produce(resolveLive(opts, row), [a, b])) as GoFishNode,
+              (await produce(
+                resolveLive(opts, row),
+                [a, b],
+                inferred
+              )) as GoFishNode,
               [a, b],
               row
             );
@@ -664,7 +695,6 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
     // `.mark()`/`.layer()`, and writes it into `inferred`, a cell disjoint
     // from `opts` (see `tagRelationalFusable`'s doc comment). `opts.dir`, if
     // given, still wins over the inferred travel direction.
-    const inferred: InferredRelational = {};
     const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => {
       const by = inferred.by;
       const dir = (opts as any).dir ?? inferred.dir;
@@ -689,7 +719,8 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
             return finish(
               (await produce(
                 resolveLive(groupOpts, datum),
-                groupRefs
+                groupRefs,
+                inferred
               )) as GoFishNode,
               groupRefs,
               datum
@@ -704,14 +735,18 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
       const groupOpts = resolveGroupFill(type, baseOpts, d);
       const datum = groupDatumOf(d);
       return finish(
-        (await produce(resolveLive(groupOpts, datum), d)) as GoFishNode,
+        (await produce(
+          resolveLive(groupOpts, datum),
+          d,
+          inferred
+        )) as GoFishNode,
         d,
         datum
       );
     };
     const result = nameableMark(mark);
     (result as any).__serialize = { type, opts };
-    tagRelationalFusable(result, type, opts, inferred);
+    tagRelationalFusable(result, type, opts, inferred, config.temporal);
     return result;
   }
   return relational;

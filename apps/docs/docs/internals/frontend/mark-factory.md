@@ -502,6 +502,29 @@ travel axis there is the axis it does _not_ position. Both resolutions are
 validated against the design note's worked examples (its own "Intended?"
 column), not just its prose.
 
+### A temporal connector: `time.transition()`
+
+The factory takes a third argument, `config`, whose only key today is
+`temporal: true` — and `time.transition()` (`src/ast/marks/time.ts`) is the one
+mark built with it. A temporal connector is a relational mark in every respect
+that matters here: it consumes a run of already-placed marks, owns no size
+claim, and gets its split from the complement of its path tier. What it cannot
+do is _infer_ its path tier from the spatial arrangement, because the tier it
+threads (`time.sequence(...)`) positions nothing in x or y. So
+`applyDefaultRelational` resolves `along` from the flow's time tier
+(`findTimeTier`, reading the `__timeTier` tag a sequence stamps on its
+operator) when the fusable is temporal, and the rest of the rule runs
+unchanged: the time tier orders the run, every other tier splits, and the
+Gapminder animation gets one moving dot per country without an option being
+written.
+
+The clock reaches the mark the same way the split does. `produce` now receives
+the `inferred` cell as a third argument, so `time.transition`'s `produce` reads
+`inferred.time.clock()` during resolve — which is what registers the playhead as
+a pipeline dependency and makes the chart re-resolve per emitted value. The
+cell therefore moved up one scope inside the factory (it used to be declared
+inside the bag branch), since every call form now passes it to `produce`.
+
 The paint fix from the same design note rides along for free: split and
 plain-bag now share one code path in `createRelationalMark`'s bag-form mark,
 so `resolveGroupFill` runs on both — per group on the split branch (where
