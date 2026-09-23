@@ -333,17 +333,20 @@ async function wrapWithLabelTexts(
               ? -spec.rotate
               : spec.rotate
             : undefined;
-        texts.push(
-          Text({
-            text,
-            fontSize: spec.fontSize ?? 11,
-            fontFamily: spec.fontFamily ?? LABEL_FONT_FAMILY,
-            fontWeight: spec.fontWeight,
-            fontStyle: spec.fontStyle,
-            fill: spec.color ?? autoLabelColor(target, position),
-            rotate,
-          } as any).name(textName) as GoFishNode
-        );
+        const label = Text({
+          text,
+          fontSize: spec.fontSize ?? 11,
+          fontFamily: spec.fontFamily ?? LABEL_FONT_FAMILY,
+          fontWeight: spec.fontWeight,
+          fontStyle: spec.fontStyle,
+          fill: spec.color ?? autoLabelColor(target, position),
+          rotate,
+        } as any).name(textName) as GoFishNode;
+        texts.push(label);
+        // The label is part of its target as a mark, though it lives out of
+        // the target's subtree; record that, so whatever takes the mark over
+        // (a `time.transition()`) takes the label with it.
+        (target._attachments ??= []).push(label);
         pending.push({ refName, textName, spec });
       }
     }

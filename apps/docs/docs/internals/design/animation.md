@@ -624,7 +624,33 @@ One slice of §5's table exists: the `time` namespace
   emit no display items and no hit-test targets; a sequence hides the bands it
   is not holding only for as long as it is not holding them, so it uses the
   paint-tier rule (`INTERNAL_visibleWhile`) and they keep their items, at
-  opacity 0, hit-test targets included.
+  opacity 0, hit-test targets included. The paint-tier rule is set once per
+  keyframe group and covers the group's whole subtree, including marks a
+  later elaboration pass adds to it, such as `.label()` text. So a labeled
+  keyframe shows its labels only while it is held.
+- A transition moves **every leaf of a keyframe mark**, not just its top shape.
+  The leaves are the mark's own subtree leaves plus what is attached to it from
+  outside (its label `Text`s, recorded as `_attachments` by the label pass),
+  paired across keyframes by structural position. A box leaf (rect, ellipse,
+  blank) interpolates its whole box; a text leaf moves rigidly, keeping the
+  source keyframe's own drawing, so a bar's label rides with the bar. When the
+  leaves differ between keyframes (a label in one year only), the mark falls
+  back to one run of its top shape and its labels hold with their keyframes.
+- A mark need not have a row in every keyframe. The sequence records its
+  keyframes on the time tier (`TimeTier.knots`), and the tween reads each
+  stretch between two neighboring keyframes by which ends have a row for the
+  mark: both, it moves; only the later one, it **enters**, held at that
+  keyframe's geometry while its opacity ramps from 0 to 1 over the stretch;
+  only the earlier one, it **exits**, held and ramping from 1 to 0; neither, it
+  is absent (opacity 0). A gap in a run is an exit and a later enter, and the
+  mark is absent before its first keyframe and after its last. This fade in
+  place is the default Keynote's Magic Move, PowerPoint's Morph and SwiftUI's
+  `.opacity` transition give an unmatched object. It is a paint-time opacity
+  on every item the mark emits, box and text leaves together, patched through
+  the same live slots as its geometry. `enter`/`exit` options that would
+  override it, the way `curve` overrides the interpolation, are not built. A
+  transition with no sequence (explicit `along` and `at`) has no keyframe list,
+  so it treats its run's own knots as neighbors and bridges every gap.
 
 Both halves of the inference can also be written out, and the four-level
 desugaring tower that results is the surface's own proof of §4.1. `along` names
@@ -643,9 +669,10 @@ playhead and at an exact keyframe) by `src/tests/gapminderTower.test.ts`, and
 drawn side by side by the `Gapminder Tower` stories.
 
 Everything else in §§5-9 is unbuilt: clip composition (sequence/parallel/
-stagger), timing constraints, lifecycle (enter/exit), segues, and reveals.
-The transition also paints only its keyframes' own shape, and supports
-ellipses and rects.
+stagger), timing constraints, lifecycle options beyond the default fade
+(`enter`/`exit`), segues, and reveals.
+The transition tweens rects, ellipses, blanks and text, one track per leaf of
+the keyed mark and its attached labels, and throws for other shapes.
 
 ## Sources
 

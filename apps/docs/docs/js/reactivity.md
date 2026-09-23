@@ -1,7 +1,3 @@
----
-handwritten: true
----
-
 # Reactivity & Interaction
 
 GoFish visualizations are usually a pure function of your data: you describe a

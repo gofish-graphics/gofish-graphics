@@ -744,6 +744,21 @@ every tick, for a change that alters nothing above the marks themselves.
 Emitting nothing wins over being visible: a node with no items has nothing to
 patch, so the two compose with no coordination.
 
+A visibility rule covers the node's whole subtree. `INTERNAL_lower` paints a node
+only while its own rule and every ancestor's hold, so a sequence sets the rule once
+on each keyframe group, and marks that a later elaboration pass adds under the group
+hide with it. The label pass is the case that needs this: it wraps a keyframe group
+in a new layer that holds the group beside its label `Text`s, after the sequence has
+set its rule. `wrapPreservingIdentity` (`src/ast/elaborationUtils.ts`) moves the rule
+onto the wrapper along with the group's name and key, so the labels are inside the
+rule's subtree and show only with the year they label.
+
+A transition takes a keyframe over for good, labels included: it silences every
+leaf it moves. A box leaf gets `INTERNAL_emitNothing`; a text leaf gets
+`INTERNAL_takeOverLowering`, which silences it the same way and hands its own
+`_lower` to the transition, so the transition can draw that text where the
+playhead has taken it.
+
 ### Render Pass 5: Per-Shape Lowering and Painting
 
 Each shape/operator owns a `lower(ctx) → DisplayItem[]` — the extension point that
