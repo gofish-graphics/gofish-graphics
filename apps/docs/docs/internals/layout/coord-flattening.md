@@ -237,6 +237,9 @@ it is wrapped:
   with the connector), the connector adopts it. Operands under _different_ scopes (or none)
   keep the old behavior — that multi-scope reconciliation is still the known gap
   ([#657](https://github.com/gofish-graphics/gofish-graphics/issues/657)).
+  A `tween` that moves a text leaf (a keyframe mark's label) lowers each
+  keyframe's text once, under the tween's own adopted scope, and then only
+  shifts it, so the label and its bar are drawn under the same map.
 
 ## Fitting the subtree to the coordinate budget
 

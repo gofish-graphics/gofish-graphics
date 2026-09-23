@@ -518,6 +518,20 @@ unchanged: the time tier orders the run, every other tier splits, and the
 Gapminder animation gets one moving dot per country without an option being
 written.
 
+What the connector moves is the whole keyed mark. The `tween` node behind it
+(`src/ast/graphicalOperators/tween.tsx`) builds one run per leaf of each
+keyframe mark, counting the label `Text`s the label pass attached to it, and
+pairs the leaves across keyframes by position. So a labeled bar in a bar chart
+race carries its name with it.
+
+A keyed mark may also be missing from some keyframes, as a brand is from the
+years it is not in a top ten. The time tier carries the sequence's keyframes
+(`knots`), and between two neighboring keyframes the mark moves if it has a row
+at both, fades in place (held at its keyframe, opacity ramping over the
+stretch) if it has a row at only one, and is absent if it has neither. Options
+to restyle that enter and exit are not built. With no sequence in the flow the
+run's own knots count as neighbors, so the mark bridges its gaps.
+
 The clock reaches the mark the same way the split does. `produce` now receives
 the `inferred` cell as a third argument, so `time.transition`'s `produce` reads
 `inferred.time.clock()` during resolve — which is what registers the playhead as

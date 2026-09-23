@@ -1,7 +1,3 @@
----
-handwritten: true
----
-
 # Animation
 
 An animated chart in GoFish is a chart with one extra axis: time. You already
@@ -173,6 +169,11 @@ country's color is its color. Under `"step"` the fill comes from the previous
 keyframe rather than the nearest one, so the whole mark is the frame the curve
 is holding.
 
+A mark's labels move with it. The text a `.label()` adds is part of its mark,
+so the transition carries it along. Text moves without changing size: its
+position is interpolated, and its string, font and color are read off the same
+keyframe as the mark's fill.
+
 ## Comparing curves
 
 The three curves are easiest to read side by side, at one moment, on one clock.
@@ -312,6 +313,85 @@ circle is a straight-line map once the domains are fixed. It stops agreeing when
 that path bends, for example when a scale's domain is read off one moment's rows
 instead of all of them, or when a mark's size comes from a count of them.
 
+## Bar chart race
+
+A bar chart race is the Gapminder spec with the scatter swapped for a sorted
+bar chart. Each brand is one bar, the bars are ranked by value with the largest
+on top, and every year the bars trade places.
+
+```ts
+chart(brands, { legend: false })
+  .flow(
+    time.sequence({ by: "year", duration: 20000 }),
+    spread({
+      by: field("name").sort("value", "desc"),
+      dir: "y",
+      spacing: 2,
+    })
+  )
+  .mark(
+    rect({ w: "value", fill: "category" }).label("name", {
+      position: "outset-right",
+    })
+  )
+  .layer(time.transition({ curve: "linear" }))
+  .render(container, { w: 600, h: 600, axes: { x: true, y: false } });
+```
+
+Apart from the mark itself, two lines differ from Gapminder. The inner `spread`
+sorts its groups with `field("name").sort("value", "desc")`, so each year's
+bars are placed in order from largest to smallest. The transition uses
+`curve: "linear"`, so a bar slides to its new rank and grows or shrinks at a
+steady rate between two years, the way the bars in Mike Bostock's D3 version
+move. Each brand's name is a label just past the end of its bar, and it moves
+with the bar.
+
+The data is 37 brands: the ones that have a value in every year of the run,
+from 2000 through 2019. Every bar is then on screen for the whole run, so the
+chart only ever moves bars and never has to add or remove one.
+
+The value axis is fixed over the whole run. Like Gapminder's axes, it is
+inferred from every year at once, so it reaches the largest value of any year,
+and in the early years every bar is short. Animated Vega-Lite calls this
+`rescale: false`. The bar chart race in the Animated Vega-Lite paper uses
+`rescale: true` instead, where each year gets an axis of its own and the
+longest bar always spans the plot. GoFish cannot do that yet. It is a known
+gap.
+
+### Marks that enter and leave
+
+A race usually shows only the top ten brands of each year, out of all 173.
+Then brands come and go, because a brand can rank one year and drop out the
+next. The spec does not change. It is handed rows that hold only each year's
+top ten.
+
+```ts
+const years = Array.from(new Set(allBrands.map((d) => d.year)));
+const top10 = years.flatMap((y) =>
+  allBrands
+    .filter((d) => d.year === y)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10)
+);
+```
+
+The transition reads each stretch of time between two neighboring keyframes,
+here two years in a row, by which of the two have a row for the brand.
+
+- If the brand is in both years, its bar moves, as before.
+- If it is only in the later year, its bar fades in over the stretch. It does
+  not move while it fades. It sits where the later year puts it.
+- If it is only in the earlier year, its bar fades out over the stretch, held
+  where the earlier year put it.
+- If it is in neither year, its bar is not drawn.
+
+A bar's label fades with it. A brand that drops out and later comes back fades
+out and then, when it returns, fades in again.
+
+This is the default, and for now it is the only behavior. Options to restyle
+how a mark enters and exits, such as sliding in from the bottom, are not built
+yet.
+
 ## Options
 
 ### `time.sequence(options)`
@@ -355,10 +435,15 @@ transition does not blend paint.
 
 ## What is not built yet
 
-This is a first version. A transition moves circles and rectangles, and it
-throws a clear error for other shapes. There is no composition of animations
-(playing one after another, or several at once), no staggering, and no
-enter and exit behavior for marks that appear or leave partway through.
+This is a first version. A transition moves rectangles, circles and text, and
+marks built out of those, such as a bar with a label. It throws a clear error
+for other shapes. There is no composition of animations (playing one after
+another, or several at once), no staggering, and no options to restyle how
+marks enter and exit. The value axis cannot rescale from one keyframe to the
+next.
 
-Each value the clock emits re-resolves the whole chart, which is honest but not
-cheap. A few hundred marks play smoothly; a few thousand will not.
+The chart is laid out once. The playhead is read while the chart is painted, so
+each tick of the clock changes attributes of marks already on the page and
+does not lay the chart out again. What does grow with the data is the number of
+marks on the page, because a sequence without a transition keeps every
+keyframe's marks there, even the hidden ones.

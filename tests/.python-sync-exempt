@@ -176,3 +176,10 @@ packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx
 # clock inside a `derive(...)` closure, which is the one shape the derive RPC
 # cannot carry.
 packages/gofish-graphics/stories/animated-vega-lite/GapminderTower.stories.tsx
+
+# The bar chart race, Gapminder's sibling — exempt for the same reason as the
+# Gapminder panels. Every animated story in it holds a `timer()` clock through
+# `time.sequence({ on })`, a live JS signal the derive RPC cannot carry, and the
+# year readout reads it through `live()`. Frame2000 is a pure spec, but
+# exemption is per FILE (same trade-off as issue #856).
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx

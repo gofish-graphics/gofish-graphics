@@ -2,7 +2,9 @@ import { GoFishNode } from "./_node";
 
 /** Run `build` to wrap `node` in new structure, moving the node's identity
  * (_name/key) onto whatever `build` returns — so the parent (faceting/refs/
- * select) still resolves to this node. Shared by the axis and legend
+ * select) still resolves to this node. Its paint-time visibility rule moves
+ * with it, so whatever the wrap adds beside the node (a label's `Text`, an
+ * axis's ticks) shows and hides with it. Shared by the axis, legend and label
  * elaboration passes. */
 export async function wrapPreservingIdentity(
   node: GoFishNode,
@@ -10,11 +12,14 @@ export async function wrapPreservingIdentity(
 ): Promise<GoFishNode> {
   const origName = node._name;
   const origKey = node.key;
+  const origVisible = node.__gfVisible;
   node._name = undefined;
   node.key = undefined;
+  node.__gfVisible = undefined;
   const root = await build(node);
   if (origName !== undefined) root._name = origName;
   if (origKey !== undefined) root.setKey(origKey);
+  if (origVisible !== undefined) root.__gfVisible = origVisible;
   return root;
 }
 

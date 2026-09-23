@@ -18,9 +18,14 @@
  * onto one another (a keyframe is a panel with no room of its own), and the
  * line becomes the moving dot that would have traced it.
  *
+ * A transitioned mark moves between two neighboring keyframes that both have
+ * a row for it, and fades in place across a stretch where only one of them
+ * does (see `tween.tsx`): the temporal reading of a line drawing nothing past
+ * its endpoints, with the fade Keynote's Magic Move gives unmatched objects.
+ *
  * What this version does NOT do: sequence/parallel composition of clips,
  * staggering, easing across keyframes as a first-class clip, enter/exit
- * lifecycle, and segues between two different specs. Those are §§5-9 of the
+ * styling (sliding in, fading out), and segues between two different specs. Those are §§5-9 of the
  * note and are not built.
  */
 import { createOperator } from "./createOperator";
@@ -102,6 +107,7 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  */
 export function sequence(opts: SequenceOptions) {
   let domain: [number, number] | undefined;
+  let keyframes: number[] = [];
   let clock: Timer<number> | undefined = opts.on;
 
   if (opts.on !== undefined) {
@@ -123,6 +129,7 @@ export function sequence(opts: SequenceOptions) {
     const numbers = values.map(Number).filter((v) => Number.isFinite(v));
     if (numbers.length === 0) return;
     domain = [Math.min(...numbers), Math.max(...numbers)];
+    keyframes = [...new Set(numbers)].sort((a, b) => a - b);
   };
 
   // Built per call so the split hook can close over this sequence's own
@@ -156,6 +163,7 @@ export function sequence(opts: SequenceOptions) {
 
   const tier: TimeTier = {
     by: opts.by,
+    knots: () => keyframes,
     clock: () => {
       if (clock === undefined) {
         if (domain === undefined) {
@@ -267,10 +275,17 @@ export const transition = createRelationalMark<TransitionOptions>(
       );
     }
     const knots = children.map((child) => knotOf(child, by));
+    // The keyframes the run's knots are drawn from, so the tween can tell a
+    // gap in the run from a step between neighbors. Only the sequence's own
+    // field has them; a transition along some other field, or with no
+    // sequence at all, reads its run's knots as consecutive.
+    const sequence =
+      tier !== undefined && tier.by === by ? tier.knots() : undefined;
     return tween(
       {
         at: playhead,
         knots,
+        sequence,
         method: resolveMethod(o.curve),
         ease: o.ease,
         fill: o.fill,
@@ -305,8 +320,10 @@ function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
  * Each keyframe gets a THUNK that says whether it is the held one, and the
  * playhead is read inside it, at paint (`INTERNAL_visibleWhile`). A hidden
  * keyframe keeps its box, its datum and its anchoring role, exactly as before;
- * what changed is only when the question is asked. It is applied down the whole
- * subtree because it is the marks INSIDE a keyframe group that draw.
+ * what changed is only when the question is asked. It is set on the keyframe
+ * group alone: the marks INSIDE the group are what draw, and a visibility rule
+ * covers its node's whole subtree, including the label `Text`s the label pass
+ * adds to the group after this runs.
  */
 function hold(children: GoFishAST[], playhead: () => number): void {
   // Each child is one group, and the operator stamped it with its group key —
@@ -327,15 +344,10 @@ function hold(children: GoFishAST[], playhead: () => number): void {
     return cache.held;
   };
   children.forEach((child, i) => {
-    showSubtreeWhile(child, () => knots[i] === held());
+    if (child instanceof GoFishNode) {
+      child.INTERNAL_visibleWhile(() => knots[i] === held());
+    }
   });
-}
-
-/** Make a node and everything under it paint only while `visible()` holds. */
-function showSubtreeWhile(node: GoFishAST, visible: () => boolean): void {
-  if (!(node instanceof GoFishNode)) return;
-  node.INTERNAL_visibleWhile(visible);
-  for (const child of node.children) showSubtreeWhile(child, visible);
 }
 
 /** One keyframe's time value, read off the mark's own datum. */
