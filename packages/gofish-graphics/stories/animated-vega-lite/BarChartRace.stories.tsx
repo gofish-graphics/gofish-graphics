@@ -75,18 +75,27 @@ type Args = { w: number; h: number };
 /** The 37 brands present in every year (see the shortcut note above). */
 const brands = everyYearBrands(categoryBrands);
 
-/** The top `n` brands of each year, over the full dataset. A brand's run has
- *  a knot only in the years it ranks. */
-const topEachYear = (rows: CategoryBrand[], n: number): CategoryBrand[] => {
+/** Every row of the full dataset with its `rank` that year among all that
+ *  year's brands, largest first. Rows come year by year, each year in rank
+ *  order. */
+const rankEachYear = (
+  rows: CategoryBrand[]
+): (CategoryBrand & { rank: number })[] => {
   const years = Array.from(new Set(rows.map((d) => d.year)));
   return years.flatMap((y) =>
     rows
       .filter((d) => d.year === y)
       .sort((a, b) => b.value - a.value)
-      .slice(0, n)
+      .map((d, i) => ({ ...d, rank: i + 1 }))
   );
 };
-const top10 = topEachYear(categoryBrands, 10);
+const ranked = rankEachYear(categoryBrands);
+
+/** The top ten brands of each year. A brand's run has a knot only in the
+ *  years it ranks. */
+const top10: CategoryBrand[] = ranked
+  .filter((d) => d.rank <= 10)
+  .map(({ rank, ...d }) => d);
 
 /** D3's bar chart race data shape: the brands that ever rank in a year's top
  *  `n`, with a row in every year they have a value, each carrying its `rank`
@@ -94,22 +103,15 @@ const top10 = topEachYear(categoryBrands, 10);
  *  the slot just below the visible ones, where a brand waits while it is out
  *  of the top `n`, so it enters and leaves by sliding rather than fading. */
 const rankedTopEachYear = (
-  rows: CategoryBrand[],
+  ranked: (CategoryBrand & { rank: number })[],
   n: number
 ): (CategoryBrand & { rank: number })[] => {
-  const years = Array.from(new Set(rows.map((d) => d.year)));
-  const ranked = years.flatMap((y) =>
-    rows
-      .filter((d) => d.year === y)
-      .sort((a, b) => b.value - a.value)
-      .map((d, i) => ({ ...d, rank: i + 1 }))
-  );
   const kept = new Set(ranked.filter((d) => d.rank <= n).map((d) => d.name));
   return ranked
     .filter((d) => kept.has(d.name))
     .map((d) => ({ ...d, rank: Math.min(d.rank, n + 1) }));
 };
-const top10Ranked = rankedTopEachYear(categoryBrands, 10);
+const top10Ranked = rankedTopEachYear(ranked, 10);
 
 /** The first and last keyframes, for the clock a readout shares. */
 const YEARS: [number, number] = [2000, 2019];
@@ -138,7 +140,10 @@ const yearReadout = (clock: () => number, h: number) =>
     );
 
 /** The race on a clock the caller hands in, so the paused stories are the
- *  animated one read at a fixed playhead. The same spec as `Animated`. */
+ *  animated one read at a fixed playhead. The same spec as `Animated`,
+ *  duplicated on purpose: the docs extractor copies helpers into the gallery
+ *  snippet but not a bare `args` or type-only names, so `Animated` must write
+ *  the spec out itself. Keep the two in step. */
 const race = (
   container: HTMLElement,
   args: Args,
@@ -234,21 +239,12 @@ export const Paused2010: StoryObj<Args> = {
   },
 };
 
-/** The race held on its last keyframe. The clock does not loop: on a looping
- *  clock the end of the domain is the same instant as its start, so parking
- *  one at 2019 would read back as 2000. */
+/** The race held on its last keyframe. */
 export const Paused2019: StoryObj<Args> = {
   args: { w: 600, h: 600 },
   render: (args: Args) => {
     const container = initializeContainer();
-    const year = timer({
-      domain: YEARS,
-      duration: DURATION,
-      playing: false,
-      loop: false,
-    });
-    year.set(2019);
-    race(container, args, year);
+    race(container, args, pausedClock(YEARS, DURATION, 2019));
     return container;
   },
 };

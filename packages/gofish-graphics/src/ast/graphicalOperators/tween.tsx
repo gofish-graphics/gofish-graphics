@@ -139,25 +139,43 @@ function markLeaves(node: GoFishNode): GoFishNode[] {
  * that layout decided. Reading it at a playhead is pure arithmetic over these
  * numbers, which is what lets the paint tier do it per frame.
  */
-type Track = {
-  /** The shape every keyframe of the leaf is: the shape the moving leaf is. */
-  shape: string;
-  /** Each keyframe's placed box, per channel: center and extent on each
-   *  axis, the four quantities a box leaf interpolates. */
-  cx: number[];
-  cy: number[];
-  w: number[];
-  h: number[];
-  /** Each keyframe's own color channel, for the paint a box leaf inherits. */
-  colors: (MaybeValue<string> | undefined)[];
-  /** A rigid leaf only: each keyframe's local origin (the point its anchor
-   *  sits on), and its own drawing, taken over from the keyframe. */
-  origins?: [number, number][];
-  draws?: ((
-    transform: Transform,
-    toPixel: ToPixel
-  ) => DisplayList.DisplayItem[])[];
-};
+type Track =
+  | {
+      kind: "box";
+      /** The shape every keyframe of the leaf is: the shape the moving leaf
+       *  is. */
+      shape: string;
+      /** Each keyframe's placed box, per channel: center and extent on each
+       *  axis, the four quantities a box leaf interpolates. */
+      cx: number[];
+      cy: number[];
+      w: number[];
+      h: number[];
+      /** Each keyframe's own color channel, for the paint the leaf
+       *  inherits. */
+      colors: (MaybeValue<string> | undefined)[];
+    }
+  | {
+      kind: "rigid";
+      /** Each keyframe's box center, the point the leaf's drawing moves
+       *  with. */
+      cx: number[];
+      cy: number[];
+      /** Each keyframe's local origin (the point its anchor sits on), and
+       *  its own drawing, taken over from the keyframe. */
+      origins: [number, number][];
+      draws: ((
+        transform: Transform,
+        toPixel: ToPixel
+      ) => DisplayList.DisplayItem[])[];
+    };
+
+/** One track, lowered: the items its leaf draws when the run is read by `at`
+ *  and its unblended attributes come from keyframe `source`. */
+type Painter = (
+  at: (values: number[]) => number,
+  source: number
+) => DisplayList.DisplayItem[];
 
 /**
  * Where a run with these knots is read at `t`, and how opaque it is there —
@@ -174,22 +192,25 @@ function lifecycle(
   ease: ((u: number) => number) | undefined
 ): (t: number) => { at: number; alpha: number } {
   const own = new Set(knots.filter(Number.isFinite));
-  const frames = [...new Set(sequence ?? own)].sort((a, b) => a - b);
-  const last = frames.length - 1;
+  // A sequence's keyframes arrive sorted and distinct; the run's own knots
+  // are made so.
+  const frames = sequence ?? [...own].sort((a, b) => a - b);
+  const [first, last] = [frames[0], frames[frames.length - 1]];
   return (t) => {
     // A single keyframe has no stretch to read; the mark holds it.
     if (frames.length < 2) return { at: t, alpha: own.size > 0 ? 1 : 0 };
-    if (!(frames[0] <= t && t <= frames[last])) return { at: t, alpha: 0 };
-    let i = 0;
-    while (i < last - 1 && frames[i + 1] <= t) i++;
+    // Absent, the mark is held at a fixed time, so the paint tier's geometry
+    // reads return the same values frame after frame and patch nothing.
+    if (!(t >= first)) return { at: first, alpha: 0 };
+    if (!(t <= last)) return { at: last, alpha: 0 };
+    const { i, u } = locate(frames, t);
     const [from, to] = [frames[i], frames[i + 1]];
-    const u = (t - from) / (to - from);
     const eased = ease !== undefined && u > 0 && u < 1 ? ease(u) : u;
     const [before, after] = [own.has(from), own.has(to)];
     if (before && after) return { at: t, alpha: 1 };
     if (after) return { at: to, alpha: eased };
     if (before) return { at: from, alpha: 1 - eased };
-    return { at: t, alpha: 0 };
+    return { at: from, alpha: 0 };
   };
 }
 
@@ -210,15 +231,10 @@ function moveItem(
   dy: number
 ): DisplayList.DisplayItem {
   const moved = { ...item } as Record<string, unknown>;
-  for (const [field, d] of [
-    ["x", dx],
-    ["y", dy],
-    ["cx", dx],
-    ["cy", dy],
-  ] as const) {
-    if (typeof moved[field] === "number")
-      moved[field] = (moved[field] as number) + d;
-  }
+  if (typeof moved.x === "number") moved.x += dx;
+  if (typeof moved.y === "number") moved.y += dy;
+  if (typeof moved.cx === "number") moved.cx += dx;
+  if (typeof moved.cy === "number") moved.cy += dy;
   return moved as unknown as DisplayList.DisplayItem;
 }
 
@@ -361,10 +377,17 @@ export const tween = createNodeOperator(
                 ),
               ];
 
-          if (!matched) {
-            const shapes = new Set(rows[0].map((n) => n.type));
+          // Every leaf of a row is one mark moving, so the row is checked as
+          // one: a shape the transition can move, the same for every
+          // keyframe. Matched rows may be text, which moves rigidly; the
+          // fallback row is the keyframe mark itself, so it must be a box.
+          for (const row of rows) {
+            const shapes = new Set(row.map((n) => n.type));
             for (const shape of shapes) {
-              if (!BOX_SHAPES.has(shape)) {
+              if (
+                !BOX_SHAPES.has(shape) &&
+                !(matched && RIGID_SHAPES.has(shape))
+              ) {
                 throw new Error(
                   `[gofish] time.transition(): cannot move a "${shape}" mark — a ` +
                     `transition paints its keyframes' own shape, and so far that ` +
@@ -400,26 +423,30 @@ export const tween = createNodeOperator(
             });
             allBoxes.push(...boxes);
             const shape = leaves[0].type;
-            const track: Track = {
-              shape,
-              cx: boxes.map((b) => (b.minX + b.maxX) / 2),
-              cy: boxes.map((b) => (b.minY + b.maxY) / 2),
-              w: boxes.map(width),
-              h: boxes.map(height),
-              colors: leaves.map((leaf) => leaf.color),
-            };
+            const cx = boxes.map((b) => (b.minX + b.maxX) / 2);
+            const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
             // The keyframes are scaffolding once a transition reads them:
             // every leaf it moves stops drawing, and a rigid leaf hands its
             // drawing over to be placed where the playhead is.
             if (RIGID_SHAPES.has(shape)) {
-              track.origins = stands.map((s) => displayTranslate(s.transform));
-              track.draws = leaves.map((leaf) =>
-                leaf.INTERNAL_takeOverLowering()
-              );
-            } else {
-              for (const leaf of leaves) leaf.INTERNAL_emitNothing();
+              return {
+                kind: "rigid",
+                cx,
+                cy,
+                origins: stands.map((s) => displayTranslate(s.transform)),
+                draws: leaves.map((leaf) => leaf.INTERNAL_takeOverLowering()),
+              };
             }
-            return track;
+            for (const leaf of leaves) leaf.INTERNAL_emitNothing();
+            return {
+              kind: "box",
+              shape,
+              cx,
+              cy,
+              w: boxes.map(width),
+              h: boxes.map(height),
+              colors: leaves.map((leaf) => leaf.color),
+            };
           });
           const run: Run = { knots: order.map((i) => knots[i]), tracks };
 
@@ -446,17 +473,6 @@ export const tween = createNodeOperator(
         ): DisplayList.DisplayItem[] => {
           const { run } = renderData as { run: Run };
           const unitScale = node.getRenderSession().scaleContext?.unit;
-          // One resolved paint per keyframe and box leaf, so reading the run
-          // at a playhead is an array index rather than a color computation.
-          const fills = run.tracks.map((track) =>
-            track.colors.map(
-              (keyframeColor) =>
-                resolveColorChannel(
-                  (fill ?? keyframeColor) as MaybeValue<string>,
-                  unitScale
-                ) ?? "black"
-            )
-          );
           const declaredStroke = resolveColorChannel(stroke, unitScale);
 
           // The same local-pixel map `connect` builds: the node's absolute
@@ -469,92 +485,97 @@ export const tween = createNodeOperator(
           const datum = node.datum;
           const role = roleFor(datum);
 
-          /** One box leaf as it stands at one playhead. */
-          const buildBox = (
-            track: Track,
-            trackFills: string[],
-            at: (values: number[]) => number,
-            source: number
-          ): DisplayList.DisplayItem => {
-            const [cx, cy, w, h] = [track.cx, track.cy, track.w, track.h].map(
-              at
-            );
-            const resolvedFill = trackFills[source];
-            const style = lowerStyle({
-              fill: resolvedFill,
-              stroke: declaredStroke ?? resolvedFill,
-              strokeWidth: strokeWidth ?? 0,
-              opacity: opacity ?? 1,
+          /** A box leaf, lowered: its style resolved once per keyframe, so
+           *  reading it at a playhead is an array index rather than a color
+           *  computation. */
+          const boxPainter = (
+            track: Extract<Track, { kind: "box" }>
+          ): Painter => {
+            const { shape, cx, cy, w, h } = track;
+            const styles = track.colors.map((keyframeColor) => {
+              const resolvedFill =
+                resolveColorChannel(
+                  (fill ?? keyframeColor) as MaybeValue<string>,
+                  unitScale
+                ) ?? "black";
+              return lowerStyle({
+                fill: resolvedFill,
+                stroke: declaredStroke ?? resolvedFill,
+                strokeWidth: strokeWidth ?? 0,
+                opacity: opacity ?? 1,
+              });
             });
-            if (track.shape === "ellipse") {
-              const [px, py] = toLocalPixel([cx, cy]);
-              return {
-                kind: "ellipse",
-                cx: px,
-                cy: py,
-                rx: w / 2,
-                ry: h / 2,
-                style,
-                datum,
-                role,
-              };
-            }
-            return {
-              ...rectItemFromBox(
-                cx - w / 2,
-                cx + w / 2,
-                cy - h / 2,
-                cy + h / 2,
-                toLocalPixel
-              ),
-              style,
-              datum,
-              role,
+            return (at, source) => {
+              const [x, y, bw, bh] = [cx, cy, w, h].map(at);
+              const style = styles[source];
+              if (shape === "ellipse") {
+                const [px, py] = toLocalPixel([x, y]);
+                return [
+                  {
+                    kind: "ellipse",
+                    cx: px,
+                    cy: py,
+                    rx: bw / 2,
+                    ry: bh / 2,
+                    style,
+                    datum,
+                    role,
+                  },
+                ];
+              }
+              return [
+                {
+                  ...rectItemFromBox(
+                    x - bw / 2,
+                    x + bw / 2,
+                    y - bh / 2,
+                    y + bh / 2,
+                    toLocalPixel
+                  ),
+                  style,
+                  datum,
+                  role,
+                },
+              ];
             };
           };
 
-          // Each rigid leaf's own drawing at each keyframe, lowered ONCE,
-          // here, under this node's scope: the source keyframe's items are
-          // then only moved, which is plain arithmetic the paint tier can do
-          // per frame.
-          const drawn = run.tracks.map((track) =>
-            track.draws?.map((draw, k) => {
-              const [ox, oy] = track.origins![k];
+          /** A rigid leaf, lowered: each keyframe's own drawing lowered ONCE,
+           *  here, under this node's scope, with the pixel its box center
+           *  sits on. At a playhead the source keyframe's items are moved by
+           *  as much as the center moved, so the anchor keeps its place in
+           *  the box; that is plain arithmetic the paint tier can do per
+           *  frame. The painter keeps the items, not the keyframes' drawings. */
+          const rigidPainter = (
+            track: Extract<Track, { kind: "rigid" }>
+          ): Painter => {
+            const { cx, cy } = track;
+            const drawn = track.draws.map((draw, k) => {
+              const [ox, oy] = track.origins[k];
               return draw({ translate: [tx + ox, ty + oy] }, toPixel);
-            })
-          );
-
-          /** One rigid leaf as it stands at one playhead: the source
-           *  keyframe's own drawing, moved by as much as the leaf's box center
-           *  moved, so its anchor keeps its place in the box. */
-          const buildRigid = (
-            track: Track,
-            ownDrawn: DisplayList.DisplayItem[][],
-            at: (values: number[]) => number,
-            source: number
-          ): DisplayList.DisplayItem[] => {
-            const [fromX, fromY] = toLocalPixel([
-              track.cx[source],
-              track.cy[source],
-            ]);
-            const [toX, toY] = toLocalPixel([at(track.cx), at(track.cy)]);
-            return ownDrawn[source].map((item) =>
-              moveItem(item, toX - fromX, toY - fromY)
-            );
+            });
+            const centers = cx.map((x, k) => toLocalPixel([x, cy[k]]));
+            return (at, source) => {
+              const [fromX, fromY] = centers[source];
+              const [toX, toY] = toLocalPixel([at(cx), at(cy)]);
+              return drawn[source].map((item) =>
+                moveItem(item, toX - fromX, toY - fromY)
+              );
+            };
           };
 
-          /** The moving mark as it stands at one playhead: every leaf's item,
-           *  in leaf order. Everything it needs is either in `run` (layout's)
-           *  or in this closure (lowering's), so the paint tier can call it
-           *  per frame. */
+          const painters = run.tracks.map((track) =>
+            track.kind === "box" ? boxPainter(track) : rigidPainter(track)
+          );
+          const knots = run.knots;
+
+          /** The moving mark as it stands at one playhead: every leaf's items,
+           *  in leaf order. Everything it needs was computed by layout or
+           *  lowering, so the paint tier can call it per frame. */
           const build = (at: number): DisplayList.DisplayItem[] => {
             const phase = life(at);
-            const s = sampleRun(run.knots, phase.at, method, ease);
-            const items = run.tracks.flatMap((track, j) =>
-              drawn[j]
-                ? buildRigid(track, drawn[j]!, s.at, s.source)
-                : [buildBox(track, fills[j], s.at, s.source)]
-            );
+            const s = sampleRun(knots, phase.at, method, ease);
+            const items = painters.flatMap((paint) => paint(s.at, s.source));
             // Every leaf fades together, box and text alike: they are one
             // mark entering or leaving.
             return phase.alpha === 1

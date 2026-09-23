@@ -1422,19 +1422,11 @@ export class GoFishNode {
   ) => DisplayList.DisplayItem[] {
     const own = this._lower;
     this._lower = () => [];
-    return (transform, toPixel) => {
-      if (!own) return [];
-      return own(
-        {
-          intrinsicDims: this.intrinsicDims,
-          transform,
-          renderData: this.renderData,
-          toPixel,
-        },
-        [],
-        this
-      );
-    };
+    // Lowered as `INTERNAL_lower` lowers, ids and live channels included,
+    // but without the visibility rule: the caller that took the drawing over
+    // owns when it shows.
+    return (transform, toPixel) =>
+      own ? this.lowerWith(own, transform, toPixel, undefined, false) : [];
   }
 
   /**
@@ -1509,8 +1501,30 @@ export class GoFishNode {
       throw new Error("[gofish] toPixel not set on the render session");
     }
 
-    const transform = transformOverride ?? this._displayTransform;
-    const items = this._lower(
+    return this.lowerWith(
+      this._lower,
+      transformOverride ?? this._displayTransform,
+      toPixel,
+      coordinateTransform,
+      true
+    );
+  }
+
+  /**
+   * The body of {@link INTERNAL_lower}, shared with the drawing
+   * {@link INTERNAL_takeOverLowering} hands out: call `lower` for this node,
+   * stamp the items' ids, wire its live channels, and, when `withVisibility`
+   * is set, apply the paint-time visibility rule. A taken-over drawing skips
+   * that rule because its new owner decides when it shows.
+   */
+  private lowerWith(
+    lower: Lower,
+    transform: Transform | undefined,
+    toPixel: ToPixel,
+    coordinateTransform: CoordinateTransform | undefined,
+    withVisibility: boolean
+  ): DisplayList.DisplayItem[] {
+    const items = lower(
       {
         intrinsicDims: this.intrinsicDims,
         transform,
@@ -1540,6 +1554,9 @@ export class GoFishNode {
       }
       for (const item of items) setLiveSlots(item, slots);
     }
+    // A node with no items has nothing to hide, so it skips the walk to the
+    // root that finding its visibility takes.
+    if (!withVisibility || items.length === 0) return items;
     // Paint-time visibility (see `INTERNAL_visibleWhile`): the item keeps the
     // opacity it was lowered with while it is showing, and goes to 0 while it
     // is not. The STATIC value is read here, so a headless lowering and a

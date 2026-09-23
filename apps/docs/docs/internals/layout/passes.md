@@ -756,8 +756,11 @@ rule's subtree and show only with the year they label.
 A transition takes a keyframe over for good, labels included: it silences every
 leaf it moves. A box leaf gets `INTERNAL_emitNothing`; a text leaf gets
 `INTERNAL_takeOverLowering`, which silences it the same way and hands its own
-`_lower` to the transition, so the transition can draw that text where the
-playhead has taken it.
+drawing to the transition, so the transition can draw that text where the
+playhead has taken it. The handed-over drawing lowers through the same body as
+`INTERNAL_lower`, so its items keep their ids and live channels, but it skips
+the visibility rule: once the transition owns the text, the transition decides
+when it shows.
 
 ### Render Pass 5: Per-Shape Lowering and Painting
 
