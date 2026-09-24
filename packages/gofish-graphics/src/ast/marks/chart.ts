@@ -54,6 +54,7 @@ import {
 import type { ConstraintRef, ConstraintSpec } from "../constraints";
 import {
   splitEntries,
+  splitKeyFn,
   type SplitBy,
   type InferredRelational,
 } from "../datumProjection";
@@ -789,28 +790,42 @@ export type LineOptions = {
   emY?: boolean;
 };
 
+/** Each operand's value of the connection variable (the path tier's key), in
+ *  operand order, when the connector threads a tier of its chart's flow. A
+ *  smooth connector uses them as the knots of its curve. */
+const alongValues = (
+  children: GoFishAST[],
+  inferred: InferredRelational
+): unknown[] | undefined =>
+  inferred.along === undefined
+    ? undefined
+    : children.map(splitKeyFn(inferred.along));
+
 // `line` — a center-mode connector (the "line" component): the path between the
 // centers of consecutive marks. `route` picks the shape (linear | bezier |
 // orthogonal | arc | perfectArrows | …).
-export const line = createRelationalMark<LineOptions>("line", (o, children) =>
-  Connect(
-    {
-      direction: o.dir ?? "x",
-      mode: "center",
-      fill: o.fill,
-      stroke: o.stroke,
-      strokeWidth: o.strokeWidth ?? 1,
-      strokeDasharray: o.strokeDasharray,
-      opacity: o.opacity,
-      mixBlendMode: o.mixBlendMode,
-      // Omitted ⇒ "auto": connect smooths (catmullRom) when the connected
-      // points share a continuous connection axis, else a straight line.
-      curve: o.curve,
-      source: o.source,
-      target: o.target,
-    },
-    children
-  )
+export const line = createRelationalMark<LineOptions>(
+  "line",
+  (o, children, inferred) =>
+    Connect(
+      {
+        direction: o.dir ?? "x",
+        mode: "center",
+        fill: o.fill,
+        stroke: o.stroke,
+        strokeWidth: o.strokeWidth ?? 1,
+        strokeDasharray: o.strokeDasharray,
+        opacity: o.opacity,
+        mixBlendMode: o.mixBlendMode,
+        // Omitted ⇒ "auto": connect smooths (catmullRom) when the connected
+        // points share a continuous connection axis, else a straight line.
+        curve: o.curve,
+        source: o.source,
+        target: o.target,
+        along: alongValues(children, inferred),
+      },
+      children
+    )
 );
 
 export type RibbonOptions = {
@@ -847,7 +862,7 @@ export type RibbonOptions = {
 // consecutive marks (areas, streamgraphs, sankey ribbons).
 export const ribbon = createRelationalMark<RibbonOptions>(
   "ribbon",
-  (o, children) =>
+  (o, children, inferred) =>
     Connect(
       {
         direction: o.dir ?? "x",
@@ -857,9 +872,10 @@ export const ribbon = createRelationalMark<RibbonOptions>(
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
         opacity: o.opacity,
-        // Omitted ⇒ "auto": edge mode currently resolves to a bezier band
-        // (continuous-ribbon Catmull-Rom is a follow-on).
+        // Omitted ⇒ "auto": a smooth (catmullRom) band over a continuous
+        // connection axis, else a bezier band.
         curve: o.curve,
+        along: alongValues(children, inferred),
       },
       children
     )

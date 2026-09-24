@@ -201,10 +201,12 @@ take five years' worth of the clock, and years ten apart take ten, so an uneven
 run plays at an even speed. Every keyframe is passed through exactly.
 
 `curve` says how the run is read between them. The default, `"auto"`, smooths
-the whole run with a Catmull-Rom spline, which is the same curve the spatial
-twin's `line` draws through the same points. `"linear"` moves straight from each
-keyframe to the next. `"step"` does not move at all: the mark holds one
-keyframe's value until the next keyframe's own time arrives, and then jumps.
+the whole run with a Catmull-Rom spline whose knots are the time values. A
+smooth `line` threaded through the same keyframes also uses the time values as
+its knots, so the moving mark travels exactly along that line. `"linear"`
+moves straight from each keyframe to the next. `"step"` does not move at all:
+the mark holds one keyframe's value until the next keyframe's own time arrives,
+and then jumps.
 
 Numbers interpolate; paint does not. A dot's position and size move between
 keyframes, and its fill is read off the keyframe it is nearest, because a

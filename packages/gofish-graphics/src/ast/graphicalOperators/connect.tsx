@@ -97,6 +97,32 @@ function sequenceKeyframes(children: GoFishAST[]): Keyframe[] | undefined {
  *  order, and the sequence whose window it is drawn over. */
 type TimeRun = { knots: number[]; sequence: SequenceWindow };
 
+/**
+ * A candidate parameter of a run, as the knots of its curve: one value per
+ * operand in path order, which is a parameter of the run when every value is a
+ * finite number and the values move one way along it. A run that moves
+ * backward in its parameter is the same curve with the parameter negated, as
+ * a Catmull-Rom is unchanged by an affine change of its knots. Undefined when
+ * the values are not a parameter of the run.
+ */
+function runKnots(
+  values: readonly unknown[] | undefined
+): number[] | undefined {
+  if (values === undefined || values.length < 2) return undefined;
+  const numbers: number[] = [];
+  for (const v of values) {
+    if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+    numbers.push(v);
+  }
+  const sign = Math.sign(numbers[1] - numbers[0]);
+  for (let i = 1; i < numbers.length; i++) {
+    if (sign === 0 || Math.sign(numbers[i] - numbers[i - 1]) !== sign) {
+      return undefined;
+    }
+  }
+  return numbers.map((v) => sign * v);
+}
+
 export const connect = createNodeOperator(
   (
     {
@@ -111,6 +137,7 @@ export const connect = createNodeOperator(
       mixBlendMode,
       source,
       target,
+      along,
     }: {
       // Optional in anchor mode (source/target), where it is ignored.
       direction?: FancyDirection;
@@ -142,6 +169,10 @@ export const connect = createNodeOperator(
       // that box on one axis.
       source?: AnchorSpec;
       target?: AnchorSpec;
+      // Each operand's value of the connection variable, in operand order:
+      // the key of the flow tier the connector threads (`along: "year"`
+      // gives years). A smooth run uses it as its knots (see `runKnots`).
+      along?: readonly unknown[];
     },
     children: GoFishAST[]
   ) => {
@@ -226,67 +257,62 @@ export const connect = createNodeOperator(
           );
           const bboxPairs = pairs(childPlaceables.map((child) => child.dims));
 
-          // Resolve the curve. An omitted/`"auto"` curve detects whether the
-          // connected points share a homogeneous *continuous* space on the
-          // connection axis (i.e. they are samples of a continuous variable):
-          // if so we smooth with a centripetal Catmull-Rom spline; otherwise we
-          // fall back to the always-drawable discrete connector (line→linear,
-          // ribbon→bezier). Connecting two arbitrary points is therefore always
-          // valid — it just isn't smoothed. Explicit curves always win.
+          // Whether the connected points share a homogeneous *continuous*
+          // space on the connection axis, i.e. they are samples of one
+          // continuous variable. Both the `"auto"` curve and a smooth run's
+          // knots ask it.
+          //
+          // The connection-axis *positioning* space lives on whatever placed
+          // the connected marks: the mark itself (a data-bound
+          // `ellipse({ x: value(…) })` reports POSITION) or an ancestor (a
+          // `circle`/`blank` placed by `scatter` — the scatter reports
+          // POSITION). So walk up from each mark to the nearest ancestor whose
+          // connection-axis space is a *positioning* kind (POSITION = data
+          // axis, ORDINAL = category axis), skipping the mark's own SIZE
+          // (its extent, e.g. a circle's radius) and UNDEFINED.
           //
           // The children carry the space because `resolveNames` runs before the
           // underlying-space pass, so a `ref` already proxies its target's space
           // (falling back to ORDINAL ⇒ discrete when unresolved).
+          const connectionSpaceOf = (
+            c: GoFishAST
+          ): UnderlyingSpace | undefined => {
+            let node: any = (c as any).targetNode ?? c;
+            while (node) {
+              const s = node.resolveUnderlyingSpace?.()?.[dir];
+              // Stop at the nearest *positioning* space — an ORDINAL ancestor
+              // must win over a continuous grandparent (a grouped layout is
+              // discrete even inside a continuous frame), so we can't skip it.
+              if (s !== undefined && isPositioningSpace(s)) return s;
+              node = node.parent;
+            }
+            return undefined;
+          };
+          const continuousConnectionAxis = (): boolean =>
+            children.length >= 2 &&
+            children.every((c) => {
+              const s = connectionSpaceOf(c);
+              return s !== undefined && isPOSITION(s);
+            });
+
+          // Resolve the curve. An omitted/`"auto"` curve smooths with a
+          // Catmull-Rom spline over a continuous connection axis, for BOTH
+          // lines and ribbons: a stacked area should curve like its
+          // line-chart sibling. Otherwise it falls back to the mode's
+          // always-drawable discrete connector: a *line* (center) is a
+          // straight polyline between the points; a *ribbon* (edge) is a
+          // bezier band between discrete regions (bezier is to a band what a
+          // straight segment is to a line — the honest discrete-region
+          // connector). Connecting two arbitrary points is therefore always
+          // valid — it just isn't smoothed. Explicit curves always win.
           const isAuto = curve === undefined || curveNameOf(curve) === "auto";
-          let resolvedCurve: Curve;
-          if (!isAuto) {
-            resolvedCurve = curve as Curve;
-          } else {
-            const axis = dir as 0 | 1;
-            // The connection-axis *positioning* space lives on whatever placed
-            // the connected marks: the mark itself (a data-bound
-            // `ellipse({ x: value(…) })` reports POSITION) or an ancestor (a
-            // `circle`/`blank` placed by `scatter` — the scatter reports
-            // POSITION). So walk up from each mark to the nearest ancestor whose
-            // connection-axis space is a *positioning* kind (POSITION = data
-            // axis, ORDINAL = category axis), skipping the mark's own SIZE
-            // (its extent, e.g. a circle's radius) and UNDEFINED.
-            const connectionSpaceOf = (
-              c: GoFishAST
-            ): UnderlyingSpace | undefined => {
-              let node: any = (c as any).targetNode ?? c;
-              while (node) {
-                const s = node.resolveUnderlyingSpace?.()?.[axis];
-                // Stop at the nearest *positioning* space — an ORDINAL ancestor
-                // must win over a continuous grandparent (a grouped layout is
-                // discrete even inside a continuous frame), so we can't skip it.
-                if (s !== undefined && isPositioningSpace(s)) return s;
-                node = node.parent;
-              }
-              return undefined;
-            };
-            const homogeneousContinuous =
-              children.length >= 2 &&
-              children.every((c) => {
-                const s = connectionSpaceOf(c);
-                return s !== undefined && isPOSITION(s);
-              });
-            // A *homogeneous continuous* connection axis (the points are samples
-            // of one continuous variable — a line chart, or a stacked area /
-            // streamgraph over a continuous x) smooths with centripetal
-            // Catmull-Rom, for BOTH lines and ribbons: a stacked area should
-            // curve like its line-chart sibling. Otherwise we draw the mode's
-            // "linear" connector: a *line* (center) is a straight polyline
-            // between the points; a *ribbon* (edge) is a bezier band between
-            // discrete regions (bezier is to a band what a straight segment is
-            // to a line — the honest discrete-region connector). Explicit curves
-            // always win over this default.
-            resolvedCurve = homogeneousContinuous
+          const resolvedCurve: Curve = !isAuto
+            ? (curve as Curve)
+            : continuousConnectionAxis()
               ? "catmullRom"
               : mode === "center"
                 ? "linear"
                 : "bezier";
-          }
           const resolvedCurveName = curveNameOf(resolvedCurve);
           // Edge ("ribbon") mode: bezier = S-curve band (discrete regions),
           // catmullRom = smoothed band over a continuous axis, else linear band.
@@ -430,11 +456,11 @@ export const connect = createNodeOperator(
           }
 
           // `catmullRom` is a *sequence* curve — it threads the whole run of
-          // points as one centripetal spline (d3's `.curve(curveCatmullRom)`),
-          // bypassing the pairwise router loop. A line (center) threads its
-          // centers; a ribbon (edge) threads BOTH facing boundaries of the band
-          // — forward along the near edge, a cap across, back along the far edge
-          // — so a continuous stacked area curves like its line-chart sibling.
+          // points as one Catmull-Rom spline, bypassing the pairwise router
+          // loop. A line (center) threads its centers; a ribbon (edge) threads
+          // BOTH facing boundaries of the band — forward along the near edge, a
+          // cap across, back along the far edge — so a continuous stacked area
+          // curves like its line-chart sibling.
           const mainAxis = dir as 0 | 1;
           const edgePoint = (main: number, cross: number): [number, number] => {
             const p: [number, number] = [0, 0];
@@ -443,27 +469,58 @@ export const connect = createNodeOperator(
             return p;
           };
           if (isSequenceCurve(resolvedCurveName)) {
-            // Centripetal knots: a run of placed points carries no parameter
-            // of its own.
-            const thread = (points: [number, number][]) =>
-              catmullRomPath(points, centripetalKnots(points));
+            const mains = childPlaceables.map(
+              (c) => (c.dims[mainAxis].min! + c.dims[mainAxis].max!) / 2
+            );
+            // The knots are the run's own parameter when it has one (#635),
+            // so the curve follows the data rather than the distances between
+            // its points on screen: the connection variable's values (the
+            // flow tier the run threads, e.g. `along: "year"`); else the
+            // operands' positions along what the run is threaded on, which is
+            // time for a line through a sequence's keyframes and the
+            // connection axis when that axis is continuous (a line chart over
+            // x). A run with none of these is threaded with centripetal knots.
+            //
+            // The spline is evaluated here, in layout space, before any
+            // coordinate transform. That equals evaluating it in data space
+            // and placing the result because every position scale is affine,
+            // and a Catmull-Rom with fixed knots commutes with an affine map
+            // of its points. A non-affine position scale (log, pow) would
+            // need the spline evaluated upstream of the scale instead.
+            const knots =
+              runKnots(along) ??
+              timeRun?.knots ??
+              (continuousConnectionAxis() ? runKnots(mains) : undefined);
+            // `knots` is in operand order; a path drawn back along the run
+            // (a ribbon's far edge) reads them backward and negated.
+            const thread = (
+              points: [number, number][],
+              backward = false
+            ): Path =>
+              catmullRomPath(
+                points,
+                knots === undefined
+                  ? centripetalKnots(points)
+                  : backward
+                    ? knots.map((k) => -k).reverse()
+                    : knots
+              );
             if (mode === "center") {
               const centers = childPlaceables.map((c) => centerPoint(c.dims));
               paths.push(thread(centers));
             } else {
               const near: [number, number][] = [];
               const far: [number, number][] = [];
-              for (const c of childPlaceables) {
+              childPlaceables.forEach((c, i) => {
                 const b = c.dims;
-                const main = (b[mainAxis].min! + b[mainAxis].max!) / 2;
-                near.push(edgePoint(main, b[1 - mainAxis].min!));
-                far.push(edgePoint(main, b[1 - mainAxis].max!));
-              }
+                near.push(edgePoint(mains[i], b[1 - mainAxis].min!));
+                far.push(edgePoint(mains[i], b[1 - mainAxis].max!));
+              });
               const farRev = far.slice().reverse();
               paths.push([
                 ...thread(near),
                 { type: "line", points: [near[near.length - 1], farRev[0]] },
-                ...thread(farRev),
+                ...thread(farRev, true),
                 { type: "line", points: [farRev[farRev.length - 1], near[0]] },
               ]);
             }

@@ -116,6 +116,11 @@ export function fieldNameOf(by: unknown): string | undefined {
 export type InferredRelational = {
   by?: SplitBy;
   dir?: "x" | "y";
+  /** The path tier's own `by`: the connection variable the connector
+   *  threads its operands along, whether `along` named the tier or it was
+   *  inferred. A smooth `line` or `ribbon` uses each operand's value of it as
+   *  the knots of its curve (see `runKnots` in `connect.tsx`). */
+  along?: SplitBy;
   resolved?: boolean;
   /** The flow's temporal tier, for a TEMPORAL relational mark
    *  (`time.transition()`). A spatial connector threads a tier of the flow

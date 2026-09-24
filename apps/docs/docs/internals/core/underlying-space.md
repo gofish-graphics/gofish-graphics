@@ -258,8 +258,13 @@ when you want the axis a set of siblings is arranged on rather than each
 sibling's own size. Its first consumer is the connector's `curve: "auto"`: a
 `line` / `ribbon` reads the underlying space its endpoints resolved to and, when
 that space is a _positioning_ one whose measure is continuous, smooths the path
-(centripetal Catmull–Rom) instead of drawing straight segments — so a line over
+(a Catmull–Rom spline) instead of drawing straight segments — so a line over
 a continuous x auto-curves while one over discrete categories stays polylinear.
+The same test picks the spline's knots when the run has no connection variable
+of its own (the path tier's key, `inferred.along`). On a continuous connection
+axis, the points' positions along it are the knots when the points are in order
+along it. A run with neither falls back to centripetal knots, which are
+computed from distances on screen (`runKnots` in `connect.tsx`).
 
 The guide a space supports keys on **`dataDomain`** (data-space), never on
 placement:

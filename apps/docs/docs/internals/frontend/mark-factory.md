@@ -502,6 +502,16 @@ travel axis there is the axis it does _not_ position. Both resolutions are
 validated against the design note's worked examples (its own "Intended?"
 column), not just its prose.
 
+The path tier's own `by` is also written into the cell, as `inferred.along`.
+It is the connection variable: the field the connector threads its operands
+along, whether `along` named the tier or the rule above inferred it. `line`
+and `ribbon` receive the cell as `produce`'s third argument, project each
+operand's value of that field through `splitKeyFn`, and pass the values to
+`Connect`. A smooth connector uses them as the knots of its Catmull-Rom spline
+when they are numbers in order along the run (issue #635), so a connected
+scatterplot threaded along `year` bends by years rather than by the distances
+between its points on screen (`runKnots` in `connect.tsx`).
+
 ### A temporal connector: `time.transition()`
 
 The factory takes a third argument, `config`, whose only key today is

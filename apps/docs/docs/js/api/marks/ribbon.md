@@ -44,10 +44,16 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x",
 [`linear()`](/js/api/coords/linear) is the coordinate transform. The default
 `"auto"` inspects the connection axis: over a homogeneous **continuous** axis (a
 stacked area / streamgraph sampling a continuous variable) it smooths the band
-edges with a centripetal Catmull-Rom spline — matching its
+edges with a Catmull-Rom spline — matching its
 [`line`](/js/api/marks/line) sibling — and otherwise draws a **bezier** band
 (the band equivalent of a straight line: the honest connector between discrete
 regions, as in a sankey or a categorical ribbon).
+
+A smooth ribbon takes the knots of its spline the same way a smooth
+[`line`](/js/api/marks/line) does. It uses the values of the field it runs
+along when they are numbers in order along the band. If they are not, it uses
+the positions on a continuous connection axis, and otherwise the distances
+between the points on the screen. Both edges of the band use the same knots.
 
 Like [`line`](/js/api/marks/line), `ribbon` has a **bag form** (over a `GoFishRef[]`,
 shown below) and a **pairwise form** `ribbon({ from, to })` over rows whose

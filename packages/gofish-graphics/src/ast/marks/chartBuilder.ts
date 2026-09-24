@@ -449,8 +449,9 @@ function computeDefaultBy(
 }
 
 /**
- * Compute the default split/travel-direction for a fused relational mark and
- * write it into `fusable.inferred` — NEVER into `fusable.opts` (the record
+ * Compute the default split/travel-direction for a fused relational mark, and
+ * the path tier's key it threads along, and write them into
+ * `fusable.inferred` — NEVER into `fusable.opts` (the record
  * of what the user wrote; see `tagRelationalFusable`'s doc comment in
  * chart.ts). A no-op when a default was already computed for this connector
  * (`inferred.resolved` — set so the `.mark()` fusion rewrite's internal
@@ -520,6 +521,9 @@ function applyDefaultRelational(
 
   const defaultBy = computeDefaultBy(classified, pathTierIndex);
   if (defaultBy !== undefined) fusable.inferred.by = defaultBy;
+  const pathBy =
+    pathTierIndex === undefined ? undefined : classified[pathTierIndex].by;
+  if (pathBy !== undefined) fusable.inferred.along = pathBy;
   if (travelAxis !== undefined && fusable.opts.dir === undefined) {
     fusable.inferred.dir = travelAxis;
   }

@@ -277,6 +277,54 @@ async function main(): Promise<void> {
     `${dots.length} dots`
   );
 
+  console.log("\n# a smooth line and a transition follow one curve");
+  {
+    // Uneven steps in time, from one year to nineteen, so a curve whose knots
+    // were anything but the years would part company with the dot.
+    const years = [1956, 1957, 1960, 1966, 1967, 1975, 1990, 1991, 2010];
+    const rows = drivingShifts.filter((d: any) => years.includes(d.year));
+    const keyframes = (at: number, history: number) =>
+      chart(rows)
+        .flow(
+          time.sequence({ by: "year", on: pausedClock(at), history }),
+          scatter({ x: "miles", y: "gas" })
+        )
+        .mark(circle({ r: 4 }));
+    /** The tip of the smooth line drawn in up to `at`: the last point of its
+     *  path data, which is the curve cut at the `u` matching `at`. */
+    const tip = async (at: number): Promise<Point> => {
+      const doc = await keyframes(at, Infinity)
+        .layer(line({ along: "year" }))
+        .toDisplayList(OPTIONS);
+      const [path] = items(doc).filter((item) => item.kind === "path");
+      if (!/C/.test(path.d)) throw new Error("the line is not smooth");
+      const numbers = path.d.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/g).map(Number);
+      return [numbers[numbers.length - 2], numbers[numbers.length - 1]];
+    };
+    /** Where a `time.transition()` over the same keyframes puts the dot. */
+    const dot = async (at: number): Promise<Point> => {
+      const doc = await keyframes(at, 0)
+        .layer(time.transition())
+        .toDisplayList(OPTIONS);
+      const shown = items(doc).filter(
+        (item) => item.kind === "ellipse" && item.style?.opacity !== 0
+      );
+      if (shown.length !== 1) throw new Error(`${shown.length} dots shown`);
+      return [shown[0].cx, shown[0].cy];
+    };
+    // The path data is written to four decimal places.
+    const close = (p: Point, q: Point) =>
+      Math.abs(p[0] - q[0]) < 1e-3 && Math.abs(p[1] - q[1]) < 1e-3;
+    for (const at of [1956.5, 1958.7, 1963, 1966, 1970.25, 1983, 2000.9]) {
+      const [a, b] = [await tip(at), await dot(at)];
+      ok(
+        `at ${at} the dot is at the line's tip`,
+        close(a, b),
+        `${JSON.stringify(a)} vs ${JSON.stringify(b)}`
+      );
+    }
+  }
+
   console.log("\n# what is not built throws");
   const throws = async (build: () => Promise<unknown>, pattern: RegExp) => {
     try {
