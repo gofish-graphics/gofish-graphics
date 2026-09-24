@@ -171,7 +171,7 @@ chart(drivingShifts)
     time.sequence({ by: "year", on: year, history: Infinity }),
     scatter({ x: "miles", y: "gas" })
   )
-  .mark(line({ along: "year", curve: "straight" }))
+  .mark(line({ along: "year", curve: "linear" }))
   .render(container, { w: 500, h: 500, axes: true });
 ```
 
@@ -490,7 +490,7 @@ A sequence that keeps history cannot have a transition layered over it yet.
 The sequence would show several keyframes at once, and it is not decided what
 the one moving mark should leave behind, so this throws an error. A threaded
 line can be cut only when each step from one keyframe to the next is a single
-straight or curved segment. The curves `"straight"`, `"bezier"` and
+straight or curved segment. The curves `"linear"`, `"bezier"` and
 `"catmullRom"` work. The routing curves `orthogonal()`, `arc()` and
 `perfectArrows()` throw an error, and so do a threaded `ribbon` and a threaded
 line pinned with `source` or `target`.

@@ -116,11 +116,11 @@ export const connect = createNodeOperator(
       direction?: FancyDirection;
       fill?: MaybeValue<string>;
       // The single screen-space path-shaping key. A curve value from a factory
-      // (`straight()`, `bezier()`, `orthogonal()`, `arc({ direction })`,
-      // `perfectArrows({ bow })`, …) or a bare name (`"straight"` | `"bezier"`).
+      // (`bezier()`, `orthogonal()`, `arc({ direction })`,
+      // `perfectArrows({ bow })`, …) or a bare name (`"linear"` | `"bezier"`).
       // Center ("line") mode resolves it through the curve registry; edge
-      // ("ribbon") mode only honors `straight` (linear band) vs `bezier`
-      // (S-curve band). Defaults to `"straight"` when omitted.
+      // ("ribbon") mode only honors `linear` (linear band) vs `bezier`
+      // (S-curve band). Omitted means `"auto"` (resolved below).
       curve?: Curve;
       stroke?: MaybeValue<string>;
       strokeWidth?: number;
@@ -230,7 +230,7 @@ export const connect = createNodeOperator(
           // connected points share a homogeneous *continuous* space on the
           // connection axis (i.e. they are samples of a continuous variable):
           // if so we smooth with a centripetal Catmull-Rom spline; otherwise we
-          // fall back to the always-drawable discrete connector (line→straight,
+          // fall back to the always-drawable discrete connector (line→linear,
           // ribbon→bezier). Connecting two arbitrary points is therefore always
           // valid — it just isn't smoothed. Explicit curves always win.
           //
@@ -284,7 +284,7 @@ export const connect = createNodeOperator(
             resolvedCurve = homogeneousContinuous
               ? "catmullRom"
               : mode === "center"
-                ? "straight"
+                ? "linear"
                 : "bezier";
           }
           const resolvedCurveName = curveNameOf(resolvedCurve);
@@ -377,7 +377,7 @@ export const connect = createNodeOperator(
                   `only over the stretch of time the sequence shows, cut at ` +
                   `the exact point in data time. That cut needs each step ` +
                   `from one keyframe to the next to be ONE straight or cubic ` +
-                  `segment between the keyframes' centers, which "straight", ` +
+                  `segment between the keyframes' centers, which "linear", ` +
                   `"bezier" and "catmullRom" (the default) draw and ` +
                   `"${resolvedCurveName}" does not. Use one of those, or ` +
                   `open an issue for "${resolvedCurveName}".`

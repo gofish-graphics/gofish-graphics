@@ -38,7 +38,7 @@ const data = {
 const chart = tree(
   {
     node: (d) => circle({ r: 10, fill: "steelblue" }),
-    link: { curve: "straight", stroke: "#888" },
+    link: { curve: "linear", stroke: "#888" },
     parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
     sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
   },
@@ -118,7 +118,7 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
 - A function `(source, target) => LinkOptions` — per-edge styling.
 
 ```ts no-check
-link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 }
+link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 }
 ```
 
 `curve` accepts `"straight"` (default), `"bezier"`, `"orthogonal"` (right-angle

@@ -38,12 +38,14 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x",
 ::: gofish-ref ribbon
 :::
 
-`curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
-`straight()`, `bezier()`, `orthogonal()`, `arc({ direction: "up" | "down" })`, or
-`perfectArrows({ bow })`. The default `"auto"` inspects the connection axis: over a
-homogeneous **continuous** axis (a stacked area / streamgraph sampling a continuous
-variable) it smooths the band edges with a centripetal Catmull-Rom spline — matching
-its [`line`](/js/api/marks/line) sibling — and otherwise draws a **bezier** band
+`curve` accepts the strings `"linear"` or `"bezier"`, or a `CurveSpec` factory:
+`bezier()`, `orthogonal()`, `arc({ direction: "up" | "down" })`, or
+`perfectArrows({ bow })`. `"linear"` has no factory, because
+[`linear()`](/js/api/coords/linear) is the coordinate transform. The default
+`"auto"` inspects the connection axis: over a homogeneous **continuous** axis (a
+stacked area / streamgraph sampling a continuous variable) it smooths the band
+edges with a centripetal Catmull-Rom spline — matching its
+[`line`](/js/api/marks/line) sibling — and otherwise draws a **bezier** band
 (the band equivalent of a straight line: the honest connector between discrete
 regions, as in a sankey or a categorical ribbon).
 

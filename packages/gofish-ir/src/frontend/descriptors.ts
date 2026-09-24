@@ -816,7 +816,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       curve: {
         type: t.any,
-        doc: 'Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = "auto" (catmullRom on a homogeneous continuous connection axis, else straight).',
+        doc: 'Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name ("linear"/"bezier"/"catmullRom"). Omitted = "auto" (catmullRom on a homogeneous continuous connection axis, else linear).',
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       source: {
@@ -877,7 +877,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
         type: t.any,
-        doc: 'Screen-space band-edge shape (straight() | bezier()). Omitted = "auto" (bezier).',
+        doc: 'Screen-space band-edge shape ("linear" | bezier()). Omitted = "auto" (bezier).',
       },
       from: { type: t.string, py: "from_" },
       to: { type: t.string },

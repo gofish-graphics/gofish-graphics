@@ -759,9 +759,9 @@ export type LineOptions = {
   strokeDasharray?: string;
   opacity?: number | LiveValue;
   mixBlendMode?: "normal" | "multiply";
-  // Screen-space path shape, as a factory call (`straight()`, `bezier()`,
-  // `catmullRom()`, `orthogonal()`, `arc({ direction })`, `perfectArrows({ bow })`,
-  // …) or a bare name (`"straight"` | `"bezier"`). The single path-shaping key.
+  // Screen-space path shape, as a factory call (`bezier()`, `orthogonal()`,
+  // `arc({ direction })`, `perfectArrows({ bow })`, …) or a bare name
+  // (`"linear"` | `"bezier"` | `"catmullRom"`). The single path-shaping key.
   curve?: Curve;
   dir?: "x" | "y";
   // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
@@ -790,7 +790,7 @@ export type LineOptions = {
 };
 
 // `line` — a center-mode connector (the "line" component): the path between the
-// centers of consecutive marks. `route` picks the shape (straight | bezier |
+// centers of consecutive marks. `route` picks the shape (linear | bezier |
 // orthogonal | arc | perfectArrows | …).
 export const line = createRelationalMark<LineOptions>("line", (o, children) =>
   Connect(
@@ -820,8 +820,8 @@ export type RibbonOptions = {
   opacity?: number | LiveValue;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
-  // Screen-space path shape for the band edges (`straight()` | `bezier()`).
-  // Edge mode honors straight (linear band) vs bezier (S-curve band).
+  // Screen-space path shape for the band edges (`"linear"` | `bezier()`).
+  // Edge mode honors linear (linear band) vs bezier (S-curve band).
   curve?: Curve;
   from?: string;
   to?: string;

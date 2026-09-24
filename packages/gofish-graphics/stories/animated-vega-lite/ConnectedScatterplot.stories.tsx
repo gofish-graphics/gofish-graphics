@@ -81,7 +81,7 @@ export const Animated: StoryObj<Args> = {
         time.sequence({ by: "year", on: year, history: Infinity }),
         scatter({ x: "miles", y: "gas" })
       )
-      .mark(line({ along: "year", curve: "straight" }))
+      .mark(line({ along: "year", curve: "linear" }))
       .render(container, { w: args.w, h: args.h, axes: true });
 
     return container;
@@ -105,7 +105,7 @@ export const Paused1979: StoryObj<Args> = {
         }),
         scatter({ x: "miles", y: "gas" })
       )
-      .mark(line({ along: "year", curve: "straight" }))
+      .mark(line({ along: "year", curve: "linear" }))
       .render(container, { w: args.w, h: args.h, axes: true });
 
     return container;
@@ -177,7 +177,7 @@ export const Comet: StoryObj<Args> = {
         time.sequence({ by: "year", on: year, history: 10 }),
         scatter({ x: "miles", y: "gas" })
       )
-      .mark(line({ along: "year", curve: "straight" }))
+      .mark(line({ along: "year", curve: "linear" }))
       .render(container, { w: args.w, h: args.h, axes: true });
 
     return container;
@@ -196,7 +196,7 @@ export const CometPaused1979: StoryObj<Args> = {
         time.sequence({ by: "year", playing: false, at: AT, history: 10 }),
         scatter({ x: "miles", y: "gas" })
       )
-      .mark(line({ along: "year", curve: "straight" }))
+      .mark(line({ along: "year", curve: "linear" }))
       .render(container, { w: args.w, h: args.h, axes: true });
 
     return container;

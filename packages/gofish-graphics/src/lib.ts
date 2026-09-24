@@ -123,7 +123,6 @@ export {
   getRoute,
   hasRoute,
   resolveCurve,
-  straight,
   bezier,
   orthogonal,
   arc,

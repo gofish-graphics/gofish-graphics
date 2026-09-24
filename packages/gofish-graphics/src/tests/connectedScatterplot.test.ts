@@ -144,7 +144,7 @@ async function sugar(at: number) {
       time.sequence({ by: "year", on: pausedClock(at), history: Infinity }),
       scatter({ x: "miles", y: "gas" })
     )
-    .mark(line({ along: "year", curve: "straight" }))
+    .mark(line({ along: "year", curve: "linear" }))
     .toDisplayList(OPTIONS);
 }
 
@@ -174,7 +174,7 @@ async function dataSpace(at: number) {
       group({ by: "year" }),
       scatter({ x: "miles", y: "gas" })
     )
-    .mark(line({ along: "year", curve: "straight" }))
+    .mark(line({ along: "year", curve: "linear" }))
     .layer(
       chart(drivingShifts)
         .flow(group({ by: "year" }), scatter({ x: "miles", y: "gas" }))
@@ -233,7 +233,7 @@ async function main(): Promise<void> {
         time.sequence({ by: "year", on: clock, history: Infinity }),
         scatter({ x: "miles", y: "gas" })
       )
-      .mark(line({ along: "year", curve: "straight" }))
+      .mark(line({ along: "year", curve: "linear" }))
       .render(container, OPTIONS);
     await settle();
     const d = () => container.querySelector("path")?.getAttribute("d") ?? "";

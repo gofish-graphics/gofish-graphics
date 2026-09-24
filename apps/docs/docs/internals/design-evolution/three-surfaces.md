@@ -54,10 +54,12 @@ or `ribbon` (edge band, formerly the `area` mark) — invoked with an explicit
 array of `ref(...)` children. The shape of the drawn path is a single `curve`
 key, backed by the pluggable router registry that `lib.ts` re-exports from
 `ast/graphicalOperators/routers` (`registerRoute` / `getRoute` / `resolveCurve`
-and the built-in `straight` / `bezier` / `orthogonal` / `arc` / `perfectArrows`
-routers). `curve: "auto"` smooths automatically on continuous axes — see
-[Underlying Space](/internals/core/underlying-space) for the positioning-space
-test that decides this.
+and the built-in `linear` / `bezier` / `orthogonal` / `arc` / `perfectArrows`
+routers; every built-in but `linear` has a factory of the same name, since
+`linear()` is already the Cartesian coordinate transform, so that curve is
+written as the bare string `"linear"`). `curve: "auto"` smooths automatically
+on continuous axes — see [Underlying Space](/internals/core/underlying-space)
+for the positioning-space test that decides this.
 
 The fluent builder went through the same consolidation one layer up. It
 briefly had its own `.connect(connectorMark)` method — sugar for threading a

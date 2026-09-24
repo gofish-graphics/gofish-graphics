@@ -2273,7 +2273,7 @@ for the API.
           "description": "Blend mode where connectors overlap."
         },
         "curve": {
-          "description": "Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = \"auto\" (catmullRom on a homogeneous continuous connection axis, else straight)."
+          "description": "Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name (\"linear\"/\"bezier\"/\"catmullRom\"). Omitted = \"auto\" (catmullRom on a homogeneous continuous connection axis, else linear)."
         },
         "dir": {
           "enum": ["x", "y"],
@@ -2372,7 +2372,7 @@ for the API.
           "description": "Connection axis."
         },
         "curve": {
-          "description": "Screen-space band-edge shape (straight() | bezier()). Omitted = \"auto\" (bezier)."
+          "description": "Screen-space band-edge shape (\"linear\" | bezier()). Omitted = \"auto\" (bezier)."
         },
         "from": {
           "type": "string"

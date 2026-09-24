@@ -43,11 +43,13 @@ When `curve` is omitted (`"auto"`), `line` inspects the connected points: if the
 share a continuous connection axis it smooths them with a centripetal Catmull-Rom
 spline, otherwise it draws a straight polyline.
 
-`curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
-`straight()`, `bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`,
-or `perfectArrows({ bow })`. The `orthogonal` elbow bends at the midpoint of the
-connector's `dir` axis; pass `orthogonal({ bend: "auto" })` to infer the bend axis
-from the endpoint geometry instead (for layouts with no single growth axis).
+`curve` accepts the strings `"linear"` or `"bezier"`, or a `CurveSpec` factory:
+`bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`, or
+`perfectArrows({ bow })`. `"linear"` has no factory, because
+[`linear()`](/js/api/coords/linear) is the coordinate transform. The `orthogonal`
+elbow bends at the midpoint of the connector's `dir` axis; pass
+`orthogonal({ bend: "auto" })` to infer the bend axis from the endpoint geometry
+instead (for layouts with no single growth axis).
 
 ## Two forms
 

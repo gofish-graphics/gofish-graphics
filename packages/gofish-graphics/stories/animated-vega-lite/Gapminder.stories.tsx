@@ -599,15 +599,16 @@ const sparkRow = (samples: Sample[], clock: any) =>
   Frame({ w: SPARK_W, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
     Frame({ w: SPARK_W, h: SPARK_H_PX }, [
       sparkSamples(samples)
-        // `curve: "straight"` is not a default worth leaning on here, it is
+        // `curve: "linear"` is not a default worth leaning on here, it is
         // the whole point: an omitted curve is `auto`, and `auto` over a
         // continuous axis smooths with a Catmull-Rom — which would round the
         // corners off the staircase and turn the impulses into bumps, drawing
         // the smooth reading of a picture whose subject is that the two
-        // readings differ. ("straight" is the screen-space path shape; it is
-        // the same idea as `curve: "linear"` on a transition, which names an
-        // interpolation in time rather than a path in space.)
-        .layer(line({ stroke: "#999", strokeWidth: 1, curve: "straight" })),
+        // readings differ. (Here "linear" is the screen-space path shape; it
+        // is the same name and the same idea as `curve: "linear"` on a
+        // transition, which names an interpolation in time rather than a path
+        // in space.)
+        .layer(line({ stroke: "#999", strokeWidth: 1, curve: "linear" })),
     ]),
     Frame({ w: SPARK_W, h: SPARK_H_PX }, [
       sparkSamples(samples).layer(
