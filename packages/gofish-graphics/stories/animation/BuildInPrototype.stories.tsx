@@ -58,6 +58,8 @@ import canis1bChained from "./build-in/canis-1b-chained";
 import canis1bChainedSrc from "./build-in/canis-1b-chained.ts?raw";
 import castFig3 from "./build-in/cast-fig3";
 import castFig3Src from "./build-in/cast-fig3.ts?raw";
+import gantt from "./build-in/gantt";
+import ganttSrc from "./build-in/gantt.ts?raw";
 
 type Hold = { playing?: boolean; at?: number };
 type Run = (container: HTMLElement, hold?: Hold) => unknown;
@@ -267,6 +269,15 @@ const EXAMPLES: Record<string, Example> = {
     source: castFig3Src,
     frames: [0, 1000, 2000, 3000, 3800],
   },
+  gantt: {
+    section: SECTIONS.canis,
+    title: "CAST+ Gantt · duration from a field (stretch)",
+    caption:
+      "Tasks wipe in from the left one after another, and each wipe lasts in proportion to the task's days, as `w: \"days\"` sizes the bar. DECLARED SHORTCUT: the time scale is linear with the longest task at 1000 ms (Build, 12 days); a real time scale for field-valued durations is open. The build lasts 36 days × 1000 / 12 = 3000 ms.",
+    run: gantt,
+    source: ganttSrc,
+    frames: [0, 700, 1500, 2300, 3000],
+  },
 };
 
 /** One line each: what the sketches have that this prototype does not. */
@@ -278,7 +289,7 @@ const NOT_BUILT = [
   "Canis data-driven delay (start times spaced by a value): needs `history` from PR #902.",
   '"Ride" semantics for stacks (segments riding on the ones below, amCharts): segments grow in place instead (5a, 5b).',
   "Polar or radial grow: a mark in a polar coord lowers to a path, which a grow cannot collapse yet.",
-  "A total budget for a stagger (3c's OPEN line) and a field-valued duration (CAST+ Gantt): not built.",
+  "A total budget for a stagger (3c's OPEN line): not built.",
   "Labels riding the growing bar's end (#894): a label waits until its bar has arrived, then appears.",
 ];
 
@@ -488,3 +499,4 @@ export const RaceChained = filmstrip("race");
 export const Canis1bSelection = filmstrip("canis1bSel");
 export const Canis1bChained = filmstrip("canis1bChained");
 export const CastFig3 = filmstrip("cast");
+export const CastPlusGantt = filmstrip("gantt");

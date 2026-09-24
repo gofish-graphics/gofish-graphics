@@ -386,6 +386,49 @@ console.log("# labels wait for their mark");
   );
 }
 
+console.log("# a field-valued duration (CAST+ Gantt)");
+{
+  // Wipes last days / 12 × 1000 ms (the longest task, 12 days, takes
+  // 1000 ms), one after another: Research ends at 417, Design at 1000.
+  const tasks = [
+    { task: "Research", start: 0, days: 5 },
+    { task: "Design", start: 4, days: 7 },
+    { task: "Build", start: 13, days: 12 },
+  ];
+  const widths = async (at: number) =>
+    (paint(
+      await held(
+        chart(tasks)
+          .flow(
+            spread({ by: field("task").sort("start"), dir: "y" }).transition({
+              enter: time.stagger({ spacing: 0 }),
+            })
+          )
+          .mark(
+            rect({ x: "start", w: "days" }).transition({
+              enter: animation.wipe({ from: "left", duration: "days" }),
+            })
+          ),
+        at,
+        false
+      )
+    ) as any[])
+      .filter((i) => i.kind === "rect")
+      .map((i) => i.w);
+  const [rest, at1000] = [await widths(5000), await widths(1000)];
+  ok(
+    "at 1000 ms Research and Design are in, and Build has not started",
+    at1000[0] === rest[0] && at1000[1] === rest[1] && at1000[2] === 0,
+    JSON.stringify(at1000)
+  );
+  const mid = await widths(1500);
+  ok(
+    "at 1500 ms Build is halfway through its 1000 ms wipe",
+    mid[2] > 0 && mid[2] < rest[2],
+    JSON.stringify(mid)
+  );
+}
+
 console.log("# the race: chained .transition() vs .layer(time.transition())");
 {
   const brands = everyYearBrands(categoryBrands);

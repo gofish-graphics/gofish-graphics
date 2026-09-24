@@ -34,6 +34,7 @@ import type { GoFishAST } from "../ast/_ast";
 import { timer, type Timer } from "../interaction/inputs";
 import { checkEffectFits, fadeIn, type Effect } from "./effects";
 import { groupEntries, rowsOf } from "./grouping";
+import { projectPath } from "../ast/datumProjection";
 import { makeRule } from "./paint";
 import { solveSchedule, type Clip, type Schedule } from "./schedule";
 import { nodeTransition, playsDataTime } from "./transition";
@@ -59,6 +60,7 @@ export function installBuildIn(
 ): BuildIn | undefined {
   const clip = clipOf(root, false);
   if (clip === undefined) return undefined;
+  resolveFieldDurations(clip);
   const schedule = solveSchedule(clip);
   const { total } = schedule;
   const clock = timer<number>({
@@ -87,6 +89,57 @@ export function installBuildIn(
     }
   }
   return { schedule, clock };
+}
+
+/** The longest value a field-valued duration reaches, which the shortcut
+ *  time scale maps to 1000 ms (see `EffectOptions.duration`). */
+const FIELD_DURATION_MAX_MS = 1000;
+
+/**
+ * Give every leaf whose effects take a FIELD-valued duration its own
+ * duration: its marks' value of the field, on a linear scale whose largest
+ * value (over every mark the effect animates) is 1000 ms. Each leaf gets its
+ * own copy of such an effect, so the paint rule reads the resolved number.
+ */
+function resolveFieldDurations(clip: Clip<Leaf>): void {
+  const leaves: Extract<Clip<Leaf>, { kind: "leaf" }>[] = [];
+  const collect = (c: Clip<Leaf>): void => {
+    if (c.kind === "leaf") leaves.push(c);
+    else c.groups.forEach((g) => g.forEach(collect));
+  };
+  collect(clip);
+  const valueOf = (leaf: Leaf, field: string): number => {
+    const value = Number(projectPath(leaf.targets.flatMap(rowsOf), field));
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(
+        `[gofish] animation({ duration: "${field}" }): a mark's duration ` +
+          `comes from its own value of "${field}", and this mark has no ` +
+          `single number there (0 or more).`
+      );
+    }
+    return value;
+  };
+  const max = new Map<Effect, number>();
+  for (const { payload } of leaves) {
+    for (const e of payload.effects) {
+      if (e.durationField === undefined) continue;
+      const v = valueOf(payload, e.durationField);
+      max.set(e, Math.max(max.get(e) ?? 0, v));
+    }
+  }
+  if (max.size === 0) return;
+  for (const leaf of leaves) {
+    leaf.payload.effects = leaf.payload.effects.map((e) => {
+      if (e.durationField === undefined) return e;
+      const top = max.get(e)!;
+      const v = valueOf(leaf.payload, e.durationField);
+      return {
+        ...e,
+        duration: top > 0 ? (FIELD_DURATION_MAX_MS * v) / top : 0,
+      };
+    });
+    leaf.duration = Math.max(0, ...leaf.payload.effects.map((e) => e.duration));
+  }
 }
 
 /** The marks that draw: a mark with no children draws itself; a composite

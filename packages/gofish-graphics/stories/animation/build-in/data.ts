@@ -124,3 +124,14 @@ export const chinstraps = penguins
 
 /** The bar chart race's brands: the 37 with a value in every year. */
 export const brands = everyYearBrands(categoryBrands);
+
+/** A small project plan (made-up), for the CAST+ Gantt scenario: each task
+ *  starts on a day and lasts some days. */
+export const tasks = [
+  { task: "Research", start: 0, days: 5 },
+  { task: "Design", start: 4, days: 7 },
+  { task: "Prototype", start: 10, days: 4 },
+  { task: "Build", start: 13, days: 12 },
+  { task: "Test", start: 22, days: 6 },
+  { task: "Launch", start: 28, days: 2 },
+];

@@ -52,8 +52,12 @@ export function resolveEase(ease: Ease | undefined): (u: number) => number {
 }
 
 export type EffectOptions = {
-  /** Milliseconds. Default 500. */
-  duration?: number;
+  /** Milliseconds, default 500. Or a FIELD name: each mark's effect lasts in
+   *  proportion to its own value of that field, the way `w: "days"` sizes a
+   *  bar. DECLARED SHORTCUT: the time scale is linear with the largest value
+   *  at 1000 ms; a real time scale (a size claim on t, with its own unit)
+   *  is open. */
+  duration?: number | string;
   /** Default slow-in / slow-out (`"cubicInOut"`), which Dragicevic et al.
    *  (2011) found easier to follow than constant speed. */
   ease?: Ease;
@@ -81,6 +85,9 @@ export type Effect = {
   readonly __effect: true;
   kind: EffectKind;
   duration: number;
+  /** A field-valued duration (see `EffectOptions.duration`), resolved per
+   *  mark when the build is installed; `duration` is NaN until then. */
+  durationField?: string;
   ease: (u: number) => number;
   from?: WipeSide;
   shape?: "circle";
@@ -111,17 +118,22 @@ function effect(
   kind: EffectKind,
   opts: EffectOptions & { from?: WipeSide; shape?: "circle" } = {}
 ): Effect {
-  const duration = opts.duration ?? DEFAULT_DURATION;
-  if (!(Number.isFinite(duration) && duration >= 0)) {
+  const field = typeof opts.duration === "string" ? opts.duration : undefined;
+  const duration =
+    typeof opts.duration === "string"
+      ? NaN
+      : (opts.duration ?? DEFAULT_DURATION);
+  if (field === undefined && !(Number.isFinite(duration) && duration >= 0)) {
     throw new Error(
       `[gofish] animation.${kind}({ duration: ${String(opts.duration)} }): a ` +
-        `duration is a number of milliseconds, 0 or more.`
+        `duration is a number of milliseconds, 0 or more, or a field name.`
     );
   }
   return {
     __effect: true,
     kind,
     duration,
+    ...(field !== undefined ? { durationField: field } : {}),
     ease: resolveEase(opts.ease),
     written: { duration: opts.duration, ease: opts.ease },
     ...(opts.from !== undefined ? { from: opts.from } : {}),

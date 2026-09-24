@@ -717,7 +717,10 @@ time.stagger(...) })` arranges the operator's children in time, and
   circle's radius. Labels follow their mark's timing through `_attachedTo`: they
   fade or appear with it, and wait for a geometric effect to finish (riding the
   bar's end, #894, is not built). Under an arrangement, a mark with no effect of
-  its own fades in, the #892 default.
+  its own fades in, the #892 default. An effect's `duration` may name a field
+  (`wipe({ duration: "days" })`, the CAST+ Gantt), a size claim on t read per
+  mark; the time scale for it is a declared shortcut (linear, the largest value
+  at 1000 ms).
 - Under a `time.sequence`, a mark's `.transition({ update: animation.tween(...)
 })` is the chained spelling of `.layer(time.transition(...))`, and its enter
   and exit can only be the default fade.
