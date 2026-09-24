@@ -38,7 +38,15 @@ import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
-import { sourceIndex, type InterpolationMethod } from "../../interpolate";
+import type { InterpolationMethod } from "../../interpolate";
+import {
+  keyframeBand,
+  keyframeShowing,
+  markKeyframe,
+  windowAt,
+  type Keyframe,
+  type SequenceWindow,
+} from "../../timeWindow";
 
 export type SequenceOptions = {
   /** The data field whose values are the keyframes. Must be numeric: the
@@ -62,6 +70,15 @@ export type SequenceOptions = {
    *  domain and its own playback, so `duration`, `loop`, `playing` and `at`
    *  are errors alongside it. */
   on?: Timer<number>;
+  /** How far back the sequence keeps showing, in the field's own units. At
+   *  playhead `T` it shows every keyframe whose band overlaps
+   *  `[T − history, T]`. Default 0: one keyframe at a time. `Infinity` keeps
+   *  every keyframe the playhead has reached (Animated Vega-Lite's `lte`
+   *  predicate), and a number in between keeps a trail that far back. A
+   *  `line` threaded through the keyframes is drawn over the same window, cut
+   *  at the exact point in data time (see `src/timeWindow.ts`). It says what
+   *  the chart shows, not how the clock runs, so it is allowed with `on`. */
+  history?: number;
 };
 
 /** The options a sequence's own clock is built from — the ones a supplied
@@ -86,6 +103,14 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * holds a frame, then jumps to the next one, exactly as Animated Vega-Lite's
  * band scale on time does.
  *
+ * With `history`, the playhead is widened into a WINDOW, `[T − history, T]`,
+ * and every keyframe whose band overlaps it is shown: `Infinity` keeps every
+ * year reached so far on screen, which is how a connected scatterplot is drawn
+ * in. The window is defined once (`src/timeWindow.ts`) and read by two things:
+ * the keyframes, which show while their band overlaps it, and any `line`
+ * threaded THROUGH the keyframes, which draws only the part of its run inside
+ * it, cut at the exact point in data time (see `connect.tsx`).
+ *
  * Which band is showing is a PAINT-time fact, like a transition's playhead and
  * for the same reason: every keyframe group is laid out either way — it has to
  * be, or the domains would move — so the clock changes nothing above the marks
@@ -97,7 +122,10 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * their box leaves emit no items at all (`INTERNAL_emitNothing`) and their
  * text leaves hand their drawing to the transition
  * (`INTERNAL_takeOverLowering`), so there is nothing left to show or hide and
- * the two compose with nothing to coordinate.
+ * the two compose with nothing to coordinate. That is also why a transition
+ * over a sequence that keeps history is an error for now: the sequence would
+ * show several keyframes at once, and what the one moving mark should leave
+ * behind (a trail) is not decided.
  *
  * The operator also owns the chart's clock, and builds it lazily: the domain
  * is the field's own range, which is not known until the data has been split,
@@ -112,6 +140,16 @@ export function sequence(opts: SequenceOptions) {
    *  domain from the first to the last. */
   let keyframes: number[] = [];
   let clock: Timer<number> | undefined = opts.on;
+
+  const history = opts.history ?? 0;
+  if (!(history >= 0)) {
+    throw new Error(
+      `[gofish] time.sequence({ by: "${opts.by}", history: ${history} }): ` +
+        `history is how far back the sequence keeps showing, in ` +
+        `"${opts.by}"'s own units, so it must be a number of at least 0 ` +
+        `(0 shows one keyframe at a time, Infinity everything so far).`
+    );
+  }
 
   if (opts.on !== undefined) {
     const owned = CLOCK_OPTIONS.filter((k) => opts[k] !== undefined);
@@ -146,8 +184,9 @@ export function sequence(opts: SequenceOptions) {
       // paint-time — untracked and flagged, so the clock wires up for events
       // without becoming a pipeline dependency (see `src/interaction/live.ts`).
       readLive(tier.clock);
-      // WHICH keyframe is held is then decided per frame, in paint position.
-      hold(children, tier.clock, tier.knots());
+      // WHICH keyframes are shown is then decided per frame, in paint
+      // position.
+      hold(children, shown, tier.knots());
       return Frame({}, children);
     },
     {
@@ -186,6 +225,13 @@ export function sequence(opts: SequenceOptions) {
       }
       return clock();
     },
+  };
+  /** The window this sequence shows at the current playhead: the one reading
+   *  of it, shared by its keyframes' visibility and by any line threaded
+   *  through them (which finds it through the keyframes, see `hold`). */
+  const shown: SequenceWindow = {
+    history,
+    window: () => windowAt(tier.clock(), history),
   };
   (operator as any).__timeTier = tier;
   // The clock is a live JS signal, so a sequence cannot cross the Python
@@ -311,46 +357,52 @@ function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
 }
 
 /**
- * Show the keyframe whose band the playhead is in, and hide the rest — as a
- * standing rule per keyframe, not a decision taken once.
+ * Show the keyframes whose bands the sequence's window overlaps, and hide the
+ * rest — as a standing rule per keyframe, not a decision taken once.
  *
  * The band rule is the step rule: keyframe `i` owns `[t_i, t_{i+1})`, the last
  * keyframe owns everything after it, and a playhead before the run holds the
  * first — the same reading `interpolateStep` gives a run of values, which is
  * why a sequence alone and a `curve: "step"` transition draw the same picture.
+ * With no history the window is the playhead itself, and overlapping it is
+ * containing it; with history the window reaches back, and every band it
+ * reaches shows.
  *
- * Each keyframe gets a THUNK that says whether it is the held one, and the
- * playhead is read inside it, at paint (`INTERNAL_visibleWhile`). A hidden
- * keyframe keeps its box, its datum and its anchoring role, exactly as before;
- * what changed is only when the question is asked. It is set on the keyframe
- * group alone: the marks INSIDE the group are what draw, and a visibility rule
+ * Each keyframe group is also marked as a keyframe of this sequence
+ * (`markKeyframe`), with its time and its band. That is what a connector over
+ * the keyframes reads to find out that it threads them in time (see
+ * `connect.tsx`), and from it, the same window.
+ *
+ * Each keyframe gets a THUNK that says whether it is showing, and the playhead
+ * is read inside it, at paint (`INTERNAL_visibleWhile`). A hidden keyframe
+ * keeps its box, its datum and its anchoring role, exactly as before; what
+ * changed is only when the question is asked. It is set on the keyframe group
+ * alone: the marks INSIDE the group are what draw, and a visibility rule
  * covers its node's whole subtree, including the label `Text`s the label pass
  * adds to the group after this runs.
  */
 function hold(
   children: GoFishAST[],
-  playhead: () => number,
+  sequence: SequenceWindow,
   bands: number[]
 ): void {
-  // Each child is one group, and the operator stamped it with its group key —
-  // the value of `by` this keyframe is, which is the knot. `bands` is the
-  // sequence's keyframes, the same values sorted and distinct.
-  const knots = children.map((child) => Number((child as GoFishNode).key));
   if (bands.length === 0) return;
-  // The held band, computed at most once per distinct playhead value and
-  // shared by every keyframe's thunk (the same caching `tween` does).
-  // (`NaN` never equals a playhead, so the first read always computes.)
-  let cache = { t: NaN, held: bands[0] };
-  const held = (): number => {
-    const t = playhead();
-    if (t !== cache.t)
-      cache = { t, held: bands[sourceIndex(bands, t, "step")] };
-    return cache.held;
-  };
-  children.forEach((child, i) => {
-    if (child instanceof GoFishNode) {
-      child.INTERNAL_visibleWhile(() => knots[i] === held());
+  children.forEach((child) => {
+    if (!(child instanceof GoFishNode)) return;
+    // Each child is one group, and the operator stamped it with its group
+    // key — the value of `by` this keyframe is, which is the knot. `bands` is
+    // the sequence's keyframes, the same values sorted and distinct.
+    const t = Number(child.key);
+    const j = bands.indexOf(t);
+    // A key the sequence could not read as a number owns no band of time, so
+    // it never shows.
+    if (j < 0) {
+      child.INTERNAL_visibleWhile(() => false);
+      return;
     }
+    const keyframe: Keyframe = { t, band: keyframeBand(bands, j), sequence };
+    markKeyframe(child, keyframe);
+    child.INTERNAL_visibleWhile(() => keyframeShowing(keyframe));
   });
 }
 

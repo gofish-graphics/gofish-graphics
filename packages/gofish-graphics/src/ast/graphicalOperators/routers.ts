@@ -103,6 +103,19 @@ export function hasRoute(name: string): boolean {
 export const isSequenceCurve = (name: string | undefined): boolean =>
   name === "catmullRom";
 
+/**
+ * Curves that THREAD the points: each interval between two consecutive points
+ * is drawn as exactly one segment, a straight line or a cubic, from the one
+ * point's center to the next's. The interpolating curves do (straight, bezier,
+ * catmullRom). The routing curves do not: orthogonal and arc draw an interval
+ * as several segments, and perfectArrows runs between the two boxes' edges.
+ * A line threaded through a `time.sequence`'s keyframes is cut inside one of
+ * these segments by data time (`windowPath` in `src/timeWindow.ts`), so it
+ * needs a threading curve.
+ */
+export const isThreadingCurve = (name: string | undefined): boolean =>
+  name === "straight" || name === "bezier" || isSequenceCurve(name);
+
 /** Resolve a `Curve` (string or spec) to its router fn + options. */
 export function resolveCurve(curve: Curve): {
   router: Router;

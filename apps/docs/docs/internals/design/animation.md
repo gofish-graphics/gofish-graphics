@@ -148,6 +148,18 @@ The trichotomy matters because the three kinds have different semantics
 costs and prerequisites (Appendix A). A complete animation grammar should
 express all three without forcing one kind through another kind's defaults.
 
+A line drawn in over time can come from a scene animation or from a reveal,
+and the two mean different things even when they look alike. In a scene
+animation, `time.sequence({ by, history })` shows every keyframe from
+`T - history` to the playhead `T`, and a `line` threaded through those
+keyframes is cut at the edges of that window by data time. Each point of the
+line sits at its keyframe's time, and time moves linearly along each segment,
+so the tip of the line is where a `time.transition()` dot would be at the same
+moment. A reveal with `stroke-dashoffset` paces the drawing by length along
+the path instead. The reveal is the right tool for presentation, where the
+author picks the order and the pace. It is a separate construct, and the cut
+by data time is not a reveal.
+
 ## 4. Where interpolation lives: upstream or downstream of layout
 
 The deepest semantic distinction in this design is _which side of the layout

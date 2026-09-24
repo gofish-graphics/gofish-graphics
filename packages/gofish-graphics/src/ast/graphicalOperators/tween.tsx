@@ -83,6 +83,7 @@ import {
   type InterpolationMethod,
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
+import { keyframeOf } from "../../timeWindow";
 import { targetOf } from "./layer";
 
 export type TweenOptions = {
@@ -335,6 +336,25 @@ export const tween = createNodeOperator(
           );
           const order = knotOrder(knots);
           const keyframes = order.map((i) => targetOf(children[i]));
+
+          // A sequence that keeps history shows several of its keyframes at
+          // once, and a transition takes the keyframes over to draw ONE mark
+          // moving between them. What that mark should leave behind (a trail
+          // of where it has been) is not decided, so the pair is an error
+          // rather than a guess.
+          const history = keyframes
+            .map((k) => keyframeOf(k)?.sequence.history ?? 0)
+            .find((h) => h > 0);
+          if (history !== undefined) {
+            throw new Error(
+              `[gofish] time.transition(): the sequence it moves through keeps ` +
+                `history (history: ${history}), so it shows several keyframes ` +
+                `at once, and a transition draws one moving mark in place of ` +
+                `them. What that mark should leave behind is not built yet. ` +
+                `Drop \`history\` to animate the mark, or drop the transition ` +
+                `and draw the past as a line({ along }) through the keyframes.`
+            );
+          }
 
           /** A leaf's placed box and local origin in this node's frame. The
            *  keyframe mark itself is its operand, already placed; any other

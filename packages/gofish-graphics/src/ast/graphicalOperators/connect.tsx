@@ -31,8 +31,20 @@ import {
   resolveCurve,
   centerPoint,
   isSequenceCurve,
+  isThreadingCurve,
   type Curve,
 } from "./routers";
+import { targetOf } from "./layer";
+import { readLive } from "../../interaction/live";
+import { setLiveSlots } from "../../interaction/liveSlots";
+import {
+  keyframeOf,
+  keyframeShowing,
+  windowPath,
+  type Keyframe,
+  type SequenceWindow,
+  type TimeWindow,
+} from "../../timeWindow";
 
 // Per-axis bbox anchor. A literal number is the raw fraction in [0, 1]; the
 // keywords map to {start: 0, middle: 0.5, end: 1}. GoFish is y-up, so
@@ -65,6 +77,25 @@ const resolveAnchor = (a: AnchorSpec): [number, number] => {
     a.y !== undefined ? resolveAnchorAxis(a.y) : 0.5,
   ];
 };
+
+/**
+ * The keyframes a connector's operands are part of, when every operand is
+ * part of a keyframe of ONE `time.sequence` (the record the sequence leaves on
+ * its keyframe groups, see `src/timeWindow.ts`). Undefined otherwise, and the
+ * connector is drawn whole, as any connector is.
+ */
+function sequenceKeyframes(children: GoFishAST[]): Keyframe[] | undefined {
+  const found = children.map((child) => keyframeOf(targetOf(child)));
+  const first = found[0];
+  if (first === undefined) return undefined;
+  return found.every((k) => k?.sequence === first.sequence)
+    ? (found as Keyframe[])
+    : undefined;
+}
+
+/** A line threaded through a sequence's keyframes: each knot's time, in path
+ *  order, and the sequence whose window it is drawn over. */
+type TimeRun = { knots: number[]; sequence: SequenceWindow };
 
 export const connect = createNodeOperator(
   (
@@ -122,7 +153,7 @@ export const connect = createNodeOperator(
     const curveNameOf = (c: Curve | undefined): string | undefined =>
       c === undefined ? undefined : typeof c === "string" ? c : c.type;
 
-    return new GoFishNode(
+    const self: GoFishNode = new GoFishNode(
       {
         type: "connect",
         shared: [false, false],
@@ -147,6 +178,36 @@ export const connect = createNodeOperator(
 
           const hasAnchors =
             resolvedSource !== undefined || resolvedTarget !== undefined;
+
+          // A connector over a `time.sequence`'s keyframes is read in time as
+          // well as in space, by the window the sequence shows (see
+          // `src/timeWindow.ts`). Operands all inside ONE keyframe: the
+          // connector is part of that keyframe's picture, so it shows when
+          // the keyframe does, and is not cut. Operands in DIFFERENT
+          // keyframes: it threads the time tier, so it draws only the stretch
+          // of its run inside the window, cut by data time at paint (see
+          // `lower`). Which case it is comes from the keyframes themselves,
+          // not from the field names in the spec.
+          const keyframes = sequenceKeyframes(children);
+          const threadsTime =
+            keyframes !== undefined &&
+            keyframes.some((k) => k.t !== keyframes[0].t);
+          if (keyframes !== undefined && !threadsTime) {
+            self.INTERNAL_visibleWhile(() => keyframeShowing(keyframes[0]));
+          }
+          if (threadsTime && (mode !== "center" || hasAnchors)) {
+            throw new Error(
+              `[gofish] ${mode === "center" ? "line" : "ribbon"}(): this ` +
+                `connector threads the keyframes of a time.sequence, so it ` +
+                `is drawn only over the stretch of time the sequence shows, ` +
+                `cut at the exact point in data time. That cut is built for ` +
+                `a line through the keyframes' centers; ` +
+                (mode === "center"
+                  ? "a line pinned to `source`/`target` anchors"
+                  : "a ribbon's band") +
+                ` is not built yet.`
+            );
+          }
 
           if (mode === "edge" && !hasAnchors) {
             for (const child of children) {
@@ -303,6 +364,44 @@ export const connect = createNodeOperator(
               renderData: { paths, defaultColor },
             };
           }
+          // A line threading a sequence's keyframes is cut inside a segment
+          // by data time, which needs segment `i` of its path to run from
+          // knot `i` to knot `i + 1` (a threading curve), and the knots to
+          // move forward in time along the path.
+          let timeRun: TimeRun | undefined;
+          if (threadsTime) {
+            if (!isThreadingCurve(resolvedCurveName)) {
+              throw new Error(
+                `[gofish] line({ curve: "${resolvedCurveName}" }): this line ` +
+                  `threads the keyframes of a time.sequence, so it is drawn ` +
+                  `only over the stretch of time the sequence shows, cut at ` +
+                  `the exact point in data time. That cut needs each step ` +
+                  `from one keyframe to the next to be ONE straight or cubic ` +
+                  `segment between the keyframes' centers, which "straight", ` +
+                  `"bezier" and "catmullRom" (the default) draw and ` +
+                  `"${resolvedCurveName}" does not. Use one of those, or ` +
+                  `open an issue for "${resolvedCurveName}".`
+              );
+            }
+            const knots = keyframes.map((k) => k.t);
+            const back = knots.findIndex(
+              (t, i) => i > 0 && !(t > knots[i - 1])
+            );
+            if (back >= 0) {
+              throw new Error(
+                `[gofish] line(): this line threads the keyframes of a ` +
+                  `time.sequence, so each of its points is a moment in time, ` +
+                  `and it goes from ${knots[back - 1]} to ${knots[back]}: ` +
+                  `back in time, or twice through one keyframe. A line drawn ` +
+                  `in over time has to move forward through the keyframes. If ` +
+                  `each keyframe holds several marks, split the line so each ` +
+                  `run has one mark per keyframe (for example, add \`by\` to ` +
+                  `the operator that places the marks).`
+              );
+            }
+            timeRun = { knots, sequence: keyframes[0].sequence };
+          }
+
           // If in center mode, adjust bounding boxes to have zero width/height
           // with min and max equal to the center point
 
@@ -579,7 +678,10 @@ export const connect = createNodeOperator(
               },
             ],
             transform: { translate: [0, 0] },
-            renderData: { paths: mergedPaths, defaultColor },
+            // The box above is the WHOLE run's, cut or not: the room a line
+            // uses over its run, the way a transition claims its whole
+            // trajectory, so the window moving changes nothing above it.
+            renderData: { paths: mergedPaths, defaultColor, timeRun },
           };
         },
         // IR lowering — mirror of `render`. Each connector path is offset by the
@@ -629,21 +731,43 @@ export const connect = createNodeOperator(
             mixBlendMode: mixBlendMode ?? "normal",
           });
 
-          return (renderData.paths as Path[]).map((path) => {
-            const transformedPath = coordinateTransform
-              ? transformPath(path, coordinateTransform, { resample: true })
-              : path;
-            return {
-              kind: "path",
-              d: pathToPixelSVG(transformedPath, offsetToPixel),
-              role: roleFor(node.datum),
-              datum: node.datum,
-              style,
-            };
+          /** A path's pixel-space path data. */
+          const pathData = (path: Path): string =>
+            pathToPixelSVG(
+              coordinateTransform
+                ? transformPath(path, coordinateTransform, { resample: true })
+                : path,
+              offsetToPixel
+            );
+          const toItem = (d: string): DisplayList.DisplayItem => ({
+            kind: "path",
+            d,
+            role: roleFor(node.datum),
+            datum: node.datum,
+            style,
           });
+
+          const timeRun = renderData.timeRun as TimeRun | undefined;
+          if (timeRun === undefined) {
+            return (renderData.paths as Path[]).map((path) =>
+              toItem(pathData(path))
+            );
+          }
+          // A line threading a sequence's keyframes: its one path, cut to
+          // the window the sequence is showing. The window is read once here
+          // for the value to lower, and then per frame in paint position by
+          // the `d` slot, which patches the path data and nothing else — the
+          // same split `tween` makes for its playhead.
+          const [run] = renderData.paths as Path[];
+          const drawnOver = (window: TimeWindow): string =>
+            pathData(windowPath(run, timeRun.knots, window));
+          const item = toItem(drawnOver(readLive(timeRun.sequence.window)));
+          setLiveSlots(item, { d: () => drawnOver(timeRun.sequence.window()) });
+          return [item];
         },
       },
       children
     );
+    return self;
   }
 );

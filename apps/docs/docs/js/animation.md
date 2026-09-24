@@ -151,6 +151,49 @@ Several charts on one clock play in lockstep the same way. The clock owns its
 domain, its duration and whether it is running, so `duration`, `loop`,
 `playing` and `at` are errors alongside `on`.
 
+## Keeping the past on screen
+
+A sequence shows one keyframe at a time. `history` keeps earlier keyframes on
+screen as well. It is a length of time in the field's own units, and the
+default is `0`. At a playhead of `T`, the sequence shows every keyframe whose
+band of time overlaps the window from `T - history` to `T`. With
+`history: Infinity`, every year the playhead has reached stays on screen.
+
+A `line` threaded through the keyframes is drawn over the same window. This is
+how the Animated Vega-Lite connected scatterplot draws its line in, one year at
+a time.
+
+```ts
+const year = timer({ domain: [1956, 2010], duration: 54 * 200 });
+
+chart(drivingShifts)
+  .flow(
+    time.sequence({ by: "year", on: year, history: Infinity }),
+    scatter({ x: "miles", y: "gas" })
+  )
+  .mark(line({ along: "year", curve: "straight" }))
+  .render(container, { w: 500, h: 500, axes: true });
+```
+
+The line ends at the playhead. Between two years, the line is cut partway
+along the segment that joins them, so halfway through 1979 it ends halfway from
+the 1979 point to the 1980 point. That is where a `time.transition()` dot would
+be at the same moment. The cut is placed by time and not by distance on the
+page, so the tip takes 200 ms to cross each year, however far apart the two
+points are.
+
+With a finite history, e.g., `history: 10`, the line keeps only the last ten
+years, so it is cut at both ends. With no history the window is a single
+moment, so a threaded line draws nothing.
+
+A line is threaded through the keyframes when its points belong to different
+keyframes of one sequence. A line whose points all sit inside one keyframe,
+e.g., a line through one year's countries, is not cut. It shows and hides with
+its keyframe.
+
+The axes hold still here too. The chart makes room for the whole line when it
+is laid out, so drawing the line in moves nothing else.
+
 ## Between the keyframes
 
 The knots of the interpolation are the data's own time values. Years five apart
@@ -218,10 +261,10 @@ both constructs.
 Everything that depends on the year is settled while the chart is being laid
 out: every keyframe is placed, so the run a transition walks is known, and so is
 where each frame's dots sit. The clock is read afterward, while the chart is
-being painted. A new value from it moves the dots a transition draws and changes
-which keyframe a sequence shows, and both of those are changes to attributes of
-marks that are already on the page. Nothing is measured again and nothing is
-placed again.
+being painted. A new value from it moves the dots a transition draws, changes
+which keyframes a sequence shows, and moves the end of a threaded line. All of
+those are changes to attributes of marks that are already on the page. Nothing
+is measured again and nothing is placed again.
 
 The one cost worth knowing is what a sequence keeps: it draws every keyframe,
 and hides all but the one it is holding, so a chart of fifty years of data has
@@ -404,6 +447,7 @@ yet.
 | `playing`  | `boolean` | `true`  | Start the clock. `false` holds the chart still.            |
 | `at`       | `number`  | none    | Where the playhead starts, in the field's units.           |
 | `on`       | `Timer`   | own     | A clock to play on. Rules out the four options above.      |
+| `history`  | `number`  | `0`     | How far back keyframes stay shown, in the field's units.   |
 
 ### `time.transition(options?)`
 
@@ -441,6 +485,15 @@ for other shapes. There is no composition of animations (playing one after
 another, or several at once), no staggering, and no options to restyle how
 marks enter and exit. The value axis cannot rescale from one keyframe to the
 next.
+
+A sequence that keeps history cannot have a transition layered over it yet.
+The sequence would show several keyframes at once, and it is not decided what
+the one moving mark should leave behind, so this throws an error. A threaded
+line can be cut only when each step from one keyframe to the next is a single
+straight or curved segment. The curves `"straight"`, `"bezier"` and
+`"catmullRom"` work. The routing curves `orthogonal()`, `arc()` and
+`perfectArrows()` throw an error, and so do a threaded `ribbon` and a threaded
+line pinned with `source` or `target`.
 
 The chart is laid out once. The playhead is read while the chart is painted, so
 each tick of the clock changes attributes of marks already on the page and

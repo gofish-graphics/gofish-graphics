@@ -12,7 +12,10 @@ export type LineSegment = {
   points: [Point, Point];
 };
 
-export const segment = (point1: Point, point2: Point): LineSegment => ({ type: "line", points: [point1, point2] });
+export const segment = (point1: Point, point2: Point): LineSegment => ({
+  type: "line",
+  points: [point1, point2],
+});
 
 export type BezierCurve = {
   type: "bezier";
@@ -22,7 +25,12 @@ export type BezierCurve = {
   end: Point;
 };
 
-export const curve = (start: Point, control1: Point, control2: Point, end: Point): BezierCurve => ({
+export const curve = (
+  start: Point,
+  control1: Point,
+  control2: Point,
+  end: Point
+): BezierCurve => ({
   type: "bezier",
   start,
   control1,
@@ -45,8 +53,12 @@ export const segmentToSVG = (segment: PathSegment): string => {
 };
 
 export const pathToSVGPath = (path: Path): string => {
+  // An empty path draws nothing, which is empty path data (a line cut to a
+  // window it does not reach is one — see `windowPath` in `timeWindow.ts`).
+  if (path.length === 0) return "";
   const firstSegment = path[0];
-  const startPoint = firstSegment.type === "line" ? firstSegment.points[0] : firstSegment.start;
+  const startPoint =
+    firstSegment.type === "line" ? firstSegment.points[0] : firstSegment.start;
   return `M${startPoint[0]},${startPoint[1]} ${path.map(segmentToSVG).join(" ")}`;
 };
 
@@ -63,7 +75,13 @@ export const transformPath = (
   // Default behavior: direct transformation without resampling
   return path.map((segment): PathSegment => {
     if (segment.type === "line") {
-      return { type: "line", points: [space.transform(segment.points[0]), space.transform(segment.points[1])] as [Point, Point] };
+      return {
+        type: "line",
+        points: [
+          space.transform(segment.points[0]),
+          space.transform(segment.points[1]),
+        ] as [Point, Point],
+      };
     } else {
       return {
         type: "bezier",
@@ -76,7 +94,10 @@ export const transformPath = (
   });
 };
 
-const subdivideSegment = (lineSegment: LineSegment, n: number): LineSegment[] => {
+const subdivideSegment = (
+  lineSegment: LineSegment,
+  n: number
+): LineSegment[] => {
   const points: Point[] = [];
   for (let i = 0; i <= n; i++) {
     points.push(lerpPoint(lineSegment.points[0], lineSegment.points[1], i / n));
@@ -91,7 +112,10 @@ const subdivideSegment = (lineSegment: LineSegment, n: number): LineSegment[] =>
   return segments;
 };
 
-export const subdivideCurve1 = (c: BezierCurve, t: number = 0.5): [BezierCurve, BezierCurve] => {
+export const subdivideCurve1 = (
+  c: BezierCurve,
+  t: number = 0.5
+): [BezierCurve, BezierCurve] => {
   // Apply de Casteljau's algorithm to find points on the curve
 
   // First level of interpolation
@@ -113,7 +137,10 @@ export const subdivideCurve1 = (c: BezierCurve, t: number = 0.5): [BezierCurve, 
   return [leftCurve, rightCurve];
 };
 
-const subdivideCurve = (curve: BezierCurve, numSegments: number): BezierCurve[] => {
+const subdivideCurve = (
+  curve: BezierCurve,
+  numSegments: number
+): BezierCurve[] => {
   if (numSegments <= 0) {
     throw new Error("Number of segments must be positive");
   }
@@ -166,7 +193,11 @@ export const path = (
     subdivision = 0,
     closed = false,
     interpolation = "linear",
-  }: { subdivision?: number; closed?: boolean; interpolation?: "linear" | "bezierX" | "bezierY" }
+  }: {
+    subdivision?: number;
+    closed?: boolean;
+    interpolation?: "linear" | "bezierX" | "bezierY";
+  }
 ): Path => {
   let segments: PathSegment[] = [];
   if (closed === true) {
@@ -186,7 +217,12 @@ export const path = (
         interpolation === "bezierX"
           ? [(points[i][0] + points[i + 1][0]) / 2, points[i + 1][1]]
           : [points[i + 1][0], (points[i][1] + points[i + 1][1]) / 2];
-      segments.push(...subdivideCurve(curve(points[i], control1, control2, points[i + 1]), subdivision));
+      segments.push(
+        ...subdivideCurve(
+          curve(points[i], control1, control2, points[i + 1]),
+          subdivision
+        )
+      );
     }
   }
   return subdivision > 0 ? subdividePath(segments, subdivision) : segments;
