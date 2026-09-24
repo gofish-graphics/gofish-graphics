@@ -1,0 +1,380 @@
+/* Tokens follow the docs landing page (apps/docs/.../landing/landing.css). */
+:root {
+  --paper: #f7f2e9;
+  --paper-shade: #efe7d8;
+  --ink: #26211b;
+  --ink-soft: #6e6457;
+  --graphite: #4a4540;
+  --accent: #2f9e6e;
+  --accent-deep: #1f7a52;
+  --bluep: #3f6bd6;
+  --leaf: #2f9e6e;
+  --gold: #c98f12;
+  --del: #c2413b;
+  --shadow-warm: rgba(38, 28, 18, 0.16);
+  /* The docs landing page's paper texture, drawn at frame size so it never
+     tiles (its tile seams show once the video is on a big screen). */
+  --paper-tex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1920' height='1080'%3E%3Cdefs%3E%3Cfilter id='tooth'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.7 0.7 0.7 0 -0.5' result='m'/%3E%3CfeFlood flood-color='%238a7a64'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='mottle'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.014' numOctaves='4' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0.5 0.5 0 -0.34' result='m'/%3E%3CfeFlood flood-color='%23b9a98e'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='light'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.014' numOctaves='4' seed='27' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0.5 0.5 0 -0.34' result='m'/%3E%3CfeFlood flood-color='%23fffdf6'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='flecks'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.3 0.3' numOctaves='2' seed='14' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='discrete' tableValues='0 0 0 0 0 0 0 1'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0' result='m'/%3E%3CfeFlood flood-color='%236b5a44'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='1920' height='1080' filter='url(%23mottle)' opacity='0.08'/%3E%3Crect width='1920' height='1080' filter='url(%23light)' opacity='0.06'/%3E%3Crect width='1920' height='1080' filter='url(%23tooth)' opacity='0.1'/%3E%3Crect width='1920' height='1080' filter='url(%23flecks)' opacity='0.05'/%3E%3C/svg%3E");
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: "Spline Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-color: var(--paper);
+}
+#stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--paper-tex);
+  background-size: 1920px 1080px;
+  pointer-events: none;
+}
+/* Everything on stage paints above the paper texture and vignette. */
+#stage > * {
+  z-index: 1;
+}
+#stage::after {
+  /* soft vignette */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(
+    ellipse at 50% 45%,
+    rgba(255, 255, 255, 0) 55%,
+    rgba(120, 95, 60, 0.1) 100%
+  );
+  pointer-events: none;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* ---------- captions ---------- */
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 84px;
+  text-align: center;
+  font-family: "Fraunces", serif;
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-size: 54px;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  opacity: 0;
+}
+.caption .part {
+  transition: none;
+}
+
+/* ---------- title + outro ---------- */
+.center-stack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.logo {
+  width: 300px;
+  height: auto;
+  display: block;
+}
+.wordmark {
+  font-family: "Fraunces", serif;
+  font-optical-sizing: auto;
+  font-weight: 800;
+  font-size: 150px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-top: 6px;
+}
+.subtitle {
+  font-family: "Spline Sans", sans-serif;
+  font-weight: 500;
+  font-size: 46px;
+  color: var(--ink-soft);
+  margin-top: 30px;
+}
+.url {
+  margin-top: 34px;
+  font-family: "Spline Sans Mono", monospace;
+  font-weight: 500;
+  font-size: 48px;
+  color: var(--accent-deep);
+  background: rgba(47, 158, 110, 0.1);
+  padding: 10px 30px;
+  border-radius: 10px;
+}
+
+/* ---------- cards ---------- */
+.card {
+  position: absolute;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.12),
+    0 10px 24px rgba(38, 28, 18, 0.1),
+    0 30px 60px rgba(38, 28, 18, 0.1);
+}
+
+.code-card {
+  left: 96px;
+  width: 800px;
+  padding: 34px 40px;
+}
+.code-card .file {
+  font-family: "Spline Sans Mono", monospace;
+  font-size: 17px;
+  color: var(--ink-soft);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.code-card .dots {
+  display: inline-flex;
+  gap: 7px;
+  margin-right: 10px;
+}
+.code-card .dots i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--paper-shade);
+  display: block;
+}
+.code {
+  margin: 0;
+  font-family: "Spline Sans Mono", monospace;
+  font-size: 23px;
+  line-height: 1.75;
+  color: var(--ink);
+  white-space: pre;
+  min-height: calc(7 * 1.75em);
+}
+.tok-fn {
+  color: var(--graphite);
+  font-weight: 600;
+}
+.tok-str {
+  color: var(--leaf);
+}
+.tok-field {
+  color: var(--bluep);
+}
+.tok-num {
+  color: var(--gold);
+}
+.tok-kw {
+  color: var(--gold);
+}
+.tok-punct {
+  color: #8a8074;
+}
+.tok-id {
+  color: var(--ink);
+}
+.seg {
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  white-space: pre;
+  border-radius: 5px;
+}
+.seg-del .strike {
+  position: absolute;
+  left: 0;
+  top: 52%;
+  height: 3px;
+  background: var(--del);
+  border-radius: 2px;
+}
+.caret {
+  display: inline-block;
+  width: 3px;
+  height: 1.25em;
+  margin-right: -3px;
+  vertical-align: -0.22em;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+.chart-card {
+  left: 936px;
+  width: 888px;
+  overflow: hidden;
+}
+.chart-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.data-preview {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: "Spline Sans Mono", monospace;
+  font-size: 24px;
+  color: var(--ink);
+}
+.data-preview .name {
+  font-weight: 600;
+  color: var(--graphite);
+  margin-bottom: 18px;
+}
+.data-preview table {
+  border-collapse: collapse;
+}
+.data-preview th {
+  font-weight: 500;
+  color: var(--bluep);
+  text-align: left;
+  padding: 6px 28px 10px;
+  border-bottom: 2px solid var(--paper-shade);
+}
+.data-preview td {
+  padding: 7px 28px;
+  white-space: pre;
+}
+.data-preview td.str {
+  color: var(--leaf);
+}
+.data-preview td.num {
+  color: var(--gold);
+  text-align: right;
+}
+.data-preview .more {
+  margin-top: 14px;
+  color: var(--ink-soft);
+  font-size: 20px;
+}
+
+/* ---------- montage ---------- */
+.grid {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 960px 620px;
+}
+.tile {
+  position: absolute;
+  width: 404px;
+  height: 246px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.1),
+    0 8px 20px rgba(38, 28, 18, 0.1);
+  padding: 14px 14px 0;
+  transform-origin: 50% 50%;
+}
+.tile canvas {
+  display: block;
+}
+.tile .label {
+  font-family: "Spline Sans", sans-serif;
+  font-weight: 500;
+  font-size: 18px;
+  color: var(--ink-soft);
+  text-align: center;
+  margin-top: 8px;
+  white-space: nowrap;
+}
+
+/* ---------- install chips ---------- */
+.install-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 470px;
+  display: flex;
+  justify-content: center;
+  gap: 72px;
+}
+.install {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.install .lang {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: "Spline Sans", sans-serif;
+  font-weight: 600;
+  font-size: 32px;
+  color: var(--ink);
+  margin: 0 0 16px 6px;
+}
+.install .badge {
+  font-family: "Spline Sans Mono", monospace;
+  font-weight: 500;
+  font-size: 18px;
+  color: #fff;
+  border-radius: 6px;
+  padding: 3px 9px;
+}
+.chip {
+  font-family: "Spline Sans Mono", monospace;
+  font-size: 33px;
+  color: var(--ink);
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px 30px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.1),
+    0 10px 24px rgba(38, 28, 18, 0.1);
+  white-space: pre;
+}
+.chip .prompt {
+  color: var(--ink-soft);
+  opacity: 0.6;
+}
+.chip .pkg {
+  color: var(--accent-deep);
+  font-weight: 500;
+}
+.import-line {
+  margin-top: 20px;
+  margin-left: 6px;
+  font-family: "Spline Sans Mono", monospace;
+  font-size: 25px;
+  color: var(--ink-soft);
+  white-space: pre;
+}

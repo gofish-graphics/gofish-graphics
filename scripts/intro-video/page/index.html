@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GoFish intro video</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Same families the docs landing page loads. -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..700&family=Spline+Sans+Mono:wght@400;500;600&family=Spline+Sans:wght@400;500;600&display=block"
+    />
+  </head>
+  <body>
+    <div id="stage">
+      <!-- Scene 1: title -->
+      <div class="layer" id="title">
+        <div
+          class="center-stack"
+          style="top: 0; bottom: 40px; justify-content: center"
+        >
+          <div style="perspective: 900px">
+            <img class="logo" id="title-logo" alt="" />
+          </div>
+          <div class="wordmark" id="title-word">GoFish</div>
+          <div class="subtitle" id="title-sub">
+            Build visualizations by composing shapes.
+          </div>
+        </div>
+      </div>
+
+      <!-- Captions (scenes 2 to 5) -->
+      <div class="caption" id="cap-start">
+        <span class="part">Start with data.</span>
+        <span class="part">Pick a layout.</span>
+        <span class="part">Draw a mark.</span>
+      </div>
+      <div class="caption" id="cap-word">Change one word, get a new chart.</div>
+      <div class="caption" id="cap-polar">
+        Add polar coordinates, get a radial chart.
+      </div>
+      <div class="caption" id="cap-montage">
+        Charts, diagrams, and everything in between.
+      </div>
+      <div class="caption" id="cap-lang">
+        One grammar, in JavaScript and Python.
+      </div>
+
+      <!-- Scenes 2 and 3: code + chart -->
+      <div class="card code-card" id="code-card">
+        <div class="file">
+          <span class="dots"><i></i><i></i><i></i></span>chart.js
+        </div>
+        <pre class="code" id="code"></pre>
+      </div>
+      <div class="card chart-card" id="chart-card">
+        <div class="data-preview" id="data-preview"></div>
+      </div>
+
+      <!-- Scene 4: montage -->
+      <div class="grid" id="grid"></div>
+
+      <!-- Scene 5: install -->
+      <div class="install-row" id="install">
+        <div class="install" id="install-js">
+          <div class="lang">JavaScript</div>
+          <div class="chip">
+            <span class="prompt">$ </span>npm install
+            <span class="pkg">gofish-graphics@nightly</span>
+          </div>
+          <div class="import-line">
+            import { chart } from "gofish-graphics";
+          </div>
+        </div>
+        <div class="install" id="install-py">
+          <div class="lang">Python</div>
+          <div class="chip">
+            <span class="prompt">$ </span>pip install --pre
+            <span class="pkg">gofish-graphics</span>
+          </div>
+          <div class="import-line">from gofish import chart</div>
+        </div>
+      </div>
+
+      <!-- Scene 6: outro -->
+      <div class="layer" id="outro">
+        <div
+          class="center-stack"
+          style="top: 0; bottom: 40px; justify-content: center"
+        >
+          <img class="logo" id="outro-logo" alt="" style="width: 240px" />
+          <div class="wordmark" id="outro-word" style="font-size: 120px">
+            GoFish
+          </div>
+          <div class="url" id="outro-url">gofish.graphics</div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

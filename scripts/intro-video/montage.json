@@ -1,0 +1,64 @@
+[
+  {
+    "id": "polar-ribbon",
+    "story": "Forward Syntax V3/Ribbon/Polar",
+    "title": "Polar Ribbon Chart"
+  },
+  {
+    "id": "bird-migration",
+    "story": "Animated Vega-Lite/Bird Migration/A_StaticLines",
+    "title": "Bird Migration A: Static",
+    "label": "Bird Migration",
+    "crop": [0, 0, 1, 0.62]
+  },
+  {
+    "id": "insertion-sort",
+    "story": "Bluefish/Insertion Sort/InsertionSort",
+    "title": "Insertion Sort"
+  },
+  {
+    "id": "waffle",
+    "story": "Forward Syntax V3/Waffle Chart/Default",
+    "title": "Waffle Chart"
+  },
+  {
+    "id": "sankey-tree",
+    "story": "Low Level Syntax/Sankey Tree/Default",
+    "title": "Sankey Tree"
+  },
+  {
+    "id": "bottle",
+    "story": "Piccl/Bottle/Default",
+    "title": "Bottle Fill Chart"
+  },
+  {
+    "id": "ridgeline",
+    "story": "Forward Syntax V3/Ridgeline Chart/Default",
+    "title": "Ridgeline Chart"
+  },
+  {
+    "id": "topology",
+    "story": "Bluefish/Topology/Topology",
+    "title": "Three-Point Set Topologies"
+  },
+  {
+    "id": "flower",
+    "story": "Low Level Syntax/Flower Chart/Default",
+    "title": "Flower Chart"
+  },
+  {
+    "id": "stringline",
+    "story": "Low Level Syntax/Stringline Chart/Default",
+    "title": "Stringline Chart"
+  },
+  {
+    "id": "ohm-parse-tree",
+    "story": "Bluefish/Ohm Parse Tree/OhmParseTree",
+    "title": "Ohm Parse Tree"
+  },
+  {
+    "id": "sunflower",
+    "story": "Forward Syntax V3/Equal Scale/Sunflower",
+    "title": "Sunflower (Equal Scale)"
+  }
+]
