@@ -435,6 +435,12 @@ export class GoFishNode {
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
+  /** Nodes that belong to this node as a mark but live OUTSIDE its subtree:
+   *  today the label `Text`s the label pass seats for it in the tier above
+   *  (`labels/elaborate.tsx`), which stay out of the subtree so they never
+   *  inflate this node's box. Whoever takes the mark over (a
+   *  `time.transition()`) takes these with it. */
+  public _attachments?: GoFishNode[];
   // `undefined` means "no author opinion" — distinct from an explicit
   // `.zOrder(0)`, which is a deliberate choice and must be distinguishable
   // from silence (e.g. by the relational-mark auto-zBelow suppression check
@@ -1401,6 +1407,29 @@ export class GoFishNode {
   }
 
   /**
+   * Silence this node as {@link INTERNAL_emitNothing} does, and hand its own
+   * drawing to the caller that takes it over: the returned function lowers the
+   * node exactly as it would have drawn itself, placed at `transform` (an
+   * absolute transform, like `INTERNAL_lower`'s override) and mapped by
+   * `toPixel`. Call it while lowering, like any `_lower`: it reads the
+   * session's active flip scope. A `time.transition()` moves a keyframe's
+   * text this way: the keyframe stops drawing, and the transition draws it
+   * where the playhead has taken it.
+   */
+  public INTERNAL_takeOverLowering(): (
+    transform: Transform,
+    toPixel: ToPixel
+  ) => DisplayList.DisplayItem[] {
+    const own = this._lower;
+    this._lower = () => [];
+    // Lowered as `INTERNAL_lower` lowers, ids and live channels included,
+    // but without the visibility rule: the caller that took the drawing over
+    // owns when it shows.
+    return (transform, toPixel) =>
+      own ? this.lowerWith(own, transform, toPixel, undefined, false) : [];
+  }
+
+  /**
    * Make this node's items show only while `visible()` says so, as a PAINT-time
    * fact: the items are lowered either way, and their opacity is patched per
    * frame from the same live-slot side table a `live()` channel uses.
@@ -1416,6 +1445,10 @@ export class GoFishNode {
    * holds the axes still), so only the painting changes, and only the painting
    * is patched.
    *
+   * The rule covers the node's whole subtree: a node paints only while its own
+   * rule and every ancestor's hold (see `effectiveVisibility`), so marks that
+   * an elaboration pass adds under it later are hidden with it.
+   *
    * Emitting nothing WINS over this: a node whose `_lower` returns no items has
    * nothing to patch, so the two compose with no coordination.
    *
@@ -1425,6 +1458,21 @@ export class GoFishNode {
    */
   public INTERNAL_visibleWhile(visible: () => boolean): void {
     this.__gfVisible = visible;
+  }
+
+  /** The visibility this node paints under: its own rule AND every
+   *  ancestor's. A rule set on a node covers its whole subtree, including
+   *  nodes a later elaboration pass adds under it (a label's `Text`, an
+   *  axis's ticks), so nothing has to be stamped node by node. Undefined when
+   *  no rule is set anywhere up the chain, which is the static path. */
+  private effectiveVisibility(): (() => boolean) | undefined {
+    const rules: (() => boolean)[] = [];
+    for (let n: GoFishNode | undefined = this; n; n = n.parent) {
+      if (n.__gfVisible) rules.push(n.__gfVisible);
+    }
+    if (rules.length === 0) return undefined;
+    if (rules.length === 1) return rules[0];
+    return () => rules.every((rule) => rule());
   }
 
   /**
@@ -1453,8 +1501,30 @@ export class GoFishNode {
       throw new Error("[gofish] toPixel not set on the render session");
     }
 
-    const transform = transformOverride ?? this._displayTransform;
-    const items = this._lower(
+    return this.lowerWith(
+      this._lower,
+      transformOverride ?? this._displayTransform,
+      toPixel,
+      coordinateTransform,
+      true
+    );
+  }
+
+  /**
+   * The body of {@link INTERNAL_lower}, shared with the drawing
+   * {@link INTERNAL_takeOverLowering} hands out: call `lower` for this node,
+   * stamp the items' ids, wire its live channels, and, when `withVisibility`
+   * is set, apply the paint-time visibility rule. A taken-over drawing skips
+   * that rule because its new owner decides when it shows.
+   */
+  private lowerWith(
+    lower: Lower,
+    transform: Transform | undefined,
+    toPixel: ToPixel,
+    coordinateTransform: CoordinateTransform | undefined,
+    withVisibility: boolean
+  ): DisplayList.DisplayItem[] {
+    const items = lower(
       {
         intrinsicDims: this.intrinsicDims,
         transform,
@@ -1484,12 +1554,15 @@ export class GoFishNode {
       }
       for (const item of items) setLiveSlots(item, slots);
     }
+    // A node with no items has nothing to hide, so it skips the walk to the
+    // root that finding its visibility takes.
+    if (!withVisibility || items.length === 0) return items;
     // Paint-time visibility (see `INTERNAL_visibleWhile`): the item keeps the
     // opacity it was lowered with while it is showing, and goes to 0 while it
     // is not. The STATIC value is read here, so a headless lowering and a
     // screenshot show exactly what the live chart shows at that playhead; the
     // slot then patches the one attribute per frame.
-    const visible = this.__gfVisible;
+    const visible = this.effectiveVisibility();
     if (visible) {
       const showing = readLive(visible);
       for (const item of items) {

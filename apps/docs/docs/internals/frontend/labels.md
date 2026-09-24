@@ -93,6 +93,12 @@ occupy space in the **parent's** bbox (which downstream passes — axis titles,
 legends, the canvas size inference — see and reserve room for) without ever
 perturbing sibling placement inside the parent.
 
+The cost is that a label is not in its mark's subtree, though it is part of
+the mark. So the pass records the link the other way: each label `Text` is
+pushed onto its target's `_attachments`. A consumer that takes a mark over
+takes its attachments with it; today that is `time.transition()`, which moves
+a bar's label with the bar (`src/ast/graphicalOperators/tween.tsx`).
+
 Concretely, `wrapWithLabelTexts` builds:
 
 ```

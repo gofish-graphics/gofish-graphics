@@ -136,6 +136,10 @@ export type InferredRelational = {
 export type TimeTier = {
   by: string;
   clock: () => number;
+  /** The sequence's keyframes, in time order: every value of `by` the flow
+   *  split on. A transition reads it to tell a gap in one mark's run (two of
+   *  its knots that are NOT neighbors here) from a step between neighbors. */
+  knots: () => number[];
 };
 
 /** Build the grouping key-function for a single split. Exists so that path

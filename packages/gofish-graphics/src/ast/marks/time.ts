@@ -18,9 +18,14 @@
  * onto one another (a keyframe is a panel with no room of its own), and the
  * line becomes the moving dot that would have traced it.
  *
+ * A transitioned mark moves between two neighboring keyframes that both have
+ * a row for it, and fades in place across a stretch where only one of them
+ * does (see `tween.tsx`): the temporal reading of a line drawing nothing past
+ * its endpoints, with the fade Keynote's Magic Move gives unmatched objects.
+ *
  * What this version does NOT do: sequence/parallel composition of clips,
  * staggering, easing across keyframes as a first-class clip, enter/exit
- * lifecycle, and segues between two different specs. Those are §§5-9 of the
+ * styling (sliding in, fading out), and segues between two different specs. Those are §§5-9 of the
  * note and are not built.
  */
 import { createOperator } from "./createOperator";
@@ -89,8 +94,10 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * the chart is laid out once however long it plays.
  *
  * A `time.transition()` layered over it takes the keyframes over completely:
- * they emit no items at all (`INTERNAL_emitNothing`), so there is nothing left
- * to show or hide and the two compose with nothing to coordinate.
+ * their box leaves emit no items at all (`INTERNAL_emitNothing`) and their
+ * text leaves hand their drawing to the transition
+ * (`INTERNAL_takeOverLowering`), so there is nothing left to show or hide and
+ * the two compose with nothing to coordinate.
  *
  * The operator also owns the chart's clock, and builds it lazily: the domain
  * is the field's own range, which is not known until the data has been split,
@@ -101,7 +108,9 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * same one.
  */
 export function sequence(opts: SequenceOptions) {
-  let domain: [number, number] | undefined;
+  /** The field's values, sorted and distinct: the keyframes, and the clock's
+   *  domain from the first to the last. */
+  let keyframes: number[] = [];
   let clock: Timer<number> | undefined = opts.on;
 
   if (opts.on !== undefined) {
@@ -117,12 +126,12 @@ export function sequence(opts: SequenceOptions) {
     }
   }
 
-  /** Record the field's range as the flow splits, so the clock is built from
+  /** Record the field's values as the flow splits, so the clock is built from
    *  the data rather than from a hand-written domain. */
   const observe = (values: unknown[]): void => {
     const numbers = values.map(Number).filter((v) => Number.isFinite(v));
     if (numbers.length === 0) return;
-    domain = [Math.min(...numbers), Math.max(...numbers)];
+    keyframes = [...new Set(numbers)].sort((a, b) => a - b);
   };
 
   // Built per call so the split hook can close over this sequence's own
@@ -138,7 +147,7 @@ export function sequence(opts: SequenceOptions) {
       // without becoming a pipeline dependency (see `src/interaction/live.ts`).
       readLive(tier.clock);
       // WHICH keyframe is held is then decided per frame, in paint position.
-      hold(children, tier.clock);
+      hold(children, tier.clock, tier.knots());
       return Frame({}, children);
     },
     {
@@ -156,9 +165,10 @@ export function sequence(opts: SequenceOptions) {
 
   const tier: TimeTier = {
     by: opts.by,
+    knots: () => keyframes,
     clock: () => {
       if (clock === undefined) {
-        if (domain === undefined) {
+        if (keyframes.length === 0) {
           throw new Error(
             `[gofish] time.sequence({ by: "${opts.by}" }): "${opts.by}" has no ` +
               `numeric values to play through — a sequence's field is the ` +
@@ -167,7 +177,7 @@ export function sequence(opts: SequenceOptions) {
           );
         }
         clock = timer<number>({
-          domain,
+          domain: [keyframes[0], keyframes.at(-1)!],
           duration: opts.duration ?? 5000,
           loop: opts.loop ?? true,
           playing: opts.playing ?? true,
@@ -267,10 +277,17 @@ export const transition = createRelationalMark<TransitionOptions>(
       );
     }
     const knots = children.map((child) => knotOf(child, by));
+    // The keyframes the run's knots are drawn from, so the tween can tell a
+    // gap in the run from a step between neighbors. Only the sequence's own
+    // field has them; a transition along some other field, or with no
+    // sequence at all, reads its run's knots as consecutive.
+    const sequence =
+      tier !== undefined && tier.by === by ? tier.knots() : undefined;
     return tween(
       {
         at: playhead,
         knots,
+        sequence,
         method: resolveMethod(o.curve),
         ease: o.ease,
         fill: o.fill,
@@ -305,16 +322,20 @@ function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
  * Each keyframe gets a THUNK that says whether it is the held one, and the
  * playhead is read inside it, at paint (`INTERNAL_visibleWhile`). A hidden
  * keyframe keeps its box, its datum and its anchoring role, exactly as before;
- * what changed is only when the question is asked. It is applied down the whole
- * subtree because it is the marks INSIDE a keyframe group that draw.
+ * what changed is only when the question is asked. It is set on the keyframe
+ * group alone: the marks INSIDE the group are what draw, and a visibility rule
+ * covers its node's whole subtree, including the label `Text`s the label pass
+ * adds to the group after this runs.
  */
-function hold(children: GoFishAST[], playhead: () => number): void {
+function hold(
+  children: GoFishAST[],
+  playhead: () => number,
+  bands: number[]
+): void {
   // Each child is one group, and the operator stamped it with its group key —
-  // the value of `by` this keyframe is, which is the knot.
+  // the value of `by` this keyframe is, which is the knot. `bands` is the
+  // sequence's keyframes, the same values sorted and distinct.
   const knots = children.map((child) => Number((child as GoFishNode).key));
-  const bands = [...new Set(knots.filter(Number.isFinite))].sort(
-    (a, b) => a - b
-  );
   if (bands.length === 0) return;
   // The held band, computed at most once per distinct playhead value and
   // shared by every keyframe's thunk (the same caching `tween` does).
@@ -327,15 +348,10 @@ function hold(children: GoFishAST[], playhead: () => number): void {
     return cache.held;
   };
   children.forEach((child, i) => {
-    showSubtreeWhile(child, () => knots[i] === held());
+    if (child instanceof GoFishNode) {
+      child.INTERNAL_visibleWhile(() => knots[i] === held());
+    }
   });
-}
-
-/** Make a node and everything under it paint only while `visible()` holds. */
-function showSubtreeWhile(node: GoFishAST, visible: () => boolean): void {
-  if (!(node instanceof GoFishNode)) return;
-  node.INTERNAL_visibleWhile(visible);
-  for (const child of node.children) showSubtreeWhile(child, visible);
 }
 
 /** One keyframe's time value, read off the mark's own datum. */
