@@ -1,6 +1,7 @@
 /**
  * Unit tests for the window a `time.sequence` shows (`src/timeWindow.ts`):
- * the keyframes' band rule and the cut of a line threaded through them. Run:
+ * the keyframes' band rule, the trail a transition leaves behind, and the cut
+ * of a line threaded through them. Run:
  * `tsx src/tests/timeWindow.test.ts` (wired into `pnpm test` as
  * `test:time-window`).
  *
@@ -11,12 +12,16 @@
  */
 
 import {
-  bandInWindow,
+  spanInWindow,
   keyframeBand,
   keyframeOf,
+  keyframeShowing,
   markKeyframe,
+  moveKeyframe,
+  movedKeyframe,
   windowAt,
   windowPath,
+  type Keyframe,
   type SequenceWindow,
 } from "../timeWindow";
 import { sourceIndex } from "../interpolate";
@@ -75,22 +80,22 @@ console.log("# the band rule: history 0 is the step rule");
   const agree = playheads.every((t) =>
     bands.every(
       (_, j) =>
-        bandInWindow(keyframeBand(bands, j), windowAt(t, 0)) ===
+        spanInWindow(keyframeBand(bands, j), windowAt(t, 0)) ===
         (j === sourceIndex(bands, t, "step"))
     )
   );
   ok("each playhead shows exactly the step rule's keyframe", agree);
   ok(
     "the first band reaches back before the run",
-    bandInWindow(keyframeBand(bands, 0), windowAt(1900, 0))
+    spanInWindow(keyframeBand(bands, 0), windowAt(1900, 0))
   );
   ok(
     "the last band runs on past the end",
-    bandInWindow(keyframeBand(bands, 3), windowAt(2100, 0))
+    spanInWindow(keyframeBand(bands, 3), windowAt(2100, 0))
   );
   ok(
     "a lone keyframe owns all of time",
-    bandInWindow(keyframeBand([1955], 0), windowAt(0, 0))
+    spanInWindow(keyframeBand([1955], 0), windowAt(0, 0))
   );
 }
 
@@ -99,7 +104,7 @@ console.log("# the band rule: history widens the window");
   const bands = [1955, 1960, 1965, 1970];
   const shown = (t: number, h: number) =>
     bands.filter((_, j) =>
-      bandInWindow(keyframeBand(bands, j), windowAt(t, h))
+      spanInWindow(keyframeBand(bands, j), windowAt(t, h))
     );
   ok(
     "Infinity shows every keyframe reached",
@@ -231,14 +236,100 @@ console.log("# the keyframe record");
     history: 0,
     window: () => windowAt(2000, 0),
   };
-  const group = { parent: undefined };
+  const group: { parent?: unknown } = { parent: undefined };
   const mark = { parent: { parent: group } };
-  markKeyframe(group, { t: 2000, band: [-Infinity, 2001], sequence });
+  markKeyframe(group, { t: 2000, span: [-Infinity, 2001], sequence });
   ok("a mark inside a keyframe finds it", keyframeOf(mark)?.t === 2000);
   ok("and the sequence it belongs to", keyframeOf(mark)?.sequence === sequence);
   ok(
     "a node outside every keyframe finds none",
     keyframeOf({ parent: undefined }) === undefined
+  );
+  const wrapper = { parent: undefined };
+  group.parent = wrapper;
+  moveKeyframe(group, wrapper);
+  const beside = { parent: wrapper };
+  ok(
+    "a record moved to a wrapper covers what the wrapper adds beside the group",
+    keyframeOf(beside)?.t === 2000 && keyframeOf(mark)?.t === 2000
+  );
+}
+
+console.log("# the trail rule, over a grid of playheads");
+{
+  // Keyframes five years apart, one of them after a ten-year gap, so the
+  // bands are uneven.
+  const times = [1955, 1960, 1965, 1975, 1980];
+  const playheads = [
+    1950, 1955, 1956, 1959.99, 1960, 1962.5, 1965, 1970, 1974.9, 1975, 1977,
+    1980, 1985,
+  ];
+  const histories = [0, 0.5, 3, 5, 10, 17, Infinity];
+  /** Which keyframes show at `T`, written out by hand from the rule on #903
+   *  rather than through `spanInWindow`. */
+  const expected = (
+    reading: "none" | "glide" | "step",
+    T: number,
+    h: number
+  ): number[] =>
+    times.filter((t, j) => {
+      const [start, end] = keyframeBand(times, j);
+      if (reading === "glide") return T - h <= t && t < T;
+      const overlaps = start <= T && end > T - h;
+      if (reading === "none") return overlaps;
+      // A step keyframe's band overlaps the window but no longer holds the
+      // playhead: its band is over, and its end is still inside the window.
+      return overlaps && !(start <= T && T < end);
+    });
+  const shown = (
+    reading: "none" | "glide" | "step",
+    T: number,
+    h: number
+  ): number[] =>
+    times.filter((t, j) => {
+      const sequence: SequenceWindow = {
+        history: h,
+        window: () => windowAt(T, h),
+      };
+      const keyframe: Keyframe = { t, span: keyframeBand(times, j), sequence };
+      return keyframeShowing(
+        reading === "none"
+          ? keyframe
+          : movedKeyframe(keyframe, reading === "glide")
+      );
+    });
+  for (const reading of ["none", "glide", "step"] as const) {
+    const misses: string[] = [];
+    for (const T of playheads) {
+      for (const h of histories) {
+        const [a, b] = [shown(reading, T, h), expected(reading, T, h)];
+        if (JSON.stringify(a) !== JSON.stringify(b)) {
+          misses.push(`T=${T} h=${h}: ${a} vs ${b}`);
+        }
+      }
+    }
+    ok(
+      `${reading === "none" ? "no transition" : reading}: every playhead and history`,
+      misses.length === 0,
+      misses.slice(0, 3).join("; ")
+    );
+  }
+  ok(
+    "with no history, a transition shows no keyframe at all",
+    playheads.every(
+      (T) =>
+        shown("glide", T, 0).length === 0 && shown("step", T, 0).length === 0
+    )
+  );
+  ok(
+    "a gliding trail leaves each keyframe the moment the mark moves off it",
+    JSON.stringify(shown("glide", 1965, Infinity)) === "[1955,1960]" &&
+      JSON.stringify(shown("glide", 1965.01, Infinity)) === "[1955,1960,1965]"
+  );
+  ok(
+    "a jumping trail keeps each old keyframe one step longer",
+    JSON.stringify(shown("glide", 1981, 10)) === "[1975,1980]" &&
+      JSON.stringify(shown("step", 1981, 10)) === "[1965,1975]"
   );
 }
 

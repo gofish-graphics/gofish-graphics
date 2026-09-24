@@ -16,11 +16,15 @@
  * layout is affine in the interpolated quantities, which a fixed-domain
  * scatter is (see the animation design note, §4.1).
  *
- * The operands are made invisible here, by the same structural rule `blank()`
- * uses (`INTERNAL_emitNothing`): once a transition is reading a run of
- * keyframes, the keyframes themselves are scaffolding. They keep their boxes,
- * their data and their anchoring role, and they contribute no display items
- * and no hit-test targets.
+ * The operands keep drawing, but only as the TRAIL the moving mark leaves
+ * behind (`showAsTrail`). Each keyframe mark shows while its span of time
+ * overlaps the window its sequence shows, except while the moving mark stands
+ * in for it, and a gliding curve narrows a keyframe's span to its own moment
+ * (the rule is `movedKeyframe` in `src/timeWindow.ts`). With no history the
+ * window is the playhead alone, so the trail is empty and the moving mark is
+ * all that shows. Like a sequence's own hold, this is decided at PAINT time:
+ * the keyframes are lowered either way and their opacity is patched per
+ * frame.
  *
  * WHEN THE MARK IS THERE. A line draws nothing past its endpoints, and a
  * tween, read on time, draws nothing outside its run. Each stretch between two
@@ -83,7 +87,7 @@ import {
   type InterpolationMethod,
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
-import { keyframeOf } from "../../timeWindow";
+import { keyframeOf, keyframeShowing, movedKeyframe } from "../../timeWindow";
 import { targetOf } from "./layer";
 
 export type TweenOptions = {
@@ -136,6 +140,26 @@ function markLeaves(node: GoFishNode): GoFishNode[] {
 }
 
 /**
+ * Leave a leaf of a keyframe mark that the transition moves to show only as
+ * part of the trail the moving mark leaves behind. The rule is
+ * `movedKeyframe`'s (`src/timeWindow.ts`); `glides` is whether the curve moves
+ * the mark between keyframes, which is every curve but `"step"`. It is set at
+ * paint time on the leaf, and a leaf also paints only while its keyframe
+ * group's own rule holds, which the trail rule never widens. A keyframe that
+ * belongs to no sequence (a transition over plain groups with a clock of its
+ * own) has no window to show in, so it never shows.
+ */
+function showAsTrail(leaf: GoFishNode, glides: boolean): void {
+  const keyframe = keyframeOf(leaf);
+  if (keyframe === undefined) {
+    leaf.INTERNAL_visibleWhile(() => false);
+    return;
+  }
+  const moved = movedKeyframe(keyframe, glides);
+  leaf.INTERNAL_visibleWhile(() => keyframeShowing(moved));
+}
+
+/**
  * One leaf's run through the keyframes, in time order: everything about it
  * that layout decided. Reading it at a playhead is pure arithmetic over these
  * numbers, which is what lets the paint tier do it per frame.
@@ -163,7 +187,7 @@ type Track =
       cx: number[];
       cy: number[];
       /** Each keyframe's local origin (the point its anchor sits on), and
-       *  its own drawing, taken over from the keyframe. */
+       *  a copy of its own drawing, lent by the keyframe. */
       origins: [number, number][];
       draws: ((
         transform: Transform,
@@ -337,25 +361,6 @@ export const tween = createNodeOperator(
           const order = knotOrder(knots);
           const keyframes = order.map((i) => targetOf(children[i]));
 
-          // A sequence that keeps history shows several of its keyframes at
-          // once, and a transition takes the keyframes over to draw ONE mark
-          // moving between them. What that mark should leave behind (a trail
-          // of where it has been) is not decided, so the pair is an error
-          // rather than a guess.
-          const history = keyframes
-            .map((k) => keyframeOf(k)?.sequence.history ?? 0)
-            .find((h) => h > 0);
-          if (history !== undefined) {
-            throw new Error(
-              `[gofish] time.transition(): the sequence it moves through keeps ` +
-                `history (history: ${history}), so it shows several keyframes ` +
-                `at once, and a transition draws one moving mark in place of ` +
-                `them. What that mark should leave behind is not built yet. ` +
-                `Drop \`history\` to animate the mark, or drop the transition ` +
-                `and draw the past as a line({ along }) through the keyframes.`
-            );
-          }
-
           /** A leaf's placed box and local origin in this node's frame. The
            *  keyframe mark itself is its operand, already placed; any other
            *  leaf is read through a `ref` of the same kind, which is how an
@@ -445,19 +450,22 @@ export const tween = createNodeOperator(
             const shape = leaves[0].type;
             const cx = boxes.map((b) => (b.minX + b.maxX) / 2);
             const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
-            // The keyframes are scaffolding once a transition reads them:
-            // every leaf it moves stops drawing, and a rigid leaf hands its
-            // drawing over to be placed where the playhead is.
+            // Every leaf the transition moves shows only as the trail, and a
+            // rigid leaf also lends its drawing to the moving mark, to be
+            // placed where the playhead is.
+            for (const leaf of leaves) showAsTrail(leaf, method !== "step");
             if (RIGID_SHAPES.has(shape)) {
               return {
                 kind: "rigid",
                 cx,
                 cy,
                 origins: stands.map((s) => displayTranslate(s.transform)),
-                draws: leaves.map((leaf) => leaf.INTERNAL_takeOverLowering()),
+                draws: leaves.map(
+                  (leaf) => (transform: Transform, toPixel: ToPixel) =>
+                    leaf.INTERNAL_lowerAt(transform, toPixel)
+                ),
               };
             }
-            for (const leaf of leaves) leaf.INTERNAL_emitNothing();
             return {
               kind: "box",
               shape,

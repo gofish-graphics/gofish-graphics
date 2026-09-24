@@ -118,14 +118,12 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * own items (`INTERNAL_visibleWhile`), read per frame in paint position, and
  * the chart is laid out once however long it plays.
  *
- * A `time.transition()` layered over it takes the keyframes over completely:
- * their box leaves emit no items at all (`INTERNAL_emitNothing`) and their
- * text leaves hand their drawing to the transition
- * (`INTERNAL_takeOverLowering`), so there is nothing left to show or hide and
- * the two compose with nothing to coordinate. That is also why a transition
- * over a sequence that keeps history is an error for now: the sequence would
- * show several keyframes at once, and what the one moving mark should leave
- * behind (a trail) is not decided.
+ * A `time.transition()` layered over it draws one moving mark in place of the
+ * keyframe marks it moves, and those keyframe marks show only as the trail the
+ * mark leaves behind: each shows while its span, which depends on the
+ * transition's curve, overlaps the window, except while the moving mark
+ * stands in for it (`movedKeyframe` in `src/timeWindow.ts`). With no history
+ * that trail is empty, so the moving mark is all that shows.
  *
  * The operator also owns the chart's clock, and builds it lazily: the domain
  * is the field's own range, which is not known until the data has been split,
@@ -256,8 +254,9 @@ export type TransitionOptions = {
   at?: (() => number) | number;
   /** How the run is read between keyframes. `"auto"` smooths a numeric time
    *  field with a Catmull-Rom through the whole run — the temporal reading of
-   *  `connect`'s auto rule, and the same curve the spatial twin's `line`
-   *  draws through the same points. `"linear"` moves straight from each
+   *  `connect`'s auto rule, with the time values as its knots, which is the
+   *  curve a smooth `line` threaded through the same keyframes draws.
+   *  `"linear"` moves straight from each
    *  keyframe to the next. `"step"` does not move between them at all: the
    *  mark holds one keyframe's value until the next keyframe's own time
    *  arrives, and then jumps — the same picture the keyframes alone draw. */
@@ -350,7 +349,8 @@ export const transition = createRelationalMark<TransitionOptions>(
 /** `"auto"` on a time axis: the field is numeric (a sequence enforces that),
  *  so the run is a sample of a continuous variable and smooths — the same
  *  conclusion `connect`'s auto rule reaches for a continuous connection axis,
- *  and the reason a transition traces the curve its spatial twin draws. */
+ *  and the reason a transition traces the curve a smooth threaded line
+ *  draws. */
 function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
   if (curve === "step") return "step";
   return curve === "linear" ? "linear" : "catmullRom";
@@ -400,7 +400,7 @@ function hold(
       child.INTERNAL_visibleWhile(() => false);
       return;
     }
-    const keyframe: Keyframe = { t, band: keyframeBand(bands, j), sequence };
+    const keyframe: Keyframe = { t, span: keyframeBand(bands, j), sequence };
     markKeyframe(child, keyframe);
     child.INTERNAL_visibleWhile(() => keyframeShowing(keyframe));
   });

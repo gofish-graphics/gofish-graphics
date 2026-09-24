@@ -28,12 +28,23 @@
  * ANIMATED is that port, line and all. PAUSED1979 holds it at 1979.5, halfway
  * through a year, so the cut inside a segment shows. WITH DOTS draws each
  * year's point too, styled like the static connected scatterplot, and each dot
- * appears as the line reaches it. COMET keeps only the last ten years, so the
- * line is cut at both ends, and COMET PAUSED 1979 holds it still.
+ * appears as the line reaches it. MOVING DOT adds a `time.transition()` dot
+ * that travels along the line's tip, leaving the year dots behind it as its
+ * trail, and MOVING DOT PAUSED 1979 holds it still. COMET keeps only the last
+ * ten years, so the line is cut at both ends, and COMET PAUSED 1979 holds it
+ * still.
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, circle, line, scatter, time, timer } from "../../src/lib";
+import {
+  chart,
+  circle,
+  line,
+  scatter,
+  selectAll,
+  time,
+  timer,
+} from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
 
 const meta: Meta = {
@@ -158,6 +169,70 @@ export const WithDotsPaused1979: StoryObj<Args> = {
       .mark(dot())
       .layer(line({ along: "year", stroke: "black", strokeWidth: 2 }))
       .render(container, { w: args.w, h: args.h, axes: true });
+
+    return container;
+  },
+};
+
+/**
+ * WITH DOTS plus a moving dot: the dots, the line threaded through them, and a
+ * `time.transition()` over the same dots. The sequence keeps all its history,
+ * so the transition draws one dot moving through the years and the year dots
+ * stay behind it as its trail.
+ *
+ * The transition is a tier of its own over the dots (`selectAll("dots")`)
+ * because `.layer(...)` reads the tier just before it, which here is the line.
+ * It reads the sequence's clock like any transition over the sequence's
+ * keyframes.
+ *
+ * Both the line and the transition are smooth, and both use the years as
+ * their knots, so the moving dot rides exactly on the line's tip. A gliding
+ * transition covers the time between two years, so each year's dot covers only
+ * its own moment: it shows the moment the moving dot leaves it, and the trail
+ * has no gap behind the moving dot.
+ */
+const movingDot = (sequence: Record<string, unknown>) =>
+  chart(drivingShifts)
+    .flow(
+      time.sequence({ by: "year", history: Infinity, ...sequence } as any),
+      scatter({ x: "miles", y: "gas" })
+    )
+    .mark(dot().name("dots"))
+    .layer(line({ along: "year", stroke: "black", strokeWidth: 2 }))
+    .layer(
+      chart(selectAll("dots")).mark(
+        time.transition({ fill: "#e4572e", stroke: "black", strokeWidth: 2 })
+      )
+    );
+
+export const MovingDot: StoryObj<Args> = {
+  args: { w: 500, h: 500 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const year = timer({ domain: [1956, 2010], duration: 54 * 200 });
+    movingDot({ on: year }).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: true,
+    });
+
+    return container;
+  },
+};
+
+/** The moving dot held still halfway through 1979: the year dots up to 1979
+ *  stay behind, and the moving dot sits on the line's tip halfway to 1980. */
+export const MovingDotPaused1979: StoryObj<Args> = {
+  args: { w: 500, h: 500 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    movingDot({ playing: false, at: AT }).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: true,
+    });
 
     return container;
   },

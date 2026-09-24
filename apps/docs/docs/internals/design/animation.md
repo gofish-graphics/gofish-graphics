@@ -629,17 +629,20 @@ One slice of §5's table exists: the `time` namespace
   plays at an even speed. On a fixed-domain scatter the σ-affine commutativity
   of §4.1 holds exactly, and the rendered dot matches the data-space
   interpolation mapped through the scales to floating-point precision.
-- The keyframe marks are **paint-hidden** in §2.1's sense. Which rule does it
-  depends on who is hiding them, and the two differ in exactly the way §2.1
-  wants: a transition takes its keyframes over for good, so it uses the
-  structural rule (`INTERNAL_emitNothing`, the same one `blank()` uses) and they
-  emit no display items and no hit-test targets; a sequence hides the bands it
-  is not holding only for as long as it is not holding them, so it uses the
-  paint-tier rule (`INTERNAL_visibleWhile`) and they keep their items, at
-  opacity 0, hit-test targets included. The paint-tier rule is set once per
-  keyframe group and covers the group's whole subtree, including marks a
-  later elaboration pass adds to it, such as `.label()` text. So a labeled
-  keyframe shows its labels only while it is held.
+- The keyframe marks are **paint-hidden** in §2.1's sense, by the paint-tier
+  rule (`INTERNAL_visibleWhile`), so they keep their items, at opacity 0,
+  hit-test targets included. A sequence sets the rule once per keyframe group,
+  and it covers the group's whole subtree, including marks a later elaboration
+  pass adds to it, such as `.label()` text. So a labeled keyframe shows its
+  labels only while it is held. A transition sets a narrower rule of its own on
+  each leaf it moves, so a keyframe it moves shows only as part of the trail
+  the moving mark leaves behind (#903): a keyframe covers its band under
+  `"step"` and only its own moment under a gliding curve, it shows while that
+  span overlaps the sequence's window, and the keyframe whose span contains
+  the playhead is hidden because the moving mark stands in for it
+  (`movedKeyframe` in `src/timeWindow.ts`). With no history no moved keyframe
+  shows. This rule replaced an earlier structural one (`INTERNAL_emitNothing`),
+  which could not bring a keyframe back for a trail.
 - A transition moves **every leaf of a keyframe mark**, not just its top shape.
   The leaves are the mark's own subtree leaves plus what is attached to it from
   outside (its label `Text`s, recorded as `_attachments` by the label pass),

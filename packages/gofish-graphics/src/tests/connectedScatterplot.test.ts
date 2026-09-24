@@ -41,6 +41,7 @@ const {
   orthogonal,
   ribbon,
   scatter,
+  selectAll,
   time,
   timer,
 } = GoFish as any;
@@ -325,6 +326,92 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("\n# a moving dot leaves a trail");
+  {
+    /** The dots, a line threaded through them, and a transition moving one
+     *  red dot over the same keyframes, on a sequence keeping `history`. The
+     *  keyframe dots are white, so the moving dot is the only red one. */
+    const trail = (
+      at: number,
+      curve: "linear" | "catmullRom" | "step",
+      history = Infinity
+    ) =>
+      chart(drivingShifts)
+        .flow(
+          time.sequence({ by: "year", on: pausedClock(at), history }),
+          scatter({ x: "miles", y: "gas" })
+        )
+        .mark(circle({ r: 4, fill: "white" }).name("dots"))
+        .layer(
+          line({ along: "year", curve: curve === "step" ? "linear" : curve })
+        )
+        .layer(
+          chart(selectAll("dots")).mark(time.transition({ curve, fill: "red" }))
+        )
+        .toDisplayList(OPTIONS);
+    const shownDots = (doc: any, fill: string) =>
+      items(doc).filter(
+        (item) =>
+          item.kind === "ellipse" &&
+          item.style?.fill === fill &&
+          item.style?.opacity !== 0
+      );
+    const lastPoint = (doc: any): Point => {
+      const [path] = items(doc).filter((item) => item.kind === "path");
+      const numbers = path.d.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/g).map(Number);
+      return [numbers[numbers.length - 2], numbers[numbers.length - 1]];
+    };
+    const onTip = (doc: any): boolean => {
+      const [dot] = shownDots(doc, "red");
+      const tip = lastPoint(doc);
+      return (
+        dot !== undefined &&
+        Math.abs(dot.cx - tip[0]) < 1e-3 &&
+        Math.abs(dot.cy - tip[1]) < 1e-3
+      );
+    };
+    const years = drivingShifts.map((d: any) => d.year);
+    for (const at of [1962.5, 1979.25, 1980, 2004.6]) {
+      const doc = await trail(at, "linear");
+      const white = shownDots(doc, "white").length;
+      const reached = years.filter((y: number) => y < at).length;
+      ok(
+        `linear at ${at}: every year passed shows, and no other`,
+        white === reached,
+        `${white} vs ${reached}`
+      );
+      ok(
+        `linear at ${at}: one moving dot, at the line's tip`,
+        shownDots(doc, "red").length === 1 && onTip(doc)
+      );
+      const diff = firstDifference(
+        lineSegments(doc),
+        lineSegments(await dataSpace(at))
+      );
+      ok(`linear at ${at}: the line is the data-space rung`, !diff, diff);
+    }
+    for (const at of [1956.5, 1979.25, 1995.9]) {
+      ok(
+        `catmullRom at ${at}: the moving dot is at the line's tip`,
+        onTip(await trail(at, "catmullRom"))
+      );
+    }
+    const stepped = await trail(1979.25, "step");
+    ok(
+      "step: the moving dot holds 1979, and every band already over shows",
+      shownDots(stepped, "white").length ===
+        years.filter((y: number) => y < 1979).length
+    );
+    for (const curve of ["linear", "catmullRom", "step"] as const) {
+      const doc = await trail(1979.25, curve, 0);
+      ok(
+        `${curve} with no history: the moving dot alone`,
+        shownDots(doc, "white").length === 0 &&
+          shownDots(doc, "red").length === 1
+      );
+    }
+  }
+
   console.log("\n# what is not built throws");
   const throws = async (build: () => Promise<unknown>, pattern: RegExp) => {
     try {
@@ -343,11 +430,6 @@ async function main(): Promise<void> {
       )
       .mark(circle({ r: 4 }));
   let why = await throws(
-    () => keyframes(10).layer(time.transition()).toDisplayList(OPTIONS),
-    /keeps history/
-  );
-  ok("a transition over a sequence that keeps history", !why, why);
-  why = await throws(
     () =>
       keyframes(Infinity)
         .layer(line({ along: "year", curve: orthogonal() }))

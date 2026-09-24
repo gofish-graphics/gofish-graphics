@@ -28,9 +28,11 @@ import {
   chart,
   circle,
   filter,
+  group,
   line,
   live,
   scatter,
+  selectAll,
   rect,
   spread,
   spreadX,
@@ -689,6 +691,174 @@ export const Frame1955: StoryObj<Args> = {
       )
       .mark(circle({ r: 4, fill: "country" }))
       .render(container, { w: args.w, h: args.h, axes: true } as any);
+
+    return container;
+  },
+};
+
+/** The countries the trail stories follow: few enough that every trail can be
+ *  read, and each with a turn in it (China's famine around 1960, Rwanda's
+ *  genocide in the 1990s, South Africa's life expectancy falling after 1990). */
+const TRAIL_COUNTRIES = [
+  "China",
+  "India",
+  "United States",
+  "Rwanda",
+  "South Africa",
+];
+
+/**
+ * Gapminder with trails. Each country is a dot moving through the years, and
+ * it leaves its past years behind it: a faint dot for each year it has passed
+ * and a line threaded through them.
+ *
+ * The keyframes are the faint dots. The sequence keeps all its history, so
+ * every year the playhead has reached stays on screen, and the line threaded
+ * through the dots is drawn up to the playhead. The transition over the same
+ * dots draws the moving dot. It is a tier of its own over the dots
+ * (`selectAll("years")`, split by country) because `.layer(...)` reads the tier
+ * just before it, which is the lines. With a gliding curve each year's dot
+ * covers only its own moment, so it appears the moment the moving dot leaves
+ * it, and the moving dot is always at the tip of its line: the line and the
+ * transition use the same curve, with the years as its knots.
+ *
+ * The moving dot takes its size and color from the keyframes, and its opacity
+ * from the transition, which is 1 unless it is given. That is why it stands
+ * out from the faint dots it leaves behind.
+ */
+const trails = (
+  rows: any[],
+  clock: any,
+  curve: "linear" | "catmullRom",
+  options: Record<string, unknown> = {}
+) =>
+  chart(
+    rows.filter((d) => TRAIL_COUNTRIES.includes(d.country)),
+    options
+  )
+    .flow(
+      time.sequence({ by: "year", on: clock, history: Infinity }),
+      scatter({ by: "country", x: "fertility", y: "life_expect" })
+    )
+    .mark(circle({ r: 4, fill: "country", opacity: 0.3 }).name("years"))
+    .layer(
+      line({
+        along: "year",
+        stroke: "country",
+        strokeWidth: 1.5,
+        opacity: 0.6,
+        curve,
+      })
+    )
+    .layer(
+      chart(selectAll("years"))
+        .flow(group({ by: "country" }))
+        .mark(time.transition({ curve }))
+    );
+
+export const Trails: StoryObj<Args> = {
+  args: { w: 500, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Gapminder Trails",
+      description:
+        "Five countries' fertility rate and life expectancy from 1955 to 2005, each a dot moving through the years that leaves a trail of its past years behind it.",
+    },
+  },
+  loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const gapminder = context.loaded.gapminder as any[];
+
+    const year = timer({ domain: yearRange(gapminder), duration: 10000 });
+    trails(gapminder, year, "catmullRom")
+      .layer(yearReadout(year))
+      .render(container, { w: args.w, h: args.h, axes: true } as any);
+
+    return container;
+  },
+};
+
+/** The trails held still at 1997.5, halfway between 1995 and 2000: every year
+ *  up to 1995 is behind each moving dot, and Rwanda's dot is on its way back
+ *  up from its fall in the early 1990s. */
+export const TrailsPaused: StoryObj<Args> = {
+  args: { w: 500, h: 400 },
+  loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const gapminder = context.loaded.gapminder as any[];
+
+    const year = pausedClock(yearRange(gapminder), 10000, 1997.5);
+    trails(gapminder, year, "catmullRom")
+      .layer(yearReadout(year))
+      .render(container, { w: args.w, h: args.h, axes: true } as any);
+
+    return container;
+  },
+};
+
+/** The two gliding curves side by side on one clock: straight segments on
+ *  the left, the smooth curve on the right. Each moving dot stays on the tip
+ *  of its own line either way, because the line and the transition in a panel
+ *  use the same curve. */
+const trailCurvesRow = (
+  container: HTMLElement,
+  args: Args,
+  rows: any[],
+  clock: any
+) =>
+  GoFish(
+    container,
+    { w: args.w, h: args.h, legend: false, axes: true } as any,
+    () =>
+      spreadY({ spacing: 16, alignment: "middle" }, [
+        text({
+          text: live(() => String(Math.floor(clock()))),
+          fontSize: 40,
+          fill: "#ccc",
+        }),
+        spreadX(
+          { spacing: 16, alignment: "end" },
+          (["linear", "catmullRom"] as const).map((curve) =>
+            spreadY({ spacing: 8, alignment: "middle" }, [
+              text({ text: curve, fontSize: 12, fill: "#555" }),
+              Frame({ w: PANEL_W, h: 280 }, [
+                trails(rows, clock, curve, { legend: false, padding: 0 }),
+              ]),
+            ])
+          )
+        ),
+      ])
+  );
+
+export const TrailsCurves: StoryObj<Args> = {
+  args: { w: 600, h: 400 },
+  loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const gapminder = context.loaded.gapminder as any[];
+
+    const year = timer({ domain: yearRange(gapminder), duration: 10000 });
+    trailCurvesRow(container, args, gapminder, year);
+
+    return container;
+  },
+};
+
+/** The two curves held still at 1967.5, after China's trail has turned
+ *  through its 1960 famine: the straight segments meet at a corner at 1960,
+ *  and the smooth curve swings round it. */
+export const TrailsCurvesPaused: StoryObj<Args> = {
+  args: { w: 600, h: 400 },
+  loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const gapminder = context.loaded.gapminder as any[];
+
+    const year = pausedClock(yearRange(gapminder), 10000, 1967.5);
+    trailCurvesRow(container, args, gapminder, year);
 
     return container;
   },

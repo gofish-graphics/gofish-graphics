@@ -157,7 +157,9 @@ A sequence shows one keyframe at a time. `history` keeps earlier keyframes on
 screen as well. It is a length of time in the field's own units, and the
 default is `0`. At a playhead of `T`, the sequence shows every keyframe whose
 band of time overlaps the window from `T - history` to `T`. With
-`history: Infinity`, every year the playhead has reached stays on screen.
+`history: Infinity`, every year the playhead has reached stays on screen. A
+transition layered over the sequence changes which keyframes show, as
+[a moving mark with a trail](#a-moving-mark-with-a-trail) explains.
 
 A `line` threaded through the keyframes is drawn over the same window. This is
 how the Animated Vega-Lite connected scatterplot draws its line in, one year at
@@ -254,6 +256,65 @@ already holds each keyframe until the next one's time arrives, and a step curve
 asks the transition to do exactly that, so the transition has nothing left to
 add. It is worth having as a curve anyway, because it is the reading the other
 two are measured against.
+
+## A moving mark with a trail
+
+A sequence that keeps history can have a transition layered over it too. The
+transition draws one moving mark per run, as it does without history, and the
+keyframes it moves stay behind the mark as its trail.
+
+```ts
+const year = timer({ domain: [1955, 2005], duration: 10000 });
+const countries = ["China", "India", "United States", "Rwanda", "South Africa"];
+
+chart(gapminder.filter((d) => countries.includes(d.country)))
+  .flow(
+    time.sequence({ by: "year", on: year, history: Infinity }),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(circle({ r: 4, fill: "country", opacity: 0.3 }).name("years"))
+  .layer(line({ along: "year", stroke: "country", strokeWidth: 1.5 }))
+  .layer(
+    chart(selectAll("years"))
+      .flow(group({ by: "country" }))
+      .mark(time.transition())
+  )
+  .render(container, { w: 500, h: 400, axes: true });
+```
+
+Each country is a moving dot that leaves behind a faint dot for each year it
+has passed, with a line threaded through them. The transition is a tier of its
+own over the dots, `chart(selectAll("years"))`, because `.layer(...)` reads the
+tier just before it, and here that tier is the line. It is split by country, as
+the sugar would split it, and it reads the sequence's clock. The moving dot
+takes its size and color from the keyframes and its opacity from the
+transition, which is why it stands out from the faint dots.
+
+Which keyframes show depends on the transition's curve, because each keyframe
+covers a span of time:
+
+- With a curve that glides, which is `"linear"`, `"catmullRom"` or the default
+  `"auto"`, the moving mark covers the time between two keyframes. So a
+  keyframe covers only its own moment, and it appears the moment the moving
+  mark leaves it. The trail has no gap behind the moving mark.
+- With `curve: "step"`, and with no transition at all, a keyframe covers its
+  whole band, from its own time up to the next keyframe's.
+
+At a playhead of `T`, a keyframe shows while its span overlaps the window from
+`T - history` to `T`. The one exception is the keyframe whose span contains
+`T`, because the moving mark stands in for it.
+
+With `history: 0` the window is the single moment `T`, so the only keyframe it
+can reach is the one the moving mark stands in for, and no keyframe shows. A
+transition without history therefore draws only the moving mark, as it always
+has. With a limited history, e.g., `history: 10`, a `"step"` trail keeps each
+old keyframe one step longer than a gliding trail does, because a step keyframe
+covers the time up to the next keyframe and a gliding one covers only its own
+moment.
+
+The line and the transition here both use the default curve, so both are
+smooth, with the years as their knots. They follow the same curve, and each
+moving dot stays on the tip of its line.
 
 ## What a frame costs
 
@@ -488,11 +549,8 @@ another, or several at once), no staggering, and no options to restyle how
 marks enter and exit. The value axis cannot rescale from one keyframe to the
 next.
 
-A sequence that keeps history cannot have a transition layered over it yet.
-The sequence would show several keyframes at once, and it is not decided what
-the one moving mark should leave behind, so this throws an error. A threaded
-line can be cut only when each step from one keyframe to the next is a single
-straight or curved segment. The curves `"linear"`, `"bezier"` and
+A threaded line can be cut only when each step from one keyframe to the next is
+a single straight or curved segment. The curves `"linear"`, `"bezier"` and
 `"catmullRom"` work. The routing curves `orthogonal()`, `arc()` and
 `perfectArrows()` throw an error, and so do a threaded `ribbon` and a threaded
 line pinned with `source` or `target`.
@@ -500,5 +558,5 @@ line pinned with `source` or `target`.
 The chart is laid out once. The playhead is read while the chart is painted, so
 each tick of the clock changes attributes of marks already on the page and
 does not lay the chart out again. What does grow with the data is the number of
-marks on the page, because a sequence without a transition keeps every
-keyframe's marks there, even the hidden ones.
+marks on the page, because a sequence keeps every keyframe's marks there, even
+the hidden ones, whether or not a transition is layered over it.
