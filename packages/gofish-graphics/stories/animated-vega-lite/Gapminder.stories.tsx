@@ -40,6 +40,7 @@ import {
   time,
   timer,
 } from "../../src/lib";
+import { catmullRomJet } from "../../src/catmullRom";
 import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
 
@@ -380,74 +381,6 @@ type Quantity = (typeof QUANTITIES)[number];
 
 type Sample = { t: number; method: string; value: number };
 
-/** A value and its first two derivatives with respect to time, carried
- *  together so one pass down the interpolation computes all three. */
-type Jet = [value: number, velocity: number, acceleration: number];
-
-/** The constant jet of a keyframe's value: it does not depend on time. */
-const jetOf = (v: number): Jet => [v, 0, 0];
-
-/**
- * The Barry-Goldman lerp, differentiated twice.
- *
- * `interpolateCatmullRom` builds its value out of nested lerps of the form
- * `((tb - t)·A + (t - ta)·B) / (tb - ta)`, where `A` and `B` are themselves
- * lerps and therefore themselves functions of `t`. Each level is linear in
- * `t`, so differentiating is the product rule and nothing more:
- *
- *   L   = ((tb - t)·A  +  (t - ta)·B) / (tb - ta)
- *   L'  = (-A + (tb - t)·A'  +  B + (t - ta)·B') / (tb - ta)
- *   L'' = (-2A' + (tb - t)·A''  +  2B' + (t - ta)·B'') / (tb - ta)
- *
- * Running the pyramid over jets instead of numbers therefore hands back the
- * spline's exact velocity and acceleration, not an approximation of them.
- * A degenerate span collapses onto its later endpoint, the same rule the
- * library's own lerp uses.
- */
-const lerpJet = (A: Jet, B: Jet, ta: number, tb: number, t: number): Jet => {
-  if (tb === ta) return B;
-  const w = tb - ta;
-  return [
-    ((tb - t) * A[0] + (t - ta) * B[0]) / w,
-    (-A[0] + (tb - t) * A[1] + B[0] + (t - ta) * B[1]) / w,
-    (-2 * A[1] + (tb - t) * A[2] + 2 * B[1] + (t - ta) * B[2]) / w,
-  ];
-};
-
-/**
- * The spline, its velocity and its acceleration at `t`, read INSIDE the
- * interval `[knots[i], knots[i+1]]`.
- *
- * The interval is named rather than looked up because the acceleration is
- * only piecewise continuous: at a knot it has two values, one from the
- * interval on each side, and which one is wanted is the caller's question.
- * This is `interpolateCatmullRom` with jets in place of numbers — the same
- * phantom-neighbor reflection at the ends, the same pyramid.
- */
-const catmullRomJet = (
-  knots: number[],
-  values: number[],
-  i: number,
-  t: number
-): Jet => {
-  const n = knots.length;
-  const t1 = knots[i];
-  const t2 = knots[i + 1];
-  const p1 = jetOf(values[i]);
-  const p2 = jetOf(values[i + 1]);
-  const t0 = i > 0 ? knots[i - 1] : t1 - (t2 - t1);
-  const p0 = i > 0 ? jetOf(values[i - 1]) : p1;
-  const t3 = i + 2 < n ? knots[i + 2] : t2 + (t2 - t1);
-  const p3 = i + 2 < n ? jetOf(values[i + 2]) : p2;
-
-  const a1 = lerpJet(p0, p1, t0, t1, t);
-  const a2 = lerpJet(p1, p2, t1, t2, t);
-  const a3 = lerpJet(p2, p3, t2, t3, t);
-  const b1 = lerpJet(a1, a2, t0, t2, t);
-  const b2 = lerpJet(a2, a3, t1, t3, t);
-  return lerpJet(b1, b2, t1, t2, t);
-};
-
 /**
  * One country's run under each reading, with its velocity and acceleration.
  *
@@ -473,9 +406,9 @@ const catmullRomJet = (
  * DISCONTINUOUS at the knots — a Catmull-Rom is only C¹ — so each interval is
  * sampled just inside its own ends and the intervals are joined by risers,
  * which is what makes the jumps read as jumps rather than as a steep ramp.
- * All three come from `catmullRomJet`, the library's own pyramid run over
- * jets, so the velocity and acceleration are exact derivatives of the very
- * curve the transition above is following.
+ * All three come from `catmullRomJet`, the library's own spline read with its
+ * derivatives, so the velocity and acceleration are exact derivatives of the
+ * very curve the transition above is following.
  */
 const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
   const run = rows
@@ -527,7 +460,7 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
       // Position and velocity are continuous across a knot, so the shared
       // endpoint is emitted once, by the interval on its left.
       if (i === 0 || s > 0) {
-        const [position, velocity] = catmullRomJet(knots, values, i, t);
+        const [position, velocity] = catmullRomJet(knots, values, i, u);
         at("position", "catmullRom", t, position);
         at("velocity", "catmullRom", t, velocity);
       }
@@ -540,7 +473,7 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
         "acceleration",
         "catmullRom",
         tA,
-        catmullRomJet(knots, values, i, tA)[2]
+        catmullRomJet(knots, values, i, (tA - knots[i]) / span)[2]
       );
     }
   }

@@ -1,5 +1,5 @@
 import { Path, transformPath } from "../../path";
-import { convertPointsToBezierCurves } from "../../adaptive-resampling";
+import { catmullRomPath, centripetalKnots } from "../../catmullRom";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
@@ -443,9 +443,13 @@ export const connect = createNodeOperator(
             return p;
           };
           if (isSequenceCurve(resolvedCurveName)) {
+            // Centripetal knots: a run of placed points carries no parameter
+            // of its own.
+            const thread = (points: [number, number][]) =>
+              catmullRomPath(points, centripetalKnots(points));
             if (mode === "center") {
               const centers = childPlaceables.map((c) => centerPoint(c.dims));
-              paths.push(convertPointsToBezierCurves(centers));
+              paths.push(thread(centers));
             } else {
               const near: [number, number][] = [];
               const far: [number, number][] = [];
@@ -457,9 +461,9 @@ export const connect = createNodeOperator(
               }
               const farRev = far.slice().reverse();
               paths.push([
-                ...convertPointsToBezierCurves(near),
+                ...thread(near),
                 { type: "line", points: [near[near.length - 1], farRev[0]] },
-                ...convertPointsToBezierCurves(farRev),
+                ...thread(farRev),
                 { type: "line", points: [farRev[farRev.length - 1], near[0]] },
               ]);
             }

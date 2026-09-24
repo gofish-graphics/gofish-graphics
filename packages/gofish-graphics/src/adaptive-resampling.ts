@@ -11,6 +11,7 @@
  */
 
 import { CoordinateTransform } from "./ast/coordinateTransforms/coord";
+import { catmullRomPath, centripetalKnots } from "./catmullRom";
 import {
   Path,
   PathSegment,
@@ -18,7 +19,6 @@ import {
   BezierCurve,
   Point,
   segment,
-  curve,
   lerpPoint,
   subdivideCurve1,
 } from "./path";
@@ -48,15 +48,6 @@ function distance(p0: Point, p1: Point): number {
 }
 
 /**
- * Computes squared Euclidean distance between two points
- */
-function distanceSquared(p0: Point, p1: Point): number {
-  const dx = p1[0] - p0[0];
-  const dy = p1[1] - p0[1];
-  return dx * dx + dy * dy;
-}
-
-/**
  * Source space operations for line segments
  */
 function lineSourceMidpoint(seg: LineSegment): Point {
@@ -79,55 +70,6 @@ function bezierSourceMidpoint(curve: BezierCurve): Point {
 function bezierSourceDistance(curve: BezierCurve): number {
   // Use chord length for simplicity
   return distance(curve.start, curve.end);
-}
-
-/**
- * Converts a centripetal Catmull-Rom spline segment to a cubic Bezier curve.
- * Given four control points P0, P1, P2, P3, creates a Bezier curve from P1 to P2.
- * Uses centripetal parameterization (alpha = 0.5) for smooth, cusp-free curves.
- *
- * This uses a standard approximation that works well for centripetal Catmull-Rom splines.
- */
-function catmullRomToBezier(
-  p0: Point,
-  p1: Point,
-  p2: Point,
-  p3: Point
-): BezierCurve {
-  // Centripetal parameterization: calculate distances with alpha = 0.5
-  // For centripetal: t_i = sqrt(|P_i - P_{i-1}|)
-  const d1 = Math.sqrt(distanceSquared(p0, p1));
-  const d2 = Math.sqrt(distanceSquared(p1, p2));
-  const d3 = Math.sqrt(distanceSquared(p2, p3));
-
-  // Avoid division by zero
-  const eps = 1e-6;
-  const d1Safe = Math.max(d1, eps);
-  const d2Safe = Math.max(d2, eps);
-  const d3Safe = Math.max(d3, eps);
-
-  // Calculate tangents at P1 and P2
-  // For centripetal Catmull-Rom, tangents are weighted by the centripetal distances
-  // Tangent at P1 points toward P2, weighted by distances from P0
-  // Tangent at P2 points from P1, weighted by distances to P3
-  const t1x = (p2[0] - p0[0]) / (d1Safe + d2Safe);
-  const t1y = (p2[1] - p0[1]) / (d1Safe + d2Safe);
-  const t2x = (p3[0] - p1[0]) / (d2Safe + d3Safe);
-  const t2y = (p3[1] - p1[1]) / (d2Safe + d3Safe);
-
-  // Convert to Bezier control points
-  // The control points are positioned along the tangent vectors
-  // The factor d2/3 ensures the Bezier curve approximates the Catmull-Rom segment length
-  const control1: Point = [
-    p1[0] + (d2Safe / 3) * t1x,
-    p1[1] + (d2Safe / 3) * t1y,
-  ];
-  const control2: Point = [
-    p2[0] - (d2Safe / 3) * t2x,
-    p2[1] - (d2Safe / 3) * t2y,
-  ];
-
-  return curve(p1, control1, control2, p2);
 }
 
 /**
@@ -190,84 +132,6 @@ function resampleLineSegment(
       resampleLineSegment(rightSeg, transform, options, depth - 1, result);
     }
   }
-}
-
-/**
- * Converts an array of points to Bezier curves using centripetal Catmull-Rom interpolation.
- * This function handles the conversion for a single segment's resampled points,
- * preserving boundaries by only smoothing within the point set.
- */
-export function convertPointsToBezierCurves(points: Point[]): PathSegment[] {
-  const segments: PathSegment[] = [];
-
-  if (points.length === 0) {
-    return segments;
-  }
-
-  if (points.length === 1) {
-    // Single point - can't create a segment
-    return segments;
-  }
-
-  if (points.length === 2) {
-    // Two points - can't create Catmull-Rom, use line segment
-    segments.push(segment(points[0], points[1]));
-    return segments;
-  }
-
-  if (points.length === 3) {
-    // Three points - create two segments with duplicated endpoints
-    // First segment: from points[0] to points[1]
-    segments.push(
-      catmullRomToBezier(
-        points[0], // P0 (duplicate for boundary)
-        points[0], // P1 (start of curve)
-        points[1], // P2 (end of curve)
-        points[2] // P3 (next point for tangent)
-      )
-    );
-
-    // Second segment: from points[1] to points[2]
-    segments.push(
-      catmullRomToBezier(
-        points[0], // P0 (previous point for tangent)
-        points[1], // P1 (start of curve)
-        points[2], // P2 (end of curve)
-        points[2] // P3 (duplicate for boundary)
-      )
-    );
-    return segments;
-  }
-
-  // Four or more points - apply Catmull-Rom conversion for each segment
-  for (let i = 0; i < points.length - 1; i++) {
-    // For each segment from points[i] to points[i+1], we need 4 points
-    let p0: Point, p1: Point, p2: Point, p3: Point;
-
-    if (i === 0) {
-      // First segment: duplicate first point for P0
-      p0 = points[0];
-      p1 = points[0];
-      p2 = points[1];
-      p3 = points[2];
-    } else if (i === points.length - 2) {
-      // Last segment: duplicate last point for P3
-      p0 = points[i - 1];
-      p1 = points[i];
-      p2 = points[i + 1];
-      p3 = points[i + 1];
-    } else {
-      // Interior segments: use 4 consecutive points
-      p0 = points[i - 1];
-      p1 = points[i];
-      p2 = points[i + 1];
-      p3 = points[i + 2];
-    }
-
-    segments.push(catmullRomToBezier(p0, p1, p2, p3));
-  }
-
-  return segments;
 }
 
 /**
@@ -373,10 +237,12 @@ export function adaptiveResamplePath(
     const endPoint = seg.type === "line" ? seg.points[1] : seg.end;
     segmentPoints.push(transform(endPoint));
 
-    // Convert this segment's points to Bezier curves (within this segment only)
-    // This preserves boundaries - no smoothing across segments
-    const bezierSegments = convertPointsToBezierCurves(segmentPoints);
-    outputSegments.push(...bezierSegments);
+    // Thread this segment's points with a centripetal Catmull-Rom (within
+    // this segment only). This preserves boundaries - no smoothing across
+    // segments
+    outputSegments.push(
+      ...catmullRomPath(segmentPoints, centripetalKnots(segmentPoints))
+    );
   }
 
   return outputSegments;
