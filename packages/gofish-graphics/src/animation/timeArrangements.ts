@@ -133,6 +133,8 @@ export const buildIn = createNodeOperator(
     // (a neutral explicit order) keeps the relational-mark default, "paint
     // under your operands" (`layer.tsx`), from reordering the very marks it
     // selects: the selected bars must paint exactly as the chained form's.
+    // TODO(#907): declared shortcut. The z-order solve should not reorder
+    // siblings no constraint relates; remove this once it doesn't.
     node.zOrder(0);
     setNodeTransition(node, {
       enter: effects,
