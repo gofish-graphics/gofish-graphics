@@ -558,5 +558,6 @@ line pinned with `source` or `target`.
 The chart is laid out once. The playhead is read while the chart is painted, so
 each tick of the clock changes attributes of marks already on the page and
 does not lay the chart out again. What does grow with the data is the number of
-marks on the page, because a sequence keeps every keyframe's marks there, even
-the hidden ones, whether or not a transition is layered over it.
+marks on the page, because a sequence without a transition keeps every
+keyframe's marks there, even the hidden ones. So does a transition over a
+sequence that keeps history, because those marks are its trail.

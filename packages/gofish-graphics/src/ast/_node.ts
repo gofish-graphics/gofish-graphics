@@ -1407,25 +1407,25 @@ export class GoFishNode {
   }
 
   /**
-   * A copy of this node's own drawing for another node to paint: the node
-   * lowered exactly as it draws itself, placed at `transform` (an absolute
-   * transform, like `INTERNAL_lower`'s override) and mapped by `toPixel`. The
-   * node goes on drawing itself as well. Call it while lowering, like any
-   * `_lower`: it reads the session's active flip scope. A `time.transition()`
-   * moves a keyframe's text this way: it draws the copy where the playhead has
-   * taken the text, and the keyframe's own text shows only as part of the
-   * trail.
+   * Lend this node's own drawing, as it stands now, to another node to paint:
+   * the returned function lowers the node exactly as it draws itself, placed
+   * at `transform` (an absolute transform, like `INTERNAL_lower`'s override)
+   * and mapped by `toPixel`. Call it while lowering, like any `_lower`: it
+   * reads the session's active flip scope. The loan is taken NOW, so the node
+   * can then be silenced (`INTERNAL_emitNothing`) or hidden without taking
+   * the copy with it. A `time.transition()` moves a keyframe's text this way:
+   * it draws the copy where the playhead has taken the text.
    */
-  public INTERNAL_lowerAt(
+  public INTERNAL_lendDrawing(): (
     transform: Transform,
     toPixel: ToPixel
-  ): DisplayList.DisplayItem[] {
+  ) => DisplayList.DisplayItem[] {
+    const own = this._lower;
     // Lowered as `INTERNAL_lower` lowers, ids and live channels included,
     // but without the visibility rule: the node painting the copy owns when
     // it shows.
-    return this._lower
-      ? this.lowerWith(this._lower, transform, toPixel, undefined, false)
-      : [];
+    return (transform, toPixel) =>
+      own ? this.lowerWith(own, transform, toPixel, undefined, false) : [];
   }
 
   /**
@@ -1435,7 +1435,8 @@ export class GoFishNode {
    *
    * This is the other half of the pair with {@link INTERNAL_emitNothing}, and
    * the difference is which tier decides. A node that must not draw AT ALL
-   * (`blank()`, a `ref`) is hidden by construction, at resolve. A node whose
+   * (`blank()`, a `ref`, a keyframe a transition moves when its sequence
+   * keeps no history) is hidden by construction, at resolve. A node whose
    * drawing comes and goes with a signal — a `time.sequence`'s keyframe
    * groups, where the clock picks which band is showing, or the keyframe marks
    * a `time.transition()` leaves behind as its trail — cannot be, because a
@@ -1474,7 +1475,10 @@ export class GoFishNode {
     }
     if (rules.length === 0) return undefined;
     if (rules.length === 1) return rules[0];
-    return () => rules.every((rule) => rule());
+    return () => {
+      for (const rule of rules) if (!rule()) return false;
+      return true;
+    };
   }
 
   /**
@@ -1513,11 +1517,13 @@ export class GoFishNode {
   }
 
   /**
-   * The body of {@link INTERNAL_lower}, shared with the copy
-   * {@link INTERNAL_lowerAt} draws: call `lower` for this node, stamp the
+   * The body of {@link INTERNAL_lower}, shared with the drawing
+   * {@link INTERNAL_lendDrawing} lends: call `lower` for this node, stamp the
    * items' ids, wire its live channels, and, when `withVisibility` is set,
-   * apply the paint-time visibility rule. A copy skips that rule because the
-   * node painting it decides when it shows.
+   * apply the paint-time visibility rule. A lent drawing skips that rule
+   * because the node painting it decides when it shows, and it passes the
+   * lowering it was lent, which the node itself may since have been silenced
+   * out of.
    */
   private lowerWith(
     lower: Lower,

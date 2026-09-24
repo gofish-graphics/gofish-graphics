@@ -40,11 +40,11 @@ import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
 import type { InterpolationMethod } from "../../interpolate";
 import {
-  keyframeBand,
-  keyframeShowing,
-  markKeyframe,
-  windowAt,
-  type Keyframe,
+  keyframeOf,
+  keyframeRule,
+  markSequence,
+  showingAt,
+  type Showing,
   type SequenceWindow,
 } from "../../timeWindow";
 
@@ -119,11 +119,8 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * the chart is laid out once however long it plays.
  *
  * A `time.transition()` layered over it draws one moving mark in place of the
- * keyframe marks it moves, and those keyframe marks show only as the trail the
- * mark leaves behind: each shows while its span, which depends on the
- * transition's curve, overlaps the window, except while the moving mark
- * stands in for it (`movedKeyframe` in `src/timeWindow.ts`). With no history
- * that trail is empty, so the moving mark is all that shows.
+ * keyframe marks it moves, which show only as its trail (`trailRule` in
+ * `src/timeWindow.ts`).
  *
  * The operator also owns the chart's clock, and builds it lazily: the domain
  * is the field's own range, which is not known until the data has been split,
@@ -174,7 +171,7 @@ export function sequence(opts: SequenceOptions) {
   // `observe`; every other operator is a module-level factory because it has
   // no state to keep.
   const operator = createOperator<any, SequenceOptions>(
-    (_o, children) => {
+    async (_o, children) => {
       // Read ONCE, HERE, and only for what a resolve-time read is for: this is
       // where the clock is lazily built (the domain is known by now) and where
       // it registers with the chart's interaction runtime, which is installed
@@ -182,10 +179,14 @@ export function sequence(opts: SequenceOptions) {
       // paint-time — untracked and flagged, so the clock wires up for events
       // without becoming a pipeline dependency (see `src/interaction/live.ts`).
       readLive(tier.clock);
+      const frame = await Frame({}, children);
+      // The keyframes are this Frame's children, so a node finds the keyframe
+      // it is part of by walking up to it (`keyframeOf`).
+      markSequence(frame, shown);
       // WHICH keyframes are shown is then decided per frame, in paint
       // position.
-      hold(children, shown, tier.knots());
-      return Frame({}, children);
+      hold(children);
+      return frame;
     },
     {
       split: ({ by }, d) => {
@@ -224,12 +225,22 @@ export function sequence(opts: SequenceOptions) {
       return clock();
     },
   };
-  /** The window this sequence shows at the current playhead: the one reading
-   *  of it, shared by its keyframes' visibility and by any line threaded
-   *  through them (which finds it through the keyframes, see `hold`). */
+  /** What this sequence shows at the current playhead: the one reading of
+   *  it, shared by its keyframes' visibility, a transition's trail and any
+   *  line threaded through the keyframes (which find it through the
+   *  keyframes, see `keyframeOf`). Every one of them reads it at paint, so it
+   *  is worked out once per playhead value and kept until the clock moves. */
+  let last: { t: number; keyframes: number[]; showing: Showing } | undefined;
   const shown: SequenceWindow = {
+    keyframes: tier.knots,
     history,
-    window: () => windowAt(tier.clock(), history),
+    showing: () => {
+      const t = tier.clock();
+      if (last === undefined || last.t !== t || last.keyframes !== keyframes) {
+        last = { t, keyframes, showing: showingAt(keyframes, t, history) };
+      }
+      return last.showing;
+    },
   };
   (operator as any).__timeTier = tier;
   // The clock is a live JS signal, so a sequence cannot cross the Python
@@ -368,10 +379,11 @@ function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
  * containing it; with history the window reaches back, and every band it
  * reaches shows.
  *
- * Each keyframe group is also marked as a keyframe of this sequence
- * (`markKeyframe`), with its time and its band. That is what a connector over
- * the keyframes reads to find out that it threads them in time (see
- * `connect.tsx`), and from it, the same window.
+ * Which keyframe a group is comes from its key, the value of `by` the
+ * operator stamped it with, read by `keyframeOf` through the Frame the groups
+ * sit in. That is also what a connector over the keyframes reads to find out
+ * that it threads them in time (see `connect.tsx`), and from it, the same
+ * window.
  *
  * Each keyframe gets a THUNK that says whether it is showing, and the playhead
  * is read inside it, at paint (`INTERNAL_visibleWhile`). A hidden keyframe
@@ -381,28 +393,17 @@ function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
  * covers its node's whole subtree, including the label `Text`s the label pass
  * adds to the group after this runs.
  */
-function hold(
-  children: GoFishAST[],
-  sequence: SequenceWindow,
-  bands: number[]
-): void {
-  if (bands.length === 0) return;
+function hold(children: GoFishAST[]): void {
   children.forEach((child) => {
     if (!(child instanceof GoFishNode)) return;
-    // Each child is one group, and the operator stamped it with its group
-    // key — the value of `by` this keyframe is, which is the knot. `bands` is
-    // the sequence's keyframes, the same values sorted and distinct.
-    const t = Number(child.key);
-    const j = bands.indexOf(t);
+    const keyframe = keyframeOf(child);
     // A key the sequence could not read as a number owns no band of time, so
-    // it never shows.
-    if (j < 0) {
-      child.INTERNAL_visibleWhile(() => false);
-      return;
-    }
-    const keyframe: Keyframe = { t, span: keyframeBand(bands, j), sequence };
-    markKeyframe(child, keyframe);
-    child.INTERNAL_visibleWhile(() => keyframeShowing(keyframe));
+    // it never shows. This is a rule and not `INTERNAL_emitNothing`, because
+    // the group is not a leaf: emitting nothing silences only a node's own
+    // items, while a rule covers its whole subtree.
+    child.INTERNAL_visibleWhile(
+      keyframe === undefined ? () => false : keyframeRule(keyframe)
+    );
   });
 }
 

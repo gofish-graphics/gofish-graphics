@@ -634,15 +634,13 @@ One slice of §5's table exists: the `time` namespace
   hit-test targets included. A sequence sets the rule once per keyframe group,
   and it covers the group's whole subtree, including marks a later elaboration
   pass adds to it, such as `.label()` text. So a labeled keyframe shows its
-  labels only while it is held. A transition sets a narrower rule of its own on
-  each leaf it moves, so a keyframe it moves shows only as part of the trail
-  the moving mark leaves behind (#903): a keyframe covers its band under
-  `"step"` and only its own moment under a gliding curve, it shows while that
-  span overlaps the sequence's window, and the keyframe whose span contains
-  the playhead is hidden because the moving mark stands in for it
-  (`movedKeyframe` in `src/timeWindow.ts`). With no history no moved keyframe
-  shows. This rule replaced an earlier structural one (`INTERNAL_emitNothing`),
-  which could not bring a keyframe back for a trail.
+  labels only while it is held. When the sequence keeps history, a transition
+  sets a narrower rule of its own on each leaf it moves, so a keyframe it moves
+  shows only as part of the trail the moving mark leaves behind (#903,
+  `trailRule` in `src/timeWindow.ts`). With no history that trail is always
+  empty, which is known at resolve, so the transition uses the structural rule
+  (`INTERNAL_emitNothing`, the same one `blank()` uses) and those keyframes
+  emit no display items and no hit-test targets.
 - A transition moves **every leaf of a keyframe mark**, not just its top shape.
   The leaves are the mark's own subtree leaves plus what is attached to it from
   outside (its label `Text`s, recorded as `_attachments` by the label pass),

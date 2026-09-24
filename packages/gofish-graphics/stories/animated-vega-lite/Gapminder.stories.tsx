@@ -260,14 +260,15 @@ const curvePanel = (rows: any[], clock: any, curve: Reading) => {
     : keyframes.layer(time.transition({ curve }));
 };
 
-/** The whole comparison, on a clock the caller hands in — so the playing and
- *  the paused stories are one picture read at two playheads. */
-const curvesRow = (
+/** A row of panels, one per reading, each under its caption, on a clock the
+ *  caller hands in — so the playing and the paused stories are one picture
+ *  read at two playheads. `panel` draws a reading's panel. */
+const curvesRow = <C,>(
   container: HTMLElement,
   args: Args,
-  rows: any[],
   clock: any,
-  readings: { caption: string; curve: Reading }[] = CURVES,
+  readings: { caption: string; curve: C }[],
+  panel: (curve: C) => any,
   below: any[] = []
 ) =>
   GoFish(
@@ -285,7 +286,7 @@ const curvesRow = (
           readings.map(({ caption, curve }) =>
             spreadY({ spacing: 8, alignment: "middle" }, [
               text({ text: caption, fontSize: 12, fill: "#555" }),
-              Frame({ w: PANEL_W, h: 280 }, [curvePanel(rows, clock, curve)]),
+              Frame({ w: PANEL_W, h: 280 }, [panel(curve)]),
             ])
           )
         ),
@@ -315,7 +316,9 @@ export const Curves: StoryObj<Args> = {
     // Ten seconds rather than five: the four readings differ most between
     // keyframes, and a slower clock spends longer there.
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    curvesRow(container, args, gapminder, year);
+    curvesRow(container, args, year, CURVES, (curve) =>
+      curvePanel(gapminder, year, curve)
+    );
 
     return container;
   },
@@ -333,7 +336,9 @@ export const CurvesThree: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    curvesRow(container, args, gapminder, year, CURVES_THREE);
+    curvesRow(container, args, year, CURVES_THREE, (curve) =>
+      curvePanel(gapminder, year, curve)
+    );
 
     return container;
   },
@@ -618,9 +623,9 @@ export const CurvesThreeKinematics: StoryObj<Args> = {
     curvesRow(
       container,
       args,
-      gapminder,
       year,
       CURVES_THREE,
+      (curve) => curvePanel(gapminder, year, curve),
       kinematicsBlock(gapminder, year)
     );
 
@@ -645,9 +650,9 @@ export const CurvesThreeKinematicsPaused: StoryObj<Args> = {
     curvesRow(
       container,
       args,
-      gapminder,
       year,
       CURVES_THREE,
+      (curve) => curvePanel(gapminder, year, curve),
       kinematicsBlock(gapminder, year)
     );
 
@@ -670,7 +675,9 @@ export const CurvesPaused: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = pausedClock(yearRange(gapminder), 10000, 1957.5);
-    curvesRow(container, args, gapminder, year);
+    curvesRow(container, args, year, CURVES, (curve) =>
+      curvePanel(gapminder, year, curve)
+    );
 
     return container;
   },
@@ -717,10 +724,10 @@ const TRAIL_COUNTRIES = [
  * through the dots is drawn up to the playhead. The transition over the same
  * dots draws the moving dot. It is a tier of its own over the dots
  * (`selectAll("years")`, split by country) because `.layer(...)` reads the tier
- * just before it, which is the lines. With a gliding curve each year's dot
- * covers only its own moment, so it appears the moment the moving dot leaves
- * it, and the moving dot is always at the tip of its line: the line and the
- * transition use the same curve, with the years as its knots.
+ * just before it, which is the lines, and the dots it moves show only as its
+ * trail (`trailRule` in `src/timeWindow.ts`). The moving dot is always at the
+ * tip of its line, because the line and the transition use the same curve,
+ * with the years as its knots.
  *
  * The moving dot takes its size and color from the keyframes, and its opacity
  * from the transition, which is 1 unless it is given. That is why it stands
@@ -803,34 +810,19 @@ export const TrailsPaused: StoryObj<Args> = {
  *  the left, the smooth curve on the right. Each moving dot stays on the tip
  *  of its own line either way, because the line and the transition in a panel
  *  use the same curve. */
+const TRAIL_CURVES = (["linear", "catmullRom"] as const).map((curve) => ({
+  caption: curve,
+  curve,
+}));
+
 const trailCurvesRow = (
   container: HTMLElement,
   args: Args,
   rows: any[],
   clock: any
 ) =>
-  GoFish(
-    container,
-    { w: args.w, h: args.h, legend: false, axes: true } as any,
-    () =>
-      spreadY({ spacing: 16, alignment: "middle" }, [
-        text({
-          text: live(() => String(Math.floor(clock()))),
-          fontSize: 40,
-          fill: "#ccc",
-        }),
-        spreadX(
-          { spacing: 16, alignment: "end" },
-          (["linear", "catmullRom"] as const).map((curve) =>
-            spreadY({ spacing: 8, alignment: "middle" }, [
-              text({ text: curve, fontSize: 12, fill: "#555" }),
-              Frame({ w: PANEL_W, h: 280 }, [
-                trails(rows, clock, curve, { legend: false, padding: 0 }),
-              ]),
-            ])
-          )
-        ),
-      ])
+  curvesRow(container, args, clock, TRAIL_CURVES, (curve) =>
+    trails(rows, clock, curve, { legend: false, padding: 0 })
   );
 
 export const TrailsCurves: StoryObj<Args> = {

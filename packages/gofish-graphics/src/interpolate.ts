@@ -15,7 +15,7 @@
  * reuses the ordering for every channel it interpolates (x, y, width, height).
  */
 
-import { catmullRomAt } from "./catmullRom";
+import { catmullRomAt, catmullRomCubics, cubicAt } from "./catmullRom";
 import { lerp } from "./util";
 
 /** How a run is read between its knots. */
@@ -122,6 +122,29 @@ export function interpolateAt(
   }
   if (method === "linear") return lerp(values[i], values[i + 1], u);
   return catmullRomAt(knots, values, i, u);
+}
+
+/**
+ * One channel of a keyframe run, prepared once for reading at many located
+ * parameters: the reader `interpolateAt` is, with a smooth run's cubics worked
+ * out here rather than on every read. A transition reads every channel of its
+ * run on every frame, so it builds these at layout. A run of fewer than two
+ * knots holds its one value (or is NaN when empty), as `interpolateRun` does.
+ */
+export function channelReader(
+  knots: number[],
+  values: number[],
+  method: InterpolationMethod
+): (at: KnotLocation) => number {
+  if (knots.length < 2) {
+    const held = knots.length === 0 ? NaN : values[0];
+    return () => held;
+  }
+  if (method !== "catmullRom") {
+    return (at) => interpolateAt(knots, values, at, method);
+  }
+  const cubics = catmullRomCubics(knots, values);
+  return ({ i, u }) => cubicAt(cubics, i, u);
 }
 
 /**

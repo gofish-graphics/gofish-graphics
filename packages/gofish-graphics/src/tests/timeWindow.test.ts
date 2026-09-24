@@ -12,13 +12,11 @@
  */
 
 import {
-  spanInWindow,
-  keyframeBand,
   keyframeOf,
-  keyframeShowing,
-  markKeyframe,
-  moveKeyframe,
-  movedKeyframe,
+  keyframeRule,
+  markSequence,
+  showingAt,
+  trailRule,
   windowAt,
   windowPath,
   type Keyframe,
@@ -72,64 +70,53 @@ const smooth: Path = [
   curve(a, [3, 5], [7, -5], b),
   curve(b, [20, 300], [0, 700], c),
 ];
+/** A path cut into the pieces `windowPath` takes: one per knot interval. */
+const pieces = (path: Path): Path[] => path.map((seg) => [seg]);
+
+/** The keyframe `times[index]` of a sequence keeping `history` and parked at
+ *  playhead `T`. */
+const keyframeAt = (
+  times: number[],
+  index: number,
+  T: number,
+  history: number
+): Keyframe => ({
+  t: times[index],
+  index,
+  sequence: {
+    keyframes: () => times,
+    history,
+    showing: () => showingAt(times, T, history),
+  },
+});
 
 console.log("# the band rule: history 0 is the step rule");
 {
   const bands = [1955, 1960, 1965, 1970];
   const playheads = [1900, 1955, 1957.5, 1960, 1964.99, 1965, 1970, 2100];
+  const showing = (j: number, t: number, times = bands) =>
+    keyframeRule(keyframeAt(times, j, t, 0))();
   const agree = playheads.every((t) =>
     bands.every(
-      (_, j) =>
-        spanInWindow(keyframeBand(bands, j), windowAt(t, 0)) ===
-        (j === sourceIndex(bands, t, "step"))
+      (_, j) => showing(j, t) === (j === sourceIndex(bands, t, "step"))
     )
   );
   ok("each playhead shows exactly the step rule's keyframe", agree);
-  ok(
-    "the first band reaches back before the run",
-    spanInWindow(keyframeBand(bands, 0), windowAt(1900, 0))
-  );
-  ok(
-    "the last band runs on past the end",
-    spanInWindow(keyframeBand(bands, 3), windowAt(2100, 0))
-  );
-  ok(
-    "a lone keyframe owns all of time",
-    spanInWindow(keyframeBand([1955], 0), windowAt(0, 0))
-  );
-}
-
-console.log("# the band rule: history widens the window");
-{
-  const bands = [1955, 1960, 1965, 1970];
-  const shown = (t: number, h: number) =>
-    bands.filter((_, j) =>
-      spanInWindow(keyframeBand(bands, j), windowAt(t, h))
-    );
-  ok(
-    "Infinity shows every keyframe reached",
-    JSON.stringify(shown(1966, Infinity)) === "[1955,1960,1965]"
-  );
-  ok(
-    "a finite history shows every band the window reaches",
-    JSON.stringify(shown(1966, 3)) === "[1960,1965]"
-  );
-  ok(
-    "a band the window only touches at its open end is not shown",
-    JSON.stringify(shown(1970, 5)) === "[1965,1970]"
-  );
+  ok("the first band reaches back before the run", showing(0, 1900));
+  ok("the last band runs on past the end", showing(3, 2100));
+  ok("a lone keyframe owns all of time", showing(0, 0, [1955]));
 }
 
 console.log("# the cut: straight segments");
 {
-  const cut = windowPath(straight, knots, windowAt(2000.5, Infinity));
+  const cut = windowPath(pieces(straight), knots, windowAt(2000.5, Infinity));
   ok("cuts inside the first segment", cut.length === 1);
   ok(
     "at the segment's own parameter (u = 0.5)",
     nearPoint(endOf(cut[0]), [5, 0]),
     JSON.stringify(cut)
   );
-  const later = windowPath(straight, knots, windowAt(2002.5, Infinity));
+  const later = windowPath(pieces(straight), knots, windowAt(2002.5, Infinity));
   ok(
     "by data time, not arc length: 2002.5 is three quarters up the long segment",
     later.length === 2 && nearPoint(endOf(later[1]), [10, 750]),
@@ -145,7 +132,7 @@ console.log("# the cut: straight segments");
 
 console.log("# the cut: cubic segments");
 {
-  const cut = windowPath(smooth, knots, windowAt(2001.5, Infinity));
+  const cut = windowPath(pieces(smooth), knots, windowAt(2001.5, Infinity));
   const tail = cut[1] as BezierCurve;
   ok("keeps one piece per segment reached", cut.length === 2);
   ok(
@@ -161,7 +148,7 @@ console.log("# the cut: cubic segments");
 
 console.log("# the cut: both ends");
 {
-  const within = windowPath(smooth, knots, windowAt(2002.5, 1));
+  const within = windowPath(pieces(smooth), knots, windowAt(2002.5, 1));
   const piece = within[0] as BezierCurve;
   const original = smooth[1] as BezierCurve;
   ok("a window inside one segment is one piece", within.length === 1);
@@ -171,7 +158,7 @@ console.log("# the cut: both ends");
     "which is the curve between them",
     nearPoint(bezierAt(piece, 0.5), bezierAt(original, 0.5))
   );
-  const across = windowPath(straight, knots, windowAt(2001.5, 1));
+  const across = windowPath(pieces(straight), knots, windowAt(2001.5, 1));
   ok(
     "a window across a knot cuts both segments",
     across.length === 2 &&
@@ -186,37 +173,38 @@ console.log("# the cut: edges of the run");
 {
   ok(
     "history 0 is an instant, and draws nothing",
-    windowPath(straight, knots, windowAt(2001.5, 0)).length === 0
+    windowPath(pieces(straight), knots, windowAt(2001.5, 0)).length === 0
   );
-  const all = windowPath(smooth, knots, windowAt(2003, Infinity));
+  const all = windowPath(pieces(smooth), knots, windowAt(2003, Infinity));
   ok(
     "Infinity at the last knot draws the whole path, unchanged",
     all.length === 2 && all[0] === smooth[0] && all[1] === smooth[1]
   );
-  const onKnot = windowPath(straight, knots, windowAt(2001, Infinity));
+  const onKnot = windowPath(pieces(straight), knots, windowAt(2001, Infinity));
   ok(
     "a cut exactly at a knot ends there, with no zero-length piece",
     onKnot.length === 1 && onKnot[0] === straight[0]
   );
-  const fromKnot = windowPath(straight, knots, windowAt(2003, 2));
+  const fromKnot = windowPath(pieces(straight), knots, windowAt(2003, 2));
   ok(
     "and a window starting exactly at a knot starts there",
     fromKnot.length === 1 && fromKnot[0] === straight[1]
   );
   ok(
     "a playhead before the first knot draws nothing",
-    windowPath(straight, knots, windowAt(1999, Infinity)).length === 0
+    windowPath(pieces(straight), knots, windowAt(1999, Infinity)).length === 0
   );
   ok(
     "a playhead on the first knot draws nothing (an instant of the run)",
-    windowPath(straight, knots, windowAt(2000, Infinity)).length === 0
+    windowPath(pieces(straight), knots, windowAt(2000, Infinity)).length === 0
   );
   ok(
     "a playhead after the last knot keeps the whole run",
-    JSON.stringify(windowPath(straight, knots, windowAt(2050, Infinity))) ===
-      JSON.stringify(straight)
+    JSON.stringify(
+      windowPath(pieces(straight), knots, windowAt(2050, Infinity))
+    ) === JSON.stringify(straight)
   );
-  const trailing = windowPath(straight, knots, windowAt(2004, 2));
+  const trailing = windowPath(pieces(straight), knots, windowAt(2004, 2));
   ok(
     "and a finite window past the end keeps only what it still reaches",
     trailing.length === 1 &&
@@ -226,31 +214,40 @@ console.log("# the cut: edges of the run");
   );
   ok(
     "until it has passed the run entirely",
-    windowPath(straight, knots, windowAt(2010, 2)).length === 0
+    windowPath(pieces(straight), knots, windowAt(2010, 2)).length === 0
   );
 }
 
 console.log("# the keyframe record");
 {
   const sequence: SequenceWindow = {
+    keyframes: () => [1999, 2000, 2001],
     history: 0,
-    window: () => windowAt(2000, 0),
+    showing: () => showingAt([1999, 2000, 2001], 2000, 0),
   };
-  const group: { parent?: unknown } = { parent: undefined };
+  const frame = { parent: undefined };
+  markSequence(frame, sequence);
+  const group = { parent: frame as unknown, key: "2000" as unknown };
   const mark = { parent: { parent: group } };
-  markKeyframe(group, { t: 2000, span: [-Infinity, 2001], sequence });
   ok("a mark inside a keyframe finds it", keyframeOf(mark)?.t === 2000);
+  ok("and its place in the sequence", keyframeOf(mark)?.index === 1);
   ok("and the sequence it belongs to", keyframeOf(mark)?.sequence === sequence);
   ok(
     "a node outside every keyframe finds none",
     keyframeOf({ parent: undefined }) === undefined
   );
-  const wrapper = { parent: undefined };
+  ok(
+    "a key that is not one of the sequence's times makes no keyframe",
+    keyframeOf({ parent: frame, key: "1998" }) === undefined
+  );
+  // A pass that wraps the keyframe moves its key onto the wrapper, which
+  // takes the keyframe's place under the Frame.
+  const wrapper = { parent: frame, key: "2000" };
   group.parent = wrapper;
-  moveKeyframe(group, wrapper);
+  group.key = undefined;
   const beside = { parent: wrapper };
   ok(
-    "a record moved to a wrapper covers what the wrapper adds beside the group",
+    "a wrapper's key covers the keyframe and what is added beside it",
     keyframeOf(beside)?.t === 2000 && keyframeOf(mark)?.t === 2000
   );
 }
@@ -266,14 +263,15 @@ console.log("# the trail rule, over a grid of playheads");
   ];
   const histories = [0, 0.5, 3, 5, 10, 17, Infinity];
   /** Which keyframes show at `T`, written out by hand from the rule on #903
-   *  rather than through `spanInWindow`. */
+   *  rather than through the rules under test. */
   const expected = (
     reading: "none" | "glide" | "step",
     T: number,
     h: number
   ): number[] =>
     times.filter((t, j) => {
-      const [start, end] = keyframeBand(times, j);
+      const start = j === 0 ? -Infinity : t;
+      const end = j === times.length - 1 ? Infinity : times[j + 1];
       if (reading === "glide") return T - h <= t && t < T;
       const overlaps = start <= T && end > T - h;
       if (reading === "none") return overlaps;
@@ -286,17 +284,12 @@ console.log("# the trail rule, over a grid of playheads");
     T: number,
     h: number
   ): number[] =>
-    times.filter((t, j) => {
-      const sequence: SequenceWindow = {
-        history: h,
-        window: () => windowAt(T, h),
-      };
-      const keyframe: Keyframe = { t, span: keyframeBand(times, j), sequence };
-      return keyframeShowing(
-        reading === "none"
-          ? keyframe
-          : movedKeyframe(keyframe, reading === "glide")
-      );
+    times.filter((_, j) => {
+      const keyframe = keyframeAt(times, j, T, h);
+      if (reading === "none") return keyframeRule(keyframe)();
+      // No rule means the trail is always empty.
+      const rule = trailRule(keyframe, reading === "glide");
+      return rule !== undefined && rule();
     });
   for (const reading of ["none", "glide", "step"] as const) {
     const misses: string[] = [];

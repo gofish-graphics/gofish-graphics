@@ -1,5 +1,5 @@
 /**
- * The window of time a `time.sequence` shows, and the two things that read it.
+ * The window of time a `time.sequence` shows, and the things that read it.
  *
  * A sequence gives each keyframe a BAND of time: keyframe `i` owns
  * `[t_i, t_{i+1})`, the first band also reaches back before the run (a
@@ -9,26 +9,27 @@
  * keyframe whose band contains it is the one shown. At `h = Infinity` it is
  * everything up to `T`, which is Animated Vega-Lite's `lte` predicate.
  *
- * Two readers, one window. A KEYFRAME shows while its span overlaps the
- * window. Its span is its band, except where a `time.transition()` moves its
- * mark: a gliding transition covers the time between keyframes with the
- * moving mark, so there a keyframe's span is the one moment `t_i`, and the
- * keyframe whose span contains the playhead is not shown, because the moving
- * mark stands in for it (see `movedKeyframe`). A `line` THREADED through the
- * keyframes (its knots are keyframes of the sequence, so it runs along the
- * time tier) draws only the part of itself that lies inside the window, cut
- * at the exact point in DATA time: knot `i`
- * sits at its keyframe's time `t_i`, and inside a segment time moves linearly
- * with the segment's own parameter. So the tip of a line drawn up to the
- * playhead is where a `time.transition()` dot would be at the same moment.
- * Arc length would pace the drawing by distance on screen instead, and the
- * distance one year covers can differ many times over from one year to the
- * next.
+ * Three readers, one window:
  *
- * Both reads happen at PAINT time, like every read of the playhead. Layout
- * places every keyframe and gives a threaded line the box of its whole run, so
- * nothing above them sees the window move.
+ * - A KEYFRAME shows while its band overlaps the window (`keyframeRule`).
+ * - A keyframe whose mark a `time.transition()` moves shows only as part of
+ *   the trail the moving mark leaves behind (`trailRule`).
+ * - A `line` THREADED through the keyframes (its knots are keyframes of the
+ *   sequence, so it runs along the time tier) draws only the part of itself
+ *   that lies inside the window, cut at the exact point in DATA time: knot `i`
+ *   sits at its keyframe's time `t_i`, and inside a segment time moves
+ *   linearly with the segment's own parameter (`windowPath`). So the tip of a
+ *   line drawn up to the playhead is where a `time.transition()` dot would be
+ *   at the same moment. Arc length would pace the drawing by distance on
+ *   screen instead, and the distance one year covers can differ many times
+ *   over from one year to the next.
+ *
+ * Every read happens at PAINT time, like every read of the playhead, and a
+ * sequence works out what it shows once per playhead value (`showingAt`).
+ * Layout places every keyframe and gives a threaded line the box of its whole
+ * run, so nothing above them sees the window move.
  */
+import { locate, sourceIndex } from "./interpolate";
 import {
   type Path,
   type PathSegment,
@@ -41,71 +42,66 @@ import {
 export type TimeWindow = { from: number; to: number };
 
 /** The window a sequence keeping `history` shows at playhead `t`:
- *  `[t − history, t]`. The one definition of it, which the keyframes'
- *  visibility and a threaded line's cut both go through. */
+ *  `[t − history, t]`. The one definition of it, which every reader of a
+ *  sequence goes through (`showingAt`). */
 export function windowAt(t: number, history: number): TimeWindow {
   return { from: t - history, to: t };
 }
 
-/** The band keyframe `j` owns among `keyframes` (sorted, distinct):
- *  `[t_j, t_{j+1})`, with the first band open toward the past and the last
- *  toward the future. */
-export function keyframeBand(keyframes: number[], j: number): [number, number] {
-  return [
-    j === 0 ? -Infinity : keyframes[j],
-    j === keyframes.length - 1 ? Infinity : keyframes[j + 1],
-  ];
-}
+/** What a sequence shows at one playhead: its window, and the first and last
+ *  of its keyframes whose bands the window overlaps. */
+export type Showing = { window: TimeWindow; first: number; last: number };
 
-/** Whether the span `[start, end)` overlaps a window. A span always includes
- *  its own start, so a span of one moment, `[t, t]`, is the instant `t`. When
- *  the window is an instant `T` and the span is a band, this is
- *  `start <= T < end`: the band contains the playhead, which is the step rule
- *  a sequence with no history plays by. */
-export function spanInWindow(
-  [start, end]: [number, number],
-  { from, to }: TimeWindow
-): boolean {
-  return start <= to && (end > from || start >= from);
-}
-
-/** Whether the span `[start, end)`, which includes its own start, contains
- *  the moment `t`. */
-export function spanContains(
-  [start, end]: [number, number],
-  t: number
-): boolean {
-  return t === start || (start <= t && t < end);
+/**
+ * What a sequence with these keyframes (sorted, distinct) shows at playhead
+ * `t`. The bands the window overlaps are the ones from the band holding its
+ * start to the band holding its end, and the band holding a moment is the
+ * keyframe the step rule reads there (`sourceIndex`): the last keyframe at or
+ * before it, or the first when it is before the run.
+ */
+export function showingAt(
+  keyframes: number[],
+  t: number,
+  history: number
+): Showing {
+  const window = windowAt(t, history);
+  return {
+    window,
+    first: sourceIndex(keyframes, window.from, "step"),
+    last: sourceIndex(keyframes, window.to, "step"),
+  };
 }
 
 /**
- * The part of a threaded path that lies inside a window, cut by data time.
+ * The part of a threaded run that lies inside a window, cut by data time.
  *
- * `path` has exactly one segment per knot interval: segment `i` runs from knot
- * `i` to knot `i + 1`, as a straight line or as one cubic of a Catmull-Rom
- * chain. `knots` are the knots' times, strictly increasing. A point at local
- * parameter `u` of segment `i` sits at time `t_i + u·(t_{i+1} − t_i)`, so a
- * segment the window's edge falls inside is cut at that edge's `u`: a line by
- * interpolating its endpoints, a cubic by de Casteljau. A window that meets
- * the run in a single instant, or not at all, draws nothing.
+ * `pieces[i]` is the step from knot `i` to knot `i + 1`, drawn as ONE straight
+ * or cubic segment (the caller checks that), and `knots` are the knots' times,
+ * strictly increasing. A point at local parameter `u` of piece `i` sits at
+ * time `t_i + u·(t_{i+1} − t_i)`, so a piece the window's edge falls inside is
+ * cut at that edge's `u`: a line by interpolating its endpoints, a cubic by de
+ * Casteljau. A window that meets the run in a single instant, or not at all,
+ * draws nothing, and a window ending exactly on a knot ends with the piece
+ * before it.
  */
 export function windowPath(
-  path: Path,
+  pieces: Path[],
   knots: number[],
   window: TimeWindow
 ): Path {
   const from = Math.max(window.from, knots[0]);
   const to = Math.min(window.to, knots[knots.length - 1]);
   if (!(from < to)) return [];
+  const start = locate(knots, from);
+  const end = locate(knots, to);
+  const last = end.u === 0 ? end.i - 1 : end.i;
   const out: Path = [];
-  for (let i = 0; i < path.length; i++) {
-    const [a, b] = [knots[i], knots[i + 1]];
-    if (b <= from || a >= to) continue;
+  for (let i = start.i; i <= last; i++) {
     out.push(
       cutSegment(
-        path[i],
-        a < from ? (from - a) / (b - a) : 0,
-        b > to ? (to - a) / (b - a) : 1
+        pieces[i][0],
+        i === start.i ? start.u : 0,
+        i === end.i ? end.u : 1
       )
     );
   }
@@ -128,90 +124,102 @@ function cutSegment(seg: PathSegment, u0: number, u1: number): PathSegment {
   return u0 === 0 ? head : subdivideCurve1(head, u0 / u1)[1];
 }
 
-/** What one sequence tells its keyframes: how much history it keeps, and the
- *  window it is showing right now (a paint-time read of its clock). There is
- *  one per `time.sequence(...)` call, so two keyframes belong to the same
- *  sequence exactly when they share it. */
-export type SequenceWindow = { history: number; window: () => TimeWindow };
-
-/** A keyframe of a sequence: its time value, the span of time it covers, and
- *  the sequence it belongs to. */
-export type Keyframe = {
-  t: number;
-  /** `[start, end)`, which always includes `t`. The sequence gives each
-   *  keyframe its band (`keyframeBand`); a transition that moves the
-   *  keyframe's mark may narrow it (`movedKeyframe`). */
-  span: [number, number];
-  /** Set when a `time.transition()` moves this keyframe's mark: the moving
-   *  mark stands in for the keyframe while the playhead is inside its span. */
-  moved?: boolean;
-  sequence: SequenceWindow;
+/** What one sequence tells its keyframes: their times (sorted, distinct), how
+ *  much history it keeps, and what it is showing right now (a paint-time read
+ *  of its clock). There is one per `time.sequence(...)` call, so two
+ *  keyframes belong to the same sequence exactly when they share it. */
+export type SequenceWindow = {
+  keyframes: () => number[];
+  history: number;
+  showing: () => Showing;
 };
 
-/** Each keyframe group node's record, set by the sequence that laid it out. A
- *  side table rather than a field, so a node carries nothing it does not
- *  need. */
-const keyframes = new WeakMap<object, Keyframe>();
+/** A keyframe of a sequence: its time, its place among the sequence's
+ *  keyframes, and the sequence. */
+export type Keyframe = { t: number; index: number; sequence: SequenceWindow };
 
-/** Record that `node` is a keyframe of a sequence. */
-export function markKeyframe(node: object, keyframe: Keyframe): void {
-  keyframes.set(node, keyframe);
+/** Each sequence's record, on the Frame it lays its keyframes out in. */
+const sequences = new WeakMap<object, SequenceWindow>();
+
+/** Record that `frame` is the Frame a sequence lays its keyframes out in. */
+export function markSequence(frame: object, sequence: SequenceWindow): void {
+  sequences.set(frame, sequence);
 }
 
-/** Move `from`'s keyframe record, if it has one, to `to`: an elaboration pass
- *  that wraps a keyframe group in a new node moves the group's identity onto
- *  the wrapper (`wrapPreservingIdentity`), so that marks it adds beside the
- *  group, e.g. label texts, are part of the keyframe too. */
-export function moveKeyframe(from: object, to: object): void {
-  const keyframe = keyframes.get(from);
-  if (keyframe === undefined) return;
-  keyframes.delete(from);
-  keyframes.set(to, keyframe);
-}
+type TreeNode = { parent?: unknown; key?: unknown };
 
-/** The keyframe `node` is part of: its own record, or its nearest
- *  ancestor's. A keyframe is a group, and the marks that draw it sit inside
- *  it. */
-export function keyframeOf(
-  node: { parent?: unknown } | undefined
-): Keyframe | undefined {
-  for (let n = node; n; n = n.parent as { parent?: unknown } | undefined) {
-    const keyframe = keyframes.get(n);
-    if (keyframe !== undefined) return keyframe;
+/**
+ * The keyframe `node` is part of. A sequence lays its keyframes out as the
+ * children of one Frame, each keyed by its time, so this walks up to the node
+ * whose parent is a sequence's Frame and reads that node's key. A pass that
+ * wraps a keyframe in a new node gives the wrapper the keyframe's key
+ * (`wrapPreservingIdentity`), so what the pass adds beside the keyframe, e.g.
+ * its label texts, is part of the keyframe too. A key the sequence could not
+ * read as one of its keyframes' times makes no keyframe.
+ */
+export function keyframeOf(node: TreeNode | undefined): Keyframe | undefined {
+  let n = node;
+  while (n !== undefined) {
+    const parent = n.parent as TreeNode | undefined;
+    const sequence = parent === undefined ? undefined : sequences.get(parent);
+    if (sequence !== undefined) {
+      const t = Number(n.key);
+      const index = sequence.keyframes().indexOf(t);
+      return index < 0 ? undefined : { t, index, sequence };
+    }
+    n = parent;
   }
   return undefined;
 }
 
-/**
- * The keyframe as a `time.transition()` that moves its mark sees it.
- *
- * A gliding transition (any curve but `"step"`) covers the time between two
- * keyframes with its moving mark, so the keyframe itself covers only its own
- * moment, `[t_i, t_i]`: the mark leaves the keyframe behind the moment it
- * moves off it, and a trail has no gap behind the moving mark. Under
- * `"step"` the moving mark holds the keyframe's value for its whole band, so
- * the span stays the band. Either way the moving mark stands in for the
- * keyframe while its span contains the playhead.
- *
- * With no history the window is the playhead itself, so the only keyframe
- * whose span it can overlap is the one the moving mark stands in for, and no
- * keyframe shows: the moving mark alone, as a transition has always drawn.
- */
-export function movedKeyframe(keyframe: Keyframe, glides: boolean): Keyframe {
-  return {
-    ...keyframe,
-    span: glides ? [keyframe.t, keyframe.t] : keyframe.span,
-    moved: true,
+/** When a keyframe shows: while its band overlaps the window its sequence is
+ *  showing. Read at paint; captures only the keyframe. */
+export function keyframeRule(keyframe: Keyframe): () => boolean {
+  const { index, sequence } = keyframe;
+  return () => {
+    const { first, last } = sequence.showing();
+    return first <= index && index <= last;
   };
 }
 
-/** Whether a keyframe is showing right now: its span overlaps the window its
- *  sequence is showing, unless a moving mark stands in for it because the
- *  playhead is inside its span. Read at paint. */
-export function keyframeShowing(keyframe: Keyframe): boolean {
-  const window = keyframe.sequence.window();
-  return (
-    spanInWindow(keyframe.span, window) &&
-    !(keyframe.moved && spanContains(keyframe.span, window.to))
-  );
+/**
+ * When a keyframe whose mark a `time.transition()` moves shows: only as part
+ * of the trail the moving mark leaves behind (#903).
+ *
+ * The span of time the keyframe covers depends on the transition's curve. A
+ * gliding curve (`glides`: every curve but `"step"`) covers the time between
+ * two keyframes with the moving mark, so the keyframe covers only its own
+ * moment `t_i`: the mark leaves the keyframe behind the moment it moves off
+ * it, and the trail has no gap behind the moving mark. Under `"step"` the
+ * moving mark holds the keyframe's value for its whole band, so the keyframe
+ * covers its band. The keyframe shows while its span overlaps the window,
+ * except while its span contains the playhead, because the moving mark stands
+ * in for it then. So a gliding keyframe shows while `T − h <= t_i < T`, and a
+ * step keyframe shows once its band is over and until the window has left it
+ * behind, which keeps each old keyframe one step longer than a gliding trail.
+ *
+ * Undefined when the trail is always empty, which is known before anything is
+ * painted: a keyframe that belongs to no sequence has no window to show in,
+ * and with no history the window is the playhead alone, so the only keyframe
+ * whose span it can reach is the one the moving mark stands in for. A
+ * transition then draws the moving mark alone.
+ */
+export function trailRule(
+  keyframe: Keyframe | undefined,
+  glides: boolean
+): (() => boolean) | undefined {
+  if (keyframe === undefined || keyframe.sequence.history === 0) {
+    return undefined;
+  }
+  const { t, index, sequence } = keyframe;
+  if (glides) {
+    return () => {
+      const { window } = sequence.showing();
+      return window.from <= t && t < window.to;
+    };
+  }
+  return () => {
+    const { first, last } = sequence.showing();
+    return first <= index && index < last;
+  };
 }

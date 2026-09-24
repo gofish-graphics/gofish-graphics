@@ -31,7 +31,6 @@ import {
   resolveCurve,
   centerPoint,
   isSequenceCurve,
-  isThreadingCurve,
   type Curve,
 } from "./routers";
 import { targetOf } from "./layer";
@@ -39,11 +38,10 @@ import { readLive } from "../../interaction/live";
 import { setLiveSlots } from "../../interaction/liveSlots";
 import {
   keyframeOf,
-  keyframeShowing,
+  keyframeRule,
   windowPath,
   type Keyframe,
   type SequenceWindow,
-  type TimeWindow,
 } from "../../timeWindow";
 
 // Per-axis bbox anchor. A literal number is the raw fraction in [0, 1]; the
@@ -94,8 +92,22 @@ function sequenceKeyframes(children: GoFishAST[]): Keyframe[] | undefined {
 }
 
 /** A line threaded through a sequence's keyframes: each knot's time, in path
- *  order, and the sequence whose window it is drawn over. */
-type TimeRun = { knots: number[]; sequence: SequenceWindow };
+ *  order, the step of the path from each knot to the next, and the sequence
+ *  whose window it is drawn over. */
+type TimeRun = { knots: number[]; pieces: Path[]; sequence: SequenceWindow };
+
+/** Where `values` first stops going up: the index of the first value that is
+ *  not greater than the one before it, or -1 when every value is. */
+function firstStepBack(values: readonly number[]): number {
+  for (let i = 1; i < values.length; i++) {
+    if (!(values[i] > values[i - 1])) return i;
+  }
+  return -1;
+}
+
+/** Whether two points are the same, allowing for rounding. */
+const samePoint = (p: [number, number], q: [number, number]): boolean =>
+  Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9;
 
 /**
  * A candidate parameter of a run, as the knots of its curve: one value per
@@ -115,12 +127,8 @@ function runKnots(
     numbers.push(v);
   }
   const sign = Math.sign(numbers[1] - numbers[0]);
-  for (let i = 1; i < numbers.length; i++) {
-    if (sign === 0 || Math.sign(numbers[i] - numbers[i - 1]) !== sign) {
-      return undefined;
-    }
-  }
-  return numbers.map((v) => sign * v);
+  const knots = numbers.map((v) => sign * v);
+  return firstStepBack(knots) < 0 ? knots : undefined;
 }
 
 export const connect = createNodeOperator(
@@ -184,7 +192,7 @@ export const connect = createNodeOperator(
     const curveNameOf = (c: Curve | undefined): string | undefined =>
       c === undefined ? undefined : typeof c === "string" ? c : c.type;
 
-    const self: GoFishNode = new GoFishNode(
+    return new GoFishNode(
       {
         type: "connect",
         shared: [false, false],
@@ -202,7 +210,7 @@ export const connect = createNodeOperator(
         ) => {
           return [UNDEFINED, UNDEFINED];
         },
-        layout: (shared, size, scales, children) => {
+        layout: (shared, size, scales, children, node) => {
           const defaultColor = children[0]?.color ?? "black";
 
           const paths: Path[] = [];
@@ -224,7 +232,7 @@ export const connect = createNodeOperator(
             keyframes !== undefined &&
             keyframes.some((k) => k.t !== keyframes[0].t);
           if (keyframes !== undefined && !threadsTime) {
-            self.INTERNAL_visibleWhile(() => keyframeShowing(keyframes[0]));
+            node.INTERNAL_visibleWhile(keyframeRule(keyframes[0]));
           }
           if (threadsTime && (mode !== "center" || hasAnchors)) {
             throw new Error(
@@ -277,14 +285,14 @@ export const connect = createNodeOperator(
           const connectionSpaceOf = (
             c: GoFishAST
           ): UnderlyingSpace | undefined => {
-            let node: any = (c as any).targetNode ?? c;
-            while (node) {
-              const s = node.resolveUnderlyingSpace?.()?.[dir];
+            let n: any = targetOf(c);
+            while (n) {
+              const s = n.resolveUnderlyingSpace?.()?.[dir];
               // Stop at the nearest *positioning* space — an ORDINAL ancestor
               // must win over a continuous grandparent (a grouped layout is
               // discrete even inside a continuous frame), so we can't skip it.
               if (s !== undefined && isPositioningSpace(s)) return s;
-              node = node.parent;
+              n = n.parent;
             }
             return undefined;
           };
@@ -390,43 +398,24 @@ export const connect = createNodeOperator(
               renderData: { paths, defaultColor },
             };
           }
-          // A line threading a sequence's keyframes is cut inside a segment
-          // by data time, which needs segment `i` of its path to run from
-          // knot `i` to knot `i + 1` (a threading curve), and the knots to
-          // move forward in time along the path.
-          let timeRun: TimeRun | undefined;
-          if (threadsTime) {
-            if (!isThreadingCurve(resolvedCurveName)) {
-              throw new Error(
-                `[gofish] line({ curve: "${resolvedCurveName}" }): this line ` +
-                  `threads the keyframes of a time.sequence, so it is drawn ` +
-                  `only over the stretch of time the sequence shows, cut at ` +
-                  `the exact point in data time. That cut needs each step ` +
-                  `from one keyframe to the next to be ONE straight or cubic ` +
-                  `segment between the keyframes' centers, which "linear", ` +
-                  `"bezier" and "catmullRom" (the default) draw and ` +
-                  `"${resolvedCurveName}" does not. Use one of those, or ` +
-                  `open an issue for "${resolvedCurveName}".`
-              );
-            }
-            const knots = keyframes.map((k) => k.t);
-            const back = knots.findIndex(
-              (t, i) => i > 0 && !(t > knots[i - 1])
+          // A line threading a sequence's keyframes is cut by data time, so
+          // its knots have to move forward in time along the path.
+          const timeKnots = threadsTime ? keyframes.map((k) => k.t) : undefined;
+          const back = timeKnots === undefined ? -1 : firstStepBack(timeKnots);
+          if (timeKnots !== undefined && back >= 0) {
+            throw new Error(
+              `[gofish] line(): this line threads the keyframes of a ` +
+                `time.sequence, so each of its points is a moment in time, ` +
+                `and it goes from ${timeKnots[back - 1]} to ${timeKnots[back]}: ` +
+                `back in time, or twice through one keyframe. A line drawn ` +
+                `in over time has to move forward through the keyframes. If ` +
+                `each keyframe holds several marks, split the line so each ` +
+                `run has one mark per keyframe (for example, add \`by\` to ` +
+                `the operator that places the marks).`
             );
-            if (back >= 0) {
-              throw new Error(
-                `[gofish] line(): this line threads the keyframes of a ` +
-                  `time.sequence, so each of its points is a moment in time, ` +
-                  `and it goes from ${knots[back - 1]} to ${knots[back]}: ` +
-                  `back in time, or twice through one keyframe. A line drawn ` +
-                  `in over time has to move forward through the keyframes. If ` +
-                  `each keyframe holds several marks, split the line so each ` +
-                  `run has one mark per keyframe (for example, add \`by\` to ` +
-                  `the operator that places the marks).`
-              );
-            }
-            timeRun = { knots, sequence: keyframes[0].sequence };
           }
+          /** A line's path, one piece per step from a point to the next. */
+          let steps: Path[] = [];
 
           // If in center mode, adjust bounding boxes to have zero width/height
           // with min and max equal to the center point
@@ -470,7 +459,7 @@ export const connect = createNodeOperator(
           };
           if (isSequenceCurve(resolvedCurveName)) {
             const mains = childPlaceables.map(
-              (c) => (c.dims[mainAxis].min! + c.dims[mainAxis].max!) / 2
+              (c) => centerPoint(c.dims)[mainAxis]
             );
             // The knots are the run's own parameter when it has one (#635),
             // so the curve follows the data rather than the distances between
@@ -489,7 +478,7 @@ export const connect = createNodeOperator(
             // need the spline evaluated upstream of the scale instead.
             const knots =
               runKnots(along) ??
-              timeRun?.knots ??
+              timeKnots ??
               (continuousConnectionAxis() ? runKnots(mains) : undefined);
             // `knots` is in operand order; a path drawn back along the run
             // (a ribbon's far edge) reads them backward and negated.
@@ -507,7 +496,9 @@ export const connect = createNodeOperator(
               );
             if (mode === "center") {
               const centers = childPlaceables.map((c) => centerPoint(c.dims));
-              paths.push(thread(centers));
+              const threaded = thread(centers);
+              paths.push(threaded);
+              steps = threaded.map((seg) => [seg]);
             } else {
               const near: [number, number][] = [];
               const far: [number, number][] = [];
@@ -531,6 +522,7 @@ export const connect = createNodeOperator(
                 router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
               );
             }
+            steps = paths;
           } else if (dir === 0) {
             // Edge ("ribbon") mode: a filled quad between the facing edges.
             if (!edgeBezier) {
@@ -713,6 +705,42 @@ export const connect = createNodeOperator(
             ];
           };
 
+          // A threaded line is cut inside one step of its path by data time
+          // (`windowPath`), which needs each step from one keyframe to the
+          // next to be ONE straight or cubic segment from the one keyframe's
+          // center to the next's.
+          let timeRun: TimeRun | undefined;
+          if (timeKnots !== undefined) {
+            const centers = childPlaceables.map((c) => centerPoint(c.dims));
+            const ends = (seg: Path[number]): [number, number][] =>
+              seg.type === "line" ? seg.points : [seg.start, seg.end];
+            const threads = steps.every((piece, i) => {
+              if (piece.length !== 1) return false;
+              const [start, end] = ends(piece[0]);
+              return (
+                samePoint(start, centers[i]) && samePoint(end, centers[i + 1])
+              );
+            });
+            if (!threads) {
+              throw new Error(
+                `[gofish] line({ curve: "${resolvedCurveName}" }): this line ` +
+                  `threads the keyframes of a time.sequence, so it is drawn ` +
+                  `only over the stretch of time the sequence shows, cut at ` +
+                  `the exact point in data time. That cut needs each step ` +
+                  `from one keyframe to the next to be ONE straight or cubic ` +
+                  `segment between the keyframes' centers, which "linear", ` +
+                  `"bezier" and "catmullRom" (the default) draw and ` +
+                  `"${resolvedCurveName}" does not. Use one of those, or ` +
+                  `open an issue for "${resolvedCurveName}".`
+              );
+            }
+            timeRun = {
+              knots: timeKnots,
+              pieces: steps,
+              sequence: keyframes![0].sequence,
+            };
+          }
+
           const mergedPaths: Path[] = [];
           let run: Path[] = [];
           for (let i = 0; i < paths.length; i++) {
@@ -814,21 +842,20 @@ export const connect = createNodeOperator(
               toItem(pathData(path))
             );
           }
-          // A line threading a sequence's keyframes: its one path, cut to
+          // A line threading a sequence's keyframes: its steps, cut to
           // the window the sequence is showing. The window is read once here
           // for the value to lower, and then per frame in paint position by
           // the `d` slot, which patches the path data and nothing else — the
           // same split `tween` makes for its playhead.
-          const [run] = renderData.paths as Path[];
-          const drawnOver = (window: TimeWindow): string =>
-            pathData(windowPath(run, timeRun.knots, window));
-          const item = toItem(drawnOver(readLive(timeRun.sequence.window)));
-          setLiveSlots(item, { d: () => drawnOver(timeRun.sequence.window()) });
+          const { knots, pieces, sequence } = timeRun;
+          const drawnOver = (): string =>
+            pathData(windowPath(pieces, knots, sequence.showing().window));
+          const item = toItem(readLive(drawnOver));
+          setLiveSlots(item, { d: drawnOver });
           return [item];
         },
       },
       children
     );
-    return self;
   }
 );

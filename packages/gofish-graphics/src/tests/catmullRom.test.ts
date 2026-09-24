@@ -11,12 +11,14 @@
  * constant rate is read at that rate everywhere.
  */
 
+import { catmullRomJet, catmullRomPath, centripetalKnots } from "../catmullRom";
+import seedrandom from "seedrandom";
 import {
-  catmullRomJet,
-  catmullRomPath,
-  centripetalKnots,
-} from "../catmullRom";
-import { interpolateCatmullRom } from "../interpolate";
+  channelReader,
+  interpolateCatmullRom,
+  interpolateRun,
+  locate,
+} from "../interpolate";
 import { type Point, subdivideCurve1 } from "../path";
 
 let passed = 0;
@@ -32,15 +34,8 @@ function ok(name: string, cond: boolean, detail?: string): void {
 }
 const near = (a: number, b: number, eps = 1e-9) => Math.abs(a - b) < eps;
 
-/** A seeded random stream (mulberry32), so a failure reproduces. */
-function random(seed: number): () => number {
-  return () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let r = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/** A seeded random stream, so a failure reproduces. */
+const random = (seed: number): (() => number) => seedrandom(String(seed));
 
 /** A random run: `n` points in a 500px box, at strictly increasing knots
  *  whose gaps differ by up to a hundredfold. */
@@ -89,7 +84,34 @@ console.log("# a path's cubic at u is the reading at the matching t");
   );
 }
 
-console.log("# it is the Barry-Goldman spline, with the end interval reflected");
+console.log("# a prepared channel reads what a single read reads");
+{
+  // A transition prepares each channel once (`channelReader`, with a smooth
+  // run's cubics worked out ahead) and reads it every frame; `interpolateRun`
+  // works one reading out on its own. They must agree to the last bit.
+  const rand = random(831);
+  let mismatches = 0;
+  for (let trial = 0; trial < 100; trial++) {
+    const n = 1 + Math.floor(rand() * 8);
+    const { knots, points } = randomRun(rand, n);
+    const values = points.map((p) => p[0]);
+    for (const method of ["step", "linear", "catmullRom"] as const) {
+      const read = channelReader(knots, values, method);
+      for (let s = -2; s <= 42; s++) {
+        const t = knots[0] + (s / 40) * (knots[n - 1] - knots[0] || 1);
+        const at = n < 2 ? { i: 0, u: 0 } : locate(knots, t);
+        if (!Object.is(read(at), interpolateRun(knots, values, t, method))) {
+          mismatches++;
+        }
+      }
+    }
+  }
+  ok("on 100 random runs, every method", mismatches === 0, `${mismatches}`);
+}
+
+console.log(
+  "# it is the Barry-Goldman spline, with the end interval reflected"
+);
 {
   // The textbook construction, written out independently: the pyramid of
   // lerps over four neighbors, with the missing neighbor at an end being the

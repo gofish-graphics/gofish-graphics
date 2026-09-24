@@ -750,21 +750,22 @@ on each keyframe group, and marks that a later elaboration pass adds under the g
 hide with it. The label pass is the case that needs this: it wraps a keyframe group
 in a new layer that holds the group beside its label `Text`s, after the sequence has
 set its rule. `wrapPreservingIdentity` (`src/ast/elaborationUtils.ts`) moves the rule
-onto the wrapper along with the group's name, key and keyframe record, so the labels
-are inside the rule's subtree, show only with the year they label, and belong to
-that year's keyframe.
+onto the wrapper along with the group's name and key, so the labels are inside the
+rule's subtree, show only with the year they label, and belong to that year's
+keyframe (`keyframeOf` in `src/timeWindow.ts` reads the key of the node under the
+sequence's Frame).
 
-A transition hides the keyframes it moves the same way, at paint, labels
-included. Every leaf it moves gets a visibility rule of its own, which narrows
-its keyframe group's rule (a second rule on a node narrows the first, and a
-node paints only while its own rules and every ancestor's hold). So a moved
-keyframe shows only as part of the trail the moving mark leaves behind; the
-rule is `movedKeyframe` in `src/timeWindow.ts`. A text leaf also lends the
-transition a copy of its drawing, `INTERNAL_lowerAt`, so the transition can
-draw that text where the playhead has taken it. The copy lowers through the
-same body as `INTERNAL_lower`, so its items keep their ids and live channels,
-but it skips the visibility rule: the transition decides when the moving copy
-shows.
+A transition hides the keyframes it moves, labels included. When its sequence keeps
+history, every leaf it moves gets a visibility rule of its own, which narrows its
+keyframe group's rule (a second rule on a node narrows the first, and a node paints
+only while its own rules and every ancestor's hold), so a moved keyframe shows only
+as part of the trail the moving mark leaves behind (`trailRule` in
+`src/timeWindow.ts`). With no history the trail is always empty, which is known at
+resolve, so the leaves get `INTERNAL_emitNothing` instead. A text leaf also lends the
+transition its drawing first, `INTERNAL_lendDrawing`, so the transition can draw
+that text where the playhead has taken it. The lent drawing lowers through the same
+body as `INTERNAL_lower`, so its items keep their ids and live channels, but it
+skips the visibility rule: the transition decides when the moving copy shows.
 
 ### Render Pass 5: Per-Shape Lowering and Painting
 

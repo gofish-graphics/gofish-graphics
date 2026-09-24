@@ -16,15 +16,8 @@
  * layout is affine in the interpolated quantities, which a fixed-domain
  * scatter is (see the animation design note, §4.1).
  *
- * The operands keep drawing, but only as the TRAIL the moving mark leaves
- * behind (`showAsTrail`). Each keyframe mark shows while its span of time
- * overlaps the window its sequence shows, except while the moving mark stands
- * in for it, and a gliding curve narrows a keyframe's span to its own moment
- * (the rule is `movedKeyframe` in `src/timeWindow.ts`). With no history the
- * window is the playhead alone, so the trail is empty and the moving mark is
- * all that shows. Like a sequence's own hold, this is decided at PAINT time:
- * the keyframes are lowered either way and their opacity is patched per
- * frame.
+ * The operands show only as the TRAIL the moving mark leaves behind
+ * (`trailRule` in `src/timeWindow.ts`, applied by `showAsTrail`).
  *
  * WHEN THE MARK IS THERE. A line draws nothing past its endpoints, and a
  * tween, read on time, draws nothing outside its run. Each stretch between two
@@ -80,14 +73,15 @@ import { createNodeOperator } from "../withGoFish";
 import { readLive } from "../../interaction/live";
 import { GEOMETRY_CHANNELS, setLiveSlots } from "../../interaction/liveSlots";
 import {
-  interpolateAt,
+  channelReader,
   knotOrder,
   locate,
   sourceIndex,
   type InterpolationMethod,
+  type KnotLocation,
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
-import { keyframeOf, keyframeShowing, movedKeyframe } from "../../timeWindow";
+import { keyframeOf, trailRule } from "../../timeWindow";
 import { targetOf } from "./layer";
 
 export type TweenOptions = {
@@ -139,25 +133,17 @@ function markLeaves(node: GoFishNode): GoFishNode[] {
   return [...own, ...(node._attachments ?? []).flatMap(markLeaves)];
 }
 
-/**
- * Leave a leaf of a keyframe mark that the transition moves to show only as
- * part of the trail the moving mark leaves behind. The rule is
- * `movedKeyframe`'s (`src/timeWindow.ts`); `glides` is whether the curve moves
- * the mark between keyframes, which is every curve but `"step"`. It is set at
- * paint time on the leaf, and a leaf also paints only while its keyframe
- * group's own rule holds, which the trail rule never widens. A keyframe that
- * belongs to no sequence (a transition over plain groups with a clock of its
- * own) has no window to show in, so it never shows.
- */
+/** Leave a leaf of a keyframe mark the transition moves to show only as part
+ *  of its trail (`trailRule` in `src/timeWindow.ts`), and draw nothing at all
+ *  when the trail is always empty. */
 function showAsTrail(leaf: GoFishNode, glides: boolean): void {
-  const keyframe = keyframeOf(leaf);
-  if (keyframe === undefined) {
-    leaf.INTERNAL_visibleWhile(() => false);
-    return;
-  }
-  const moved = movedKeyframe(keyframe, glides);
-  leaf.INTERNAL_visibleWhile(() => keyframeShowing(moved));
+  const rule = trailRule(keyframeOf(leaf), glides);
+  if (rule === undefined) leaf.INTERNAL_emitNothing();
+  else leaf.INTERNAL_visibleWhile(rule);
 }
+
+/** One channel of a track: its value where the run is located. */
+type Channel = (at: KnotLocation) => number;
 
 /**
  * One leaf's run through the keyframes, in time order: everything about it
@@ -170,12 +156,12 @@ type Track =
       /** The shape every keyframe of the leaf is: the shape the moving leaf
        *  is. */
       shape: string;
-      /** Each keyframe's placed box, per channel: center and extent on each
-       *  axis, the four quantities a box leaf interpolates. */
-      cx: number[];
-      cy: number[];
-      w: number[];
-      h: number[];
+      /** The four quantities a box leaf interpolates: its center and its
+       *  extent on each axis, each read from every keyframe's placed box. */
+      x: Channel;
+      y: Channel;
+      w: Channel;
+      h: Channel;
       /** Each keyframe's own color channel, for the paint the leaf
        *  inherits. */
       colors: (MaybeValue<string> | undefined)[];
@@ -183,9 +169,11 @@ type Track =
   | {
       kind: "rigid";
       /** Each keyframe's box center, the point the leaf's drawing moves
-       *  with. */
+       *  with, and the channels that read it. */
       cx: number[];
       cy: number[];
+      x: Channel;
+      y: Channel;
       /** Each keyframe's local origin (the point its anchor sits on), and
        *  a copy of its own drawing, lent by the keyframe. */
       origins: [number, number][];
@@ -195,12 +183,9 @@ type Track =
       ) => DisplayList.DisplayItem[])[];
     };
 
-/** One track, lowered: the items its leaf draws when the run is read by `at`
- *  and its unblended attributes come from keyframe `source`. */
-type Painter = (
-  at: (values: number[]) => number,
-  source: number
-) => DisplayList.DisplayItem[];
+/** One track, lowered: the items its leaf draws when the run is read `at` a
+ *  location and its unblended attributes come from keyframe `source`. */
+type Painter = (at: KnotLocation, source: number) => DisplayList.DisplayItem[];
 
 /**
  * Where a run with these knots is read at `t`, and how opaque it is there —
@@ -268,8 +253,8 @@ function moveItem(
 type Run = { knots: number[]; tracks: Track[] };
 
 /**
- * Locate `t` in a run: a reader for any per-keyframe channel at `t`, and the
- * keyframe the attributes that are NOT blended come from.
+ * Locate `t` in a run: where every per-keyframe channel is read at `t`, and
+ * the keyframe the attributes that are NOT blended come from.
  *
  * Easing warps the parameter INSIDE the interval `t` falls in, then maps back
  * to time, so an eased run still passes through every keyframe at its own time
@@ -287,22 +272,17 @@ function sampleRun(
   t: number,
   method: InterpolationMethod,
   ease: ((u: number) => number) | undefined
-): { at: (values: number[]) => number; source: number } {
+): { at: KnotLocation; source: number } {
   const source = sourceIndex(knots, t, method);
-  // Fewer than two keyframes leaves no segment to locate in; the channel
-  // rule is `interpolateRun`'s (a lone keyframe holds, an empty run is NaN).
-  if (knots.length < 2) {
-    return {
-      at: (values) => (knots.length === 0 ? NaN : values[0]),
-      source,
-    };
-  }
+  // Fewer than two keyframes leaves no segment to locate in; a channel of
+  // such a run holds its one value wherever it is read (`channelReader`).
+  if (knots.length < 2) return { at: { i: 0, u: 0 }, source };
   let loc = locate(knots, t);
   if (ease !== undefined && loc.u > 0 && loc.u < 1) {
     const { i, u } = loc;
     loc = locate(knots, knots[i] + ease(u) * (knots[i + 1] - knots[i]));
   }
-  return { at: (values) => interpolateAt(knots, values, loc, method), source };
+  return { at: loc, source };
 }
 
 export const tween = createNodeOperator(
@@ -439,6 +419,11 @@ export const tween = createNodeOperator(
             }
           }
 
+          const runKnots = order.map((i) => knots[i]);
+          /** A channel of this run, from each keyframe's value of it. */
+          const channel = (values: number[]): Channel =>
+            channelReader(runKnots, values, method);
+          const glides = method !== "step";
           const allBoxes: ReturnType<typeof bbox>[] = [];
           const tracks: Track[] = rows.map((leaves) => {
             const stands = leaves.map((leaf, k) => placeLeaf(leaf, k));
@@ -450,33 +435,35 @@ export const tween = createNodeOperator(
             const shape = leaves[0].type;
             const cx = boxes.map((b) => (b.minX + b.maxX) / 2);
             const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
-            // Every leaf the transition moves shows only as the trail, and a
-            // rigid leaf also lends its drawing to the moving mark, to be
-            // placed where the playhead is.
-            for (const leaf of leaves) showAsTrail(leaf, method !== "step");
-            if (RIGID_SHAPES.has(shape)) {
+            // A rigid leaf lends its drawing to the moving mark, to be placed
+            // where the playhead is. The loan is taken first, because every
+            // leaf the transition moves then shows only as its trail.
+            const draws = RIGID_SHAPES.has(shape)
+              ? leaves.map((leaf) => leaf.INTERNAL_lendDrawing())
+              : undefined;
+            for (const leaf of leaves) showAsTrail(leaf, glides);
+            if (draws !== undefined) {
               return {
                 kind: "rigid",
                 cx,
                 cy,
+                x: channel(cx),
+                y: channel(cy),
                 origins: stands.map((s) => displayTranslate(s.transform)),
-                draws: leaves.map(
-                  (leaf) => (transform: Transform, toPixel: ToPixel) =>
-                    leaf.INTERNAL_lowerAt(transform, toPixel)
-                ),
+                draws,
               };
             }
             return {
               kind: "box",
               shape,
-              cx,
-              cy,
-              w: boxes.map(width),
-              h: boxes.map(height),
+              x: channel(cx),
+              y: channel(cy),
+              w: channel(boxes.map(width)),
+              h: channel(boxes.map(height)),
               colors: leaves.map((leaf) => leaf.color),
             };
           });
-          const run: Run = { knots: order.map((i) => knots[i]), tracks };
+          const run: Run = { knots: runKnots, tracks };
 
           // The box is the whole TRAJECTORY, not the point the mark is at:
           // the union of the keyframes' placed boxes, which is the room the
@@ -519,7 +506,7 @@ export const tween = createNodeOperator(
           const boxPainter = (
             track: Extract<Track, { kind: "box" }>
           ): Painter => {
-            const { shape, cx, cy, w, h } = track;
+            const { shape } = track;
             const styles = track.colors.map((keyframeColor) => {
               const resolvedFill =
                 resolveColorChannel(
@@ -534,7 +521,10 @@ export const tween = createNodeOperator(
               });
             });
             return (at, source) => {
-              const [x, y, bw, bh] = [cx, cy, w, h].map(at);
+              const x = track.x(at);
+              const y = track.y(at);
+              const bw = track.w(at);
+              const bh = track.h(at);
               const style = styles[source];
               if (shape === "ellipse") {
                 const [px, py] = toLocalPixel([x, y]);
@@ -585,7 +575,7 @@ export const tween = createNodeOperator(
             const centers = cx.map((x, k) => toLocalPixel([x, cy[k]]));
             return (at, source) => {
               const [fromX, fromY] = centers[source];
-              const [toX, toY] = toLocalPixel([at(cx), at(cy)]);
+              const [toX, toY] = toLocalPixel([track.x(at), track.y(at)]);
               return drawn[source].map((item) =>
                 moveItem(item, toX - fromX, toY - fromY)
               );

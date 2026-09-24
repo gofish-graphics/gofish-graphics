@@ -26,6 +26,7 @@
  * does not count as a difference.
  */
 import { nextTick, settle } from "./interactionDomSetup";
+import { items, pausedClock } from "./animationTestHelpers";
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import { drivingShifts } from "../data/drivingShifts";
@@ -43,7 +44,6 @@ const {
   scatter,
   selectAll,
   time,
-  timer,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -66,32 +66,17 @@ const YEARS: [number, number] = [1956, 2010];
 const EPS = 1e-6;
 const OPTIONS = { w: W, h: H, axes: true };
 
-/** A paused clock parked at `at`. It does not loop, so parked at the end of
- *  its domain it reads back as the end rather than folding to the start. */
-function pausedClock(at: number) {
-  const clock = timer({
-    domain: YEARS,
-    duration: 54 * 200,
-    playing: false,
-    loop: false,
-  });
-  clock.set(at);
-  return clock;
-}
+/** The data's clock, parked at `at`. */
+const clockAt = (at: number) => pausedClock(YEARS, 54 * 200, at);
 
-/** Every item of a display list, flattened. */
-function items(doc: any): any[] {
-  const out: any[] = [];
-  const walk = (n: any): void => {
-    if (Array.isArray(n)) return n.forEach(walk);
-    if (n === null || typeof n !== "object") return;
-    if (n.kind !== undefined) out.push(n);
-    if (n.items) walk(n.items);
-    if (n.children) walk(n.children);
-  };
-  walk(doc.items ?? doc);
-  return out;
-}
+/** One keyframe per year of `rows`, placed by miles and gas, on a sequence
+ *  keeping `history` years and parked at `at`. Every chart here starts from
+ *  it. */
+const keyframes = (rows: any[], at: number, history: number) =>
+  chart(rows).flow(
+    time.sequence({ by: "year", on: clockAt(at), history }),
+    scatter({ x: "miles", y: "gas" })
+  );
 
 type Point = [number, number];
 type Segment = [Point, Point];
@@ -99,13 +84,18 @@ type Segment = [Point, Point];
 const samePoint = (p: Point, q: Point) =>
   Math.abs(p[0] - q[0]) < EPS && Math.abs(p[1] - q[1]) < EPS;
 
+/** The one path in a display list. */
+function onePath(doc: any): any {
+  const paths = items(doc).filter((item) => item.kind === "path");
+  if (paths.length !== 1) throw new Error(`${paths.length} paths, not 1`);
+  return paths[0];
+}
+
 /** The one line's straight segments, parsed out of its path data, with any
  *  zero-length ones dropped. Throws on anything but `M` and `L`: both rungs
  *  draw straight segments, so a curve would be a difference in itself. */
 function lineSegments(doc: any): Segment[] {
-  const paths = items(doc).filter((item) => item.kind === "path");
-  if (paths.length !== 1) throw new Error(`${paths.length} paths, not 1`);
-  const d: string = paths[0].d;
+  const d: string = onePath(doc).d;
   const commands = d.match(/[A-Za-z]/g) ?? [];
   if (commands.some((c) => c !== "M" && c !== "L")) {
     throw new Error(`not a straight path: ${d.slice(0, 80)}`);
@@ -120,6 +110,15 @@ function lineSegments(doc: any): Segment[] {
     at = p;
   }
   return out;
+}
+
+/** The last point of the one path's data: the tip of a line drawn in up to
+ *  the playhead, which is the path cut at the `u` matching the playhead. */
+function lastPoint(doc: any): Point {
+  const numbers = onePath(doc)
+    .d.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/g)
+    .map(Number);
+  return [numbers[numbers.length - 2], numbers[numbers.length - 1]];
 }
 
 /** Report the first place two lines part company, or `undefined`. */
@@ -140,11 +139,7 @@ function firstDifference(a: Segment[], b: Segment[]): string | undefined {
 
 /** The AVL port, held still at `at`. */
 async function sugar(at: number) {
-  return chart(drivingShifts)
-    .flow(
-      time.sequence({ by: "year", on: pausedClock(at), history: Infinity }),
-      scatter({ x: "miles", y: "gas" })
-    )
+  return keyframes(drivingShifts, at, Infinity)
     .mark(line({ along: "year", curve: "linear" }))
     .toDisplayList(OPTIONS);
 }
@@ -157,11 +152,11 @@ async function sugar(at: number) {
  *  does. Layered that way, the line's chart would be a `LayerBuilder` nested
  *  in another one, and the two name their first tiers' marks the same, so the
  *  line would thread both tiers' blanks. */
-async function dataSpace(at: number) {
-  return chart(drivingShifts)
+async function dataSpace(rows: any[], at: number) {
+  return chart(rows)
     .flow(
-      derive((rows: any[]) => {
-        const keyed = rows.map((row) => ({ ...row, key: ":)" }));
+      derive((d: any[]) => {
+        const keyed = d.map((row) => ({ ...row, key: ":)" }));
         return [
           ...keyed.filter((row) => row.year <= at),
           ...interpolate(keyed, {
@@ -177,7 +172,7 @@ async function dataSpace(at: number) {
     )
     .mark(line({ along: "year", curve: "linear" }))
     .layer(
-      chart(drivingShifts)
+      chart(rows)
         .flow(group({ by: "year" }), scatter({ x: "miles", y: "gas" }))
         .mark(blank())
     )
@@ -201,7 +196,7 @@ async function main(): Promise<void> {
     docs.set(at, high);
     const diff = firstDifference(
       lineSegments(high),
-      lineSegments(await dataSpace(at))
+      lineSegments(await dataSpace(drivingShifts, at))
     );
     ok(`at ${at}`, diff === undefined, diff);
   }
@@ -222,7 +217,7 @@ async function main(): Promise<void> {
   {
     const container = document.createElement("div");
     document.body.appendChild(container);
-    const clock = pausedClock(1960);
+    const clock = clockAt(1960);
     let resolves = 0;
     await chart(drivingShifts)
       .flow(
@@ -259,15 +254,7 @@ async function main(): Promise<void> {
 
   console.log("\n# the dots show with the line");
   const dots = items(
-    await chart(drivingShifts)
-      .flow(
-        time.sequence({
-          by: "year",
-          on: pausedClock(1979.25),
-          history: Infinity,
-        }),
-        scatter({ x: "miles", y: "gas" })
-      )
+    await keyframes(drivingShifts, 1979.25, Infinity)
       .mark(circle({ r: 4 }))
       .layer(line({ along: "year" }))
       .toDisplayList(OPTIONS)
@@ -278,69 +265,22 @@ async function main(): Promise<void> {
     `${dots.length} dots`
   );
 
-  console.log("\n# a smooth line and a transition follow one curve");
+  console.log("\n# a moving dot leaves a trail, on the line's tip");
   {
-    // Uneven steps in time, from one year to nineteen, so a curve whose knots
-    // were anything but the years would part company with the dot.
+    // Uneven steps in time, from one year to nineteen, so a smooth curve
+    // whose knots were anything but the years would part company with the
+    // moving dot.
     const years = [1956, 1957, 1960, 1966, 1967, 1975, 1990, 1991, 2010];
     const rows = drivingShifts.filter((d: any) => years.includes(d.year));
-    const keyframes = (at: number, history: number) =>
-      chart(rows)
-        .flow(
-          time.sequence({ by: "year", on: pausedClock(at), history }),
-          scatter({ x: "miles", y: "gas" })
-        )
-        .mark(circle({ r: 4 }));
-    /** The tip of the smooth line drawn in up to `at`: the last point of its
-     *  path data, which is the curve cut at the `u` matching `at`. */
-    const tip = async (at: number): Promise<Point> => {
-      const doc = await keyframes(at, Infinity)
-        .layer(line({ along: "year" }))
-        .toDisplayList(OPTIONS);
-      const [path] = items(doc).filter((item) => item.kind === "path");
-      if (!/C/.test(path.d)) throw new Error("the line is not smooth");
-      const numbers = path.d.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/g).map(Number);
-      return [numbers[numbers.length - 2], numbers[numbers.length - 1]];
-    };
-    /** Where a `time.transition()` over the same keyframes puts the dot. */
-    const dot = async (at: number): Promise<Point> => {
-      const doc = await keyframes(at, 0)
-        .layer(time.transition())
-        .toDisplayList(OPTIONS);
-      const shown = items(doc).filter(
-        (item) => item.kind === "ellipse" && item.style?.opacity !== 0
-      );
-      if (shown.length !== 1) throw new Error(`${shown.length} dots shown`);
-      return [shown[0].cx, shown[0].cy];
-    };
-    // The path data is written to four decimal places.
-    const close = (p: Point, q: Point) =>
-      Math.abs(p[0] - q[0]) < 1e-3 && Math.abs(p[1] - q[1]) < 1e-3;
-    for (const at of [1956.5, 1958.7, 1963, 1966, 1970.25, 1983, 2000.9]) {
-      const [a, b] = [await tip(at), await dot(at)];
-      ok(
-        `at ${at} the dot is at the line's tip`,
-        close(a, b),
-        `${JSON.stringify(a)} vs ${JSON.stringify(b)}`
-      );
-    }
-  }
-
-  console.log("\n# a moving dot leaves a trail");
-  {
     /** The dots, a line threaded through them, and a transition moving one
-     *  red dot over the same keyframes, on a sequence keeping `history`. The
-     *  keyframe dots are white, so the moving dot is the only red one. */
+     *  red dot over the same keyframes. The keyframe dots are white, so the
+     *  moving dot is the only red one. */
     const trail = (
       at: number,
       curve: "linear" | "catmullRom" | "step",
       history = Infinity
     ) =>
-      chart(drivingShifts)
-        .flow(
-          time.sequence({ by: "year", on: pausedClock(at), history }),
-          scatter({ x: "miles", y: "gas" })
-        )
+      keyframes(rows, at, history)
         .mark(circle({ r: 4, fill: "white" }).name("dots"))
         .layer(
           line({ along: "year", curve: curve === "step" ? "linear" : curve })
@@ -356,51 +296,45 @@ async function main(): Promise<void> {
           item.style?.fill === fill &&
           item.style?.opacity !== 0
       );
-    const lastPoint = (doc: any): Point => {
-      const [path] = items(doc).filter((item) => item.kind === "path");
-      const numbers = path.d.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/g).map(Number);
-      return [numbers[numbers.length - 2], numbers[numbers.length - 1]];
-    };
+    /** Whether the one moving dot sits on the line's tip. The path data is
+     *  written to four decimal places. */
     const onTip = (doc: any): boolean => {
-      const [dot] = shownDots(doc, "red");
+      const moving = shownDots(doc, "red");
       const tip = lastPoint(doc);
       return (
-        dot !== undefined &&
-        Math.abs(dot.cx - tip[0]) < 1e-3 &&
-        Math.abs(dot.cy - tip[1]) < 1e-3
+        moving.length === 1 &&
+        Math.abs(moving[0].cx - tip[0]) < 1e-3 &&
+        Math.abs(moving[0].cy - tip[1]) < 1e-3
       );
     };
-    const years = drivingShifts.map((d: any) => d.year);
-    for (const at of [1962.5, 1979.25, 1980, 2004.6]) {
+    for (const at of [1956.5, 1963, 1966, 1979.25, 2004.6]) {
       const doc = await trail(at, "linear");
       const white = shownDots(doc, "white").length;
-      const reached = years.filter((y: number) => y < at).length;
+      const reached = years.filter((y) => y < at).length;
       ok(
         `linear at ${at}: every year passed shows, and no other`,
         white === reached,
         `${white} vs ${reached}`
       );
-      ok(
-        `linear at ${at}: one moving dot, at the line's tip`,
-        shownDots(doc, "red").length === 1 && onTip(doc)
-      );
+      ok(`linear at ${at}: one moving dot, on the line's tip`, onTip(doc));
       const diff = firstDifference(
         lineSegments(doc),
-        lineSegments(await dataSpace(at))
+        lineSegments(await dataSpace(rows, at))
       );
       ok(`linear at ${at}: the line is the data-space rung`, !diff, diff);
     }
-    for (const at of [1956.5, 1979.25, 1995.9]) {
+    for (const at of [1956.5, 1958.7, 1963, 1966, 1970.25, 1983, 2000.9]) {
       ok(
-        `catmullRom at ${at}: the moving dot is at the line's tip`,
+        `catmullRom at ${at}: one moving dot, on the line's tip`,
         onTip(await trail(at, "catmullRom"))
       );
     }
     const stepped = await trail(1979.25, "step");
     ok(
-      "step: the moving dot holds 1979, and every band already over shows",
+      "step: the moving dot holds 1975, and every band already over shows",
       shownDots(stepped, "white").length ===
-        years.filter((y: number) => y < 1979).length
+        years.filter((y, i) => i + 1 < years.length && years[i + 1] <= 1979.25)
+          .length
     );
     for (const curve of ["linear", "catmullRom", "step"] as const) {
       const doc = await trail(1979.25, curve, 0);
@@ -422,16 +356,11 @@ async function main(): Promise<void> {
       return pattern.test(message) ? undefined : message;
     }
   };
-  const keyframes = (history: number) =>
-    chart(drivingShifts)
-      .flow(
-        time.sequence({ by: "year", on: pausedClock(1979), history }),
-        scatter({ x: "miles", y: "gas" })
-      )
-      .mark(circle({ r: 4 }));
+  const threaded = () =>
+    keyframes(drivingShifts, 1979, Infinity).mark(circle({ r: 4 }));
   let why = await throws(
     () =>
-      keyframes(Infinity)
+      threaded()
         .layer(line({ along: "year", curve: orthogonal() }))
         .toDisplayList(OPTIONS),
     /"orthogonal" does not/
@@ -439,7 +368,7 @@ async function main(): Promise<void> {
   ok("a threaded line whose curve is a router", !why, why);
   why = await throws(
     () =>
-      keyframes(Infinity)
+      threaded()
         .layer(ribbon({ along: "year" }))
         .toDisplayList(OPTIONS),
     /a ribbon's band/

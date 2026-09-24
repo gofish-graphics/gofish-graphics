@@ -46,6 +46,7 @@ import {
   timer,
 } from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
+import { pausedClock } from "./pausedClock";
 
 const meta: Meta = {
   title: "Animated Vega-Lite/Connected Scatterplot",
@@ -57,15 +58,38 @@ const meta: Meta = {
 export default meta;
 
 type Args = { w: number; h: number };
+type Clock = ReturnType<typeof timer>;
+
+/** The years the data runs over, and one pass through them at 200 ms a year,
+ *  Animated Vega-Lite's band step. */
+const YEARS: [number, number] = [1956, 2010];
+const DURATION = 54 * 200;
 
 /** A point in time halfway through a year, where the line is cut inside a
  *  segment rather than on a knot. */
 const AT = 1979.5;
 
+/** The clock a playing story runs on, and the one a paused twin is held
+ *  still on, at `AT`. */
+const playing = (): Clock => timer({ domain: YEARS, duration: DURATION });
+const paused = (): Clock => pausedClock(YEARS, DURATION, AT);
+
 /** The dots, styled like the static connected scatterplot
  *  (`stories/forwardsyntax/Scatter.stories.tsx`). */
 const dot = () =>
   circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 });
+
+/** The keyframes every picture here plays through: one per year, placed by
+ *  miles and gas, keeping `history` years on screen behind the playhead. */
+const years = (clock: Clock, history = Infinity) =>
+  chart(drivingShifts).flow(
+    time.sequence({ by: "year", on: clock, history }),
+    scatter({ x: "miles", y: "gas" })
+  );
+
+/** The port: the line alone, drawn in up to the playhead. */
+const port = (clock: Clock) =>
+  years(clock).mark(line({ along: "year", curve: "linear" }));
 
 /**
  * The port. The line starts at 1956 and is drawn in, one year every 200 ms,
@@ -84,17 +108,7 @@ export const Animated: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-
-    const year = timer({ domain: [1956, 2010], duration: 54 * 200 }); // 200 ms per year, AVL's band step
-
-    chart(drivingShifts)
-      .flow(
-        time.sequence({ by: "year", on: year, history: Infinity }),
-        scatter({ x: "miles", y: "gas" })
-      )
-      .mark(line({ along: "year", curve: "linear" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
-
+    port(playing()).render(container, { w: args.w, h: args.h, axes: true });
     return container;
   },
 };
@@ -105,20 +119,7 @@ export const Paused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-
-    chart(drivingShifts)
-      .flow(
-        time.sequence({
-          by: "year",
-          playing: false,
-          at: AT,
-          history: Infinity,
-        }),
-        scatter({ x: "miles", y: "gas" })
-      )
-      .mark(line({ along: "year", curve: "linear" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
-
+    port(paused()).render(container, { w: args.w, h: args.h, axes: true });
     return container;
   },
 };
@@ -129,22 +130,16 @@ export const Paused1979: StoryObj<Args> = {
  * arrives at it. The line's curve is left to its default, which smooths the
  * run with a Catmull-Rom spline, so this is also the cut inside a curve.
  */
+const withDots = (clock: Clock) =>
+  years(clock)
+    .mark(dot())
+    .layer(line({ along: "year", stroke: "black", strokeWidth: 2 }));
+
 export const WithDots: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-
-    const year = timer({ domain: [1956, 2010], duration: 54 * 200 });
-
-    chart(drivingShifts)
-      .flow(
-        time.sequence({ by: "year", on: year, history: Infinity }),
-        scatter({ x: "miles", y: "gas" })
-      )
-      .mark(dot())
-      .layer(line({ along: "year", stroke: "black", strokeWidth: 2 }))
-      .render(container, { w: args.w, h: args.h, axes: true });
-
+    withDots(playing()).render(container, { w: args.w, h: args.h, axes: true });
     return container;
   },
 };
@@ -155,21 +150,7 @@ export const WithDotsPaused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-
-    chart(drivingShifts)
-      .flow(
-        time.sequence({
-          by: "year",
-          playing: false,
-          at: AT,
-          history: Infinity,
-        }),
-        scatter({ x: "miles", y: "gas" })
-      )
-      .mark(dot())
-      .layer(line({ along: "year", stroke: "black", strokeWidth: 2 }))
-      .render(container, { w: args.w, h: args.h, axes: true });
-
+    withDots(paused()).render(container, { w: args.w, h: args.h, axes: true });
     return container;
   },
 };
@@ -178,25 +159,16 @@ export const WithDotsPaused1979: StoryObj<Args> = {
  * WITH DOTS plus a moving dot: the dots, the line threaded through them, and a
  * `time.transition()` over the same dots. The sequence keeps all its history,
  * so the transition draws one dot moving through the years and the year dots
- * stay behind it as its trail.
+ * stay behind it as its trail (`trailRule` in `src/timeWindow.ts`).
  *
  * The transition is a tier of its own over the dots (`selectAll("dots")`)
  * because `.layer(...)` reads the tier just before it, which here is the line.
  * It reads the sequence's clock like any transition over the sequence's
- * keyframes.
- *
- * Both the line and the transition are smooth, and both use the years as
- * their knots, so the moving dot rides exactly on the line's tip. A gliding
- * transition covers the time between two years, so each year's dot covers only
- * its own moment: it shows the moment the moving dot leaves it, and the trail
- * has no gap behind the moving dot.
+ * keyframes. Both the line and the transition are smooth, and both use the
+ * years as their knots, so the moving dot rides exactly on the line's tip.
  */
-const movingDot = (sequence: Record<string, unknown>) =>
-  chart(drivingShifts)
-    .flow(
-      time.sequence({ by: "year", history: Infinity, ...sequence } as any),
-      scatter({ x: "miles", y: "gas" })
-    )
+const movingDot = (clock: Clock) =>
+  years(clock)
     .mark(dot().name("dots"))
     .layer(line({ along: "year", stroke: "black", strokeWidth: 2 }))
     .layer(
@@ -209,14 +181,11 @@ export const MovingDot: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-
-    const year = timer({ domain: [1956, 2010], duration: 54 * 200 });
-    movingDot({ on: year }).render(container, {
+    movingDot(playing()).render(container, {
       w: args.w,
       h: args.h,
       axes: true,
     });
-
     return container;
   },
 };
@@ -227,34 +196,25 @@ export const MovingDotPaused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-
-    movingDot({ playing: false, at: AT }).render(container, {
+    movingDot(paused()).render(container, {
       w: args.w,
       h: args.h,
       axes: true,
     });
-
     return container;
   },
 };
 
 /** Only the last ten years: the line's tail is cut as well as its tip, so a
  *  ten-year stretch of the run travels along the path. */
+const comet = (clock: Clock) =>
+  years(clock, 10).mark(line({ along: "year", curve: "linear" }));
+
 export const Comet: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-
-    const year = timer({ domain: [1956, 2010], duration: 54 * 200 });
-
-    chart(drivingShifts)
-      .flow(
-        time.sequence({ by: "year", on: year, history: 10 }),
-        scatter({ x: "miles", y: "gas" })
-      )
-      .mark(line({ along: "year", curve: "linear" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
-
+    comet(playing()).render(container, { w: args.w, h: args.h, axes: true });
     return container;
   },
 };
@@ -265,15 +225,7 @@ export const CometPaused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-
-    chart(drivingShifts)
-      .flow(
-        time.sequence({ by: "year", playing: false, at: AT, history: 10 }),
-        scatter({ x: "miles", y: "gas" })
-      )
-      .mark(line({ along: "year", curve: "linear" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
-
+    comet(paused()).render(container, { w: args.w, h: args.h, axes: true });
     return container;
   },
 };
