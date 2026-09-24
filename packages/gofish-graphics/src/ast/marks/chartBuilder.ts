@@ -987,15 +987,19 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // leave with the data, so the build-in leaves this tier alone.
     if (findTimeTier(this.state.operators) !== undefined) {
       markDataTime(node);
-      const arranged = this.state.operators.find(
-        (op) => (op as any).__transition !== undefined
-      );
+      // An operator's `update` arrangement is read by `time.transition()`
+      // (a staggered move between keyframes). Its children never enter or
+      // leave all at once under a sequence, so those phases are not built.
+      const arranged = this.state.operators.find((op) => {
+        const spec = (op as any).__transition;
+        return spec?.enter !== undefined || spec?.exit !== undefined;
+      });
       if (arranged !== undefined) {
         throw new Error(
-          `[gofish] operator.transition() under a time.sequence: arranging ` +
-            `an operator's children in time between keyframes (a staggered ` +
-            `update) is not in this prototype. Put .transition() on the ` +
-            `mark (update: animation.tween(...)).`
+          `[gofish] operator.transition({ enter / exit }) under a ` +
+            `time.sequence: marks enter and leave with the data there, one ` +
+            `stretch at a time, so arranging them is not in this prototype. ` +
+            `\`update: time.stagger(...)\` is.`
         );
       }
     }

@@ -56,14 +56,17 @@ export type OperatorTransition = {
 
 /** What a node records. A mark records effects; the selection form's leaf
  *  also names the marks it animates (`targets`), where a chained mark
- *  animates itself. An operator records an arrangement. */
+ *  animates itself. An operator records how its children are arranged in
+ *  time, per phase: `arrangement` as they enter (the build-in reads it),
+ *  `update` as they move between two keyframes of a sequence
+ *  (`time.transition()` reads it), `exitArrangement` as they leave. */
 export type NodeTransition = {
   enter?: Effect[];
   exit?: Effect[];
   targets?: GoFishNode[];
   arrangement?: ArrangementSpec;
-  /** Arrangements for the phases this prototype does not play in a build. */
-  unbuilt?: string[];
+  update?: ArrangementSpec;
+  exitArrangement?: ArrangementSpec;
 };
 
 const records = new WeakMap<GoFishNode, NodeTransition>();
@@ -120,12 +123,10 @@ export function recordOperatorTransition(
   spec: OperatorTransition
 ): void {
   const where = "operator.transition()";
-  const unbuilt = (["update", "exit"] as const).filter(
-    (phase) => arrangementOf(spec[phase], `${where} ${phase}`) !== undefined
-  );
   records.set(node, {
     arrangement: arrangementOf(spec.enter, `${where} enter`),
-    ...(unbuilt.length > 0 ? { unbuilt } : {}),
+    update: arrangementOf(spec.update, `${where} update`),
+    exitArrangement: arrangementOf(spec.exit, `${where} exit`),
   });
 }
 

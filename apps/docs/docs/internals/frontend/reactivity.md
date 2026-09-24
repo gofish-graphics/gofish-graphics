@@ -293,6 +293,12 @@ With no domain the scale is the identity onto `[0, duration]`, which is the plai
 elapsed-milliseconds clock every other library exposes — the degenerate case, not
 a separate mode.
 
+Because it is a scale, a timer also exposes its range, `duration`, beside its
+`domain`. A reader that needs to turn a stretch of the domain into time reads
+them together: a staggered update inside a `time.sequence` gives its lag in
+milliseconds, and fits it to the milliseconds between two keyframes
+(`TimeTier.msPerUnit`, `src/animation/updateStagger.ts`).
+
 ## Controls are marks, not nodes
 
 `widgets.ts` builds `slider` and `button` out of the same three pieces every

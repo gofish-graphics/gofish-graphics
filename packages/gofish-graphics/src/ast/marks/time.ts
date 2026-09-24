@@ -166,28 +166,35 @@ export function sequence(opts: SequenceOptions) {
     }
   )(opts);
 
+  /** The clock, built on first use (see the note above `sequence`). */
+  const ownClock = (): Timer<number> => {
+    if (clock === undefined) {
+      if (keyframes.length === 0) {
+        throw new Error(
+          `[gofish] time.sequence({ by: "${opts.by}" }): "${opts.by}" has no ` +
+            `numeric values to play through — a sequence's field is the ` +
+            `playhead's own units, so it must be a number (a year, a day, a ` +
+            `step index).`
+        );
+      }
+      clock = timer<number>({
+        domain: [keyframes[0], keyframes.at(-1)!],
+        duration: opts.duration ?? 5000,
+        loop: opts.loop ?? true,
+        playing: opts.playing ?? true,
+      });
+      if (opts.at !== undefined) clock.set(opts.at);
+    }
+    return clock;
+  };
   const tier: TimeTier = {
     by: opts.by,
     knots: () => keyframes,
-    clock: () => {
-      if (clock === undefined) {
-        if (keyframes.length === 0) {
-          throw new Error(
-            `[gofish] time.sequence({ by: "${opts.by}" }): "${opts.by}" has no ` +
-              `numeric values to play through — a sequence's field is the ` +
-              `playhead's own units, so it must be a number (a year, a day, a ` +
-              `step index).`
-          );
-        }
-        clock = timer<number>({
-          domain: [keyframes[0], keyframes.at(-1)!],
-          duration: opts.duration ?? 5000,
-          loop: opts.loop ?? true,
-          playing: opts.playing ?? true,
-        });
-        if (opts.at !== undefined) clock.set(opts.at);
-      }
-      return clock();
+    clock: () => ownClock()(),
+    msPerUnit: () => {
+      const c = ownClock();
+      const [lo, hi] = c.domain as readonly [number, number];
+      return hi > lo ? c.duration / (hi - lo) : 0;
     },
   };
   (operator as any).__timeTier = tier;
@@ -321,6 +328,7 @@ export const transition = createRelationalMark<TransitionOptions>(
         sequence,
         method: resolveMethod(o.curve),
         ease: o.ease,
+        msPerUnit: sequence !== undefined ? tier?.msPerUnit : undefined,
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth,

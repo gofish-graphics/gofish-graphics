@@ -84,6 +84,11 @@ import {
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
 import { targetOf } from "./layer";
+import {
+  updateSlotOf,
+  updateWarp,
+  type UpdateSlot,
+} from "../../animation/updateStagger";
 
 export type TweenOptions = {
   /** The playhead, in the time field's own units (a year, not a fraction).
@@ -105,6 +110,10 @@ export type TweenOptions = {
    *  `[0, 1]`. Easing is a warp of the parameter, not of the values, so it
    *  composes with either interpolation method. */
   ease?: (u: number) => number;
+  /** The clock's milliseconds per unit of the time field, for an operator
+   *  whose `.transition({ update: time.stagger(...) })` staggers the moves
+   *  (`src/animation/updateStagger.ts`): its lag is in ms. */
+  msPerUnit?: () => number;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -238,9 +247,14 @@ function moveItem(
   return moved as unknown as DisplayList.DisplayItem;
 }
 
-/** The run a tween paints: the keyframes' time values and one track per
- *  matched leaf of the keyed mark. */
-type Run = { knots: number[]; tracks: Track[] };
+/** The run a tween paints: the keyframes' time values, one track per
+ *  matched leaf of the keyed mark, and where each keyframe sits in a
+ *  staggered update (`updateSlotOf`), if one arranges it. */
+type Run = {
+  knots: number[];
+  tracks: Track[];
+  slots: (UpdateSlot | undefined)[];
+};
 
 /**
  * Locate `t` in a run: a reader for any per-keyframe channel at `t`, and the
@@ -288,6 +302,7 @@ export const tween = createNodeOperator(
       sequence,
       method,
       ease,
+      msPerUnit,
       fill,
       stroke,
       strokeWidth,
@@ -448,7 +463,13 @@ export const tween = createNodeOperator(
               colors: leaves.map((leaf) => leaf.color),
             };
           });
-          const run: Run = { knots: order.map((i) => knots[i]), tracks };
+          const run: Run = {
+            knots: order.map((i) => knots[i]),
+            tracks,
+            slots: keyframes.map((k) =>
+              k instanceof GoFishNode ? updateSlotOf(k) : undefined
+            ),
+          };
 
           // The box is the whole TRAJECTORY, not the point the mark is at:
           // the union of the keyframes' placed boxes, which is the room the
@@ -568,12 +589,16 @@ export const tween = createNodeOperator(
             track.kind === "box" ? boxPainter(track) : rigidPainter(track)
           );
           const knots = run.knots;
+          /** The playhead as this key reads it: itself, unless an operator
+           *  staggers the moves between keyframes, when each key moves in its
+           *  own fitted slice of the stretch. */
+          const warp = updateWarp(sequence, knots, run.slots, msPerUnit);
 
           /** The moving mark as it stands at one playhead: every leaf's items,
            *  in leaf order. Everything it needs was computed by layout or
            *  lowering, so the paint tier can call it per frame. */
           const build = (at: number): DisplayList.DisplayItem[] => {
-            const phase = life(at);
+            const phase = life(warp(at));
             const s = sampleRun(knots, phase.at, method, ease);
             const items = painters.flatMap((paint) => paint(s.at, s.source));
             // Every leaf fades together, box and text alike: they are one

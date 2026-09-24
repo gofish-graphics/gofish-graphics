@@ -1302,7 +1302,11 @@ error rather than silently doing the wrong thing:
   `spread`/`stack`/`group`/`scatter`/`treemap`'s `by` (and `time.sequence`'s,
   which splits keyframes the same way — its groups are laid out in one shared
   frame, so the space they occupy is the space of the whole dataset, which is
-  what keeps a playing chart's axes still): `dropNulls` filters out
+  what keeps a playing chart's axes still; the `TimeTier` it hands a
+  `time.transition()` is declared in the same module and carries the clock,
+  the keyframes, and the clock's milliseconds per unit of the field). A
+  build-in stagger's `by` reuses `splitEntries` for the order of its groups
+  (`src/animation/grouping.ts`). `dropNulls` filters out
   rows whose value at the field is `null`/`undefined` FIRST (so it composes
   the same regardless of where it sits in the chain — every other domain op
   re-derives its grouping from these filtered rows), then it groups the

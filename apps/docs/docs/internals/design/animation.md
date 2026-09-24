@@ -721,13 +721,24 @@ time.stagger(...) })` arranges the operator's children in time, and
   (`wipe({ duration: "days" })`, the CAST+ Gantt), a size claim on t read per
   mark; the time scale for it is a declared shortcut (linear, the largest value
   at 1000 ms).
-- Under a `time.sequence`, a mark's `.transition({ update: animation.tween(...)
-})` is the chained spelling of `.layer(time.transition(...))`, and its enter
-  and exit can only be the default fade.
+- Under a `time.sequence`, a mark's `.transition()` with
+  `update: animation.tween(...)` is the chained spelling of
+  `.layer(time.transition(...))`, and its enter and exit can only be the
+  default fade.
+- A staggered UPDATE (sketch 6a, D3's Sortable Bar Chart):
+  `spread(...).transition({ update: time.stagger({ lag }) })` under a
+  sequence. The tween reads it as a per-key warp of the playhead
+  (`updateStagger.ts`): between two keyframes each key moves in its own slice
+  of the stretch, in the order the stretch ends in, placed by the same time
+  layout. The default is FIT: the lag and every move shrink by one factor so
+  the last key arrives at the next keyframe, which keeps the dwell and keeps
+  every keyframe exact. The lag is in milliseconds, so the sequence's clock
+  exposes its milliseconds per unit (`TimeTier.msPerUnit`, from
+  `Timer.duration`).
 
 Everything else in §§5-9 is unbuilt: `sequence` as a composition of clips,
 timing constraints (`time.after`), enter and exit styling during a sequence,
-exit on a data change, a staggered update, segues, and reveals of chrome.
+exit on a data change, segues, and reveals of chrome.
 
 ## Sources
 

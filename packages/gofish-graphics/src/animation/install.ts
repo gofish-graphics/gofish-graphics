@@ -163,11 +163,13 @@ function clipOf(
 ): Clip<Leaf> | undefined {
   if (!(node instanceof GoFishNode) || playsDataTime(node)) return undefined;
   const record = nodeTransition(node);
-  if (record?.unbuilt !== undefined || record?.exit !== undefined) {
-    const phases = [
-      ...(record.unbuilt ?? []),
-      ...(record.exit !== undefined ? ["exit"] : []),
-    ];
+  const phases = [
+    ...(record?.update !== undefined ? ["update"] : []),
+    ...(record?.exit !== undefined || record?.exitArrangement !== undefined
+      ? ["exit"]
+      : []),
+  ];
+  if (phases.length > 0) {
     throw new Error(
       `[gofish] .transition({ ${phases.join(", ")} }): in a chart with no ` +
         `time.sequence, marks enter once, on the first render, and nothing ` +

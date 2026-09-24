@@ -52,6 +52,8 @@ import ex5b from "./build-in/ex5b";
 import ex5bSrc from "./build-in/ex5b.ts?raw";
 import raceChained from "./build-in/race-chained";
 import raceChainedSrc from "./build-in/race-chained.ts?raw";
+import raceStagger from "./build-in/race-stagger";
+import raceStaggerSrc from "./build-in/race-stagger.ts?raw";
 import canis1bSel from "./build-in/canis-1b-selection";
 import canis1bSelSrc from "./build-in/canis-1b-selection.ts?raw";
 import canis1bChained from "./build-in/canis-1b-chained";
@@ -83,7 +85,7 @@ const SECTIONS = {
   s3: "3. Variations: only the arrangement or the effect changes",
   s4: "4. Grouped bars",
   s5: "5. Stacked bars",
-  s8: "8. The race, chained",
+  s8: "6a and 8. The race, chained",
   canis: "Canis and CAST",
 };
 
@@ -242,6 +244,16 @@ const EXAMPLES: Record<string, Example> = {
     frames: [2000, 2007.5, 2019],
     unit: "year",
   },
+  raceStagger: {
+    section: SECTIONS.s8,
+    title: "6a · the race with a staggered re-sort (stretch)",
+    caption:
+      "The spread's update arrangement staggers the moves between two years, in the order the year ends in (D3 Sortable Bar Chart). The FIT default: each bar's move and the 20 ms lag shrink together so the last bar arrives at the next year, keeping the dwell (here to about 59%: 12 ms apart, 625 ms moves in a 1053 ms year). Every keyframe still draws exactly.",
+    run: raceStagger,
+    source: raceStaggerSrc,
+    frames: [2007, 2007.25, 2007.5, 2007.75, 2008],
+    unit: "year",
+  },
   canis1bSel: {
     section: SECTIONS.canis,
     title: "Canis Fig. 1b · selection form",
@@ -285,7 +297,6 @@ const NOT_BUILT = [
   "Axes, title or other chrome first (sketch §7, CAST Fig. 3's title): OPEN, waits on custom axes. Axes appear at once.",
   "A label, then its bar, inside one mark (CAST+ Fig. 8): OPEN (how data reaches a createMark mark).",
   "Exit on a data change for a static chart (sketch 6b): there is no data-change trigger yet, so `exit` in a build throws.",
-  "A staggered update inside a time.sequence (sketch 6a, D3 Sortable Bar Chart): not built; operator.transition() under a sequence throws.",
   "Canis data-driven delay (start times spaced by a value): needs `history` from PR #902.",
   '"Ride" semantics for stacks (segments riding on the ones below, amCharts): segments grow in place instead (5a, 5b).',
   "Polar or radial grow: a mark in a polar coord lowers to a path, which a grow cannot collapse yet.",
@@ -496,6 +507,7 @@ export const Ex4cByCity = filmstrip("ex4c");
 export const Ex5aStacks = filmstrip("ex5a");
 export const Ex5bStackSegments = filmstrip("ex5b");
 export const RaceChained = filmstrip("race");
+export const RaceStaggeredUpdate = filmstrip("raceStagger");
 export const Canis1bSelection = filmstrip("canis1bSel");
 export const Canis1bChained = filmstrip("canis1bChained");
 export const CastFig3 = filmstrip("cast");

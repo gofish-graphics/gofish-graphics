@@ -463,6 +463,72 @@ console.log("# the race: chained .transition() vs .layer(time.transition())");
     const diff = firstDifference(paint(today), paint(chained));
     ok(`the race at ${at}`, diff === undefined, diff);
   }
+
+  console.log("# the race with a staggered re-sort (6a, FIT)");
+  const staggered = (at: number) =>
+    chart(brands, { legend: false })
+      .flow(
+        time.sequence({ by: "year", duration: 20000, playing: false, at }),
+        spread({
+          by: field("name").sort("value", "desc"),
+          dir: "y",
+          sharedScale: true,
+          spacing: 2,
+        }).transition({ update: time.stagger({ lag: 20 }) })
+      )
+      .mark(
+        bar().transition({ update: animation.tween({ curve: "linear" }) })
+      )
+      .toDisplayList({ w: 600, h: 600, axes: { x: true, y: false } });
+  const plain = (at: number) =>
+    flow(at)
+      .mark(bar())
+      .layer(time.transition({ curve: "linear" }))
+      .toDisplayList({ w: 600, h: 600, axes: { x: true, y: false } });
+  for (const at of [2007, 2008]) {
+    const diff = firstDifference(
+      paint(await plain(at)),
+      paint(await staggered(at))
+    );
+    ok(`every keyframe draws exactly (${at})`, diff === undefined, diff);
+  }
+  /** Each brand's bar box at a playhead, by name. */
+  const bars = async (doc: Promise<any>) => {
+    const out = new Map<string, number[]>();
+    for (const item of (await doc).items as any[]) {
+      if (item.kind === "rect" && item.role !== "overlay" && item.datum)
+        out.set(String(item.datum.name), [item.x, item.y, item.w, item.h]);
+    }
+    return out;
+  };
+  // 37 bars, a 20 ms lag, and 20000 / 19 ms per year: fitted, a year's
+  // stagger lasts 36·20 + 1052.6 ms, so each move takes 1052.6 / 1772.6 of
+  // the year and wave w starts at 20·w / 1772.6 of it.
+  const move = 20000 / 19;
+  const total = 36 * 20 + move;
+  const localAt = (w: number, u: number) =>
+    Math.min(1, Math.max(0, (u - (20 * w) / total) / (move / total)));
+  const ranked2008 = brands
+    .filter((d: any) => d.year === 2008)
+    .sort((a: any, b: any) => b.value - a.value)
+    .map((d: any) => d.name);
+  const [first, last] = [ranked2008[0], ranked2008.at(-1)];
+  const at = await bars(staggered(2007.25));
+  const firstTarget = await bars(plain(2007 + localAt(0, 0.25)));
+  const lastTarget = await bars(plain(2007 + localAt(36, 0.25)));
+  ok(
+    `a quarter into 2007-2008, ${first} (first in 2008) is ${(
+      localAt(0, 0.25) * 100
+    ).toFixed(0)}% through its move`,
+    JSON.stringify(at.get(first)) === JSON.stringify(firstTarget.get(first)),
+    `${at.get(first)} vs ${firstTarget.get(first)}`
+  );
+  ok(
+    `and ${last} (last in 2008) has not started`,
+    JSON.stringify(at.get(last)) === JSON.stringify(lastTarget.get(last)) &&
+      localAt(36, 0.25) === 0,
+    `${at.get(last)} vs ${lastTarget.get(last)}`
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
