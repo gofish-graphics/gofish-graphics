@@ -29,7 +29,7 @@
  * through a year, so the cut inside a segment shows. WITH DOTS draws each
  * year's point too, styled like the static connected scatterplot, and each dot
  * appears as the line reaches it. COMET keeps only the last ten years, so the
- * line is cut at both ends.
+ * line is cut at both ends, and COMET PAUSED 1979 holds it still.
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
@@ -163,9 +163,30 @@ export const WithDotsPaused1979: StoryObj<Args> = {
   },
 };
 
-/** Only the last ten years, held still halfway through 1979: the line runs
- *  from halfway through 1969 to halfway through 1979, cut at both ends. */
+/** Only the last ten years: the line's tail is cut as well as its tip, so a
+ *  ten-year stretch of the run travels along the path. */
 export const Comet: StoryObj<Args> = {
+  args: { w: 500, h: 500 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const year = timer({ domain: [1956, 2010], duration: 54 * 200 });
+
+    chart(drivingShifts)
+      .flow(
+        time.sequence({ by: "year", on: year, history: 10 }),
+        scatter({ x: "miles", y: "gas" })
+      )
+      .mark(line({ along: "year", curve: "straight" }))
+      .render(container, { w: args.w, h: args.h, axes: true });
+
+    return container;
+  },
+};
+
+/** The comet held still halfway through 1979: the line runs from halfway
+ *  through 1969 to halfway through 1979, cut at both ends. */
+export const CometPaused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
