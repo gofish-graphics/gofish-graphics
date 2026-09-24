@@ -302,7 +302,9 @@ covers a span of time:
 
 At a playhead of `T`, a keyframe shows while its span overlaps the window from
 `T - history` to `T`. The one exception is the keyframe whose span contains
-`T`, because the moving mark stands in for it.
+`T`, because the moving mark stands in for it. `T` is the transition's own
+playhead, so a transition given its own clock with `at` draws its trail on that
+clock too, and the trail always ends where the moving mark is.
 
 With `history: 0` the window is the single moment `T`, so the only keyframe it
 can reach is the one the moving mark stands in for, and no keyframe shows. A

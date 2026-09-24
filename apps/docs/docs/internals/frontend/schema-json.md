@@ -2372,7 +2372,7 @@ for the API.
           "description": "Connection axis."
         },
         "curve": {
-          "description": "Screen-space band-edge shape (\"linear\" | bezier()). Omitted = \"auto\" (bezier)."
+          "description": "Screen-space band-edge shape (\"linear\" | bezier() | \"catmullRom\"). Omitted = \"auto\" (catmullRom on a homogeneous continuous connection axis, else a bezier band)."
         },
         "from": {
           "type": "string"

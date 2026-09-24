@@ -877,7 +877,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
         type: t.any,
-        doc: 'Screen-space band-edge shape ("linear" | bezier()). Omitted = "auto" (bezier).',
+        doc: 'Screen-space band-edge shape ("linear" | bezier() | "catmullRom"). Omitted = "auto" (catmullRom on a homogeneous continuous connection axis, else a bezier band).',
       },
       from: { type: t.string, py: "from_" },
       to: { type: t.string },

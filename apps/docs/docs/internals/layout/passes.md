@@ -744,10 +744,12 @@ every tick, for a change that alters nothing above the marks themselves.
 Emitting nothing wins over being visible: a node with no items has nothing to
 patch, so the two compose with no coordination.
 
-A visibility rule covers the node's whole subtree. `INTERNAL_lower` paints a node
-only while its own rule and every ancestor's hold, so a sequence sets the rule once
-on each keyframe group, and marks that a later elaboration pass adds under the group
-hide with it. The label pass is the case that needs this: it wraps a keyframe group
+A visibility rule is set under an owner (a sequence, for its keyframes) and covers
+the node's whole subtree. `INTERNAL_lower` paints a node only while every owner's
+rule holds, each owner's being the one set nearest the node, so a sequence sets the
+rule once on each keyframe group, and marks that a later elaboration pass adds under
+the group hide with it. Setting a rule again from the same owner replaces it, so a
+second layout does not pile rules up. The label pass is the case that needs this: it wraps a keyframe group
 in a new layer that holds the group beside its label `Text`s, after the sequence has
 set its rule. `wrapPreservingIdentity` (`src/ast/elaborationUtils.ts`) moves the rule
 onto the wrapper along with the group's name and key, so the labels are inside the
@@ -756,16 +758,17 @@ keyframe (`keyframeOf` in `src/timeWindow.ts` reads the key of the node under th
 sequence's Frame).
 
 A transition hides the keyframes it moves, labels included. When its sequence keeps
-history, every leaf it moves gets a visibility rule of its own, which narrows its
-keyframe group's rule (a second rule on a node narrows the first, and a node paints
-only while its own rules and every ancestor's hold), so a moved keyframe shows only
-as part of the trail the moving mark leaves behind (`trailRule` in
-`src/timeWindow.ts`). With no history the trail is always empty, which is known at
-resolve, so the leaves get `INTERNAL_emitNothing` instead. A text leaf also lends the
-transition its drawing first, `INTERNAL_lendDrawing`, so the transition can draw
-that text where the playhead has taken it. The lent drawing lowers through the same
-body as `INTERNAL_lower`, so its items keep their ids and live channels, but it
-skips the visibility rule: the transition decides when the moving copy shows.
+history, every leaf it moves gets a visibility rule of its own, set under the same
+sequence, so for that leaf it stands in for the keyframe group's rule: a moved
+keyframe shows only as part of the trail the moving mark leaves behind, read on the
+transition's own clock and knots (`trailRule` in `src/timeWindow.ts`). With no
+history the trail is always empty, which is known at resolve, so the leaves get
+`INTERNAL_emitNothing` instead. A text leaf also lends the transition its drawing,
+`INTERNAL_lendDrawing`, so the transition can draw that text where the playhead has
+taken it. A node keeps the lowering it was built with, so it lends its real drawing
+even after it has been silenced. The lent drawing lowers through the same body as
+`INTERNAL_lower`, so its items keep their ids and live channels, but it skips the
+visibility rule: the transition decides when the moving copy shows.
 
 ### Render Pass 5: Per-Shape Lowering and Painting
 

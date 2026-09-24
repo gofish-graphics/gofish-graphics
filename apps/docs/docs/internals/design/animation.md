@@ -242,17 +242,20 @@ that render individually.** The two-layer ggplot idiom (`geom_point() +
 geom_smooth()`) is the spatial shadow of Gemini²'s keyframe insertion: both
 densify with true points so the geometric connector between them can be dumb.
 
-One sharp technical note that falls out of taking the analogy seriously: our
-default spatial curve is _centripetal_ Catmull-Rom, whose chord-length
-parameterization depends on a **metric** — distances between points. Pixel
-space has a canonical metric; data space across axes with different units
-does not (what is the distance between (2 years, 3 dollars) and (5 years,
-1 dollar)?). So centripetal interpolation is well-defined downstream and
-ill-defined upstream without an explicit normalization — a principled reason
-the appearance-smoothing default lives in screen space, and why a data-space
-interpolation family (an `interpolate({ method: "catmullRom" })` sibling of
-`smooth` in #635's family, emitting dense rows) should default to _uniform_
-parameterization, which is affine-invariant and metric-free. The temporal
+One sharp technical note that falls out of taking the analogy seriously:
+_centripetal_ Catmull-Rom, whose chord-length parameterization depends on a
+**metric** — distances between points — is well-defined on screen, where
+pixels give a canonical metric, and ill-defined in data space across axes
+with different units (what is the distance between (2 years, 3 dollars) and
+(5 years, 1 dollar)?). That is why the default smooth curve (#635) does not
+measure distances at all when the data gives the run a parameter of its own.
+A smooth `line` or `ribbon` takes its knots from the run's own parameter: the
+times of the keyframes a line threads, else the values of the field it runs
+along, else its points' positions on a continuous connection axis. Only a
+run with none of these falls back to centripetal knots on screen. The same
+reasoning is why a data-space interpolation family (an
+`interpolate({ method: "catmullRom" })` sibling of `smooth` in #635's family,
+emitting dense rows) should never default to centripetal parameterization. The temporal
 reading: **easing is parameterization** — a time-reparameterization of the
 interpolant, independent of which space the interpolation happens in. After
 Effects' "roving keyframes" (keyframes repositioned in time for smooth
@@ -635,9 +638,9 @@ One slice of §5's table exists: the `time` namespace
   and it covers the group's whole subtree, including marks a later elaboration
   pass adds to it, such as `.label()` text. So a labeled keyframe shows its
   labels only while it is held. When the sequence keeps history, a transition
-  sets a narrower rule of its own on each leaf it moves, so a keyframe it moves
-  shows only as part of the trail the moving mark leaves behind (#903,
-  `trailRule` in `src/timeWindow.ts`). With no history that trail is always
+  sets a rule of its own on each leaf it moves, standing in for the sequence's,
+  so a keyframe it moves shows only as part of the trail the moving mark
+  leaves behind (#903, `trailRule` in `src/timeWindow.ts`). With no history that trail is always
   empty, which is known at resolve, so the transition uses the structural rule
   (`INTERNAL_emitNothing`, the same one `blank()` uses) and those keyframes
   emit no display items and no hit-test targets.

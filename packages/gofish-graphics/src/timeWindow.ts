@@ -124,15 +124,40 @@ function cutSegment(seg: PathSegment, u0: number, u1: number): PathSegment {
   return u0 === 0 ? head : subdivideCurve1(head, u0 / u1)[1];
 }
 
-/** What one sequence tells its keyframes: their times (sorted, distinct), how
- *  much history it keeps, and what it is showing right now (a paint-time read
- *  of its clock). There is one per `time.sequence(...)` call, so two
- *  keyframes belong to the same sequence exactly when they share it. */
+/** What a run of keyframes shows on a clock: their times (sorted, distinct),
+ *  how much history it keeps, and what it is showing right now (a paint-time
+ *  read of the clock). A sequence has one (`time.sequence(...)`), so two
+ *  keyframes belong to the same sequence exactly when they share it, and a
+ *  transition builds one for its trail on its own clock and knots. */
 export type SequenceWindow = {
   keyframes: () => number[];
   history: number;
   showing: () => Showing;
 };
+
+/** The window of these keyframes on `clock`, keeping `history`. What it shows
+ *  is worked out once per playhead value and kept until the clock moves (or
+ *  the keyframes change); the clock itself is read on every call, so a
+ *  paint-time read still registers it. */
+export function sequenceWindow(
+  keyframes: () => number[],
+  clock: () => number,
+  history: number
+): SequenceWindow {
+  let last: { t: number; keyframes: number[]; showing: Showing } | undefined;
+  return {
+    keyframes,
+    history,
+    showing: () => {
+      const t = clock();
+      const times = keyframes();
+      if (last === undefined || last.t !== t || last.keyframes !== times) {
+        last = { t, keyframes: times, showing: showingAt(times, t, history) };
+      }
+      return last.showing;
+    },
+  };
+}
 
 /** A keyframe of a sequence: its time, its place among the sequence's
  *  keyframes, and the sequence. */
@@ -198,28 +223,33 @@ export function keyframeRule(keyframe: Keyframe): () => boolean {
  * step keyframe shows once its band is over and until the window has left it
  * behind, which keeps each old keyframe one step longer than a gliding trail.
  *
+ * The trail is read on the TRANSITION's own playhead and knots, so it cannot
+ * disagree with the moving mark: `trail` is the window of the transition's
+ * run (`index` is the keyframe's place in it), on the transition's clock,
+ * keeping the history of the sequence the keyframes belong to.
+ *
  * Undefined when the trail is always empty, which is known before anything is
- * painted: a keyframe that belongs to no sequence has no window to show in,
- * and with no history the window is the playhead alone, so the only keyframe
- * whose span it can reach is the one the moving mark stands in for. A
- * transition then draws the moving mark alone.
+ * painted: keyframes that belong to no sequence have no history to show
+ * (`trail` is undefined), and with no history the window is the playhead
+ * alone, so the only keyframe whose span it can reach is the one the moving
+ * mark stands in for. A transition then draws the moving mark alone.
  */
 export function trailRule(
-  keyframe: Keyframe | undefined,
+  trail: SequenceWindow | undefined,
+  index: number,
   glides: boolean
 ): (() => boolean) | undefined {
-  if (keyframe === undefined || keyframe.sequence.history === 0) {
-    return undefined;
-  }
-  const { t, index, sequence } = keyframe;
+  if (trail === undefined || trail.history === 0) return undefined;
+  const showing = trail.showing;
+  const t = trail.keyframes()[index];
   if (glides) {
     return () => {
-      const { window } = sequence.showing();
+      const { window } = showing();
       return window.from <= t && t < window.to;
     };
   }
   return () => {
-    const { first, last } = sequence.showing();
+    const { first, last } = showing();
     return first <= index && index < last;
   };
 }

@@ -354,9 +354,9 @@ export class GoFishNode {
    *  mark builders at resolve. Baked into the `liveSlots` side table at lower
    *  time; undefined on the static path. */
   public __gfLive?: Record<string, LiveValue>;
-  /** Paint-time visibility (see {@link INTERNAL_visibleWhile}); undefined on
-   *  the static path. */
-  public __gfVisible?: () => boolean;
+  /** Paint-time visibility rules, one per owner (see
+   *  {@link INTERNAL_visibleWhile}); undefined on the static path. */
+  public __gfVisible?: Map<object, () => boolean>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   private _layout: Layout;
@@ -364,6 +364,10 @@ export class GoFishNode {
    *  description. Absent on operators that never lower themselves (their
    *  children are lowered directly); lowering such a node throws. */
   private _lower?: Lower;
+  /** The lowering the node was built with, kept when
+   *  {@link INTERNAL_emitNothing} silences it, so what it lends
+   *  ({@link INTERNAL_lendDrawing}) is always its real drawing. */
+  private readonly _ownLower?: Lower;
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
@@ -543,6 +547,7 @@ export class GoFishNode {
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
     this._layout = layout;
     this._lower = lower;
+    this._ownLower = lower;
     this.children = children;
     children.forEach((child) => {
       child.parent = this;
@@ -1407,20 +1412,21 @@ export class GoFishNode {
   }
 
   /**
-   * Lend this node's own drawing, as it stands now, to another node to paint:
-   * the returned function lowers the node exactly as it draws itself, placed
+   * Lend this node's own drawing to another node to paint: the returned
+   * function lowers the node exactly as it was built to draw itself, placed
    * at `transform` (an absolute transform, like `INTERNAL_lower`'s override)
    * and mapped by `toPixel`. Call it while lowering, like any `_lower`: it
-   * reads the session's active flip scope. The loan is taken NOW, so the node
-   * can then be silenced (`INTERNAL_emitNothing`) or hidden without taking
-   * the copy with it. A `time.transition()` moves a keyframe's text this way:
-   * it draws the copy where the playhead has taken the text.
+   * reads the session's active flip scope. It lends the node's own lowering
+   * even when the node has been silenced (`INTERNAL_emitNothing`), so a node
+   * can be silenced and lend in either order, any number of times. A
+   * `time.transition()` moves a keyframe's text this way: it draws the copy
+   * where the playhead has taken the text.
    */
   public INTERNAL_lendDrawing(): (
     transform: Transform,
     toPixel: ToPixel
   ) => DisplayList.DisplayItem[] {
-    const own = this._lower;
+    const own = this._ownLower;
     // Lowered as `INTERNAL_lower` lowers, ids and live channels included,
     // but without the visibility rule: the node painting the copy owns when
     // it shows.
@@ -1445,11 +1451,15 @@ export class GoFishNode {
    * either way (every keyframe is placed, which is what holds the axes still),
    * so only the painting changes, and only the painting is patched.
    *
-   * The rule covers the node's whole subtree: a node paints only while its own
-   * rule and every ancestor's hold (see `effectiveVisibility`), so marks that
-   * an elaboration pass adds under it later are hidden with it. A second rule
-   * set on the same node narrows the first: the node shows only while both
-   * hold.
+   * A rule is set under an `owner`, the thing that decides it (a
+   * `time.sequence` for its keyframes). The rule covers the node's whole
+   * subtree: a node paints only while every owner's rule holds, and each
+   * owner's rule is the one set nearest the node (see `effectiveVisibility`).
+   * So marks that an elaboration pass adds under the node later are hidden
+   * with it, a descendant can refine what the same owner decides for its own
+   * subtree (a transition's trail, over the sequence's keyframe groups), and
+   * setting a rule again from the same owner, e.g. on a second layout,
+   * replaces the first rather than piling up.
    *
    * Emitting nothing WINS over this: a node whose `_lower` returns no items has
    * nothing to patch, so the two compose with no coordination.
@@ -1458,20 +1468,26 @@ export class GoFishNode {
    * hit-testing is the one lowered at resolve, so a hidden node still answers
    * to a pointer. See /internals/frontend/reactivity.
    */
-  public INTERNAL_visibleWhile(visible: () => boolean): void {
-    const earlier = this.__gfVisible;
-    this.__gfVisible = earlier ? () => earlier() && visible() : visible;
+  public INTERNAL_visibleWhile(owner: object, visible: () => boolean): void {
+    (this.__gfVisible ??= new Map()).set(owner, visible);
   }
 
-  /** The visibility this node paints under: its own rule AND every
-   *  ancestor's. A rule set on a node covers its whole subtree, including
-   *  nodes a later elaboration pass adds under it (a label's `Text`, an
-   *  axis's ticks), so nothing has to be stamped node by node. Undefined when
-   *  no rule is set anywhere up the chain, which is the static path. */
+  /** The visibility this node paints under: for each owner, the rule set
+   *  nearest the node, on it or an ancestor, and all of them must hold. A rule
+   *  set on a node covers its whole subtree, including nodes a later
+   *  elaboration pass adds under it (a label's `Text`, an axis's ticks), so
+   *  nothing has to be stamped node by node. Undefined when no rule is set
+   *  anywhere up the chain, which is the static path. */
   private effectiveVisibility(): (() => boolean) | undefined {
+    const owners = new Set<object>();
     const rules: (() => boolean)[] = [];
     for (let n: GoFishNode | undefined = this; n; n = n.parent) {
-      if (n.__gfVisible) rules.push(n.__gfVisible);
+      if (n.__gfVisible === undefined) continue;
+      for (const [owner, rule] of n.__gfVisible) {
+        if (owners.has(owner)) continue;
+        owners.add(owner);
+        rules.push(rule);
+      }
     }
     if (rules.length === 0) return undefined;
     if (rules.length === 1) return rules[0];

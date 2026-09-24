@@ -406,10 +406,11 @@ trail is always empty, and that is known at resolve, so the keyframe marks it
 moves emit nothing at all and the sequence's visibility thunks find nothing to
 act on. With history, the keyframes it has passed show as its trail: each leaf
 it moves gets a visibility rule of its own (`showAsTrail` in `tween.tsx`,
-`trailRule` in `src/timeWindow.ts`), and since a node paints only while its own
-rule and every ancestor's hold, the leaf's rule narrows the sequence's rule on
-the keyframe group rather than replacing it. Every rule reads what the sequence
-shows through one value it works out once per playhead value (`showingAt`).
+`trailRule` in `src/timeWindow.ts`), set under the same sequence as the rule on
+the keyframe group, so for that leaf it stands in for the group's rule. The
+trail is read on the transition's own clock and knots, so it cannot disagree
+with the moving mark. Each rule reads what its window shows through one value
+worked out once per playhead value (`sequenceWindow`).
 
 The price is the live channels' standing one: what the display list carries, and
 therefore what serialization and the runtime's hit-test frame see, is the value

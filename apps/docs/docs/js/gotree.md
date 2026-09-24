@@ -121,7 +121,7 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
 link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 }
 ```
 
-`curve` accepts `"straight"` (default), `"bezier"`, `"orthogonal"` (right-angle
+`curve` accepts `"linear"` (default), `"bezier"`, `"orthogonal"` (right-angle
 elbows), and `"arc"`. The `orthogonal` and `bezier` links fold along the tree's
 growth axis — the direction its `parentChild` combiner distributes — so a
 vertical tree's elbows bend downward and a horizontal tree's bend sideways. When
@@ -344,7 +344,7 @@ conventions and switch from JSON descriptors to callable helpers.
 | Paper                             | GoTree-in-GoFish                                   |
 | --------------------------------- | -------------------------------------------------- |
 | `Element.Node: "rectangle"`       | `node: (d) => rect({...})`                         |
-| `Element.Link: "straight"`        | `link: { curve: "straight" }`                      |
+| `Element.Link: "straight"`        | `link: { curve: "linear" }`                        |
 | `Element.Color: "depth"`          | inside `node`: `fill: byDepth(d.depth)`            |
 | `Element.Width/Height`            | inside `node`: `w` / `h` on the mark               |
 | `Element.LinkWidth`               | `link.strokeWidth`                                 |

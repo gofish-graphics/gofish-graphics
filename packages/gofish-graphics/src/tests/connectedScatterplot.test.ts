@@ -43,6 +43,7 @@ const {
   ribbon,
   scatter,
   selectAll,
+  field,
   time,
 } = GoFish as any;
 
@@ -119,6 +120,15 @@ function lastPoint(doc: any): Point {
     .d.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/g)
     .map(Number);
   return [numbers[numbers.length - 2], numbers[numbers.length - 1]];
+}
+
+/** Whether two paths' data hold the same numbers, to the four decimal places
+ *  the path data is written to. */
+function sameNumbers(a: string, b: string): boolean {
+  const numbers = (d: string) =>
+    (d.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/g) ?? []).map(Number);
+  const [x, y] = [numbers(a), numbers(b)];
+  return x.length === y.length && x.every((v, i) => Math.abs(v - y[i]) < 1e-3);
 }
 
 /** Report the first place two lines part company, or `undefined`. */
@@ -346,6 +356,122 @@ async function main(): Promise<void> {
     }
   }
 
+  console.log("\n# a line through the keyframes backward in time");
+  {
+    // The same run with its rows in the other order: the line threads the
+    // years from 2010 back to 1956, which is the same path read the other
+    // way, and it is drawn in forward in time all the same.
+    const backward = [...drivingShifts].reverse();
+    const straight = await keyframes(backward, 1979.25, Infinity)
+      .mark(line({ along: "year", curve: "linear" }))
+      .toDisplayList(OPTIONS);
+    const diff = firstDifference(
+      lineSegments(straight),
+      lineSegments(docs.get(1979.25))
+    );
+    ok("a straight line is the line drawn forward", !diff, diff);
+    const smooth = async (rows: any[]) =>
+      onePath(
+        await keyframes(rows, 1979.25, Infinity)
+          .mark(line({ along: "year" }))
+          .toDisplayList(OPTIONS)
+      ).d as string;
+    ok(
+      "a smooth line is the same curve, cut at the same point",
+      sameNumbers(await smooth(backward), await smooth(drivingShifts))
+    );
+  }
+
+  console.log("\n# the curve's knots are the times the line is cut by");
+  {
+    // A sequence keyed by five-year bins holds one row per bin, at a year
+    // that is not the bin's start. The line is cut by the keyframes' times,
+    // the bin starts, so its curve has to be knotted at them too: it must
+    // match a line through the same points at the bin starts themselves.
+    const starts = [1960, 1965, 1970, 1975, 1980, 1985];
+    const inBin = (year: number) =>
+      starts.find((s) => s <= year && year < s + 5)!;
+    const offStart = drivingShifts.filter((d: any) =>
+      [1960, 1966, 1972, 1977, 1983, 1989].includes(d.year)
+    );
+    const atStart = offStart.map((d: any) => ({ ...d, year: inBin(d.year) }));
+    const tip = async (rows: any[], by: unknown) =>
+      lastPoint(
+        await chart(rows)
+          .flow(
+            time.sequence({ by, on: clockAt(1972.5), history: Infinity }),
+            scatter({ x: "miles", y: "gas" })
+          )
+          .mark(line({ along: "year" }))
+          .toDisplayList(OPTIONS)
+      );
+    const [binned, plain] = [
+      await tip(offStart, field("year").bin({ thresholds: starts.slice(1) })),
+      await tip(atStart, "year"),
+    ];
+    ok(
+      "a binned sequence's line is cut on its own curve",
+      Math.abs(binned[0] - plain[0]) < 1e-3 &&
+        Math.abs(binned[1] - plain[1]) < 1e-3,
+      `${JSON.stringify(binned)} vs ${JSON.stringify(plain)}`
+    );
+  }
+
+  console.log("\n# the trail follows the transition's own clock");
+  for (const at of [1965.5, 1990.5]) {
+    // The sequence is held at 1979.25, and the transition reads a clock of
+    // its own: its trail is read on that clock, so it ends where its moving
+    // dot is, behind the sequence's playhead or ahead of it.
+    const doc = await keyframes(drivingShifts, 1979.25, Infinity)
+      .mark(circle({ r: 4, fill: "white" }).name("dots"))
+      .layer(
+        chart(selectAll("dots")).mark(
+          time.transition({ at: clockAt(at), fill: "red" })
+        )
+      )
+      .toDisplayList(OPTIONS);
+    const white = items(doc).filter(
+      (item) =>
+        item.kind === "ellipse" &&
+        item.style?.fill === "white" &&
+        item.style?.opacity !== 0
+    ).length;
+    const reached = drivingShifts.filter((d: any) => d.year < at).length;
+    ok(
+      `a transition at ${at}: the trail is every year before ${at}`,
+      white === reached,
+      `${white} vs ${reached}`
+    );
+  }
+
+  console.log("\n# laying the chart out again");
+  for (const history of [0, Infinity]) {
+    // A second layout of the same nodes sets the trail's rules again, and
+    // must neither pile them up nor lose the moving label, whose drawing is
+    // lent even after the keyframe's own label is silenced.
+    const node = await keyframes(drivingShifts.slice(0, 6), 1958.5, history)
+      .mark(circle({ r: 4 }).label("year"))
+      .layer(time.transition())
+      .resolve();
+    const shown = (doc: any) =>
+      items(doc)
+        .filter(
+          (item) =>
+            (item.kind === "ellipse" || item.kind === "text") &&
+            item.style?.opacity !== 0
+        )
+        .map((item) => `${item.kind}:${item.text ?? ""}`)
+        .sort()
+        .join(",");
+    const first = shown(await node.toDisplayList(OPTIONS));
+    const again = shown(await node.toDisplayList(OPTIONS));
+    ok(
+      `history ${history}: the second layout shows what the first did`,
+      first === again && first.includes("text:"),
+      `${first} vs ${again}`
+    );
+  }
+
   console.log("\n# what is not built throws");
   const throws = async (build: () => Promise<unknown>, pattern: RegExp) => {
     try {
@@ -374,6 +500,45 @@ async function main(): Promise<void> {
     /a ribbon's band/
   );
   ok("a threaded ribbon", !why, why);
+  // A run that goes back and forth in time cannot be drawn in one way.
+  const zigzag = drivingShifts.map((d: any) =>
+    d.year === 1960
+      ? { ...d, year: 1961 }
+      : d.year === 1961
+        ? { ...d, year: 1960 }
+        : d
+  );
+  why = await throws(
+    () =>
+      keyframes(zigzag, 1979, Infinity)
+        .mark(line({ along: "year" }))
+        .toDisplayList(OPTIONS),
+    /back and forth in time/
+  );
+  ok("a threaded line that goes back and forth in time", !why, why);
+  // A sequence's field has to be a number, with or without a clock of its own.
+  const labelled = drivingShifts.map((d: any) => ({
+    ...d,
+    label: `y${d.year}`,
+  }));
+  for (const clock of [{ on: clockAt(1979) }, {}]) {
+    why = await throws(
+      () =>
+        chart(labelled)
+          .flow(
+            time.sequence({ by: "label", ...clock }),
+            scatter({ x: "miles", y: "gas" })
+          )
+          .mark(circle({ r: 4 }))
+          .toDisplayList(OPTIONS),
+      /"label" has a value that is not a number/
+    );
+    ok(
+      `a sequence over labels, ${"on" in clock ? "on a given clock" : "on its own clock"}`,
+      !why,
+      why
+    );
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

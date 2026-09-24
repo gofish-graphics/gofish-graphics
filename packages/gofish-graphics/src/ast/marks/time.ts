@@ -43,8 +43,7 @@ import {
   keyframeOf,
   keyframeRule,
   markSequence,
-  showingAt,
-  type Showing,
+  sequenceWindow,
   type SequenceWindow,
 } from "../../timeWindow";
 
@@ -159,10 +158,28 @@ export function sequence(opts: SequenceOptions) {
     }
   }
 
+  /** The error for a field whose values are not numbers: `bad` holds one
+   *  that is not, and is omitted when there are no values at all. */
+  const notNumbers = (bad?: { value: unknown }): Error =>
+    new Error(
+      `[gofish] time.sequence({ by: "${opts.by}" }): "${opts.by}" has ` +
+        (bad === undefined
+          ? `no numeric values to play through`
+          : `a value that is not a number ` +
+            `(${JSON.stringify(bad.value) ?? String(bad.value)})`) +
+        ` — a sequence's field is the playhead's own units, so it must be a ` +
+        `number (a year, a day, a step index).`
+    );
+
   /** Record the field's values as the flow splits, so the clock is built from
-   *  the data rather than from a hand-written domain. */
+   *  the data rather than from a hand-written domain. Every value has to be a
+   *  number, because a keyframe with no time has no band of time to show in,
+   *  so a value that is not one is an error rather than a keyframe that never
+   *  shows. */
   const observe = (values: unknown[]): void => {
-    const numbers = values.map(Number).filter((v) => Number.isFinite(v));
+    const numbers = values.map(Number);
+    const bad = numbers.findIndex((v) => !Number.isFinite(v));
+    if (bad >= 0) throw notNumbers({ value: values[bad] });
     if (numbers.length === 0) return;
     keyframes = [...new Set(numbers)].sort((a, b) => a - b);
   };
@@ -185,7 +202,7 @@ export function sequence(opts: SequenceOptions) {
       markSequence(frame, shown);
       // WHICH keyframes are shown is then decided per frame, in paint
       // position.
-      hold(children);
+      hold(children, shown);
       return frame;
     },
     {
@@ -206,14 +223,7 @@ export function sequence(opts: SequenceOptions) {
     knots: () => keyframes,
     clock: () => {
       if (clock === undefined) {
-        if (keyframes.length === 0) {
-          throw new Error(
-            `[gofish] time.sequence({ by: "${opts.by}" }): "${opts.by}" has no ` +
-              `numeric values to play through — a sequence's field is the ` +
-              `playhead's own units, so it must be a number (a year, a day, a ` +
-              `step index).`
-          );
-        }
+        if (keyframes.length === 0) throw notNumbers();
         clock = timer<number>({
           domain: [keyframes[0], keyframes.at(-1)!],
           duration: opts.duration ?? 5000,
@@ -226,22 +236,10 @@ export function sequence(opts: SequenceOptions) {
     },
   };
   /** What this sequence shows at the current playhead: the one reading of
-   *  it, shared by its keyframes' visibility, a transition's trail and any
-   *  line threaded through the keyframes (which find it through the
-   *  keyframes, see `keyframeOf`). Every one of them reads it at paint, so it
-   *  is worked out once per playhead value and kept until the clock moves. */
-  let last: { t: number; keyframes: number[]; showing: Showing } | undefined;
-  const shown: SequenceWindow = {
-    keyframes: tier.knots,
-    history,
-    showing: () => {
-      const t = tier.clock();
-      if (last === undefined || last.t !== t || last.keyframes !== keyframes) {
-        last = { t, keyframes, showing: showingAt(keyframes, t, history) };
-      }
-      return last.showing;
-    },
-  };
+   *  it, shared by its keyframes' visibility and any line threaded through
+   *  the keyframes (which find it through the keyframes, see `keyframeOf`).
+   *  It is also the owner of the keyframes' visibility rules. */
+  const shown = sequenceWindow(tier.knots, tier.clock, history);
   (operator as any).__timeTier = tier;
   // The clock is a live JS signal, so a sequence cannot cross the Python
   // bridge; leaving the IR tag off makes the emitter treat it as opaque.
@@ -393,17 +391,15 @@ function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
  * covers its node's whole subtree, including the label `Text`s the label pass
  * adds to the group after this runs.
  */
-function hold(children: GoFishAST[]): void {
+function hold(children: GoFishAST[], sequence: SequenceWindow): void {
   children.forEach((child) => {
     if (!(child instanceof GoFishNode)) return;
+    // Every group's key is one of the keyframes' times: a value of the field
+    // that is not a number is an error as the flow splits (`observe`).
     const keyframe = keyframeOf(child);
-    // A key the sequence could not read as a number owns no band of time, so
-    // it never shows. This is a rule and not `INTERNAL_emitNothing`, because
-    // the group is not a leaf: emitting nothing silences only a node's own
-    // items, while a rule covers its whole subtree.
-    child.INTERNAL_visibleWhile(
-      keyframe === undefined ? () => false : keyframeRule(keyframe)
-    );
+    if (keyframe !== undefined) {
+      child.INTERNAL_visibleWhile(sequence, keyframeRule(keyframe));
+    }
   });
 }
 

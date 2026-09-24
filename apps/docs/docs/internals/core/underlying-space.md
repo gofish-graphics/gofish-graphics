@@ -260,8 +260,9 @@ sibling's own size. Its first consumer is the connector's `curve: "auto"`: a
 that space is a _positioning_ one whose measure is continuous, smooths the path
 (a Catmull–Rom spline) instead of drawing straight segments — so a line over
 a continuous x auto-curves while one over discrete categories stays polylinear.
-The same test picks the spline's knots when the run has no connection variable
-of its own (the path tier's key, `inferred.along`). On a continuous connection
+The same test picks the spline's knots when the run has no parameter of its
+own (the times of the keyframes a line threads, or the path tier's key,
+`inferred.along`, read through `projectBy`). On a continuous connection
 axis, the points' positions along it are the knots when the points are in order
 along it. A run with neither falls back to centripetal knots, which are
 computed from distances on screen (`runKnots` in `connect.tsx`).

@@ -81,7 +81,12 @@ import {
   type KnotLocation,
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
-import { keyframeOf, trailRule } from "../../timeWindow";
+import {
+  keyframeOf,
+  sequenceWindow,
+  trailRule,
+  type SequenceWindow,
+} from "../../timeWindow";
 import { targetOf } from "./layer";
 
 export type TweenOptions = {
@@ -133,13 +138,26 @@ function markLeaves(node: GoFishNode): GoFishNode[] {
   return [...own, ...(node._attachments ?? []).flatMap(markLeaves)];
 }
 
-/** Leave a leaf of a keyframe mark the transition moves to show only as part
- *  of its trail (`trailRule` in `src/timeWindow.ts`), and draw nothing at all
- *  when the trail is always empty. */
-function showAsTrail(leaf: GoFishNode, glides: boolean): void {
-  const rule = trailRule(keyframeOf(leaf), glides);
+/** Leave a leaf of the run's keyframe `index` to show only as part of the
+ *  transition's trail (`trailRule` in `src/timeWindow.ts`), and draw nothing
+ *  at all when the trail is always empty. `trailOf` gives the trail's window
+ *  for the sequence the keyframe belongs to. The rule is set under that
+ *  sequence, so for this leaf it stands in for the sequence's own rule on the
+ *  keyframe group, and setting it again on another layout replaces it. */
+function showAsTrail(
+  leaf: GoFishNode,
+  index: number,
+  trailOf: (sequence: SequenceWindow) => SequenceWindow,
+  glides: boolean
+): void {
+  const sequence = keyframeOf(leaf)?.sequence;
+  const rule = trailRule(
+    sequence === undefined ? undefined : trailOf(sequence),
+    index,
+    glides
+  );
   if (rule === undefined) leaf.INTERNAL_emitNothing();
-  else leaf.INTERNAL_visibleWhile(rule);
+  else leaf.INTERNAL_visibleWhile(sequence!, rule);
 }
 
 /** One channel of a track: its value where the run is located. */
@@ -424,6 +442,22 @@ export const tween = createNodeOperator(
           const channel = (values: number[]): Channel =>
             channelReader(runKnots, values, method);
           const glides = method !== "step";
+          // The trail is read on the transition's own clock and run, keeping
+          // the history of the sequence its keyframes belong to, so it and
+          // the moving mark cannot disagree.
+          const trails = new Map<SequenceWindow, SequenceWindow>();
+          const trailOf = (sequence: SequenceWindow): SequenceWindow => {
+            let trail = trails.get(sequence);
+            if (trail === undefined) {
+              trail = sequenceWindow(
+                () => runKnots,
+                readPlayhead,
+                sequence.history
+              );
+              trails.set(sequence, trail);
+            }
+            return trail;
+          };
           const allBoxes: ReturnType<typeof bbox>[] = [];
           const tracks: Track[] = rows.map((leaves) => {
             const stands = leaves.map((leaf, k) => placeLeaf(leaf, k));
@@ -435,13 +469,13 @@ export const tween = createNodeOperator(
             const shape = leaves[0].type;
             const cx = boxes.map((b) => (b.minX + b.maxX) / 2);
             const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
-            // A rigid leaf lends its drawing to the moving mark, to be placed
-            // where the playhead is. The loan is taken first, because every
-            // leaf the transition moves then shows only as its trail.
+            // Every leaf the transition moves shows only as its trail, and a
+            // rigid leaf also lends its drawing to the moving mark, to be
+            // placed where the playhead is.
+            leaves.forEach((leaf, k) => showAsTrail(leaf, k, trailOf, glides));
             const draws = RIGID_SHAPES.has(shape)
               ? leaves.map((leaf) => leaf.INTERNAL_lendDrawing())
               : undefined;
-            for (const leaf of leaves) showAsTrail(leaf, glides);
             if (draws !== undefined) {
               return {
                 kind: "rigid",

@@ -1,6 +1,7 @@
-import { Path, transformPath } from "../../path";
+import { Path, curve, segment, transformPath } from "../../path";
 import { catmullRomPath, centripetalKnots } from "../../catmullRom";
 import { GoFishAST } from "../_ast";
+import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
@@ -83,18 +84,30 @@ const resolveAnchor = (a: AnchorSpec): [number, number] => {
  * connector is drawn whole, as any connector is.
  */
 function sequenceKeyframes(children: GoFishAST[]): Keyframe[] | undefined {
-  const found = children.map((child) => keyframeOf(targetOf(child)));
-  const first = found[0];
+  // The first operand decides whether there is anything to find, so a chart
+  // with no sequence walks up from one operand, not from every one.
+  const first =
+    children.length === 0 ? undefined : keyframeOf(targetOf(children[0]));
   if (first === undefined) return undefined;
-  return found.every((k) => k?.sequence === first.sequence)
-    ? (found as Keyframe[])
-    : undefined;
+  const found: Keyframe[] = [first];
+  for (let i = 1; i < children.length; i++) {
+    const keyframe = keyframeOf(targetOf(children[i]));
+    if (keyframe?.sequence !== first.sequence) return undefined;
+    found.push(keyframe);
+  }
+  return found;
 }
 
-/** A line threaded through a sequence's keyframes: each knot's time, in path
- *  order, the step of the path from each knot to the next, and the sequence
- *  whose window it is drawn over. */
+/** A line threaded through a sequence's keyframes: each knot's time, in time
+ *  order, the step of the path from each knot to the next, drawn forward in
+ *  time, and the sequence whose window it is drawn over. */
 type TimeRun = { knots: number[]; pieces: Path[]; sequence: SequenceWindow };
+
+/** A segment drawn the other way. */
+const reversed = (seg: Path[number]): Path[number] =>
+  seg.type === "line"
+    ? segment(seg.points[1], seg.points[0])
+    : curve(seg.end, seg.control2, seg.control1, seg.start);
 
 /** Where `values` first stops going up: the index of the first value that is
  *  not greater than the one before it, or -1 when every value is. */
@@ -177,10 +190,10 @@ export const connect = createNodeOperator(
       // that box on one axis.
       source?: AnchorSpec;
       target?: AnchorSpec;
-      // Each operand's value of the connection variable, in operand order:
-      // the key of the flow tier the connector threads (`along: "year"`
-      // gives years). A smooth run uses it as its knots (see `runKnots`).
-      along?: readonly unknown[];
+      // The connection variable: the key of the flow tier the connector
+      // threads (`along: "year"` names years). A smooth run reads each
+      // operand's value of it as its knots (see `runKnots`), and only then.
+      along?: SplitBy;
     },
     children: GoFishAST[]
   ) => {
@@ -232,7 +245,10 @@ export const connect = createNodeOperator(
             keyframes !== undefined &&
             keyframes.some((k) => k.t !== keyframes[0].t);
           if (keyframes !== undefined && !threadsTime) {
-            node.INTERNAL_visibleWhile(keyframeRule(keyframes[0]));
+            node.INTERNAL_visibleWhile(
+              keyframes[0].sequence,
+              keyframeRule(keyframes[0])
+            );
           }
           if (threadsTime && (mode !== "center" || hasAnchors)) {
             throw new Error(
@@ -296,12 +312,14 @@ export const connect = createNodeOperator(
             }
             return undefined;
           };
+          let continuous: boolean | undefined;
           const continuousConnectionAxis = (): boolean =>
-            children.length >= 2 &&
-            children.every((c) => {
-              const s = connectionSpaceOf(c);
-              return s !== undefined && isPOSITION(s);
-            });
+            (continuous ??=
+              children.length >= 2 &&
+              children.every((c) => {
+                const s = connectionSpaceOf(c);
+                return s !== undefined && isPOSITION(s);
+              }));
 
           // Resolve the curve. An omitted/`"auto"` curve smooths with a
           // Catmull-Rom spline over a continuous connection axis, for BOTH
@@ -399,19 +417,28 @@ export const connect = createNodeOperator(
             };
           }
           // A line threading a sequence's keyframes is cut by data time, so
-          // its knots have to move forward in time along the path.
+          // it has to move through the keyframes one way in time. Forward or
+          // backward are both fine: backward is the same path drawn the
+          // other way, and it is drawn in forward in time (see `timeRun`).
           const timeKnots = threadsTime ? keyframes.map((k) => k.t) : undefined;
-          const back = timeKnots === undefined ? -1 : firstStepBack(timeKnots);
+          const timeSign =
+            timeKnots === undefined
+              ? 1
+              : Math.sign(timeKnots[1] - timeKnots[0]);
+          const back =
+            timeKnots === undefined
+              ? -1
+              : firstStepBack(timeKnots.map((t) => timeSign * t));
           if (timeKnots !== undefined && back >= 0) {
             throw new Error(
               `[gofish] line(): this line threads the keyframes of a ` +
                 `time.sequence, so each of its points is a moment in time, ` +
                 `and it goes from ${timeKnots[back - 1]} to ${timeKnots[back]}: ` +
-                `back in time, or twice through one keyframe. A line drawn ` +
-                `in over time has to move forward through the keyframes. If ` +
-                `each keyframe holds several marks, split the line so each ` +
-                `run has one mark per keyframe (for example, add \`by\` to ` +
-                `the operator that places the marks).`
+                `back and forth in time, or twice through one keyframe. A ` +
+                `line drawn in over time has to move through the keyframes ` +
+                `one way. If each keyframe holds several marks, split the ` +
+                `line so each run has one mark per keyframe (for example, ` +
+                `add \`by\` to the operator that places the marks).`
             );
           }
           /** A line's path, one piece per step from a point to the next. */
@@ -463,12 +490,13 @@ export const connect = createNodeOperator(
             );
             // The knots are the run's own parameter when it has one (#635),
             // so the curve follows the data rather than the distances between
-            // its points on screen: the connection variable's values (the
-            // flow tier the run threads, e.g. `along: "year"`); else the
-            // operands' positions along what the run is threaded on, which is
-            // time for a line through a sequence's keyframes and the
-            // connection axis when that axis is continuous (a line chart over
-            // x). A run with none of these is threaded with centripetal knots.
+            // its points on screen. A line through a sequence's keyframes
+            // uses their times, which are what it is cut by, so the cut and
+            // the curve agree. Otherwise the connection variable's values
+            // (the flow tier the run threads, e.g. `along: "year"`), read
+            // only here; else the operands' positions on the connection axis
+            // when that axis is continuous (a line chart over x). A run with
+            // none of these is threaded with centripetal knots.
             //
             // The spline is evaluated here, in layout space, before any
             // coordinate transform. That equals evaluating it in data space
@@ -477,8 +505,10 @@ export const connect = createNodeOperator(
             // of its points. A non-affine position scale (log, pow) would
             // need the spline evaluated upstream of the scale instead.
             const knots =
-              runKnots(along) ??
-              timeKnots ??
+              runKnots(timeKnots) ??
+              (along === undefined
+                ? undefined
+                : runKnots(children.map((c) => projectBy(c, along)))) ??
               (continuousConnectionAxis() ? runKnots(mains) : undefined);
             // `knots` is in operand order; a path drawn back along the run
             // (a ribbon's far edge) reads them backward and negated.
@@ -734,11 +764,23 @@ export const connect = createNodeOperator(
                   `open an issue for "${resolvedCurveName}".`
               );
             }
-            timeRun = {
-              knots: timeKnots,
-              pieces: steps,
-              sequence: keyframes![0].sequence,
-            };
+            // Drawn in forward in time: a run that goes back in time is read
+            // from its last keyframe, each step drawn the other way.
+            timeRun =
+              timeSign > 0
+                ? {
+                    knots: timeKnots,
+                    pieces: steps,
+                    sequence: keyframes![0].sequence,
+                  }
+                : {
+                    knots: timeKnots.slice().reverse(),
+                    pieces: steps
+                      .slice()
+                      .reverse()
+                      .map((piece) => piece.map(reversed).reverse()),
+                    sequence: keyframes![0].sequence,
+                  };
           }
 
           const mergedPaths: Path[] = [];

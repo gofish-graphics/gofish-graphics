@@ -15,6 +15,7 @@ import {
   keyframeOf,
   keyframeRule,
   markSequence,
+  sequenceWindow,
   showingAt,
   trailRule,
   windowAt,
@@ -83,11 +84,11 @@ const keyframeAt = (
 ): Keyframe => ({
   t: times[index],
   index,
-  sequence: {
-    keyframes: () => times,
-    history,
-    showing: () => showingAt(times, T, history),
-  },
+  sequence: sequenceWindow(
+    () => times,
+    () => T,
+    history
+  ),
 });
 
 console.log("# the band rule: history 0 is the step rule");
@@ -288,7 +289,11 @@ console.log("# the trail rule, over a grid of playheads");
       const keyframe = keyframeAt(times, j, T, h);
       if (reading === "none") return keyframeRule(keyframe)();
       // No rule means the trail is always empty.
-      const rule = trailRule(keyframe, reading === "glide");
+      const rule = trailRule(
+        keyframe.sequence,
+        keyframe.index,
+        reading === "glide"
+      );
       return rule !== undefined && rule();
     });
   for (const reading of ["none", "glide", "step"] as const) {

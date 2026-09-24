@@ -835,7 +835,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         opacity: Opacity, 0 to 1.
         mixBlendMode: Blend mode where bands overlap. Default "normal".
         dir: Connection axis.
-        curve: Screen-space band-edge shape ("linear" | bezier()). Omitted = "auto" (bezier).
+        curve: Screen-space band-edge shape ("linear" | bezier() | "catmullRom"). Omitted = "auto" (catmullRom on a homogeneous continuous connection axis, else a bezier band).
         along: Names a flow tier by its `by` field: that tier becomes the path tier (threading its groups in order) and every OTHER grouping tier splits. Omitted: the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` where the mark doesn't fuse over this chart's own flow (a refs bag, or the pairwise from/to form), is an error.
         emX: Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself.
         emY: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.

@@ -505,12 +505,16 @@ column), not just its prose.
 The path tier's own `by` is also written into the cell, as `inferred.along`.
 It is the connection variable: the field the connector threads its operands
 along, whether `along` named the tier or the rule above inferred it. `line`
-and `ribbon` receive the cell as `produce`'s third argument, project each
-operand's value of that field through `splitKeyFn`, and pass the values to
-`Connect`. A smooth connector uses them as the knots of its Catmull-Rom spline
-when they are numbers in order along the run (issue #635), so a connected
-scatterplot threaded along `year` bends by years rather than by the distances
-between its points on screen (`runKnots` in `connect.tsx`).
+and `ribbon` receive the cell as `produce`'s third argument and pass the key
+on to `Connect`. Only a smooth connector reads it: it projects each operand's
+value of the key through its underlying rows (`projectBy` in
+`datumProjection.ts`, which applies a key function to each row rather than to
+the ref) and uses the values as the knots of its Catmull-Rom spline when they
+are numbers in order along the run (issue #635). So a connected scatterplot
+threaded along `year` bends by years rather than by the distances between its
+points on screen (`runKnots` in `connect.tsx`). A line that threads a
+sequence's keyframes uses the keyframes' own times first, which are what its
+cut is made by.
 
 ### A temporal connector: `time.transition()`
 
