@@ -247,6 +247,13 @@ methods:
   orders each layer's children by `(zOrder, index)`. The constant form
   round-trips through the IR; a callback is dropped from the emitted IR (like a
   function `.label` accessor).
+- `mark.transition({ enter, update, exit })` records how the mark looks in
+  each phase of an animation (`animation.grow()`, `animation.fadeIn()`, and
+  so on) on every produced node. With no `time.sequence` in the flow, the
+  build-in reads the `enter` effects back off the resolved tree
+  (`src/animation/install.ts`). Under a sequence, the chart builder turns the
+  spec into a `time.transition()` tier instead. This is the build-in
+  prototype (draft PR #901) and is JavaScript-only.
 - `mark.translate({ x?, y? })` — wraps the produced node in a structural
   translation node. This is deliberately not equivalent to merging `x`/`y` into
   the mark's own options: a mark or operator may already give `x`/`y`

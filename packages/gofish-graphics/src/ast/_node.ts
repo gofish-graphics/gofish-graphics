@@ -38,6 +38,7 @@ import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
 import { readLive } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
+import type { AnimationRule } from "../animation/paint";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -441,6 +442,13 @@ export class GoFishNode {
    *  inflate this node's box. Whoever takes the mark over (a
    *  `time.transition()`) takes these with it. */
   public _attachments?: GoFishNode[];
+  /** The mark this node is attached to (the inverse of `_attachments`), set
+   *  by {@link INTERNAL_attach}. An attached label paints under its mark's
+   *  animation (see {@link INTERNAL_animate}). */
+  public _attachedTo?: GoFishNode;
+  /** Paint-time animation (see {@link INTERNAL_animate}); undefined on the
+   *  static path. */
+  public __gfAnimate?: AnimationRule;
   // `undefined` means "no author opinion" — distinct from an explicit
   // `.zOrder(0)`, which is a deliberate choice and must be distinguishable
   // from silence (e.g. by the relational-mark auto-zBelow suppression check
@@ -1460,6 +1468,31 @@ export class GoFishNode {
     this.__gfVisible = visible;
   }
 
+  /**
+   * Record that `node` belongs to this node as a mark though it lives outside
+   * its subtree (a label the label pass seats in the tier above), in both
+   * directions: `this._attachments` lists it, and `node._attachedTo` names
+   * this node. Whoever takes the mark over (a `time.transition()`) takes its
+   * attachments with it, and an attachment paints under its mark's animation.
+   */
+  public INTERNAL_attach(node: GoFishNode): void {
+    (this._attachments ??= []).push(node);
+    node._attachedTo = this;
+  }
+
+  /**
+   * Animate this node's items at PAINT time: the node lowers at rest, and
+   * `rule` rewrites the items to the build clock's current state and patches
+   * the fields that change per frame through the live-slot side table, the
+   * same channel `INTERNAL_visibleWhile` and a `live()` value use. Nothing is
+   * laid out again: the node keeps its layout box, the room it takes at rest.
+   * The nodes attached to this one (its labels) paint under the same rule, as
+   * riders that follow its timing. See `src/animation/paint.ts`.
+   */
+  public INTERNAL_animate(rule: AnimationRule): void {
+    this.__gfAnimate = rule;
+  }
+
   /** The visibility this node paints under: its own rule AND every
    *  ancestor's. A rule set on a node covers its whole subtree, including
    *  nodes a later elaboration pass adds under it (a label's `Text`, an
@@ -1557,6 +1590,12 @@ export class GoFishNode {
     // A node with no items has nothing to hide, so it skips the walk to the
     // root that finding its visibility takes.
     if (!withVisibility || items.length === 0) return items;
+    // Paint-time animation (see `INTERNAL_animate`): this node's own rule, or
+    // the rule of the mark it is attached to. Like visibility, a taken-over
+    // drawing skips it: its new owner decides how it shows.
+    const frame = { transform, toPixel };
+    if (this.__gfAnimate) this.__gfAnimate.paint(items, frame, this, "host");
+    else this._attachedTo?.__gfAnimate?.paint(items, frame, this, "rider");
     // Paint-time visibility (see `INTERNAL_visibleWhile`): the item keeps the
     // opacity it was lowered with while it is showing, and goes to 0 while it
     // is not. The STATIC value is read here, so a headless lowering and a

@@ -39,6 +39,9 @@ import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
 import { sourceIndex, type InterpolationMethod } from "../../interpolate";
+import { buildIn, stagger, parallel } from "../../animation/timeArrangements";
+import { effectList, type Effect } from "../../animation/effects";
+import { checkSequencePhases } from "../../animation/transition";
 
 export type SequenceOptions = {
   /** The data field whose values are the keyframes. Must be numeric: the
@@ -222,6 +225,13 @@ export type TransitionOptions = {
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
   opacity?: number;
+  /** How the marks enter. With no `time.sequence` (and no `along`/`at`) this
+   *  is a BUILD-IN: the marks enter once, from the empty chart, with these
+   *  effects (`src/animation/`). Under a sequence it can only be the default
+   *  fade, `animation.fadeIn()`. */
+  enter?: Effect | Effect[];
+  /** How the marks leave; under a sequence only `animation.fadeOut()`. */
+  exit?: Effect | Effect[];
 };
 
 /**
@@ -245,6 +255,27 @@ export const transition = createRelationalMark<TransitionOptions>(
   "time.transition",
   (o, children, inferred) => {
     const tier = inferred.time;
+    // BUILD MODE: no keyframes at all, so the transition is from the empty
+    // chart and every selected mark enters (`src/animation/`).
+    if (
+      tier === undefined &&
+      o.along === undefined &&
+      o.at === undefined &&
+      o.enter !== undefined
+    ) {
+      if (o.exit !== undefined) {
+        throw new Error(
+          `[gofish] time.transition({ exit }): with no time.sequence the ` +
+            `marks enter once and never leave, so an exit has nothing to ` +
+            `trigger it in this prototype.`
+        );
+      }
+      return buildIn(
+        { effects: effectList(o.enter, "time.transition({ enter })")! },
+        children
+      );
+    }
+    checkSequencePhases(o, "time.transition()");
     // Both halves of "which run, read where" can be written out instead of
     // inferred: `along` names the keyframes' time field and `at` supplies the
     // playhead. Explicit wins, and either one alone is enough to drop the
@@ -368,4 +399,4 @@ function knotOf(child: GoFishAST, by: string): number {
   return value;
 }
 
-export const time = { sequence, transition };
+export const time = { sequence, transition, stagger, parallel };

@@ -205,6 +205,20 @@ export { compose } from "./ast/marks/compose";
 // bare names beside the spatial operators.
 export { time } from "./ast/marks/time";
 export type { SequenceOptions, TransitionOptions } from "./ast/marks/time";
+// `animation.*` — WHAT changes as a mark enters (grow, fadeIn, wipe, …), the
+// partner of `time.*` (WHEN: stagger, parallel, sequence, transition). The
+// build-in prototype (draft PR #901); JS-only like the rest of `time`.
+export { animation } from "./animation";
+export type {
+  Effect,
+  EffectOptions,
+  WipeOptions,
+  Ease,
+  MarkTransition,
+  OperatorTransition,
+  StaggerOptions,
+  BuildClockOptions,
+} from "./animation";
 // The data-space reading of a transition: read a table of keyframes at one
 // moment and hand the result to an ordinary chart. See `src/interpolate.ts`.
 export { interpolate } from "./interpolate";

@@ -1,0 +1,426 @@
+/**
+ * The build-in tower: the CHAINED form of a build-in (`.transition()` on
+ * operators and marks) against the SELECTION form (`.layer(chart(selectAll(
+ * ...)).flow(time.stagger(...)).mark(time.transition({ enter })))`) of the same
+ * timing. The chained form is sugar for a selection over the operator's
+ * children, so the two must draw the same display items at every playhead.
+ * Run: `pnpm build && node --conditions browser --import tsx
+ * src/tests/buildInTower.test.ts` (wired as `pnpm test:build-in-tower`).
+ *
+ * It also checks the build's fill rules on the display list (a mark shows its
+ * enter state before its turn and its rest state after its end; labels wait
+ * for their mark), and that the race written with a chained
+ * `.transition({ update: animation.tween(...) })` draws what
+ * `.layer(time.transition(...))` draws.
+ *
+ * The library is imported from `dist` after a headless DOM is set up, as the
+ * gapminder tower test does: the clock is a live signal and lowering goes
+ * through the solid-compiled backend.
+ */
+import "./interactionDomSetup";
+// @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
+import * as GoFish from "../../dist/index.js";
+import { categoryBrands, everyYearBrands } from "../data/categoryBrands";
+
+const { animation, chart, field, rect, selectAll, spread, stack, time } =
+  GoFish as any;
+
+declare const process: { exit(code: number): never };
+
+let passed = 0;
+let failed = 0;
+function ok(name: string, cond: boolean, detail?: string): void {
+  if (cond) {
+    passed++;
+    console.log(`  ok  ${name}`);
+  } else {
+    failed++;
+    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
+  }
+}
+
+/** Every drawn item, in paint order, without the node ids (which count up
+ *  across charts) and the datum (provenance, not paint). */
+function paint(doc: any): unknown[] {
+  const out: unknown[] = [];
+  const walk = (n: any): void => {
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (n === null || typeof n !== "object") return;
+    if (typeof n.kind === "string") {
+      const { id: _id, datum: _datum, children, items, ...rest } = n;
+      out.push(rest);
+      if (children) walk(children);
+      if (items) walk(items);
+      return;
+    }
+    if (n.items) walk(n.items);
+  };
+  walk(doc.items ?? doc);
+  return out;
+}
+
+function firstDifference(a: unknown[], b: unknown[]): string | undefined {
+  if (a.length !== b.length) return `${a.length} items vs ${b.length}`;
+  for (let i = 0; i < a.length; i++) {
+    const [x, y] = [JSON.stringify(a[i]), JSON.stringify(b[i])];
+    if (x !== y) return `item ${i}: ${x} vs ${y}`;
+  }
+  return undefined;
+}
+
+const held = (builder: any, at: number, axes = true) =>
+  builder.toDisplayList({ w: 480, h: 220, axes, playing: false, at });
+
+async function agree(
+  name: string,
+  a: () => any,
+  b: () => any,
+  playheads: number[]
+): Promise<void> {
+  for (const at of playheads) {
+    const diff = firstDifference(
+      paint(await held(a(), at)),
+      paint(await held(b(), at))
+    );
+    ok(`${name}, t = ${at} ms`, diff === undefined, diff);
+  }
+}
+
+const alphabet = Object.entries({
+  A: 0.08167,
+  B: 0.01492,
+  C: 0.02782,
+  D: 0.04253,
+  E: 0.12702,
+  F: 0.02288,
+  G: 0.02015,
+  H: 0.06094,
+  I: 0.06966,
+  J: 0.00153,
+  K: 0.00772,
+  L: 0.04025,
+}).map(([letter, frequency]) => ({ letter, frequency }));
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+const weather = MONTHS.flatMap((month, m) =>
+  [
+    ["Seattle", [5.8, 3.8, 4.2, 3.2, 2.0, 1.5]],
+    ["New York", [3.6, 3.2, 4.3, 4.1, 4.0, 4.5]],
+    ["Chicago", [2.1, 1.9, 2.5, 3.8, 4.9, 4.5]],
+  ].map(([city, values]) => ({
+    month,
+    city,
+    precipitation: (values as number[])[m],
+  }))
+);
+
+const sales = ["Q1", "Q2", "Q3", "Q4"].flatMap((quarter, q) =>
+  ["Alpha", "Beta", "Gamma"].map((product, p) => ({
+    quarter,
+    product,
+    revenue: 5 + ((q * 7 + p * 3) % 11),
+  }))
+);
+
+console.log("# 1: every bar together, chained vs selection");
+await agree(
+  "1",
+  () =>
+    chart(alphabet)
+      .flow(spread({ by: "letter", dir: "x" }))
+      .mark(
+        rect({ h: "frequency" }).transition({
+          enter: animation.grow({ duration: 600 }),
+        })
+      ),
+  () =>
+    chart(alphabet)
+      .flow(spread({ by: "letter", dir: "x" }))
+      .mark(rect({ h: "frequency" }).name("bars"))
+      .layer(
+        chart(selectAll("bars")).mark(
+          time.transition({ enter: animation.grow({ duration: 600 }) })
+        )
+      ),
+  [0, 200, 450, 600]
+);
+
+console.log("# 2: the staggered grow, chained vs selection");
+await agree(
+  "2",
+  () =>
+    chart(alphabet)
+      .flow(
+        spread({ by: "letter", dir: "x" }).transition({
+          enter: time.stagger({ lag: 60 }),
+        })
+      )
+      .mark(
+        rect({ h: "frequency" }).transition({
+          enter: animation.grow({ duration: 600 }),
+        })
+      ),
+  () =>
+    chart(alphabet)
+      .flow(spread({ by: "letter", dir: "x" }))
+      .mark(rect({ h: "frequency" }).name("bars"))
+      .layer(
+        chart(selectAll("bars"))
+          .flow(time.stagger({ by: "letter", lag: 60 }))
+          .mark(time.transition({ enter: animation.grow({ duration: 600 }) }))
+      ),
+  [0, 100, 400, 700, 1260]
+);
+
+console.log("# 3a: tallest first, chained vs selection");
+await agree(
+  "3a",
+  () =>
+    chart(alphabet)
+      .flow(
+        spread({ by: "letter", dir: "x" }).transition({
+          enter: time.stagger({
+            by: field("letter").sort("frequency", "desc"),
+            lag: 60,
+          }),
+        })
+      )
+      .mark(
+        rect({ h: "frequency" }).transition({
+          enter: animation.grow({ duration: 600 }),
+        })
+      ),
+  () =>
+    chart(alphabet)
+      .flow(spread({ by: "letter", dir: "x" }))
+      .mark(rect({ h: "frequency" }).name("bars"))
+      .layer(
+        chart(selectAll("bars"))
+          .flow(
+            time.stagger({
+              by: field("letter").sort("frequency", "desc"),
+              lag: 60,
+            })
+          )
+          .mark(time.transition({ enter: animation.grow({ duration: 600 }) }))
+      ),
+  [0, 150, 500, 900]
+);
+
+const grouped = (monthStagger: boolean, cityLag?: number) =>
+  chart(weather).flow(
+    monthStagger
+      ? spread({ by: "month", dir: "x" }).transition({
+          enter: time.stagger({ lag: 300 }),
+        })
+      : spread({ by: "month", dir: "x" }),
+    cityLag !== undefined
+      ? spread({ by: "city", dir: "x", spacing: 0 }).transition({
+          enter: time.stagger({ lag: cityLag }),
+        })
+      : spread({ by: "city", dir: "x", spacing: 0 })
+  );
+
+console.log("# 4a: one month at a time, chained vs selection");
+await agree(
+  "4a",
+  () =>
+    grouped(true).mark(
+      rect({ h: "precipitation", fill: "city" }).transition({
+        enter: animation.grow({ duration: 400 }),
+      })
+    ),
+  () =>
+    grouped(false)
+      .mark(rect({ h: "precipitation", fill: "city" }).name("bars"))
+      .layer(
+        chart(selectAll("bars"))
+          .flow(time.stagger({ by: "month", lag: 300 }))
+          .mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
+      ),
+  [0, 250, 700, 1300, 1900]
+);
+
+console.log("# 4b: nested staggers, chained vs selection");
+await agree(
+  "4b",
+  () =>
+    grouped(true, 50).mark(
+      rect({ h: "precipitation", fill: "city" }).transition({
+        enter: animation.grow({ duration: 400 }),
+      })
+    ),
+  () =>
+    grouped(false)
+      .mark(rect({ h: "precipitation", fill: "city" }).name("bars"))
+      .layer(
+        chart(selectAll("bars"))
+          .flow(
+            time.stagger({ by: "month", lag: 300 }),
+            time.stagger({ by: "city", lag: 50 })
+          )
+          .mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
+      ),
+  [0, 75, 330, 520, 1000, 2000]
+);
+
+console.log("# Canis 1b, chained vs its selection form over the same nesting");
+const stacked = (arranged: boolean) =>
+  chart(sales).flow(
+    arranged
+      ? spread({ by: "quarter", dir: "x" }).transition({
+          enter: time.stagger({ lag: 100 }),
+        })
+      : spread({ by: "quarter", dir: "x" }),
+    arranged
+      ? stack({ by: "product", dir: "y" }).transition({
+          enter: time.stagger({ spacing: 0 }),
+        })
+      : stack({ by: "product", dir: "y" })
+  );
+await agree(
+  "Canis 1b",
+  () =>
+    stacked(true).mark(
+      rect({ h: "revenue", fill: "product" }).transition({
+        enter: animation.wipe({ from: "bottom" }),
+      })
+    ),
+  () =>
+    stacked(false)
+      .mark(rect({ h: "revenue", fill: "product" }).name("bars"))
+      .layer(
+        chart(selectAll("bars"))
+          .flow(
+            time.stagger({ by: "quarter", lag: 100 }),
+            time.stagger({ by: "product", spacing: 0 })
+          )
+          .mark(time.transition({ enter: animation.wipe({ from: "bottom" }) }))
+      ),
+  [0, 300, 650, 1100, 1800]
+);
+
+console.log("# fill: the enter state before a turn, the rest state after");
+{
+  const bars = () =>
+    chart(alphabet)
+      .flow(
+        spread({ by: "letter", dir: "x" }).transition({
+          enter: time.stagger({ lag: 60 }),
+        })
+      )
+      .mark(
+        rect({ h: "frequency" }).transition({
+          enter: animation.grow({ duration: 600 }),
+        })
+      );
+  // The bars: the rects that carry data (axis ticks are overlay rects).
+  const rects = (doc: any) =>
+    (paint(doc) as any[]).filter(
+      (i) => i.kind === "rect" && i.role !== "overlay"
+    );
+  const start = rects(await held(bars(), 0));
+  ok(
+    "at t = 0 every bar is at its enter state (zero height, never full size)",
+    start.length === alphabet.length && start.every((r) => r.h === 0)
+  );
+  const mid = rects(await held(bars(), 300));
+  ok(
+    "at t = 300 the first bars are growing and the last have not started",
+    mid[0].h > 0 && mid[alphabet.length - 1].h === 0
+  );
+  const rest = rects(
+    await chart(alphabet)
+      .flow(spread({ by: "letter", dir: "x" }))
+      .mark(rect({ h: "frequency" }))
+      .toDisplayList({ w: 480, h: 220, axes: true })
+  );
+  const end = rects(await held(bars(), 5000));
+  ok(
+    "after the end every bar holds the static chart's geometry exactly",
+    firstDifference(end, rest) === undefined,
+    firstDifference(end, rest)
+  );
+  const unplayed = rects(
+    await bars().toDisplayList({ w: 480, h: 220, axes: true, playing: false })
+  );
+  ok(
+    "`playing: false` alone holds the build at its start",
+    unplayed.every((r) => r.h === 0)
+  );
+}
+
+console.log("# labels wait for their mark");
+{
+  const labeled = (at: number) =>
+    held(
+      chart(alphabet.slice(0, 3))
+        .flow(
+          spread({ by: "letter", dir: "x" }).transition({
+            enter: time.stagger({ spacing: 0 }),
+          })
+        )
+        .mark(
+          rect({ h: "frequency" })
+            .label("letter")
+            .transition({ enter: animation.grow({ duration: 400 }) })
+        ),
+      at,
+      false
+    );
+  const labelOpacities = async (at: number) =>
+    (paint(await labeled(at)) as any[])
+      .filter((i) => i.kind === "text" && ["A", "B", "C"].includes(i.text))
+      .map((i) => i.style?.opacity ?? 1);
+  const mid = await labelOpacities(600);
+  ok(
+    "at t = 600: A's label shows (A arrived at 400), B's and C's wait",
+    JSON.stringify(mid) === JSON.stringify([1, 0, 0]),
+    JSON.stringify(mid)
+  );
+  const end = await labelOpacities(1200);
+  ok(
+    "at the end every label shows",
+    JSON.stringify(end) === JSON.stringify([1, 1, 1]),
+    JSON.stringify(end)
+  );
+}
+
+console.log("# the race: chained .transition() vs .layer(time.transition())");
+{
+  const brands = everyYearBrands(categoryBrands);
+  const flow = (at: number) =>
+    chart(brands, { legend: false }).flow(
+      time.sequence({ by: "year", duration: 20000, playing: false, at }),
+      spread({
+        by: field("name").sort("value", "desc"),
+        dir: "y",
+        sharedScale: true,
+        spacing: 2,
+      })
+    );
+  const bar = () =>
+    rect({ w: "value", fill: "category" }).label("name", {
+      position: "outset-right",
+    });
+  for (const at of [2000, 2007.5, 2019]) {
+    const today = await flow(at)
+      .mark(bar())
+      .layer(time.transition({ curve: "linear" }))
+      .toDisplayList({ w: 600, h: 600, axes: { x: true, y: false } });
+    const chained = await flow(at)
+      .mark(
+        bar().transition({
+          enter: animation.fadeIn(),
+          update: animation.tween({ curve: "linear" }),
+          exit: animation.fadeOut(),
+        })
+      )
+      .toDisplayList({ w: 600, h: 600, axes: { x: true, y: false } });
+    const diff = firstDifference(paint(today), paint(chained));
+    ok(`the race at ${at}`, diff === undefined, diff);
+  }
+}
+
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed > 0 ? 1 : 0);

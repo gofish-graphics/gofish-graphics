@@ -24,6 +24,12 @@ import {
   type TerminalMethods,
 } from "./terminals";
 import { expandComposedOperator } from "./compose";
+import {
+  markDataTime,
+  tweenTierFor,
+  type MarkTransition,
+} from "../../animation/transition";
+import { installBuildIn } from "../../animation/install";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -695,6 +701,22 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   mark(
     mark: Mark<TOutput> | ChartBuilder<any, any>
   ): ChartBuilder<TInput, TOutput> | LayerBuilder {
+    // A mark's `.transition()` under a `time.sequence`: the mark enters,
+    // moves and leaves with the data, which is `time.transition()`'s job, so
+    // this is the chained spelling of `.mark(m).layer(time.transition(...))`
+    // (see `tweenTierFor`). With no sequence the spec stays on the mark's
+    // nodes for the build-in (`src/animation/install.ts`).
+    const transition = (mark as any)?.__transition as
+      | MarkTransition
+      | undefined;
+    if (
+      transition !== undefined &&
+      !(mark instanceof ChartBuilder) &&
+      findTimeTier(this.state.operators) !== undefined
+    ) {
+      const tier = tweenTierFor(transition) as Mark<any>;
+      return this.with({ finalMark: mark as Mark<TOutput> }).layer(tier);
+    }
     if (mark instanceof ChartBuilder) {
       const finalMark = ((d: TOutput, _key, layerContext) =>
         (mark.usesPreviousLayerMarks()
@@ -960,6 +982,23 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // deterministic regardless of how individual async legs (e.g. a Python
     // `derive` RPC) interleaved at resolution time.
     collectLayerRegistrations(node, this.state.layerContext);
+
+    // A flow with a `time.sequence` plays DATA time: its marks enter and
+    // leave with the data, so the build-in leaves this tier alone.
+    if (findTimeTier(this.state.operators) !== undefined) {
+      markDataTime(node);
+      const arranged = this.state.operators.find(
+        (op) => (op as any).__transition !== undefined
+      );
+      if (arranged !== undefined) {
+        throw new Error(
+          `[gofish] operator.transition() under a time.sequence: arranging ` +
+            `an operator's children in time between keyframes (a staggered ` +
+            `update) is not in this prototype. Put .transition() on the ` +
+            `mark (update: animation.tween(...)).`
+        );
+      }
+    }
 
     // Embed colorConfig on the node so it survives .resolve() inside Layer
     if (this.state.options?.color) {
@@ -1242,6 +1281,13 @@ async function resolveForRender(
   options: RenderOptions
 ) {
   const node = await this.resolve();
+  // The build-in: marks with enter transitions enter once, on one clock for
+  // the whole chart, which the render options `playing` / `at` can hold (see
+  // `src/animation/install.ts`). A chart with none is untouched.
+  installBuildIn(node, {
+    playing: options.playing as boolean | undefined,
+    at: options.at as number | undefined,
+  });
   const meta = this.renderMeta();
   return {
     node,

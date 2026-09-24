@@ -94,10 +94,15 @@ legends, the canvas size inference — see and reserve room for) without ever
 perturbing sibling placement inside the parent.
 
 The cost is that a label is not in its mark's subtree, though it is part of
-the mark. So the pass records the link the other way: each label `Text` is
-pushed onto its target's `_attachments`. A consumer that takes a mark over
-takes its attachments with it; today that is `time.transition()`, which moves
-a bar's label with the bar (`src/ast/graphicalOperators/tween.tsx`).
+the mark. So the pass records the link the other way, in both directions:
+`target.INTERNAL_attach(label)` pushes each label `Text` onto its target's
+`_attachments` and sets the label's `_attachedTo` to the target. A consumer
+that takes a mark over takes its attachments with it; today that is
+`time.transition()`, which moves a bar's label with the bar
+(`src/ast/graphicalOperators/tween.tsx`). The other direction is for paint: a
+label lowers under its mark's build-in animation (`INTERNAL_animate`), which it
+finds through `_attachedTo`, so it follows its mark's timing
+(`src/animation/paint.ts`).
 
 Concretely, `wrapWithLabelTexts` builds:
 

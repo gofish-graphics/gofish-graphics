@@ -334,6 +334,17 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   serialize as the opaque `{type: "derive"}` fallback, losing both
   `translate` and any chained `.label()`.
 
+`.transition(spec)` on the operator form (the build-in prototype, see
+`src/animation/`) is built the same way. `dual` closes over a
+`transitionState` that `.transition()` (`attachTransitionOption`) sets, and
+the execution closure records it on the node `layout` builds
+(`recordOperatorTransition`), so the build-in can read the operator's
+arrangement of its children off the resolved tree. `translateOperator`
+delegates `.transition()` to the base operator, as it does `.label()`. The
+spec is also tagged on the operator itself (`__transition`), so the chart
+builder can refuse an arrangement under a `time.sequence`, where it is not
+built yet. Animation is JavaScript-only, so nothing reaches the IR.
+
 ## 8. The relationship with `createMark`
 
 The two factories are siblings:
@@ -365,6 +376,11 @@ by-split-form relational marks (see
 Without this, `ribbon(opts).name("area")` would lose the tag the moment
 `.name(...)` wraps it in a new function, and `.mark(ribbon(opts).name("area"))`
 would silently stop fusing.
+It propagates a chained `.transition(...)` spec (`__transition`) the same way,
+for the same reason: the chart builder reads it off the final mark whatever was
+chained after it. The `transition` modifier itself (`transitionModifier`, in
+`nameableMark`'s set) records the mark's effects on each produced node, where
+the build-in reads them.
 
 A modifier's `apply(node, layerContext, datum, ...args)` receives the
 **per-instance datum** the mark was called with — the same value the shape
