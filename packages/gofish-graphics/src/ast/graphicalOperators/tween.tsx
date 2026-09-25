@@ -180,9 +180,15 @@ type Channel = (at: KnotLocation) => number;
 /**
  * One leaf's run through the keyframes, in time order: everything about it
  * that layout decided. Reading it at a playhead is pure arithmetic over these
- * numbers, which is what lets the paint tier do it per frame.
+ * numbers, which is what lets the paint tier do it per frame. Every track
+ * keeps the leaf at each keyframe, which lends its own drawing to the moving
+ * mark (`INTERNAL_lendDrawing`), and the leaf's local origin there (the point
+ * its anchor sits on), where that drawing is placed.
  */
-type Track =
+type Track = {
+  leaves: GoFishNode[];
+  origins: [number, number][];
+} & (
   | {
       kind: "box";
       /** The shape every keyframe of the leaf is: the shape the moving leaf
@@ -194,13 +200,6 @@ type Track =
       y: Channel;
       w: Channel;
       h: Channel;
-      /** A copy of each keyframe's own drawing, lent by the keyframe, for
-       *  the paint the leaf inherits: the moving mark is painted as the mark
-       *  it moves is, unless the transition says otherwise. */
-      draws: ((
-        transform: Transform,
-        toPixel: ToPixel
-      ) => DisplayList.DisplayItem[])[];
     }
   | {
       kind: "rigid";
@@ -210,14 +209,8 @@ type Track =
       cy: number[];
       x: Channel;
       y: Channel;
-      /** Each keyframe's local origin (the point its anchor sits on), and
-       *  a copy of its own drawing, lent by the keyframe. */
-      origins: [number, number][];
-      draws: ((
-        transform: Transform,
-        toPixel: ToPixel
-      ) => DisplayList.DisplayItem[])[];
-    };
+    }
+);
 
 /** One track, lowered: the items its leaf draws when the run is read `at` a
  *  location and its unblended attributes come from keyframe `source`. */
@@ -475,29 +468,30 @@ export const tween = createNodeOperator(
             const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
             // Every leaf the transition moves draws nothing of its own: the
             // moving mark is its drawing. Each lends that drawing to the
-            // moving mark: a rigid leaf's is placed where the playhead is, and
-            // a box leaf's gives the moving mark its paint.
+            // moving mark at lowering: a rigid leaf's is placed where the
+            // playhead is, and a box leaf's gives the moving mark its paint.
             leaves.forEach((leaf) => leaf.INTERNAL_emitNothing());
-            const draws = leaves.map((leaf) => leaf.INTERNAL_lendDrawing());
+            const origins = stands.map((s) => displayTranslate(s.transform));
             if (RIGID_SHAPES.has(shape)) {
               return {
                 kind: "rigid",
+                leaves,
+                origins,
                 cx,
                 cy,
                 x: channel(cx),
                 y: channel(cy),
-                origins: stands.map((s) => displayTranslate(s.transform)),
-                draws,
               };
             }
             return {
               kind: "box",
+              leaves,
+              origins,
               shape,
               x: channel(cx),
               y: channel(cy),
               w: channel(boxes.map(width)),
               h: channel(boxes.map(height)),
-              draws,
             };
           });
           const run: Run = {
@@ -559,12 +553,31 @@ export const tween = createNodeOperator(
             strokeWidth,
             opacity,
           });
+          /** The drawing the leaf at keyframe `k` of a track lends, lowered
+           *  once per leaf, under this node's scope, at the leaf's own origin.
+           *  A leaf stands at several points of an unrolled run, and it is
+           *  the same drawing at each. */
+          const drawings = new Map<GoFishNode, DisplayList.DisplayItem[]>();
+          const drawingAt = (track: Track, k: number) => {
+            const leaf = track.leaves[k];
+            let drawn = drawings.get(leaf);
+            if (drawn === undefined) {
+              const [ox, oy] = track.origins[k];
+              drawn = leaf.INTERNAL_lendDrawing()(
+                { translate: [tx + ox, ty + oy] },
+                toPixel
+              );
+              drawings.set(leaf, drawn);
+            }
+            return drawn;
+          };
+
           const boxPainter = (
             track: Extract<Track, { kind: "box" }>
           ): Painter => {
             const { shape } = track;
-            const styles = track.draws.map((draw) => ({
-              ...draw({ translate: [tx, ty] }, toPixel)[0]?.style,
+            const styles = track.leaves.map((_, k) => ({
+              ...drawingAt(track, k)[0]?.style,
               ...declared,
             }));
             return (at, source) => {
@@ -605,20 +618,17 @@ export const tween = createNodeOperator(
             };
           };
 
-          /** A rigid leaf, lowered: each keyframe's own drawing lowered ONCE,
-           *  here, under this node's scope, with the pixel its box center
-           *  sits on. At a playhead the source keyframe's items are moved by
-           *  as much as the center moved, so the anchor keeps its place in
-           *  the box; that is plain arithmetic the paint tier can do per
-           *  frame. The painter keeps the items, not the keyframes' drawings. */
+          /** A rigid leaf, lowered: each keyframe's own drawing
+           *  (`drawingAt`), with the pixel its box center sits on. At a
+           *  playhead the source keyframe's items are moved by as much as the
+           *  center moved, so the anchor keeps its place in the box; that is
+           *  plain arithmetic the paint tier can do per frame. The painter
+           *  keeps the items, not the keyframes' drawings. */
           const rigidPainter = (
             track: Extract<Track, { kind: "rigid" }>
           ): Painter => {
             const { cx, cy } = track;
-            const drawn = track.draws.map((draw, k) => {
-              const [ox, oy] = track.origins[k];
-              return draw({ translate: [tx + ox, ty + oy] }, toPixel);
-            });
+            const drawn = track.leaves.map((_, k) => drawingAt(track, k));
             const centers = cx.map((x, k) => toLocalPixel([x, cy[k]]));
             return (at, source) => {
               const [fromX, fromY] = centers[source];
