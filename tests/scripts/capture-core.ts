@@ -7,8 +7,9 @@
  *   - capture-pixels.ts   (HEAD vs base-ref pixel diff)
  *   - capture-one.ts      (one story, for the iterate-example loop; also uses
  *                          `listStories`)
- * and `startViteServer`/`waitForVite` alone by capture-sweep.ts, dump-scopes.ts
- * and capture-docs-images.ts.
+ * its per-story pieces (`withHarness`, a fresh runner page per story,
+ * `renderStoryOnFakeClock`) by capture-docs-images.ts, and
+ * `startViteServer`/`waitForVite` alone by capture-sweep.ts and dump-scopes.ts.
  *
  * The capture loop: spin up a Vite dev server that serves the stories-runner
  * page, then render every (optionally filtered) story and extract + normalize
@@ -61,6 +62,7 @@ import {
   chromium,
   type Browser,
   type BrowserContext,
+  type BrowserContextOptions,
   type Page,
 } from "playwright";
 import { spawn, type ChildProcess } from "child_process";
@@ -194,21 +196,28 @@ export async function waitForVite(
 }
 
 /** One line of a story's log, and the stream it belongs on. */
-type LogLine = { err: boolean; text: string };
-type Log = (line: LogLine) => void;
+export type LogLine = { err: boolean; text: string };
+export type Log = (line: LogLine) => void;
 
-const printLine = ({ err, text }: LogLine) =>
+export const printLine = ({ err, text }: LogLine) =>
   err ? console.error(text) : console.log(text);
+
+/** Opens a fresh runner page in its own context (see `openRunnerPage`). */
+export type OpenRunnerPage = (
+  log: Log,
+  contextOptions?: BrowserContextOptions
+) => Promise<RunnerPage>;
 
 /**
  * A running harness: a Vite server rooted at `harnessDir` plus one Chromium,
  * and a way to open a fresh runner page in its own context. Torn down when
- * `fn` settles.
+ * `fn` settles. `fn` also gets the browser itself, for pages that are not
+ * story renders (capture-docs-images' OG cards).
  */
-async function withHarness<T>(
+export async function withHarness<T>(
   harnessDir: string,
   port: number,
-  fn: (openRunnerPage: (log: Log) => Promise<RunnerPage>) => Promise<T>
+  fn: (openRunnerPage: OpenRunnerPage, browser: Browser) => Promise<T>
 ): Promise<T> {
   const viteProc = startViteServer(harnessDir, port);
   viteProc.stdout?.on("data", (d) => {
@@ -221,14 +230,17 @@ async function withHarness<T>(
     await waitForVite(port);
     browser = await chromium.launch({ headless: true });
     const b = browser;
-    return await fn((log) => openRunnerPage(b, port, log));
+    return await fn(
+      (log, contextOptions) => openRunnerPage(b, port, log, contextOptions),
+      b
+    );
   } finally {
     await browser?.close();
     viteProc.kill();
   }
 }
 
-type RunnerPage = { context: BrowserContext; page: Page };
+export type RunnerPage = { context: BrowserContext; page: Page };
 
 /**
  * Open a fresh, fully isolated runner page. A new browser CONTEXT gets its own
@@ -238,15 +250,18 @@ type RunnerPage = { context: BrowserContext; page: Page };
  * flipped `300 18px monospace` metrics for every later story in the run — see
  * header comment). Context startup is ~tens of ms, same order as the
  * navigation itself. Browser console errors go to `log`, so a story's errors
- * print with that story.
+ * print with that story. `contextOptions` override the context defaults
+ * (capture-docs-images asks for `deviceScaleFactor: 2`).
  */
 async function openRunnerPage(
   browser: Browser,
   port: number,
-  log: Log
+  log: Log,
+  contextOptions: BrowserContextOptions = {}
 ): Promise<RunnerPage> {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 720 },
+    ...contextOptions,
   });
   // Install the fake clock BEFORE the first navigation so nothing in the
   // page ever sees the real one; it keeps running at real speed until the
@@ -309,22 +324,24 @@ type StoryOutcome =
   | { kind: "failed"; path: string; error: string }
   | { kind: "skipped"; path: string };
 
-/** Render one story in `page` and write its output. Throws on timeout. */
-async function captureStory(
+/**
+ * Render one story into a page from `openRunnerPage` (its fake clock paused)
+ * and hand it the fixed virtual budget, after which its DOM is ready to read:
+ * a still story is fully drawn and an animated one sits on the same frame
+ * every run. Resolves to the story's render error, or null. Throws on timeout.
+ */
+export async function renderStoryOnFakeClock(
   page: Page,
-  story: StoryInfo,
-  outDir: string,
-  screenshot: boolean,
+  storyId: string,
+  label: string,
   log: Log
-): Promise<StoryOutcome> {
-  const path = storyToPath(story.title, story.name);
-
+): Promise<string | null> {
   // Kick the render off but do NOT await it: the runner's tail (a rAF
   // plus a 100ms settle) can only complete once the paused clock is
   // given virtual time below, so awaiting here would deadlock.
   await page.evaluate((id) => {
     void window.__renderStory__(id);
-  }, story.id);
+  }, storyId);
 
   // Phase 1 — real time only. Loaders, dynamic imports, fonts and the
   // gofish render promise are real promises that resolve on their own.
@@ -357,7 +374,7 @@ async function captureStory(
     while (!(await page.evaluate(() => window.__STORY_RENDER_DONE__))) {
       if (Date.now() > deadline)
         throw new Error(
-          `Timed out after 15000ms waiting for ${story.title}/${story.name} to render`
+          `Timed out after 15000ms waiting for ${label} to render`
         );
       await page.clock.runFor(VIRTUAL_STEP_MS);
       overrun += VIRTUAL_STEP_MS;
@@ -369,7 +386,26 @@ async function captureStory(
   }
 
   const renderError = await page.evaluate(() => window.__STORY_RENDER_ERROR__);
-  if (renderError) return { kind: "failed", path, error: String(renderError) };
+  return renderError ? String(renderError) : null;
+}
+
+/** Render one story in `page` and write its output. Throws on timeout. */
+async function captureStory(
+  page: Page,
+  story: StoryInfo,
+  outDir: string,
+  screenshot: boolean,
+  log: Log
+): Promise<StoryOutcome> {
+  const path = storyToPath(story.title, story.name);
+
+  const renderError = await renderStoryOnFakeClock(
+    page,
+    story.id,
+    `${story.title}/${story.name}`,
+    log
+  );
+  if (renderError) return { kind: "failed", path, error: renderError };
 
   const rawDom = await page.evaluate(() => {
     const root = document.getElementById("stories-root");
