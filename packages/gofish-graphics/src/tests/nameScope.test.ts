@@ -424,6 +424,114 @@ async function main() {
     check("a missing name is undefined: defaults and optional checks work", ok, detail);
   }
 
+  // 11. A sequenced tier names its mark so its transitions can read the marks
+  //     back. A name the mark already has, a string before other modifiers or
+  //     a createName token, is the one it keeps: selectAll, ref, and the
+  //     transitions all find the mark by it.
+  console.log("\n# Name scope — a sequenced tier keeps its mark's own name");
+  {
+    const rows = [
+      { year: 2000, x: 1, y: 2 },
+      { year: 2001, x: 2, y: 3 },
+      { year: 2002, x: 3, y: 1 },
+    ];
+    const sequence = () => {
+      const clock = gf.timer({
+        domain: [2000, 2002],
+        duration: 1000,
+        playing: false,
+        loop: false,
+      });
+      clock.set(2001);
+      return gf.time.sequence({ by: "year", on: clock });
+    };
+    const tier = (data: any[], mark: any) =>
+      gf
+        .chart(data)
+        .flow(sequence(), gf.scatter({ x: "x", y: "y" }))
+        .mark(mark);
+
+    /** The bag `selectAll(name)` hands a chart drawn beside the tier. */
+    async function selected(mark: any, name: string): Promise<unknown[]> {
+      let seen: unknown[] = [];
+      await items(
+        gf.layer([
+          tier(rows, mark),
+          gf.chart(gf.selectAll(name)).mark((bag: unknown[]) => {
+            seen = bag;
+            return gf.rect({ w: 1, h: 1 });
+          }),
+        ])
+      );
+      return seen;
+    }
+
+    /** Whether `ref(target)` reaches the tier's one mark: a line from it to
+     *  a sibling rect is drawn. */
+    async function reached(mark: any, target: any): Promise<string> {
+      try {
+        const out = await items(
+          gf.layer([
+            tier([rows[0]], mark),
+            gf.rect({ w: 5, h: 5 }).name("b"),
+            gf.line({}, [gf.ref(target), gf.ref("b")]),
+          ])
+        );
+        return out.some((i) => i.kind === "path") ? "" : "no line drawn";
+      } catch (e: any) {
+        return String(e?.message);
+      }
+    }
+
+    const tween = () => ({ update: gf.animation.tween() });
+
+    // `.name("dots").transition(...)`
+    {
+      const dots = () => gf.circle({ r: 4 }).name("dots").transition(tween());
+      const bag = await selected(dots(), "dots").catch((e) => e);
+      check(
+        ".name().transition(): selectAll finds every mark",
+        Array.isArray(bag) && bag.length === rows.length,
+        String(bag instanceof Error ? bag.message : (bag as any)?.length)
+      );
+      const miss = await reached(dots(), "dots");
+      check(".name().transition(): ref finds the mark", miss === "", miss);
+    }
+
+    // `.name("bars").label(...)`
+    {
+      const bars = () => gf.rect({ w: 5, h: 5 }).name("bars").label("x");
+      const bag = await selected(bars(), "bars").catch((e) => e);
+      check(
+        ".name().label(): selectAll finds every mark",
+        Array.isArray(bag) && bag.length === rows.length,
+        String(bag instanceof Error ? bag.message : (bag as any)?.length)
+      );
+      const miss = await reached(bars(), "bars");
+      check(".name().label(): ref finds the mark", miss === "", miss);
+    }
+
+    // A createName token.
+    {
+      const token = gf.createName("dot");
+      const miss = await reached(gf.circle({ r: 4 }).name(token), token);
+      check("a token-named mark: ref(token) finds the mark", miss === "", miss);
+      // Its transitions read the marks back by the token, so they draw what
+      // the same mark's transitions draw under a string name.
+      const drawn = async (name: any) =>
+        (
+          await items(tier(rows, gf.circle({ r: 4 }).name(name).transition(tween())))
+        ).length;
+      const byToken = await drawn(gf.createName("dot"));
+      const byString = await drawn("dot");
+      check(
+        "a token-named mark: its transitions draw as under a string name",
+        byToken === byString,
+        JSON.stringify({ byToken, byString })
+      );
+    }
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

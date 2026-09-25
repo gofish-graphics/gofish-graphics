@@ -7,6 +7,7 @@ covers:
   - packages/gofish-graphics/src/ast/withGoFish.ts
   - packages/gofish-graphics/src/ast/channels.ts
   - packages/gofish-graphics/src/ast/marks/chart.ts
+  - packages/gofish-graphics/src/ast/marks/markResult.ts
 ---
 
 # `createMark`: turning a shape into a frontend mark
@@ -176,7 +177,7 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 `spreadX`, `Frame`, …) is built from. They flatten the children array, await its
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
 shared by both loops: a thunk is called, and whatever comes out — like every other
-child — goes to `resolveMarkResult` (`marks/chartBuilder.ts`), the single place
+child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
 that knows all the shapes. Four get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
@@ -189,9 +190,14 @@ that knows all the shapes. Four get in:
   own, not the root tier's: that is where a root `coord` is hoisted around every
   tier, so resolving the tiers by hand would drop the shared projection.
 
-The dependency runs one way — `withGoFish` and `createOperator` import from
-`chartBuilder`, never the reverse — which is why `resolveMarkResult` lives there
-rather than being duplicated as a local builder-child dispatch on this side.
+`markResult.ts` imports neither `chartBuilder` nor `createOperator`, so
+`withGoFish`, `createOperator` and `chartBuilder` all use the one
+`resolveMarkResult` rather than each keeping a local builder-child dispatch,
+and the dependency between the two builder modules runs one way:
+`chartBuilder` imports `createOperator` (for `nameableMark`), never the
+reverse. `resolveMarkResult` knows a builder by the method it calls,
+`withLayerContext`, not by its class, which is what lets it sit below
+`chartBuilder`.
 
 The builder case is the reverse direction of `.layer(node)`, which has always
 accepted low-level nodes: a chart composes inside an operator (`spreadY([map,
@@ -204,7 +210,7 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 `spreadX`, `Frame`, …) is built from. They flatten the children array, await its
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
 shared by both loops: a thunk is called, and whatever comes out — like every other
-child — goes to `resolveMarkResult` (`marks/chartBuilder.ts`), the single place
+child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
 that knows all the shapes. Four get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
@@ -216,9 +222,14 @@ that knows all the shapes. Four get in:
   own, not the root tier's: that is where a root `coord` is hoisted around every
   tier, so resolving the tiers by hand would drop the shared projection.
 
-The dependency runs one way — `withGoFish` and `createOperator` import from
-`chartBuilder`, never the reverse — which is why `resolveMarkResult` lives there
-rather than being duplicated as a local builder-child dispatch on this side.
+`markResult.ts` imports neither `chartBuilder` nor `createOperator`, so
+`withGoFish`, `createOperator` and `chartBuilder` all use the one
+`resolveMarkResult` rather than each keeping a local builder-child dispatch,
+and the dependency between the two builder modules runs one way:
+`chartBuilder` imports `createOperator` (for `nameableMark`), never the
+reverse. `resolveMarkResult` knows a builder by the method it calls,
+`withLayerContext`, not by its class, which is what lets it sit below
+`chartBuilder`.
 
 The builder case is the reverse direction of `.layer(node)`, which has always
 accepted low-level nodes: a chart composes inside an operator (`spreadY([map,
@@ -233,9 +244,13 @@ methods:
   layer context so `selectAll("layerName")` can pull the array of refs (or
   `ref("layerName")` the single node, when the layer holds exactly one). It also
   stashes the passed name on the returned mark function via `stashLayerName`
-  (defined in `chartBuilder.ts`, called by every `.name()` implementation), so
-  `.layer()`'s producer-tier auto-naming can detect a user-chained name
-  without parsing the `__serialize` tag. (An earlier `ChartBuilder.connect()`
+  (defined in `markResult.ts`, called by every `.name()` implementation, and
+  carried forward by every modifier chained after it), so `.layer()`'s
+  producer-tier auto-naming and a sequenced tier's naming can detect a
+  user-chained name without parsing the `__serialize` tag. A `createName`
+  token is filed in the layer context under its own symbol (`layerKey`), so
+  those tiers find a token-named mark's nodes too, while no string
+  `selectAll` or `ref` can reach them. (An earlier `ChartBuilder.connect()`
   method used this same stashed name; it was deleted in favor of
   [`.layer()`](/js/api/core/layer), which generalizes the pattern to every
   tier — see below.) `LayerBuilder.wireTiers()` looks for the stashed name on

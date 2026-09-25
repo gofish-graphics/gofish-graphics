@@ -29,7 +29,7 @@ import { text } from "../ast/shapes/text";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { nameableMark, type NameableMark } from "../ast/marks/createOperator";
-import { resolveMarkResult } from "../ast/marks/chartBuilder";
+import { resolveMarkResult } from "../ast/marks/markResult";
 import type { Mark } from "../ast/types";
 import { clamp, mod } from "../util";
 import { click, drag } from "./inputs";

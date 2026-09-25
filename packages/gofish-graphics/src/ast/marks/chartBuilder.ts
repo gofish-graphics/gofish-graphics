@@ -28,6 +28,12 @@ import {
 } from "./terminals";
 import { expandComposedOperator } from "./compose";
 import { nameableMark } from "./createOperator";
+import {
+  layerKey,
+  resolveMarkResult,
+  stashLayerName,
+  type LayerContext,
+} from "./markResult";
 import { markDataTime, chainedUpdates } from "../../animation/transition";
 import {
   installBuildIn,
@@ -41,14 +47,6 @@ import {
  */
 export const PREVIOUS_LAYER_MARKS = Symbol("gofish-previous-layer-marks");
 
-/** Per-chart registry of named layers for ref()/selectAll() lookup. */
-export type LayerContext = {
-  [name: string]: {
-    data: any[];
-    nodes: GoFishNode[];
-  };
-};
-
 /** How many names `mintLayerName` has handed out in each registry. */
 const mintedNames = new WeakMap<LayerContext, number>();
 
@@ -61,45 +59,6 @@ function mintLayerName(layerContext: LayerContext): string {
   const n = mintedNames.get(layerContext) ?? 0;
   mintedNames.set(layerContext, n + 1);
   return `__gofish_layer_${n}`;
-}
-
-/**
- * Resolves whatever a Mark returns into a GoFishNode. createOperator.ts
- * imports it from here. The two modules import each other (this one takes
- * `nameableMark` for `ensureNamedMark`), and each uses the other's exports
- * only at call time, so they load in either order.
- */
-export async function resolveMarkResult(
-  raw: ReturnType<Mark<any>> | LayerBuilder,
-  layerContext?: LayerContext
-): Promise<GoFishNode> {
-  // Mark functions are typed as sync-returning, but async marks are a
-  // valid pattern (e.g. the Python wrapper's mark-as-function bridges via
-  // RPC and returns `Promise<ChartBuilder>`). Await any thenable upfront
-  // so the instanceof/typeof checks below see the resolved value.
-  if (raw && typeof (raw as any).then === "function") {
-    raw = await (raw as unknown as Promise<ReturnType<Mark<any>>>);
-  }
-  if (raw instanceof ChartBuilder)
-    return raw.withLayerContext(layerContext ?? {}).resolve();
-  // A `.mark(<relational mark>)` chart elaborates to `.mark(anchor).layer(R)`,
-  // i.e. a LayerBuilder — so a chart pipeline handed anywhere a mark is taken
-  // (a `.layer(...)` tier, a `layer([...])` child) can be one. It resolves to
-  // its own stacked node; its tiers share the ENCLOSING scope's layer context
-  // (its own, when there is none), so a `.name(...)` inside it is findable from
-  // outside — exactly as for a ChartBuilder tier.
-  if (raw instanceof LayerBuilder)
-    return raw.withLayerContext(layerContext ?? {}).resolve();
-  if (typeof raw === "function")
-    return resolveMarkResult(
-      // Pass layerContext through so mark wrappers (e.g. .name(...)) that
-      // need to register into the layer context still see it when invoked
-      // here. Their `d`/`key` args remain undefined since this resolution
-      // path is for thunked / curried marks that don't take a datum.
-      (raw as Mark<any>)(undefined as any, undefined, layerContext),
-      layerContext
-    );
-  return raw as unknown as GoFishNode;
 }
 
 export type ChartOptions = {
@@ -153,7 +112,7 @@ export type ChartOptions = {
  * produced by createMark, can itself carry a name).
  */
 function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
-  const layerName = (node as { __layerRegistration?: string })
+  const layerName = (node as { __layerRegistration?: string | symbol })
     .__layerRegistration;
   if (layerName) {
     if (!layerContext[layerName]) {
@@ -163,7 +122,8 @@ function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
     layerContext[layerName].data.push((node as { datum?: unknown }).datum);
     // One-shot — repeat resolves (e.g. embedded Layer renders) would
     // otherwise re-push the same node.
-    (node as { __layerRegistration?: string }).__layerRegistration = undefined;
+    (node as { __layerRegistration?: string | symbol }).__layerRegistration =
+      undefined;
   }
 }
 
@@ -237,16 +197,6 @@ function dataIsRefs(data: unknown): boolean {
     data instanceof GoFishRef ||
     (Array.isArray(data) && data.length > 0 && data[0] instanceof GoFishRef)
   );
-}
-
-/**
- * Stash the chained `.name(...)` value directly on a mark function, so a
- * user-chained name can be detected without relying on the `__serialize` tag
- * (absent on untagged custom marks, and it omits Tokens). Every `.name()`
- * implementation calls this.
- */
-export function stashLayerName(mark: object, layerName: unknown): void {
-  (mark as any).__layerName = layerName;
 }
 
 /* ---- Default grouping for relational marks in a flow (issue #752) ----
@@ -904,13 +854,14 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   }
 
   /** Ensure this tier's mark carries a name so a later tier can `selectAll` its
-   *  nodes. Returns the (possibly renamed) builder and the effective name — an
-   *  existing `.name(...)` wins; otherwise a name fresh in `layerContext`, the
+   *  nodes. Returns the (possibly renamed) builder and the registry key its
+   *  marks are filed under (`layerKey`) — an existing `.name(...)`, a string or
+   *  a `createName` token, wins; otherwise a name fresh in `layerContext`, the
    *  registry the tier resolves into (`mintLayerName`), is applied to the
    *  mark. */
   ensureNamedMark(layerContext: LayerContext): {
     builder: ChartBuilder<TInput, TOutput>;
-    name: string;
+    name: string | symbol;
   } {
     if (this.state.finalMark === undefined) {
       throw new Error(
@@ -918,8 +869,8 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
           "mark to the previous tier, or give the layer's Chart() its own data."
       );
     }
-    const existing = (this.state.finalMark as any)?.__layerName;
-    if (typeof existing === "string" && existing.length > 0) {
+    const existing = layerKey((this.state.finalMark as any)?.__layerName);
+    if (existing !== undefined) {
       return { builder: this, name: existing };
     }
     const autoName = mintLayerName(layerContext);
@@ -995,7 +946,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
   /** `resolve`, with the name this tier's mark carries when it draws a
    *  transition over its marks. */
-  private async resolveNamed(name: string | undefined): Promise<GoFishNode> {
+  private async resolveNamed(
+    name: string | symbol | undefined
+  ): Promise<GoFishNode> {
     let composedMark = this.state.finalMark as Mark<any>;
     for (const op of this.state.operators.toReversed()) {
       composedMark = await op(composedMark);
@@ -1260,7 +1213,7 @@ export class LayerBuilder extends RenderableBuilder {
         // tier exists, so its produced nodes are addressable as the next
         // tier's scope — uniformly, regardless of whether the next tier is an
         // empty `Chart()` scope, a relational mark, or a leaf annotation.
-        let autoName: string | undefined;
+        let autoName: string | symbol | undefined;
         if (hasNext) {
           const named = tier.ensureNamedMark(sharedContext);
           tier = named.builder;

@@ -35,10 +35,11 @@ import { GoFishNode } from "../_node";
 import { GoFishRef } from "../_ref";
 import { Mark, Operator } from "../types";
 import {
-  LayerContext,
+  layerKey,
   resolveMarkResult,
   stashLayerName,
-} from "./chartBuilder";
+  type LayerContext,
+} from "./markResult";
 import { CHANNEL_INFER, resolveMeasure } from "../channels";
 import type {
   ChannelAnnotations as MarkChannelAnnotations,
@@ -69,8 +70,8 @@ import {
   type OperatorTransition,
 } from "../../animation/transition";
 
-export type { LayerContext } from "./chartBuilder";
-export { resolveMarkResult } from "./chartBuilder";
+export type { LayerContext } from "./markResult";
+export { resolveMarkResult } from "./markResult";
 
 // NameableMark is the same type used by createMark — see withGoFish.ts.
 export type { NameableMark } from "../withGoFish";
@@ -248,6 +249,12 @@ function modifierMethod(
     if ((base as any).__relationalFusable) {
       (wrapped as any).__relationalFusable = (base as any).__relationalFusable;
     }
+    // Carry the stashed `.name(...)` forward the same way, so a mark named and
+    // then chained (`.name("dots").transition(...)`, `.name("bars").label(...)`)
+    // still reads as named. A `.name` further down the chain restashes it.
+    if ((base as any).__layerName !== undefined) {
+      stashLayerName(wrapped, (base as any).__layerName);
+    }
     cfg.tag?.(wrapped, base, ...args);
     return redecorate(wrapped);
   };
@@ -313,15 +320,17 @@ export function attachModifiers<T>(
  * `ref(...)`/`selectAll(...)` can find it back. Registration is deferred (a
  * `__layerRegistration` tag) rather than an inline `layerContext` push so
  * registry order follows parent-iteration order, not async-completion order.
- * Tokens are hygienic handles and don't join the string-keyed registry.
+ * Tokens are hygienic handles: they are filed under their own symbol
+ * (`layerKey`), so no string name reaches them.
  */
 export const nameModifier = {
   name: "name",
   apply: (node, layerContext, _datum, layerName) => {
     node.name(layerName as any);
-    if (layerContext && typeof layerName === "string" && layerName) {
-      (node as { __layerRegistration?: string }).__layerRegistration =
-        layerName;
+    const key = layerKey(layerName);
+    if (layerContext && key !== undefined) {
+      (node as { __layerRegistration?: string | symbol }).__layerRegistration =
+        key;
     }
   },
   tag: (wrapped, base, layerName) => {
