@@ -1,22 +1,16 @@
 # Basics
 
-Everything in GoFish is built out of two kinds of things: **marks** and
-**operators**. A mark is a shape, like a rectangle or a piece of text. An
-operator arranges other things, like putting them in a row or stacking them.
+GoFish graphics are made of two kinds of things: **marks** that render shapes like circles, lines, and compound shapes, and **operators** that take two or more marks and compose them into a new mark, putting them in a row for instance. Both charts and diagrams are composed with marks and operators. In this tutorial we will get our first taste of these concepts. Afterwards, you can complete the [Charts tutorial](/js/tutorials/charts) or the [Diagrams tutorial](/js/tutorials/diagrams) in either order.
 
-Marks and operators are shared by every kind of picture GoFish can draw. Charts
-use them. Diagrams use them. This page teaches the shared part. When you finish
-it you can go on to the [Charts tutorial](/js/tutorials/charts) or the
-[Diagrams tutorial](/js/tutorials/diagrams), in either order.
+## The `rect` mark
 
-You do not need a dataset, a scale, or an axis to draw something. You do not
-even need `chart()`. Every mark and every operator can draw itself with
-`.render(container, { w, h })`.
+A mark is a function call that takes an object of attributes. For example, the `rect()` mark draws a rectangle. You can give it a width, a height, and a fill color (among other things):
 
-## One shape
+```js
+gf.rect({ w: 150, h: 44, fill: "#e2ebf6" });
+```
 
-`rect()` makes a rectangle. Give it a width, a height, and a fill color, then
-render it into a DOM element.
+To render it, you can call the `render` method with a root HTML container and the width and height you want for the GoFish graphic:
 
 ::: gofish
 
@@ -33,7 +27,9 @@ The second argument to `.render()` is the size of the drawing surface in
 pixels. If you leave `w` or `h` out, GoFish works out a size that fits the
 content.
 
-## Two shapes at the same place
+## Layering marks
+
+Just like marks, operators are also function calls. The simplest way to compose two marks is to layer them on top of each other using the `layer()` operator.
 
 `layer()` takes an array of children and draws them all at the same spot, one
 on top of the other, in the order you wrote them. The layer is as big as the
@@ -51,13 +47,11 @@ gf.layer([
 :::
 
 Both rectangles start at the same corner, so the thin gray one lands on the top
-edge of the blue one and reads as a border.
+edge of the blue one and looks like a border. But this is just a coincidence! Nothing in the code above describes the placement of the rectangles relative to each other.
 
-## Side by side: `spread` and `stack`
+## Placing marks side by side: `spread`
 
-`spread()` puts its children in a row. `dir` picks the direction, `"x"` for a
-row and `"y"` for a column, and `spacing` is the gap between neighbors in
-pixels.
+GoFish provides a standard library of operators that lay out child marks. A common operator is `spread()`, which places its children in a row or column. Just like a mark, an operator can take an object of attributes that customize its appearance. The `dir` attribute specifies the direction of the spread, `"x"` for a row and `"y"` for a column. `spacing` is the gap between neighboring children in pixels.
 
 ::: gofish
 
@@ -71,33 +65,9 @@ gf.spread({ dir: "x", spacing: 10 }, [
 
 :::
 
-`stack()` does the same thing with no gap. The children touch, which is what
-you want for a stacked bar or a row of table cells.
+## Data-driven graphics
 
-::: gofish
-
-```js
-gf.stack({ dir: "x" }, [
-  gf.rect({ w: 40, h: 40, fill: "#e63946" }),
-  gf.rect({ w: 40, h: 40, fill: "#457b9d" }),
-  gf.rect({ w: 40, h: 40, fill: "#2a9d8f" }),
-]).render(root, { w: 220, h: 80 });
-```
-
-:::
-
-That is the whole difference: `spread` leaves space between children, `stack`
-glues them together.
-
-Both also take an `alignment` option, which says how to line the children up on
-the other axis. `"start"` is the top edge of a row, `"end"` is the bottom edge,
-and `"middle"` is the center.
-
-## Data
-
-Nothing so far knew about data. An operator takes a plain array of children, so
-you can build that array with `Array.prototype.map` and read whatever you like
-off your own objects.
+Instead of defining all our marks manually, we can specify their properties using some data! To do so, we can define a small dataset and use JavaScript's map function to programmatically generate some rectangles. The `d` variable inside the `map` takes on one value of the `data` array at a time.
 
 ::: gofish
 
@@ -116,9 +86,9 @@ gf.spread(
 
 :::
 
-This is already a bar chart in every way except one: the heights are in pixels,
-because we multiplied by 12 ourselves. Handing that job to a scale is exactly
-what `chart()` does, and that is the subject of the Charts tutorial.
+The `alignment` attribute on `spread()` specifies that its children should be end-aligned, which in this case means to their bottom edges.
+
+(We'll see how to describe a bar chart more simply in the charts tutorial.)
 
 ## Text
 
