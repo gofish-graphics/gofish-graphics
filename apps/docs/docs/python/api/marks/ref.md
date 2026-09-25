@@ -29,9 +29,9 @@ ref(target: str | Token) -> Ref
 
 ## Forms
 
-### String — layer-local
+### String — nearest match
 
-`ref("x")` walks up the parent chain to the nearest `layer` and picks the direct child named `.name("x")`. Strings do **not** cross component boundaries.
+`ref("x")` finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to where the ref sits. It searches the subtree of the ref's parent first, then the subtree of each ancestor in turn, and stops at the first level that has a match. The search never crosses a `@mark` boundary, in either direction. A nearer match hides a farther one with the same name. Two matches at the level where the search stops is an error, and so is no match at all.
 
 ```python
 from gofish import layer, rect, ref
@@ -41,6 +41,8 @@ layer([
     ref("bg"),  # resolves to the rect above
 ])
 ```
+
+`.constrain()` operands use the same lookup, starting at the constrained layer. See [How to name and scope](/python/api/howto/naming-and-scoping).
 
 ### Token — globally addressable
 
@@ -86,9 +88,9 @@ with the chained form or the variadic `.path(*segs)` escape hatch shown above.
 
 ## Parameters
 
-| Parameter | Type           | Description                                                                                                             |
-| --------- | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `target`  | `str \| Token` | What to reference — a string (layer-local) or a `Token` (global). Extend with `.attr` / `[i]` / `.path(...)` for paths. |
+| Parameter | Type           | Description                                                                                                                                   |
+| --------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `target`  | `str \| Token` | What to reference — a string (nearest match, bounded by `@mark`) or a `Token` (global). Extend with `.attr` / `[i]` / `.path(...)` for paths. |
 
 ## `ref.datum` {#datum}
 

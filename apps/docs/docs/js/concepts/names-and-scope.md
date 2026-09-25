@@ -51,12 +51,33 @@ gf.Spread({ dir: "y", spacing: 8, alignment: "end" }, [
 
 Three slots are on the screen and every one of them has a child called `box`
 and a child called `value`. Nothing collides, and nothing had to be made
-unique. Each `.constrain()` callback sees the two children of its own layer,
-and it cannot see anybody else's.
+unique. Each `.constrain()` callback looks its names up inside its own `slot`,
+and it cannot see into anybody else's.
 
 Make it ten slots, or one per row of a dataset, and the picture is the same.
 The component author wrote `box` once and never had to think about how many
 copies would exist.
+
+## The nearest match wins
+
+Inside a component, a string name is looked up from where it is used. A
+`ref("box")` starts at the layer it sits in, and a `.constrain()` callback
+starts at the layer it is attached to. If that layer's contents have a node
+named `box`, at any depth, that is the one. If not, the lookup moves out one
+level and tries again, and so on up to the component boundary.
+
+This means a nearer name hides a farther one. That is on purpose. It is what
+lets a layer that is repeated, once per row of a chart or once per call of a
+helper function, use the same local names every time: each copy finds its
+own. Two nodes with the same name at the same distance are an error, and so is
+a name that is not found at all, so a typo or a real collision never passes
+in silence.
+
+Because the lookup reaches into nested operators, a constraint can name a node
+deep inside another child, such as one circle inside a `spread` inside an
+`enclose`. That node stays attached to the child that contains it: the
+constraint moves the whole child, or, if the child is not named, uses the node
+as a fixed point.
 
 ## Why not one flat namespace
 
@@ -89,9 +110,9 @@ Scoping alone would make components airtight, which is too airtight. An arrow
 between two components has to name an endpoint inside each of them. So GoFish
 has a second kind of name.
 
-A **string** name is a label. It is meaningful inside the layer that handed it
-out and nowhere else. `.name("box")` is a note to that layer's own
-`.constrain()` callback.
+A **string** name is a label. It is meaningful inside the component that
+contains it and nowhere else. `.name("box")` is a note to the constraints and
+refs in that component.
 
 A **token**, made by `createName("value")`, is an identity. Each call returns a
 fresh value, so two components that both call `createName("value")` hold two

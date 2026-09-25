@@ -23,7 +23,7 @@ See also [How to name and scope](/js/api/howto/naming-and-scoping) for when to u
 ```ts
 ref(
   nodeOrSelection:
-    | string                              // layer-local lookup
+    | string                              // nearest-match lookup, bounded by createMark
     | Token                               // global lookup; chainable as ref(token).foo[i].bar
     | (Token | string | number)[]         // path (array form)
     | GoFishNode                          // direct node
@@ -33,9 +33,9 @@ ref(
 
 ## Forms
 
-### String — layer-local
+### String — nearest match
 
-`ref("x")` walks up the parent chain to the nearest `Layer` and picks the direct child named `.name("x")`. Strings do **not** cross component boundaries.
+`ref("x")` finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to where the ref sits. It searches the subtree of the ref's parent first, then the subtree of each ancestor in turn, and stops at the first level that has a match. The search never crosses a `createMark` boundary, in either direction. A nearer match hides a farther one with the same name. Two matches at the level where the search stops is an error, and so is no match at all.
 
 ```ts
 Layer([
@@ -43,6 +43,8 @@ Layer([
   ref("bg"), // resolves to the rect above
 ]);
 ```
+
+`.constrain()` operands use the same lookup, starting at the constrained layer. See [How to name and scope](/js/api/howto/naming-and-scoping) and [Name Resolution & Scoping](/internals/core/names-and-scoping).
 
 ### Token — globally addressable
 
