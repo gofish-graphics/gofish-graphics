@@ -1517,8 +1517,7 @@ def spread(
 
 
 def layer(
-    children_or_options: Union[List[Any], dict],
-    children: Optional[List[Any]] = None,
+    children: List[Any],
     **options: Any,
 ) -> Union["LayerBuilder", "RelatableMark"]:
     """Layer marks or charts — a single dual-form `layer` (like spread/stack).
@@ -1526,8 +1525,8 @@ def layer(
     Two element kinds, dispatched by child type:
 
     - **Chart tiers** — ``layer([chart(...), chart(...)])`` stacks each chart and
-      emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``). An
-      options dict may lead: ``layer({"coord": clock()}, [chart1, chart2])``.
+      emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``).
+      Options are keyword arguments: ``layer([chart1, chart2], coord=clock())``.
     - **Marks** — ``layer([rect(...).name("a"), ...])`` wraps child marks in a
       layer node (returns a ``RelatableMark`` that renders directly), with
       ``.relate(...)`` for clauses that relate the marks::
@@ -1540,16 +1539,10 @@ def layer(
     Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
     charts and marks.
     """
-    if isinstance(children_or_options, dict):
-        opts = {**children_or_options, **options}
-        kids = children or []
-    else:
-        opts = options
-        kids = children_or_options
     # Chart tiers → LayerBuilder; marks → combinator mark.
-    if kids and all(isinstance(c, ChartBuilder) for c in kids):
-        return LayerBuilder(list(kids), opts or None)
-    return RelatableMark("layer", _children=list(kids), **opts)
+    if children and all(isinstance(c, ChartBuilder) for c in children):
+        return LayerBuilder(list(children), options or None)
+    return RelatableMark("layer", _children=list(children), **options)
 
 
 # `enclose` is generated (packages/gofish-python/gofish/_generated.py) —
@@ -2364,7 +2357,7 @@ def polar(
 def wavy() -> dict:
     """
     Wavy coordinate transform — adds a sinusoidal ripple to both axes. Use as:
-    `layer({"coord": wavy()}, [...])`.
+    `layer([...], coord=wavy())`.
 
     The actual transform/domain is reconstructed on the JS side from this tag
     (the function body can't cross the IR bridge), mirroring `clock()`.
@@ -2928,18 +2921,15 @@ def offset(
 
 def chart(
     data: Any = _PREVIOUS_LAYER_MARKS,
-    options: Optional[dict] = None,
-    **kwargs: Any,
+    **options: Any,
 ) -> ChartBuilder:
     """
     Create a new chart builder.
 
-    Chart-level options can be passed either as a positional dict (mirroring
-    the JS ``Chart(data, { axes, coord, ... })``) or as keyword arguments —
-    both forms are accepted and merged (kwargs win on conflict):
+    Chart-level options are keyword arguments (the JS options object
+    ``chart(data, { axes, coord, ... })`` becomes kwargs):
 
-        chart(data, {"color": palette("tableau10")})   # JS-style options object
-        chart(data, color=palette("tableau10"))         # keyword form
+        chart(data, color=palette("tableau10"))
         chart(data, color=gradient("blues"), coord=clock())
 
     Axes are a chart option (not a render option). ``axes`` accepts:
@@ -2960,16 +2950,13 @@ def chart(
     Args:
         data: Input data, or `ref(name)` / `selectAll(name)` for cross-chart
             layer references
-        options: Chart options as a dict (JS-style positional object)
-        **kwargs: Chart options as keywords — ``axes``, ``color``, ``coord``,
-            ``padding``, ... (merged over ``options``)
+        **options: Chart options as keywords — ``axes``, ``color``, ``coord``,
+            ``padding``, ...
 
     Returns:
         ChartBuilder instance
     """
-    merged: dict = dict(options) if options else {}
-    merged.update(kwargs)
-    return ChartBuilder(data, merged if merged else None)
+    return ChartBuilder(data, options or None)
 
 
 class LayerBuilder:

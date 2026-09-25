@@ -51,6 +51,6 @@ def story_polar():
         .mark(ribbon(opacity=0.8))
     )
     return (
-        layer({"coord": clock()}, [bars, overlay]),
+        layer([bars, overlay], coord=clock()),
         {"w": 400, "h": 400, "axes": True},
     )

@@ -69,7 +69,7 @@ def bar_chart(
     # field, height from the y field.
     if orientation == "y":
         return (
-            chart(data, chart_options or None)
+            chart(data, **chart_options)
             .flow(spread(by=x, dir="x"))
             .mark(mark_fn(h=y, fill=fill))
         )
@@ -78,7 +78,7 @@ def bar_chart(
     # field, width from the x field.
     if orientation == "x":
         return (
-            chart(data, chart_options or None)
+            chart(data, **chart_options)
             .flow(spread(by=y, dir="y"))
             .mark(mark_fn(w=x, fill=fill))
         )

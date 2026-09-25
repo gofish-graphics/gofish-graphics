@@ -424,6 +424,32 @@ async function main() {
     check("a missing name is undefined: defaults and optional checks work", ok, detail);
   }
 
+  // A ref laid out again lands in the same place (#928). The ref's
+  // translate is recomputed on every layout, so the walk from the ref up to
+  // the common ancestor must not include the ref's own translate from the
+  // previous layout.
+  {
+    const node = gf
+      .layer([
+        gf.spread({ dir: "x", spacing: 60 }, [
+          gf.rect({ w: 20, h: 20 }).name("a"),
+          gf.rect({ w: 20, h: 20 }).name("b"),
+        ]),
+      ])
+      .relate(({ a, b }: any) => [gf.arrow({}, [a, b])]);
+    const paths: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const out = await node.toDisplayList({ w: 300, h: 100 });
+      paths.push(
+        JSON.stringify(out.items.filter((it: any) => it.kind === "path"))
+      );
+    }
+    check(
+      "a ref laid out three times draws the same connector each time",
+      paths[0] !== "[]" && paths[1] === paths[0] && paths[2] === paths[0],
+      paths.join("\n")
+    );
+  }
 
   console.log("\n# relate() — drawing clauses and dependency order");
 

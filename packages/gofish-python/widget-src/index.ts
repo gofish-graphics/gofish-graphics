@@ -258,13 +258,27 @@ function renderError(
 ): void {
   const message = error.message || String(error);
   const stack = debug && error.stack ? error.stack : "";
-  container.innerHTML = `
-    <div style="color: red; padding: 20px; border: 2px solid red; background: #ffe0e0;">
-      <h2 style="margin-top: 0;">GoFish Widget Error</h2>
-      <p><strong>${message}</strong></p>
-      ${stack ? `<pre style="background: #fff; padding: 10px; overflow: auto; white-space: pre-wrap;">${stack}</pre>` : ""}
-    </div>
-  `;
+  // Build with DOM APIs and `.textContent` so error text (which often echoes
+  // user data) is never parsed as HTML.
+  const panel = document.createElement("div");
+  panel.style.cssText =
+    "color: red; padding: 20px; border: 2px solid red; background: #ffe0e0;";
+  const title = document.createElement("h2");
+  title.style.cssText = "margin-top: 0;";
+  title.textContent = "GoFish Widget Error";
+  const paragraph = document.createElement("p");
+  const strong = document.createElement("strong");
+  strong.textContent = message;
+  paragraph.append(strong);
+  panel.append(title, paragraph);
+  if (stack) {
+    const pre = document.createElement("pre");
+    pre.style.cssText =
+      "background: #fff; padding: 10px; overflow: auto; white-space: pre-wrap;";
+    pre.textContent = stack;
+    panel.append(pre);
+  }
+  container.replaceChildren(panel);
 }
 
 function renderLayer(
@@ -493,21 +507,9 @@ export default {
     log("render() called");
 
     const containerId = model.get("container_id");
-    el.innerHTML = `<div id="${containerId}"></div>`;
-    const container = el.querySelector(`#${containerId}`) as HTMLElement;
-    if (!container) {
-      const error = new Error(
-        `Container with id "${containerId}" not found after creation`
-      );
-      renderError(el, error, debug);
-      try {
-        model.set("render_result", { error: error.message });
-        model.save_changes();
-      } catch {
-        /* ignore */
-      }
-      return;
-    }
+    const container = document.createElement("div");
+    container.id = containerId;
+    el.replaceChildren(container);
 
     let bridge = (model as any).__gofishBridge as
       | Serialize.DeriveBridge

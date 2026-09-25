@@ -736,7 +736,8 @@ replaces the node's lowering with one that returns `[]`. Because every draw path
 SVG paint pass, the `toDisplayList` export, and a bake boundary's re-walk of its
 subtree — goes through `INTERNAL_lower`, one rule makes the node invisible everywhere,
 with no "visible" flag for paint to consult and no option that can turn drawing back
-on. This matters at scale: the [blank-fusion
+on. For the same reason `blank()` takes no paint-only options (stroke, corner radius):
+its `fill` survives only because it seeds the color scale. This matters at scale: the [blank-fusion
 rewrite](/internals/frontend/mark-factory) synthesizes one anchor `blank` per row, so a
 26,000-row line chart used to emit 26,000 zero-size `<rect>` elements (and 26,000
 entries in the interaction hit-test map) that nobody could see or click.
