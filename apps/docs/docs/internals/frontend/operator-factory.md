@@ -381,7 +381,11 @@ It propagates a chained `.transition(...)` spec (`__transition`) the same way,
 for the same reason: the chart builder reads it off the final mark whatever was
 chained after it. The `transition` modifier itself (`transitionModifier`, in
 `nameableMark`'s set) records the mark's effects on each produced node, where
-the build-in reads them.
+the build-in reads them. The combinator form carries the specs chained inside
+its children (`__transitions`) up to the combinator it builds
+(`adoptChildTransition`), so a spec chained on a mark inside
+`time.history({ last }, [...])` or `spread({...}, [...])` still reaches the
+chart builder.
 
 A modifier's `apply(node, layerContext, datum, ...args)` receives the
 **per-instance datum** the mark was called with — the same value the shape

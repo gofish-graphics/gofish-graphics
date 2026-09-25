@@ -14,6 +14,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { birds } from "../../src/data/birds";
 import { world110m } from "../../src/data/world110m";
+import { pausedClock } from "./pausedClock";
 import {
   Frame,
   GoFish,
@@ -24,6 +25,7 @@ import {
   filter,
   geo,
   group,
+  layer,
   line,
   live,
   polygon,
@@ -33,6 +35,7 @@ import {
   spreadX,
   spreadY,
   text,
+  time,
   timer,
 } from "../../src/lib";
 
@@ -203,6 +206,83 @@ export const D_Trails: StoryObj<Args> = {
               fill: "species",
               opacity: (d: any) => (d.day === day() ? 1 : 0.1),
             })
+          )
+      )
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
+/** The day the paused panel-D stories are held on, as the birds head north
+ *  in spring. */
+const PAUSED_DAY = 120;
+
+/** Panel D as it ships, a filter on the wrapped distance back from the
+ *  playhead, held still on `PAUSED_DAY`. */
+export const D_TrailsPaused: StoryObj<Args> = {
+  args: { w: 600, h: 600 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const day = pausedClock([1, 365], 10000, PAUSED_DAY);
+
+    basemap()
+      .layer(
+        chart(birds)
+          .flow(
+            filter((d: any) =>
+              between((day() - d.day + 365) % 365, 0, 20, { closed: "left" })
+            ),
+            scatter({ x: "lon", y: "lat" })
+          )
+          .mark(
+            circle({
+              r: 3,
+              fill: "species",
+              opacity: (d: any) => (d.day === day() ? 1 : 0.1),
+            })
+          )
+      )
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
+/**
+ * Panel D spelled with `time.history`, held still on `PAUSED_DAY`: one
+ * keyframe per day, each species a circle placed by its position that day.
+ * Each day's mark is two layers. The faint circle is kept for 20 days after
+ * its own (`time.history`), which is the trail, and the solid circle is that
+ * day's position, shown during its day.
+ *
+ * Only the paused picture is built this way for now. Played, every one of the
+ * 52,560 circles (365 days × 72 species × 2 layers) re-reads the clock each
+ * tick to decide whether it shows, which costs far more than panel D's frame
+ * budget (#848), so the playing panels D and E keep the filter.
+ */
+export const D_TrailsHistoryPaused: StoryObj<Args> = {
+  args: { w: 600, h: 600 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const day = pausedClock([1, 365], 10000, PAUSED_DAY);
+
+    basemap()
+      .layer(
+        chart(birds)
+          .flow(
+            time.sequence({ by: "day", on: day }),
+            scatter({ x: "lon", y: "lat" })
+          )
+          .mark(
+            layer([
+              time.history({ last: 20 }, [
+                circle({ r: 3, fill: "species", opacity: 0.1 }),
+              ]),
+              circle({ r: 3, fill: "species" }),
+            ])
           )
       )
       .render(container, { w: args.w, h: args.h });

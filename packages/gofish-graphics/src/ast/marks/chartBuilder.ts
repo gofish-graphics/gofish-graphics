@@ -30,7 +30,7 @@ import { expandComposedOperator } from "./compose";
 import {
   markDataTime,
   tweenTierFor,
-  type MarkTransition,
+  chainedTransitions,
 } from "../../animation/transition";
 import {
   installBuildIn,
@@ -616,6 +616,11 @@ type ChartBuilderState<TInput, TOutput> = {
   layerContext: LayerContext;
   nodeZOrder?: number;
   nodeName?: string;
+  /** The `time.transition()` a mark's chained `.transition({ update })` asks
+   *  for under a `time.sequence` (see `ChartBuilder.mark`). It is part of
+   *  this tier, not a tier after it: it is drawn over this tier's marks, and
+   *  the next tier still sees those marks as its scope. */
+  transitionTier?: Mark<any>;
 };
 
 export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
@@ -715,19 +720,38 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   ): ChartBuilder<TInput, TOutput> | LayerBuilder {
     // A mark's `.transition()` under a `time.sequence`: the mark enters,
     // moves and leaves with the data, which is `time.transition()`'s job, so
-    // this is the chained spelling of `.mark(m).layer(time.transition(...))`
-    // (see `tweenTierFor`). With no sequence the spec stays on the mark's
-    // nodes for the build-in (`src/animation/install.ts`).
-    const transition = (mark as any)?.__transition as
-      | MarkTransition
-      | undefined;
+    // this is the chained spelling of a `time.transition(...)` over this
+    // tier's marks (see `tweenTierFor`). The chained mark may sit inside a
+    // combinator (`layer([trail, head.transition(...)])`), which carries its
+    // spec up; the transition then moves that mark in each keyframe
+    // (`tween.tsx`). It is drawn with this tier rather than as a tier after
+    // it, so a `.layer(...)` chained next still sees this tier's marks. With
+    // no sequence the spec stays on the mark's nodes for the build-in
+    // (`src/animation/install.ts`).
+    const transitions = chainedTransitions(mark);
     if (
-      transition !== undefined &&
+      transitions.length > 0 &&
       !(mark instanceof ChartBuilder) &&
       findTimeTier(this.state.operators) !== undefined
     ) {
-      const tier = tweenTierFor(transition) as Mark<any>;
-      return this.with({ finalMark: mark as Mark<TOutput> }).layer(tier);
+      if (transitions.length > 1) {
+        throw new Error(
+          `[gofish] .transition({ update }): ${transitions.length} marks in ` +
+            `one .mark(...) each chain a transition under a time.sequence, ` +
+            `and a tier draws one. Chain it on one of them, or move the ` +
+            `others into a .layer(...) of their own.`
+        );
+      }
+      const tier = tweenTierFor(transitions[0]) as Mark<any>;
+      applyDefaultRelational(
+        (tier as any).__relationalFusable as RelationalFusable,
+        this.state.operators,
+        undefined
+      );
+      return this.with({
+        finalMark: mark as Mark<TOutput>,
+        transitionTier: tier,
+      });
     }
     if (mark instanceof ChartBuilder) {
       const finalMark = ((d: TOutput, _key, layerContext) =>
@@ -961,9 +985,26 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     return this.with({ options: rest });
   }
 
-  /** Build this chart's node. Named marks tag themselves during resolution
-   *  and are collected into `layerContext` by the post-resolve walk below. */
+  /** The transition this tier draws over its own marks, if a chained
+   *  `.transition({ update })` asked for one (see `mark`). */
+  transitionTier(): Mark<any> | undefined {
+    return this.state.transitionTier;
+  }
+
+  /** Build this chart's node. A tier that draws a transition over its marks
+   *  is built as a layer of the two (`LayerBuilder` draws the transition with
+   *  its tier). */
   async resolve(): Promise<GoFishNode> {
+    if (this.state.transitionTier !== undefined) {
+      return new LayerBuilder([this], this.state.layerContext).resolve();
+    }
+    return this.resolveTier();
+  }
+
+  /** Build this tier's own node, without the transition it may draw over its
+   *  marks. Named marks tag themselves during resolution and are collected
+   *  into `layerContext` by the post-resolve walk below. */
+  async resolveTier(): Promise<GoFishNode> {
     if (!this.state.finalMark) {
       throw new Error("Cannot resolve: no mark specified. Call .mark() first.");
     }
@@ -1214,8 +1255,11 @@ export class LayerBuilder extends RenderableBuilder {
         // tier exists, so its produced nodes are addressable as the next
         // tier's scope — uniformly, regardless of whether the next tier is an
         // empty `Chart()` scope, a relational mark, or a leaf annotation.
+        // A transition the tier draws over its own marks reads them the same
+        // way, so it needs them named too.
+        const moving = tier.transitionTier();
         let autoName: string | undefined;
-        if (hasNext) {
+        if (hasNext || moving !== undefined) {
           // The registry may be an enclosing builder's, which has auto-named
           // its own tiers already: skip the names it holds, or this tier's
           // scope would take in that builder's marks too.
@@ -1227,10 +1271,22 @@ export class LayerBuilder extends RenderableBuilder {
           tier = named.builder;
           autoName = named.name;
         }
-        nodes.push(await tier.withLayerContext(sharedContext).resolve());
-        prevRefs = autoName
-          ? (sharedContext[autoName]?.nodes ?? []).map((n) => ref({ __ref: n }))
-          : undefined;
+        nodes.push(await tier.withLayerContext(sharedContext).resolveTier());
+        // A fresh bag per reader: a ref is a node of the tree it is read in,
+        // placed from where it sits, so two readers cannot share one.
+        const refs = () =>
+          (sharedContext[autoName!]?.nodes ?? []).map((n) => ref({ __ref: n }));
+        prevRefs = autoName ? refs() : undefined;
+        // The transition is part of this tier: it is drawn over the tier's
+        // marks, and the next tier still takes those marks as its scope.
+        if (moving !== undefined) {
+          nodes.push(
+            await resolveMarkResult(
+              moving(refs() as any, undefined, sharedContext),
+              sharedContext
+            )
+          );
+        }
       } else {
         // Mark tier: resolve the bare mark against the shared layer context
         // (so a `.name(...)`-tagged annotation still registers) and pass the

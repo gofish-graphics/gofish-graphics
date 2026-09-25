@@ -1,23 +1,26 @@
 /**
- * Unit tests for the window a `time.sequence` shows (`src/timeWindow.ts`):
- * the keyframes' band rule, the trail a transition leaves behind, and the cut
- * of a line threaded through them. Run:
+ * Unit tests for when a `time.sequence`'s keyframes show
+ * (`src/timeWindow.ts`): the keyframes' band rule, the window a
+ * `time.history` widens it to, the lifetime of a mark made of parts, and the
+ * cut of a line threaded through the keyframes. Run:
  * `tsx src/tests/timeWindow.test.ts` (wired into `pnpm test` as
  * `test:time-window`).
  *
- * The contract: with no history the band rule is exactly the step rule a
+ * The contract: with lifetime 0 the band rule is exactly the step rule a
  * sequence has always played by, and a threaded line is cut by DATA time, so
  * the cut point inside a segment is at the segment's own parameter
  * `u = (T − t_i) / (t_{i+1} − t_i)`, whatever the segment's length on screen.
  */
 
 import {
+  historiesIn,
   keyframeOf,
-  keyframeRule,
+  lifetimeOf,
+  lifetimeRule,
+  markHistory,
   markSequence,
   sequenceWindow,
   showingAt,
-  trailRule,
   windowAt,
   windowPath,
   type Keyframe,
@@ -74,29 +77,22 @@ const smooth: Path = [
 /** A path cut into the pieces `windowPath` takes: one per knot interval. */
 const pieces = (path: Path): Path[] => path.map((seg) => [seg]);
 
-/** The keyframe `times[index]` of a sequence keeping `history` and parked at
- *  playhead `T`. */
-const keyframeAt = (
-  times: number[],
-  index: number,
-  T: number,
-  history: number
-): Keyframe => ({
+/** The keyframe `times[index]` of a sequence parked at playhead `T`. */
+const keyframeAt = (times: number[], index: number, T: number): Keyframe => ({
   t: times[index],
   index,
   sequence: sequenceWindow(
     () => times,
-    () => T,
-    history
+    () => T
   ),
 });
 
-console.log("# the band rule: history 0 is the step rule");
+console.log("# the band rule: lifetime 0 is the step rule");
 {
   const bands = [1955, 1960, 1965, 1970];
   const playheads = [1900, 1955, 1957.5, 1960, 1964.99, 1965, 1970, 2100];
   const showing = (j: number, t: number, times = bands) =>
-    keyframeRule(keyframeAt(times, j, t, 0))();
+    lifetimeRule(keyframeAt(times, j, t), 0)();
   const agree = playheads.every((t) =>
     bands.every(
       (_, j) => showing(j, t) === (j === sourceIndex(bands, t, "step"))
@@ -223,8 +219,7 @@ console.log("# the keyframe record");
 {
   const sequence: SequenceWindow = {
     keyframes: () => [1999, 2000, 2001],
-    history: 0,
-    showing: () => showingAt([1999, 2000, 2001], 2000, 0),
+    showing: (last) => showingAt([1999, 2000, 2001], 2000, last),
   };
   const frame = { parent: undefined };
   markSequence(frame, sequence);
@@ -253,7 +248,7 @@ console.log("# the keyframe record");
   );
 }
 
-console.log("# the trail rule, over a grid of playheads");
+console.log("# the history window, over a grid of playheads");
 {
   // Keyframes five years apart, one of them after a ten-year gap, so the
   // bands are uneven.
@@ -262,72 +257,108 @@ console.log("# the trail rule, over a grid of playheads");
     1950, 1955, 1956, 1959.99, 1960, 1962.5, 1965, 1970, 1974.9, 1975, 1977,
     1980, 1985,
   ];
-  const histories = [0, 0.5, 3, 5, 10, 17, Infinity];
-  /** Which keyframes show at `T`, written out by hand from the rule on #903
-   *  rather than through the rules under test. */
-  const expected = (
-    reading: "none" | "glide" | "step",
-    T: number,
-    h: number
-  ): number[] =>
-    times.filter((t, j) => {
-      const start = j === 0 ? -Infinity : t;
-      const end = j === times.length - 1 ? Infinity : times[j + 1];
-      if (reading === "glide") return T - h <= t && t < T;
-      const overlaps = start <= T && end > T - h;
-      if (reading === "none") return overlaps;
-      // A step keyframe's band overlaps the window but no longer holds the
-      // playhead: its band is over, and its end is still inside the window.
-      return overlaps && !(start <= T && T < end);
-    });
-  const shown = (
-    reading: "none" | "glide" | "step",
-    T: number,
-    h: number
-  ): number[] =>
+  const lasts = [0, 0.5, 3, 5, 10, 17, Infinity];
+  /** Which keyframes show at `T` for lifetime `last`, written out by hand:
+   *  every one whose band overlaps `[T − last, T]`. */
+  const expected = (T: number, last: number): number[] =>
     times.filter((_, j) => {
-      const keyframe = keyframeAt(times, j, T, h);
-      if (reading === "none") return keyframeRule(keyframe)();
-      // No rule means the trail is always empty.
-      const rule = trailRule(
-        keyframe.sequence,
-        keyframe.index,
-        reading === "glide"
-      );
-      return rule !== undefined && rule();
+      const start = j === 0 ? -Infinity : times[j];
+      const end = j === times.length - 1 ? Infinity : times[j + 1];
+      return start <= T && end > T - last;
     });
-  for (const reading of ["none", "glide", "step"] as const) {
-    const misses: string[] = [];
-    for (const T of playheads) {
-      for (const h of histories) {
-        const [a, b] = [shown(reading, T, h), expected(reading, T, h)];
-        if (JSON.stringify(a) !== JSON.stringify(b)) {
-          misses.push(`T=${T} h=${h}: ${a} vs ${b}`);
-        }
+  const shown = (T: number, last: number): number[] =>
+    times.filter((_, j) => lifetimeRule(keyframeAt(times, j, T), last)());
+  const misses: string[] = [];
+  for (const T of playheads) {
+    for (const last of lasts) {
+      const [a, b] = [shown(T, last), expected(T, last)];
+      if (JSON.stringify(a) !== JSON.stringify(b)) {
+        misses.push(`T=${T} last=${last}: ${a} vs ${b}`);
       }
     }
-    ok(
-      `${reading === "none" ? "no transition" : reading}: every playhead and history`,
-      misses.length === 0,
-      misses.slice(0, 3).join("; ")
-    );
   }
   ok(
-    "with no history, a transition shows no keyframe at all",
-    playheads.every(
-      (T) =>
-        shown("glide", T, 0).length === 0 && shown("step", T, 0).length === 0
+    "every playhead and lifetime: the bands the window overlaps",
+    misses.length === 0,
+    misses.slice(0, 3).join("; ")
+  );
+  ok(
+    "a history includes the keyframe the playhead is in",
+    playheads.every((T) =>
+      lasts.every((last) =>
+        shown(T, last).includes(times[sourceIndex(times, T, "step")])
+      )
     )
   );
   ok(
-    "a gliding trail leaves each keyframe the moment the mark moves off it",
-    JSON.stringify(shown("glide", 1965, Infinity)) === "[1955,1960]" &&
-      JSON.stringify(shown("glide", 1965.01, Infinity)) === "[1955,1960,1965]"
+    "Infinity keeps everything the playhead has reached",
+    JSON.stringify(shown(1977, Infinity)) === "[1955,1960,1965,1975]"
+  );
+  // One sequence answers for several lifetimes at the same playhead.
+  const sequence = sequenceWindow(
+    () => times,
+    () => 1977
   );
   ok(
-    "a jumping trail keeps each old keyframe one step longer",
-    JSON.stringify(shown("glide", 1981, 10)) === "[1975,1980]" &&
-      JSON.stringify(shown("step", 1981, 10)) === "[1965,1975]"
+    "one sequence, several lifetimes",
+    sequence.showing(0).first === 3 &&
+      sequence.showing(Infinity).first === 0 &&
+      sequence.showing(0).first === 3
+  );
+}
+
+console.log("# lifetimes: the nearest time.history, and the union of parts");
+{
+  type N = { parent?: N; key?: unknown; children: N[] };
+  const node = (children: N[] = []): N => {
+    const n: N = { children };
+    for (const c of children) c.parent = n;
+    return n;
+  };
+  // frame > keyframe > layer([ history(10)[ dot ], head ])
+  const dot = node();
+  const trail = node([dot]);
+  markHistory(trail, 10);
+  const head = node();
+  const both = node([trail, head]);
+  const keyframe = node([both]);
+  keyframe.key = "2000";
+  const frame = node([keyframe]);
+  markSequence(frame, {
+    keyframes: () => [2000],
+    showing: (last) => showingAt([2000], 2000, last),
+  });
+  ok("a bare mark lives for its band", lifetimeOf(head) === 0);
+  ok("a mark under a history lives as long as it says", lifetimeOf(dot) === 10);
+  ok("the history itself", lifetimeOf(trail) === 10);
+  ok(
+    "a mark of parts lives as long as its longest-lived part",
+    lifetimeOf(both) === 10 && lifetimeOf(keyframe) === 10
+  );
+  // A nearer history wins over one further up.
+  const inner = node([node()]);
+  markHistory(inner, 2);
+  const outer = node([inner, node()]);
+  markHistory(outer, Infinity);
+  const other = node([outer]);
+  other.key = "2000";
+  other.parent = frame;
+  ok(
+    "the nearest history decides for the marks under it",
+    lifetimeOf(inner.children[0]) === 2 &&
+      lifetimeOf(outer.children[1]) === Infinity &&
+      lifetimeOf(outer) === Infinity
+  );
+  ok(
+    "the histories in a keyframe",
+    historiesIn(keyframe).length === 1 && historiesIn(other).length === 2
+  );
+  // A history above the keyframe (outside the sequence) is not the keyframe's.
+  const above = node([frame]);
+  markHistory(above, 5);
+  ok(
+    "a history outside the keyframe does not reach into it",
+    lifetimeOf(head) === 0
   );
 }
 

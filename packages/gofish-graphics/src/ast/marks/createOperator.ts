@@ -63,6 +63,7 @@ import {
 import { attachBuilderTerminals } from "./terminals";
 import { installBuildIn } from "../../animation/install";
 import {
+  chainedTransitions,
   recordMarkTransition,
   recordOperatorTransition,
   type MarkTransition,
@@ -252,6 +253,9 @@ function modifierMethod(
     // the final mark (see `transitionModifier`), whatever was chained after.
     if ((base as any).__transition) {
       (wrapped as any).__transition = (base as any).__transition;
+    }
+    if ((base as any).__transitions) {
+      (wrapped as any).__transitions = (base as any).__transitions;
     }
     cfg.tag?.(wrapped, base, ...args);
     return redecorate(wrapped);
@@ -668,6 +672,20 @@ export type OperatorConfig<Datum, Options> = {
  *  they are otherwise trapped inside the mark's closure. Shared by every
  *  combinator: this factory's combinator form, `layer`, and the Porter-Duff
  *  operators (both in marks/chart.ts). */
+/**
+ * Carry the `.transition(...)` specs chained inside a combinator's children up
+ * to the combinator (`layer([trail, head.transition(...)])`), so the chart
+ * builder, which reads them off the mark it is given, finds them wherever the
+ * chained mark sits. The nodes still record each spec on its own mark alone,
+ * and that mark is the one a transition moves (`tween.tsx`). Whether several
+ * are allowed depends on the clock (the chart builder decides).
+ */
+export function adoptChildTransition(mark: object, children: unknown): void {
+  if (!Array.isArray(children)) return;
+  const specs = children.flatMap(chainedTransitions);
+  if (specs.length > 0) (mark as any).__transitions = specs;
+}
+
 export function tagCombinator<M extends object>(
   mark: M,
   type: string,
@@ -988,6 +1006,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         return node;
       };
       const combinator = nameableMark(base);
+      adoptChildTransition(combinator, marks);
       if (cfg.serialize) {
         tagCombinator(
           combinator,

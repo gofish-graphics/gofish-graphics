@@ -25,14 +25,14 @@ import { initializeContainer } from "../helper";
 import {
   Frame,
   GoFish,
+  animation,
   chart,
   circle,
   filter,
-  group,
+  layer,
   line,
   live,
   scatter,
-  selectAll,
   rect,
   spread,
   spreadX,
@@ -719,19 +719,14 @@ const TRAIL_COUNTRIES = [
  * it leaves its past years behind it: a faint dot for each year it has passed
  * and a line threaded through them.
  *
- * The keyframes are the faint dots. The sequence keeps all its history, so
- * every year the playhead has reached stays on screen, and the line threaded
- * through the dots is drawn up to the playhead. The transition over the same
- * dots draws the moving dot. It is a tier of its own over the dots
- * (`selectAll("years")`, split by country) because `.layer(...)` reads the tier
- * just before it, which is the lines, and the dots it moves show only as its
- * trail (`trailRule` in `src/timeWindow.ts`). The moving dot is always at the
- * tip of its line, because the line and the transition use the same curve,
- * with the years as its knots.
- *
- * The moving dot takes its size and color from the keyframes, and its opacity
- * from the transition, which is 1 unless it is given. That is why it stands
- * out from the faint dots it leaves behind.
+ * Each year's mark is two layers. The faint dot is kept once reached
+ * (`time.history`), which is the trail. The solid dot is the head: on its own
+ * it is that year's dot, shown during its year, and with
+ * `.transition({ update })` it glides from year to year instead. The line is
+ * layered over the year marks, and is drawn over the window of the marks it
+ * connects, the longer of their two layers', so it runs up to the playhead.
+ * The head is always at the tip of its line, because the line and the head's
+ * tween use the same curve, with the years as its knots.
  */
 const trails = (
   rows: any[],
@@ -744,10 +739,17 @@ const trails = (
     options
   )
     .flow(
-      time.sequence({ by: "year", on: clock, history: Infinity }),
+      time.sequence({ by: "year", on: clock }),
       scatter({ by: "country", x: "fertility", y: "life_expect" })
     )
-    .mark(circle({ r: 4, fill: "country", opacity: 0.3 }).name("years"))
+    .mark(
+      layer([
+        time.history([circle({ r: 4, fill: "country", opacity: 0.3 })]),
+        circle({ r: 4, fill: "country" }).transition({
+          update: animation.tween({ curve }),
+        }),
+      ])
+    )
     .layer(
       line({
         along: "year",
@@ -756,11 +758,6 @@ const trails = (
         opacity: 0.6,
         curve,
       })
-    )
-    .layer(
-      chart(selectAll("years"))
-        .flow(group({ by: "country" }))
-        .mark(time.transition({ curve }))
     );
 
 export const Trails: StoryObj<Args> = {

@@ -38,8 +38,10 @@ import { targetOf } from "./layer";
 import { readLive } from "../../interaction/live";
 import { setLiveSlots } from "../../interaction/liveSlots";
 import {
+  historyOf,
   keyframeOf,
-  keyframeRule,
+  lifetimeOf,
+  lifetimeRule,
   windowPath,
   type Keyframe,
   type SequenceWindow,
@@ -98,10 +100,37 @@ function sequenceKeyframes(children: GoFishAST[]): Keyframe[] | undefined {
   return found;
 }
 
+/**
+ * The lifetime of the marks a connector's operands are (`lifetimeOf`), the
+ * one `last` of every operand. Undefined when the operands' lifetimes differ,
+ * which a line threaded through them cannot be drawn over yet: its window
+ * would change from one step to the next.
+ */
+function operandLifetime(children: GoFishAST[]): number | undefined {
+  const lifetimes = new Set(
+    children.map((child) => lifetimeOf(targetOf(child) as any))
+  );
+  return lifetimes.size === 1 ? [...lifetimes][0] : undefined;
+}
+
+/** Whether `node` sits under a `time.history`. */
+function underHistory(node: GoFishNode): boolean {
+  for (let n = node.parent; n !== undefined; n = n.parent) {
+    if (historyOf(n) !== undefined) return true;
+  }
+  return false;
+}
+
 /** A line threaded through a sequence's keyframes: each knot's time, in time
  *  order, the step of the path from each knot to the next, drawn forward in
- *  time, and the sequence whose window it is drawn over. */
-type TimeRun = { knots: number[]; pieces: Path[]; sequence: SequenceWindow };
+ *  time, the sequence whose window it is drawn over, and the lifetime of the
+ *  marks it connects, which picks the window. */
+type TimeRun = {
+  knots: number[];
+  pieces: Path[];
+  sequence: SequenceWindow;
+  last: number;
+};
 
 /** A segment drawn the other way. */
 const reversed = (seg: Path[number]): Path[number] =>
@@ -232,14 +261,16 @@ export const connect = createNodeOperator(
             resolvedSource !== undefined || resolvedTarget !== undefined;
 
           // A connector over a `time.sequence`'s keyframes is read in time as
-          // well as in space, by the window the sequence shows (see
+          // well as in space, by the lifetime of the marks it connects (see
           // `src/timeWindow.ts`). Operands all inside ONE keyframe: the
-          // connector is part of that keyframe's picture, so it shows when
-          // the keyframe does, and is not cut. Operands in DIFFERENT
-          // keyframes: it threads the time tier, so it draws only the stretch
-          // of its run inside the window, cut by data time at paint (see
-          // `lower`). Which case it is comes from the keyframes themselves,
-          // not from the field names in the spec.
+          // connector is part of that keyframe's picture, so it shows while
+          // its operands do, and is not cut. Operands in DIFFERENT keyframes:
+          // it threads the time tier, so it draws only the stretch of its run
+          // inside its operands' window, cut by data time at paint (see
+          // `lower`). With no `time.history` over the operands that window is
+          // the playhead alone, and the line draws nothing. Which case it is
+          // comes from the keyframes themselves, not from the field names in
+          // the spec.
           const keyframes = sequenceKeyframes(children);
           const threadsTime =
             keyframes !== undefined &&
@@ -247,7 +278,30 @@ export const connect = createNodeOperator(
           if (keyframes !== undefined && !threadsTime) {
             node.INTERNAL_visibleWhile(
               keyframes[0].sequence,
-              keyframeRule(keyframes[0])
+              lifetimeRule(
+                keyframes[0],
+                Math.max(...children.map((c) => lifetimeOf(targetOf(c) as any)))
+              )
+            );
+          }
+          const last = threadsTime ? operandLifetime(children) : undefined;
+          if (threadsTime && last === undefined) {
+            throw new Error(
+              `[gofish] line(): this line threads the keyframes of a ` +
+                `time.sequence, and the marks it connects stay on screen for ` +
+                `different spans of time (different time.history windows), ` +
+                `so its own window would change from one step to the next. ` +
+                `That is not built yet: give every keyframe's mark the same ` +
+                `time.history.`
+            );
+          }
+          if (threadsTime && underHistory(node)) {
+            throw new Error(
+              `[gofish] time.history([line(...)]): a line threaded through ` +
+                `the keyframes of a time.sequence is drawn over the window of ` +
+                `the marks it connects, so a time.history around the line ` +
+                `itself has nothing to set. Put the time.history around the ` +
+                `keyframe marks (or in the flow) instead.`
             );
           }
           if (threadsTime && (mode !== "center" || hasAnchors)) {
@@ -772,6 +826,7 @@ export const connect = createNodeOperator(
                     knots: timeKnots,
                     pieces: steps,
                     sequence: keyframes![0].sequence,
+                    last: last!,
                   }
                 : {
                     knots: timeKnots.slice().reverse(),
@@ -780,6 +835,7 @@ export const connect = createNodeOperator(
                       .reverse()
                       .map((piece) => piece.map(reversed).reverse()),
                     sequence: keyframes![0].sequence,
+                    last: last!,
                   };
           }
 
@@ -889,9 +945,9 @@ export const connect = createNodeOperator(
           // for the value to lower, and then per frame in paint position by
           // the `d` slot, which patches the path data and nothing else — the
           // same split `tween` makes for its playhead.
-          const { knots, pieces, sequence } = timeRun;
+          const { knots, pieces, sequence, last } = timeRun;
           const drawnOver = (): string =>
-            pathData(windowPath(pieces, knots, sequence.showing().window));
+            pathData(windowPath(pieces, knots, sequence.showing(last).window));
           const item = toItem(readLive(drawnOver));
           setLiveSlots(item, { d: drawnOver });
           return [item];

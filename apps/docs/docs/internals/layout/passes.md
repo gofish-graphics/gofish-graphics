@@ -767,15 +767,15 @@ rule's subtree, show only with the year they label, and belong to that year's
 keyframe (`keyframeOf` in `src/timeWindow.ts` reads the key of the node under the
 sequence's Frame).
 
-A transition hides the keyframes it moves, labels included. When its sequence keeps
-history, every leaf it moves gets a visibility rule of its own, set under the same
-sequence, so for that leaf it stands in for the keyframe group's rule: a moved
-keyframe shows only as part of the trail the moving mark leaves behind, read on the
-transition's own clock and knots (`trailRule` in `src/timeWindow.ts`). With no
-history the trail is always empty, which is known at resolve, so the leaves get
-`INTERNAL_emitNothing` instead. A text leaf also lends the transition its drawing,
-`INTERNAL_lendDrawing`, so the transition can draw that text where the playhead has
-taken it. A node keeps the lowering it was built with, so it lends its real drawing
+A `time.history({ last })` inside a keyframe gets a rule of its own from the
+sequence, set under the same owner, so for the marks under it it stands in for the
+keyframe group's rule: they show while the group's band overlaps `[T − last, T]`
+(`lifetimeRule` in `src/timeWindow.ts`). A transition hides the marks it moves,
+labels included, with `INTERNAL_emitNothing`: the moving mark is their drawing, and a
+trail behind it is a `time.history` of another mark in the same keyframe. Each leaf
+it moves also lends the transition its drawing,
+`INTERNAL_lendDrawing`: the transition draws a text where the playhead has taken
+it, and paints a box as the mark it moves is painted. A node keeps the lowering it was built with, so it lends its real drawing
 even after it has been silenced. The lent drawing lowers through the same body as
 `INTERNAL_lower`, so its items keep their ids and live channels, but it skips the
 visibility rule: the transition decides when the moving copy shows.

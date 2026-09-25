@@ -7,9 +7,11 @@
  * The two spellings are the rungs of the Gapminder tower's kind
  * (`gapminderTower.test.ts`):
  *
- *   SUGAR       a `time.sequence` keeping all its history (`history:
- *               Infinity`), with a `line` threaded through its keyframes. The
- *               line is cut at paint, by data time, at the playhead.
+ *   SUGAR       a `time.sequence` with a `time.history()` after it in the
+ *               flow, so every year reached stays, and a `line` threaded
+ *               through its keyframes. The line is drawn over the window of
+ *               the marks it connects, cut at paint, by data time, at the
+ *               playhead.
  *   DATA SPACE  what Animated Vega-Lite's compiler does for a line: keep the
  *               rows up to the playhead, append one row interpolated AT the
  *               playhead (`interpolate`, keyed by a constant column, like
@@ -32,12 +34,14 @@ import * as GoFish from "../../dist/index.js";
 import { drivingShifts } from "../data/drivingShifts";
 
 const {
+  animation,
   blank,
   chart,
   circle,
   derive,
   group,
   interpolate,
+  layer,
   line,
   orthogonal,
   ribbon,
@@ -71,13 +75,19 @@ const OPTIONS = { w: W, h: H, axes: true };
 const clockAt = (at: number) => pausedClock(YEARS, 54 * 200, at);
 
 /** One keyframe per year of `rows`, placed by miles and gas, on a sequence
- *  keeping `history` years and parked at `at`. Every chart here starts from
- *  it. */
-const keyframes = (rows: any[], at: number, history: number) =>
-  chart(rows).flow(
-    time.sequence({ by: "year", on: clockAt(at), history }),
-    scatter({ x: "miles", y: "gas" })
-  );
+ *  parked at `at`, with a `time.history({ last })` after it in the flow when
+ *  `last` is given. Every chart here starts from it. */
+const keyframes = (rows: any[], at: number, last?: number) =>
+  last === undefined
+    ? chart(rows).flow(
+        time.sequence({ by: "year", on: clockAt(at) }),
+        scatter({ x: "miles", y: "gas" })
+      )
+    : chart(rows).flow(
+        time.sequence({ by: "year", on: clockAt(at) }),
+        time.history({ last }),
+        scatter({ x: "miles", y: "gas" })
+      );
 
 type Point = [number, number];
 type Segment = [Point, Point];
@@ -236,7 +246,8 @@ async function main(): Promise<void> {
           resolves++;
           return rows;
         }),
-        time.sequence({ by: "year", on: clock, history: Infinity }),
+        time.sequence({ by: "year", on: clock }),
+        time.history(),
         scatter({ x: "miles", y: "gas" })
       )
       .mark(line({ along: "year", curve: "linear" }))
@@ -275,28 +286,28 @@ async function main(): Promise<void> {
     `${dots.length} dots`
   );
 
-  console.log("\n# a moving dot leaves a trail, on the line's tip");
+  console.log("\n# a moving head over a trail, on the line's tip");
   {
     // Uneven steps in time, from one year to nineteen, so a smooth curve
     // whose knots were anything but the years would part company with the
     // moving dot.
     const years = [1956, 1957, 1960, 1966, 1967, 1975, 1990, 1991, 2010];
     const rows = drivingShifts.filter((d: any) => years.includes(d.year));
-    /** The dots, a line threaded through them, and a transition moving one
-     *  red dot over the same keyframes. The keyframe dots are white, so the
-     *  moving dot is the only red one. */
-    const trail = (
-      at: number,
-      curve: "linear" | "catmullRom" | "step",
-      history = Infinity
-    ) =>
-      keyframes(rows, at, history)
-        .mark(circle({ r: 4, fill: "white" }).name("dots"))
-        .layer(
-          line({ along: "year", curve: curve === "step" ? "linear" : curve })
+    /** Each year's mark is a white dot kept once reached (the trail) and a
+     *  red dot that glides from year to year (the head), with a line layered
+     *  over the year marks. The head is the only red dot. */
+    const trail = (at: number, curve: "linear" | "catmullRom" | "step") =>
+      keyframes(rows, at)
+        .mark(
+          layer([
+            time.history([circle({ r: 4, fill: "white" })]),
+            circle({ r: 4, fill: "red" }).transition({
+              update: animation.tween({ curve }),
+            }),
+          ])
         )
         .layer(
-          chart(selectAll("dots")).mark(time.transition({ curve, fill: "red" }))
+          line({ along: "year", curve: curve === "step" ? "linear" : curve })
         )
         .toDisplayList(OPTIONS);
     const shownDots = (doc: any, fill: string) =>
@@ -320,9 +331,10 @@ async function main(): Promise<void> {
     for (const at of [1956.5, 1963, 1966, 1979.25, 2004.6]) {
       const doc = await trail(at, "linear");
       const white = shownDots(doc, "white").length;
-      const reached = years.filter((y) => y < at).length;
+      // The trail includes the year the playhead is in.
+      const reached = years.filter((y) => y <= at).length;
       ok(
-        `linear at ${at}: every year passed shows, and no other`,
+        `linear at ${at}: every year reached shows, the current one included`,
         white === reached,
         `${white} vs ${reached}`
       );
@@ -341,19 +353,74 @@ async function main(): Promise<void> {
     }
     const stepped = await trail(1979.25, "step");
     ok(
-      "step: the moving dot holds 1975, and every band already over shows",
+      "step: the trail is the same, whatever the head does",
       shownDots(stepped, "white").length ===
-        years.filter((y, i) => i + 1 < years.length && years[i + 1] <= 1979.25)
-          .length
+        years.filter((y) => y <= 1979.25).length &&
+        shownDots(stepped, "red").length === 1
     );
-    for (const curve of ["linear", "catmullRom", "step"] as const) {
-      const doc = await trail(1979.25, curve, 0);
-      ok(
-        `${curve} with no history: the moving dot alone`,
-        shownDots(doc, "white").length === 0 &&
-          shownDots(doc, "red").length === 1
+  }
+
+  console.log("\n# the line takes its window from the marks it connects");
+  {
+    const lineOver = async (mark: unknown, at = 1979.25) =>
+      onePath(
+        await keyframes(drivingShifts, at)
+          .mark(mark)
+          .layer(line({ along: "year", curve: "linear" }))
+          .toDisplayList(OPTIONS)
+      ).d as string;
+    ok(
+      "a bare sequence: every mark lives for its band, so no line",
+      (await lineOver(circle({ r: 4 }))) === ""
+    );
+    const flowForm = onePath(await sugar(1979.25)).d as string;
+    ok(
+      "a history around the marks: the line runs up to the playhead",
+      sameNumbers(await lineOver(time.history([circle({ r: 4 })])), flowForm)
+    );
+    ok(
+      "a mark of parts: the line follows its longest-lived part",
+      sameNumbers(
+        await lineOver(
+          layer([time.history([circle({ r: 4 })]), circle({ r: 4 })])
+        ),
+        flowForm
+      )
+    );
+    const comet = onePath(
+      await keyframes(drivingShifts, 1979.25, 10)
+        .mark(line({ along: "year", curve: "linear" }))
+        .toDisplayList(OPTIONS)
+    ).d as string;
+    ok(
+      "a history of ten years: the line keeps ten years, cut at both ends",
+      lineSegments({ items: [{ kind: "path", d: comet }] }).length === 11 &&
+        sameNumbers(
+          await lineOver(
+            layer([time.history({ last: 10 }, [circle({ r: 4 })]), blank()])
+          ),
+          comet
+        )
+    );
+  }
+
+  console.log("\n# the flow form is the wrapper form at another depth");
+  // The line is given its stroke: left to its default it takes the color of
+  // the first mark it connects, and a time.history has none of its own.
+  for (const last of [0, 3, Infinity]) {
+    const flow = await keyframes(drivingShifts, 1979.25, last)
+      .mark(circle({ r: 4 }))
+      .layer(line({ along: "year", stroke: "black" }))
+      .toDisplayList(OPTIONS);
+    const wrapper = await keyframes(drivingShifts, 1979.25)
+      .mark(time.history({ last }, [circle({ r: 4 })]))
+      .layer(line({ along: "year", stroke: "black" }))
+      .toDisplayList(OPTIONS);
+    const drawn = (doc: any) =>
+      JSON.stringify(
+        items(doc).map(({ id: _id, datum: _datum, ...rest }) => rest)
       );
-    }
+    ok(`last ${last}: the same picture`, drawn(flow) === drawn(wrapper));
   }
 
   console.log("\n# a line through the keyframes backward in time");
@@ -399,7 +466,8 @@ async function main(): Promise<void> {
       lastPoint(
         await chart(rows)
           .flow(
-            time.sequence({ by, on: clockAt(1972.5), history: Infinity }),
+            time.sequence({ by, on: clockAt(1972.5) }),
+            time.history(),
             scatter({ x: "miles", y: "gas" })
           )
           .mark(line({ along: "year" }))
@@ -417,39 +485,12 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log("\n# the trail follows the transition's own clock");
-  for (const at of [1965.5, 1990.5]) {
-    // The sequence is held at 1979.25, and the transition reads a clock of
-    // its own: its trail is read on that clock, so it ends where its moving
-    // dot is, behind the sequence's playhead or ahead of it.
-    const doc = await keyframes(drivingShifts, 1979.25, Infinity)
-      .mark(circle({ r: 4, fill: "white" }).name("dots"))
-      .layer(
-        chart(selectAll("dots")).mark(
-          time.transition({ at: clockAt(at), fill: "red" })
-        )
-      )
-      .toDisplayList(OPTIONS);
-    const white = items(doc).filter(
-      (item) =>
-        item.kind === "ellipse" &&
-        item.style?.fill === "white" &&
-        item.style?.opacity !== 0
-    ).length;
-    const reached = drivingShifts.filter((d: any) => d.year < at).length;
-    ok(
-      `a transition at ${at}: the trail is every year before ${at}`,
-      white === reached,
-      `${white} vs ${reached}`
-    );
-  }
-
   console.log("\n# laying the chart out again");
-  for (const history of [0, Infinity]) {
-    // A second layout of the same nodes sets the trail's rules again, and
+  for (const last of [undefined, Infinity]) {
+    // A second layout of the same nodes sets the visibility rules again, and
     // must neither pile them up nor lose the moving label, whose drawing is
     // lent even after the keyframe's own label is silenced.
-    const node = await keyframes(drivingShifts.slice(0, 6), 1958.5, history)
+    const node = await keyframes(drivingShifts.slice(0, 6), 1958.5, last)
       .mark(circle({ r: 4 }).label("year"))
       .layer(time.transition())
       .resolve();
@@ -466,7 +507,7 @@ async function main(): Promise<void> {
     const first = shown(await node.toDisplayList(OPTIONS));
     const again = shown(await node.toDisplayList(OPTIONS));
     ok(
-      `history ${history}: the second layout shows what the first did`,
+      `history ${last}: the second layout shows what the first did`,
       first === again && first.includes("text:"),
       `${first} vs ${again}`
     );
@@ -516,6 +557,28 @@ async function main(): Promise<void> {
     /back and forth in time/
   );
   ok("a threaded line that goes back and forth in time", !why, why);
+  why = await throws(
+    async () =>
+      chart(drivingShifts)
+        .flow(
+          time.sequence({ by: "year", on: clockAt(1979), history: Infinity }),
+          scatter({ x: "miles", y: "gas" })
+        )
+        .mark(circle({ r: 4 }))
+        .toDisplayList(OPTIONS),
+    /no longer an option of the sequence/
+  );
+  ok("history on the sequence is gone", !why, why);
+  why = await throws(
+    () =>
+      threaded()
+        .layer(time.history([line({ along: "year" })]))
+        .toDisplayList(OPTIONS),
+    /a time.history around the line/
+  );
+  ok("a time.history around a threaded line", !why, why);
+  why = await throws(async () => time.history({ last: -1 }), /at least 0/);
+  ok("a negative last", !why, why);
   // A sequence's field has to be a number, with or without a clock of its own.
   const labelled = drivingShifts.map((d: any) => ({
     ...d,

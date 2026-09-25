@@ -153,24 +153,41 @@ domain, its duration and whether it is running, so `duration`, `loop`,
 
 ## Keeping the past on screen
 
-A sequence shows one keyframe at a time. `history` keeps earlier keyframes on
-screen as well. It is a length of time in the field's own units, and the
-default is `0`. At a playhead of `T`, the sequence shows every keyframe whose
-band of time overlaps the window from `T - history` to `T`. With
-`history: Infinity`, every year the playhead has reached stays on screen. A
-transition layered over the sequence changes which keyframes show, as
-[a moving mark with a trail](#a-moving-mark-with-a-trail) explains.
+A sequence shows one keyframe at a time. `time.history` keeps marks on screen
+after their own keyframe. `last` is a length of time in the field's own units,
+and the default is `Infinity`. At a playhead of `T`, a mark under
+`time.history({ last })` shows while its keyframe's band of time overlaps the
+window from `T - last` to `T`. The keyframe the playhead is in is always
+inside that window. With the default, every year the playhead has reached
+stays on screen.
 
-A `line` threaded through the keyframes is drawn over the same window. This is
-how the Animated Vega-Lite connected scatterplot draws its line in, one year at
-a time.
+`time.history` is an operator, so it has the two forms every operator has. In
+the flow, after the sequence, it keeps everything below it:
+
+```ts
+.flow(time.sequence({ by: "year" }), time.history({ last: 10 }), scatter(...))
+```
+
+Around marks, it keeps those marks only:
+
+```ts
+.mark(time.history({ last: 10 }, [circle({ r: 4 })]))
+```
+
+The two draw the same picture. `time.history([circle({ r: 4 })])` takes the
+default `last`.
+
+A `line` threaded through the keyframes is drawn over the window of the marks
+it connects. This is how the Animated Vega-Lite connected scatterplot draws its
+line in, one year at a time.
 
 ```ts
 const year = timer({ domain: [1956, 2010], duration: 54 * 200 });
 
 chart(drivingShifts)
   .flow(
-    time.sequence({ by: "year", on: year, history: Infinity }),
+    time.sequence({ by: "year", on: year }),
+    time.history(),
     scatter({ x: "miles", y: "gas" })
   )
   .mark(line({ along: "year", curve: "linear" }))
@@ -179,19 +196,24 @@ chart(drivingShifts)
 
 The line ends at the playhead. Between two years, the line is cut partway
 along the segment that joins them, so halfway through 1979 it ends halfway from
-the 1979 point to the 1980 point. That is where a `time.transition()` dot would
-be at the same moment. The cut is placed by time and not by distance on the
-page, so the tip takes 200 ms to cross each year, however far apart the two
-points are.
+the 1979 point to the 1980 point. That is where a moving dot would be at the
+same moment. The cut is placed by time and not by distance on the page, so the
+tip takes 200 ms to cross each year, however far apart the two points are.
 
-With a finite history, e.g., `history: 10`, the line keeps only the last ten
-years, so it is cut at both ends. With no history the window is a single
-moment, so a threaded line draws nothing.
+With `last: 10`, the line keeps only the last ten years, so it is cut at both
+ends. Without a `time.history`, each mark shows only during its own keyframe,
+so the window is a single moment and a threaded line draws nothing.
+
+When the marks a line connects are made of several parts, e.g., a
+`layer([...])` with a `time.history` around one of them, the line uses the
+window of the part that stays longest, the way the mark's box holds all of its
+parts. A `time.history` around the line itself is an error, because the line
+takes its window from the marks it connects.
 
 A line is threaded through the keyframes when its points belong to different
 keyframes of one sequence. A line whose points all sit inside one keyframe,
 e.g., a line through one year's countries, is not cut. It shows and hides with
-its keyframe.
+the marks it connects.
 
 The axes hold still here too. The chart makes room for the whole line when it
 is laid out, so drawing the line in moves nothing else.
@@ -259,9 +281,10 @@ two are measured against.
 
 ## A moving mark with a trail
 
-A sequence that keeps history can have a transition layered over it too. The
-transition draws one moving mark per run, as it does without history, and the
-keyframes it moves stay behind the mark as its trail.
+A moving mark and the trail it leaves are two layers of one mark. The trail is
+a `time.history` of the keyframe marks. The moving mark, the head, is the mark
+itself: on its own it shows during its own keyframe, and with
+`.transition({ update })` it glides from keyframe to keyframe instead.
 
 ```ts
 const year = timer({ domain: [1955, 2005], duration: 10000 });
@@ -269,54 +292,35 @@ const countries = ["China", "India", "United States", "Rwanda", "South Africa"];
 
 chart(gapminder.filter((d) => countries.includes(d.country)))
   .flow(
-    time.sequence({ by: "year", on: year, history: Infinity }),
+    time.sequence({ by: "year", on: year }),
     scatter({ by: "country", x: "fertility", y: "life_expect" })
   )
-  .mark(circle({ r: 4, fill: "country", opacity: 0.3 }).name("years"))
-  .layer(line({ along: "year", stroke: "country", strokeWidth: 1.5 }))
-  .layer(
-    chart(selectAll("years"))
-      .flow(group({ by: "country" }))
-      .mark(time.transition())
+  .mark(
+    layer([
+      time.history([circle({ r: 4, fill: "country", opacity: 0.3 })]),
+      circle({ r: 4, fill: "country" }).transition({
+        update: animation.tween(),
+      }),
+    ])
   )
+  .layer(line({ along: "year", stroke: "country", strokeWidth: 1.5 }))
   .render(container, { w: 500, h: 400, axes: true });
 ```
 
 Each country is a moving dot that leaves behind a faint dot for each year it
-has passed, with a line threaded through them. The transition is a tier of its
-own over the dots, `chart(selectAll("years"))`, because `.layer(...)` reads the
-tier just before it, and here that tier is the line. It is split by country, as
-the sugar would split it, and it reads the sequence's clock. The moving dot
-takes its size and color from the keyframes and its opacity from the
-transition, which is why it stands out from the faint dots.
+has reached, with a line threaded through them. The trail includes the year the
+playhead is in, and the head is drawn on top of it. The line is drawn over the
+window of the year marks, and a year mark stays as long as its trail does, so
+the line runs up to the playhead.
 
-Which keyframes show depends on the transition's curve, because each keyframe
-covers a span of time:
+The head is painted as the mark it moves is, so it is solid while the trail is
+faint. Its `.transition({ update })` is the chained spelling of a
+`time.transition()` over the year marks, and it moves only the mark it is
+chained on.
 
-- With a curve that glides, which is `"linear"`, `"catmullRom"` or the default
-  `"auto"`, the moving mark covers the time between two keyframes. So a
-  keyframe covers only its own moment, and it appears the moment the moving
-  mark leaves it. The trail has no gap behind the moving mark.
-- With `curve: "step"`, and with no transition at all, a keyframe covers its
-  whole band, from its own time up to the next keyframe's.
-
-At a playhead of `T`, a keyframe shows while its span overlaps the window from
-`T - history` to `T`. The one exception is the keyframe whose span contains
-`T`, because the moving mark stands in for it. `T` is the transition's own
-playhead, so a transition given its own clock with `at` draws its trail on that
-clock too, and the trail always ends where the moving mark is.
-
-With `history: 0` the window is the single moment `T`, so the only keyframe it
-can reach is the one the moving mark stands in for, and no keyframe shows. A
-transition without history therefore draws only the moving mark, as it always
-has. With a limited history, e.g., `history: 10`, a `"step"` trail keeps each
-old keyframe one step longer than a gliding trail does, because a step keyframe
-covers the time up to the next keyframe and a gliding one covers only its own
-moment.
-
-The line and the transition here both use the default curve, so both are
-smooth, with the years as their knots. They follow the same curve, and each
-moving dot stays on the tip of its line.
+The line and the head here both use the default curve, so both are smooth,
+with the years as their knots. They follow the same curve, and each moving dot
+stays on the tip of its line.
 
 ## What a frame costs
 
@@ -512,7 +516,12 @@ yet.
 | `playing`  | `boolean` | `true`  | Start the clock. `false` holds the chart still.            |
 | `at`       | `number`  | none    | Where the playhead starts, in the field's units.           |
 | `on`       | `Timer`   | own     | A clock to play on. Rules out the four options above.      |
-| `history`  | `number`  | `0`     | How far back keyframes stay shown, in the field's units.   |
+
+### `time.history(options?, marks?)`
+
+| Option | Type     | Default    | Meaning                                                          |
+| ------ | -------- | ---------- | ---------------------------------------------------------------- |
+| `last` | `number` | `Infinity` | How far back from the playhead marks stay, in the field's units. |
 
 ### `time.transition(options?)`
 
@@ -523,9 +532,9 @@ yet.
 | `curve`       | `"auto" \| "step" \| "linear" \| "catmullRom"` | `"auto"`   | How the run is read between keyframes.                          |
 | `ease`        | `(u: number) => number`                        | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
 | `fill`        | `string`                                       | keyframe's | Paint for the moving mark.                                      |
-| `stroke`      | `string`                                       | `fill`     | Outline color.                                                  |
-| `strokeWidth` | `number`                                       | `0`        | Outline width.                                                  |
-| `opacity`     | `number`                                       | `1`        | Opacity of the moving mark.                                     |
+| `stroke`      | `string`                                       | keyframe's | Outline color.                                                  |
+| `strokeWidth` | `number`                                       | keyframe's | Outline width.                                                  |
+| `opacity`     | `number`                                       | keyframe's | Opacity of the moving mark.                                     |
 
 ### `interpolate(rows, options)`
 
@@ -561,5 +570,7 @@ The chart is laid out once. The playhead is read while the chart is painted, so
 each tick of the clock changes attributes of marks already on the page and
 does not lay the chart out again. What does grow with the data is the number of
 marks on the page, because a sequence without a transition keeps every
-keyframe's marks there, even the hidden ones. So does a transition over a
-sequence that keeps history, because those marks are its trail.
+keyframe's marks there, even the hidden ones. Each of those marks reads the
+playhead on every tick to decide whether it shows, so a sequence over tens of
+thousands of rows costs more per tick than a filter that keeps only the rows
+on screen (#848).

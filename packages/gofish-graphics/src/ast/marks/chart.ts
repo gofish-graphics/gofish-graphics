@@ -33,6 +33,7 @@ import {
   resolveMarkResult,
   nameableMark,
   attachModifiers,
+  adoptChildTransition,
   tagCombinator,
   nameModifier,
   labelModifier,
@@ -1031,7 +1032,9 @@ export function layer<T>(
     (node as any).datum = d;
     return node;
   };
-  return tagCombinator(makeConstrainableMark(base), "layer", opts, marks);
+  const combinator = makeConstrainableMark(base);
+  adoptChildTransition(combinator, marks);
+  return tagCombinator(combinator, "layer", opts, marks);
 }
 
 function makePorterDuffCombinator(
@@ -1065,7 +1068,9 @@ function makePorterDuffCombinator(
       (node as any).datum = d;
       return node;
     };
-    return tagCombinator(nameableMark(base), irType, opts, marks);
+    const combinator = nameableMark(base);
+    adoptChildTransition(combinator, marks);
+    return tagCombinator(combinator, irType, opts, marks);
   }
   return fn;
 }

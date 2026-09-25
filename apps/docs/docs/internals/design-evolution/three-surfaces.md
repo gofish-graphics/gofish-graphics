@@ -84,7 +84,8 @@ combinator form described above all funnel through it. See
 [`.layer()`](/js/api/core/layer) for the current API.
 
 One export is deliberately not a bare name: `time`, the animation surface, is a
-single namespace object holding `time.sequence` and `time.transition`. The
+single namespace object holding `time.sequence`, `time.history` and
+`time.transition` (with the build-in's `time.stagger` and `time.parallel`). The
 animation design note's §9.1 decision is that temporal constructs get their own
 vocabulary rather than a `dir: "t"` on the spatial operators, and the namespace
 is that decision made visible at the import site — `spread` and `line` stay

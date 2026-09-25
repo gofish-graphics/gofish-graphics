@@ -40,12 +40,18 @@ import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
 import type { InterpolationMethod } from "../../interpolate";
 import {
+  historiesIn,
+  historyOf,
   keyframeOf,
-  keyframeRule,
+  lifetimeRule,
+  markHistory,
   markSequence,
   sequenceWindow,
   type SequenceWindow,
 } from "../../timeWindow";
+import type { Mark, Operator } from "../types";
+import type { GoFishRef } from "../_ref";
+import type { NameableMark } from "../withGoFish";
 import { buildIn, stagger, parallel } from "../../animation/timeArrangements";
 import { effectList, type Effect } from "../../animation/effects";
 import { checkSequencePhases } from "../../animation/transition";
@@ -72,15 +78,6 @@ export type SequenceOptions = {
    *  domain and its own playback, so `duration`, `loop`, `playing` and `at`
    *  are errors alongside it. */
   on?: Timer<number>;
-  /** How far back the sequence keeps showing, in the field's own units. At
-   *  playhead `T` it shows every keyframe whose band overlaps
-   *  `[T − history, T]`. Default 0: one keyframe at a time. `Infinity` keeps
-   *  every keyframe the playhead has reached (Animated Vega-Lite's `lte`
-   *  predicate), and a number in between keeps a trail that far back. A
-   *  `line` threaded through the keyframes is drawn over the same window, cut
-   *  at the exact point in data time (see `src/timeWindow.ts`). It says what
-   *  the chart shows, not how the clock runs, so it is allowed with `on`. */
-  history?: number;
 };
 
 /** The options a sequence's own clock is built from — the ones a supplied
@@ -105,13 +102,15 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * holds a frame, then jumps to the next one, exactly as Animated Vega-Lite's
  * band scale on time does.
  *
- * With `history`, the playhead is widened into a WINDOW, `[T − history, T]`,
- * and every keyframe whose band overlaps it is shown: `Infinity` keeps every
- * year reached so far on screen, which is how a connected scatterplot is drawn
- * in. The window is defined once (`src/timeWindow.ts`) and read by two things:
- * the keyframes, which show while their band overlaps it, and any `line`
- * threaded THROUGH the keyframes, which draws only the part of its run inside
- * it, cut at the exact point in data time (see `connect.tsx`).
+ * Marks that should stay on screen longer than their own band say so with
+ * `time.history({ last })`, in the flow after the sequence or around the
+ * marks. It widens the playhead into a WINDOW, `[T − last, T]`, for the marks
+ * under it, and they show while their keyframe's band overlaps it:
+ * `last: Infinity` keeps every year reached so far on screen, which is how a
+ * connected scatterplot is drawn in. The window is defined once
+ * (`src/timeWindow.ts`), and a `line` threaded THROUGH the keyframes reads it
+ * too: it draws only the part of its run inside the window of the marks it
+ * connects, cut at the exact point in data time (see `connect.tsx`).
  *
  * Which band is showing is a PAINT-time fact, like a transition's playhead and
  * for the same reason: every keyframe group is laid out either way — it has to
@@ -121,8 +120,9 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * the chart is laid out once however long it plays.
  *
  * A `time.transition()` layered over it draws one moving mark in place of the
- * keyframe marks it moves, which show only as its trail (`trailRule` in
- * `src/timeWindow.ts`).
+ * keyframe marks it moves, which then draw nothing of their own. The moving
+ * mark and a `time.history` of the same marks are separate layers of one
+ * mark, so the moving head is drawn over the trail rather than cut out of it.
  *
  * The operator also owns the chart's clock, and builds it lazily: the domain
  * is the field's own range, which is not known until the data has been split,
@@ -138,13 +138,13 @@ export function sequence(opts: SequenceOptions) {
   let keyframes: number[] = [];
   let clock: Timer<number> | undefined = opts.on;
 
-  const history = opts.history ?? 0;
-  if (!(history >= 0)) {
+  if ((opts as { history?: unknown }).history !== undefined) {
     throw new Error(
-      `[gofish] time.sequence({ by: "${opts.by}", history: ${history} }): ` +
-        `history is how far back the sequence keeps showing, in ` +
-        `"${opts.by}"'s own units, so it must be a number of at least 0 ` +
-        `(0 shows one keyframe at a time, Infinity everything so far).`
+      `[gofish] time.sequence({ by: "${opts.by}", history }): \`history\` is ` +
+        `no longer an option of the sequence. Say how long marks stay on ` +
+        `screen with time.history({ last }), in the flow after the sequence ` +
+        `(\`.flow(time.sequence({ by: "${opts.by}" }), time.history({ last }), ` +
+        `...)\`) or around the marks it keeps (\`time.history([circle(...)])\`).`
     );
   }
 
@@ -249,7 +249,7 @@ export function sequence(opts: SequenceOptions) {
    *  it, shared by its keyframes' visibility and any line threaded through
    *  the keyframes (which find it through the keyframes, see `keyframeOf`).
    *  It is also the owner of the keyframes' visibility rules. */
-  const shown = sequenceWindow(tier.knots, tier.clock, history);
+  const shown = sequenceWindow(tier.knots, tier.clock);
   (operator as any).__timeTier = tier;
   // The clock is a live JS signal, so a sequence cannot cross the Python
   // bridge; leaving the IR tag off makes the emitter treat it as opaque.
@@ -409,9 +409,10 @@ function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
  * keyframe owns everything after it, and a playhead before the run holds the
  * first — the same reading `interpolateStep` gives a run of values, which is
  * why a sequence alone and a `curve: "step"` transition draw the same picture.
- * With no history the window is the playhead itself, and overlapping it is
- * containing it; with history the window reaches back, and every band it
- * reaches shows.
+ * Under a `time.history({ last })` the window reaches `last` back from the
+ * playhead, and the marks under it show while their band overlaps it; the
+ * keyframe group itself has lifetime 0, where the window is the playhead
+ * itself and overlapping it is containing it.
  *
  * Which keyframe a group is comes from its key, the value of `by` the
  * operator stamped it with, read by `keyframeOf` through the Frame the groups
@@ -425,7 +426,9 @@ function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
  * changed is only when the question is asked. It is set on the keyframe group
  * alone: the marks INSIDE the group are what draw, and a visibility rule
  * covers its node's whole subtree, including the label `Text`s the label pass
- * adds to the group after this runs.
+ * adds to the group after this runs. Each `time.history` inside the keyframe
+ * gets a rule of its own under the same sequence, which is nearer the marks
+ * it wraps and so decides for them.
  */
 function hold(children: GoFishAST[], sequence: SequenceWindow): void {
   children.forEach((child) => {
@@ -433,10 +436,83 @@ function hold(children: GoFishAST[], sequence: SequenceWindow): void {
     // Every group's key is one of the keyframes' times: a value of the field
     // that is not a number is an error as the flow splits (`observe`).
     const keyframe = keyframeOf(child);
-    if (keyframe !== undefined) {
-      child.INTERNAL_visibleWhile(sequence, keyframeRule(keyframe));
+    if (keyframe === undefined) return;
+    child.INTERNAL_visibleWhile(sequence, lifetimeRule(keyframe, 0));
+    for (const node of historiesIn(child)) {
+      (node as GoFishNode).INTERNAL_visibleWhile(
+        sequence,
+        lifetimeRule(keyframe, historyOf(node)!)
+      );
     }
   });
+}
+
+export type HistoryOptions = {
+  /** How far back from the playhead the marks keep showing, in the
+   *  sequence field's own units. Default `Infinity`: every keyframe the
+   *  playhead has reached. */
+  last?: number;
+};
+
+/** The one operator both forms of `time.history` build: a Frame over its
+ *  children, recorded with its `last` (`markHistory`) for the enclosing
+ *  sequence to read. The flow form splits nothing: the marks below it are
+ *  drawn over all of its data, and it wraps them. */
+const historyOperator = createOperator<any, HistoryOptions>(
+  async (o, children) => {
+    const node = await Frame({}, children);
+    markHistory(node, o.last ?? Infinity);
+    return node;
+  },
+  {
+    split: (_o, d) => new Map([[0, d]]),
+    arrangement: { kind: "none" },
+  }
+);
+
+/**
+ * `time.history({ last })` — keep marks on screen after their keyframe's
+ * band, for `last` units of the sequence's field. It is a windowed `inits`
+ * over the enclosing `time.sequence`: at playhead `T` the marks under it show
+ * for every keyframe whose band overlaps `[T − last, T]`, the current
+ * keyframe included.
+ *
+ * Like every operator it has two forms, the same operator at different
+ * depths. In the flow (`.flow(time.sequence(...), time.history(), ...)`) it
+ * applies to everything below it; around marks (`time.history([circle()])`,
+ * `time.history({ last: 20 }, [circle()])`) it applies to those marks alone.
+ * A mark's lifetime is set by the nearest `time.history` above it, and a
+ * `line` threaded through the keyframes is drawn over the window of the marks
+ * it connects (see `src/timeWindow.ts`).
+ *
+ * Outside every `time.sequence` there is no playhead, so every mark shows
+ * anyway, and a `time.history` there changes nothing.
+ */
+export function history(opts?: HistoryOptions): Operator<any[], any[]>;
+export function history(children: (Mark<any> | GoFishRef)[]): NameableMark<any>;
+export function history(
+  opts: HistoryOptions,
+  children: (Mark<any> | GoFishRef)[]
+): NameableMark<any>;
+export function history(
+  optsOrChildren?: HistoryOptions | (Mark<any> | GoFishRef)[],
+  maybeChildren?: (Mark<any> | GoFishRef)[]
+): Operator<any[], any[]> | NameableMark<any> {
+  const [opts, children] = Array.isArray(optsOrChildren)
+    ? [{}, optsOrChildren]
+    : [optsOrChildren ?? {}, maybeChildren];
+  const last = opts.last ?? Infinity;
+  if (!(last >= 0)) {
+    throw new Error(
+      `[gofish] time.history({ last: ${last} }): \`last\` is how far back ` +
+        `from the playhead the marks keep showing, in the sequence field's ` +
+        `own units, so it must be a number of at least 0 (Infinity, the ` +
+        `default, keeps everything the playhead has reached).`
+    );
+  }
+  return children === undefined
+    ? (historyOperator({ last }) as Operator<any[], any[]>)
+    : historyOperator({ last }, children);
 }
 
 /** One keyframe's time value, read off the mark's own datum. */
@@ -453,4 +529,4 @@ function knotOf(child: GoFishAST, by: string): number {
   return value;
 }
 
-export const time = { sequence, transition, stagger, parallel };
+export const time = { sequence, history, transition, stagger, parallel };

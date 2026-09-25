@@ -89,6 +89,20 @@ export function setNodeTransition(
   records.set(node, record);
 }
 
+/**
+ * The `.transition(...)` specs chained on a mark or on the marks inside it: a
+ * mark's own (`__transition`), or those a combinator carried up from its
+ * children (`__transitions`, `adoptChildTransition` in `createOperator.ts`).
+ * The chart builder reads them to draw a mark's transition under a sequence.
+ */
+export function chainedTransitions(mark: unknown): MarkTransition[] {
+  const m = mark as
+    | { __transition?: MarkTransition; __transitions?: MarkTransition[] }
+    | undefined;
+  if (m?.__transitions !== undefined) return m.__transitions;
+  return m?.__transition === undefined ? [] : [m.__transition];
+}
+
 /** A mark's `.transition(spec)`, recorded on one node it produced. */
 export function recordMarkTransition(
   node: GoFishNode,

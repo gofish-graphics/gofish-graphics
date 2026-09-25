@@ -150,9 +150,9 @@ express all three without forcing one kind through another kind's defaults.
 
 A line drawn in over time can come from a scene animation or from a reveal,
 and the two mean different things even when they look alike. In a scene
-animation, `time.sequence({ by, history })` shows every keyframe from
-`T - history` to the playhead `T`, and a `line` threaded through those
-keyframes is cut at the edges of that window by data time. Each point of the
+animation, `time.history({ last })` under a `time.sequence({ by })` keeps
+every keyframe from `T - last` to the playhead `T`, and a `line` threaded
+through those keyframes is cut at the edges of that window by data time. Each point of the
 line sits at its keyframe's time, and time moves linearly along each segment,
 so the tip of the line is where a `time.transition()` dot would be at the same
 moment. A reveal with `stroke-dashoffset` paces the drawing by length along
@@ -637,13 +637,12 @@ One slice of §5's table exists: the `time` namespace
   hit-test targets included. A sequence sets the rule once per keyframe group,
   and it covers the group's whole subtree, including marks a later elaboration
   pass adds to it, such as `.label()` text. So a labeled keyframe shows its
-  labels only while it is held. When the sequence keeps history, a transition
-  sets a rule of its own on each leaf it moves, standing in for the sequence's,
-  so a keyframe it moves shows only as part of the trail the moving mark
-  leaves behind (#903, `trailRule` in `src/timeWindow.ts`). With no history that trail is always
-  empty, which is known at resolve, so the transition uses the structural rule
-  (`INTERNAL_emitNothing`, the same one `blank()` uses) and those keyframes
-  emit no display items and no hit-test targets.
+  labels only while it is held. The marks a transition moves use the
+  structural rule instead (`INTERNAL_emitNothing`, the same one `blank()`
+  uses): they emit no display items and no hit-test targets, because the
+  moving mark is their drawing. A trail behind the moving mark is a separate
+  layer of the same mark, a `time.history` of the keyframe marks (#903), so
+  head and tail are layered rather than coupled.
 - A transition moves **every leaf of a keyframe mark**, not just its top shape.
   The leaves are the mark's own subtree leaves plus what is attached to it from
   outside (its label `Text`s, recorded as `_attachments` by the label pass),

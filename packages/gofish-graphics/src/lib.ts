@@ -207,7 +207,11 @@ export { compose } from "./ast/marks/compose";
 // own surface — `time.sequence` / `time.transition` — rather than as two more
 // bare names beside the spatial operators.
 export { time } from "./ast/marks/time";
-export type { SequenceOptions, TransitionOptions } from "./ast/marks/time";
+export type {
+  SequenceOptions,
+  HistoryOptions,
+  TransitionOptions,
+} from "./ast/marks/time";
 // `animation.*` — WHAT changes as a mark enters (grow, fadeIn, wipe, …), the
 // partner of `time.*` (WHEN: stagger, parallel, sequence, transition). The
 // build-in prototype (draft PR #901); JS-only like the rest of `time`.

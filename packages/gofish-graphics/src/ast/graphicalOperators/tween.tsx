@@ -16,8 +16,12 @@
  * layout is affine in the interpolated quantities, which a fixed-domain
  * scatter is (see the animation design note, §4.1).
  *
- * The operands show only as the TRAIL the moving mark leaves behind
- * (`trailRule` in `src/timeWindow.ts`, applied by `showAsTrail`).
+ * WHAT MOVES. In each operand, the mark a `.transition({ update })` was
+ * chained on, or the operand itself when nothing in it chained one (the
+ * selection form, `time.transition()` over a bag of marks). The marks that
+ * move draw nothing of their own: the moving mark is their drawing. A trail
+ * behind it is not the transition's business. It is a `time.history` of
+ * another mark, layered with the moving one.
  *
  * WHEN THE MARK IS THERE. A line draws nothing past its endpoints, and a
  * tween, read on time, draws nothing outside its run. Each stretch between two
@@ -82,13 +86,8 @@ import {
   type KnotLocation,
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
-import {
-  keyframeOf,
-  sequenceWindow,
-  trailRule,
-  type SequenceWindow,
-} from "../../timeWindow";
 import { targetOf } from "./layer";
+import { nodeTransition } from "../../animation/transition";
 import {
   updateSlotOf,
   updateWarp,
@@ -149,26 +148,34 @@ function markLeaves(node: GoFishNode): GoFishNode[] {
   return [...own, ...(node._attachments ?? []).flatMap(markLeaves)];
 }
 
-/** Leave a leaf of the run's keyframe `index` to show only as part of the
- *  transition's trail (`trailRule` in `src/timeWindow.ts`), and draw nothing
- *  at all when the trail is always empty. `trailOf` gives the trail's window
- *  for the sequence the keyframe belongs to. The rule is set under that
- *  sequence, so for this leaf it stands in for the sequence's own rule on the
- *  keyframe group, and setting it again on another layout replaces it. */
-function showAsTrail(
-  leaf: GoFishNode,
-  index: number,
-  trailOf: (sequence: SequenceWindow) => SequenceWindow,
-  glides: boolean
-): void {
-  const sequence = keyframeOf(leaf)?.sequence;
-  const rule = trailRule(
-    sequence === undefined ? undefined : trailOf(sequence),
-    index,
-    glides
+/** The marks in `operand` a `.transition({ update })` was chained on, not
+ *  looking inside one once found. */
+function chainedIn(operand: GoFishNode): GoFishNode[] {
+  const record = nodeTransition(operand);
+  if (record?.kind === "mark" && record.update !== undefined) return [operand];
+  return operand.children.flatMap((child) =>
+    child instanceof GoFishNode ? chainedIn(child) : []
   );
-  if (rule === undefined) leaf.INTERNAL_emitNothing();
-  else leaf.INTERNAL_visibleWhile(sequence!, rule);
+}
+
+/**
+ * The mark a transition moves in one keyframe operand: the one mark in it a
+ * `.transition({ update })` was chained on, or the operand itself when
+ * nothing in it chained one. A run is one mark moving, so an operand with
+ * several chained marks is an error rather than a guess at which one.
+ */
+function movedIn(operand: GoFishNode | undefined): GoFishNode | undefined {
+  if (!(operand instanceof GoFishNode)) return operand;
+  const chained = chainedIn(operand);
+  if (chained.length > 1) {
+    throw new Error(
+      `[gofish] .transition({ update }): one keyframe mark holds ` +
+        `${chained.length} marks with a chained transition, and a transition ` +
+        `moves one mark per keyframe. Chain it on one of them, or split the ` +
+        `others into a flow of their own.`
+    );
+  }
+  return chained[0] ?? operand;
 }
 
 /** One channel of a track: its value where the run is located. */
@@ -191,9 +198,13 @@ type Track =
       y: Channel;
       w: Channel;
       h: Channel;
-      /** Each keyframe's own color channel, for the paint the leaf
-       *  inherits. */
-      colors: (MaybeValue<string> | undefined)[];
+      /** A copy of each keyframe's own drawing, lent by the keyframe, for
+       *  the paint the leaf inherits: the moving mark is painted as the mark
+       *  it moves is, unless the transition says otherwise. */
+      draws: ((
+        transform: Transform,
+        toPixel: ToPixel
+      ) => DisplayList.DisplayItem[])[];
     }
   | {
       kind: "rigid";
@@ -365,14 +376,15 @@ export const tween = createNodeOperator(
             ])
           );
           const order = knotOrder(knots);
-          const keyframes = order.map((i) => targetOf(children[i]));
+          const operands = order.map((i) => targetOf(children[i]));
+          /** The mark that moves in each keyframe, in time order. */
+          const keyframes = operands.map(movedIn);
 
           /** A leaf's placed box and local origin in this node's frame. The
-           *  keyframe mark itself is its operand, already placed; any other
-           *  leaf is read through a `ref` of the same kind, which is how an
-           *  operand is read. */
+           *  operand itself is already placed; any other leaf is read through
+           *  a `ref` of the same kind, which is how an operand is read. */
           const placeLeaf = (leaf: GoFishNode, k: number): Placeable => {
-            if (leaf === keyframes[k]) return placed[order[k]];
+            if (leaf === operands[k]) return placed[order[k]];
             const stand = new GoFishRef({ node: leaf });
             stand.parent = self;
             stand.resolveNames();
@@ -449,23 +461,6 @@ export const tween = createNodeOperator(
           /** A channel of this run, from each keyframe's value of it. */
           const channel = (values: number[]): Channel =>
             channelReader(runKnots, values, method);
-          const glides = method !== "step";
-          // The trail is read on the transition's own clock and run, keeping
-          // the history of the sequence its keyframes belong to, so it and
-          // the moving mark cannot disagree.
-          const trails = new Map<SequenceWindow, SequenceWindow>();
-          const trailOf = (sequence: SequenceWindow): SequenceWindow => {
-            let trail = trails.get(sequence);
-            if (trail === undefined) {
-              trail = sequenceWindow(
-                () => runKnots,
-                readPlayhead,
-                sequence.history
-              );
-              trails.set(sequence, trail);
-            }
-            return trail;
-          };
           const allBoxes: ReturnType<typeof bbox>[] = [];
           const tracks: Track[] = rows.map((leaves) => {
             const stands = leaves.map((leaf, k) => placeLeaf(leaf, k));
@@ -477,14 +472,13 @@ export const tween = createNodeOperator(
             const shape = leaves[0].type;
             const cx = boxes.map((b) => (b.minX + b.maxX) / 2);
             const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
-            // Every leaf the transition moves shows only as its trail, and a
-            // rigid leaf also lends its drawing to the moving mark, to be
-            // placed where the playhead is.
-            leaves.forEach((leaf, k) => showAsTrail(leaf, k, trailOf, glides));
-            const draws = RIGID_SHAPES.has(shape)
-              ? leaves.map((leaf) => leaf.INTERNAL_lendDrawing())
-              : undefined;
-            if (draws !== undefined) {
+            // Every leaf the transition moves draws nothing of its own: the
+            // moving mark is its drawing. Each lends that drawing to the
+            // moving mark: a rigid leaf's is placed where the playhead is, and
+            // a box leaf's gives the moving mark its paint.
+            leaves.forEach((leaf) => leaf.INTERNAL_emitNothing());
+            const draws = leaves.map((leaf) => leaf.INTERNAL_lendDrawing());
+            if (RIGID_SHAPES.has(shape)) {
               return {
                 kind: "rigid",
                 cx,
@@ -502,7 +496,7 @@ export const tween = createNodeOperator(
               y: channel(cy),
               w: channel(boxes.map(width)),
               h: channel(boxes.map(height)),
-              colors: leaves.map((leaf) => leaf.color),
+              draws,
             };
           });
           const run: Run = {
@@ -550,24 +544,28 @@ export const tween = createNodeOperator(
 
           /** A box leaf, lowered: its style resolved once per keyframe, so
            *  reading it at a playhead is an array index rather than a color
-           *  computation. */
+           *  computation. Each keyframe's style is the one its own drawing
+           *  has, with what the transition's options say over it. */
+          const declaredFill =
+            fill === undefined
+              ? undefined
+              : resolveColorChannel(fill as MaybeValue<string>, unitScale);
+          // A declared fill outlines the mark in the same paint unless a
+          // stroke is declared too, as a mark's own fill does.
+          const declared = lowerStyle({
+            fill: declaredFill,
+            stroke: declaredStroke ?? declaredFill,
+            strokeWidth,
+            opacity,
+          });
           const boxPainter = (
             track: Extract<Track, { kind: "box" }>
           ): Painter => {
             const { shape } = track;
-            const styles = track.colors.map((keyframeColor) => {
-              const resolvedFill =
-                resolveColorChannel(
-                  (fill ?? keyframeColor) as MaybeValue<string>,
-                  unitScale
-                ) ?? "black";
-              return lowerStyle({
-                fill: resolvedFill,
-                stroke: declaredStroke ?? resolvedFill,
-                strokeWidth: strokeWidth ?? 0,
-                opacity: opacity ?? 1,
-              });
-            });
+            const styles = track.draws.map((draw) => ({
+              ...draw({ translate: [tx, ty] }, toPixel)[0]?.style,
+              ...declared,
+            }));
             return (at, source) => {
               const x = track.x(at);
               const y = track.y(at);
