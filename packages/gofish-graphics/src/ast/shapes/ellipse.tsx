@@ -56,7 +56,8 @@ export const Ellipse = ({
       // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
       // (same array the closures below capture). See rect.tsx / _node passes.
       args: { dims },
-      color: fill,
+      // Used to seed the unit color scale. Prefer whichever channel is data-driven.
+      color: isValue(fill) ? fill : stroke,
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
