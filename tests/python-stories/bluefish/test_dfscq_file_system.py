@@ -131,18 +131,15 @@ def _action_label(box_name, slot_name, label_text):
 
 def _boxed_align(width, content):
     """A fixed-width slot with its content right/middle-anchored inside it
-    (Bluefish's <BoxedAlign alignment="centerRight">). The text is named
-    `slotText`, not `content`: a boxed-align sits inside `_with_min_width`'s
-    `content`, and a name resolves anywhere inside the constraining layer,
-    so a nested "content" would make that one ambiguous."""
+    (Bluefish's <BoxedAlign alignment="centerRight">)."""
     return layer(
         [
             rect(w=width, h=0, fill="transparent").name("slot"),
-            content.name("slotText"),
+            content.name("content"),
         ]
     ).constrain(
-        lambda slot, slotText: [
-            Constraint.align([slot, slotText], x="end", y="middle"),
+        lambda slot, content: [
+            Constraint.align([slot, content], x="end", y="middle"),
         ]
     )
 

@@ -152,16 +152,13 @@ const ActionLabel = (
 // A fixed-width slot with its content right/middle-anchored inside it
 // (Bluefish's <BoxedAlign alignment="centerRight">) — used for the
 // "activeTxn:" / "committedTxns:" left-column labels so every stage's
-// content column starts at the same x regardless of label length. The text
-// is named `slotText`, not `content`: a BoxedAlign sits inside
-// `withMinWidth`'s `content`, and a string name resolves anywhere inside the
-// constraining layer, so a nested "content" would make that one ambiguous.
+// content column starts at the same x regardless of label length.
 const BoxedAlign = (width: number, content: ReturnType<typeof text>) =>
   Layer([
     rect({ w: width, h: 0, fill: "transparent" }).name("slot"),
-    content.name("slotText"),
-  ]).constrain(({ slot, slotText }) => [
-    Constraint.align({ x: "end", y: "middle" }, [slot, slotText]),
+    content.name("content"),
+  ]).constrain(({ slot, content }) => [
+    Constraint.align({ x: "end", y: "middle" }, [slot, content]),
   ]);
 
 export const DFSCQ: StoryObj<Args> = {

@@ -1,13 +1,6 @@
 import { spread as gfSpread, Layer, Constraint } from "gofish-graphics";
 import type { Combiner, DepthCombiner, Alignment } from "./spec";
 
-// String names are visible across the whole enclosing createMark scope (not
-// just one layer), so each combiner call mints its own name prefix: a tree
-// applies the same combiner at every node, and a shared `__combine-0` would be
-// ambiguous.
-let combinerCalls = 0;
-const freshPrefix = (kind: string): string => `__${kind}${combinerCalls++}`;
-
 /**
  * `perDepth` builds a depth-indexed combiner: `fn(depth)` returns the `Combiner`
  * to use for the subtree at that depth. Use it (in a `parentChild`/`sibling`
@@ -92,9 +85,8 @@ export const distribute = (opts: DistributeOptions): Combiner => {
     // Wrap in a thin Layer (chainable .name()) rather than calling .name on
     // the child directly — the latter loses chainability for createMark-
     // produced NameableMarks.
-    const prefix = freshPrefix("distribute");
-    const named = children.map((c, i) => Layer([c]).name(`${prefix}-${i}`));
-    const refs = (c: any) => named.map((_, i) => c[`${prefix}-${i}`]);
+    const named = children.map((c, i) => Layer([c]).name(`__distribute-${i}`));
+    const refs = (c: any) => named.map((_, i) => c[`__distribute-${i}`]);
     const orthogonal = opts.dir === "x" ? "y" : "x";
     return Layer(named).constrain((c: any) => {
       const cs: any[] = [
@@ -158,9 +150,8 @@ const normalizeAxis = (a: CombineAxis | undefined) =>
  */
 export const combine = (opts: CombineOptions): Combiner => {
   const combiner: Combiner = (children: any[]) => {
-    const prefix = freshPrefix("combine");
-    const named = children.map((c, i) => Layer([c]).name(`${prefix}-${i}`));
-    const refs = (c: any) => named.map((_, i) => c[`${prefix}-${i}`]);
+    const named = children.map((c, i) => Layer([c]).name(`__combine-${i}`));
+    const refs = (c: any) => named.map((_, i) => c[`__combine-${i}`]);
     return Layer(named).constrain((c: any) => {
       const cs: any[] = [];
       for (const axis of ["x", "y"] as const) {
@@ -190,8 +181,8 @@ export const combine = (opts: CombineOptions): Combiner => {
           }
           cs.push(
             Constraint.nest({ [axis]: spec.pad ?? 0 }, [
-              c[`${prefix}-0`],
-              c[`${prefix}-1`],
+              c["__combine-0"],
+              c["__combine-1"],
             ])
           );
         }
@@ -213,6 +204,8 @@ export const combine = (opts: CombineOptions): Combiner => {
 
 export type NestOptions = { x?: number; y?: number };
 
+const OUTER_NAME = "__nest-outer";
+const INNER_NAME = "__nest-inner";
 
 /**
  * Nest helper: wraps `[outer, inner]` in a Layer with
@@ -222,8 +215,7 @@ export type NestOptions = { x?: number; y?: number };
  * inside outer on the same axes.
  *
  * Naming: the nest constraint references its children by name, so we wrap
- * each in a thin Layer with a fresh `__nestN-outer` / `__nestN-inner` name
- * (fresh per call: string names are scope-wide, see `freshPrefix`). We can't
+ * each in a thin Layer named `__nest-outer` / `__nest-inner`. We can't
  * just call `.name()` on the user's nodeMark because createMark's NameableMark
  * loses chainability after the first `.name()` (the result is a plain Mark
  * whose `.name` is the built-in function property). Wrapping in a fresh Layer
@@ -241,9 +233,6 @@ export const nest =
       );
     }
     const [outer, inner] = children;
-    const prefix = freshPrefix("nest");
-    const OUTER_NAME = `${prefix}-outer`;
-    const INNER_NAME = `${prefix}-inner`;
     const namedOuter = Layer([outer]).name(OUTER_NAME);
     const namedInner = Layer([inner]).name(INNER_NAME);
     return Layer([namedOuter, namedInner]).constrain((c: any) => [
