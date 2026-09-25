@@ -148,27 +148,23 @@ export type Showing = { window: TimeWindow; shown: boolean[] };
  * before the run. On a cyclic axis the bands are read on the unrolled run, so
  * the last keyframe's band runs up to the next cycle's first keyframe, and a
  * window that reaches back past the first keyframe reaches the end of the
- * cycle before.
+ * cycle before. `run` is the keyframes unrolled (`unrollRun`), which a caller
+ * that reads the same keyframes at many playheads works out once.
  */
 export function showingAt(
   keyframes: number[],
   t: number,
   last: number,
-  cycle?: Cycle
+  cycle?: Cycle,
+  run = unrollRun(keyframes, cycle)
 ): Showing {
   const window = windowAt(t, last, cycle);
-  const run = unrollRun(keyframes, cycle);
   const shown = keyframes.map(() => false);
   const to = sourceIndex(run.knots, window.to, "step");
   for (let k = sourceIndex(run.knots, window.from, "step"); k <= to; k++) {
     shown[run.index[k]] = true;
   }
   return { window, shown };
-}
-
-/** Whether keyframe `index` is among the ones `showing` shows. */
-export function shows(showing: Showing, index: number): boolean {
-  return showing.shown[index];
 }
 
 /**
@@ -224,20 +220,27 @@ function cutSegment(seg: PathSegment, u0: number, u1: number): PathSegment {
 }
 
 /** A run of keyframes on a clock: their times (sorted, distinct), the cycle
- *  of the time axis if it repeats, and what it is showing right now for a
- *  lifetime (a paint-time read of the clock). A sequence has one
+ *  of the time axis if it repeats, where a time sits among the keyframes (-1
+ *  for a time that is not one), what it is showing right now for a lifetime
+ *  (a paint-time read of the clock), and the rule for whether one keyframe
+ *  shows for a lifetime (read at paint). A sequence has one
  *  (`time.sequence(...)`), so two keyframes belong to the same sequence
  *  exactly when they share it. */
 export type SequenceWindow = {
   keyframes: () => number[];
   cycle: () => Cycle | undefined;
+  indexOf: (t: number) => number;
   showing: (last: number) => Showing;
+  rule: (index: number, last: number) => () => boolean;
 };
 
 /** The window of these keyframes on `clock`. What it shows is worked out
  *  once per playhead value and lifetime, and kept until the clock moves (or
  *  the keyframes change); the clock itself is read on every call, so a
- *  paint-time read still registers it. */
+ *  paint-time read still registers it. What only the keyframes decide (their
+ *  unrolled run, each one's place) is worked out once per set of keyframes,
+ *  and each keyframe's rule once per lifetime, shared by every mark that
+ *  asks. */
 export function sequenceWindow(
   keyframes: () => number[],
   clock: () => number,
@@ -245,24 +248,51 @@ export function sequenceWindow(
 ): SequenceWindow {
   let t: number | undefined;
   let times: number[] | undefined;
+  let run: { knots: number[]; index: number[] } | undefined;
+  let places: Map<number, number> | undefined;
   const cache = new Map<number, Showing>();
+  const rules = new Map<number, (() => boolean)[]>();
+  /** The keyframes now, with what only they decide worked out again when
+   *  they change. */
+  const current = (): number[] => {
+    const now = keyframes();
+    if (now !== times) {
+      times = now;
+      run = undefined;
+      places = undefined;
+      cache.clear();
+    }
+    return now;
+  };
+  const showing = (last: number): Showing => {
+    const now = clock();
+    const frames = current();
+    if (now !== t) {
+      t = now;
+      cache.clear();
+    }
+    let shown = cache.get(last);
+    if (shown === undefined) {
+      const axis = cycle();
+      run ??= unrollRun(frames, axis);
+      shown = showingAt(frames, now, last, axis, run);
+      cache.set(last, shown);
+    }
+    return shown;
+  };
   return {
     keyframes,
     cycle,
-    showing: (last) => {
-      const now = clock();
-      const current = keyframes();
-      if (now !== t || current !== times) {
-        t = now;
-        times = current;
-        cache.clear();
-      }
-      let showing = cache.get(last);
-      if (showing === undefined) {
-        showing = showingAt(current, now, last, cycle());
-        cache.set(last, showing);
-      }
-      return showing;
+    indexOf: (time) => {
+      const frames = current();
+      places ??= new Map(frames.map((k, i) => [k, i]));
+      return places.get(time) ?? -1;
+    },
+    showing,
+    rule: (index, last) => {
+      let byIndex = rules.get(last);
+      if (byIndex === undefined) rules.set(last, (byIndex = []));
+      return (byIndex[index] ??= () => showing(last).shown[index]);
     },
   };
 }
@@ -297,7 +327,7 @@ export function keyframeOf(node: TreeNode | undefined): Keyframe | undefined {
     const sequence = parent === undefined ? undefined : sequences.get(parent);
     if (sequence !== undefined) {
       const t = Number(n.key);
-      const index = sequence.keyframes().indexOf(t);
+      const index = sequence.indexOf(t);
       return index < 0 ? undefined : { t, index, sequence };
     }
     n = parent;
@@ -319,11 +349,11 @@ export function historyOf(node: object): number | undefined {
 }
 
 /** When the marks of a keyframe with lifetime `last` show: while the
- *  keyframe's band overlaps the window of that lifetime. Read at paint;
- *  captures only the keyframe. */
+ *  keyframe's band overlaps the window of that lifetime. Read at paint. One
+ *  rule per keyframe and lifetime, shared by every mark that asks
+ *  (`SequenceWindow.rule`). */
 export function lifetimeRule(keyframe: Keyframe, last: number): () => boolean {
-  const { index, sequence } = keyframe;
-  return () => shows(sequence.showing(last), index);
+  return keyframe.sequence.rule(keyframe.index, last);
 }
 
 /**

@@ -221,11 +221,10 @@ console.log("# the cut: edges of the run");
 
 console.log("# the keyframe record");
 {
-  const sequence: SequenceWindow = {
-    keyframes: () => [1999, 2000, 2001],
-    cycle: () => undefined,
-    showing: (last) => showingAt([1999, 2000, 2001], 2000, last),
-  };
+  const sequence: SequenceWindow = sequenceWindow(
+    () => [1999, 2000, 2001],
+    () => 2000
+  );
   const frame = { parent: undefined };
   markSequence(frame, sequence);
   const group = { parent: frame as unknown, key: "2000" as unknown };
@@ -330,11 +329,13 @@ console.log("# lifetimes: the nearest time.history, and the union of parts");
   const keyframe = node([both]);
   keyframe.key = "2000";
   const frame = node([keyframe]);
-  markSequence(frame, {
-    keyframes: () => [2000],
-    cycle: () => undefined,
-    showing: (last) => showingAt([2000], 2000, last),
-  });
+  markSequence(
+    frame,
+    sequenceWindow(
+      () => [2000],
+      () => 2000
+    )
+  );
   ok("a bare mark lives for its band", lifetimeOf(head) === 0);
   ok("a mark under a history lives as long as it says", lifetimeOf(dot) === 10);
   ok("the history itself", lifetimeOf(trail) === 10);
