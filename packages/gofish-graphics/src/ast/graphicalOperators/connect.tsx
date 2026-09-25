@@ -42,7 +42,7 @@ import {
   keyframeOf,
   lifetimeOf,
   lifetimeRule,
-  unrollRun,
+  unrollOrder,
   windowPath,
   type Keyframe,
   type SequenceWindow,
@@ -133,11 +133,13 @@ type TimeRun = {
   last: number;
 };
 
-/** Where `values` first stops going up: the index of the first value that is
- *  not greater than the one before it, or -1 when every value is. */
+/** Where `values` first stops moving the way its first step goes: the index
+ *  of the first value that does not go on up (or down) from the one before
+ *  it, or -1 when every value does. The one check that a run moves one way. */
 function firstStepBack(values: readonly number[]): number {
+  const sign = Math.sign(values[1] - values[0]);
   for (let i = 1; i < values.length; i++) {
-    if (!(values[i] > values[i - 1])) return i;
+    if (!(sign * values[i] > sign * values[i - 1])) return i;
   }
   return -1;
 }
@@ -163,9 +165,9 @@ function runKnots(
     if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
     numbers.push(v);
   }
+  if (firstStepBack(numbers) >= 0) return undefined;
   const sign = Math.sign(numbers[1] - numbers[0]);
-  const knots = numbers.map((v) => sign * v);
-  return firstStepBack(knots) < 0 ? knots : undefined;
+  return numbers.map((v) => sign * v);
 }
 
 export const connect = createNodeOperator(
@@ -324,7 +326,7 @@ export const connect = createNodeOperator(
           // it has to move through the keyframes one way in time. Forward or
           // backward are both fine: backward is the same path, and it is
           // built forward, from the keyframe earliest in time. It is built on
-          // its run laid out along the time axis (`unrollRun`): the run
+          // its run laid out along the time axis (`unrollOrder`): the run
           // itself, or on a cyclic axis the run repeated a cycle before and
           // after, which joins the last keyframe to the first across the
           // seam. The same mark stands at each of its copies: `points[j]` is
@@ -333,8 +335,7 @@ export const connect = createNodeOperator(
           let timeKnots: number[] | undefined;
           if (threadsTime) {
             const times = keyframes!.map((k) => k.t);
-            const sign = Math.sign(times[1] - times[0]);
-            const back = firstStepBack(times.map((t) => sign * t));
+            const back = firstStepBack(times);
             if (back >= 0) {
               throw new Error(
                 `[gofish] line(): this line threads the keyframes of a ` +
@@ -347,15 +348,9 @@ export const connect = createNodeOperator(
                   `add \`by\` to the operator that places the marks).`
               );
             }
-            const forward = times.map((_, i) =>
-              sign > 0 ? i : times.length - 1 - i
-            );
-            const unrolled = unrollRun(
-              forward.map((i) => times[i]),
-              keyframes![0].sequence.cycle()
-            );
-            points = unrolled.index.map((k) => forward[k]);
-            timeKnots = unrolled.knots;
+            const run = unrollOrder(times, keyframes![0].sequence.cycle());
+            points = run.operand;
+            timeKnots = run.knots;
           }
 
           // Forward σ (size slope) but not the anchored map: connect places

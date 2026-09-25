@@ -38,7 +38,7 @@ import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
-import { knotOrder, type InterpolationMethod } from "../../interpolate";
+import type { InterpolationMethod } from "../../interpolate";
 import {
   historiesIn,
   historyOf,
@@ -48,13 +48,13 @@ import {
   markSequence,
   sequenceWindow,
   foldTime,
+  unrollOrder,
   unrollRun,
   type Cycle,
   type SequenceWindow,
 } from "../../timeWindow";
 import type { Mark, Operator } from "../types";
-import { GoFishRef } from "../_ref";
-import { targetOf } from "../graphicalOperators/layer";
+import type { GoFishRef } from "../_ref";
 import type { NameableMark } from "../withGoFish";
 import { buildIn, stagger, parallel } from "../../animation/timeArrangements";
 import {
@@ -435,25 +435,16 @@ export const transition = createRelationalMark<TransitionOptions>(
       );
     }
     const onSequence = tier !== undefined && tier.by === by;
-    // On a cyclic axis the run is read unrolled (`unrollRun`): its keyframes
-    // repeated a cycle before and after, with the playhead folded into one
-    // cycle, so the mark glides across the seam from the last keyframe to
-    // the first, and a smooth curve has neighbors on both sides of it. Every
-    // copy of a keyframe is the same mark, read through a ref of its own.
+    // The run is read in time order, and on a cyclic axis unrolled
+    // (`unrollOrder`): its keyframes repeated a cycle before and after, with
+    // the playhead folded into one cycle, so the mark glides across the seam
+    // from the last keyframe to the first, and a smooth curve has neighbors
+    // on both sides of it. Every copy of a keyframe is the same operand.
     const cycle = onSequence ? tier!.cycle() : undefined;
-    const times = children.map((child) => knotOf(child, by));
-    const order = knotOrder(times);
-    const run = unrollRun(
-      order.map((i) => times[i]),
+    const run = unrollOrder(
+      children.map((child) => knotOf(child, by)),
       cycle
     );
-    const own = run.knots.length === times.length;
-    const operands = run.index.map((k, j) => {
-      const child = children[order[k]];
-      const copy = !own && (j < times.length || j >= 2 * times.length);
-      const target = copy ? targetOf(child) : undefined;
-      return target === undefined ? child : new GoFishRef({ node: target });
-    });
     // The keyframes the run's knots are drawn from, so the tween can tell a
     // gap in the run from a step between neighbors. Only the sequence's own
     // field has them; a transition along some other field, or with no
@@ -462,15 +453,13 @@ export const transition = createRelationalMark<TransitionOptions>(
       ? unrollRun(tier!.knots(), cycle).knots
       : undefined;
     const at =
-      cycle === undefined
-        ? playhead
-        : typeof playhead === "function"
-          ? () => foldTime(playhead(), cycle)
-          : foldTime(playhead, cycle);
+      typeof playhead === "function"
+        ? () => foldTime(playhead(), cycle)
+        : foldTime(playhead, cycle);
     return tween(
       {
         at,
-        knots: run.knots,
+        run,
         sequence,
         method: resolveMethod(o.curve),
         ease: o.ease,
@@ -481,7 +470,7 @@ export const transition = createRelationalMark<TransitionOptions>(
         strokeWidth: o.strokeWidth,
         opacity: o.opacity,
       },
-      operands
+      children
     );
   },
   { temporal: true }
@@ -557,7 +546,7 @@ export type HistoryOptions = {
 const historyOperator = createOperator<any, HistoryOptions>(
   async (o, children) => {
     const node = await Frame({}, children);
-    markHistory(node, o.last ?? Infinity);
+    markHistory(node, o.last!);
     return node;
   },
   {

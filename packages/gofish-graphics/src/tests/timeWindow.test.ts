@@ -22,6 +22,7 @@ import {
   sequenceWindow,
   showingAt,
   foldTime,
+  unrollOrder,
   unrollRun,
   windowAt,
   type Cycle,
@@ -394,6 +395,18 @@ console.log("# a cyclic time axis");
   ok(
     "a run on an axis that does not repeat is itself",
     JSON.stringify(unrollRun([1, 4, 8], undefined).knots) === "[1,4,8]"
+  );
+  // Marks in any order: which one stands at each point of the run.
+  const marks = unrollOrder([8, 1, 4], cycle);
+  ok(
+    "a run of marks sorts them in time and says which mark stands where",
+    JSON.stringify(marks.knots) === "[-9,-6,-2,1,4,8,11,14]" &&
+      JSON.stringify(marks.operand) === "[1,2,0,1,2,0,1,2]"
+  );
+  ok(
+    "and backward in time is the same run",
+    JSON.stringify(unrollOrder([8, 4, 1], undefined)) ===
+      '{"knots":[1,4,8],"operand":[2,1,0]}'
   );
   const shownAt = (T: number, last: number): number[] =>
     days.filter((_, i) => showingAt(days, T, last, cycle).shown[i]);

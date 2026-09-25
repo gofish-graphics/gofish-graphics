@@ -82,7 +82,6 @@ import { readLive } from "../../interaction/live";
 import { GEOMETRY_CHANNELS, setLiveItems } from "../../interaction/liveSlots";
 import {
   channelReader,
-  knotOrder,
   locate,
   sourceIndex,
   type InterpolationMethod,
@@ -105,8 +104,11 @@ export type TweenOptions = {
    *  frame in paint position. A plain number is a chart held still, and lowers to exactly the
    *  static item it would have lowered before. */
   at: (() => number) | number;
-  /** Each operand's time value, in operand order. */
-  knots: number[];
+  /** The run the mark travels (`unrollOrder`): `knots[j]` is the time of its
+   *  `j`-th point, in time order, and `operand[j]` the operand that stands
+   *  there. On a cyclic axis the run is unrolled over the cycle before and
+   *  after, so an operand stands at several points; it is laid out once. */
+  run: { knots: number[]; operand: number[] };
   /** Every keyframe of the sequence the knots are drawn from, in time order.
    *  The mark enters, moves and exits by which keyframes here have a row for
    *  it (see the header). Omitted, the run's own knots are the keyframes, so
@@ -319,7 +321,7 @@ export const tween = createNodeOperator(
   (
     {
       at: playhead,
-      knots,
+      run: { knots, operand },
       sequence,
       method,
       ease,
@@ -370,8 +372,7 @@ export const tween = createNodeOperator(
               axisScale(scales?.[1]?.sigma, undefined),
             ])
           );
-          const order = knotOrder(knots);
-          const operands = order.map((i) => targetOf(children[i]));
+          const operands = operand.map((i) => targetOf(children[i]));
           /** The marks that move in each keyframe, in time order. */
           const moved = operands.map((operand) => movedIn(operand, moves));
 
@@ -379,7 +380,7 @@ export const tween = createNodeOperator(
            *  operand itself is already placed; any other leaf is read through
            *  a `ref` of the same kind, which is how an operand is read. */
           const placeLeaf = (leaf: GoFishNode, k: number): Placeable => {
-            if (leaf === operands[k]) return placed[order[k]];
+            if (leaf === operands[k]) return placed[operand[k]];
             const stand = new GoFishRef({ node: leaf });
             stand.parent = self;
             stand.resolveNames();
@@ -458,10 +459,9 @@ export const tween = createNodeOperator(
             }
           }
 
-          const runKnots = order.map((i) => knots[i]);
           /** A channel of this run, from each keyframe's value of it. */
           const channel = (values: number[]): Channel =>
-            channelReader(runKnots, values, method);
+            channelReader(knots, values, method);
           const allBoxes: ReturnType<typeof bbox>[] = [];
           const tracks: Track[] = rows.map((leaves) => {
             const stands = leaves.map((leaf, k) => placeLeaf(leaf, k));
@@ -501,7 +501,7 @@ export const tween = createNodeOperator(
             };
           });
           const run: Run = {
-            knots: runKnots,
+            knots,
             tracks,
             slots: moved.map((marks) =>
               marks[0] === undefined ? undefined : updateSlotOf(marks[0])

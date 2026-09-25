@@ -37,7 +37,8 @@
  * every period. Two things here are all that knows it, and every reader goes
  * through them. `windowAt` folds the playhead into one cycle and measures the
  * distance back from it, and `unrollRun` lays a run of times out over the
- * cycle before, its own cycle and the start of the next. The window is read
+ * cycle before, its own cycle and the start of the next (`unrollOrder` for a
+ * run of marks, which says which mark stands at each point). The window is read
  * on the unrolled run, so a keyframe's band, a trail, a threaded line and a
  * moving mark all cross the seam from the last keyframe to the first the way
  * they cross any other step. On an axis that does not repeat both are the
@@ -49,7 +50,8 @@
  * threaded line the box of its whole run, so nothing above them sees the
  * window move.
  */
-import { locate, sourceIndex } from "./interpolate";
+import { knotOrder, locate, sourceIndex } from "./interpolate";
+import { mod } from "./util";
 import {
   type Path,
   type PathSegment,
@@ -70,7 +72,7 @@ export type Cycle = { origin: number; period: number };
 export function foldTime(t: number, cycle: Cycle | undefined): number {
   if (cycle === undefined) return t;
   const { origin, period } = cycle;
-  return origin + ((((t - origin) % period) + period) % period);
+  return origin + mod(t - origin, period);
 }
 
 /** The window a mark with lifetime `last` looks at, at playhead `t`:
@@ -111,6 +113,26 @@ export function unrollRun(
     ],
     index: [...own, ...own, ...after],
   };
+}
+
+/**
+ * A run of marks laid out along the time axis, whatever order they come in:
+ * `times[i]` is mark `i`'s time (distinct), and the run is those times sorted
+ * and unrolled (`unrollRun`). `knots[j]` is the run's `j`-th time, and
+ * `operand[j]` the mark that stands there. On a cyclic axis a mark stands at
+ * several points of the run; it is still one mark, laid out once. A threaded
+ * line and a transition both read their operands through this.
+ */
+export function unrollOrder(
+  times: number[],
+  cycle: Cycle | undefined
+): { knots: number[]; operand: number[] } {
+  const order = knotOrder(times);
+  const run = unrollRun(
+    order.map((i) => times[i]),
+    cycle
+  );
+  return { knots: run.knots, operand: run.index.map((k) => order[k]) };
 }
 
 /** What a sequence shows at one playhead, for one lifetime: the window, and

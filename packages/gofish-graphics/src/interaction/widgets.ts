@@ -31,7 +31,7 @@ import { Constraint } from "../ast/constraints";
 import { nameableMark, type NameableMark } from "../ast/marks/createOperator";
 import { resolveMarkResult } from "../ast/marks/chartBuilder";
 import type { Mark } from "../ast/types";
-import { clamp } from "../util";
+import { clamp, mod } from "../util";
 import { click, drag } from "./inputs";
 import type { Hit, SvgPoint } from "./types";
 
@@ -133,9 +133,6 @@ const READOUT_FONT = 12;
  *  label comes to the track. Measuring the text properly happens at layout,
  *  inside the text node. */
 const READOUT_SLOT_W = 0.62 * READOUT_FONT;
-
-/** Euclidean modulo — `a % n` with the sign of `n`, so a negative drag wraps. */
-const mod = (a: number, n: number): number => (n === 0 ? 0 : ((a % n) + n) % n);
 
 /**
  * `slider({ value, onInput, domain, step, w, wrap, format })` — a track with a
