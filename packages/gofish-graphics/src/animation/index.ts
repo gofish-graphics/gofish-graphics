@@ -50,18 +50,7 @@ export const animation = {
   tween,
 };
 
-export type {
-  Effect,
-  EffectOptions,
-  WipeOptions,
-  WipeSide,
-  Ease,
-  TweenEffect,
-} from "./effects";
-export type {
-  MarkTransition,
-  OperatorTransition,
-  TimeArrangement,
-} from "./transition";
+export type { Effect, EffectOptions, WipeOptions, Ease } from "./effects";
+export type { MarkTransition, OperatorTransition } from "./transition";
 export type { StaggerOptions } from "./timeArrangements";
 export type { BuildClockOptions } from "./install";

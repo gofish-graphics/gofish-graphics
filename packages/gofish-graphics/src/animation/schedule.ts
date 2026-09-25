@@ -54,7 +54,7 @@ export type Clip<T> =
   | { kind: "group"; arrangement: Arrangement; groups: Clip<T>[][] };
 
 /** One leaf, placed on t. */
-export type Scheduled<T> = { start: number; duration: number; payload: T };
+type Scheduled<T> = { start: number; payload: T };
 
 export type Schedule<T> = {
   /** When the last leaf ends: the length of the whole build. */
@@ -82,7 +82,7 @@ export function solveSchedule<T>(clip: Clip<T>): Schedule<T> {
   const items: Scheduled<T>[] = [];
   const place = (c: Clip<T>, start: number): void => {
     if (c.kind === "leaf") {
-      items.push({ start, duration: c.duration, payload: c.payload });
+      items.push({ start, payload: c.payload });
       return;
     }
     durationOf(c);

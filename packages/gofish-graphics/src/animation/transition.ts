@@ -62,7 +62,7 @@ export type OperatorTransition = {
  *  between two keyframes of a sequence (`time.transition()` reads it), and as
  *  they leave. Which phases can play depends on the chart's clock, so they
  *  are checked where that is known (`checkPhases`). */
-export type NodeTransition =
+type NodeTransition =
   | {
       kind: "mark";
       enter?: Effect[];

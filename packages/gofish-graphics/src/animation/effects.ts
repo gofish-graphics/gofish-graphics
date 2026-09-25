@@ -66,7 +66,7 @@ export type EffectOptions = {
   ease?: Ease;
 };
 
-export type WipeSide = "bottom" | "top" | "left" | "right";
+type WipeSide = "bottom" | "top" | "left" | "right";
 
 export type WipeOptions = EffectOptions & {
   /** The side the reveal starts from, on screen. Default `"bottom"`. */
@@ -75,13 +75,7 @@ export type WipeOptions = EffectOptions & {
   shape?: "circle";
 };
 
-export type EffectKind =
-  | "grow"
-  | "shrink"
-  | "fadeIn"
-  | "fadeOut"
-  | "appear"
-  | "wipe";
+type EffectKind = "grow" | "shrink" | "fadeIn" | "fadeOut" | "appear" | "wipe";
 
 /** What an effect does to a mark at a progress `p` in [0, 1]. */
 type Look = {

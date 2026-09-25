@@ -61,7 +61,7 @@ export type StaggerOptions = {
   from?: StaggerFrom;
 };
 
-export type TimeArrangementOperator = Operator<any, any> & TimeArrangement;
+type TimeArrangementOperator = Operator<any, any> & TimeArrangement;
 
 function timeOperator(spec: ArrangementSpec): TimeArrangementOperator {
   const operator = createOperator<any, ArrangementSpec>(

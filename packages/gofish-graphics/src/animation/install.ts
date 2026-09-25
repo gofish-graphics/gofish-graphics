@@ -90,10 +90,9 @@ export function installBuildIn(
     playing: options.playing ?? true,
   });
   if (options.at !== undefined) clock.set(options.at);
-  // The playhead the marks read, per frame, at paint.
-  const playhead = (): number => clock();
   for (const { start, payload } of schedule.items) {
-    const rule = makeRule(playhead, start, payload.effects);
+    // The marks read the clock per frame, at paint.
+    const rule = makeRule(clock, start, payload.effects);
     for (const target of payload.targets) {
       for (const leaf of leavesOf(target)) {
         for (const { effect } of payload.effects) effect.fits(leaf.type);

@@ -37,10 +37,10 @@ import {
 } from "./effects";
 
 /** What lowering knows about where a node was drawn. */
-export type LowerFrame = { transform?: Transform; toPixel: ToPixel };
+type LowerFrame = { transform?: Transform; toPixel: ToPixel };
 
-/** A node's paint-time animation: its effects, when they start, and the
- *  clock that says where the playhead is. */
+/** A node's paint-time animation: its effects, played from their start on
+ *  the build clock. */
 export type AnimationRule = {
   /** Rewrite `items` (lowered at rest) to the playhead's current state and
    *  register the per-frame patches. `role` is "host" for the animated
@@ -51,16 +51,13 @@ export type AnimationRule = {
     node: GoFishNode,
     role: "host" | "rider"
   ): void;
-  /** When the effects start, in build-clock ms. */
-  readonly start: number;
-  readonly effects: TimedEffect[];
 };
 
 /** Which of a node's axes carry a data SIZE: the ones a grow collapses. Read
  *  off the node itself: an axis whose resolved space is a baseline magnitude
  *  or a difference, or whose size channel is data-driven (a rect with a data
  *  `x` and `w` is POSITION on x, and still grows from its start). */
-export function sizeAxesOf(node: GoFishNode): [boolean, boolean] {
+function sizeAxesOf(node: GoFishNode): [boolean, boolean] {
   const dims = node.args?.dims as { size?: unknown }[] | undefined;
   const axis = (a: 0 | 1): boolean => {
     const space = node._underlyingSpace?.[a];
@@ -85,8 +82,6 @@ export function makeRule(
     return t < start ? -Infinity : t >= end ? Infinity : t;
   };
   return {
-    start,
-    effects,
     paint(items, { transform, toPixel }, node, role) {
       if (items.length === 0) return;
       // The rest state, kept apart from the items the renderer holds, which
