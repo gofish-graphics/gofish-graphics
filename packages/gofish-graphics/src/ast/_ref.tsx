@@ -260,9 +260,10 @@ export class GoFishRef {
       current = current.parent;
     }
 
-    // Compute transform from LCA down to this ref's parent: the ref's own
-    // translate is what this computes, so it is not part of the path, and a
-    // ref laid out again lands where it did the first time (#928).
+    // Compute transform from LCA down to this ref's parent. The ref's own
+    // translate is what this method sets, so it must not be read here:
+    // including the value from a previous layout would make a second layout
+    // subtract the first result and land at 0 (#928).
     const downwardTranslate: [number, number] = [0, 0];
     current = this.parent;
     while (current && current !== lca) {

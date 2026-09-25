@@ -777,11 +777,9 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
       w: { ...ch.num("Width."), default: 0 },
       h: { ...ch.num("Height."), default: 0 },
-      rx: { type: t.number, doc: "Corner radius, x." },
-      ry: { type: t.number, doc: "Corner radius, y." },
-      fill: ch.color("Fill color. A blank draws nothing unless given one."),
-      stroke: { type: t.string, doc: "Stroke color." },
-      strokeWidth: { type: t.number, doc: "Stroke width in pixels." },
+      fill: ch.color(
+        "Fill color. A blank never paints; `fill` only seeds the shared color scale."
+      ),
       debug: {
         type: t.boolean,
         doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",

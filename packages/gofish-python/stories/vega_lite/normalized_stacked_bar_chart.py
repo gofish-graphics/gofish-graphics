@@ -31,7 +31,7 @@ def default(data=None, w=500, h=300):
     if data is None:
         data = load_data()
     return (
-        chart(data, {"color": _COLOR})
+        chart(data, color=_COLOR)
         .flow(
             derive(_recode_sex),
             spread(by="age", dir="x"),

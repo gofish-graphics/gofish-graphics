@@ -52,10 +52,6 @@ chart(data, coord=clock()) \
     .render(w=400, h=300)
 ```
 
-`coord` may also be passed as a positional options dict —
-`chart(data, {"coord": clock()})` — but the keyword form above is preferred in
-Python.
-
 ## Coordinate Mapping
 
 | Cartesian | Clock                               |

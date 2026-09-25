@@ -873,21 +873,18 @@ export const ribbon = createRelationalMark<RibbonOptions>(
  * `blank()` — an invisible positioning guide. It takes part in layout, carries
  * a datum, anchors refs (`selectAll`) and seeds the color scale exactly as a
  * `rect` does, and it emits NOTHING to the display list: no SVG element, no
- * hit-test entry. That is unconditional — `fill`/`stroke`/`rx`/`ry` reach the
- * color scale and the layout only; there is no option that makes a blank
- * paint. See `Blank` in `shapes/rect.tsx` for how the rule is enforced.
+ * hit-test entry. That is unconditional — `fill` reaches the color scale only,
+ * there is no option that makes a blank paint, and so it takes no paint-only
+ * options (stroke, corner radius). See `Blank` in `shapes/rect.tsx` for how
+ * the rule is enforced.
  */
 export function blank<T extends Record<string, any>>({
   emX,
   emY,
   w = 0,
   h = 0,
-  rx,
-  ry,
   fill,
   debug,
-  stroke,
-  strokeWidth,
 }: {
   emX?: boolean;
   emY?: boolean;
@@ -897,11 +894,7 @@ export function blank<T extends Record<string, any>>({
   // `field(...)` pipeline (e.g. `field("count").sum()`) evaluates identically.
   w?: number | (keyof T & string) | Value<number> | FieldExpr;
   h?: number | (keyof T & string) | Value<number> | FieldExpr;
-  rx?: number;
-  ry?: number;
   fill?: string | (keyof T & string);
-  stroke?: string;
-  strokeWidth?: number;
   debug?: boolean;
 } = {}): Mark<T | T[] | { item: T | T[]; key: number | string }> {
   // A rect's dims/layout/datum with rect's paint removed (and `{ type:
@@ -911,12 +904,8 @@ export function blank<T extends Record<string, any>>({
     emY,
     w,
     h,
-    rx,
-    ry,
     fill,
     debug,
-    stroke,
-    strokeWidth,
   });
 }
 

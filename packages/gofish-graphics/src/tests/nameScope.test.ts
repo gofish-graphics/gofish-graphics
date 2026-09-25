@@ -424,7 +424,33 @@ async function main() {
     check("a missing name is undefined: defaults and optional checks work", ok, detail);
   }
 
-  // 11. A sequenced tier names its mark so its transitions can read the marks
+  // 11. A ref laid out again lands in the same place (#928). The ref's
+  //     translate is recomputed on every layout, so the walk from the ref
+  //     up to the common ancestor must not include the ref's own translate
+  //     from the previous layout.
+  {
+    const node = gf.layer([
+      gf.spread({ dir: "x", spacing: 60 }, [
+        gf.rect({ w: 20, h: 20 }).name("a"),
+        gf.rect({ w: 20, h: 20 }).name("b"),
+      ]),
+      gf.arrow({}, [gf.ref("a"), gf.ref("b")]),
+    ]);
+    const paths: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const out = await node.toDisplayList({ w: 300, h: 100 });
+      paths.push(
+        JSON.stringify(out.items.filter((it: any) => it.kind === "path"))
+      );
+    }
+    check(
+      "a ref laid out three times draws the same connector each time",
+      paths[0] !== "[]" && paths[1] === paths[0] && paths[2] === paths[0],
+      paths.join("\n")
+    );
+  }
+
+  // 12. A sequenced tier names its mark so its transitions can read the marks
   //     back. A name the mark already has, a string before other modifiers or
   //     a createName token, is the one it keeps: selectAll, ref, and the
   //     transitions all find the mark by it.

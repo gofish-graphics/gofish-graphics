@@ -16,7 +16,7 @@ If you want to start contributing to the codebase itself, **try the "good first 
 
 ### Installations
 
-[Ensure pnpm is installed](https://pnpm.io/installation), then build to setup the gofish-graphics package.
+[Ensure pnpm is installed](https://pnpm.io/installation), then build to setup the gofish-graphics package. The repo pins its pnpm version in the `packageManager` field of the root `package.json`. If your `pnpm` comes from corepack, you need corepack 0.34.5 or newer to run that version (`npm install -g corepack@latest`); older corepack releases fail with `Cannot find module .../bin/pnpm.cjs`.
 
 ```bash
 pnpm build
