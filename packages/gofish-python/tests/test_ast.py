@@ -320,7 +320,7 @@ class TestNewMarks:
     def test_scatter_dims_and_theta_dir(self):
         """scatter takes `dims`; spread's `dir` passes a coord name through."""
         ir = (
-            chart([{"b": 1, "d": 2}], {"coord": clock()})
+            chart([{"b": 1, "d": 2}], coord=clock())
             .flow(
                 scatter(dims={"theta": "b", "r": {"min": "d", "max": "d"}}),
                 spread(dir="theta"),
