@@ -25,6 +25,7 @@ import { categoryBrands, everyYearBrands } from "../data/categoryBrands";
 const {
   animation,
   chart,
+  clock,
   derive,
   field,
   rect,
@@ -530,6 +531,41 @@ console.log("# the race: chained .transition() vs .layer(time.transition())");
       localAt(36, 0.25) === 0,
     `${at.get(last)} vs ${lastTarget.get(last)}`
   );
+}
+
+console.log("# a grow or a wipe on a pie wedge fails loudly");
+{
+  // A rect in polar coordinates is drawn as a path, which a grow or a wipe
+  // cannot reshape; it must not silently pop in.
+  const pie = (effect: unknown) =>
+    chart(alphabet.slice(0, 4), { coord: clock() })
+      .flow(stack({ by: "letter", dir: "x" }))
+      .mark(rect({ w: "frequency", fill: "letter" }).transition({ enter: effect }))
+      .toDisplayList({ w: 200, h: 200, playing: false, at: 0 });
+  for (const [name, effect] of [
+    ["grow", animation.grow()],
+    ["shrink", animation.shrink()],
+    ["wipe", animation.wipe({ from: "left" })],
+  ] as const) {
+    let message = "";
+    try {
+      await pie(effect);
+    } catch (e) {
+      message = String((e as Error).message);
+    }
+    ok(
+      `${name} on a wedge throws, naming the path and fadeIn`,
+      message.includes('"path"') && message.includes("fadeIn"),
+      message || "no error"
+    );
+  }
+  let fadeError: unknown;
+  try {
+    await pie(animation.fadeIn());
+  } catch (e) {
+    fadeError = e;
+  }
+  ok("fadeIn on a wedge draws", fadeError === undefined, String(fadeError));
 }
 
 console.log("# a re-render lands on the build's final frame (#914)");

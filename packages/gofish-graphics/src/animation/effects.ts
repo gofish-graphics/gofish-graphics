@@ -15,7 +15,6 @@
  */
 import type { DisplayList } from "gofish-ir";
 import { fadeItem } from "../ast/displayList/lowerHelpers";
-import { BOX_SHAPES } from "../ast/graphicalOperators/tween";
 
 /** A time warp `u -> u'` on [0, 1], or the name of a standard one. */
 export type Ease =
@@ -90,9 +89,11 @@ type Look = {
   rider(p: number): number;
   /** The fields `host` can change on `item`: what the paint tier patches. */
   channels(item: DisplayList.DisplayItem): readonly string[];
-  /** Throw unless the effect can draw a mark of this node type. Checked when
-   *  the build is installed, so a mismatch fails before anything paints. */
-  fits(nodeType: string): void;
+  /** Throw unless the effect can draw an item of this kind. Checked on the
+   *  mark's own items as it is lowered, which is where the kind is known (a
+   *  rect in polar coordinates lowers to a path), so a mismatch fails before
+   *  anything paints. */
+  fits(kind: DisplayList.DisplayItem["kind"]): void;
 };
 
 /** One effect: what it does, and its timing options as written (validated
@@ -182,15 +183,25 @@ const collapsing = (kind: "grow" | "shrink"): Look => ({
   host: collapse,
   rider: waits,
   channels: boxFieldsOf,
-  fits: (nodeType) => {
-    if (BOX_SHAPES.has(nodeType)) return;
+  fits: (item) => {
+    if (BOX_FIELDS[item] !== undefined) return;
     throw new Error(
-      `[gofish] animation.${kind}(): collapses a rect or an ellipse ` +
-        `toward its baseline, and this mark is a "${nodeType}". Use ` +
-        `animation.fadeIn() or animation.appear() for it.`
+      `[gofish] animation.${kind}(): collapses a box-shaped mark (a rect ` +
+        `or an ellipse) toward its baseline, and this mark ${drawnAs(item)}. ` +
+        `Use animation.fadeIn() or animation.appear() for it.`
     );
   },
 });
+
+/** How a mark that lowered to an item of `kind` is described in a message.
+ *  A path is named because the mark usually was not written as one: a rect
+ *  or an ellipse in polar or other curved coordinates is drawn as a path. */
+const drawnAs = (kind: string): string =>
+  `is drawn as a "${kind}"` +
+  (kind === "path"
+    ? ` (a rect or an ellipse in polar or other curved coordinates is ` +
+      `drawn as a path)`
+    : "");
 
 /** Multiply the mark's opacity by `p`; its rider fades with it. */
 const fading: Look = {
@@ -209,10 +220,9 @@ const revealing = (
   host: (item, p) => reveal(item, p, from, shape),
   rider: waits,
   channels: boxFieldsOf,
-  fits: (nodeType) => {
+  fits: (item) => {
     const circle = shape === "circle";
-    const boxy = nodeType === "rect" || nodeType === "blank";
-    if (circle ? nodeType === "ellipse" : boxy) return;
+    if (item === (circle ? "ellipse" : "rect")) return;
     throw new Error(
       `[gofish] animation.wipe(${
         circle ? `{ shape: "circle" }` : `{ from: "${from}" }`
@@ -220,8 +230,9 @@ const revealing = (
         (circle
           ? `a circular reveal is built for circles (it grows the radius)`
           : `a side wipe is built for rects (it clips the box)`) +
-        `, and this mark is a "${nodeType}". A general clip needs a clip ` +
-        `item in the display list, which this prototype does not have.`
+        `, and this mark ${drawnAs(item)}. Use animation.fadeIn() or ` +
+        `animation.appear() for it. A general clip needs a clip item in the ` +
+        `display list, which this prototype does not have.`
     );
   },
 });

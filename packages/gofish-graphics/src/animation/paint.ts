@@ -84,6 +84,14 @@ export function makeRule(
   return {
     paint(items, { transform, toPixel }, node, role) {
       if (items.length === 0) return;
+      // The effects are checked against the items the mark lowered to, which
+      // lowering alone knows: a rect in polar coordinates is drawn as a path,
+      // and a grow or a wipe cannot reshape one.
+      if (role === "host") {
+        for (const item of items) {
+          for (const { effect } of effects) effect.fits(item.kind);
+        }
+      }
       // The rest state, kept apart from the items the renderer holds, which
       // are rewritten to the current state below.
       const rest = items.map((item) => ({
