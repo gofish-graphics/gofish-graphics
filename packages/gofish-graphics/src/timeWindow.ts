@@ -33,6 +33,16 @@
  *   marks it is made of (`lifetimeOf`), the way its box is the union of their
  *   boxes.
  *
+ * The time axis may be a CYCLE (`time.sequence({ cyclic })`): time repeats
+ * every period. Two things here are all that knows it, and every reader goes
+ * through them. `windowAt` folds the playhead into one cycle and measures the
+ * distance back from it, and `unrollRun` lays a run of times out over the
+ * cycle before, its own cycle and the start of the next. The window is read
+ * on the unrolled run, so a keyframe's band, a trail, a threaded line and a
+ * moving mark all cross the seam from the last keyframe to the first the way
+ * they cross any other step. On an axis that does not repeat both are the
+ * identity.
+ *
  * Every read happens at PAINT time, like every read of the playhead, and a
  * sequence works out what it shows once per playhead value and lifetime
  * (`SequenceWindow.showing`). Layout places every keyframe and gives a
@@ -51,16 +61,61 @@ import {
 /** A stretch of time, closed at both ends, in the sequence field's units. */
 export type TimeWindow = { from: number; to: number };
 
+/** A cyclic time axis (`time.sequence({ cyclic })`): time repeats every
+ *  `period`, one cycle starting at `origin`, the first keyframe. */
+export type Cycle = { origin: number; period: number };
+
+/** Time `t` in the one cycle that starts at the first keyframe: `t` itself on
+ *  an axis that does not repeat. */
+export function foldTime(t: number, cycle: Cycle | undefined): number {
+  if (cycle === undefined) return t;
+  const { origin, period } = cycle;
+  return origin + ((((t - origin) % period) + period) % period);
+}
+
 /** The window a mark with lifetime `last` looks at, at playhead `t`:
- *  `[t − last, t]`. The one place a distance back in time from the playhead
- *  is measured, which every reader goes through (`showingAt`). */
-export function windowAt(t: number, last: number): TimeWindow {
-  return { from: t - last, to: t };
+ *  `[t − last, t]`. On a cyclic axis the playhead is folded into one cycle
+ *  and the window reaches back at most one period, so it is measured on the
+ *  run unrolled one period back (`unrollRun`). The one place a distance back
+ *  in time from the playhead is measured, which every reader goes through. */
+export function windowAt(t: number, last: number, cycle?: Cycle): TimeWindow {
+  if (cycle === undefined) return { from: t - last, to: t };
+  const to = foldTime(t, cycle);
+  return { from: to - Math.min(last, cycle.period), to };
+}
+
+/**
+ * A run of times (sorted, distinct) laid out along the time axis: the run
+ * itself on an axis that does not repeat, and on a cyclic one the run
+ * unrolled over the cycle before it, its own cycle, and the first two times
+ * of the cycle after it. That covers every window (`windowAt`) and every
+ * playhead folded into one cycle, gives the step from the last time back to
+ * the first (the seam) its own piece, and gives a smooth curve through the
+ * run neighbors on both sides of the seam. `index[k]` is the run position
+ * `knots[k]` repeats.
+ */
+export function unrollRun(
+  times: number[],
+  cycle: Cycle | undefined
+): { knots: number[]; index: number[] } {
+  const n = times.length;
+  const own = times.map((_, i) => i);
+  if (cycle === undefined || n === 0) return { knots: times, index: own };
+  const { period } = cycle;
+  const after = own.slice(0, Math.min(2, n));
+  return {
+    knots: [
+      ...times.map((t) => t - period),
+      ...times,
+      ...after.map((i) => times[i] + period),
+    ],
+    index: [...own, ...own, ...after],
+  };
 }
 
 /** What a sequence shows at one playhead, for one lifetime: the window, and
- *  the first and last of its keyframes whose bands the window overlaps. */
-export type Showing = { window: TimeWindow; first: number; last: number };
+ *  for each keyframe whether its band overlaps the window. */
+export type Showing = { window: TimeWindow; shown: boolean[] };
 
 /**
  * What a sequence with these keyframes (sorted, distinct) shows at playhead
@@ -68,24 +123,30 @@ export type Showing = { window: TimeWindow; first: number; last: number };
  * ones from the band holding its start to the band holding its end, and the
  * band holding a moment is the keyframe the step rule reads there
  * (`sourceIndex`): the last keyframe at or before it, or the first when it is
- * before the run.
+ * before the run. On a cyclic axis the bands are read on the unrolled run, so
+ * the last keyframe's band runs up to the next cycle's first keyframe, and a
+ * window that reaches back past the first keyframe reaches the end of the
+ * cycle before.
  */
 export function showingAt(
   keyframes: number[],
   t: number,
-  last: number
+  last: number,
+  cycle?: Cycle
 ): Showing {
-  const window = windowAt(t, last);
-  return {
-    window,
-    first: sourceIndex(keyframes, window.from, "step"),
-    last: sourceIndex(keyframes, window.to, "step"),
-  };
+  const window = windowAt(t, last, cycle);
+  const run = unrollRun(keyframes, cycle);
+  const shown = keyframes.map(() => false);
+  const to = sourceIndex(run.knots, window.to, "step");
+  for (let k = sourceIndex(run.knots, window.from, "step"); k <= to; k++) {
+    shown[run.index[k]] = true;
+  }
+  return { window, shown };
 }
 
 /** Whether keyframe `index` is among the ones `showing` shows. */
 export function shows(showing: Showing, index: number): boolean {
-  return showing.first <= index && index <= showing.last;
+  return showing.shown[index];
 }
 
 /**
@@ -140,12 +201,14 @@ function cutSegment(seg: PathSegment, u0: number, u1: number): PathSegment {
   return u0 === 0 ? head : subdivideCurve1(head, u0 / u1)[1];
 }
 
-/** A run of keyframes on a clock: their times (sorted, distinct), and what it
- *  is showing right now for a lifetime (a paint-time read of the clock). A
- *  sequence has one (`time.sequence(...)`), so two keyframes belong to the
- *  same sequence exactly when they share it. */
+/** A run of keyframes on a clock: their times (sorted, distinct), the cycle
+ *  of the time axis if it repeats, and what it is showing right now for a
+ *  lifetime (a paint-time read of the clock). A sequence has one
+ *  (`time.sequence(...)`), so two keyframes belong to the same sequence
+ *  exactly when they share it. */
 export type SequenceWindow = {
   keyframes: () => number[];
+  cycle: () => Cycle | undefined;
   showing: (last: number) => Showing;
 };
 
@@ -155,13 +218,15 @@ export type SequenceWindow = {
  *  paint-time read still registers it. */
 export function sequenceWindow(
   keyframes: () => number[],
-  clock: () => number
+  clock: () => number,
+  cycle: () => Cycle | undefined = () => undefined
 ): SequenceWindow {
   let t: number | undefined;
   let times: number[] | undefined;
   const cache = new Map<number, Showing>();
   return {
     keyframes,
+    cycle,
     showing: (last) => {
       const now = clock();
       const current = keyframes();
@@ -172,7 +237,7 @@ export function sequenceWindow(
       }
       let showing = cache.get(last);
       if (showing === undefined) {
-        showing = showingAt(current, now, last);
+        showing = showingAt(current, now, last, cycle());
         cache.set(last, showing);
       }
       return showing;

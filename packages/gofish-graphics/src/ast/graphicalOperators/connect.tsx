@@ -1,4 +1,4 @@
-import { Path, curve, segment, transformPath } from "../../path";
+import { Path, transformPath } from "../../path";
 import { catmullRomPath, centripetalKnots } from "../../catmullRom";
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
@@ -42,6 +42,7 @@ import {
   keyframeOf,
   lifetimeOf,
   lifetimeRule,
+  unrollRun,
   windowPath,
   type Keyframe,
   type SequenceWindow,
@@ -131,12 +132,6 @@ type TimeRun = {
   sequence: SequenceWindow;
   last: number;
 };
-
-/** A segment drawn the other way. */
-const reversed = (seg: Path[number]): Path[number] =>
-  seg.type === "line"
-    ? segment(seg.points[1], seg.points[0])
-    : curve(seg.end, seg.control2, seg.control1, seg.start);
 
 /** Where `values` first stops going up: the index of the first value that is
  *  not greater than the one before it, or -1 when every value is. */
@@ -325,14 +320,54 @@ export const connect = createNodeOperator(
             }
           }
 
+          // A line threading a sequence's keyframes is cut by data time, so
+          // it has to move through the keyframes one way in time. Forward or
+          // backward are both fine: backward is the same path, and it is
+          // built forward, from the keyframe earliest in time. It is built on
+          // its run laid out along the time axis (`unrollRun`): the run
+          // itself, or on a cyclic axis the run repeated a cycle before and
+          // after, which joins the last keyframe to the first across the
+          // seam. The same mark stands at each of its copies: `points[j]` is
+          // the operand the path's `j`-th point is.
+          let points = children.map((_, i) => i);
+          let timeKnots: number[] | undefined;
+          if (threadsTime) {
+            const times = keyframes!.map((k) => k.t);
+            const sign = Math.sign(times[1] - times[0]);
+            const back = firstStepBack(times.map((t) => sign * t));
+            if (back >= 0) {
+              throw new Error(
+                `[gofish] line(): this line threads the keyframes of a ` +
+                  `time.sequence, so each of its points is a moment in time, ` +
+                  `and it goes from ${times[back - 1]} to ${times[back]}: ` +
+                  `back and forth in time, or twice through one keyframe. A ` +
+                  `line drawn in over time has to move through the keyframes ` +
+                  `one way. If each keyframe holds several marks, split the ` +
+                  `line so each run has one mark per keyframe (for example, ` +
+                  `add \`by\` to the operator that places the marks).`
+              );
+            }
+            const forward = times.map((_, i) =>
+              sign > 0 ? i : times.length - 1 - i
+            );
+            const unrolled = unrollRun(
+              forward.map((i) => times[i]),
+              keyframes![0].sequence.cycle()
+            );
+            points = unrolled.index.map((k) => forward[k]);
+            timeKnots = unrolled.knots;
+          }
+
           // Forward σ (size slope) but not the anchored map: connect places
-          // endpoints by their own bboxes, not by data position.
-          const childPlaceables = children.map((child) =>
+          // endpoints by their own bboxes, not by data position. Each operand
+          // is laid out once, however many points of the run it stands at.
+          const placed = children.map((child) =>
             child.layout(size, [
               axisScale(scales?.[0]?.sigma, undefined),
               axisScale(scales?.[1]?.sigma, undefined),
             ])
           );
+          const childPlaceables = points.map((i) => placed[i]);
           const bboxPairs = pairs(childPlaceables.map((child) => child.dims));
 
           // Whether the connected points share a homogeneous *continuous*
@@ -469,31 +504,6 @@ export const connect = createNodeOperator(
               transform: { translate: [0, 0] },
               renderData: { paths, defaultColor },
             };
-          }
-          // A line threading a sequence's keyframes is cut by data time, so
-          // it has to move through the keyframes one way in time. Forward or
-          // backward are both fine: backward is the same path drawn the
-          // other way, and it is drawn in forward in time (see `timeRun`).
-          const timeKnots = threadsTime ? keyframes.map((k) => k.t) : undefined;
-          const timeSign =
-            timeKnots === undefined
-              ? 1
-              : Math.sign(timeKnots[1] - timeKnots[0]);
-          const back =
-            timeKnots === undefined
-              ? -1
-              : firstStepBack(timeKnots.map((t) => timeSign * t));
-          if (timeKnots !== undefined && back >= 0) {
-            throw new Error(
-              `[gofish] line(): this line threads the keyframes of a ` +
-                `time.sequence, so each of its points is a moment in time, ` +
-                `and it goes from ${timeKnots[back - 1]} to ${timeKnots[back]}: ` +
-                `back and forth in time, or twice through one keyframe. A ` +
-                `line drawn in over time has to move through the keyframes ` +
-                `one way. If each keyframe holds several marks, split the ` +
-                `line so each run has one mark per keyframe (for example, ` +
-                `add \`by\` to the operator that places the marks).`
-            );
           }
           /** A line's path, one piece per step from a point to the next. */
           let steps: Path[] = [];
@@ -818,25 +828,12 @@ export const connect = createNodeOperator(
                   `open an issue for "${resolvedCurveName}".`
               );
             }
-            // Drawn in forward in time: a run that goes back in time is read
-            // from its last keyframe, each step drawn the other way.
-            timeRun =
-              timeSign > 0
-                ? {
-                    knots: timeKnots,
-                    pieces: steps,
-                    sequence: keyframes![0].sequence,
-                    last: last!,
-                  }
-                : {
-                    knots: timeKnots.slice().reverse(),
-                    pieces: steps
-                      .slice()
-                      .reverse()
-                      .map((piece) => piece.map(reversed).reverse()),
-                    sequence: keyframes![0].sequence,
-                    last: last!,
-                  };
+            timeRun = {
+              knots: timeKnots,
+              pieces: steps,
+              sequence: keyframes![0].sequence,
+              last: last!,
+            };
           }
 
           const mergedPaths: Path[] = [];

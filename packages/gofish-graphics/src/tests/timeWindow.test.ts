@@ -21,7 +21,10 @@ import {
   markSequence,
   sequenceWindow,
   showingAt,
+  foldTime,
+  unrollRun,
   windowAt,
+  type Cycle,
   windowPath,
   type Keyframe,
   type SequenceWindow,
@@ -219,6 +222,7 @@ console.log("# the keyframe record");
 {
   const sequence: SequenceWindow = {
     keyframes: () => [1999, 2000, 2001],
+    cycle: () => undefined,
     showing: (last) => showingAt([1999, 2000, 2001], 2000, last),
   };
   const frame = { parent: undefined };
@@ -301,9 +305,10 @@ console.log("# the history window, over a grid of playheads");
   );
   ok(
     "one sequence, several lifetimes",
-    sequence.showing(0).first === 3 &&
-      sequence.showing(Infinity).first === 0 &&
-      sequence.showing(0).first === 3
+    JSON.stringify(sequence.showing(0).shown) ===
+      "[false,false,false,true,false]" &&
+      sequence.showing(Infinity).shown.slice(0, 4).every(Boolean) &&
+      sequence.showing(0).shown[3]
   );
 }
 
@@ -326,6 +331,7 @@ console.log("# lifetimes: the nearest time.history, and the union of parts");
   const frame = node([keyframe]);
   markSequence(frame, {
     keyframes: () => [2000],
+    cycle: () => undefined,
     showing: (last) => showingAt([2000], 2000, last),
   });
   ok("a bare mark lives for its band", lifetimeOf(head) === 0);
@@ -359,6 +365,74 @@ console.log("# lifetimes: the nearest time.history, and the union of parts");
   ok(
     "a history outside the keyframe does not reach into it",
     lifetimeOf(head) === 0
+  );
+}
+
+console.log("# a cyclic time axis");
+{
+  // Days 1 to 10 of a ten-day cycle.
+  const days = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const cycle: Cycle = { origin: 1, period: 10 };
+  ok(
+    "a playhead folds into the one cycle",
+    foldTime(11, cycle) === 1 &&
+      foldTime(0.5, cycle) === 10.5 &&
+      foldTime(23, cycle) === 3 &&
+      foldTime(7, undefined) === 7
+  );
+  ok(
+    "the window reaches back at most one period",
+    JSON.stringify(windowAt(13, 4, cycle)) === '{"from":-1,"to":3}' &&
+      JSON.stringify(windowAt(3, Infinity, cycle)) === '{"from":-7,"to":3}'
+  );
+  const run = unrollRun([1, 4, 8], cycle);
+  ok(
+    "a run unrolls over the cycle before and the start of the cycle after",
+    JSON.stringify(run.knots) === "[-9,-6,-2,1,4,8,11,14]" &&
+      JSON.stringify(run.index) === "[0,1,2,0,1,2,0,1]"
+  );
+  ok(
+    "a run on an axis that does not repeat is itself",
+    JSON.stringify(unrollRun([1, 4, 8], undefined).knots) === "[1,4,8]"
+  );
+  const shownAt = (T: number, last: number): number[] =>
+    days.filter((_, i) => showingAt(days, T, last, cycle).shown[i]);
+  ok(
+    "the last keyframe's band runs up to the next cycle's first",
+    JSON.stringify(shownAt(10.5, 0)) === "[10]"
+  );
+  ok(
+    "a history across the seam: day 2 with the last 3 days is 9, 10, 1, 2",
+    JSON.stringify(shownAt(2, 3)) === "[1,2,9,10]"
+  );
+  ok(
+    "a history inside the cycle is as before",
+    JSON.stringify(shownAt(6, 2)) === "[4,5,6]"
+  );
+  ok(
+    "a history longer than the cycle keeps every keyframe",
+    shownAt(3, Infinity).length === 10 && shownAt(3, 25).length === 10
+  );
+  ok(
+    "a playhead in a later cycle reads as the same day",
+    JSON.stringify(shownAt(22, 3)) === JSON.stringify(shownAt(2, 3))
+  );
+  // A line through three knots of a cycle, unrolled: the window cuts the
+  // seam piece from the last knot to the first.
+  const a: Point = [0, 0];
+  const b: Point = [10, 0];
+  const c: Point = [10, 10];
+  const loop = unrollRun([1, 4, 8], cycle);
+  const points = loop.index.map((i) => [a, b, c][i]);
+  const steps = points.slice(1).map((p, i) => [segment(points[i], p)]);
+  const drawn = windowPath(steps, loop.knots, windowAt(2.5, 2, cycle));
+  ok(
+    "a threaded line across the seam runs from the last knot to the first",
+    drawn.length === 2 &&
+      nearPoint(startOf(drawn[0]), lerpPoint(c, a, (0.5 - -2) / 3)) &&
+      nearPoint(endOf(drawn[0]), a) &&
+      nearPoint(endOf(drawn[1]), lerpPoint(a, b, 0.5)),
+    JSON.stringify(drawn)
   );
 }
 

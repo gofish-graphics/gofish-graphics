@@ -218,6 +218,40 @@ the marks it connects.
 The axes hold still here too. The chart makes room for the whole line when it
 is laid out, so drawing the line in moves nothing else.
 
+## Time that repeats
+
+Some fields are cycles: a day of the year, an hour of the day. `cyclic` says
+so. `cyclic: true` infers the period as the last keyframe minus the first plus
+one step between keyframes, so days 1 to 365 give a period of 365. It needs
+evenly spaced keyframes. `cyclic: 366` gives the period directly. The
+keyframes must fit in one period, and a field that spans more is an error; to
+fold several years onto one, derive the day of the year first.
+
+```ts
+chart(birds)
+  .flow(
+    time.sequence({ by: "day", on: day, cyclic: true }),
+    scatter({ x: "lon", y: "lat" })
+  )
+  .mark(
+    layer([
+      time.history({ last: 20 }, [
+        circle({ r: 3, fill: "species", opacity: 0.1 }),
+      ]),
+      circle({ r: 3, fill: "species" }),
+    ])
+  );
+```
+
+Everything that reads the time axis reads it around the cycle, with no option
+of its own. The last keyframe's band runs up to the next cycle's first
+keyframe. `time.history` measures back across the new year, so on day 5 this
+trail reaches back into December. A head chained with
+`.transition({ update })` glides from the last keyframe to the first instead
+of flying back, and a threaded `line` joins the last keyframe to the first.
+A sequence that builds its own clock plays one period and loops. A clock given
+with `on` is left as it is.
+
 ## Between the keyframes
 
 The knots of the interpolation are the data's own time values. Years five apart
@@ -508,14 +542,15 @@ yet.
 
 ### `time.sequence(options)`
 
-| Option     | Type      | Default | Meaning                                                    |
-| ---------- | --------- | ------- | ---------------------------------------------------------- |
-| `by`       | `string`  | none    | The field whose values are the keyframes. Must be numeric. |
-| `duration` | `number`  | `5000`  | Milliseconds one pass through the field takes.             |
-| `loop`     | `boolean` | `true`  | Start over at the end.                                     |
-| `playing`  | `boolean` | `true`  | Start the clock. `false` holds the chart still.            |
-| `at`       | `number`  | none    | Where the playhead starts, in the field's units.           |
-| `on`       | `Timer`   | own     | A clock to play on. Rules out the four options above.      |
+| Option     | Type                | Default | Meaning                                                              |
+| ---------- | ------------------- | ------- | -------------------------------------------------------------------- |
+| `by`       | `string`            | none    | The field whose values are the keyframes. Must be numeric.           |
+| `duration` | `number`            | `5000`  | Milliseconds one pass through the field takes.                       |
+| `loop`     | `boolean`           | `true`  | Start over at the end.                                               |
+| `playing`  | `boolean`           | `true`  | Start the clock. `false` holds the chart still.                      |
+| `at`       | `number`            | none    | Where the playhead starts, in the field's units.                     |
+| `on`       | `Timer`             | own     | A clock to play on. Rules out the four options above.                |
+| `cyclic`   | `boolean \| number` | none    | The field repeats. `true` infers the period; a number is the period. |
 
 ### `time.history(options?, marks?)`
 

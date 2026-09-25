@@ -1315,7 +1315,8 @@ error rather than silently doing the wrong thing:
   frame, so the space they occupy is the space of the whole dataset, which is
   what keeps a playing chart's axes still; the `TimeTier` it hands a
   `time.transition()` is declared in the same module and carries the clock,
-  the keyframes, and the clock's milliseconds per unit of the field). A
+  the keyframes, the cycle of the time axis when the sequence is `cyclic`, and
+  the clock's milliseconds per unit of the field). A
   build-in stagger's `by` reuses `splitEntries` for the order of its groups
   (`src/animation/grouping.ts`). `dropNulls` filters out
   rows whose value at the field is `null`/`undefined` FIRST (so it composes

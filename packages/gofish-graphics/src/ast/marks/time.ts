@@ -38,7 +38,7 @@ import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
-import type { InterpolationMethod } from "../../interpolate";
+import { knotOrder, type InterpolationMethod } from "../../interpolate";
 import {
   historiesIn,
   historyOf,
@@ -47,10 +47,14 @@ import {
   markHistory,
   markSequence,
   sequenceWindow,
+  foldTime,
+  unrollRun,
+  type Cycle,
   type SequenceWindow,
 } from "../../timeWindow";
 import type { Mark, Operator } from "../types";
-import type { GoFishRef } from "../_ref";
+import { GoFishRef } from "../_ref";
+import { targetOf } from "../graphicalOperators/layer";
 import type { NameableMark } from "../withGoFish";
 import { buildIn, stagger, parallel } from "../../animation/timeArrangements";
 import { effectList, type Effect } from "../../animation/effects";
@@ -78,6 +82,16 @@ export type SequenceOptions = {
    *  domain and its own playback, so `duration`, `loop`, `playing` and `at`
    *  are errors alongside it. */
   on?: Timer<number>;
+  /** The field is a cycle (a day of the year, an hour of the day): time
+   *  repeats every period, so the last keyframe's band runs up to the next
+   *  cycle's first keyframe, and whatever reads the time axis reads it around
+   *  the seam (`time.history`, a chained `.transition({ update })`, a threaded
+   *  `line`). `true` infers the period from the keyframes, the last minus the
+   *  first plus one step between them, which needs evenly spaced keyframes
+   *  (days 1 to 365 give 365); a number is the period itself. The keyframes
+   *  must fit in one period. A sequence that builds its own clock plays one
+   *  period and loops; a clock given with `on` is left as it is. */
+  cyclic?: boolean | number;
 };
 
 /** The options a sequence's own clock is built from — the ones a supplied
@@ -137,6 +151,17 @@ export function sequence(opts: SequenceOptions) {
    *  domain from the first to the last. */
   let keyframes: number[] = [];
   let clock: Timer<number> | undefined = opts.on;
+  /** The time axis's cycle, once the keyframes are known (`cyclic`). */
+  let cycle: Cycle | undefined;
+
+  const { cyclic } = opts;
+  if (typeof cyclic === "number" && !(Number.isFinite(cyclic) && cyclic > 0)) {
+    throw new Error(
+      `[gofish] time.sequence({ by: "${opts.by}", cyclic: ${cyclic} }): a ` +
+        `period is a positive length of time in "${opts.by}"'s own units ` +
+        `(365 for days of a year), or \`cyclic: true\` to infer it.`
+    );
+  }
 
   if ((opts as { history?: unknown }).history !== undefined) {
     throw new Error(
@@ -185,6 +210,45 @@ export function sequence(opts: SequenceOptions) {
     if (bad >= 0) throw notNumbers({ value: values[bad] });
     if (numbers.length === 0) return;
     keyframes = [...new Set(numbers)].sort((a, b) => a - b);
+    cycle = cycleOf(keyframes);
+  };
+
+  /** The cycle `cyclic` asks for over these keyframes, checked: the period is
+   *  given, or the span plus one step between evenly spaced keyframes, and
+   *  the keyframes fit in one period. */
+  const cycleOf = (times: number[]): Cycle | undefined => {
+    if (cyclic === undefined || cyclic === false) return undefined;
+    const where = `time.sequence({ by: "${opts.by}", cyclic: ${cyclic} })`;
+    const [first, last] = [times[0], times[times.length - 1]];
+    let period: number;
+    if (typeof cyclic === "number") {
+      period = cyclic;
+    } else {
+      const steps = times.slice(1).map((t, i) => t - times[i]);
+      const step = steps[0];
+      const even =
+        step !== undefined &&
+        steps.every((s) => Math.abs(s - step) <= 1e-9 * Math.abs(step));
+      if (!even) {
+        throw new Error(
+          `[gofish] ${where}: the period is inferred as one step past the ` +
+            `last keyframe, which needs at least two keyframes spaced evenly, ` +
+            `and "${opts.by}" has ` +
+            (step === undefined ? `one value` : `uneven steps`) +
+            `. Give the period instead, e.g. \`cyclic: 365\`.`
+        );
+      }
+      period = last - first + step;
+    }
+    if (last - first >= period) {
+      throw new Error(
+        `[gofish] ${where}: "${opts.by}" runs from ${first} to ${last}, more ` +
+          `than one period of ${period}. A cyclic sequence plays one cycle; ` +
+          `to fold several cycles onto one, derive the position in the cycle ` +
+          `first (e.g. derive a day of the year from a date).`
+      );
+    }
+    return { origin: first, period };
   };
 
   // Built per call so the split hook can close over this sequence's own
@@ -225,8 +289,13 @@ export function sequence(opts: SequenceOptions) {
   const ownClock = (): Timer<number> => {
     if (clock === undefined) {
       if (keyframes.length === 0) throw notNumbers();
+      // One pass is one cycle when the axis repeats, so the last keyframe's
+      // band gets its time before the clock loops back to the first.
       clock = timer<number>({
-        domain: [keyframes[0], keyframes.at(-1)!],
+        domain: [
+          keyframes[0],
+          cycle === undefined ? keyframes.at(-1)! : cycle.origin + cycle.period,
+        ],
         duration: opts.duration ?? 5000,
         loop: opts.loop ?? true,
         playing: opts.playing ?? true,
@@ -238,6 +307,7 @@ export function sequence(opts: SequenceOptions) {
   const tier: TimeTier = {
     by: opts.by,
     knots: () => keyframes,
+    cycle: () => cycle,
     clock: () => ownClock()(),
     msPerUnit: () => {
       const c = ownClock();
@@ -249,7 +319,7 @@ export function sequence(opts: SequenceOptions) {
    *  it, shared by its keyframes' visibility and any line threaded through
    *  the keyframes (which find it through the keyframes, see `keyframeOf`).
    *  It is also the owner of the keyframes' visibility rules. */
-  const shown = sequenceWindow(tier.knots, tier.clock);
+  const shown = sequenceWindow(tier.knots, tier.clock, tier.cycle);
   (operator as any).__timeTier = tier;
   // The clock is a live JS signal, so a sequence cannot cross the Python
   // bridge; leaving the IR tag off makes the emitter treat it as opaque.
@@ -365,17 +435,43 @@ export const transition = createRelationalMark<TransitionOptions>(
           `transition read the clock it owns.`
       );
     }
-    const knots = children.map((child) => knotOf(child, by));
+    const onSequence = tier !== undefined && tier.by === by;
+    // On a cyclic axis the run is read unrolled (`unrollRun`): its keyframes
+    // repeated a cycle before and after, with the playhead folded into one
+    // cycle, so the mark glides across the seam from the last keyframe to
+    // the first, and a smooth curve has neighbors on both sides of it. Every
+    // copy of a keyframe is the same mark, read through a ref of its own.
+    const cycle = onSequence ? tier!.cycle() : undefined;
+    const times = children.map((child) => knotOf(child, by));
+    const order = knotOrder(times);
+    const run = unrollRun(
+      order.map((i) => times[i]),
+      cycle
+    );
+    const own = run.knots.length === times.length;
+    const operands = run.index.map((k, j) => {
+      const child = children[order[k]];
+      const copy = !own && (j < times.length || j >= 2 * times.length);
+      const target = copy ? targetOf(child) : undefined;
+      return target === undefined ? child : new GoFishRef({ node: target });
+    });
     // The keyframes the run's knots are drawn from, so the tween can tell a
     // gap in the run from a step between neighbors. Only the sequence's own
     // field has them; a transition along some other field, or with no
     // sequence at all, reads its run's knots as consecutive.
-    const sequence =
-      tier !== undefined && tier.by === by ? tier.knots() : undefined;
+    const sequence = onSequence
+      ? unrollRun(tier!.knots(), cycle).knots
+      : undefined;
+    const at =
+      cycle === undefined
+        ? playhead
+        : typeof playhead === "function"
+          ? () => foldTime(playhead(), cycle)
+          : foldTime(playhead, cycle);
     return tween(
       {
-        at: playhead,
-        knots,
+        at,
+        knots: run.knots,
         sequence,
         method: resolveMethod(o.curve),
         ease: o.ease,
@@ -385,7 +481,7 @@ export const transition = createRelationalMark<TransitionOptions>(
         strokeWidth: o.strokeWidth,
         opacity: o.opacity,
       },
-      children
+      operands
     );
   },
   { temporal: true }

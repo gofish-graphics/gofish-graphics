@@ -513,6 +513,146 @@ async function main(): Promise<void> {
     );
   }
 
+  console.log("\n# a cyclic sequence");
+  {
+    // Ten days around a loop, so day 10 sits next to day 1.
+    const loopDays = Array.from({ length: 10 }, (_, i) => ({
+      day: i + 1,
+      x: Math.cos((2 * Math.PI * i) / 10),
+      y: Math.sin((2 * Math.PI * i) / 10),
+    }));
+    /** One keyframe a day, placed by x and y, on a clock parked at `at`,
+     *  with the sequence's `cyclic` option and a history of `last`. */
+    const days = (at: number, cyclic: boolean | number, last?: number) =>
+      chart(loopDays).flow(
+        time.sequence({
+          by: "day",
+          on: pausedClock([1, 11], 10000, at),
+          cyclic,
+        }),
+        ...(last === undefined ? [] : [time.history({ last })]),
+        scatter({ x: "x", y: "y" })
+      );
+    const shownDays = async (
+      at: number,
+      cyclic: boolean | number,
+      last?: number
+    ) =>
+      items(
+        await days(at, cyclic, last)
+          .mark(circle({ r: 4 }))
+          .toDisplayList(OPTIONS)
+      )
+        .map((item, i) => ({ item, i }))
+        .filter(({ item }) => item.kind === "ellipse")
+        .filter(({ item }) => item.style?.opacity !== 0).length;
+    const dayCenters = items(
+      await days(1, true, Infinity).mark(circle({ r: 4 })).toDisplayList(OPTIONS)
+    )
+      .filter((item) => item.kind === "ellipse")
+      .map((item) => [item.cx, item.cy] as Point);
+    const between = (p: Point, q: Point, u: number): Point => [
+      p[0] + u * (q[0] - p[0]),
+      p[1] + u * (q[1] - p[1]),
+    ];
+    const near = (p: Point, q: Point) =>
+      Math.abs(p[0] - q[0]) < 1e-3 && Math.abs(p[1] - q[1]) < 1e-3;
+
+    ok(
+      "cyclic: true infers the period as the span plus one step",
+      (await shownDays(10.5, true)) === 1 &&
+        (await shownDays(10.5, true, 0.2)) === 1
+    );
+    ok(
+      "a history across the seam: day 2 with 3 days back shows 9, 10, 1, 2",
+      (await shownDays(2, true, 3)) === 4
+    );
+    ok(
+      "without cyclic the same history stops at day 1",
+      (await shownDays(2, false, 3)) === 2
+    );
+    // With a period of 12 the cycle is 1 to 13, so at 11.5 the last band
+    // still holds; with the inferred 10 the playhead is back on day 1.
+    const heldAt = async (cyclic: boolean | number) =>
+      items(
+        await days(11.5, cyclic)
+          .mark(circle({ r: 4 }))
+          .toDisplayList(OPTIONS)
+      ).findIndex(
+        (item) => item.kind === "ellipse" && item.style?.opacity !== 0
+      );
+    ok(
+      "a number overrides the inferred period",
+      (await heldAt(12)) !== (await heldAt(true))
+    );
+
+    // A threaded line across the seam, straight so its geometry is exact.
+    const lineAt = async (at: number, last: number) =>
+      lineSegments(
+        await days(at, true, last)
+          .mark(line({ along: "day", curve: "linear" }))
+          .toDisplayList(OPTIONS)
+      );
+    const seam = await lineAt(1.5, 2);
+    ok(
+      "a line joins the last keyframe to the first under the history window",
+      seam.length === 3 &&
+        near(seam[0][0], between(dayCenters[8], dayCenters[9], 0.5)) &&
+        near(seam[0][1], dayCenters[9]) &&
+        near(seam[1][1], dayCenters[0]) &&
+        near(seam[2][1], between(dayCenters[0], dayCenters[1], 0.5)),
+      JSON.stringify(seam)
+    );
+    // A head gliding across the seam sits on the tip of a smooth line.
+    const glide = async (at: number) => {
+      const doc = await days(at, true)
+        .mark(
+          layer([
+            time.history({ last: 2 }, [circle({ r: 4, fill: "white" })]),
+            circle({ r: 4, fill: "red" }).transition({
+              update: animation.tween(),
+            }),
+          ])
+        )
+        .layer(line({ along: "day" }))
+        .toDisplayList(OPTIONS);
+      const head = items(doc).filter(
+        (item) =>
+          item.kind === "ellipse" &&
+          item.style?.fill === "red" &&
+          item.style?.opacity !== 0
+      );
+      return { head, tip: lastPoint(doc) };
+    };
+    for (const at of [10.25, 10.5, 10.9, 1.2]) {
+      const { head, tip } = await glide(at);
+      ok(
+        `a head at ${at} glides across the seam on the line's tip`,
+        head.length === 1 && near([head[0].cx, head[0].cy], tip),
+        JSON.stringify({ head: head.map((h: any) => [h.cx, h.cy]), tip })
+      );
+    }
+    const { head: midSeam } = await glide(10.5);
+    ok(
+      "and between the last keyframe and the first, not flying back",
+      Math.hypot(
+        midSeam[0].cx - (dayCenters[9][0] + dayCenters[0][0]) / 2,
+        midSeam[0].cy - (dayCenters[9][1] + dayCenters[0][1]) / 2
+      ) < 20
+    );
+
+    const why = await (async () => {
+      try {
+        await days(1, 5).mark(circle({ r: 4 })).toDisplayList(OPTIONS);
+        return "no error";
+      } catch (e) {
+        const message = String((e as Error).message);
+        return /more than one period/.test(message) ? undefined : message;
+      }
+    })();
+    ok("keyframes spanning more than one period throw", !why, why);
+  }
+
   console.log("\n# what is not built throws");
   const throws = async (build: () => Promise<unknown>, pattern: RegExp) => {
     try {

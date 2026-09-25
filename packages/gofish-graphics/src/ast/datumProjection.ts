@@ -29,6 +29,7 @@ import {
   type FieldOp,
 } from "./fieldExpr";
 import { binRows } from "./transforms";
+import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
 function eqKey(v: unknown): string {
@@ -163,6 +164,9 @@ export type TimeTier = {
    *  split on. A transition reads it to tell a gap in one mark's run (two of
    *  its knots that are NOT neighbors here) from a step between neighbors. */
   knots: () => number[];
+  /** The cycle of the time axis when the sequence is cyclic: every reader of
+   *  time reads it around the seam (see `src/timeWindow.ts`). */
+  cycle: () => Cycle | undefined;
   /** Wall-clock milliseconds per unit of `by` on the clock (ms per year, say),
    *  so a timing written in ms (a stagger's `lag`) can be read against a
    *  stretch between two keyframes. */
