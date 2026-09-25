@@ -479,8 +479,8 @@ export const rect: typeof baseRect = ((opts: any) =>
  * NOTHING. Invisibility is structural, not a paint style: the node emits no
  * display items at all (`INTERNAL_emitNothing`), the same rule `GoFishRef`
  * already follows as a placement stand-in. One rule, no flag — there is no
- * configuration under which a blank paints, so `fill`/`stroke`/`rx`/`ry` only
- * ever reach the color scale and the layout, never the canvas.
+ * configuration under which a blank paints, so `blank()` accepts no paint-only
+ * options (stroke, corner radius); its `fill` only seeds the color scale.
  *
  * This is what keeps an anchor tier free: the blank-fusion rewrite
  * (`.mark(line(opts))` ⇒ `.mark(blank(anchor)).layer(line(opts))`, see

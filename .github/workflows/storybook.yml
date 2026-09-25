@@ -23,9 +23,7 @@ jobs:
           fetch-depth: 0 # Required for Chromatic to track git history
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v5

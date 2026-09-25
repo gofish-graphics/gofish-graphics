@@ -89,9 +89,7 @@ jobs:
 
       - name: Setup pnpm
         if: steps.plan.outputs.skip == 'false'
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         if: steps.plan.outputs.skip == 'false'
@@ -143,10 +141,6 @@ jobs:
       - name: Build gofish-graphics
         if: steps.plan.outputs.skip == 'false'
         run: pnpm --filter gofish-graphics build
-
-      - name: Generate TypeScript declarations
-        if: steps.plan.outputs.skip == 'false'
-        run: pnpm exec tsc --project packages/gofish-graphics/tsconfig.build.json || true
 
       # gofish-ir publishes first so the workspace:* dependency in
       # gofish-graphics resolves to a real published version on the registry

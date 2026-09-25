@@ -1,6 +1,6 @@
 import { computeAesthetic } from "../../util";
 import * as Monotonic from "../../util/monotonic";
-import { color6_old, resolveColorChannel } from "../../color";
+import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
@@ -34,7 +34,7 @@ import {
 } from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Ellipse = ({
-  fill = color6_old[0],
+  fill = color6[0],
   stroke = fill,
   strokeWidth = 0,
   opacity = 1,
@@ -56,7 +56,8 @@ export const Ellipse = ({
       // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
       // (same array the closures below capture). See rect.tsx / _node passes.
       args: { dims },
-      color: fill,
+      // Used to seed the unit color scale. Prefer whichever channel is data-driven.
+      color: isValue(fill) ? fill : stroke,
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]

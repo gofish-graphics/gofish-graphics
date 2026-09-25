@@ -3,7 +3,7 @@
 A whimsical scatter where each lake is a balloon on a string, the whole scene
 warped by a `wavy` coordinate transform. Each balloon is a small `layer` of two
 ellipses + two rects (flipped via a y=−1 scale transform); a thin rect draws the
-string. Exercises `layer({coord: wavy()})` (Tier-2 coord transform) and
+string. Exercises `layer([...], coord=wavy())` (Tier-2 coord transform) and
 shape-level `cx`/`cy` positioning.
 """
 

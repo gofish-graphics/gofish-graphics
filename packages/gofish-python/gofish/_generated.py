@@ -324,7 +324,7 @@ def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = 
             _kw[_k] = _channel(_v)
     return Mark("polygon", **_kw)
 
-def blank(*, debug: Optional[bool] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, rx: Optional[float] = None, ry: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
+def blank(*, debug: Optional[bool] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, **kwargs: Any) -> Mark:
     """An invisible sizing/positioning guide — a rect that emits no display items at all, with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
 
     Args:
@@ -333,11 +333,7 @@ def blank(*, debug: Optional[bool] = None, emX: Optional[bool] = None, emY: Opti
         emY: Embed y in the parent's y space.
         w: Width. Default 0.
         h: Height. Default 0.
-        rx: Corner radius, x.
-        ry: Corner radius, y.
-        fill: Fill color. A blank draws nothing unless given one.
-        stroke: Stroke color.
-        strokeWidth: Stroke width in pixels.
+        fill: Fill color. A blank never paints; `fill` only seeds the shared color scale.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -346,11 +342,7 @@ def blank(*, debug: Optional[bool] = None, emX: Optional[bool] = None, emY: Opti
         ("emY", emY),
         ("w", w),
         ("h", h),
-        ("rx", rx),
-        ("ry", ry),
         ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
     ]:
         if _v is not None:
             _kw[_k] = _channel(_v)

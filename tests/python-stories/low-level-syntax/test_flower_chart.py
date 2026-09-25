@@ -45,7 +45,6 @@ def story_default():
             [
                 ref,
                 layer(
-                    {"coord": polar()},
                     [
                         stack(
                             petals,
@@ -56,6 +55,7 @@ def story_default():
                             sharedScale=True,
                         ),
                     ],
+                    coord=polar(),
                 ),
             ],
             dir="y",
