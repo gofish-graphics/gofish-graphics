@@ -171,6 +171,27 @@ export const C_Animated: StoryObj<Args> = {
   },
 };
 
+/** Panel D's trails on the clock `day`. */
+const trails = (day: ReturnType<typeof timer>) =>
+  chart(birds)
+    .flow(
+      // One keyframe per day. Day-of-year is cyclic, so early in January the
+      // trail reaches back into December instead of stopping.
+      time.sequence({ by: "day", on: day, cyclic: true }),
+      scatter({ x: "lon", y: "lat" })
+    )
+    .mark(
+      // Each day's mark is two layers: a faint circle kept on screen for 20
+      // days after its own (the trail), and a solid circle shown during its
+      // day.
+      layer([
+        time.history({ last: 20 }, [
+          circle({ r: 3, fill: "species", opacity: 0.1 }),
+        ]),
+        circle({ r: 3, fill: "species" }),
+      ])
+    );
+
 export const D_Trails: StoryObj<Args> = {
   args: { w: 600, h: 600 },
   tags: ["gallery"],
@@ -187,26 +208,7 @@ export const D_Trails: StoryObj<Args> = {
     const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
 
     basemap()
-      .layer(
-        chart(birds)
-          .flow(
-            // One keyframe per day. Day-of-year is cyclic, so early in January
-            // the trail reaches back into December instead of stopping.
-            time.sequence({ by: "day", on: day, cyclic: true }),
-            scatter({ x: "lon", y: "lat" })
-          )
-          .mark(
-            // Each day's mark is two layers: a faint circle kept on screen
-            // for 20 days after its own (the trail), and a solid circle
-            // shown during its day.
-            layer([
-              time.history({ last: 20 }, [
-                circle({ r: 3, fill: "species", opacity: 0.1 }),
-              ]),
-              circle({ r: 3, fill: "species" }),
-            ])
-          )
-      )
+      .layer(trails(day))
       .render(container, { w: args.w, h: args.h });
 
     return container;
@@ -225,22 +227,6 @@ const pausedDay = (at: number) => {
   day.set(at);
   return day;
 };
-
-/** Panel D's trails on the clock `day`. */
-const trails = (day: ReturnType<typeof timer>) =>
-  chart(birds)
-    .flow(
-      time.sequence({ by: "day", on: day, cyclic: true }),
-      scatter({ x: "lon", y: "lat" })
-    )
-    .mark(
-      layer([
-        time.history({ last: 20 }, [
-          circle({ r: 3, fill: "species", opacity: 0.1 }),
-        ]),
-        circle({ r: 3, fill: "species" }),
-      ])
-    );
 
 /** Panel D held still on day `at`, for a deterministic capture. */
 const pausedPanel = (at: number): StoryObj<Args> => ({
@@ -281,21 +267,7 @@ export const E_Controls: StoryObj<Args> = {
     // against — and the controls would sit inside the map. At the root (panels
     // A–D) that padding is just canvas margin; in a composition it has to go,
     // and the spacing below is the composition's own business.
-    const map = basemap({ padding: 0 }).layer(
-      chart(birds)
-        .flow(
-          time.sequence({ by: "day", on: day, cyclic: true }),
-          scatter({ x: "lon", y: "lat" })
-        )
-        .mark(
-          layer([
-            time.history({ last: 20 }, [
-              circle({ r: 3, fill: "species", opacity: 0.1 }),
-            ]),
-            circle({ r: 3, fill: "species" }),
-          ])
-        )
-    );
+    const map = basemap({ padding: 0 }).layer(trails(day));
 
     // The controls are ordinary marks, so they lay out under the map with the
     // ordinary operators. The timer stays the single source of truth: the

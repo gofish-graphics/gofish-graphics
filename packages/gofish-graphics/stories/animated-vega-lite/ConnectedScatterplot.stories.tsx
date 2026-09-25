@@ -46,6 +46,7 @@ import {
   scatter,
   time,
   timer,
+  type Operator,
 } from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
 import { pausedClock } from "./pausedClock";
@@ -82,23 +83,18 @@ const dot = () =>
   circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 });
 
 /** The keyframes every picture here plays through: one per year, placed by
- *  miles and gas. */
-const years = (clock: Clock) =>
+ *  miles and gas, with `between` in the flow after the sequence. */
+const years = (clock: Clock, ...between: Operator<any, any>[]) =>
   chart(drivingShifts).flow(
     time.sequence({ by: "year", on: clock }),
+    ...between,
     scatter({ x: "miles", y: "gas" })
   );
 
 /** The port: the line alone, drawn in up to the playhead. Every year stays,
  *  so the line is drawn over everything the playhead has reached. */
 const port = (clock: Clock) =>
-  chart(drivingShifts)
-    .flow(
-      time.sequence({ by: "year", on: clock }),
-      time.history(),
-      scatter({ x: "miles", y: "gas" })
-    )
-    .mark(line({ along: "year", curve: "linear" }));
+  years(clock, time.history()).mark(line({ along: "year", curve: "linear" }));
 
 /**
  * The port. The line starts at 1956 and is drawn in, one year every 200 ms,
@@ -219,13 +215,9 @@ export const MovingDotPaused1979: StoryObj<Args> = {
 /** Only the last ten years: the line's tail is cut as well as its tip, so a
  *  ten-year stretch of the run travels along the path. */
 const comet = (clock: Clock) =>
-  chart(drivingShifts)
-    .flow(
-      time.sequence({ by: "year", on: clock }),
-      time.history({ last: 10 }),
-      scatter({ x: "miles", y: "gas" })
-    )
-    .mark(line({ along: "year", curve: "linear" }));
+  years(clock, time.history({ last: 10 })).mark(
+    line({ along: "year", curve: "linear" })
+  );
 
 export const Comet: StoryObj<Args> = {
   args: { w: 500, h: 500 },
