@@ -16,9 +16,12 @@
  * layout is affine in the interpolated quantities, which a fixed-domain
  * scatter is (see the animation design note, §4.1).
  *
- * WHAT MOVES. In each operand, the mark a `.transition({ update })` was
+ * WHAT MOVES. In each operand, the marks a `.transition({ update })` was
  * chained on, or the operand itself when nothing in it chained one (the
- * selection form, `time.transition()` over a bag of marks). The marks that
+ * selection form, `time.transition()` over a bag of marks). A chained
+ * transition moves the marks that chained its own tween, however many of
+ * them a keyframe holds; marks that chained a different tween are another
+ * transition's. The marks that
  * move draw nothing of their own: the moving mark is their drawing. A trail
  * behind it is not the transition's business. It is a `time.history` of
  * another mark, layered with the moving one.
@@ -87,7 +90,8 @@ import {
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
 import { targetOf } from "./layer";
-import { nodeTransition } from "../../animation/transition";
+import { chainedMarks } from "../../animation/transition";
+import type { TweenEffect } from "../../animation/effects";
 import {
   updateSlotOf,
   updateWarp,
@@ -118,6 +122,11 @@ export type TweenOptions = {
    *  whose `.transition({ update: time.stagger(...) })` staggers the moves
    *  (`src/animation/updateStagger.ts`): its lag is in ms. */
   msPerUnit?: () => number;
+  /** The tween a `.transition({ update })` chained on the marks this
+   *  transition moves (the chart builder draws one transition per tween,
+   *  `ChartBuilder.resolve`). Omitted (the selection form), it moves the
+   *  marks that chained any, or each operand itself when none did. */
+  moves?: TweenEffect;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -148,34 +157,19 @@ function markLeaves(node: GoFishNode): GoFishNode[] {
   return [...own, ...(node._attachments ?? []).flatMap(markLeaves)];
 }
 
-/** The marks in `operand` a `.transition({ update })` was chained on, not
- *  looking inside one once found. */
-function chainedIn(operand: GoFishNode): GoFishNode[] {
-  const record = nodeTransition(operand);
-  if (record?.kind === "mark" && record.update !== undefined) return [operand];
-  return operand.children.flatMap((child) =>
-    child instanceof GoFishNode ? chainedIn(child) : []
-  );
-}
-
 /**
- * The mark a transition moves in one keyframe operand: the one mark in it a
- * `.transition({ update })` was chained on, or the operand itself when
- * nothing in it chained one. A run is one mark moving, so an operand with
- * several chained marks is an error rather than a guess at which one.
+ * The marks a transition moves in one keyframe operand: the marks in it that
+ * chained the transition's tween (`moves`), or, when the transition was not
+ * chained (the selection form), the marks in it that chained any, or the
+ * operand itself when none did.
  */
-function movedIn(operand: GoFishNode | undefined): GoFishNode | undefined {
-  if (!(operand instanceof GoFishNode)) return operand;
-  const chained = chainedIn(operand);
-  if (chained.length > 1) {
-    throw new Error(
-      `[gofish] .transition({ update }): one keyframe mark holds ` +
-        `${chained.length} marks with a chained transition, and a transition ` +
-        `moves one mark per keyframe. Chain it on one of them, or split the ` +
-        `others into a flow of their own.`
-    );
-  }
-  return chained[0] ?? operand;
+function movedIn(
+  operand: GoFishNode | undefined,
+  moves: TweenEffect | undefined
+): GoFishNode[] {
+  if (!(operand instanceof GoFishNode)) return [];
+  const chained = chainedMarks(operand, moves);
+  return chained.length > 0 || moves !== undefined ? chained : [operand];
 }
 
 /** One channel of a track: its value where the run is located. */
@@ -330,6 +324,7 @@ export const tween = createNodeOperator(
       method,
       ease,
       msPerUnit,
+      moves,
       fill,
       stroke,
       strokeWidth,
@@ -340,8 +335,8 @@ export const tween = createNodeOperator(
     /** The playhead as a function, whether or not it was written as one, and
      *  whether it can change after layout. A plain number cannot, so the node
      *  lowers to a static item and nothing reactive is wired up. */
-    const moves = typeof playhead === "function";
-    const readPlayhead = moves ? playhead : () => playhead;
+    const live = typeof playhead === "function";
+    const readPlayhead = live ? playhead : () => playhead;
 
     // The playhead, read ONCE, HERE: the value the node lowers to, and the
     // read that registers the clock with the chart's interaction runtime.
@@ -377,8 +372,8 @@ export const tween = createNodeOperator(
           );
           const order = knotOrder(knots);
           const operands = order.map((i) => targetOf(children[i]));
-          /** The mark that moves in each keyframe, in time order. */
-          const keyframes = operands.map(movedIn);
+          /** The marks that move in each keyframe, in time order. */
+          const moved = operands.map((operand) => movedIn(operand, moves));
 
           /** A leaf's placed box and local origin in this node's frame. The
            *  operand itself is already placed; any other leaf is read through
@@ -391,15 +386,13 @@ export const tween = createNodeOperator(
             return stand.layout(size);
           };
 
-          // Match the keyed mark's leaves across the keyframes by structural
+          // Match the moving marks' leaves across the keyframes by structural
           // position. When every keyframe has the same leaves, each leaf gets
           // a run of its own. When they differ (a label present in one year
-          // only), the leaves cannot be paired, and the mark falls back to one
-          // run of the keyframe mark itself, its attachments left to the
-          // keyframes (they hold and snap with them).
-          const leafSets = keyframes.map((n) =>
-            n instanceof GoFishNode ? markLeaves(n) : []
-          );
+          // only), the leaves cannot be paired, and each moving mark falls
+          // back to one run of itself, its attachments left to the keyframes
+          // (they hold and snap with them).
+          const leafSets = moved.map((marks) => marks.flatMap(markLeaves));
           const shapesOf = (leaves: GoFishNode[]) =>
             leaves.map((l) => l.type).join("/");
           const matched =
@@ -412,18 +405,26 @@ export const tween = createNodeOperator(
                   (l) => BOX_SHAPES.has(l.type) || RIGID_SHAPES.has(l.type)
                 )
             );
+          if (
+            !matched &&
+            moved.some((marks) => marks.length !== moved[0].length)
+          ) {
+            throw new Error(
+              `[gofish] time.transition(): the keyframes hold different ` +
+                `numbers of marks to move (` +
+                `${[...new Set(moved.map((marks) => marks.length))].join(" / ")}` +
+                `), and a transition pairs them across the keyframes by ` +
+                `position. Give every keyframe of a run the same marks.`
+            );
+          }
           const rows: GoFishNode[][] = matched
             ? leafSets[0].map((_, j) => leafSets.map((leaves) => leaves[j]))
-            : [
-                keyframes.filter(
-                  (n): n is GoFishNode => n instanceof GoFishNode
-                ),
-              ];
+            : (moved[0] ?? []).map((_, j) => moved.map((marks) => marks[j]));
 
           // Every leaf of a row is one mark moving, so the row is checked as
           // one: a shape the transition can move, the same for every
-          // keyframe. Matched rows may be text, which moves rigidly; the
-          // fallback row is the keyframe mark itself, so it must be a box.
+          // keyframe. Matched rows may be text, which moves rigidly; a
+          // fallback row is a moving mark itself, so it must be a box.
           for (const row of rows) {
             const shapes = new Set(row.map((n) => n.type));
             for (const shape of shapes) {
@@ -502,8 +503,8 @@ export const tween = createNodeOperator(
           const run: Run = {
             knots: runKnots,
             tracks,
-            slots: keyframes.map((k) =>
-              k instanceof GoFishNode ? updateSlotOf(k) : undefined
+            slots: moved.map((marks) =>
+              marks[0] === undefined ? undefined : updateSlotOf(marks[0])
             ),
           };
 
@@ -652,7 +653,7 @@ export const tween = createNodeOperator(
           };
 
           const items = build(t);
-          if (moves) {
+          if (live) {
             // The paint tier's half of the split: one thunk per attribute of
             // each moving item, each re-reading the playhead in JSX attribute
             // position so Solid patches that attribute and nothing else. The

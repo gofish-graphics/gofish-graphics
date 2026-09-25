@@ -57,7 +57,11 @@ import { GoFishRef } from "../_ref";
 import { targetOf } from "../graphicalOperators/layer";
 import type { NameableMark } from "../withGoFish";
 import { buildIn, stagger, parallel } from "../../animation/timeArrangements";
-import { effectList, type Effect } from "../../animation/effects";
+import {
+  effectList,
+  type Effect,
+  type TweenEffect,
+} from "../../animation/effects";
 import { checkSequencePhases } from "../../animation/transition";
 
 export type SequenceOptions = {
@@ -353,6 +357,11 @@ export type TransitionOptions = {
   enter?: Effect | Effect[];
   /** How the marks leave; under a sequence only `animation.fadeOut()`. */
   exit?: Effect | Effect[];
+  /** The tween whose `.transition({ update })` marks this transition moves.
+   *  Set by `animation.tween()` for the chained spelling, where the chart
+   *  builder draws one transition per tween (`ChartBuilder.resolve`); not
+   *  written by hand. */
+  moves?: TweenEffect;
 };
 
 /**
@@ -466,6 +475,7 @@ export const transition = createRelationalMark<TransitionOptions>(
         method: resolveMethod(o.curve),
         ease: o.ease,
         msPerUnit: tier?.msPerUnit,
+        moves: o.moves,
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth,

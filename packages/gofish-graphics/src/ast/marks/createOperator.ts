@@ -63,7 +63,6 @@ import {
 import { attachBuilderTerminals } from "./terminals";
 import { installBuildIn } from "../../animation/install";
 import {
-  chainedTransitions,
   recordMarkTransition,
   recordOperatorTransition,
   type MarkTransition,
@@ -248,14 +247,6 @@ function modifierMethod(
     // applies the name/label/zOrder when invoked).
     if ((base as any).__relationalFusable) {
       (wrapped as any).__relationalFusable = (base as any).__relationalFusable;
-    }
-    // Same for a chained `.transition(...)`: the chart builder reads it off
-    // the final mark (see `transitionModifier`), whatever was chained after.
-    if ((base as any).__transition) {
-      (wrapped as any).__transition = (base as any).__transition;
-    }
-    if ((base as any).__transitions) {
-      (wrapped as any).__transitions = (base as any).__transitions;
     }
     cfg.tag?.(wrapped, base, ...args);
     return redecorate(wrapped);
@@ -442,19 +433,18 @@ export const zOrderModifier = {
 /**
  * `.transition({ enter, update, exit })` — how the mark looks in each phase
  * of an animation (`animation.grow()`, `animation.fadeIn()`, …). It records
- * the effects on each produced node, where the build-in reads them
- * (`src/animation/install.ts`), and tags the mark with the spec, which the
- * chart builder reads when the flow has a `time.sequence` (then the phases
- * are `time.transition()`'s). Animation is JS-only, so nothing reaches the IR.
+ * the effects on each produced node. The build-in reads them there
+ * (`src/animation/install.ts`), and so does the chart builder when the flow
+ * has a `time.sequence` (then the phases are `time.transition()`'s,
+ * `chainedUpdates`). Animation is JS-only, so nothing reaches the IR.
  */
 export const transitionModifier = {
   name: "transition",
   apply: (node, _layerContext, _datum, spec) => {
     recordMarkTransition(node, spec);
   },
-  tag: (wrapped, base, spec) => {
+  tag: (wrapped, base) => {
     propagateSerialize(base, wrapped, () => {});
-    (wrapped as any).__transition = spec;
   },
 } satisfies ModifierConfig<[spec: MarkTransition]>;
 
@@ -672,20 +662,6 @@ export type OperatorConfig<Datum, Options> = {
  *  they are otherwise trapped inside the mark's closure. Shared by every
  *  combinator: this factory's combinator form, `layer`, and the Porter-Duff
  *  operators (both in marks/chart.ts). */
-/**
- * Carry the `.transition(...)` specs chained inside a combinator's children up
- * to the combinator (`layer([trail, head.transition(...)])`), so the chart
- * builder, which reads them off the mark it is given, finds them wherever the
- * chained mark sits. The nodes still record each spec on its own mark alone,
- * and that mark is the one a transition moves (`tween.tsx`). Whether several
- * are allowed depends on the clock (the chart builder decides).
- */
-export function adoptChildTransition(mark: object, children: unknown): void {
-  if (!Array.isArray(children)) return;
-  const specs = children.flatMap(chainedTransitions);
-  if (specs.length > 0) (mark as any).__transitions = specs;
-}
-
 export function tagCombinator<M extends object>(
   mark: M,
   type: string,
@@ -1006,7 +982,6 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         return node;
       };
       const combinator = nameableMark(base);
-      adoptChildTransition(combinator, marks);
       if (cfg.serialize) {
         tagCombinator(
           combinator,

@@ -254,16 +254,16 @@ methods:
   each phase of an animation (`animation.grow()`, `animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the
   build-in reads the `enter` effects back off the resolved tree
-  (`src/animation/install.ts`). Under a sequence, the chart builder turns the
-  spec into a `time.transition()` drawn with the mark's tier (the next
-  `.layer(...)` still takes the tier's marks as its scope), and the transition
-  moves only the mark the spec was chained on. The chained mark may sit inside
-  a combinator (`layer([trail, head.transition(...)])`): the `layer` and
-  compositing combinators carry their children's specs up to themselves
-  (`adoptChildTransition`), so the chart builder finds them on the mark it is
-  given (`chainedTransitions`). Under a sequence a tier draws one transition,
-  so two chained marks in one `.mark(...)` are an error there. This is the
-  build-in prototype (draft PR #901) and is JavaScript-only.
+  (`src/animation/install.ts`). Under a sequence, the chart builder reads the
+  records off the tier's resolved marks (`chainedUpdates`) and draws one
+  `time.transition()` for each way of moving it finds (the same curve and
+  ease, `sameTween`), inside the tier's own frame, so the next `.layer(...)`
+  still takes the tier's marks as its scope. Each transition moves only the
+  marks that chained its tween, however many of them a keyframe holds. The
+  chained mark may sit anywhere inside the tier's mark
+  (`layer([trail, head.transition(...)])`, a `createMark` component), because
+  the records are on the nodes. This is the build-in prototype (draft PR
+  #901) and is JavaScript-only.
 - `mark.translate({ x?, y? })` — wraps the produced node in a structural
   translation node. This is deliberately not equivalent to merging `x`/`y` into
   the mark's own options: a mark or operator may already give `x`/`y`

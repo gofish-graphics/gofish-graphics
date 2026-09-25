@@ -120,13 +120,23 @@ export type TimedEffect = {
  *  `time.sequence` (the update phase). It is the chained spelling of today's
  *  `.layer(time.transition({ curve, ease }))`, and like it keeps
  *  `time.transition`'s defaults (the auto curve, no ease). `layer` builds that
- *  transition tier; it is bound where the `time` namespace is in reach
+ *  transition tier, which moves the marks that chained this tween; it is bound where the `time` namespace is in reach
  *  (`animation/index.ts`), so the chart builder can use it without importing
  *  `time` (which would cycle). */
 export type TweenEffect = {
   readonly __tween: true;
+  /** How the run is read between keyframes, as for `time.transition`. */
+  readonly curve?: "auto" | "step" | "linear" | "catmullRom";
+  /** A time warp inside each keyframe interval, resolved. */
+  readonly ease?: (u: number) => number;
   layer: () => unknown;
 };
+
+/** Whether two tweens move a mark the same way: the same curve and the same
+ *  ease. Marks whose tweens do are moved by one transition, however many
+ *  times `animation.tween(...)` was called for them. */
+export const sameTween = (a: TweenEffect, b: TweenEffect): boolean =>
+  a.curve === b.curve && a.ease === b.ease;
 
 export const DEFAULT_DURATION = 500;
 

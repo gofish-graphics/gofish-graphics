@@ -38,9 +38,11 @@ const {
   blank,
   chart,
   circle,
+  createMark,
   derive,
   group,
   interpolate,
+  Layer,
   layer,
   line,
   orthogonal,
@@ -651,6 +653,68 @@ async function main(): Promise<void> {
       }
     })();
     ok("keyframes spanning more than one period throw", !why, why);
+  }
+
+  console.log("\n# several chained marks in one keyframe");
+  {
+    const near = (p: Point, q: Point) =>
+      Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
+    /** The moving marks at 1979.5, by fill. */
+    const headsAt = async (mark: any): Promise<Record<string, Point[]>> => {
+      const doc = await keyframes(drivingShifts, 1979.5)
+        .mark(mark)
+        .toDisplayList(OPTIONS);
+      const out: Record<string, Point[]> = {};
+      for (const item of items(doc)) {
+        if (item.kind !== "ellipse" || item.style?.opacity === 0) continue;
+        (out[item.style?.fill] ??= []).push([item.cx, item.cy]);
+      }
+      return out;
+    };
+    const head = (fill: string, update: any) =>
+      circle({ r: 4, fill }).transition({ update });
+    const alone = async (curve: string) =>
+      (await headsAt(head("red", animation.tween({ curve })))).red[0];
+    const [linear, smooth] = [await alone("linear"), await alone("catmullRom")];
+
+    const shared = animation.tween({ curve: "linear" });
+    const both = await headsAt(
+      layer([head("red", shared), head("blue", shared)])
+    );
+    ok(
+      "two marks chaining one tween both move, on the one run",
+      both.red?.length === 1 &&
+        both.blue?.length === 1 &&
+        near(both.red[0], linear) &&
+        near(both.blue[0], linear),
+      JSON.stringify(both)
+    );
+    const two = await headsAt(
+      layer([
+        head("red", animation.tween({ curve: "linear" })),
+        head("blue", animation.tween({ curve: "catmullRom" })),
+      ])
+    );
+    ok(
+      "two tweens in one keyframe each move their own mark",
+      two.red?.length === 1 &&
+        two.blue?.length === 1 &&
+        near(two.red[0], linear) &&
+        near(two.blue[0], smooth) &&
+        !near(linear, smooth),
+      JSON.stringify(two)
+    );
+    // A chained mark inside a component moves too: the chart reads the
+    // transition off the marks it built, wherever the chained one sits.
+    const Head = createMark(() =>
+      Layer([head("red", animation.tween({ curve: "linear" }))])
+    );
+    const inComponent = await headsAt(Head({}));
+    ok(
+      "a chained mark inside a createMark component moves",
+      inComponent.red?.length === 1 && near(inComponent.red[0], linear),
+      JSON.stringify(inComponent)
+    );
   }
 
   console.log("\n# what is not built throws");
