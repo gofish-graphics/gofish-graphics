@@ -40,6 +40,25 @@ scatter(*, by=None, **options) -> Operator
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
+## Placing by axis name with `dims`
+
+`x` and `y` mean the first and second axis in any coordinate space. To use the
+names the enclosing coordinate space declares, pass them in the `dims` dict: a
+plain value is the point, like `x`, and `{"min": ..., "max": ...}` is the span,
+like `xMin`/`xMax`.
+
+```python
+# Under polar(): the same as scatter(by="id", x="bearing", y="distance")
+chart(trips, coord=polar()) \
+    .flow(scatter(by="id", dims={"theta": "bearing", "r": "distance"})) \
+    .mark(circle(r=4))
+```
+
+A scatter only places its children, so a `"size"` inside `dims` is an error;
+size the mark instead. Placing an axis twice, such as `x` together with
+`dims["theta"]`, is an error too. The circle's `r` is its radius, not the polar
+axis: axis names only appear as keys of `dims`.
+
 ## Examples
 
 ```python

@@ -253,7 +253,7 @@ carries **no** size σ (Stage 6c — a POSITION-only axis has no SIZE scope, so 
 never fabricates one; the map's own slope is the scope's σ). Only
 DATA-bound channels consume these — a plain number bypasses both (see
 `computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
-mark that says `thetaSize: datum(count)` auto-fits. Because the coord is the
+mark that says `w: datum(count)` (the θ extent) auto-fits. Because the coord is the
 single σ-scale-root, an intermediate `distribute`/`nest` under it must NOT
 re-root (it propagates the inherited σ — see the scale-root scoping gate in
 `buildChildScalePlan`); this is what makes a flat distribute confluent with any

@@ -216,6 +216,19 @@ field name like `x: "miles"` becomes a per-group mean position
 `discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
 slot coordinate instead of an invalid numeric mean.
 
+A `{ type: "dims", ... }` channel is an axis-name-keyed bag
+(`scatter({ dims: { theta: "bearing", r: "distance" } })`). `applyChannels`
+runs the bag's `entry`/`discrete` flags over every slot, with each slot's kind
+taken from its structure (`size` is `"size"`, anything else `"pos"`; see
+`inferAxisDims`), so `dims.theta` is inferred exactly as `x` would be. Which
+axis `theta` means is not known here: the scatter defers the constraints that
+need it to the [axis-name pass](/internals/layout/passes#pass-5-5-axis-name-resolution).
+
+`axisFields` returns its grouping fields keyed by axis **name**, the way the
+operator names the axis (`spread({ by, dir: "theta" })` reports
+`{ theta: by }`), and the node builder looks its own measure up by that same
+name, so the measure needs no axis index at build time.
+
 **Windowed `normalize()` on an entry-flagged `size` channel.** `spread`/
 `stack` declare `size: { type: "size", entry: true }` (#700 Phase 2) — a
 per-entry stack-axis extent, one value per split entry, that `Spread` wraps

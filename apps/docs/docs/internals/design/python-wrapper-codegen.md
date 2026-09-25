@@ -170,27 +170,37 @@ every option.
 
 Leaf marks are open-world in the IR today, but they aren't _really_ open on
 the JS side either: a mark's channels are exactly the destructured options of
-its factory plus the `FancyDims` box channels plus the coord aliases in
-`KNOWN_ALIAS_KEYS`. Everything else is silently ignored. Case in point,
-found while grounding this doc: **the current Python `rect()` exposes `rs=`
-and `ts=` kwargs that exist nowhere in JS** (the real alias names are
-`rSize`/`thetaSize`) — they serialize, pass the open-world validator, and
-are dropped on the floor at render. A closed list turns that class of bug
-into an autocomplete error.
+its factory plus the `FancyDims` box channels (plus, at the time, the coord
+aliases in a hand-kept `KNOWN_ALIAS_KEYS`). Everything else is silently
+ignored. Case in point, found while grounding this doc: **the Python `rect()`
+of the time exposed `rs=` and `ts=` kwargs that exist nowhere in JS** (the
+real alias names were `rSize`/`thetaSize`) — they serialize, pass the
+open-world validator, and are dropped on the floor at render. A closed list
+turns that class of bug into an autocomplete error.
 
 Decision: **enumerate channels per mark in the descriptor**, built up
 incrementally. Two things keep the maintenance cost low:
 
 - **Shared field groups.** Most channels aren't per-mark. `boxDims` (the
-  14 `FancyDims`/alias channels: `x, cx, x2, w, emX, y, cy, y2, h, emY,
-theta, thetaSize, r, rSize`) and `paint` (`fill, stroke, strokeWidth,
-opacity, filter`) are declared once and included by reference; a mark
-  entry then lists only its genuinely own fields (rect: `rx, ry,
-aspectRatio`).
+  `FancyDims` channels: `x, cx, x2, w, emX, y, cy, y2, h, emY, dims`) and
+  `paint` (`fill, stroke, strokeWidth, opacity, filter`) are declared once
+  and included by reference; a mark entry then lists only its genuinely own
+  fields (rect: `rx, ry, aspectRatio`).
 - **An explicit escape hatch instead of open kwargs.** If raw SVG
   passthrough is ever needed, it gets one named kwarg (e.g. `svg={...}` /
   a `style` dict), not `**kwargs` — autocomplete and closed-world checking
   survive.
+
+**Axis names are the first such escape hatch (#838).** A coordinate space
+declares names for its axes (polar `theta`/`r`, geo `lon`/`lat`), and any
+coordinate space, including one a user writes, may declare new ones. A closed
+signature cannot list names that only exist at render time, and the earlier
+approach (the four polar names as top-level kwargs, from a hand-kept list)
+drifted: geo's `lon`/`lat` were silently dropped. So the names moved into one
+named kwarg, `dims={...}`, on the box-dims marks and on `scatter`. Its keys
+are open (`t.record(t.ref("AxisDimsValue"))`, a dict in Python), and every
+other kwarg stays closed. The top-level `x/y/w/h` keys keep working in every
+coordinate space, where they mean axis 0 and axis 1.
 
 Strictness rolls out gradually: the generated Python signatures are closed
 immediately (that's where autocomplete lives); `validate.ts` can start
@@ -212,8 +222,8 @@ const boxDims = group({
   emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
   y: ch.num(), cy: ch.num(), y2: ch.num(), h: ch.num(),
   emY: { type: t.boolean },
-  // Coord aliases (KNOWN_ALIAS_KEYS) — resolved to x/y/w/h by resolveAliases.
-  theta: ch.num(), thetaSize: ch.num(), r: ch.num(), rSize: ch.num(),
+  // Axis names a coordinate space declares — resolved by resolveAliases.
+  dims: { type: t.record(t.ref("AxisDimsValue")) },
 });
 
 const paint = group({
@@ -274,7 +284,7 @@ From the `rect` entry the generator emits, mechanically:
 ```python
 def rect(*, x=None, cx=None, x2=None, w=None, emX=None,
          y=None, cy=None, y2=None, h=None, emY=None,
-         theta=None, thetaSize=None, r=None, rSize=None,
+         dims=None,
          fill=None, stroke=None, strokeWidth=None, opacity=None, filter=None,
          rx=None, ry=None, aspectRatio=None,
          key=None, label=None) -> Mark:
@@ -291,9 +301,10 @@ def rect(*, x=None, cx=None, x2=None, w=None, emX=None,
 plus a `Rect` `$def` in the JSON Schema (closed property list), the
 `knownFields` row + typed checks in the validator, and the `LeafMarkIR`
 member type in `schema.ts` — one authored entry, four generated artifacts.
-Note the emitted signature is exactly today's hand-written `rect()` minus
-its two phantom kwargs (`rs`, `ts`) and plus the four coord aliases it was
-missing — i.e., the generator's first diff already fixes real drift.
+Note the first emitted signature was the hand-written `rect()` of the time
+minus its two phantom kwargs (`rs`, `ts`) and plus the four coord aliases it
+was missing — i.e., the generator's first diff already fixed real drift.
+Those four aliases have since folded into `dims` (see above).
 
 ## Recommended staging
 
@@ -349,7 +360,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   renames, constraint/mark/operator type strings) are gone, replaced by
   descriptor lookups. Two real drift bugs were fixed as a byproduct: the
   hand-written `rect()` had phantom `rs=`/`ts=` kwargs that don't exist in
-  JS (the real names are `rSize`/`thetaSize`) and silently dropped on the
+  JS (the real names were then `rSize`/`thetaSize`) and silently dropped on the
   floor at render; `text()` had a phantom `fontWeight` and a phantom
   `label` kwarg and was missing its box-dims channels. IR for all 161
   Python stories was verified byte-identical across the change.

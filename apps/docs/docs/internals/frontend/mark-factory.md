@@ -129,16 +129,17 @@ Walking `withGoFish.ts:431-477`:
    - `"color"` channel → `inferColor(markValue, data)`. If the string matches
      a field in the first datum, wrap it as a `Value` so the color scale
      picks it up; otherwise treat the string as a literal color.
-   - **Coordinate-space axis aliases** (`theta`/`r`/`thetaSize`/`rSize`, the
-     `KNOWN_ALIAS_KEYS`) aren't declared channels, but carry the same value
-     semantics as the canonical dims they resolve to, so `createMark` infers
-     their channel by suffix: a `<name>Size` alias aggregates as a `"size"`
-     channel (`inferSize`), a position alias (`theta`/`r`) as a `"pos"` channel
-     (`inferPos`). This happens here, before the [alias-resolution
-     pass](/internals/layout/passes#pass-5-5-coordinate-space-alias-resolution)
-     moves the resolved value onto the canonical `x/y/w/h` facet — so
-     `rSize: "field"` aggregates exactly like `h: "field"`. The `__axisFields`
-     hint (used to infer axis titles) also falls back to the alias field names.
+   - `"dims"` channel → the axis-name-keyed `dims` option
+     (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
+     channel, and its kind comes from its structure, not its name: `size` is
+     a `"size"` channel, and a bare value or `min`/`center`/`max` is a
+     `"pos"` channel (`mapAxisDims` in `dims.ts`; `inferAxisDims` in
+     `channels.ts`). A `Value` in a slot passes through, as it does at the top
+     level. The kind does not depend on which axis the name means, so it can
+     run here, before the [axis-name
+     pass](/internals/layout/passes#pass-5-5-axis-name-resolution) knows the
+     enclosing coord and writes the slots onto the mark's dims. So
+     `dims: { r: { size: "count" } }` aggregates exactly like `h: "count"`.
    - Anything else → pass through.
 4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
    producing the `GoFishNode`. A component body (the no-`channels` form) may

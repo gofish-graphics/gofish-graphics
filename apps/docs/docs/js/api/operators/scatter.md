@@ -26,7 +26,7 @@ gf.chart(locations, { axes: true })
 ## Signature
 
 ```ts
-scatter({ by?, x?, y?, xMin?, xMax?, yMin?, yMax?, alignment? })
+scatter({ by?, x?, y?, xMin?, xMax?, yMin?, yMax?, dims?, alignment? })
 ```
 
 ## Parameters
@@ -35,6 +35,27 @@ scatter({ by?, x?, y?, xMin?, xMax?, yMin?, yMax?, alignment? })
 :::
 
 At least one of `x`, `y`, the `xMin`/`xMax` pair, or the `yMin`/`yMax` pair is required.
+
+## Placing by axis name with `dims`
+
+`x` and `y` mean the first and second axis in any coordinate space. To use the
+names the enclosing coordinate space declares, put them in `dims`: a plain
+value is the point, like `x`, and `{ min, max }` is the span, like
+`xMin`/`xMax`.
+
+```ts
+// Under polar(): the same as scatter({ by: "id", x: "bearing", y: "distance" })
+.flow(scatter({ by: "id", dims: { theta: "bearing", r: "distance" } }))
+.mark(circle({ r: 4 }))
+
+// Under geo(): the same as scatter({ by: "name", x: "lon", y: "lat" })
+.flow(scatter({ by: "name", dims: { lon: "lon", lat: "lat" } }))
+```
+
+A scatter only places its children, so a `size` inside `dims` is an error; size
+the mark instead. Placing an axis twice, such as `x` together with
+`dims.theta`, is an error too. The circle's `r` above is its radius, not the
+polar axis: axis names only appear as keys of `dims`.
 
 ## Example
 

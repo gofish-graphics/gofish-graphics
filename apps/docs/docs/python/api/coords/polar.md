@@ -38,19 +38,40 @@ o'clock and going clockwise.
 ::: gofish-ref polar
 :::
 
-## Axis aliases
+## Axis names
 
-Inside a polar `coord`, dimensions can be named by their polar axis: `theta` (= `x`,
-angular position) and `r` (= `y`, radius), with extents `thetaSize` (= `w`) and
-`rSize` (= `h`). Like `emX`/`emY`, these mark options are camelCase. They coexist
-with `x`/`y` and are **scope-bounded** — valid only inside a coord that declares them.
-The operator `dir` accepts the angular/radial aliases too.
+In every coordinate space, `x`, `y`, `w`, and `h` refer to the first and
+second axis. Under polar, the first axis is the angle and the second is the
+radius, so `w` is an angular extent and `h` is a radial one.
+
+Polar also declares its own names for the two axes: `theta` for the angle and
+`r` for the radius. You can use them in two places:
+
+- in a mark's `dims` keyword, a dict keyed by axis name. A plain value is a
+  position, like `x`. A dict names the parts of the axis you want to set:
+  `"min"`, `"center"`, `"max"`, `"size"`, and `"embedded"`.
+- in an operator's `dir`, as in `stack(dir="theta")`.
 
 ```python
 chart(data, coord=polar()) \
     .flow(spread(by="category", dir="theta")) \
-    .mark(rect(thetaSize=0.4, rSize="value", emX=True, emY=True))
+    .mark(rect(dims={"theta": {"size": 0.4}, "r": {"size": "value"}},
+               emX=True, emY=True))
 ```
+
+This is the same chart as `spread(by="category", dir="x")` with
+`rect(w=0.4, h="value", emX=True, emY=True)`. The names only work inside a
+coordinate space that declares them; anywhere else, `"theta"` raises an error
+that lists the names you can use there.
+
+Each part of an axis can be set once. `w=0.4` together with
+`dims={"theta": {"size": 0.4}}` is an error, because both set the angular size.
+`x=0` together with `dims={"theta": {"size": 0.4}}` is fine.
+
+A circle's own `r` keyword is still its radius. The polar `r` axis only appears
+as a key inside `dims`, so `scatter(by="id", dims={"theta": "bearing", "r":
+"distance"})` with `circle(r=4)` places each dot by bearing and distance and
+draws it with radius 4.
 
 ## Usage
 

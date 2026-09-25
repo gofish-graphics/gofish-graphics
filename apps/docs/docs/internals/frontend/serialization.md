@@ -321,7 +321,7 @@ default to) was hand-duplicated across four places: the TS type in
 `OPERATOR_TYPES` listed `"treemap"` while the `OperatorIR` union and the
 JSON Schema enum omitted it, and the hand-written Python `rect()` exposed
 `rs=`/`ts=` kwargs that don't exist anywhere in JS (the real names are
-`rSize`/`thetaSize`; they serialized, passed the open-world validator, and
+`rSize`/`thetaSize` at the time; they serialized, passed the open-world validator, and
 were silently dropped at render).
 
 [`descriptors.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/descriptors.ts)
@@ -330,8 +330,8 @@ construct (operator, leaf mark, combinator mark, coord transform) listing
 its fields in a small type DSL (`t.string`, `t.number`, `t.enum(...)`,
 `t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
 pointer at an authored envelope `$def`, and so on — see the file's `t`/`ch`
-exports). Shared field groups (`boxDims`, the 14 box-geometry/coord-alias
-channels; `paint`, the five paint channels) are declared once and pulled
+exports). Shared field groups (`boxDims`, the ten closed x/y/w/h box channels plus the open `dims` bag
+keyed by axis name; `paint`, the five paint channels) are declared once and pulled
 into a mark's entry by reference, so most mark entries list only the
 fields genuinely their own.
 
@@ -341,7 +341,15 @@ fields genuinely their own.
 `ref` — these are structural or recursive shapes rather than flat field
 bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
 of those files the doc comment marks as "stays hand-written below").
-Constraints likewise stay authored.
+Constraints likewise stay authored. So do `AxisInterval` and `AxisDimsValue`,
+the value shape of a `dims` option (`t.record(t.ref("AxisDimsValue"))` in the
+table): a bare `ChannelValue` or an interval object with only
+`min`/`center`/`max`/`size`/`embedded` keys. `validate.ts` tells the two apart
+the way the renderer does (an interval is a plain object with no `type` tag), so
+a misspelled anchor is reported rather than read as an unknown channel shape.
+The keys of `dims` are axis names that only mean something inside the enclosing
+coordinate space, so the wire keeps them open and carries them verbatim; the
+same goes for `spread`/`stack`'s `dir`, which is a plain string on the wire.
 
 Four consumers read the table:
 

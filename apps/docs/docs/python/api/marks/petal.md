@@ -26,14 +26,14 @@ chart(seafood, coord=polar()) \
 ```python
 petal(*, x=None, cx=None, x2=None, w=None, emX=None,
       y=None, cy=None, y2=None, h=None, emY=None,
-      theta=None, thetaSize=None, r=None, rSize=None,
+      dims=None,
       fill=None, stroke=None, strokeWidth=None) -> Mark
 ```
 
 Use it inside a [`polar()`](/python/api/coords/polar) or
 [`clock()`](/python/api/coords/clock) coordinate space, where `w`/`h` read as the
-angular and radial extents (and `theta`/`thetaSize`/`r`/`rSize` spell the same
-thing).
+angular and radial extents. `dims={"theta": ..., "r": ...}` names the same two
+axes by their polar names (see [Axis names](/python/api/coords/polar#axis-names)).
 
 ## Parameters
 

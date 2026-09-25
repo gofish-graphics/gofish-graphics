@@ -93,6 +93,13 @@ thetaSize, rSize })`, `spread({ by, dir: "theta" })`, `stack({ dir: "r" })`. No 
   operator names (the abandoned `stackR`/`stackT` route). `dir`/`by` accept aliases.
 - **Axis renderer uses the aliases** for titles/labels (this is what makes #23 read).
 
+> **Superseded by #838.** The top-level `theta`/`thetaSize`/`r`/`rSize` keys are
+> gone. `x`/`y`/`w`/`h` mean axis 0/1 in every space, and a space's declared names
+> are used as keys of a mark's (or scatter's) `dims` option, e.g.
+> `rect({ dims: { theta: { size: 0.4 }, r: { size: "value" } } })`, and as an
+> operator's `dir`, which now resolves against the enclosing coord's declared names
+> instead of a static theta→0/r→1 map. See the layout-passes essay, Pass 5.5.
+
 ### Phase 3 — **Embedding redesign** (needs co-design — see below; #542, #8)
 
 The conceptual crux. Settle the point/line/area contract. Decoupled section below.

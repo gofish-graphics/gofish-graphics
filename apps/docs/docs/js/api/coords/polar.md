@@ -41,18 +41,52 @@ o'clock and going clockwise.
 ::: gofish-ref polar
 :::
 
-## Axis aliases
+## Axis names
 
-Inside a polar `coord`, dimensions can be named by their polar axis: `theta` (= `x`,
-angular position) and `r` (= `y`, radius), with extents `thetaSize` (= `w`) and
-`rSize` (= `h`). They coexist with `x`/`y` and are **scope-bounded** — valid only
-inside a coord that declares them (using one outside throws). The operator `dir`
-accepts the angular/radial aliases too.
+In every coordinate space, `x`, `y`, `w`, and `h` refer to the first and
+second axis. Under polar, the first axis is the angle and the second is the
+radius, so `w` is an angular extent and `h` is a radial one.
+
+Polar also declares its own names for the two axes: `theta` for the angle and
+`r` for the radius. You can use them in two places:
+
+- in a mark's `dims` option, which is keyed by axis name. A plain value is a
+  position, like `x`. An object names the parts of the axis you want to set:
+  `min`, `center`, `max`, `size`, and `embedded`.
+- in an operator's `dir`, as in `stack({ dir: "theta" })`.
+
+This chart is the one at the top of the page, written with the polar names:
+
+::: gofish
+
+```js
+gf.chart(seafood, { coord: gf.polar() })
+  .flow(gf.stack({ by: "species", dir: "theta" }))
+  .mark(gf.rect({ dims: { theta: { size: "count" } }, fill: "species" }))
+  .render(root, {
+    w: 400,
+    h: 300,
+    transform: { x: 200, y: 150 },
+  });
+```
+
+:::
+
+The names only work inside a coordinate space that declares them. Outside
+polar, `theta` throws an error that lists the names you can use there.
+
+Each part of an axis can be set once. `w: 0.4` together with
+`dims: { theta: { size: 0.4 } }` is an error, because both set the angular
+size. `x: 0` together with `dims: { theta: { size: 0.4 } }` is fine, because
+one sets the start and the other sets the size.
+
+A circle's own `r` option is still its radius. The polar `r` axis only appears
+as a key inside `dims`, so the two do not collide:
 
 ```ts
-chart(data, { coord: polar() })
-  .flow(spread({ by: "category", dir: "theta" }))
-  .mark(rect({ thetaSize: 0.4, rSize: "value", emX: true, emY: true }));
+chart(trips, { coord: polar() })
+  .flow(scatter({ by: "id", dims: { theta: "bearing", r: "distance" } }))
+  .mark(circle({ r: 4 }));
 ```
 
 ## Usage
