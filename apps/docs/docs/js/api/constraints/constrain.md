@@ -4,7 +4,7 @@
 
 ## Usage
 
-Name each node you want to position using `.name("key")`, then chain `.constrain()` on the `Layer`. The callback receives an object of `ConstraintRef` handles; destructure the names you need.
+Name each node you want to position using `.name("key")`, then chain `.constrain()` on the `Layer`. The callback receives an ordinary object with one `ConstraintRef` handle for every name inside the layer. Destructure the names you need.
 
 ```ts
 Layer([
@@ -36,11 +36,20 @@ gf.layer([
 
 ## Names
 
-A name in the callback resolves the same way as [`ref("name")`](/js/api/marks/ref#string-nearest-match), starting at the constrained layer: the nearest node with that name wins, and the search never crosses a `createMark` boundary. So an operand can be nested anywhere inside the layer, not only a direct child.
+A name in the callback resolves the same way as [`ref("name")`](/js/api/marks/ref#string-nearest-match), starting at the constrained layer: the closest node with that name inside the layer wins, and the search never crosses a `createMark` boundary. So an operand can be nested anywhere inside the layer, not only a direct child, and a direct child beats a node with the same name nested deeper.
+
+The object holds exactly the names inside the layer. A name that is not there reads as `undefined`, so destructuring defaults and optional checks work as usual:
+
+```ts
+Layer(items).constrain(({ a, b, note, pad = 8 }) => [
+  Constraint.distribute({ dir: "x", spacing: pad }, [a, b]),
+  ...(note ? [Constraint.align({ y: "end" }, [a, note])] : []),
+]);
+```
 
 - **Direct child.** The constraint places it.
 - **Nested node.** It is fixed to the direct child that contains it. If that child is also named in a constraint, the two move together. If not, the child stays where it was laid out and the nested node is a fixed point the other operands move to.
-- **Errors.** A name with no match, two matches at the same distance, or a match outside the layer throws when the chart renders. A nested node cannot be resized from outside, so the target of `"span"` or `"size"` must be a direct child.
+- **Errors.** Using a missing name (an `undefined` handle) as an operand throws as soon as `.constrain()` runs, and the message lists the names inside the layer. Two matches at the same smallest distance throw when the chart renders. A nested node cannot be resized from outside, so the target of `"span"` or `"size"` must be a direct child.
 
 ::: gofish
 

@@ -68,10 +68,19 @@ level and tries again, and so on up to the component boundary.
 
 This means a nearer name hides a farther one. That is on purpose. It is what
 lets a layer that is repeated, once per row of a chart or once per call of a
-helper function, use the same local names every time: each copy finds its
-own. Two nodes with the same name at the same distance are an error, and so is
-a name that is not found at all, so a typo or a real collision never passes
-in silence.
+helper function, use the same local names every time, because each copy finds
+its own.
+
+Inside the level where the lookup stops, the closest node wins, counted in
+steps down from that level. So a layer's own child named `box` beats a `box`
+nested deeper inside another child. Two nodes with the same name at the same
+smallest distance are an error, and so is a name that is not found at all, so a
+typo or a real collision never passes in silence.
+
+Names that GoFish makes up never get in the way. A mark's data key is not a
+name, so a `spread` over rows keyed `"a"` and `"b"` does not add nodes named
+`"a"` and `"b"`. When an operator does need to name a node, it uses a fresh
+name that cannot match one you write.
 
 Because the lookup reaches into nested operators, a constraint can name a node
 deep inside another child, such as one circle inside a `spread` inside an

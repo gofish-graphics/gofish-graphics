@@ -35,7 +35,7 @@ ref(
 
 ### String — nearest match
 
-`ref("x")` finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to where the ref sits. It searches the subtree of the ref's parent first, then the subtree of each ancestor in turn, and stops at the first level that has a match. The search never crosses a `createMark` boundary, in either direction. A nearer match hides a farther one with the same name. Two matches at the level where the search stops is an error, and so is no match at all.
+`ref("x")` finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to where the ref sits. It searches the subtree of the ref's parent first, then the subtree of each ancestor in turn, and stops at the first level that has a match. Within that level the closest match wins, counted in steps down from the level, so a direct child beats a node with the same name nested deeper. The search never crosses a `createMark` boundary, in either direction. A nearer match hides a farther one with the same name. Two matches at the same smallest distance is an error, and so is no match at all. A data key is not a name, so `ref("a")` does not find a mark just because its row is keyed `"a"`.
 
 ```ts
 Layer([

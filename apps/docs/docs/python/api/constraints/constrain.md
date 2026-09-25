@@ -13,8 +13,11 @@ keyword arguments, `z_above` / `z_below` snake-cased).
 
 Name each node you want to position with `.name("key")`, then chain
 `.constrain()` on the `layer`. The callback receives one ref per parameter it
-declares, named after the parameter. A `**rest` parameter also receives every
-name inside the layer, for dynamic lookups like `rest[key]`.
+declares without a default, named after the parameter. A parameter with a
+default keeps its default and gets no ref, so the loop idiom
+`lambda a, b, gap=gap: [...]` binds the loop value as usual. A `**rest`
+parameter also receives every other name inside the layer, for dynamic lookups
+like `rest[key]`.
 
 ```python
 from gofish import layer, rect, text, Constraint
@@ -31,11 +34,11 @@ layer([
 
 ## Names
 
-A parameter name resolves the same way as [`ref("name")`](/python/api/marks/ref#string-nearest-match), starting at the constrained layer: the nearest node with that name wins, and the search never crosses a `@mark` boundary. So an operand can be nested anywhere inside the layer, not only a direct child.
+A parameter name resolves the same way as [`ref("name")`](/python/api/marks/ref#string-nearest-match), starting at the constrained layer: the closest node with that name inside the layer wins, and the search never crosses a `@mark` boundary. So an operand can be nested anywhere inside the layer, not only a direct child, and a direct child beats a node with the same name nested deeper.
 
 - **Direct child.** The constraint places it.
 - **Nested node.** It is fixed to the direct child that contains it. If that child is also named in a constraint, the two move together. If not, the child stays where it was laid out and the nested node is a fixed point the other operands move to.
-- **Errors.** A name with no match, two matches at the same distance, or a match outside the layer raises when the chart renders. A nested node cannot be resized from outside, so the target of `"span"` or `"size"` must be a direct child.
+- **Errors.** A name with no match inside the layer, or two matches at the same smallest distance, raises when the chart renders. A nested node cannot be resized from outside, so the target of `"span"` or `"size"` must be a direct child.
 
 ```python
 from gofish import Constraint, circle, enclose, layer, rect, spread

@@ -622,12 +622,12 @@ operand already placed — except the deliberate `isDataPositionedAlignTarget`
 skip (a self-scaled scatter facet), which stays silent.
 
 Before any of this, the layer resolves every placement operand to a node
-inside it (`resolveConstraintOperands`, `constraints/index.ts`). A by-name
-operand goes through the same lookup as `ref("name")` (see
-[Name Resolution & Scoping](/internals/core/names-and-scoping)); a by-position
-operand, which operators such as `spread` and the axis/legend/label chrome
-build with `constrainChildren`, names a direct-child slot (a slot, not a node
-object, because elaboration may later swap a child for a wrapper in place). A missing, ambiguous, or
+inside it (`resolveConstraintOperands`, `constraints/index.ts`). Every
+operand is a name, and it goes through the same lookup as `ref("name")` (see
+[Name Resolution & Scoping](/internals/core/names-and-scoping)), once per
+distinct name. Operators such as `spread` and the axis, legend, and label
+chrome name their own direct children, and the closest match rule makes a
+direct child win over any deeper node with the same name. A missing, ambiguous, or
 out-of-layer operand throws (#819), so a constraint can no longer bind nothing
 in silence. An operand that is a direct child is its child's placeable, as
 before. An operand nested inside a direct child is a `NestedOperand`

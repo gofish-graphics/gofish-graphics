@@ -33,8 +33,16 @@ starts:
 
 From the start, the search looks at every node inside the current level's
 subtree. If it finds the name, it stops there. If not, it moves up to the
-parent and looks at that subtree, and so on. This is the **innermost
-enclosing match**: the nearest level that contains the name wins.
+parent and looks at that subtree, and so on. So the nearest level that
+contains the name wins.
+
+Inside the level where the search stops, the closest match wins. Distance is
+the number of steps down from that level's node, so a direct child is at
+distance 1. A layer's direct child `x` therefore beats an `x` nested deeper
+inside another child, and a deeply nested name is still reachable when nothing
+closer has it. `closestAtLevel` does this with a breadth-first search that
+stops at the first depth with a match. When the search moves up a level, it
+does not walk the subtree it just searched again.
 
 The search has one hard boundary, the `createMark` component. It never goes
 above the nearest component that contains the start, and it never looks inside
@@ -47,8 +55,8 @@ component boundary means the same thing for `ref`, `.constrain()`, and
 
 Two results are errors, and both name the problem:
 
-- **Ambiguous.** Two or more nodes with the name at the level where the search
-  stops.
+- **Ambiguous.** Two or more nodes with the name at the same smallest distance
+  in the level where the search stops.
 - **Missing.** No node with the name anywhere up to the boundary.
 
 ## Why the nearest match, and why hiding is intended
@@ -76,13 +84,11 @@ and stops. The other rows' `bar`s are farther away and never compete. A rule
 that required names to be unique across the whole component would make this
 an error, and the only fix would be to invent a new name per row.
 
-Distance is counted in levels, not in depth. When one layer's subtree holds
-the same name twice, once as a direct child and once deeper down, the search
-from that layer sees both at the same level: that is ambiguous. It happens
-when a helper nests copies of itself (a tree built by recursion) or when two
-helpers that share a name nest one inside the other. Wrap the repeated part in
-`createMark` so each copy is its own scope, or rename. The `NestedBoxesTree`
-story does the first; `DFSCQ` does the second.
+A tie is still possible. It happens when two nodes with the name sit at the
+same depth below the level, e.g., two sibling layers that each hold a child
+named `x`. A tree built by recursion can produce that. Wrap each repeated part
+in `createMark` so each copy is its own scope, or rename. The
+`NestedBoxesTree` story does the first.
 
 Chart-tier names are a different lookup. `.name("bars")` on a mark in a chart
 also registers every node it produces in the chart's layer registry, and
@@ -92,21 +98,39 @@ registry.
 
 ## Constraint operands
 
-`.constrain(fn)` calls `fn` with an environment (`constraintEnv` in
-`constraints/index.ts`) where every property read is a by-name operand,
-`{ name }`. Nothing is resolved at that point. At layout, the layer resolves
-all of its operands (`resolveConstraintOperands`) with the lookup above,
-starting at itself. An operand must end up inside the layer; a name that is
-only found outside it is an error, because a layer can only place what it
-contains.
+`.constrain(fn)` calls `fn` right away with an environment
+(`constraintEnv` in `constraints/index.ts`). The environment is an ordinary
+object with one by-name operand, `{ name }`, for every distinct name inside the
+layer. It walks the same bounded tree as the lookup (`visibleNodes`), so it
+goes into nested layers but not into a nested `createMark` component.
 
-Operators that build a constrained layer themselves (spread, scatter, table,
-and the axis, legend, and label chrome) do not use names at all. They call
-`constrainChildren`, which gives them **by-position** operands
-(`{ name, child }`, from `childRefs`): the layer's `child`-th direct child. A
-slot rather than a node object, because elaboration can later replace a child
-with a wrapper in the same slot. This keeps their synthesized names, such as
-`__spread_0`, out of the lookup, so those names can repeat freely.
+These are exactly the names a constraint of this layer can use. The lookup
+from the layer stops at the layer's own level for any of them, so each one
+resolves to a node inside the layer. A name that exists only outside the layer
+could never be an operand, because a layer can only place what it contains.
+Since the layer's contents already exist when `.constrain()` runs, the
+callback does not have to wait until layout.
+
+A name that is not in the environment reads as `undefined`. So JS
+destructuring defaults, e.g., `({ a, b, pad = 8 })`, and optional checks,
+e.g., `note ? [...] : []`, work as they do for any object. If the callback
+uses `undefined` as an operand, `validateOperands` throws right away, and the
+message lists the names inside the layer (#819).
+
+At layout, the layer resolves each distinct operand name once
+(`resolveConstraintOperands`) with the lookup above, starting at itself, and
+records whether the node is a direct child. The operand stays a name until
+then because elaboration can swap a named child for a wrapper. Axis, legend,
+and label elaboration wrap a node with `wrapPreservingIdentity`, which moves
+the node's name and key onto the wrapper, so the name still finds the node
+that now fills that slot.
+
+Operators that build a constrained layer themselves use the same path. Spread,
+scatter, table, and the axis, legend, and label chrome call plain
+`.constrain()` and read their operands from the environment. The closest match
+rule is what makes this safe. An operator names its own direct children, which
+are at distance 1, so a node with the same name deeper inside a child never
+competes.
 
 ### Nested operands
 
@@ -165,10 +189,32 @@ tutorial shows the replacement: the constrained layer holds the node's
 container, so the constraint names the nested node, and anything that reads
 the result (an arrow) sits one layer out.
 
+## Names the library makes up
+
+A name the library makes up must never clash with a name a user writes. Two
+rules keep them apart:
+
+- The data key is never used as a name. `createMark` used to write each mark's
+  data key into `_name`, and `spread`, `scatter`, and `table` used to name an
+  unnamed child after its key. Then a spread over rows keyed `"a"` and `"b"`
+  put nodes named `"a"` and `"b"` into the scope, where they could make a
+  user's own `"a"` ambiguous, or answer to it. Now the key stays in `key`
+  only. Axis tick labels read the key, so they are unchanged.
+- When an operator has to name a node, it gets a fresh name from
+  `internalName` (`constraints/shared.ts`), e.g., `__spread#12`. Each call
+  returns a new name, so it cannot equal a user's name or another operator's.
+  `ensureChildNames` keeps a name the user gave a child, and gives an
+  `internalName` to an unnamed child or to a second child with the same user
+  name.
+
+These names still live in `_name`, next to user names, so they appear in a
+`.constrain()` environment. The full fix keeps library names out of `_name`
+altogether (see the open questions).
+
 ## Open questions
 
 - An inline string `ref` that is a child of a constrained layer resolves its
   position before that layer's constraints run (#878).
-- Operator-synthesized names (`__spread_0`, datum keys written by `createMark`)
-  still land in `_name`. They are harmless unless a user looks one up by
-  string, but they are not hygienic (#905 is the same problem for chart tiers).
+- Library names still share `_name` with user names, and the fixed chrome
+  names (`__axisContent`, `__legend`, and similar) are not yet made unique
+  per call. Chart-tier names have the same problem (#905).
