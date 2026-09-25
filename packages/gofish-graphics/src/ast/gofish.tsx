@@ -292,6 +292,9 @@ export async function layout(
     if (contexts?.session) n.setRenderSession(contexts.session);
     if (withColorScale) n.resolveColorScale();
     n.resolveNames();
+    // The inserted chrome is built from operators (Spread) whose constraints
+    // install in this pass; nodes resolved before are consumed and untouched.
+    n.resolveAliases();
     n.clearUnderlyingSpace();
     n.resolveUnderlyingSpace();
   };

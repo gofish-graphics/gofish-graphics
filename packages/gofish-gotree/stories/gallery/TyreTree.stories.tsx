@@ -76,7 +76,7 @@ const sampleTree = (() => {
 //     · Direction / StartAngle / CentralAngle — polar() now has these knobs but
 //       this chart's spec only customizes InnerRadius; kept at defaults.
 //     · no θ/r axis swap (no transposed variant; PolarAxis swap not expressible).
-//  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ grows
+//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight, nest-θ grows
 //    each parent to its children's arc, and the coord fits the summed weights to
 //    the circle — so the disc closes for any tree with no hand-set leafTheta.
 //  - REQUIRES a depth-balanced tree: align-r needs every leaf at the same depth
@@ -106,7 +106,7 @@ const band = 34; // radial thickness of one inclusion band
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        thetaSize: datum(1),
+        w: datum(1),
         emX: true,
         h: (d.height + 1) * band,
         emY: true,

@@ -28,8 +28,11 @@ import {
   translateForAnchor,
   Size,
   Transform,
-  AliasResolution,
-  buildAliasMap,
+  applyAxisDims,
+  axisScopeFor,
+  BASE_AXIS_SCOPE,
+  type AxisScope,
+  type PendingAxisDims,
 } from "./dims";
 import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
 import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
@@ -514,16 +517,24 @@ export class GoFishNode {
    */
   public axisDir?: 0 | 1;
   /**
-   * Alias-keyed dim options (e.g. `{ theta: 0.5, rSize: "value" }`) stashed by a
-   * mark factory at construction, before its enclosing coord exists. Resolved
-   * into `args.dims` by {@link resolveAliases} once the coord's declared aliases
-   * are known. See `extractAliasCandidates` (dims.ts).
+   * A mark's axis-name-keyed `dims` option (e.g. `{ theta: { size: 0.5 } }`),
+   * stashed by its factory at construction, before its enclosing coord exists,
+   * together with the per-axis dims array it resolves onto. Consumed by
+   * {@link resolveAliases}. See `stashAxisDims` / `applyAxisDims` (dims.ts).
    */
-  public _pendingAliases?: Record<string, any>;
+  public _pendingDims?: PendingAxisDims;
   /**
-   * Position aliases a `coord` node declares for its subtree (the transform's
+   * The part of an operator's elaboration that depends on which axis an axis
+   * NAME means (spread's `dir`, scatter's `dims`): the constraints it installs
+   * on this node. Deferred at construction, because an axis name like `theta`
+   * only has a meaning inside the coordinate space that declares it, and run
+   * once by {@link resolveAliases} with the scope of this node's children.
+   */
+  public _elaborateInAxisScope?: (scope: AxisScope) => void;
+  /**
+   * Axis names a `coord` node declares for its subtree (the transform's
    * `aliases`, e.g. `{ x: "theta", y: "r" }`). Read by {@link resolveAliases} to
-   * rebind the active alias scope while walking into this coord.
+   * rebind the axis-name scope while walking into this coord.
    */
   public _aliases?: { x?: string; y?: string };
   constructor(
@@ -723,53 +734,48 @@ export class GoFishNode {
   }
 
   /**
-   * Top-down pass that resolves coordinate-space axis aliases (e.g. polar
-   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` channels of each
-   * mark's `dims`. Mirrors {@link resolveAxes}: it carries the `active` alias
-   * scope downward, rebinding it at every `coord` node that declares aliases
-   * (a nested coord rebinds for its subtree).
+   * Top-down pass that gives axis NAMES their meaning. `x`/`y` mean axis 0/1
+   * everywhere; a coordinate space adds the names its transform declares in
+   * `aliases` (polar `theta`/`r`, geo `lon`/`lat`). Mirrors {@link resolveAxes}:
+   * it carries the `active` scope downward, and a `coord` that declares names
+   * rebinds it for its subtree (the innermost declaring coord wins).
    *
-   * Runs BEFORE `resolveUnderlyingSpace` (which reads the resolved dims). It
-   * mutates `args.dims` in place — reassigning the array element (not its fields)
-   * so the mark's layout/space closures, which captured the same array reference,
-   * observe the resolution. The `embedded` flag is authored later by
-   * {@link resolveEmbedding}, not here.
+   * At each node it consumes the two kinds of name-dependent work a factory
+   * could not do at construction, when the enclosing coord did not exist yet:
+   * - a mark's `dims` option ({@link _pendingDims}), written onto its per-axis
+   *   dims. A node's own box lives in its PARENT's space, so this resolves
+   *   against `active`, even on a coord.
+   * - an operator's axis-dependent elaboration ({@link _elaborateInAxisScope}:
+   *   spread's `dir`, scatter's `dims`), which relates the node's CHILDREN, so it
+   *   runs with the children's scope.
    *
-   * Hygiene: using an alias outside any coord that declares it (no `active` map),
-   * or naming an alias the enclosing coord doesn't declare, is a build-time error.
+   * Each is consumed once, so the pass is idempotent and can rerun over a tree
+   * that an elaboration pass (axes, legends) extended with new nodes.
+   *
+   * Runs BEFORE `resolveUnderlyingSpace` (which reads the dims and the
+   * constraints). The `embedded` flag is authored later by
+   * {@link resolveEmbedding}, not here. A name no enclosing coord declares is
+   * a build-time error that lists the names that are declared.
    */
-  public resolveAliases(active?: Record<string, AliasResolution>): void {
-    // A coord that declares aliases rebinds the scope for its subtree.
-    let next = active;
-    if (this.type === "coord" && this._aliases) {
-      next = buildAliasMap(this._aliases);
-    }
+  public resolveAliases(active: AxisScope = BASE_AXIS_SCOPE): void {
+    const inner =
+      this.type === "coord" && this._aliases
+        ? axisScopeFor(this._aliases)
+        : active;
 
-    const pending = this._pendingAliases;
+    const pending = this._pendingDims;
     if (pending) {
-      const dims = this.args?.dims as Dimensions | undefined;
-      for (const [key, value] of Object.entries(pending)) {
-        const res = next?.[key];
-        if (res === undefined) {
-          throw new Error(
-            next === undefined
-              ? `Axis alias "${key}" used outside any coordinate space that declares it. Wrap the mark in a coord (e.g. polar()) or use x/y/w/h.`
-              : `Axis alias "${key}" is not declared by the enclosing coordinate space. Declared aliases: ${Object.keys(
-                  next
-                ).join(", ")}.`
-          );
-        }
-        if (dims) {
-          dims[res.axis] = {
-            ...dims[res.axis],
-            [res.key]: value,
-          };
-        }
-      }
+      this._pendingDims = undefined;
+      applyAxisDims(pending, active);
+    }
+    const elaborate = this._elaborateInAxisScope;
+    if (elaborate) {
+      this._elaborateInAxisScope = undefined;
+      elaborate(inner);
     }
 
     this.children.forEach((c) => {
-      if (c instanceof GoFishNode) c.resolveAliases(next);
+      if (c instanceof GoFishNode) c.resolveAliases(inner);
     });
   }
 

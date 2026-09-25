@@ -11,6 +11,7 @@ import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
 import {
   displayTranslate,
   elaborateDims,
+  stashAxisDims,
   FancyDims,
   Interval,
   Size,
@@ -48,9 +49,10 @@ export type CoordinateTransform = {
   // inferDomain: ({ width, height }: { width: number; height: number }) => Interval[];
   domain: [Interval, Interval];
   /**
-   * Axis-name aliases this space contributes to its scope (e.g. polar:
-   * `{ x: "theta", y: "r" }`). Position aliases; size aliases are `<name>Size`.
-   * Propagated by `coord` so marks/operators in scope can use them.
+   * Axis names this space declares for its subtree (e.g. polar:
+   * `{ x: "theta", y: "r" }`, geo: `{ x: "lon", y: "lat" }`), on top of the
+   * `x`/`y` every space has. The only source of the names a mark's `dims`
+   * option and an operator's `dir` may use inside this space.
    */
   aliases?: { x?: string; y?: string };
   /**
@@ -323,7 +325,7 @@ export const coord = createNodeOperator(
           // anchored map. Only DATA-bound channels consume the scale — a plain
           // number bypasses both σ and the map (see `computeAesthetic`) — so
           // hand-sized (radian/pixel) stories are unchanged. This is what lets a
-          // mark say `thetaSize: datum(count)` and have the ring auto-fit.
+          // mark say `w: datum(count)` and have the ring auto-fit.
           const fitAxis = (
             axis: 0 | 1,
             budget: number
@@ -869,6 +871,9 @@ export const coord = createNodeOperator(
     // Declare this space's axis aliases (e.g. polar `{ x: "theta", y: "r" }`) so
     // resolveAliases can rebind the alias scope for the coord's subtree.
     coordNode._aliases = coordTransform.aliases;
+    // The coord's own box lives in its parent's space, so its `dims` option
+    // resolves against the parent's names (see resolveAliases).
+    coordNode._pendingDims = stashAxisDims(fancyDims, dims);
     return coordNode;
   }
 );

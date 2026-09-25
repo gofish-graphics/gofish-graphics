@@ -29,7 +29,6 @@ import {
 } from "./marks/createOperator";
 import { isValue } from "./data";
 import { splitLiveChannels } from "../interaction/live";
-import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark, MarkChild } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
@@ -513,16 +512,8 @@ function buildCreatedMark(
       const channelSpec = channels[propName];
       const markValue = resolvedOpts[propName];
 
-      let channelType: ChannelType | undefined =
+      const channelType: ChannelType | undefined =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
-      // Coordinate-space axis aliases aren't declared channels, but they carry
-      // the same value semantics as the canonical dims they resolve to: a
-      // `<name>Size` alias is a SIZE channel, a position alias (theta/r) a POS
-      // channel. Infer that here so `rSize: "field"` aggregates like `h: "field"`
-      // before the resolveAliases pass moves the value onto the dims.
-      if (channelType === undefined && KNOWN_ALIAS_KEYS.has(propName)) {
-        channelType = propName.endsWith("Size") ? "size" : "pos";
-      }
       const isEntry =
         typeof channelSpec === "object" && channelSpec?.entry === true;
 

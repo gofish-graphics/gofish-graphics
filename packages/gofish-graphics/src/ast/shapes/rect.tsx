@@ -20,7 +20,7 @@ import {
   Dimensions,
   displayDims as displayDimsOf,
   elaborateDims,
-  extractAliasCandidates,
+  stashAxisDims,
   FancyDims,
   FancySize,
   Size,
@@ -274,23 +274,21 @@ export const Rect = ({
 
         return {
           intrinsicDims: {
-            dims: [
-              {
-                // Store the box canonically: true min + unsigned extent. A
-                // negative bar grows downward, so its min is the negative
-                // endpoint and its size is the magnitude. Every derivation site
-                // (`localAnchorPoint`, `displayDims`, the `dims` getters) then
-                // reads a non-negative `size` and never needs `Math.abs`.
-                min: Math.min(0, w),
-                size: Math.abs(w),
-                embedded: dims[0].embedded,
-              },
-              {
-                min: Math.min(0, h),
-                size: Math.abs(h),
-                embedded: dims[1].embedded,
-              },
-            ],
+            0: {
+              // Store the box canonically: true min + unsigned extent. A
+              // negative bar grows downward, so its min is the negative
+              // endpoint and its size is the magnitude. Every derivation site
+              // (`localAnchorPoint`, `displayDims`, the `dims` getters) then
+              // reads a non-negative `size` and never needs `Math.abs`.
+              min: Math.min(0, w),
+              size: Math.abs(w),
+              embedded: dims[0].embedded,
+            },
+            1: {
+              min: Math.min(0, h),
+              size: Math.abs(h),
+              embedded: dims[1].embedded,
+            },
           },
           transform: {
             translate: [x, y],
@@ -448,8 +446,8 @@ export const Rect = ({
     },
     []
   );
-  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-  node._pendingAliases = extractAliasCandidates(fancyDims);
+  // Stash the axis-name-keyed `dims` option for the resolveAliases pass.
+  node._pendingDims = stashAxisDims(fancyDims, dims);
   return node;
 };
 
@@ -464,6 +462,7 @@ const RECT_CHANNELS = {
   b: "pos",
   cx: "pos",
   cy: "pos",
+  dims: "dims",
   fill: "color",
   stroke: "color",
 } as const;

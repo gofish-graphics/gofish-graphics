@@ -30,7 +30,7 @@ import { initializeContainer } from "../helper";
 // The dsl's "include" (X.Root) — parent SPANS its children's angular extent — is
 // realized by `nest` on θ (the proper containment primitive): the parent leaves
 // θ unsized and nest grows it to its children's combined arc. Leaves carry a unit
-// `thetaSize` weight; the coord is the σ-scale-root, summing the weights and
+// `w` (θ) weight; the coord is the σ-scale-root, summing the weights and
 // fitting them to the circle (#618), so every ring closes for any tree with no
 // hand-set leafTheta. (Earlier this used align-θ + a hand `d.width·leafTheta`
 // width as a workaround; `include → nest` + auto-fit renders identically and is
@@ -63,7 +63,7 @@ const bandHeight = 46; // radial thickness of one depth ring
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        thetaSize: datum(1),
+        w: datum(1),
         emX: true,
         h: bandHeight,
         emY: true,

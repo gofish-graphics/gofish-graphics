@@ -11,15 +11,22 @@ import {
   value,
   isField,
   isLiteral,
+  isValue,
   getMeasureProvenance,
   type FieldAccessor,
   type LiteralValue,
   type Measure,
 } from "./data";
 import { evalFieldValues, type FieldExpr } from "./fieldExpr";
+import { mapAxisDims, type AxisDims } from "./dims";
 import type { LiveValue } from "../interaction/live";
 
-export type ChannelType = "size" | "pos" | "color" | "raw";
+/**
+ * How a channel encodes data. `dims` is the axis-name-keyed bag of box
+ * dimensions (a mark's `dims` option): each of its slots is a `size` or a `pos`
+ * channel according to its structure (see `mapAxisDims` in dims.ts).
+ */
+export type ChannelType = "size" | "pos" | "color" | "raw" | "dims";
 
 /**
  * Channel spec. The plain string form is the default (aggregate over all data
@@ -96,7 +103,17 @@ export type DeriveMarkProps<
                   // measures the resolve-time value).
                   | LiveValue
                   | undefined
-              : ShapeProps[K]
+              : Channels[K] extends "dims" | { type: "dims" }
+                ?
+                    | AxisDims<
+                        | number
+                        | (keyof T & string)
+                        | ((d: T) => number)
+                        | Value<number>
+                        | FieldExpr
+                      >
+                    | undefined
+                : ShapeProps[K]
     : ShapeProps[K];
 } & { debug?: boolean };
 
@@ -340,4 +357,20 @@ export const CHANNEL_INFER: Record<
   pos: (val, data, measure) => inferPos(val, data, measure),
   color: (val, data) => inferColor(val, data),
   raw: (val, data) => inferRaw(val, data),
+  // Each slot resolves its own measure from `data`: the slots are separate
+  // channels that happen to share one option.
+  dims: (val, data) =>
+    inferAxisDims(val, (v, kind) => CHANNEL_INFER[kind](v, data)),
 };
+
+/**
+ * The `dims` channel: infer every slot of an axis-name-keyed bag as the size or
+ * position channel its structure makes it (`mapAxisDims`). A `datum(...)`
+ * value passes through untouched, as it does on a top-level channel.
+ */
+export function inferAxisDims(
+  val: AxisDims<any>,
+  infer: (v: any, kind: "pos" | "size") => any
+): AxisDims<any> {
+  return mapAxisDims(val, (v, kind) => (isValue(v) ? v : infer(v, kind)));
+}

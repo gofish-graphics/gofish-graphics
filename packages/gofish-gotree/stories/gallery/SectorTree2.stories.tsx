@@ -60,7 +60,7 @@ import { initializeContainer } from "../helper";
 //    never curved arcs (draft PR #637's route→curve registry is where curved
 //    links land), so the dsl's curve links are not representable anyway.
 //  - Thickness:static 2 maps to the wedge stroke width.
-//  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ sums
+//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight, nest-θ sums
 //    them up the tree, and the coord fits the total to the circle — so the disc
 //    closes for any tree with no hand-set leafTheta.
 const meta: Meta = {
@@ -93,7 +93,7 @@ const bandHeight = 42; // radial thickness of one ring
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        thetaSize: datum(1),
+        w: datum(1),
         h: bandHeight,
         emX: true,
         emY: true,
