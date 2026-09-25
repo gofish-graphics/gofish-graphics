@@ -19,6 +19,7 @@
  * field; every other channel is a `DisplayList.Style` key.
  */
 import type { DisplayList } from "gofish-ir";
+import { runInLiveEval } from "./resolveContext";
 
 export type LiveSlots = Record<string, () => unknown>;
 
@@ -54,13 +55,21 @@ const slots = new WeakMap<DisplayList.DisplayItem, LiveSlots>();
 /** Add `record`'s thunks to `item`'s slots. Slots ACCUMULATE, and a later
  *  channel wins: a node's own `lower` can slot a geometry channel and the
  *  `live()` channels of its options bag are then merged in over it, without
- *  either having to know about the other. */
+ *  either having to know about the other.
+ *
+ *  Every slot reads its inputs as a LIVE read (`runInLiveEval`). A slot runs
+ *  at paint, and paint can run while another chart's resolve is suspended at
+ *  an await with that chart's runtime ambient; an ordinary read there would
+ *  make the input a pipeline dependency of that other chart, so a build
+ *  clock's ticks re-rendered a chart that never read it. */
 export function setLiveSlots(
   item: DisplayList.DisplayItem,
   record: LiveSlots
 ): void {
+  const live: LiveSlots = {};
+  for (const c in record) live[c] = () => runInLiveEval(record[c]);
   const existing = slots.get(item);
-  slots.set(item, existing ? { ...existing, ...record } : record);
+  slots.set(item, existing ? { ...existing, ...live } : live);
 }
 
 export function getLiveSlots(

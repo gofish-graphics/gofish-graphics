@@ -94,7 +94,12 @@ to a non-interactive build.
 > charts resolving _concurrently_ (interleaving at `await` points — e.g. a Python
 > `derive` RPC) could cross-register. Registration sites are synchronous
 > spec-evaluation code in practice; a scoped-storage mechanism can replace the
-> module var if async marks ever make the race real.
+> module var if async marks ever make the race real. Paint is the exception
+> that showed up: a live slot re-runs on a clock tick, and the tick can land
+> while another chart's resolve is suspended at an `await`. So every slot
+> `setLiveSlots` stores reads under `runInLiveEval`, and a paint read never
+> becomes a pipeline dependency of whatever chart is resolving. (It can still
+> register the input with that chart's runtime, which only wires events.)
 
 ## One terminal, three callers — including components
 

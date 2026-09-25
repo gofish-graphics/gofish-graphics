@@ -584,6 +584,62 @@ console.log("# a bare mark plays its own enter transition");
   );
 }
 
+console.log("# playing charts rendered together each play their own build");
+{
+  // Three live charts render at once, as a gallery page does. A clock's tick
+  // can land while another chart is still resolving; it must not make that
+  // chart re-render (which would put it at rest, or restart it). 6 bars, a
+  // 200 ms lag and a 600 ms grow: the last bar starts at 1000 ms.
+  const resolves = [0, 0, 0];
+  const boxes = resolves.map(() => {
+    const box = document.createElement("div");
+    document.body.appendChild(box);
+    return box;
+  });
+  const bars = (box: HTMLElement) =>
+    [...box.querySelectorAll("rect")].map((r) =>
+      Number(r.getAttribute("height"))
+    );
+  const renders = boxes.map((box, i) =>
+    chart(alphabet.slice(0, 6))
+      .flow(
+        derive((rows: any) => (resolves[i]++, rows)),
+        spread({ by: "letter", dir: "x" }).transition({
+          enter: time.stagger({ lag: 200 }),
+        })
+      )
+      .mark(
+        rect({ h: "frequency" }).transition({
+          enter: animation.grow({ duration: 600 }),
+        })
+      )
+      .render(box, { w: 200, h: 120, axes: false })
+  );
+  // A bare mark plays its own build on the same page.
+  const bareBox = document.createElement("div");
+  document.body.appendChild(bareBox);
+  renders.push(
+    rect({ w: 40, h: 30 })
+      .transition({ enter: animation.grow({ duration: 2000 }) })
+      .render(bareBox, { w: 100, h: 100 })
+  );
+  await Promise.all(renders);
+  await new Promise((r) => setTimeout(r, 400));
+  ok(
+    "each chart resolved once",
+    resolves.every((n) => n === 1),
+    JSON.stringify(resolves)
+  );
+  const mid = boxes.map(bars);
+  ok(
+    "at ~400 ms each chart is mid-build: its first bar is up, its last is not",
+    mid.every((hs) => hs.length === 6 && hs[0] > 0 && hs[5] === 0),
+    JSON.stringify(mid)
+  );
+  const [bare] = bars(bareBox);
+  ok("the bare mark is still growing", bare < 30, String(bare));
+}
+
 console.log("# a re-render lands on the build's final frame (#914)");
 {
   // A signal read in derive() makes the chart re-render when it is set. The
