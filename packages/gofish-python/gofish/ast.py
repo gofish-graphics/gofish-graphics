@@ -1440,7 +1440,9 @@ def spread(
         by: Field name to partition by (operator form only), or a
             ``field(...)`` accessor carrying domain ops
             (``field("site").sort("yield")``). Omit for per-item spread.
-        **options: dir ("x"|"y"), spacing, alignment, sharedScale, anchor, glue.
+        **options: dir ("x", "y", or an axis name the enclosing coordinate
+            space declares, such as "theta"), spacing, alignment, sharedScale,
+            anchor, glue.
             Also `w`/`h` — a field name or pixel number sizing this operator's
             box (data-driven operator extent, e.g. a mosaic's column width), and
             `size` — a field name, pixel number, or ``field(...)`` accessor
@@ -1452,7 +1454,10 @@ def spread(
         Operator (no children) or Mark (with children).
     """
     if "dir" not in options:
-        raise ValueError("spread() requires 'dir' option ('x' or 'y')")
+        raise ValueError(
+            "spread() requires 'dir' option ('x', 'y', or an axis name the "
+            "enclosing coordinate space declares)"
+        )
     if children is not None:
         if by is not None:
             raise ValueError(
@@ -1674,7 +1679,8 @@ def stack(
         by: Field name to partition by (operator form only), or a
             ``field(...)`` accessor carrying domain ops
             (``field("site").sort("yield")``). Omit for per-item stack.
-        **options: dir ("x"|"y"), alignment, sharedScale, anchor. Also `w`/`h` —
+        **options: dir ("x", "y", or a coordinate-space axis name such as
+            "theta"), alignment, sharedScale, anchor. Also `w`/`h` —
             a field name or pixel number sizing this operator's box (data-driven
             operator extent, e.g. a mosaic's column width), and `size` — a
             field name, pixel number, or ``field(...)`` accessor sizing each
@@ -1686,7 +1692,10 @@ def stack(
         Operator (no children) or Mark (with children).
     """
     if "dir" not in options:
-        raise ValueError("stack() requires 'dir' option ('x' or 'y')")
+        raise ValueError(
+            "stack() requires 'dir' option ('x', 'y', or an axis name the "
+            "enclosing coordinate space declares)"
+        )
     if children is not None:
         if by is not None:
             raise ValueError(
@@ -1830,6 +1839,10 @@ def scatter(
                   yMin/yMax.
             xMin, xMax, yMin, yMax: Range-form accessors (str) — children span
                                     [xMin[i], xMax[i]] in data space.
+            dims: Placement by axis name — "x"/"y", or a name the enclosing
+                  coordinate space declares (polar "theta"/"r"). A bare value
+                  is the point, {"min", "max"} the span, e.g.
+                  ``dims={"theta": "bearing", "r": "distance"}``.
             alignment: "start" | "middle" | "end" | "baseline".
 
     Returns:
@@ -2617,7 +2630,8 @@ def repeat(row: dict, field: str) -> List[dict]:
 # generated (packages/gofish-python/gofish/_generated.py) — pure
 # kwargs-collection + wire rename, imported above. `rect()`'s generated
 # signature drops the phantom `rs=`/`ts=` kwargs (they existed nowhere in JS)
-# and gains the real coord aliases (`theta`/`thetaSize`/`r`/`rSize`); `text()`
+# and takes one `dims={...}` escape-hatch kwarg for axis names a coordinate
+# space declares (`dims={"theta": {"size": 1}}` in polar); `text()`
 # drops a phantom `fontWeight=` (also nowhere in JS).
 
 

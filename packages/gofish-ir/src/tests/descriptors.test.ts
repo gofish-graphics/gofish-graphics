@@ -88,6 +88,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "xMax",
     "yMin",
     "yMax",
+    "dims",
     "alignment",
     "axes",
     "w",

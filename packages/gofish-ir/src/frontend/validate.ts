@@ -460,6 +460,37 @@ function walkFieldType(
   }
 }
 
+const AXIS_INTERVAL_KEYS = ["min", "center", "max", "size", "embedded"];
+
+/** A `dims` entry (`AxisDimsValue`): a bare channel value, or an interval —
+ *  a plain object with no `type` tag (and no bridge sentinel) whose keys are
+ *  all anchors. Mirrors `isAxisInterval` in gofish-graphics' dims.ts. */
+function walkAxisDimsValue(value: unknown, path: string, ctx: Context): void {
+  const isInterval =
+    isObject(value) && !("type" in value) && !("__gofish_lambda" in value);
+  if (!isInterval) {
+    walkChannelValue(value, path, ctx);
+    return;
+  }
+  for (const [key, v] of Object.entries(value)) {
+    if (!AXIS_INTERVAL_KEYS.includes(key)) {
+      ctx.errors.push({
+        path: `${path}.${key}`,
+        message: `unknown axis interval key "${key}" (expected ${AXIS_INTERVAL_KEYS.join(", ")})`,
+      });
+    } else if (key === "embedded") {
+      if (typeof v !== "boolean") {
+        ctx.errors.push({
+          path: `${path}.embedded`,
+          message: `expected boolean, got ${typeNameOf(v)}`,
+        });
+      }
+    } else {
+      walkChannelValue(v, `${path}.${key}`, ctx);
+    }
+  }
+}
+
 /** Resolve a `t.ref(name)` against the small set of authored envelope
  *  shapes already validated elsewhere in this file. */
 function walkRefType(
@@ -497,6 +528,9 @@ function walkRefType(
         return;
       }
       walkFieldAccessor(value, path, ctx);
+      return;
+    case "AxisDimsValue":
+      walkAxisDimsValue(value, path, ctx);
       return;
     default:
       // Unknown ref name — permissive (forward-compat), mirrors the rest of

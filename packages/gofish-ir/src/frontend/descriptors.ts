@@ -213,8 +213,18 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
 // Shared field groups
 // ---------------------------------------------------------------------------
 
-/** The 14 `FancyDims`/coord-alias channels (`dims.ts` XYWHDims +
- *  KNOWN_ALIAS_KEYS). Included wholesale by marks whose factory spreads a
+/** A `dims` option: axis name → value or interval (`AxisDims` in schema.ts).
+ *  The names are `x`/`y` plus whatever the enclosing coordinate space
+ *  declares, known only at render time, so the key set is open — the one named
+ *  escape hatch for axis names, next to the closed x/y/w/h keys. */
+const axisDims = (doc: string): FieldSpec => ({
+  type: t.record(t.ref("AxisDimsValue")),
+  doc,
+});
+
+/** The `FancyDims` channels (`dims.ts` XYWHDims): the closed x/y/w/h keys,
+ *  which mean axis 0/1 in every coordinate space, plus the open `dims` bag
+ *  keyed by axis name. Included wholesale by marks whose factory spreads a
  *  bare `...fancyDims: FancyDims<MaybeValue<number>>` (rect, ellipse, petal,
  *  text, image, treemap, layer's `Layer(dims, children)` form). Marks that
  *  destructure a fixed subset (blank, circle) declare their own fields
@@ -230,13 +240,9 @@ export const boxDims: FieldGroup = group({
   y2: ch.num("Other y edge position."),
   h: ch.num("Height."),
   emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
-  // Coordinate-space aliases (KNOWN_ALIAS_KEYS) — resolved to x/y/w/h by
-  // resolveAliases once the enclosing coord's declared aliases are known
-  // (polar: theta→x position, r→y position).
-  theta: ch.num("Angular position alias (polar coord's x)."),
-  thetaSize: ch.num("Angular extent alias (polar coord's w)."),
-  r: ch.num("Radial position alias (polar coord's y)."),
-  rSize: ch.num("Radial extent alias (polar coord's h)."),
+  dims: axisDims(
+    "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+  ),
 });
 
 /** `rect`'s full paint group (the only leaf mark that supports all five —
@@ -327,7 +333,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
       // IR truth: optional here even though Python's spread() requires dir —
       // matches validate.ts's optionalField("dir", ...) today.
-      dir: { type: t.enum("x", "y"), doc: "Direction to spread along." },
+      dir: {
+        type: t.string,
+        doc: "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
+      },
       spacing: {
         type: t.number,
         default: 8,
@@ -382,7 +391,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.union(t.string, t.ref("FieldAccessor")),
         doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
       },
-      dir: { type: t.enum("x", "y"), doc: "Direction to stack along." },
+      dir: {
+        type: t.string,
+        doc: "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
+      },
       // Real producers pass spread's options through (the JS `stack` is a
       // literal `Spread({...props, glue: true})` forward, and stories emit
       // `stack(spacing=2)`), so the wire accepts them and the validator
@@ -450,6 +462,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       xMax: ch.num("Range form: right/top edge, x."),
       yMin: ch.num("Range form: left/bottom edge, y."),
       yMax: ch.num("Range form: right/top edge, y."),
+      dims: axisDims(
+        "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span."
+      ),
       alignment: {
         type: t.string,
         default: "baseline",
@@ -1193,7 +1208,7 @@ const polarFields: FieldGroup = group({
 
 export const COORDS: Record<string, ConstructDescriptor> = {
   polar: coordTransform("polar", {
-    doc: "Maps (θ, r) → screen. θ is the x-axis (alias theta/thetaSize), r is the y-axis (alias r/rSize).",
+    doc: "Maps (θ, r) → screen. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.",
     fields: polarFields,
   }),
   clock: coordTransform("clock", {

@@ -25,6 +25,8 @@ from gofish import (
     text,
     image,
     Constraint,
+    datum,
+    scatter,
 )
 from gofish.ast import _RefProxy
 
@@ -298,6 +300,39 @@ class TestNewMarks:
         assert d["type"] == "image"
         assert d["w"] == 100
         assert d["href"] == "url"
+
+    def test_rect_dims_escape_hatch(self):
+        """`dims` names axes the way the coordinate space does, verbatim."""
+        m = rect(dims={"theta": {"size": datum(1)}, "r": "value"}, h=4)
+        d = m.to_dict()
+        assert d["dims"] == {
+            "theta": {"size": {"type": "datum", "datum": 1}},
+            "r": "value",
+        }
+        assert d["h"] == 4
+
+    def test_top_level_alias_kwargs_are_gone(self):
+        """theta/thetaSize/r/rSize are not rect kwargs; they go in `dims`."""
+        for kwarg in ["theta", "thetaSize", "r", "rSize"]:
+            with pytest.raises(TypeError):
+                rect(**{kwarg: 1})
+
+    def test_scatter_dims_and_theta_dir(self):
+        """scatter takes `dims`; spread's `dir` passes a coord name through."""
+        ir = (
+            chart([{"b": 1, "d": 2}], {"coord": clock()})
+            .flow(
+                scatter(dims={"theta": "b", "r": {"min": "d", "max": "d"}}),
+                spread(dir="theta"),
+            )
+            .mark(circle(r=3))
+            .to_ir()
+        )
+        assert ir["operators"][0]["dims"] == {
+            "theta": "b",
+            "r": {"min": "d", "max": "d"},
+        }
+        assert ir["operators"][1]["dir"] == "theta"
 
     def test_marks_support_name(self):
         """Test all marks support .name()."""

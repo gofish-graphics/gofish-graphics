@@ -675,6 +675,27 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
       ],
     },
+    AxisInterval: {
+      description:
+        "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        min: { $ref: "#/$defs/ChannelValue" },
+        center: { $ref: "#/$defs/ChannelValue" },
+        max: { $ref: "#/$defs/ChannelValue" },
+        size: { $ref: "#/$defs/ChannelValue" },
+        embedded: { type: "boolean" },
+      },
+    },
+    AxisDimsValue: {
+      description:
+        "A `dims` entry: a bare channel value (a position) or an AxisInterval.",
+      oneOf: [
+        { $ref: "#/$defs/ChannelValue" },
+        { $ref: "#/$defs/AxisInterval" },
+      ],
+    },
     ...GENERATED_DEFS,
   },
 };

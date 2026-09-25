@@ -258,9 +258,40 @@ check(
   validate(chart([{ type: "spread", by: "lake", dir: "x" }])).valid
 );
 
+// `dir` names an axis the way the enclosing coordinate space does (#838), so
+// the wire accepts any name; an undeclared one is a render-time error.
 check(
-  "spread with invalid dir rejected",
-  !validate(chart([{ type: "spread", by: "lake", dir: "diagonal" }])).valid
+  "spread with a coord-declared dir accepts",
+  validate(chart([{ type: "spread", by: "lake", dir: "theta" }])).valid
+);
+
+check(
+  "spread with non-string dir rejected",
+  !validate(chart([{ type: "spread", by: "lake", dir: 0 }])).valid
+);
+
+check(
+  "rect with dims (value and interval) accepts",
+  validate(
+    chart([], {
+      type: "rect",
+      dims: { theta: { size: { type: "datum", datum: 1 } }, r: "value" },
+    })
+  ).valid
+);
+
+check(
+  "scatter with dims accepts",
+  validate(
+    chart([
+      { type: "scatter", dims: { lon: "lon", lat: { min: "a", max: "b" } } },
+    ])
+  ).valid
+);
+
+check(
+  "scatter dims interval with a non-anchor key rejected",
+  !validate(chart([{ type: "scatter", dims: { lon: { width: 2 } } }])).valid
 );
 
 check(
