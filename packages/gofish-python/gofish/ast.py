@@ -726,19 +726,26 @@ def _callback_refs(
     callback: Callable[..., Any], children: Optional[List[Any]]
 ) -> Dict[str, RefSentinel]:
     """The keyword arguments a `.constrain()` callback receives: one
-    `RefSentinel` per parameter it declares, named after the parameter. A
-    callback with a `**rest` catch-all also receives every name inside the
-    layer (`_subtree_names`), so it can look names up dynamically
-    (`rest[key]`). Mirrors the JS `constraintEnv` proxy: every name becomes a
-    by-name operand, resolved on the JS side at layout."""
-    params = inspect.signature(callback).parameters.values()
+    `RefSentinel` per parameter it declares without a default, named after
+    the parameter. A parameter with a default keeps it and gets no
+    `RefSentinel`: that is the loop idiom `lambda a, b, gap=gap: [...]`,
+    which binds a loop variable, not a node. A callback with a `**rest`
+    catch-all also receives every other name inside the layer
+    (`_subtree_names`), the same set the JS `constraintEnv` holds, so it can
+    look names up dynamically (`rest[key]`). JS resolves every name at
+    layout, and a name that matches no node inside the layer is an error
+    there."""
+    params = list(inspect.signature(callback).parameters.values())
     named = (
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
         inspect.Parameter.KEYWORD_ONLY,
     )
-    names = [p.name for p in params if p.kind in named]
+    declared = {p.name for p in params if p.kind in named}
+    names = [
+        p.name for p in params if p.kind in named and p.default is p.empty
+    ]
     if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params):
-        names += _subtree_names(children)
+        names += [n for n in _subtree_names(children) if n not in declared]
     return {name: RefSentinel(name) for name in names}
 
 
@@ -1038,9 +1045,11 @@ class ConstrainableMark(Mark):
     def constrain(self, callback: Callable[..., List[Any]]) -> "ConstrainableMark":
         """Apply constraints relating named nodes inside this layer.
 
-        The callback receives one `RefSentinel` per parameter it declares,
-        named after the parameter (a `**rest` catch-all also receives every
-        name inside the layer), and must return a list of constraint specs:
+        The callback receives one `RefSentinel` per parameter it declares
+        without a default, named after the parameter (a parameter with a
+        default, such as `gap=gap` in a loop, keeps its default; a `**rest`
+        catch-all also receives every other name inside the layer), and must
+        return a list of constraint specs:
 
             layer([rect(...).name("a"), rect(...).name("b")]).constrain(
                 lambda a, b: [
@@ -1050,12 +1059,12 @@ class ConstrainableMark(Mark):
             )
 
         Names are resolved on the JS side, at layout, by the same lookup
-        `ref("name")` uses: start at this layer, widen one ancestor at a
-        time, stop at the first level that has the name, never cross a
-        `@mark` boundary. So a parameter can name a node nested anywhere
-        inside the layer. A name with no match, or with two matches at the
-        stopping level, is an error at render time. Mirrors the JS
-        `constraintEnv` proxy in
+        `ref("name")` uses: start at this layer, and take the closest node
+        with the name, never crossing a `@mark` boundary. So a parameter can
+        name a node nested anywhere inside the layer, and a direct child
+        beats a deeper node with the same name. A name that matches no node
+        inside the layer, or two nodes at the same smallest distance, is an
+        error at render time. Mirrors the JS `constraintEnv` in
         `packages/gofish-graphics/src/ast/constraints/index.ts`.
         """
         if self._children is None:
@@ -2950,7 +2959,7 @@ class LayerBuilder:
         Mirrors the JS storybook spelling
         ``layer([sc.name("a"), other.name("b")]).constrain(({a, b}) => [...])``.
         The callback receives one ``RefSentinel`` per parameter it declares
-        and returns a list of constraint specs (``Constraint.align(...)`` /
+        without a default and returns a list of constraint specs (``Constraint.align(...)`` /
         ``Constraint.position(...)`` / ...). Names resolve on the JS side, as
         for ``ConstrainableMark.constrain``.
 
