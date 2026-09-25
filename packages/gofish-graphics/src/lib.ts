@@ -134,7 +134,11 @@ export {
   type CurveSpec,
 } from "./ast/graphicalOperators/routers";
 export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
-export { enclose, enclose as Enclose } from "./ast/graphicalOperators/enclose";
+export {
+  enclose,
+  enclose as Enclose,
+  enclose as background,
+} from "./ast/graphicalOperators/enclose";
 export { Frame, Frame as frame } from "./ast/graphicalOperators/frame";
 export { group } from "./ast/graphicalOperators/group";
 export {

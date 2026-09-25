@@ -494,7 +494,7 @@ gf.layer({ axes: true }, [
     .chart(seafood)
     .flow(
       gf.spread({ by: "lake", dir: "x" }),
-      gf.derive((d) => _.orderBy(d, "count", "desc")),
+      gf.derive((d) => _.orderBy(d, "count")),
       gf.stack({ by: "species", dir: "y", label: false })
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
@@ -516,8 +516,7 @@ but first let's understand what's going on.
 To add some ribbons, we first created a `Layer` so we can add the ribbons as a second layer. Then
 we name the marks in the first layer using `.name("bars")` and `selectAll` those marks in the second
 layer. `selectAll("bars")` hands us one [`ref`](/js/api/marks/ref) per bar; we group them by species
-using `gf.group({ by: "datum.species" })` — note the `datum.` path, since the selected stream is refs,
-not raw records — and finally draw a `ribbon` mark for each group.
+using `gf.group({ by: "species" })` and finally draw a `ribbon` mark for each group.
 
 <!-- First, we've added a `layer` operator that lets us layer on multiple elements in the same space.
 We create the bars with the first `chart` and use `.name("bars")` on the mark to give them a name so we can refer
@@ -535,7 +534,7 @@ gf.layer({ axes: true }, [
     .chart(seafood)
     .flow(
       gf.spread({ by: "lake", dir: "x", spacing: 64 }),
-      gf.derive((d) => _.orderBy(d, "count", "desc")),
+      gf.derive((d) => _.orderBy(d, "count")),
       gf.stack({ by: "species", dir: "y", label: false })
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
@@ -609,9 +608,8 @@ gf.layer({ coord: gf.clock(), axes: true }, [
     .flow(gf.group({ by: "species" }))
     .mark(gf.ribbon({ opacity: 0.8 })),
 ]).render(root, {
-  w: 500,
-  h: 300,
-  transform: { x: 200, y: 200 },
+  w: 400,
+  h: 400,
 });
 ```
 

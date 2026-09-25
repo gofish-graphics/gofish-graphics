@@ -39,20 +39,19 @@ grouping](/python/api/marks/ribbon#default-grouping)). `group()` is for nested
 splits (composing with a connector's own `by`, or an explicit `by` override)
 and for operator pipelines generally — anywhere you need a named per-partition
 frame without a connector mark driving the partitioning. `group`'s own `by` reads
-when it runs after a `selectAll` use the datum path — `by="datum.species"`:
+refs when it runs after a `selectAll`, and a ref is read through its rows, so the
+bare field name works — `by="species"`:
 
 ```python
 chart(selectAll("bars")) \
-    .flow(group(by="datum.species")) \
+    .flow(group(by="species")) \
     .mark(ribbon(opacity=0.8))
 ```
 
-A `datum.field` path resolves to a scalar only when every row in the ref's bag
-agrees on that field (homogeneity collapse); otherwise it is `None`. `by` also
-accepts a callable escape hatch (`by=lambda r: r.datum.species`). See
+On a ref, a field resolves to a scalar only when every row in the ref's bag
+agrees on that field (homogeneity collapse); otherwise it is `None`. See
 [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by) for the
-full explanation, including why `by` is path-prefixed but mark channels (e.g.
-`rect(h="count")`) are not.
+full explanation.
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

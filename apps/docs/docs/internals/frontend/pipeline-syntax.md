@@ -58,7 +58,7 @@ settled on `chart(data).flow(...).mark(...)`, and the ribbon-chart case above
 is now `.layer(ribbon({ opacity: 0.8 }))` chained on the builder — no split
 option at all, since a ribbon fused over the chart's own flow splits at the
 flow's grouping by default (issue #752), the re-partition this "Reverse"
-sketch spells as a separate `.group({ by: "datum.species" })` step. There is
+sketch spells as a separate `.group({ by: "species" })` step. There is
 no `.connect()` method. See [`.layer()`](/js/api/core/layer) for the current
 semantics.
 :::

@@ -123,9 +123,9 @@ import { sumBy } from "lodash";
 sumBy(bars[0].datum, "count"); // total count across the bar's rows
 ```
 
-Operators read this same bag when you re-encode a selection by a datum path,
-e.g. `group({ by: "datum.species" })`, but with **homogeneity collapse** applied:
-the path resolves to a scalar only if every row in the bag agrees on the field —
+Operators read this same bag when you re-encode a selection by a field, e.g.
+`group({ by: "species" })`, but with **homogeneity collapse** applied: the field
+resolves to a scalar only if every row in the bag agrees on it —
 see [path-aware `by`](/js/api/operators/spread#path-aware-by). To get _every_
 distinct value at a path instead, use [`pluck`](/js/api/selection/ref#pluck).
 

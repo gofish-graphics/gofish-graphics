@@ -111,9 +111,9 @@ Because it is the raw, un-collapsed bag, you can aggregate over it directly:
 sum(row["count"] for row in bars[0].datum)  # total count across the bar's rows
 ```
 
-Operators read this same bag when you re-encode a selection by a datum path,
-e.g. `group(by="datum.species")`, but with **homogeneity collapse** applied: the
-path resolves to a scalar only if every row in the bag agrees on the field — see
+Operators read this same bag when you re-encode a selection by a field, e.g.
+`group(by="species")`, but with **homogeneity collapse** applied: the field
+resolves to a scalar only if every row in the bag agrees on it — see
 [path-aware `by`](/python/api/operators/spread#path-aware-by). Enumerating
 _every_ distinct value at a path instead is the JS-only `pluck`; see the
 [note on `pluck`](/python/api/selection/ref#path-aware-by-after-a-selection) on
