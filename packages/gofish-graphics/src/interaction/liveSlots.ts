@@ -68,3 +68,62 @@ export function getLiveSlots(
 ): LiveSlots | undefined {
   return slots.get(item);
 }
+
+/** Whether a slot named `channel` overrides one of the item's own fields
+ *  (its text, or a geometry field) rather than a style key. */
+const onItem = (channel: string): boolean =>
+  channel === "text" || GEOMETRY_CHANNELS.has(channel);
+
+/** The value a slot named `channel` stands for on `item`. */
+export function readChannel(
+  item: DisplayList.DisplayItem | undefined,
+  channel: string
+): unknown {
+  return onItem(channel)
+    ? (item as unknown as Record<string, unknown> | undefined)?.[channel]
+    : (item?.style as Record<string, unknown> | undefined)?.[channel];
+}
+
+/** Set what a slot named `channel` stands for on `item`, in place. */
+export function writeChannel(
+  item: DisplayList.DisplayItem,
+  channel: string,
+  value: unknown
+): void {
+  if (onItem(channel)) {
+    (item as unknown as Record<string, unknown>)[channel] = value;
+  } else {
+    item.style = { ...item.style, [channel]: value };
+  }
+}
+
+/**
+ * The paint tier of a mark that moves with a clock (`time.transition()`, a
+ * build-in): each of `items` gets a slot per name in `channels[j]`, reading
+ * that channel off its own item of `stateAt(key())`, the items as they stand
+ * at the clock's current key. The key is read in the slot, at paint, so Solid
+ * patches those attributes and nothing else; the state is rebuilt at most once
+ * per distinct key, so a key that holds still (a mark that has not started,
+ * or has finished) costs nothing per frame. `first` is the state `items` were
+ * lowered at.
+ */
+export function setLiveItems(
+  items: DisplayList.DisplayItem[],
+  channels: readonly (readonly string[])[],
+  key: () => number,
+  stateAt: (key: number) => DisplayList.DisplayItem[],
+  first: { key: number; items: DisplayList.DisplayItem[] }
+): void {
+  let cache = first;
+  const current = (j: number): DisplayList.DisplayItem | undefined => {
+    const k = key();
+    if (k !== cache.key) cache = { key: k, items: stateAt(k) };
+    return cache.items[j];
+  };
+  items.forEach((item, j) => {
+    if (channels[j].length === 0) return;
+    const record: LiveSlots = {};
+    for (const c of channels[j]) record[c] = () => readChannel(current(j), c);
+    setLiveSlots(item, record);
+  });
+}

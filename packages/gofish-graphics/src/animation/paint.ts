@@ -23,7 +23,11 @@ import { displayTranslate, type Transform } from "../ast/dims";
 import { isValue } from "../ast/data";
 import { isBaselineMagnitude, isDIFFERENCE } from "../ast/underlyingSpace";
 import { readLive } from "../interaction/live";
-import { setLiveSlots } from "../interaction/liveSlots";
+import {
+  readChannel,
+  setLiveItems,
+  writeChannel,
+} from "../interaction/liveSlots";
 import {
   channelsOf,
   paintHost,
@@ -67,29 +71,19 @@ export function sizeAxesOf(node: GoFishNode): [boolean, boolean] {
   return [axis(0), axis(1)];
 }
 
-/** Copy an item's paintable fields from `from` onto `into`, in place, so the
- *  item keeps its identity (its id and any live slots already set on it). */
-function assignPaint(
-  into: DisplayList.DisplayItem,
-  from: DisplayList.DisplayItem,
-  channels: string[]
-): void {
-  const target = into as unknown as Record<string, unknown>;
-  const source = from as unknown as Record<string, unknown>;
-  for (const c of channels) {
-    if (c === "opacity") {
-      into.style = { ...into.style, opacity: from.style?.opacity ?? 1 };
-    } else {
-      target[c] = source[c];
-    }
-  }
-}
-
 export function makeRule(
   playhead: () => number,
   start: number,
   effects: TimedEffect[]
 ): AnimationRule {
+  const end = start + Math.max(0, ...effects.map((e) => e.duration));
+  // The playhead as the effects see it: before the start every one of them
+  // is at 0 and from the end on at 1, so those stretches read as one key
+  // each, and a mark that is waiting or done is not rebuilt per frame.
+  const key = (): number => {
+    const t = playhead();
+    return t < start ? -Infinity : t >= end ? Infinity : t;
+  };
   return {
     start,
     effects,
@@ -105,35 +99,26 @@ export function makeRule(
         baseline: toPixel(displayTranslate(transform)),
         sizeAxes: sizeAxesOf(node),
       };
-      const at = (t: number): DisplayList.DisplayItem[] =>
+      const stateAt = (t: number): DisplayList.DisplayItem[] =>
         rest.map((item) =>
           role === "host"
             ? paintHost(item, effects, t - start, frame)
             : paintRider(item, effects, t - start)
         );
+      const channels = items.map((item) => channelsOf(item, effects, role));
 
       // The static value: the state at the playhead as it stands now, read
-      // untracked so lowering does not subscribe to the clock.
-      const t0 = readLive(playhead);
-      let cache = { t: t0, items: at(t0) };
-      const current = (): DisplayList.DisplayItem[] => {
-        const t = playhead();
-        if (t !== cache.t) cache = { t, items: at(t) };
-        return cache.items;
-      };
+      // untracked so lowering does not subscribe to the clock. It is written
+      // into the renderer's items in place, so each keeps its identity (its
+      // id and any live slots already set on it).
+      const k0 = readLive(key);
+      const first = { key: k0, items: stateAt(k0) };
       items.forEach((item, j) => {
-        const channels = channelsOf(item, effects, role);
-        if (channels.length === 0) return;
-        assignPaint(item, cache.items[j], channels);
-        const slots: Record<string, () => unknown> = {};
-        for (const c of channels) {
-          slots[c] =
-            c === "opacity"
-              ? () => current()[j].style?.opacity ?? 1
-              : () => (current()[j] as unknown as Record<string, unknown>)[c];
+        for (const c of channels[j]) {
+          writeChannel(item, c, readChannel(first.items[j], c));
         }
-        setLiveSlots(item, slots);
       });
+      setLiveItems(items, channels, key, stateAt, first);
     },
   };
 }

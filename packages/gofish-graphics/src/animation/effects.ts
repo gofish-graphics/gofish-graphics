@@ -14,6 +14,7 @@
  * WHEN is not here: that is `time.*` (`time.stagger`, `time.parallel`).
  */
 import type { DisplayList } from "gofish-ir";
+import { fadeItem } from "../ast/displayList/lowerHelpers";
 import { BOX_SHAPES } from "../ast/graphicalOperators/tween";
 
 /** A time warp `u -> u'` on [0, 1], or the name of a standard one. */
@@ -199,7 +200,7 @@ const collapsing = (kind: "grow" | "shrink"): Look => ({
 
 /** Multiply the mark's opacity by `p`; its rider fades with it. */
 const fading: Look = {
-  host: (item, p) => withOpacity(item, p),
+  host: fadeItem,
   rider: (p) => p,
   channels: () => ["opacity"],
   fits: () => {},
@@ -390,17 +391,6 @@ function reveal(
   }
 }
 
-const withOpacity = (
-  item: DisplayList.DisplayItem,
-  factor: number
-): DisplayList.DisplayItem =>
-  factor === 1
-    ? item
-    : {
-        ...item,
-        style: { ...item.style, opacity: (item.style?.opacity ?? 1) * factor },
-      };
-
 /** Where a timed effect is at local time `t` (ms since the mark's start). */
 const progressOf = ({ effect, duration, ease }: TimedEffect, t: number) =>
   effect.progress(t, duration, ease);
@@ -432,7 +422,7 @@ export function paintRider(
 ): DisplayList.DisplayItem {
   let factor = 1;
   for (const e of effects) factor *= e.effect.rider(progressOf(e, t));
-  return withOpacity(item, factor);
+  return fadeItem(item, factor);
 }
 
 /** The display-item fields an effect list can change on `item`: what the

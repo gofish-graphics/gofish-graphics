@@ -20,6 +20,7 @@
  * `b`. Keyframe times are fixed points, so every keyframe still draws exactly.
  */
 import { GoFishNode } from "../ast/_node";
+import { locate } from "../interpolate";
 import { groupEntries, rowsOf } from "./grouping";
 import { solveSchedule, wavesOf, type Arrangement } from "./schedule";
 import { nodeTransition } from "./transition";
@@ -113,12 +114,10 @@ export function updateWarp(
   };
   return (t) => {
     if (!(t > frames[0] && t < frames[frames.length - 1])) return t;
-    let i = 0;
-    while (i < frames.length - 2 && t >= frames[i + 1]) i++;
+    const { i, u } = locate(frames, t);
     const fit = fitOf(i);
     if (fit === null) return t;
     const [a, b] = [frames[i], frames[i + 1]];
-    const u = (t - a) / (b - a);
     const local =
       fit.length > 0
         ? Math.min(1, Math.max(0, (u - fit.start) / fit.length))

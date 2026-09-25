@@ -192,13 +192,10 @@ export function wavesOf(n: number, from: StaggerFrom): number[][] {
         return Math.abs(i - from);
     }
   };
-  const byDistance = new Map<number, number[]>();
-  for (let i = 0; i < n; i++) {
-    const k = distance(i);
-    const wave = byDistance.get(k);
-    if (wave) wave.push(i);
-    else byDistance.set(k, [i]);
-  }
+  const byDistance = Map.groupBy(
+    Array.from({ length: n }, (_, i) => i),
+    distance
+  );
   return [...byDistance.entries()]
     .sort(([a], [b]) => a - b)
     .map(([, wave]) => wave);

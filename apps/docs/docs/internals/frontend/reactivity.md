@@ -388,9 +388,13 @@ frame, in paint position.
 and paints the one mark the run passes through at the playhead. Two facts, two
 tiers: which keyframes there are and where layout put them is decided at
 resolve; which point of that run is showing is read at paint, inside live
-geometry slots, so a tick patches four attributes of one item. What licenses the
-split is subtree containment. The node makes no size claim of its own and
-contributes no domain values, so no value it produces can be seen above it; and
+geometry slots, so a tick patches four attributes of one item. The slots come
+from one helper in `liveSlots.ts`, `setLiveItems`, which the build-in's paint
+rule (`src/animation/paint.ts`) shares: it rebuilds the moving items at most
+once per distinct playhead value, and each slot reads its own field off them.
+What licenses the split is subtree containment. The node makes no size claim of
+its own and contributes no domain values, so no value it produces can be seen
+above it; and
 it has no children to place, so "lay this subtree out again" IS "recompute this
 one display item" — which is exactly what a paint-time thunk does. Containment
 asks for one thing in exchange, and the node pays it: its layout box is the

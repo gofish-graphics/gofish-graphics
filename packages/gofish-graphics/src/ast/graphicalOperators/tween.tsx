@@ -63,6 +63,7 @@ import { GoFishNode, type Placeable, type ToPixel } from "../_node";
 import { GoFishRef } from "../_ref";
 import { resolveColorChannel } from "../../color";
 import {
+  fadeItem,
   lowerStyle,
   rectItemFromBox,
   roleFor,
@@ -74,7 +75,7 @@ import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { Size } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { readLive } from "../../interaction/live";
-import { GEOMETRY_CHANNELS, setLiveSlots } from "../../interaction/liveSlots";
+import { GEOMETRY_CHANNELS, setLiveItems } from "../../interaction/liveSlots";
 import {
   interpolateAt,
   knotOrder,
@@ -222,15 +223,6 @@ function lifecycle(
     if (before) return { at: from, alpha: 1 - eased };
     return { at: from, alpha: 0 };
   };
-}
-
-/** A display item with its opacity multiplied by `alpha`. */
-function fadeItem(
-  item: DisplayList.DisplayItem,
-  alpha: number
-): DisplayList.DisplayItem {
-  const own = item.style?.opacity ?? 1;
-  return { ...item, style: { ...item.style, opacity: own * alpha } };
 }
 
 /** A display item moved by `(dx, dy)` pixels: its position fields shifted,
@@ -616,30 +608,21 @@ export const tween = createNodeOperator(
             // position so Solid patches that attribute and nothing else. The
             // items are rebuilt at most once per distinct playhead value, and
             // the attributes then read their own field off them.
-            let cache = { at: t, items };
-            const itemsAt = (): DisplayList.DisplayItem[] => {
-              const now = readPlayhead();
-              if (now !== cache.at) cache = { at: now, items: build(now) };
-              return cache.items;
-            };
-            items.forEach((item, j) => {
-              const current = () =>
-                itemsAt()[j] as unknown as Record<string, any>;
-              const slots: Record<string, () => unknown> = {};
-              for (const field of GEOMETRY_CHANNELS) {
-                if (!(field in item)) continue;
-                slots[field] = () => current()?.[field];
-              }
+            const channels = items.map((item) => [
+              ...[...GEOMETRY_CHANNELS].filter((field) => field in item),
               // A text's string comes from the source keyframe, like paint.
-              if (item.kind === "text") slots.text = () => current()?.text;
+              ...(item.kind === "text" ? ["text"] : []),
               // Paint moves with the mark: which keyframe a run reads its
               // color off depends on where the playhead is.
-              slots.fill = () => current()?.style?.fill;
-              slots.stroke = () => current()?.style?.stroke;
+              "fill",
+              "stroke",
               // And so does presence: the mark fades in and out as it enters
               // and leaves the run.
-              slots.opacity = () => current()?.style?.opacity;
-              setLiveSlots(item, slots);
+              "opacity",
+            ]);
+            setLiveItems(items, channels, readPlayhead, build, {
+              key: t,
+              items,
             });
           }
           return items;
