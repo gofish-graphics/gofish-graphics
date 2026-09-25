@@ -468,16 +468,11 @@ export const layer = createNodeOperatorSequential(
           // (self-scaled stash, shared-scale, datum-position) nices its
           // POSITION domain only if some node in the scope renders an axis on
           // that dim — read off the persistent axis-demand stamps. Read only
-          // when this layer roots such a scope: finding the demand scans the
-          // scope's whole region, and a layer that roots none (most of them)
-          // would otherwise scan it once each, which is quadratic in a large
-          // chart.
-          const demand: [boolean | undefined, boolean | undefined] = [
-            undefined,
-            undefined,
-          ];
+          // when this layer roots such a scope, and kept per region
+          // (`scopeRendersAxis`), so a region is scanned once however many
+          // layers in it ask.
           const axisDemand = (axis: 0 | 1): boolean =>
-            (demand[axis] ??= node.scopeRendersAxis(axis));
+            node.scopeRendersAxis(axis);
           const childScalePlan = buildChildScalePlan(
             selfScaledSpaces,
             node._underlyingSpace,

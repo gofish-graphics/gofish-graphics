@@ -970,11 +970,12 @@ stashes and coords. The region is exactly the neighborhood whose axes all view
 the same underlying domain (an inner shared scope under an axis-drawing root
 inherits the root's demand, because its space is what bubbled up into the
 domain that axis draws; a stashed panel does not, because its space never
-reached the ancestor's axis). A layer asks only when it roots a scope that the
-answer changes: the walk scans the whole region, and a layer that roots none
-(most layers, e.g. one per keyframe mark under a `time.sequence`) would
-otherwise scan it once each, which is quadratic in a large chart. So the solve
-takes the demand as a per-axis read, `axisDemand(dim)`, memoized per layer.
+reached the ancestor's axis). The walk scans the whole region, so the answer is
+kept on the render session, per dim, keyed by the region's root: every scope in
+a region shares it, and the region is scanned once per render however many
+scopes ask. A layer asks only when it roots a scope the answer changes (most
+layers, e.g. one per keyframe mark under a `time.sequence`, root none), so the
+solve takes the demand as a per-axis read, `axisDemand(dim)`.
 Tick elaboration nices node-locally with the same
 `d3.nice`, applied to the axis-owning node's domain — the same union domain
 that bubbled to the scope root — so elaboration and the solve cannot disagree.

@@ -107,6 +107,10 @@ export type RenderSession = {
    *  shared by every scope root in this render. Created on first use
    *  (`getScopeRegistry`). */
   scopes?: ScopeRegistry;
+  /** Each space-flow region's axis demand, per dim, keyed by the region's
+   *  root (`scopeRendersAxis`): every scope in a region shares the answer, so
+   *  the region is scanned once per render. Created on first use. */
+  axisDemand?: WeakMap<GoFishNode, [boolean?, boolean?]>;
 };
 
 export type Placeable = {
@@ -1062,7 +1066,9 @@ export class GoFishNode {
    * root's demand — its space is what bubbled up into the domain that axis
    * draws), then scan that region root's subtree for stamps, stopping at
    * deeper stashes/coords. Reads the persistent `axisDemand` stamps, which
-   * survive axis elaboration (the `axis` work flags do not).
+   * survive axis elaboration (the `axis` work flags do not). The answer
+   * belongs to the region, so it is kept on the render session by region
+   * root, and many scopes in one region scan it once.
    */
   public scopeRendersAxis(dim: 0 | 1): boolean {
     let region: GoFishNode = this;
@@ -1073,7 +1079,12 @@ export class GoFishNode {
     ) {
       region = region.parent;
     }
-    return region.walkAxisDemand(dim, true);
+    const session = this.tryGetRenderSession();
+    if (session === undefined) return region.walkAxisDemand(dim, true);
+    const demands = (session.axisDemand ??= new WeakMap());
+    let demand = demands.get(region);
+    if (demand === undefined) demands.set(region, (demand = []));
+    return (demand[dim] ??= region.walkAxisDemand(dim, true));
   }
 
   private walkAxisDemand(dim: 0 | 1, isScopeRoot: boolean): boolean {
