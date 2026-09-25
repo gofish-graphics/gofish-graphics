@@ -318,9 +318,9 @@ children and returns a list of constraints. `Constraint.align` lines up the
 centers of Mercury and the label from left to right, and
 `Constraint.distribute` puts the label 20 pixels below Mercury.
 
-A constraint only sees the children of its own layer, by name. Mercury lives
-inside the row, so we bring it into this layer with `ref("mercury")` and give
-that reference a name too.
+A constraint can only arrange marks inside its own layer. Mercury lives in the
+other layer, inside the row, so we bring it into this layer with
+`ref("mercury")` and give that reference a name too.
 
 ## Spacing the label off the whole background
 
