@@ -432,25 +432,30 @@ console.log("# a field-valued duration (CAST+ Gantt)");
 console.log("# the race: chained .transition() vs .layer(time.transition())");
 {
   const brands = everyYearBrands(categoryBrands);
-  const flow = (at: number) =>
+  const ranking = () =>
+    spread({
+      by: field("name").sort("value", "desc"),
+      dir: "y",
+      sharedScale: true,
+      spacing: 2,
+    });
+  const flow = (at: number, spreadByValue = ranking()) =>
     chart(brands, { legend: false }).flow(
       time.sequence({ by: "year", duration: 20000, playing: false, at }),
-      spread({
-        by: field("name").sort("value", "desc"),
-        dir: "y",
-        sharedScale: true,
-        spacing: 2,
-      })
+      spreadByValue
     );
   const bar = () =>
     rect({ w: "value", fill: "category" }).label("name", {
       position: "outset-right",
     });
-  for (const at of [2000, 2007.5, 2019]) {
-    const today = await flow(at)
+  const view = { w: 600, h: 600, axes: { x: true, y: false } };
+  /** The race as the Bar Chart Race story writes it. */
+  const plain = (at: number) =>
+    flow(at)
       .mark(bar())
       .layer(time.transition({ curve: "linear" }))
-      .toDisplayList({ w: 600, h: 600, axes: { x: true, y: false } });
+      .toDisplayList(view);
+  for (const at of [2000, 2007.5, 2019]) {
     const chained = await flow(at)
       .mark(
         bar().transition({
@@ -459,32 +464,18 @@ console.log("# the race: chained .transition() vs .layer(time.transition())");
           exit: animation.fadeOut(),
         })
       )
-      .toDisplayList({ w: 600, h: 600, axes: { x: true, y: false } });
-    const diff = firstDifference(paint(today), paint(chained));
+      .toDisplayList(view);
+    const diff = firstDifference(paint(await plain(at)), paint(chained));
     ok(`the race at ${at}`, diff === undefined, diff);
   }
 
   console.log("# the race with a staggered re-sort (6a, FIT)");
   const staggered = (at: number) =>
-    chart(brands, { legend: false })
-      .flow(
-        time.sequence({ by: "year", duration: 20000, playing: false, at }),
-        spread({
-          by: field("name").sort("value", "desc"),
-          dir: "y",
-          sharedScale: true,
-          spacing: 2,
-        }).transition({ update: time.stagger({ lag: 20 }) })
-      )
+    flow(at, ranking().transition({ update: time.stagger({ lag: 20 }) }))
       .mark(
         bar().transition({ update: animation.tween({ curve: "linear" }) })
       )
-      .toDisplayList({ w: 600, h: 600, axes: { x: true, y: false } });
-  const plain = (at: number) =>
-    flow(at)
-      .mark(bar())
-      .layer(time.transition({ curve: "linear" }))
-      .toDisplayList({ w: 600, h: 600, axes: { x: true, y: false } });
+      .toDisplayList(view);
   for (const at of [2007, 2008]) {
     const diff = firstDifference(
       paint(await plain(at)),

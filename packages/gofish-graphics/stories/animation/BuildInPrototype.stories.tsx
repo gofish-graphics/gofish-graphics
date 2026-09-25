@@ -16,68 +16,35 @@
  * Not gallery-tagged: this is a prototype for review, not a docs example.
  */
 import type { Meta, StoryObj } from "@storybook/html";
+import type { BuildClockOptions } from "../../src/lib";
 import { initializeContainer } from "../helper";
 
-import ex1 from "./build-in/ex1";
-import ex1Src from "./build-in/ex1.ts?raw";
-import ex1Sel from "./build-in/ex1-selection";
-import ex1SelSrc from "./build-in/ex1-selection.ts?raw";
-import ex2 from "./build-in/ex2";
-import ex2Src from "./build-in/ex2.ts?raw";
-import ex2Sel from "./build-in/ex2-selection";
-import ex2SelSrc from "./build-in/ex2-selection.ts?raw";
-import ex3a from "./build-in/ex3a";
-import ex3aSrc from "./build-in/ex3a.ts?raw";
-import ex3b from "./build-in/ex3b";
-import ex3bSrc from "./build-in/ex3b.ts?raw";
-import ex3c from "./build-in/ex3c";
-import ex3cSrc from "./build-in/ex3c.ts?raw";
-import ex3d from "./build-in/ex3d";
-import ex3dSrc from "./build-in/ex3d.ts?raw";
-import ex3e from "./build-in/ex3e";
-import ex3eSrc from "./build-in/ex3e.ts?raw";
-import ex3f from "./build-in/ex3f";
-import ex3fSrc from "./build-in/ex3f.ts?raw";
-import ex4a from "./build-in/ex4a";
-import ex4aSrc from "./build-in/ex4a.ts?raw";
-import ex4aSel from "./build-in/ex4a-selection";
-import ex4aSelSrc from "./build-in/ex4a-selection.ts?raw";
-import ex4b from "./build-in/ex4b";
-import ex4bSrc from "./build-in/ex4b.ts?raw";
-import ex4c from "./build-in/ex4c";
-import ex4cSrc from "./build-in/ex4c.ts?raw";
-import ex5a from "./build-in/ex5a";
-import ex5aSrc from "./build-in/ex5a.ts?raw";
-import ex5b from "./build-in/ex5b";
-import ex5bSrc from "./build-in/ex5b.ts?raw";
-import raceChained from "./build-in/race-chained";
-import raceChainedSrc from "./build-in/race-chained.ts?raw";
-import raceStagger from "./build-in/race-stagger";
-import raceStaggerSrc from "./build-in/race-stagger.ts?raw";
-import canis1bSel from "./build-in/canis-1b-selection";
-import canis1bSelSrc from "./build-in/canis-1b-selection.ts?raw";
-import canis1bChained from "./build-in/canis-1b-chained";
-import canis1bChainedSrc from "./build-in/canis-1b-chained.ts?raw";
-import castFig3 from "./build-in/cast-fig3";
-import castFig3Src from "./build-in/cast-fig3.ts?raw";
-import gantt from "./build-in/gantt";
-import ganttSrc from "./build-in/gantt.ts?raw";
+type Run = (container: HTMLElement, hold?: BuildClockOptions) => unknown;
 
-type Hold = { playing?: boolean; at?: number };
-type Run = (container: HTMLElement, hold?: Hold) => unknown;
+/** Every example module, by path, once to run and once as its source text. */
+const modules = import.meta.glob<{ default: Run }>("./build-in/*.ts", {
+  eager: true,
+});
+const sources = import.meta.glob<string>("./build-in/*.ts", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+});
 
 type Example = {
   section: string;
   title: string;
   caption: string;
-  run: Run;
-  source: string;
+  /** The module in `./build-in/` that runs it (and whose text is shown). */
+  file: string;
   /** Held times for the filmstrip story (ms into the build; years for the
    *  race, whose clock is its sequence's). */
   frames: number[];
   /** What the frames count: build milliseconds, or the race's years. */
   unit?: "ms" | "year";
 };
+
+const pathOf = (example: Example) => `./build-in/${example.file}.ts`;
 
 const SECTIONS = {
   s1: "1. All bars grow at once",
@@ -95,8 +62,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "1 · chained",
     caption:
       "The mark says how it enters. No arrangement on the spread, so every bar starts together.",
-    run: ex1,
-    source: ex1Src,
+    file: "ex1",
     frames: [0, 150, 300, 600],
   },
   ex1Sel: {
@@ -104,8 +70,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "1 · selection form",
     caption:
       "The same build written as a layer over the named bars. It draws the same frames.",
-    run: ex1Sel,
-    source: ex1SelSrc,
+    file: "ex1-selection",
     frames: [0, 150, 300, 600],
   },
   ex2: {
@@ -113,8 +78,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "2 · chained",
     caption:
       "Each bar starts 60 ms after the one before and grows over 600 ms (slow-in, slow-out). Before its turn a bar shows its enter state, zero height at its baseline.",
-    run: ex2,
-    source: ex2Src,
+    file: "ex2",
     frames: [0, 400, 900, 1500, 2100],
   },
   ex2Sel: {
@@ -122,8 +86,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "2 · selection form",
     caption:
       "time.stagger as a flow operator over the selected bars. The chained form means exactly this (asserted by src/tests/buildInTower.test.ts).",
-    run: ex2Sel,
-    source: ex2SelSrc,
+    file: "ex2-selection",
     frames: [0, 400, 900, 1500, 2100],
   },
   ex3a: {
@@ -131,8 +94,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "3a · tallest first",
     caption:
       "The stagger's own `by`, an ordinary field expression: letters in order of frequency, largest first.",
-    run: ex3a,
-    source: ex3aSrc,
+    file: "ex3a",
     frames: [0, 400, 900, 1500, 2100],
   },
   ex3b: {
@@ -140,8 +102,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "3b · from the center",
     caption:
       '`from: "center"` (GSAP, Motion). With 26 bars the middle two (M, N) start together, then the pairs outward.',
-    run: ex3b,
-    source: ex3bSrc,
+    file: "ex3b",
     frames: [0, 300, 700, 1320],
   },
   ex3c: {
@@ -149,8 +110,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "3c · dwell 0.3",
     caption:
       "The lag is derived: δ = w·d / (n − w(n − 1)) = 0.3·600 / (26 − 7.5) ≈ 9.7 ms, so the build lasts about 843 ms. (The OPEN line about a total budget is not built.)",
-    run: ex3c,
-    source: ex3cSrc,
+    file: "ex3c",
     frames: [0, 200, 450, 850],
   },
   ex3d: {
@@ -158,8 +118,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "3d · appear",
     caption:
       "No motion: each bar pops in at its start, 120 ms apart. `appear` holds for its duration (default 500 ms), which only matters to what waits for it.",
-    run: ex3d,
-    source: ex3dSrc,
+    file: "ex3d",
     frames: [0, 500, 1500, 3000],
   },
   ex3e: {
@@ -167,8 +126,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "3e · grow and fade together",
     caption:
       "An array of effects plays them together, each with its own duration: the fade is done at 300 ms, the grow at 600 ms.",
-    run: ex3e,
-    source: ex3eSrc,
+    file: "ex3e",
     frames: [0, 150, 600, 1200, 2100],
   },
   ex3f: {
@@ -176,8 +134,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "3f · a named effect",
     caption:
       "An effect is a plain value. This one eases out (a fast start), where the default is slow-in, slow-out.",
-    run: ex3f,
-    source: ex3fSrc,
+    file: "ex3f",
     frames: [0, 400, 900, 1500, 2100],
   },
   ex4a: {
@@ -185,8 +142,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "4a · one month at a time",
     caption:
       'Keynote "By Set". The months are staggered 300 ms apart; the three cities in a month grow together.',
-    run: ex4a,
-    source: ex4aSrc,
+    file: "ex4a",
     frames: [0, 500, 1500, 2600, 3700],
   },
   ex4aSel: {
@@ -194,8 +150,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "4a · selection form",
     caption:
       "The same timing over the selected bars, split by month. It draws the same frames as 4a (asserted by the tower test).",
-    run: ex4aSel,
-    source: ex4aSelSrc,
+    file: "ex4a-selection",
     frames: [0, 500, 1500, 2600, 3700],
   },
   ex4b: {
@@ -203,8 +158,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "4b · months, and cities inside each",
     caption:
       'Keynote "By Element in Set". Nested operators nest the time frames: each month lasts 2 × 50 + 400 = 500 ms and months start 300 ms apart, so neighbors overlap by 200 ms. The whole build lasts 3.8 s.',
-    run: ex4b,
-    source: ex4bSrc,
+    file: "ex4b",
     frames: [0, 350, 1500, 2700, 3800],
   },
   ex4c: {
@@ -212,8 +166,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "4c · one city at a time",
     caption:
       'Keynote "By Series". In space the months are outside and the cities inside; in time it is the other way around, so it is written as a selection. Each city\'s twelve bars grow together, one city after another.',
-    run: ex4c,
-    source: ex4cSrc,
+    file: "ex4c",
     frames: [0, 200, 600, 1000, 1200],
   },
   ex5a: {
@@ -221,8 +174,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "5a · whole stacks",
     caption:
       "DECLARED PROTOTYPE BEHAVIOR: each segment grows in place from its own stack start (ECharts), so gaps open between the segments while a stack grows. Riding on the segments below (amCharts) is not built.",
-    run: ex5a,
-    source: ex5aSrc,
+    file: "ex5a",
     frames: [0, 300, 700, 1380],
   },
   ex5b: {
@@ -230,8 +182,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "5b · stacks, bottom segment first",
     caption:
       "The stack's own arrangement nests inside the spread's: each segment grows in place (200 ms) when the one below it has finished.",
-    run: ex5b,
-    source: ex5bSrc,
+    file: "ex5b",
     frames: [0, 300, 900, 1400, 1880],
   },
   race: {
@@ -239,8 +190,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "8 · the bar chart race, chained",
     caption:
       'Under a time.sequence the mark\'s .transition() is the chained spelling of .layer(time.transition({ curve: "linear" })): update says how it moves, and enter / exit can only be the default fade in place (#892). Draws the same as the Bar Chart Race story (asserted by the tower test).',
-    run: raceChained,
-    source: raceChainedSrc,
+    file: "race-chained",
     frames: [2000, 2007.5, 2019],
     unit: "year",
   },
@@ -249,8 +199,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "6a · the race with a staggered re-sort (stretch)",
     caption:
       "The spread's update arrangement staggers the moves between two years, in the order the year ends in (D3 Sortable Bar Chart). The FIT default: each bar's move and the 20 ms lag shrink together so the last bar arrives at the next year, keeping the dwell (here to about 59%: 12 ms apart, 625 ms moves in a 1053 ms year). Every keyframe still draws exactly.",
-    run: raceStagger,
-    source: raceStaggerSrc,
+    file: "race-stagger",
     frames: [2007, 2007.25, 2007.5, 2007.75, 2008],
     unit: "year",
   },
@@ -259,8 +208,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "Canis Fig. 1b · selection form",
     caption:
       'One product after another (spacing 0, Canis\'s "start after previous"), and inside each product the quarters 100 ms apart. Each segment wipes up from the bottom (500 ms).',
-    run: canis1bSel,
-    source: canis1bSelSrc,
+    file: "canis-1b-selection",
     frames: [0, 400, 1000, 1700, 2400],
   },
   canis1bChained: {
@@ -268,8 +216,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "Canis Fig. 1b · chained (the chart's own nesting)",
     caption:
       "Timed the way the chart is nested instead: whole quarters 100 ms apart, and inside each stack the bottom segment first.",
-    run: canis1bChained,
-    source: canis1bChainedSrc,
+    file: "canis-1b-chained",
     frames: [0, 400, 900, 1400, 1800],
   },
   cast: {
@@ -277,8 +224,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "CAST Fig. 3 · dots in order of a value",
     caption:
       'Dots appear 100 ms apart in order of body mass, each with a circular reveal (a growing radius). Penguins stand in for the paper\'s counties; 68 dots have 34 distinct masses, so the build lasts 33 × 100 + 500 = 3800 ms. DIVERGENCE from the sketch: its `by: "rate"` takes the groups in the order the data shows them, as `by` does everywhere, so ascending order is `field("mass").sort()`. Dots of equal mass start together.',
-    run: castFig3,
-    source: castFig3Src,
+    file: "cast-fig3",
     frames: [0, 1000, 2000, 3000, 3800],
   },
   gantt: {
@@ -286,8 +232,7 @@ const EXAMPLES: Record<string, Example> = {
     title: "CAST+ Gantt · duration from a field (stretch)",
     caption:
       "Tasks wipe in from the left one after another, and each wipe lasts in proportion to the task's days, as `w: \"days\"` sizes the bar. DECLARED SHORTCUT: the time scale is linear with the longest task at 1000 ms (Build, 12 days); a real time scale for field-valued durations is open. The build lasts 36 days × 1000 / 12 = 3000 ms.",
-    run: gantt,
-    source: ganttSrc,
+    file: "gantt",
     frames: [0, 700, 1500, 2300, 3000],
   },
 };
@@ -322,12 +267,23 @@ const el = <K extends keyof HTMLElementTagNameMap>(
 
 const FONT = "system-ui, -apple-system, sans-serif";
 
+const H2: Partial<CSSStyleDeclaration> = {
+  fontSize: "18px",
+  margin: "28px 0 8px",
+  borderBottom: "1px solid #ddd",
+  paddingBottom: "4px",
+};
+
 /** Run `example` into a fresh chart box inside `host`. */
-const play = (host: HTMLElement, example: Example, hold?: Hold) => {
+const play = (
+  host: HTMLElement,
+  example: Example,
+  hold?: BuildClockOptions
+) => {
   host.innerHTML = "";
   const box = el("div");
   host.appendChild(box);
-  example.run(box, hold);
+  modules[pathOf(example)].default(box, hold);
 };
 
 export const Gallery: StoryObj = {
@@ -368,18 +324,7 @@ export const Gallery: StoryObj = {
     for (const example of Object.values(EXAMPLES)) {
       if (example.section !== section) {
         section = example.section;
-        page.appendChild(
-          el(
-            "h2",
-            {
-              fontSize: "18px",
-              margin: "28px 0 8px",
-              borderBottom: "1px solid #ddd",
-              paddingBottom: "4px",
-            },
-            section
-          )
-        );
+        page.appendChild(el("h2", H2, section));
       }
       const row = el("div", {
         display: "grid",
@@ -401,7 +346,7 @@ export const Gallery: StoryObj = {
           overflowX: "auto",
           fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
         },
-        example.source
+        sources[pathOf(example)]
       );
       const right = el("div");
       const head = el("div", {
@@ -436,18 +381,7 @@ export const Gallery: StoryObj = {
       page.appendChild(row);
     }
 
-    page.appendChild(
-      el(
-        "h2",
-        {
-          fontSize: "18px",
-          margin: "28px 0 8px",
-          borderBottom: "1px solid #ddd",
-          paddingBottom: "4px",
-        },
-        "Not in this prototype"
-      )
-    );
+    page.appendChild(el("h2", H2, "Not in this prototype"));
     const list = el("ul", { fontSize: "14px", color: "#333" });
     for (const line of NOT_BUILT) list.appendChild(el("li", {}, line));
     page.appendChild(list);

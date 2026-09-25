@@ -238,18 +238,14 @@ console.log("# by: equal keys start together, groups in the key's order");
   const clips: Clip<string>[][] = [...plain.values()].map((g) =>
     g.map((c) => leaf(400, String(children.indexOf(c))))
   );
-  const { items } = solveSchedule<string>({
+  const s = startsOf({
     kind: "group",
     arrangement: { kind: "stagger", lag: 100 },
     groups: clips,
   });
-  const start = new Map(items.map((i) => [i.payload, i.start]));
   ok(
     "Seattle's two children start together, then Chicago, then Boston",
-    same(
-      ["0", "2", "1", "3"].map((k) => start.get(k)!),
-      [0, 0, 100, 200]
-    )
+    same(s.starts(["0", "2", "1", "3"]), [0, 0, 100, 200])
   );
 }
 
@@ -267,24 +263,24 @@ console.log("# nesting: 4b, one month at a time, cities staggered inside");
       )
     )
   );
-  const { items, total } = solveSchedule(clip);
-  const start = new Map(items.map((i) => [i.payload, i.start]));
+  const s = startsOf(clip);
+  const cities = (m: string) => ["a", "b", "c"].map((c) => `${m}${c}`);
   ok(
     "city c of month m starts at 300·m + 50·c",
     months.every((m, i) =>
-      ["a", "b", "c"].every((c, j) =>
-        near(start.get(`${m}${c}`)!, 300 * i + 50 * j)
+      same(
+        s.starts(cities(m)),
+        [0, 1, 2].map((j) => 300 * i + 50 * j)
       )
     )
   );
   const monthEnd = (i: number) =>
-    Math.max(...["a", "b", "c"].map((c) => start.get(`m${i}${c}`)! + 400)) -
-    300 * i;
+    Math.max(...s.starts(cities(`m${i}`))) + 400 - 300 * i;
   ok(
     "each month lasts 2·50 + 400 = 500 ms",
     months.every((_, i) => near(monthEnd(i), 500))
   );
-  ok("the build lasts 11·300 + 500 = 3800 ms", near(total, 3800));
+  ok("the build lasts 11·300 + 500 = 3800 ms", near(s.total, 3800));
 }
 
 console.log("# 4c, one city after another across all months (spacing 0)");

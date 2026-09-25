@@ -1,13 +1,18 @@
 // 6a. The race with a staggered re-sort each year (D3 Sortable Bar Chart).
 // Between two years each bar starts its move 20 ms after the one ranked above
 // it, and the whole stagger fits inside the year.
-import { animation, chart, field, rect, spread, time } from "../../../src/lib";
+import {
+  animation,
+  chart,
+  field,
+  rect,
+  spread,
+  time,
+  type BuildClockOptions,
+} from "../../../src/lib";
 import { brands } from "./data";
 
-export default (
-  container: HTMLElement,
-  clock?: { playing?: boolean; at?: number }
-) =>
+export default (container: HTMLElement, clock?: BuildClockOptions) =>
   chart(brands, { legend: false })
     .flow(
       time.sequence({ by: "year", duration: 20000, loop: false, ...clock }),
