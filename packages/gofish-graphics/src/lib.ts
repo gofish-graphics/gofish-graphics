@@ -32,7 +32,7 @@ export type { FieldOp, BetweenOptions } from "./ast/fieldExpr";
 // it to RPC-returned rows (the array symbol can't cross the bridge).
 export { setMeasureProvenance } from "./ast/data";
 export type { MeasureProvenance } from "./ast/data";
-export { For as map } from "./ast/iterators/for";
+export { map } from "./ast/iterators/map";
 
 // Coordinate Transforms
 export { coord } from "./ast/coordinateTransforms/coord";
@@ -47,7 +47,7 @@ export { geo } from "./ast/coordinateTransforms/geo";
 export type { Projection, GeoOptions } from "./ast/coordinateTransforms/geo";
 
 // Main API
-export { gofish as GoFish } from "./ast/gofish";
+export { gofish } from "./ast/gofish";
 export { GoFishSolid } from "./ast/GoFishSolid";
 
 // SVG export
@@ -68,9 +68,8 @@ export { createName } from "./ast/createName";
 export type { Token } from "./ast/createName";
 export { createMark } from "./ast/withGoFish";
 
-/* API v2 */
+/* Low-level operators */
 // Data
-export { For } from "./ast/iterators/for";
 // export { groupBy } from "./ast/iterators/groupBy";
 export { groupBy, sumBy, orderBy, meanBy };
 export { bin } from "./ast/transforms";
@@ -110,14 +109,17 @@ export type {
 } from "./ast/constraints";
 
 // Graphical Operators
-export { stackX, stackX as StackX } from "./ast/graphicalOperators/stackX";
-export { stackY, stackY as StackY } from "./ast/graphicalOperators/stackY";
-export { Spread, spread, stack } from "./ast/graphicalOperators/spread";
-export { stack as Stack } from "./ast/graphicalOperators/stack";
-export { Scatter, scatter } from "./ast/graphicalOperators/scatter";
-export { spreadX, spreadX as SpreadX } from "./ast/graphicalOperators/spreadX";
-export { spreadY, spreadY as SpreadY } from "./ast/graphicalOperators/spreadY";
-export { layer as Layer } from "./ast/graphicalOperators/layer";
+// Each operator has one lowercase name that works at both levels: inside
+// `chart(...).flow(...)` and as a combinator over marks (`stack(opts, [a, b])`,
+// `layer([...]).render(...)`). The node-level building blocks they are made
+// from (`Spread`, `Layer`, the region-compositing node operators, ...) are
+// internal and not exported (#146).
+export { stackX } from "./ast/graphicalOperators/stackX";
+export { stackY } from "./ast/graphicalOperators/stackY";
+export { spread, stack } from "./ast/graphicalOperators/spread";
+export { scatter } from "./ast/graphicalOperators/scatter";
+export { spreadX } from "./ast/graphicalOperators/spreadX";
+export { spreadY } from "./ast/graphicalOperators/spreadY";
 export {
   registerRoute,
   getRoute,
@@ -133,31 +135,18 @@ export {
   type Curve,
   type CurveSpec,
 } from "./ast/graphicalOperators/routers";
-export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
+export { treemap } from "./ast/graphicalOperators/treemap";
 export {
   enclose,
-  enclose as Enclose,
   enclose as background,
 } from "./ast/graphicalOperators/enclose";
-export { Frame, Frame as frame } from "./ast/graphicalOperators/frame";
+export { Frame as frame } from "./ast/graphicalOperators/frame";
 export { group } from "./ast/graphicalOperators/group";
-export {
-  position,
-  position as Position,
-} from "./ast/graphicalOperators/position";
-export { arrow, arrow as Arrow } from "./ast/graphicalOperators/arrow";
-export { Table, table } from "./ast/graphicalOperators/table";
-export { cut, cut as Cut, cutMark } from "./ast/graphicalOperators/cut";
-export { offset, offset as Offset } from "./ast/graphicalOperators/offset";
-// Region-compositing node operators (Figma-inspired names, #196/#202). `over`
-// is intentionally not exported — it is conceptually `layer` (#196).
-export {
-  intersect as Intersect,
-  exclude as Exclude,
-  subtract as Subtract,
-  paint as Paint,
-  mask as Mask,
-} from "./ast/graphicalOperators/porterDuff";
+export { position } from "./ast/graphicalOperators/position";
+export { arrow } from "./ast/graphicalOperators/arrow";
+export { table } from "./ast/graphicalOperators/table";
+export { cut, cutMark } from "./ast/graphicalOperators/cut";
+export { offset } from "./ast/graphicalOperators/offset";
 
 // Marks (lowercase, from createMark)
 export { ellipse } from "./ast/shapes/ellipse";
@@ -233,6 +222,7 @@ export type {
   ChartOptions,
   ChartBuilder,
 } from "./ast/marks/chart";
+export type { MarkChild } from "./ast/types";
 // Side-effect import: attaches .facet() / .stack() to ChartBuilder.
 import "./ast/marks/builderMixins";
 

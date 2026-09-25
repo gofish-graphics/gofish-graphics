@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { spreadX, stackX, layer, rect, polar, For, v } from "../../src/lib";
+import { spreadX, stackX, layer, rect, polar, map, v } from "../../src/lib";
 import { color6 } from "../../src/color";
 
 const meta: Meta = {
@@ -22,7 +22,7 @@ const groups = [
 const miniChart = (bars: number[], key: string) =>
   spreadX(
     { key, spacing: 4, alignment: "start", h: 160 },
-    For(bars, (b, i) =>
+    map(bars, (b, i) =>
       rect({ key: `${key}-${i}`, w: 12, h: v(b), fill: color6[i as number] })
     )
   );
@@ -33,7 +33,7 @@ export const NestedCharts: StoryObj = {
     const container = initializeContainer();
     spreadX(
       { spacing: 40, alignment: "start" },
-      For(groups, (g) => miniChart(g.bars, g.name))
+      map(groups, (g) => miniChart(g.bars, g.name))
     ).render(container, { axes: true });
     return container;
   },
@@ -57,14 +57,14 @@ const pie = () =>
   layer({ coord: polar() }, [
     stackX(
       { h: 70, spacing: 0, alignment: "start", sharedScale: true },
-      For(pieData, (d) => rect({ w: v(d.count), fill: d.color }))
+      map(pieData, (d) => rect({ w: v(d.count), fill: d.color }))
     ),
   ]);
 
 const barsBeside = () =>
   spreadX(
     { spacing: 8, alignment: "start", h: 160 },
-    For([40, 90, 60, 80], (b, i) =>
+    map([40, 90, 60, 80], (b, i) =>
       rect({ key: `b${i}`, w: 18, h: v(b), fill: color6[0] })
     )
   );

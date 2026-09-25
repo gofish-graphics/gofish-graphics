@@ -6,7 +6,6 @@ import {
   text,
   position,
   polygon,
-  Layer,
 } from "../../src/lib";
 
 // Ported from Bluefish's example-gallery topology.tsx (issue #440): three
@@ -422,7 +421,7 @@ export const Topology: StoryObj<Args> = {
     // canvas than the tightly-fit content, which leaves the extra room as a
     // margin on the bottom/right since content stays anchored at its
     // auto-fit top-left. See friction log.
-    Layer(
+    layer(
       {},
       [
         panelGrid([
@@ -468,7 +467,7 @@ export const TopologyOverdraw: StoryObj<Args> = {
   render: () => {
     const container = initializeContainer();
 
-    Layer(
+    layer(
       {},
       [
         panelGrid([

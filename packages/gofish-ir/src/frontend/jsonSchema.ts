@@ -104,7 +104,7 @@ const pascalCase = (s: string): string =>
  * `validate.ts`'s walkOperator field shapes with `type`/`translate`/`origin`/
  * `meta`/`debug` always present as properties. `additionalProperties` stays
  * `true`: the published schema keeps the permissive wire contract (the JS
- * low-level factories accept passthrough options the v3 IR doesn't model,
+ * low-level factories accept passthrough options the fluent operators' IR doesn't model,
  * e.g. spread/stack `FancyDims` — real producers emit them); strict
  * unknown-field rejection is validate.ts strict mode's job, not the wire
  * artifact's.
@@ -196,7 +196,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
   $id: "https://gofish.graphics/schema/frontend/v0.json",
   title: "GoFish Frontend IR",
   description:
-    "Source-level chart specification produced by the v3 fluent API.",
+    "Source-level chart specification produced by the fluent chart API.",
   type: "object",
   required: ["irVersion", "ir", "root"],
   additionalProperties: false,
@@ -291,7 +291,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         charts: {
           type: "array",
           description:
-            "Layer tiers. Each is a ChartIR; the v3 chart(...).layer(mark) builder chain may also include a RawMarkIR tier (a component-level, datumless annotation overlay).",
+            "Layer tiers. Each is a ChartIR; the chart(...).layer(mark) builder chain may also include a RawMarkIR tier (a component-level, datumless annotation overlay).",
           items: {
             oneOf: [{ $ref: "#/$defs/ChartIR" }, { $ref: "#/$defs/RawMarkIR" }],
           },
@@ -306,7 +306,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         builder: {
           type: "boolean",
           description:
-            "True when this came from the v3 chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.).",
+            "True when this came from the chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.).",
         },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
@@ -480,7 +480,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     },
     CutMarkIR: {
       description:
-        "Slice a single `source` mark into N clipped sub-shapes along `dir`. As a chart `.mark(...)` spec it deserializes to the v3 expand-mark form; as a combinator child it expands in place into its N slice nodes. `size` is a field-name string (expand form) or an array of absolute-pixel numbers / datum() flex-weight wrappers; omitted means equal slices.",
+        "Slice a single `source` mark into N clipped sub-shapes along `dir`. As a chart `.mark(...)` spec it deserializes to the expand-mark form; as a combinator child it expands in place into its N slice nodes. `size` is a field-name string (expand form) or an array of absolute-pixel numbers / datum() flex-weight wrappers; omitted means equal slices.",
       type: "object",
       required: ["type", "source", "dir"],
       properties: {

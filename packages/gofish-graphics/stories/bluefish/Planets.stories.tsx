@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { For, stack, spread, ellipse, layer, text, ref, arrow } from "../../src/lib";
+import { map, stack, spread, ellipse, layer, text, ref, arrow } from "../../src/lib";
 
 const meta: Meta = {
   title: "Bluefish/Planets",
@@ -29,7 +29,7 @@ export const PlanetsOnly: StoryObj<Args> = {
     const container = initializeContainer();
 
     spread({ dir: "x", spacing: 50, alignment: "middle" },
-      For(planets, (planet) =>
+      map(planets, (planet) =>
         ellipse({
           w: planet.radius * 2,
           h: planet.radius * 2,
@@ -50,7 +50,7 @@ export const PlanetsWithLabelAbove: StoryObj<Args> = {
 
     layer([
       spread({ dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,
@@ -78,7 +78,7 @@ export const PlanetsWithLabelBelow: StoryObj<Args> = {
 
     layer([
       spread({ dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,
@@ -105,7 +105,7 @@ export const PlanetsWithLabelAboveNoSpacing: StoryObj<Args> = {
 
     layer([
       spread({ dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,
@@ -132,7 +132,7 @@ export const PlanetsWithLabelBelowNoSpacing: StoryObj<Args> = {
 
     layer([
       spread({ dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,
@@ -167,7 +167,7 @@ export const PlanetsWithArrow: StoryObj<Args> = {
 
     layer([
       spread({ dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,

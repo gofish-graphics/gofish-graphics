@@ -2,9 +2,9 @@ import {
   Constraint,
   createMark,
   createName,
-  Layer,
+  layer,
   rect,
-  Spread,
+  spread,
   text,
 } from "../../../src/lib";
 import { stackSlot } from "./stackSlot";
@@ -16,7 +16,7 @@ export interface GlobalFrameProps {
 
 export const globalFrame = createMark(({ stack }: GlobalFrameProps) => {
   const variablesTag = createName("variables");
-  return Layer([
+  return layer([
     rect({ h: 300, w: 200, fill: "#e2ebf6" }).name("frame"),
     rect({ h: 300, w: 5, fill: "#a6b3b6" }).name("frameBorder"),
     text({
@@ -25,7 +25,7 @@ export const globalFrame = createMark(({ stack }: GlobalFrameProps) => {
       fill: "black",
       text: "Global Frame",
     }).name("label"),
-    Spread(
+    spread(
       { dir: "y", alignment: "end", spacing: 10 },
       stack.map((slot) =>
         stackSlot({

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Layer,
+  layer,
   Constraint,
   line,
   createMark,
@@ -41,7 +41,7 @@ const GATE = 50; // gate box / wire-symbol side length
 // of different intrinsic sizes still land on the same column across two
 // independently-built wires (mirrors Bluefish's <WireSymbol>).
 const WireSlot = createMark(({ content }: { content: any }) =>
-  Layer([
+  layer([
     rect({ w: GATE, h: GATE, fill: "transparent" }).name("slot"),
     content.name("content"),
   ]).constrain(({ slot, content }) => [
@@ -59,7 +59,7 @@ const EmptySlot = () => rect({ w: GATE, h: GATE, fill: "transparent" });
 
 // A labeled square gate (Bluefish's <BoxedSymbol>).
 const BoxedSymbol = createMark(({ label }: { label: string }) =>
-  Layer([
+  layer([
     rect({
       w: GATE,
       h: GATE,
@@ -84,7 +84,7 @@ const BoxedSymbol = createMark(({ label }: { label: string }) =>
 
 // The ⊕ (circled-plus) CNOT target symbol (Bluefish's <OPlus>).
 const OPlus = createMark(() =>
-  Layer([
+  layer([
     circle({ r: 15, fill: "transparent", stroke: "black", strokeWidth: 3 }).name(
       "ring"
     ),
@@ -125,7 +125,7 @@ const ControlDot = () => circle({ r: 5, fill: "black" });
 // slot counts shifted by different amounts, bending the vertical connector
 // lines). A plain `align x:"start"` + in-flow leader rect expresses it.
 const Wire = createMark(({ slots, span }: { slots: any[]; span?: number }) =>
-  Layer([
+  layer([
     rect({
       w: (span ?? slots.length) * SLOT + 30,
       h: 3,
@@ -188,7 +188,7 @@ export const QuantumCircuit: StoryObj<Args> = {
       text({ text: "This is a controlled-NOT." }),
     ]);
 
-    Layer({ x: 20, y: 20 }, [
+    layer({ x: 20, y: 20 }, [
       // ── tier 1: the two wire-groups + "≡" + description — fully placed ──
       spread({ dir: "x", spacing: 25, alignment: "middle" }, [
         // Left circuit: controlled-Z.

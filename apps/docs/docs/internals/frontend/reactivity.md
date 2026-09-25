@@ -115,7 +115,7 @@ cleanup that runs before the next render. The chart pipeline uses it to play the
 build-in on the first render only and to stop that render's build clock (a
 declared shortcut, #914). Three callers share it:
 
-- `ChartBuilder.render` and `LayerBuilder.render` — the v3 chart pipeline. Both
+- `ChartBuilder.render` and `LayerBuilder.render` — the fluent chart pipeline. Both
   get `render` from the shared terminal registry (`marks/terminals.ts`) with
   `renderWithInteraction` as their render strategy, and their one shared
   `resolveForRender` runs domain inference + layout over the builder's spec.

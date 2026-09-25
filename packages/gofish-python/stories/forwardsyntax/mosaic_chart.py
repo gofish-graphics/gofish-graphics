@@ -1,4 +1,4 @@
-"""Forward Syntax V3/Mosaic Chart — mirrors MosaicChart.stories.tsx
+"""Forward Syntax/Mosaic Chart — mirrors MosaicChart.stories.tsx
 
 Uses normalize() inside derive() to make each origin's cylinder counts
 sum to 1, then stacks to fill the full height — creating a mosaic / waffle chart.
@@ -6,7 +6,7 @@ sum to 1, then stacks to fill the full height — creating a mosaic / waffle cha
 
 from gofish import chart, spread, stack, derive, normalize, rect
 
-TITLE = "Forward Syntax V3/Mosaic Chart"
+TITLE = "Forward Syntax/Mosaic Chart"
 
 _data = [
     {"origin": "Europe", "cylinders": "4", "count": 66},

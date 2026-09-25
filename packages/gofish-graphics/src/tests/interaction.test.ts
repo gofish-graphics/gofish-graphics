@@ -35,9 +35,9 @@ const {
   timer,
   click,
   signal,
-  // The low-level render terminal (`gofish as GoFish`) + a v1 operator, for the
+  // The low-level render terminal (`gofish`) + a low-level operator, for the
   // component-level (no chart(), no data) reactive cases.
-  GoFish: gofish,
+  gofish,
   spreadX,
   geo,
   group,
@@ -52,7 +52,7 @@ const {
   slider,
   button,
   spreadY,
-  Frame,
+  frame,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -1146,7 +1146,7 @@ async function main() {
     const container = makeContainer();
     const [c, setC] = createSignal("#00f");
     // spreadX(...) resolves to a Promise<node> (not a function), so the terminal
-    // takes the STATIC path — a bare v1 mark would look like a thunk.
+    // takes the STATIC path — a bare low-level mark would look like a thunk.
     await gofish(
       container,
       { w: 120, h: 80 },
@@ -1648,7 +1648,7 @@ async function main() {
     });
     await gofish(container, { w: 400, h: 400, legend: false }, () =>
       spreadY({ spacing: 12 }, [
-        Frame({ w: 300, h: 300 }, [map]),
+        frame({ w: 300, h: 300 }, [map]),
         spreadX({ spacing: 8 }, [playButton, timeSlider]),
       ])
     );

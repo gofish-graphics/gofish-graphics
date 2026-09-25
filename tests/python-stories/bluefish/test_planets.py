@@ -3,7 +3,7 @@
 All six exports port directly now that the Python wrapper exposes the
 necessary low-level combinators (`layer`, `spread([marks], ...)`, `arrow`)
 and leaves (`text(text=...)`, `ref(name)`). The shared `PLANETS` constant
-mirrors the JS file. Where JS uses `For(planets, planet => ellipse({...}))`,
+mirrors the JS file. Where JS uses `map(planets, planet => ellipse({...}))`,
 Python uses a list comprehension to the same effect.
 """
 

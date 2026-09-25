@@ -64,7 +64,7 @@ function readTag(value: unknown): SerializeTag | undefined {
  * Emit a frontend-IR document for a {@link ChartBuilder}.
  *
  * Async because combinator-form marks may carry their child list as a
- * `Promise<Mark[]>` (when built via helpers like `For(...)`); the emitter
+ * `Promise<Mark[]>` (when built via helpers like `map(...)`); the emitter
  * resolves these to walk into them.
  */
 export async function toJSON(

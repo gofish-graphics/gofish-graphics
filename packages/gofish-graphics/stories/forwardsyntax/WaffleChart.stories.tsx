@@ -6,7 +6,7 @@ import { repeat } from "../../src/lib";
 import _ from "lodash";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Waffle Chart",
+  title: "Forward Syntax/Waffle Chart",
 };
 export default meta;
 

@@ -203,7 +203,7 @@ carrier must still be something `.mark()` accepts.
   method. No story exercises `.stack()` yet. The `Stackable` typeclass stays; whether the wrapper
   class does is an open question below (as written it is not a `ChartBuilder` instance, so it
   cannot be nested via `.mark()`).
-- `src/templates/` (rectTemplate, waffle, and friends) predates v3, is not exported anywhere, and
+- `src/templates/` (rectTemplate, waffle, and friends) predates the fluent builder, is not exported anywhere, and
   should be deleted when this layer lands.
 
 # Forks Not Taken

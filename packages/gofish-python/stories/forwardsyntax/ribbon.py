@@ -1,4 +1,4 @@
-"""Forward Syntax V3/Ribbon — mirrors Ribbon.stories.tsx"""
+"""Forward Syntax/Ribbon — mirrors Ribbon.stories.tsx"""
 
 import math
 
@@ -17,7 +17,7 @@ from gofish import (
 )
 from stories.data.seafood import seafood
 
-TITLE = "Forward Syntax V3/Ribbon"
+TITLE = "Forward Syntax/Ribbon"
 
 
 def basic(w=400, h=400):

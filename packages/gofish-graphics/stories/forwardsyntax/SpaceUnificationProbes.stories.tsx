@@ -10,7 +10,7 @@ import { chart, spread, rect } from "../../src/lib";
  * `number | "free" | "impossible"` model that matches `main`.
  */
 const meta: Meta = {
-  title: "Forward Syntax V3/Space Unification Probes",
+  title: "Forward Syntax/Space Unification Probes",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },

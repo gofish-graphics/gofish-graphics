@@ -4,12 +4,12 @@ import {
   Constraint,
   createMark,
   createName,
-  Layer,
+  layer,
   rect,
   text,
 } from "../../src/lib";
 import type { Token } from "../../src/lib";
-import type { GoFishAST } from "../../src/ast/_ast";
+import type { MarkChild } from "../../src/lib";
 
 // Ported from Bluefish's example-gallery ohm-parser.tsx (#439): a parse-tree
 // / derivation diagram for the arithmetic expression "3 + (4 * 5)" under a
@@ -80,7 +80,7 @@ import type { GoFishAST } from "../../src/ast/_ast";
 //   node, but a bare `text(...)` call is itself a still-deferred mark (see
 //   `EmptySlot`/`ControlDot` in QuantumCircuit.stories.tsx) — wrapping one
 //   directly in `createMark` crashes at render time. A plain function
-//   returning the mark call (or a resolved `Layer(...).constrain(...)` when
+//   returning the mark call (or a resolved `layer(...).constrain(...)` when
 //   there's a note) sidesteps that, same as `EmptySlot`/`ControlDot`.
 
 const meta: Meta = {
@@ -197,7 +197,7 @@ const TRACE = R("Exp", 0, 10, [addExpOuter]);
 // ── Marks ────────────────────────────────────────────────────────────────
 
 const CharBox = createMark(({ ch }: { ch: string }) =>
-  Layer([
+  layer([
     rect({ w: CHAR_W, h: CHAR_H, fill: "transparent" }).name("box"),
     text({ text: ch, ...BIG_FONT }).name("glyph"),
   ]).constrain(({ box, glyph }) => [
@@ -209,7 +209,7 @@ const CharBox = createMark(({ ch }: { ch: string }) =>
 // "AddExp" + "- plus"). Plain function, not createMark — see friction log.
 const LabelText = ({ main, note }: { main: string; note?: string }) =>
   note
-    ? Layer([
+    ? layer([
         text({ text: main, ...LABEL_FONT }).name("main"),
         text({ text: `- ${note}`, ...NOTE_FONT }).name("note"),
       ]).constrain(({ main: m, note: n }) => [
@@ -237,7 +237,7 @@ export const OhmParseTree: StoryObj<Args> = {
     const container = initializeContainer();
 
     let uid = 0;
-    const children: GoFishAST[] = [];
+    const children: MarkChild[] = [];
     const constraints: any[] = [];
 
     // ── Tier 1: the character row — a self-contained sub-layer with its own
@@ -255,7 +255,7 @@ export const OhmParseTree: StoryObj<Args> = {
     const rowRefs = [...charTokens, endTok].map(asRef);
     const charRowTok = createName("char-row");
     children.push(
-      Layer(
+      layer(
         { x: 0, y: 0 },
         [
           ...chars.map((ch, i) => CharBox({ ch }).name(charTokens[i])),
@@ -275,7 +275,7 @@ export const OhmParseTree: StoryObj<Args> = {
     // that's what was tried first here, and it's exactly the shape the task
     // brief suggested. It didn't work, and the reason is worth recording:
     //
-    //   `Layer({x:0,y:0}, [ref(a), ref(b)])` — an explicit anchor is
+    //   `layer({x:0,y:0}, [ref(a), ref(b)])` — an explicit anchor is
     //   required for the WRAPPER itself to read as "already placed" (see
     //   the `AlignSpan`/`AlignSize` stories in Constraints.stories.tsx,
     //   where the span *source* always carries a literal `{x,y}`). But
@@ -413,7 +413,7 @@ export const OhmParseTree: StoryObj<Args> = {
       Constraint.align({ x: "middle", y: "middle" }, [asRef(endBarTok), asRef(endLabelTok)])
     );
 
-    Layer({ x: 20, y: 20 }, children)
+    layer({ x: 20, y: 20 }, children)
       .constrain(() => constraints)
       .render(container, { w: args.w, h: args.h });
 

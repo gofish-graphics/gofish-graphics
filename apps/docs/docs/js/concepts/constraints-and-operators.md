@@ -145,8 +145,8 @@ exact, including the scale solve and the auto-fit, not just the final pixels:
 
 | Operator                                          | Constraint form                                        |
 | ------------------------------------------------- | ------------------------------------------------------ |
-| `Spread({ dir: "y", alignment: "start" }, items)` | `align({ x: "start" })` and `distribute({ dir: "y" })` |
-| `Stack({ dir: "y" }, items)`                      | `distribute({ dir: "y", glue: true })`                 |
+| `spread({ dir: "y", alignment: "start" }, items)` | `align({ x: "start" })` and `distribute({ dir: "y" })` |
+| `stack({ dir: "y" }, items)`                      | `distribute({ dir: "y", glue: true })`                 |
 
 So the choice between them is a choice of phrasing, not of capability inside
 that overlap. Use the operator when the sentence you want to write is about a

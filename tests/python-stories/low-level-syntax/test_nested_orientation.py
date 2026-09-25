@@ -7,7 +7,7 @@ would render them upside down). `PolarInChart`: a polar pie beside a continuous-
 bar chart in one free-space canvas — the `coord` pie fixes its own orientation
 and cancels the incoming flip, so the wedges keep their clockwise-from-top sense
 while the bars grow up. Combinator `spread`/`stack` in the `dir` variants stand
-in for v1 `spreadX`/`stackX`; a data-bound SIZE uses `datum(v)` (JS `value(v)`).
+in for JS `spreadX`/`stackX`; a data-bound SIZE uses `datum(v)` (JS `value(v)`).
 """
 
 from gofish import datum, layer, polar, rect, spread, stack

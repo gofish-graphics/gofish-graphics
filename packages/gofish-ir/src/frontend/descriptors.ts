@@ -264,7 +264,7 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
 
 // ---------------------------------------------------------------------------
 // Operators (all 9) — grounded in schema.ts interfaces + validate.ts's
-// per-type checks + the v3 factories in graphicalOperators/ and marks/chart.ts.
+// per-type checks + the fluent factories in graphicalOperators/ and marks/chart.ts.
 // ---------------------------------------------------------------------------
 
 export const OPERATORS: Record<string, ConstructDescriptor> = {
@@ -359,7 +359,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
       axes: { type: t.ref("AxesOptions") },
-      // Data-driven operator extent (#4/#20): the v3 spread operator carries
+      // Data-driven operator extent (#4/#20): the fluent spread operator carries
       // `w`/`h` (field/datum-driven cross-axis sizing) and `size` (#700 Phase
       // 2 — per-entry stack-axis extent, field/datum-sized children).
       // `COMBINATOR_MARKS.spread` also carries `w`/`h` for the low-level
@@ -592,7 +592,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.number,
         doc: "w/h ratio to enforce; the constraining axis wins when both are data-driven.",
       },
-      // A v3-mark-factory-wide dev flag (`FACTORY_ONLY_KEYS` in
+      // A fluent-factory-wide dev flag (`FACTORY_ONLY_KEYS` in
       // marks/createOperator.ts strips `by`/`debug` before layout, generically
       // — not a rect-only feature). Documented per-mark (matching `blank`'s
       // existing note) rather than as a base field since only the
@@ -918,7 +918,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
 export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   spread: combinatorMark("spread", {
-    doc: "Low-level combinator form of `spread`. Its `Spread`/`SpreadOptions` factory carries the same `w`/`h` (FancyDims passthrough to the elaborated layer) the v3 operator now exposes.",
+    doc: "Low-level combinator form of `spread`. Its `Spread`/`SpreadOptions` factory carries the same `w`/`h` (FancyDims passthrough to the elaborated layer) the fluent operator now exposes.",
     fields: resolveFields(OPERATORS.spread),
   }),
   stack: combinatorMark("stack", {

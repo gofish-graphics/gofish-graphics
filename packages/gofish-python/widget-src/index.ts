@@ -17,7 +17,7 @@
 
 import * as Arrow from "apache-arrow";
 import {
-  Layer,
+  layer,
   Serialize,
   serializeSVG,
   type ChartBuilder,
@@ -334,7 +334,7 @@ function renderLayer(
   };
 
   if ((spec as any).builder) {
-    // v3 `chart(...).layer(...)` chain: reconstruct through the real
+    // Fluent `chart(...).layer(...)` chain: reconstruct through the real
     // LayerBuilder so JS owns the builder's render logic (inferred axis
     // titles, etc.) instead of the wrapper re-deriving it. The child charts
     // are already wired (the producer mark is named, the consumer reads
@@ -345,12 +345,12 @@ function renderLayer(
       .reduce((acc: any, c) => acc.layer(c), childTiers[0] as any);
     layerBuilder.render(container, renderOptions);
   } else if (Object.keys(resolvedLayerOptions).length > 0) {
-    (Layer as any)(resolvedLayerOptions, childTiers).render(
+    (layer as any)(resolvedLayerOptions, childTiers).render(
       container,
       renderOptions
     );
   } else {
-    (Layer as any)(childTiers).render(container, renderOptions);
+    (layer as any)(childTiers).render(container, renderOptions);
   }
   log("Layer rendered successfully!");
 }

@@ -3,7 +3,7 @@
  *
  * `.facet()` and `.stack()` are sugar for `.flow(spread/stack(...))`. They
  * live here (not on the class itself) so `chartBuilder.ts` doesn't need to
- * import the v3 `spread`/`stack` operators — that import would cycle back
+ * import the fluent `spread`/`stack` operators — that import would cycle back
  * through `createOperator` and into `chartBuilder.ts` itself. By patching
  * the prototype from a separate module that imports both pieces, the cycle
  * never closes.

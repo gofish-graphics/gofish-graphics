@@ -74,7 +74,7 @@ function resolveWeight(
   return Number.isFinite(num) && num > 0 ? num : 0;
 }
 
-export const Treemap = createNodeOperator(
+const Treemap = createNodeOperator(
   (opts: TreemapProps, children: GoFishAST[]) => {
     const {
       key,

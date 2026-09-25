@@ -1,7 +1,7 @@
 import _ from "lodash";
 import {
   line,
-  For,
+  map,
   layer,
   groupBy,
   rect,
@@ -90,7 +90,7 @@ export const testBoxWhiskerPlot = () =>
       spacing: 8,
       sharedScale: true,
     },
-    For(
+    map(
       groupBy(
         _.orderBy(genderPayGap, (d) => payGrade.indexOf(d["Pay Grade"])),
         "Pay Grade"
@@ -101,7 +101,7 @@ export const testBoxWhiskerPlot = () =>
             key,
             spacing: 8,
           },
-          For(groupBy(d, "Gender"), (d, key) =>
+          map(groupBy(d, "Gender"), (d, key) =>
             boxAndWhisker({
               median: d[0].Median,
               min: d[0].Min,

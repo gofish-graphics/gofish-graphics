@@ -3,7 +3,7 @@ import { initializeContainer } from "../helper";
 import { chart, table, rect, gradient } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Heatmap",
+  title: "Forward Syntax/Heatmap",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

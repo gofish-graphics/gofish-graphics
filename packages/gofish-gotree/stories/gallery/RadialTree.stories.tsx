@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, line, Layer, Frame, polar } from "gofish-graphics";
+import { ellipse, line, layer, frame, polar } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -10,7 +10,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //   DSL for node placement. GoTree's angular allocation (angle proportional to a
 //   subtree's leaf count) can't be expressed with today's constraint primitives,
 //   so a small story-local data pass computes each node's polar position and we
-//   place marks explicitly inside Frame({ coord: polar() }, ...). See
+//   place marks explicitly inside frame({ coord: polar() }, ...). See
 //   RadialDeep.stories.tsx for the full derivation; the mechanics are identical,
 //   only the decoded constants differ.
 //
@@ -170,7 +170,7 @@ export const RadialTree: StoryObj = {
     // Inside a coord, paint order = array order (coord's flattenLayout ignores
     // zOrder — resolved by the ROOT bake, and coord is a bake boundary). Links
     // go FIRST to draw under the nodes; the root node is last within `nodes`.
-    Frame({ coord: polar() as any }, [Layer([...links, ...nodes])]).render(
+    frame({ coord: polar() as any }, [layer([...links, ...nodes])]).render(
       container,
       { w: 560, h: 560 }
     );

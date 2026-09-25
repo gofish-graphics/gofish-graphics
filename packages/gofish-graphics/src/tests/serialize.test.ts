@@ -1,7 +1,7 @@
 /**
  * Tests for the frontend-IR emitter (gofish-graphics/serialize/toJSON).
  *
- * Builds charts via the v3 fluent API, calls .toJSON(), and validates the
+ * Builds charts via the fluent chart API, calls .toJSON(), and validates the
  * resulting documents against the canonical schema in gofish-ir.
  *
  * Runnable as a script via tsx. No test framework — plain assertions + a

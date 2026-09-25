@@ -1,7 +1,7 @@
 import { streamgraphData } from "../data/streamgraphData";
 import {
   spreadY,
-  For,
+  map,
   groupBy,
   spreadX,
   rect,
@@ -14,11 +14,11 @@ import {
 export const testRidgeline = () =>
   spreadY(
     { spacing: -30, sharedScale: true },
-    For(groupBy(streamgraphData, "c"), (items, c) =>
+    map(groupBy(streamgraphData, "c"), (items, c) =>
       frame([
         spreadX(
           { spacing: 20 /* , sharedScale: true */ },
-          For(items, (d) =>
+          map(items, (d) =>
             rect({
               // x: d.x * 20,
               // h: v(d.y),
@@ -34,7 +34,7 @@ export const testRidgeline = () =>
             opacity: 0.7,
             mixBlendMode: "multiply",
           },
-          For(items, (d) => ref(`${d.c}-${d.x}`))
+          map(items, (d) => ref(`${d.c}-${d.x}`))
         ),
       ])
     )
