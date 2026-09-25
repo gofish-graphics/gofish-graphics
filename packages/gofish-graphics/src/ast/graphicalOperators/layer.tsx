@@ -47,7 +47,11 @@ import {
   type ZOrderConstraint,
 } from "../constraints";
 import { GoFishRef, findPathToRoot } from "../_ref";
-import { childNameKey, type ConstraintPosScales } from "../constraints/shared";
+import {
+  childNameKey,
+  internalName,
+  type ConstraintPosScales,
+} from "../constraints/shared";
 import { anchorOffset } from "../constraints/placementProgramLowerer";
 import {
   applyNestLayoutProposal,
@@ -93,13 +97,13 @@ export function targetOf(n: GoFishAST): GoFishNode | undefined {
 }
 
 /** Give `node` a resolvable constraint name if it doesn't already have one
- *  (mirrors `ensureChildNames`'s synthesis, scoped to this one-off use). */
-function ensureConstraintName(node: GoFishNode, synth: string): string {
+ *  (a fresh `internalName`, as `ensureChildNames` does). */
+function ensureConstraintName(node: GoFishNode): string {
   if (node._name !== undefined) {
-    return typeof node._name === "string" ? node._name : synth;
+    return typeof node._name === "string" ? node._name : internalName("z");
   }
-  node._name = synth;
-  return synth;
+  node._name = internalName("z");
+  return node._name;
 }
 
 /**
@@ -136,7 +140,6 @@ function applyRelationalZBelowDefaults(
   if (connectors.length === 0) return;
 
   const pairs: [string, string][] = [];
-  let synthIdx = 0;
   for (const connector of connectors) {
     const operands: GoFishAST[] | undefined = (connector as any)
       .__relationalOperands;
@@ -170,14 +173,8 @@ function applyRelationalZBelowDefaults(
         (c) => c !== connector && path.includes(c as GoFishAST)
       );
       if (!withinScope) continue;
-      const connectorName = ensureConstraintName(
-        connector,
-        `__gofish_z_${synthIdx++}`
-      );
-      const targetName = ensureConstraintName(
-        target,
-        `__gofish_z_${synthIdx++}`
-      );
+      const connectorName = ensureConstraintName(connector);
+      const targetName = ensureConstraintName(target);
       pairs.push([connectorName, targetName]);
       claimedAny = true;
     }
@@ -554,9 +551,9 @@ export const layer = createNodeOperatorSequential(
             node.children,
             node.constraints
           );
-          // Every placement operand resolved to a node inside this layer — by
-          // name from this layer outward (like `ref`), or by child slot. Throws
-          // on a missing, ambiguous, or out-of-layer operand (#819).
+          // Every placement operand resolved to a node inside this layer, by
+          // name from this layer outward (like `ref`). Throws on a missing,
+          // ambiguous, or out-of-layer operand (#819).
           const operands =
             node.constraints.length > 0
               ? resolveConstraintOperands(node)
@@ -569,8 +566,7 @@ export const layer = createNodeOperatorSequential(
           const constrainedChildren = new Set<number>();
           for (const name of layoutPlan.constrainedNames) {
             const op = operands.get(name);
-            if (op && op.node === node.children[op.child])
-              constrainedChildren.add(op.child);
+            if (op?.direct) constrainedChildren.add(op.child);
           }
 
           for (const i of layoutPlan.layoutOrder) {
@@ -637,15 +633,15 @@ export const layer = createNodeOperatorSequential(
             // child that contains it (keyed by that child's operand name, or a
             // synthetic key when the child itself is not an operand).
             const containerKey = new Map<number, string>();
+            const nested: [string, ResolvedOperand][] = [];
             for (const [name, op] of operands) {
-              if (op.node === node.children[op.child]) {
+              if (op.direct) {
                 nameToPlaceable.set(name, childPlaceables[op.child]);
                 containerKey.set(op.child, name);
-              }
+              } else nested.push([name, op]);
             }
             const rigid = new Map<string, RigidAttachment>();
-            for (const [name, op] of operands) {
-              if (op.node === node.children[op.child]) continue;
+            for (const [name, op] of nested) {
               let container = containerKey.get(op.child);
               if (container === undefined) {
                 container = `\u0000child:${op.child}`;

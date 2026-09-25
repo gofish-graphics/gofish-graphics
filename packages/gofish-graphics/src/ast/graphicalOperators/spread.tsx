@@ -150,8 +150,8 @@ export const Spread = createNodeOperator(
       } as any,
       childList
     )) as GoFishNode;
-    node.constrainChildren(() => {
-      const refs = names.map((name, child) => ({ name, child }));
+    node.constrain((g) => {
+      const refs = names.map((name) => g[name]);
       // The cross-axis align: it shares the frame (unions the children's domain)
       // and, for free children (bars), commits a baseline. A self-positioned
       // child (a scatter facet) is left alone by `align` automatically — the

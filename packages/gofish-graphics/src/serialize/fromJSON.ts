@@ -530,17 +530,16 @@ export function mapMark(
     let mark = factory(opts, childMarks);
     if (spec.constraints && typeof (mark as any).constrain === "function") {
       const constraints = spec.constraints as ConstraintSpec[];
-      mark = (mark as any).constrain((refs: Record<string, any>) =>
+      // The wire carries operand NAMES, and a by-name operand is `{ name }`:
+      // the layer resolves it at layout like any other, so a name that
+      // matches no node inside the layer is reported there, by name.
+      const operand = (name: string) => ({ name });
+      mark = (mark as any).constrain(() =>
         constraints.map((c: any) => {
           if (c.type === "zAbove" || c.type === "zBelow") {
-            return (Constraint as any)[c.type](
-              ...c.refs.map((name: string) => refs[name])
-            );
+            return (Constraint as any)[c.type](...c.refs.map(operand));
           }
-          return (Constraint as any)[c.type](
-            c.options,
-            c.refs.map((name: string) => refs[name])
-          );
+          return (Constraint as any)[c.type](c.options, c.refs.map(operand));
         })
       );
     }

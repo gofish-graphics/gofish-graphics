@@ -914,7 +914,7 @@ export async function elaborateAxes(
       content.name(CONTENT_NAME);
       const axisNodes = constrained.flatMap((e) => e.nodes);
       inner = (await (layer as any)([content, ...axisNodes])) as GoFishNode;
-      inner.constrainChildren((g) => [
+      inner.constrain((g) => [
         Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
           g[CONTENT_NAME],
         ]),
@@ -933,7 +933,7 @@ export async function elaborateAxes(
       inner.name(INNER_REF_NAME);
       const labelNodes = refBased.flatMap((e) => e.nodes);
       outerRoot = (await (layer as any)([inner, ...labelNodes])) as GoFishNode;
-      outerRoot.constrainChildren((g) => [
+      outerRoot.constrain((g) => [
         Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
           g[INNER_REF_NAME],
         ]),
@@ -1080,7 +1080,7 @@ export async function elaborateAxisTitles(
     ])) as GoFishNode;
 
     // Constraint order matters; placement is first-write-wins.
-    root.constrainChildren((g) => {
+    root.constrain((g) => {
       const cs: any[] = [
         // Pin the content at its origin (a literal-pixel position pin, x:0/y:0);
         // it never moves. Everything else seats off the (already-placed) ref

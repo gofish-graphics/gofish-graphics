@@ -25,7 +25,7 @@ import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, TrackLayout } from "./grid";
-import { resolveScopedName } from "../_ref";
+import { resolveScopedName, visibleNodes } from "../_ref";
 import {
   childNameKey,
   isPlacedOn,
@@ -119,54 +119,74 @@ export const Constraint = {
 // --- Resolution ---
 
 /**
- * The environment a user `.constrain(fn)` callback receives: every property
- * read is a BY-NAME operand (`{ name }`), resolved later, at layout, from the
- * constraining layer — the same innermost-enclosing lookup `ref("name")` uses
- * (`resolveScopedName`). So `({ mercury, label }) => ...` can name any
- * string-named node inside the layer, however deeply nested (up to a
- * `createMark` boundary), and a name that matches nothing, or matches two
- * nodes equally close, is a loud error at layout rather than a silent no-op.
+ * The environment a `.constrain(fn)` callback receives: an ordinary object with
+ * one by-name operand (`{ name }`) for every distinct string name inside
+ * `layer` (a token-named node answers to its tag), walking the same bounded
+ * tree the name lookup walks (`visibleNodes`: into nested layers, not into a
+ * nested `createMark` component). These are exactly the names a constraint of
+ * this layer can use: the lookup from the layer (`resolveScopedName`) stops at
+ * the layer's own level for any of them, so each resolves to a node inside it,
+ * while a name found only outside the layer could never be an operand. A
+ * missing name reads as `undefined`, so JS destructuring defaults
+ * (`({ a, pad = 8 })`) and optional checks (`note ? ... : ...`) work, and
+ * `validateOperands` turns an `undefined` operand into a loud error. An
+ * operand is resolved to its node at layout, by name: elaboration can swap a
+ * named child for a wrapper, and the wrapper takes the name.
  */
-export function constraintEnv(): Record<string, ConstraintRef> {
-  return new Proxy({} as Record<string, ConstraintRef>, {
-    get(_target, prop) {
-      if (typeof prop !== "string") return undefined;
-      return { name: prop };
-    },
-  });
+export function constraintEnv(
+  layer: GoFishNode
+): Record<string, ConstraintRef> {
+  const env: Record<string, ConstraintRef> = {};
+  for (const n of visibleNodes(layer)) {
+    if (n === layer) continue;
+    const name = childNameKey(n);
+    if (name !== undefined && !(name in env)) env[name] = { name };
+  }
+  return env;
 }
 
 /**
- * BY-POSITION operands for the named direct children of an elaborated layer
- * (spread, scatter, table, axis/legend/label chrome). These operators know
- * their children's slots, so their constraints never go through the name
- * lookup — their synthesized names can repeat across the scope without
- * colliding.
+ * Throw on an operand that is not an operand, typically an `undefined` read
+ * from the callback environment because no node inside the layer has that
+ * name (#819). Runs when `.constrain()` runs, so the stack points at the
+ * callback.
  */
-export function childRefs(
-  children: readonly GoFishAST[]
-): Record<string, ConstraintRef> {
-  const refs: Record<string, ConstraintRef> = {};
-  children.forEach((c, child) => {
-    const name = childNameKey(c);
-    if (name && !(name in refs)) refs[name] = { name, child };
-  });
-  return refs;
+export function validateOperands(
+  specs: ConstraintSpec[],
+  env: Record<string, ConstraintRef>
+): void {
+  for (const c of specs) {
+    c.children.forEach((ref: ConstraintRef | undefined, i: number) => {
+      if (ref && typeof ref.name === "string") return;
+      const names = Object.keys(env);
+      throw new Error(
+        `Constraint.${c.type}: operand ${i + 1} is ${String(ref)}. A ` +
+          `.constrain() callback receives only the names of nodes inside its ` +
+          `layer; check the spelling, or name the node with .name(...). ` +
+          `Names inside this layer: ${
+            names.length > 0 ? names.join(", ") : "(none)"
+          }.`
+      );
+    });
+  }
 }
 
 /** A layer constraint operand resolved to a node inside the layer: `child` is
- *  the index of the layer's direct child that is (`node === children[child]`)
- *  or contains `node`. */
-export type ResolvedOperand = { node: GoFishAST; child: number };
+ *  the index of the layer's direct child that is (`direct`) or contains
+ *  `node`. */
+export type ResolvedOperand = {
+  node: GoFishAST;
+  child: number;
+  direct: boolean;
+};
 
 /**
  * Resolve every placement operand of `layer`'s constraints to a node inside
- * the layer. By-name operands resolve from the layer outward
- * (`resolveScopedName` — missing or ambiguous names throw); by-position
- * operands name a direct child slot. Every operand must lie inside the layer (a layer
- * can only place what it contains), and one operand key must always mean one
- * node. z-order constraints are excluded: they relate SETS of nodes at paint
- * time (`paintOrder.ts`), not single placeables.
+ * the layer, once per distinct name, with the same lookup `ref("name")` uses
+ * (`resolveScopedName`: missing or ambiguous names throw). Every operand must
+ * lie inside the layer (a layer can only place what it contains). z-order
+ * constraints are excluded: they relate SETS of nodes at paint time
+ * (`paintOrder.ts`), not single placeables.
  */
 export function resolveConstraintOperands(
   layer: GoFishNode
@@ -175,21 +195,12 @@ export function resolveConstraintOperands(
   for (const c of layer.constraints) {
     if (isZOrderConstraint(c)) continue;
     for (const ref of c.children) {
-      if (!ref) continue;
-      const node =
-        ref.child !== undefined
-          ? layer.children[ref.child]
-          : resolveScopedName(layer, ref.name, `Constraint.${c.type} operand`);
-      const prior = out.get(ref.name);
-      if (prior) {
-        if (prior.node !== node) {
-          throw new Error(
-            `Constraint.${c.type}: operand key "${ref.name}" refers to two ` +
-              `different nodes in one layer.`
-          );
-        }
-        continue;
-      }
+      if (out.has(ref.name)) continue;
+      const node = resolveScopedName(
+        layer,
+        ref.name,
+        `Constraint.${c.type} operand`
+      );
       // Walk up to the layer's direct child that contains `node`.
       let cur: GoFishAST | undefined = node;
       while (cur && cur.parent !== layer) cur = cur.parent;
@@ -202,7 +213,7 @@ export function resolveConstraintOperands(
             `contains every operand.`
         );
       }
-      out.set(ref.name, { node, child });
+      out.set(ref.name, { node, child, direct: cur === node });
     }
   }
   return out;

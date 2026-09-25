@@ -4,7 +4,7 @@ import { createNodeOperator } from "../withGoFish";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { createGridConstraint } from "../constraints/grid";
-import { childNameKey } from "../constraints/shared";
+import { ensureChildNames } from "../constraints/shared";
 
 /**
  * `Table` arranges cells in a `numCols`-wide grid. It elaborates to a flat
@@ -36,20 +36,12 @@ export const Table = createNodeOperator(
     // Prefer explicit numCols; fall back to colKeys.length; finally a single row.
     const numCols = numColsOpt ?? colKeys?.length ?? children.length;
 
-    // Each cell needs a name so the grid constraint can reference it; reuse the
-    // cell's key (from the table split) when present, else synthesize one.
-    const cellNames = children.map((c, i) => {
-      // Reuse the cell's existing constraint name (string or Token, via
-      // `childNameKey`); synthesize and stamp one only when it has none.
-      const existing = childNameKey(c);
-      if (existing !== undefined) return existing;
-      const nm = (c instanceof GoFishNode && c.key) || `__grid_cell_${i}`;
-      if (c instanceof GoFishNode) c._name = nm;
-      return nm;
-    });
+    // Each cell needs a name so the grid constraint can refer to it (shared
+    // with spread and scatter — see `ensureChildNames`).
+    const cellNames = ensureChildNames(children, "cell");
 
     const node = (await layer(children)) as GoFishNode;
-    node.constrainChildren(() => [
+    node.constrain((g) => [
       // grid is table's private elaboration target — not part of the public
       // `Constraint` factory (see constraints/index.ts).
       createGridConstraint(
@@ -61,7 +53,7 @@ export const Table = createNodeOperator(
           colMeasure: axisMeasures?.x,
           rowMeasure: axisMeasures?.y,
         },
-        cellNames.map((name, child) => ({ name, child }))
+        cellNames.map((name) => g[name])
       ),
     ]);
 

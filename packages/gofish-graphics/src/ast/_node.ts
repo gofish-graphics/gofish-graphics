@@ -68,7 +68,7 @@ import type { TokenContext } from "./tokenContext";
 import type { FlipScope } from "./_displayObject";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
-import { childRefs, constraintEnv } from "./constraints";
+import { constraintEnv, validateOperands } from "./constraints";
 import {
   BBox,
   type BBoxKey,
@@ -1721,21 +1721,10 @@ export class GoFishNode {
   public constrain(
     fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
   ): this {
-    this.constraints = fn(constraintEnv());
-    return this;
-  }
-
-  /**
-   * `.constrain()` for operators that elaborate to a constrained layer and
-   * know their children's slots (spread, scatter, table, axis/legend/label
-   * chrome): the callback gets BY-POSITION operands for the named direct
-   * children (`childRefs`), so the operator's synthesized names never go
-   * through the scoped name lookup and can repeat across a scope freely.
-   */
-  public constrainChildren(
-    fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
-  ): this {
-    this.constraints = fn(childRefs(this.children));
+    const env = constraintEnv(this);
+    const specs = fn(env);
+    validateOperands(specs, env);
+    this.constraints = specs;
     return this;
   }
 

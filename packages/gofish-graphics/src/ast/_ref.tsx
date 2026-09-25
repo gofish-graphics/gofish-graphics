@@ -24,6 +24,7 @@ import type { Placeable, RenderSession } from "./_node";
 import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
+import { childNameKey } from "./constraints/shared";
 
 export class GoFishRef {
   public type: string = "ref";
@@ -387,7 +388,7 @@ export function* visibleNodes(root: GoFishAST): Generator<GoFishAST> {
  * `createMark` component at or above `from` (its inside is one scope), else
  * the topmost ancestor. Layers are NOT boundaries.
  */
-export function scopeRootOf(from: GoFishNode): GoFishNode {
+function scopeRootOf(from: GoFishNode): GoFishNode {
   let scope: GoFishNode | undefined = from;
   while (scope && !scope._isComponent) scope = scope.parent;
   if (scope) return scope;
@@ -396,35 +397,49 @@ export function scopeRootOf(from: GoFishNode): GoFishNode {
   return top;
 }
 
-/** The string key a node answers to: its string name, or its token's tag. */
-export const nameKeyOf = (node: GoFishAST): string | undefined => {
-  const n = node._name;
-  return n === undefined ? undefined : isToken(n) ? n.__tag : n;
-};
-
-/** Every node visible inside `level` (excluding `level` itself, and not
- *  descending into nested `createMark` components) whose name key is `name`. */
-export function lookupScopedName(level: GoFishNode, name: string): GoFishAST[] {
-  const out: GoFishAST[] = [];
-  for (const candidate of visibleNodes(level)) {
-    if (candidate === level) continue;
-    if (nameKeyOf(candidate) === name) out.push(candidate);
+/**
+ * The CLOSEST nodes named `name` inside `level`: a breadth-first search over
+ * the nodes visible inside `level` (not `level` itself; nested `createMark`
+ * components are visited but not entered) that returns every match at the
+ * smallest depth below `level`, or `[]`. `searched` is a child subtree an
+ * earlier, narrower level already searched without a match: its root is still
+ * checked (a level never matches itself, so it was not), but its inside is
+ * not walked again.
+ */
+function closestAtLevel(
+  level: GoFishNode,
+  name: string,
+  searched: GoFishNode | undefined
+): GoFishAST[] {
+  let frontier: GoFishAST[] = level.children;
+  while (frontier.length > 0) {
+    const matches = frontier.filter((n) => childNameKey(n) === name);
+    if (matches.length > 0) return matches;
+    const next: GoFishAST[] = [];
+    for (const n of frontier) {
+      if (n === searched) continue;
+      if (n instanceof GoFishNode && !n._isComponent) next.push(...n.children);
+    }
+    frontier = next;
   }
-  return out;
+  return [];
 }
 
 /**
  * Resolve a string name from a use site: `from` is the ref's parent, or the
  * layer running `.constrain()`. This is the one lookup behind both.
  *
- * Innermost enclosing match: search `from`'s subtree, then its parent's, one
- * ancestor at a time, and stop at the first level whose subtree contains the
- * name. The search never crosses a `createMark` boundary (neither upward past
- * the enclosing component, nor downward into a nested one). An inner match
- * hides an outer one with the same name; that is intended, and it is what
- * lets a mark repeated per row (or a helper called many times) reuse its
- * local names. Two or more matches at the stopping level, or no match up to
- * the boundary, is a loud error. `what` names the consumer in the message.
+ * Search `from`'s subtree, then its parent's, one ancestor at a time, and stop
+ * at the first level whose subtree contains the name. Within that level the
+ * closest match wins: the one with the fewest steps down from the level's
+ * node. So a layer's direct child `x` beats an `x` nested deeper, and a deeper
+ * name is reachable when nothing closer has it. Two or more matches at that
+ * same smallest distance is a loud error, and so is no match up to the
+ * boundary. The search never crosses a `createMark` boundary (neither upward
+ * past the enclosing component, nor downward into a nested one). An inner
+ * match hides an outer one with the same name; that is intended, and it is
+ * what lets a mark repeated per row (or a helper called many times) reuse its
+ * local names. `what` names the consumer in the error message.
  */
 export function resolveScopedName(
   from: GoFishNode,
@@ -432,26 +447,30 @@ export function resolveScopedName(
   what: string
 ): GoFishAST {
   const boundary = scopeRootOf(from);
-  let matches: GoFishAST[] = [];
-  for (let level: GoFishNode | undefined = from; level; level = level.parent) {
-    matches = lookupScopedName(level, name);
-    if (matches.length > 0 || level === boundary) break;
+  let level = from;
+  let searched: GoFishNode | undefined;
+  for (;;) {
+    const matches = closestAtLevel(level, name, searched);
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      throw new Error(
+        `${what}: the name "${name}" is ambiguous — ${matches.length} nodes ` +
+          `named "${name}" are equally close to the use site. Give them ` +
+          `distinct names, or wrap each repeated part in its own createMark ` +
+          `component.`
+      );
+    }
+    if (level === boundary || !level.parent) break;
+    searched = level;
+    level = level.parent;
   }
-  if (matches.length === 1) return matches[0];
   const where = boundary._isComponent
     ? "the enclosing createMark component"
     : "this diagram";
-  if (matches.length === 0) {
-    throw new Error(
-      `${what}: no node named "${name}" in ${where}. String names are ` +
-        `visible up to the nearest createMark boundary; to reach across one, ` +
-        `use createName("${name}") and a ref path.`
-    );
-  }
   throw new Error(
-    `${what}: the name "${name}" is ambiguous — ${matches.length} nodes ` +
-      `named "${name}" are equally close to the use site. Give them distinct ` +
-      `names, or wrap each repeated part in its own createMark component.`
+    `${what}: no node named "${name}" in ${where}. String names are ` +
+      `visible up to the nearest createMark boundary; to reach across one, ` +
+      `use createName("${name}") and a ref path.`
   );
 }
 
