@@ -13,7 +13,7 @@
  *   the tree API errors if asked to delete a path that isn't there.
  * - 6–9 fixed GitHub calls: get ref, get commit, (get recursive tree if
  *   removals present), create tree, create commit, update/create ref, and
- *   (final chunk only) status update + rerun.
+ *   (final chunk only) status update + repository_dispatch.
  *
  * Cloudflare caps each invocation at 50 outgoing subrequests (free plan),
  * so the client splits accepts into chunks of ~25 and calls /api/commit
@@ -25,7 +25,13 @@
  *   { paths, removals?, domContents, screenshotContents, repo, branch,
  *     headSha?, runId? }  // headSha/runId set on the final chunk only
  *
- * GITHUB_TOKEN is a Cloudflare Pages secret.
+ * GITHUB_TOKEN is a Cloudflare Pages secret. It needs Contents write (to
+ * commit baselines and to send repository_dispatch) and Commit statuses write.
+ * It does not need Actions write: re-running the failed jobs happens in the
+ * `rerun-visual-tests.yml` workflow, which the dispatch triggers. That
+ * workflow waits for the run to finish first, because GitHub rejects
+ * rerun-failed-jobs with 403 while any job of the run is still in progress
+ * (people usually accept while `python-parity` is still running).
  */
 
 interface Env {
@@ -48,8 +54,10 @@ interface CommitBody {
   branch: string;
   /** PR head SHA — used to update the Visual Diff Review commit status. */
   headSha?: string;
-  /** Workflow run id — if provided, rerun-failed-jobs is triggered post-commit
-   *  so the cheap visual-test compare job re-runs against the new baselines. */
+  /** Workflow run id. If provided, a `visual-baselines-accepted`
+   *  repository_dispatch is sent post-commit; the rerun-visual-tests workflow
+   *  waits for that run to finish and re-runs its failed jobs, so the cheap
+   *  visual-test compare job re-runs against the new baselines. */
   runId?: string;
 }
 
@@ -360,11 +368,13 @@ async function handleCommit(
   }
 
   // Best-effort post-commit actions: flip the Visual Diff Review status to
-  // success (so the PR's checks reflect the action immediately) and rerun the
-  // failed workflow jobs, which re-runs the cheap `visual-test` compare job
-  // against the newly accepted baselines (it reuses the JS capture artifact
-  // from the first attempt, so nothing is captured again). Failures here are
-  // non-fatal — the snapshot commit already succeeded.
+  // success (so the PR's checks reflect the action immediately) and send a
+  // `visual-baselines-accepted` repository_dispatch. The rerun-visual-tests
+  // workflow it triggers waits for the run to finish, then re-runs its failed
+  // jobs, which re-runs the cheap `visual-test` compare job against the newly
+  // accepted baselines (it reuses the JS capture artifact from the first
+  // attempt, so nothing is captured again). Failures here are non-fatal — the
+  // snapshot commit already succeeded.
   const postCommitWarnings: string[] = [];
 
   if (prHeadSha) {
@@ -394,17 +404,28 @@ async function handleCommit(
 
   if (runId) {
     try {
-      const rerunRes = await fetch(
-        `${apiBase}/actions/runs/${runId}/rerun-failed-jobs`,
-        { method: "POST", headers: githubHeaders }
-      );
-      if (!rerunRes.ok) {
+      const dispatchRes = await fetch(`${apiBase}/dispatches`, {
+        method: "POST",
+        headers: githubHeaders,
+        body: JSON.stringify({
+          event_type: "visual-baselines-accepted",
+          client_payload: { run_id: Number(runId), branch },
+        }),
+      });
+      if (!dispatchRes.ok) {
+        const text = await dispatchRes.text();
+        let message = text;
+        try {
+          message = (JSON.parse(text) as { message?: string }).message ?? text;
+        } catch {
+          // Not JSON; report the raw body.
+        }
         postCommitWarnings.push(
-          `rerun failed (${rerunRes.status}) — token may be missing 'actions: write'`
+          `dispatch failed (${dispatchRes.status}): ${message}`
         );
       }
     } catch (e) {
-      postCommitWarnings.push(`rerun threw: ${String(e)}`);
+      postCommitWarnings.push(`dispatch threw: ${String(e)}`);
     }
   }
 

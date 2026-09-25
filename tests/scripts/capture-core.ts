@@ -8,7 +8,7 @@
  *   - capture-one.ts      (one story, for the iterate-example loop; also uses
  *                          `listStories`)
  * and `startViteServer`/`waitForVite` alone by capture-sweep.ts, dump-scopes.ts
- * and capture-gallery-thumbnails.ts.
+ * and capture-docs-images.ts.
  *
  * The capture loop: spin up a Vite dev server that serves the stories-runner
  * page, then render every (optionally filtered) story and extract + normalize

@@ -1,0 +1,60 @@
+# Re-runs the failed jobs of a Visual Tests run after its diffs are accepted.
+#
+# The visual review site (tests/scripts/cf-functions/api/commit.ts) commits
+# accepted baselines to the snapshot branch and then sends a
+# `visual-baselines-accepted` repository_dispatch event carrying the run id.
+# It used to call rerun-failed-jobs directly, but GitHub answers 403 for a run
+# that is still in progress, and people usually click Accept while the same
+# run's `python-parity` job is still going (`visual-test` fails several
+# minutes before parity finishes). This workflow waits for the run to finish
+# and only then re-runs its failed jobs, so the `visual-test` compare job
+# checks the new baselines. Because the rerun happens here with the workflow
+# token, the review tool's PAT only needs Contents write (which covers
+# sending repository_dispatch), not Actions write.
+#
+# repository_dispatch only runs workflow files from the default branch.
+name: Rerun Visual Tests
+
+on:
+  repository_dispatch:
+    types: [visual-baselines-accepted]
+
+permissions:
+  actions: write
+
+concurrency:
+  group: rerun-visual-tests-${{ github.event.client_payload.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  rerun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Wait for the run to finish, then rerun its failed jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.client_payload.run_id }}
+          SNAPSHOT_BRANCH: ${{ github.event.client_payload.branch }}
+        run: |
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::client_payload.run_id is not a numeric run id: '$RUN_ID'"
+            exit 1
+          fi
+          echo "Baselines accepted on ${SNAPSHOT_BRANCH:-<unknown branch>}; waiting for run $RUN_ID."
+
+          # Returns right away if the run has already completed. A failed run
+          # is the expected case here, so its exit status is ignored.
+          gh run watch "$RUN_ID" --interval 30 --exit-status > /dev/null || true
+
+          conclusion=$(gh run view "$RUN_ID" --json conclusion --jq .conclusion)
+          echo "Run $RUN_ID finished with conclusion: $conclusion"
+
+          # gh errors when there is nothing to rerun (for example, the run
+          # passed). That is not a failure of this workflow.
+          if gh run rerun "$RUN_ID" --failed; then
+            echo "Re-running failed jobs of run $RUN_ID."
+          else
+            echo "::notice::Nothing was re-run for run $RUN_ID (conclusion: $conclusion)."
+          fi
