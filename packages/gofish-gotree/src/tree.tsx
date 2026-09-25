@@ -17,11 +17,12 @@ export function tree(spec: GoTreeSpec, data: TreeData): any {
   const nodeTree = renderSubtree(root, filledSpec);
   const edges = collectEdges(root, filledSpec);
 
-  // Layer order: nodeTree first so its named marks register before connects
-  // try to resolve their refs (matches the sankey pattern); edges come after.
-  // Paint order is also this, so edges draw on top of nodes — that's fine for
-  // thin connector strokes passing through node bodies.
-  const composed = Layer([nodeTree, ...edges]);
+  // The edges are `.relate()` clauses over the node tree's names: each one
+  // reads the final positions of the two nodes it connects. Paint order puts
+  // clauses after the tree, so edges draw on top of nodes (each edge carries
+  // `zOrder(-1)`) — that's fine for thin connector strokes passing through
+  // node bodies.
+  const composed = Layer([nodeTree]).relate(() => edges);
 
   if (filledSpec.coord !== undefined) {
     return Frame({ coord: filledSpec.coord as any }, [composed]);

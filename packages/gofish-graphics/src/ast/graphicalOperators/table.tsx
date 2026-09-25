@@ -41,7 +41,7 @@ export const Table = createNodeOperator(
     const cellNames = ensureChildNames(children, "cell");
 
     const node = (await layer(children)) as GoFishNode;
-    node.constrain((g) => [
+    await node.relate((g) => [
       // grid is table's private elaboration target — not part of the public
       // `Constraint` factory (see constraints/index.ts).
       createGridConstraint(

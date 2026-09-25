@@ -74,13 +74,13 @@ export const ZOrderedMixed: StoryObj = {
       layer([bars()]).name("barsWrap"),
       layer([heat()]).name("heatWrap"),
     ])
-      .constrain((c) => [
+      .relate((c) => [
         // Position side by side (layout), and add a z-order relation so the
         // layer takes the z-order hoist path (`hoistWithScope`) at bake time.
-        Constraint.distribute(
-          { dir: "x", spacing: 40, anchor: "edge" },
-          [c.barsWrap, c.heatWrap]
-        ),
+        Constraint.distribute({ dir: "x", spacing: 40, anchor: "edge" }, [
+          c.barsWrap,
+          c.heatWrap,
+        ]),
         Constraint.zAbove(c.heatWrap, c.barsWrap),
       ])
       .render(container, {});

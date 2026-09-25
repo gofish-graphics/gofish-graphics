@@ -25,6 +25,7 @@ from gofish import (
     text,
     image,
     Constraint,
+    arrow,
 )
 from gofish.ast import _RefProxy
 
@@ -460,20 +461,20 @@ class TestChartBuilder:
         assert ir["mark"]["type"] == "line"
 
 
-class TestConstrainCallback:
-    """`.constrain()` hands the callback one ref per parameter, by name."""
+class TestRelateCallback:
+    """`.relate()` hands the callback one ref per parameter, by name."""
 
     def test_defaulted_parameter_keeps_its_default(self):
         """The loop idiom `lambda a, b, gap=gap: ...` binds a value, not a
         node: the parameter keeps its default and gets no ref."""
         m = layer(
             [rect(w=10, h=10).name("a"), rect(w=5, h=5).name("b")]
-        ).constrain(
+        ).relate(
             lambda a, b, gap=7: [
                 Constraint.distribute([a, b], dir="x", spacing=gap)
             ]
         )
-        assert m.to_dict()["constraints"] == [
+        assert m.to_dict()["relate"] == [
             {
                 "type": "distribute",
                 "options": {"dir": "x", "spacing": 7},
@@ -497,5 +498,26 @@ class TestConstrainCallback:
                 rect(w=10, h=10).name("a"),
                 layer([rect(w=5, h=5).name("c")]).name("gap"),
             ]
-        ).constrain(cb)
+        ).relate(cb)
         assert seen == {"gap": 3, "rest": ["c"]}
+
+    def test_drawing_clause_serializes_operands_as_refs(self):
+        """A drawing clause is a mark; an operand in its children serializes
+        as `ref(name)`, while a constraint operand serializes as its name."""
+        m = layer(
+            [rect(w=10, h=10).name("a"), rect(w=5, h=5).name("b")]
+        ).relate(
+            lambda a, b: [
+                Constraint.distribute([a, b], dir="x", spacing=60),
+                arrow([a, b], stroke="red"),
+                None,
+            ]
+        )
+        clauses = m.to_dict()["relate"]
+        assert clauses[0]["refs"] == ["a", "b"]
+        assert clauses[1]["type"] == "arrow"
+        assert clauses[1]["children"] == [
+            {"type": "ref", "selection": "a"},
+            {"type": "ref", "selection": "b"},
+        ]
+        assert len(clauses) == 2

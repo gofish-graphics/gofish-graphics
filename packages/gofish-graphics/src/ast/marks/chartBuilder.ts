@@ -6,6 +6,7 @@ import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
+import { RelateOperand } from "../constraints/relate";
 import { ref } from "../shapes/ref";
 import { isField } from "../data";
 import {
@@ -68,6 +69,10 @@ export async function resolveMarkResult(
   if (raw && typeof (raw as any).then === "function") {
     raw = await (raw as unknown as Promise<ReturnType<Mark<any>>>);
   }
+  // A `.relate()` operand in term position (a child of a drawing clause) is
+  // a string ref to the node it names, resolved from the relating layer.
+  if (raw instanceof RelateOperand)
+    return new GoFishRef({ selection: raw.name }) as unknown as GoFishNode;
   if (raw instanceof ChartBuilder)
     return raw.withLayerContext(layerContext ?? {}).resolve();
   // A `.mark(<relational mark>)` chart elaborates to `.mark(anchor).layer(R)`,
@@ -786,7 +791,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
   /**
    * Name this chart's resolved node so it can be referenced — both by a
-   * `.constrain(...)` callback on an enclosing `layer([...])` (which resolves
+   * `.relate(...)` callback on an enclosing `layer([...])` (which resolves
    * names with the same lookup as `ref`) and by a cross-chart
    * `selectAll(name)` / `ref(name)`. Mirrors the `.name(...)` wrapper on marks.
    */
@@ -1009,7 +1014,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     }
 
     // A user-chained `.name(...)` names the resolved node so it's a valid
-    // `.constrain(...)` target on an enclosing layer (looked up by `_name`)
+    // `.relate(...)` target on an enclosing layer (looked up by `_name`)
     // and resolvable via cross-chart `selectAll`/`ref`. `stashLayerName` keeps
     // serialize detection consistent with named marks.
     if (this.state.nodeName !== undefined) {

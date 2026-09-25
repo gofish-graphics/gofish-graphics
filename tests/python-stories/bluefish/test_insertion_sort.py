@@ -106,7 +106,7 @@ def array_entry(value: int, color: str, highlight: bool):
                 fill="orangered" if highlight else "black",
             ).name("label"),
         ]
-    ).constrain(
+    ).relate(
         lambda body, circle, label: [
             Constraint.align([body, circle, label], x="middle", y="middle"),
         ]

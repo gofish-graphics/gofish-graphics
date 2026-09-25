@@ -30,7 +30,7 @@ def story_basic():
                 "outer"
             ),
             rect(w=60, h=40, fill="#e63946", rx=4).name("inner"),
-        ]).constrain(lambda outer, inner: [
+        ]).relate(lambda outer, inner: [
             Constraint.nest([outer, inner], x=10, y=10),
         ]),
         {"w": 200, "h": 160},
@@ -45,7 +45,7 @@ def story_chained():
             fill="#cfdcec", stroke="#5a7da6", strokeWidth=1.25, rx=5
         ).name("midOuter"),
         rect(w=40, h=30, fill="#2a9d8f", rx=3).name("core"),
-    ]).constrain(lambda midOuter, core: [
+    ]).relate(lambda midOuter, core: [
         Constraint.nest([midOuter, core], x=8, y=8),
     ])
 
@@ -55,7 +55,7 @@ def story_chained():
                 fill="#fafbfd", stroke="#9bb1c4", strokeWidth=1.5, rx=6
             ).name("shell"),
             mid.name("mid"),
-        ]).constrain(lambda shell, mid, **_: [
+        ]).relate(lambda shell, mid, **_: [
             Constraint.nest([shell, mid], x=12, y=12),
         ]),
         {"w": 220, "h": 200},
@@ -82,7 +82,7 @@ def story_auto_fit():
                         rx=4,
                     ).name("outer"),
                     rect(w=datum(v), h=18, fill=COLORS[i], rx=3).name("inner"),
-                ]).constrain(lambda outer, inner: [
+                ]).relate(lambda outer, inner: [
                     Constraint.nest([outer, inner], x=8, y=8),
                 ])
                 for i, v in enumerate(INNER_WIDTHS)
@@ -110,7 +110,7 @@ def story_outside_in():
                 rx=6,
             ).name("outer"),
             rect(fill="#e63946", rx=4).name("inner"),
-        ]).constrain(lambda outer, inner: [
+        ]).relate(lambda outer, inner: [
             Constraint.nest([outer, inner], x=16, y=16),
         ]),
         {"w": 280, "h": 220},
@@ -128,7 +128,7 @@ def story_fill_outer():
                 fill="#dbe6f3", stroke="#5a7da6", strokeWidth=1.5, rx=6
             ).name("outer"),
             rect(fill="#2a9d8f", rx=4).name("inner"),
-        ]).constrain(lambda outer, inner: [
+        ]).relate(lambda outer, inner: [
             Constraint.nest([outer, inner], x=20, y=20),
         ]),
         {"w": 240, "h": 180},

@@ -5,7 +5,6 @@ import {
   layer,
   groupBy,
   rect,
-  ref,
   spreadX,
   v,
 } from "../lib";
@@ -30,11 +29,16 @@ const boxAndWhisker = ({
   const minName = `min-${Math.random().toString(36).substring(2, 9)}`;
   const maxName = `max-${Math.random().toString(36).substring(2, 9)}`;
   return layer({}, [
-    rect({ w: 8, h: 1, y: v(min), fill: "gray" }).name(minName),
-    rect({ w: 8, h: 1, y: v(max), fill: "gray" }).name(maxName),
-    line({ dir: "y", strokeWidth: 1, curve: "bezier" }, [
-      ref(minName),
-      ref(maxName),
+    // The whisker is a relate clause over the two ticks; its own layer keeps
+    // it painting under the box.
+    layer([
+      rect({ w: 8, h: 1, y: v(min), fill: "gray" }).name(minName),
+      rect({ w: 8, h: 1, y: v(max), fill: "gray" }).name(maxName),
+    ]).relate((names) => [
+      line({ dir: "y", strokeWidth: 1, curve: "bezier" }, [
+        names[minName],
+        names[maxName],
+      ]),
     ]),
     rect({ w: 8, y: v(q1), h: v(q3 - q1), fill }),
     rect({ w: 8, h: 1, y: v(median), fill: "white" }),

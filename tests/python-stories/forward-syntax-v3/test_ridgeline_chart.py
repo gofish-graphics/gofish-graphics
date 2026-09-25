@@ -138,7 +138,7 @@ def story_default():
                         ).name(f"label{k}"),
                     )
                 ]
-            ).constrain(
+            ).relate(
                 lambda **refs: [
                     Constraint.align(
                         [refs[f"label{k}"], refs[f"anchor{k}"]], x="end"

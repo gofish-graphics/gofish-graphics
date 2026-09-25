@@ -31,7 +31,7 @@ import { isValue } from "./data";
 import { splitLiveChannels } from "../interaction/live";
 import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
-import type { ConstraintSpec, ConstraintRef } from "./constraints";
+import type { RelateFn } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
 import type { MarkTransition } from "../animation/transition";
@@ -107,9 +107,7 @@ export interface PromiseWithRender<T> extends Promise<T> {
   label(accessor: LabelAccessor, options?: LabelOptions): PromiseWithRender<T>;
   setKey(key: string): PromiseWithRender<T>;
   setShared(shared: [boolean, boolean]): PromiseWithRender<T>;
-  constrain(
-    fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
-  ): PromiseWithRender<T>;
+  relate(fn: RelateFn): PromiseWithRender<T>;
   zOrder(value: number): PromiseWithRender<T>;
   scope(): PromiseWithRender<T>;
 }
@@ -153,7 +151,7 @@ const CHAINABLE_NODE_METHODS = [
   "label",
   "setKey",
   "setShared",
-  "constrain",
+  "relate",
   "zOrder",
 ] as const;
 

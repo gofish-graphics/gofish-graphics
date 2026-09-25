@@ -26,10 +26,10 @@ import {
 // stage's title into its box and right-aligned the action labels).
 //
 // Structured like Pulley/QuantumCircuit: tier 1 (`pipelineHead`) fully places
-// every row via nested `spread`s and `.constrain()`; tier 2 (funnels, the
+// every row via nested `spread`s and `.relate()`; tier 2 (funnels, the
 // commit arrow, the fan-out arrows, the tick marks/labels beneath DiskLog,
 // and the "disk log:"/"disk data:" side labels) reads those placed nodes via
-// `createName` tokens + `ref()`. A `.constrain()` callback's own destructure
+// `createName` tokens + `ref()`. A `.relate()` callback's own destructure
 // (`c.someName`) only reliably reaches ONE level of nested plain `Layer`s
 // deep (confirmed working for the SPAN SITE below, and matching what
 // Pulley/QuantumCircuit rely on) — past that, explicit `ref(token)` (global
@@ -110,7 +110,7 @@ const withMinWidth = (width: number, content: ReturnType<typeof spread>) =>
   Layer([
     rect({ w: width, h: 0, fill: "transparent" }).name("filler"),
     content.name("content"),
-  ]).constrain(({ filler, content }) => [
+  ]).relate(({ filler, content }) => [
     Constraint.align({ x: "start", y: "middle" }, [filler, content]),
   ]);
 
@@ -144,7 +144,7 @@ const ActionLabel = (
     ref(boxName).name("box"),
     ref(slotName).name("slot"),
     ActionText(labelText).name("t"),
-  ]).constrain(({ box, slot, t }) => [
+  ]).relate(({ box, slot, t }) => [
     Constraint.align({ x: "end" }, [box, t]),
     Constraint.align({ y: "middle" }, [slot, t]),
   ]);
@@ -157,7 +157,7 @@ const BoxedAlign = (width: number, content: ReturnType<typeof text>) =>
   Layer([
     rect({ w: width, h: 0, fill: "transparent" }).name("slot"),
     content.name("content"),
-  ]).constrain(({ slot, content }) => [
+  ]).relate(({ slot, content }) => [
     Constraint.align({ x: "end", y: "middle" }, [slot, content]),
   ]);
 
@@ -256,7 +256,7 @@ export const DFSCQ: StoryObj<Args> = {
 
     // Divider: the SPAN SITE (see file header). `mem` is a direct (one-level)
     // named child of `diskLogInner`. (At the time of the port, only this
-    // depth resolved from an outer `.constrain()`; see FRICTION LOG #4
+    // depth resolved from an outer `.relate()`; see FRICTION LOG #4
     // below. Constraint operands now resolve at any depth inside the layer.)
     // `labelSpace`: an invisible spacer that stretches `diskLogInner`'s own
     // bbox down far enough to include the tick marks AND the "Log header" /
@@ -269,7 +269,7 @@ export const DFSCQ: StoryObj<Args> = {
       memRow,
       rect({ h: 3, fill: "black" }).name("line"),
       rect({ w: 1, h: 1, fill: "transparent" }).name("labelSpace"),
-    ]).constrain((c) => [
+    ]).relate((c) => [
       // ── SPAN SITE: the divider line adopts `mem`'s exact horizontal
       // extent — the one Bluefish `LayoutFunction` call this port replaces.
       Constraint.distribute({ dir: "y", spacing: 20 }, [c.mem, c.line]),
@@ -281,14 +281,14 @@ export const DFSCQ: StoryObj<Args> = {
     // Ticks/labels anchor to rect1/rect2/rect4, which sit TWO levels below
     // this point (diskLogInner > memRow > rectN) — deep enough that the
     // descent above stopped resolving them correctly (FRICTION LOG #4: a
-    // `.constrain()` destructure picked the same — wrong — target for every
+    // `.relate()` destructure picked the same — wrong — target for every
     // one of these once nesting went past one level, all four ticks and all
     // three labels collapsing onto rect1's position; diagnosed by inspecting
     // the captured SVG's raw coordinates). The fix, and the more robust
     // pattern generally (this is exactly what Pulley/QuantumCircuit's tier-2
     // elements do): a small self-contained `Layer` per tick/label built from
     // an explicit global `ref(token)` anchor + a fresh shape, its own
-    // `.constrain()` positioning the fresh shape relative to that ref — `ref`
+    // `.relate()` positioning the fresh shape relative to that ref — `ref`
     // resolves by global name registration, not tree descent, so nesting
     // depth is irrelevant.
     // `tickName` (optional): when given, the tick rect is named with this
@@ -304,7 +304,7 @@ export const DFSCQ: StoryObj<Args> = {
       return Layer([
         ref(anchor).name("a"),
         rect({ w: 3, h: 13, fill: "black" }).name(tickName ?? "t"),
-      ]).constrain((c) => [
+      ]).relate((c) => [
         Constraint.distribute({ dir: "y", spacing: 15 }, [c.a, c[key]]),
         Constraint.align({ x: side }, [c.a, c[key]]),
       ]);
@@ -315,7 +315,7 @@ export const DFSCQ: StoryObj<Args> = {
         text({ text: labelText, fontFamily: "serif", fontWeight: 300, fontSize: 18 }).name(
           "t"
         ),
-      ]).constrain(({ a, t }) => [
+      ]).relate(({ a, t }) => [
         Constraint.distribute({ dir: "y", spacing: 30 }, [a, t]),
         Constraint.align({ x: "middle" }, [a, t]),
       ]);
@@ -329,7 +329,7 @@ export const DFSCQ: StoryObj<Args> = {
           { dir: "y", spacing: 0, alignment: "middle" },
           lines.map((l) => text({ text: l, fontFamily: "serif", fontWeight: 300, fontSize: 18 }))
         ).name("t"),
-      ]).constrain(({ a, t }) => [
+      ]).relate(({ a, t }) => [
         Constraint.distribute({ dir: "y", spacing: 30 }, [a, t]),
         Constraint.align({ x: "middle" }, [a, t]),
       ]);
@@ -365,7 +365,7 @@ export const DFSCQ: StoryObj<Args> = {
     const applierInner = Layer([
       diskDataRow,
       diskDataTable.name("diskDataTable"),
-    ]).constrain((c) => [
+    ]).relate((c) => [
       Constraint.distribute({ dir: "y", spacing: 50 }, [c.diskdata, c.diskDataTable]),
       // Centered (not start-aligned) so the disk-data row sits directly
       // above the fan-out arrows' shared origin, which is itself centered
@@ -413,20 +413,20 @@ export const DFSCQ: StoryObj<Args> = {
     // Two more small self-contained ref-anchored layers (same pattern as
     // Tick/Label): a placeholder point above the 5-cell table for the
     // fan-out arrows, and one above DiskLog's blocks1 group for Bluefish's
-    // trailing "flush" callout arrow. Each layer's OWN `.constrain()` reads
+    // trailing "flush" callout arrow. Each layer's OWN `.relate()` reads
     // only its own direct children (never a deep cross-tier destructure), so
     // it isn't subject to FRICTION LOG #4.
     const fanoutAnchorLayer = Layer([
       rect({ w: 80, h: 1, fill: "transparent" }).name(fanoutAnchorName),
       ref(diskdataStack).name("target"),
-    ]).constrain((c) => [
+    ]).relate((c) => [
       Constraint.distribute({ dir: "y", spacing: 50 }, [c.fanoutAnchor, c.target]),
       Constraint.align({ x: "middle" }, [c.target, c.fanoutAnchor]),
     ]);
     const blocks1ArrowLayer = Layer([
       rect({ w: 10, h: 10, fill: "transparent" }).name(blocks1ArrowAnchorName),
       ref(blocks1).name("target"),
-    ]).constrain((c) => [
+    ]).relate((c) => [
       Constraint.distribute({ dir: "y", spacing: 70 }, [c.blocks1ArrowAnchor, c.target]),
       Constraint.align({ x: "middle" }, [c.target, c.blocks1ArrowAnchor]),
     ]);
@@ -443,13 +443,13 @@ export const DFSCQ: StoryObj<Args> = {
     // a union of several already-placed sources, so it isn't the right tool
     // here; and a bare `Layer` of only `ref()` children — Bluefish's
     // `<Group>` — doesn't pick up their absolute position as its own bbox
-    // the way a `.constrain()`-driven node does, so that more literal port
+    // the way a `.relate()`-driven node does, so that more literal port
     // of the original doesn't work either.)
     const LOG_DATA_WIDTH = 80 /* rect2 */ + 80 /* rect3 */ + 7 * 10 /* blocks1 */ + 3 * 10; /* blocks2 */
     const logDataAnchorLayer = Layer([
       ref(rect2).name("a"),
       rect({ w: LOG_DATA_WIDTH, h: BLOCK_H, fill: "transparent" }).name(logDataAnchor),
-    ]).constrain((c) => [
+    ]).relate((c) => [
       Constraint.align({ x: "start", y: "start" }, [c.a, c.logDataAnchor]),
     ]);
 
@@ -481,7 +481,7 @@ export const DFSCQ: StoryObj<Args> = {
         Layer([
           ref(topAnchor).name("a"),
           rect({ w: 1, h: 1, fill: "transparent" }).name(topStub),
-        ]).constrain((c) => [
+        ]).relate((c) => [
           Constraint.distribute({ dir: "y", spacing: FUNNEL_STUB }, [c.a, c[topKey]]),
           Constraint.align({ x: topEdge }, [c.a, c[topKey]]),
         ]),
@@ -489,7 +489,7 @@ export const DFSCQ: StoryObj<Args> = {
         Layer([
           rect({ w: 1, h: 1, fill: "transparent" }).name(bottomStub),
           ref(bottomAnchor).name("b"),
-        ]).constrain((c) => [
+        ]).relate((c) => [
           Constraint.distribute({ dir: "y", spacing: FUNNEL_STUB }, [c[bottomKey], c.b]),
           Constraint.align({ x: bottomEdge }, [c.b, c[bottomKey]]),
         ]),
@@ -540,7 +540,7 @@ export const DFSCQ: StoryObj<Args> = {
 
       // "disk log:" / "disk data:" side labels — small, self-contained,
       // ref-anchored (same reasoning as Tick/Label above).
-      Layer([ref(disklogleft).name("a"), ref(mem).name("m"), diskLogLabel]).constrain(
+      Layer([ref(disklogleft).name("a"), ref(mem).name("m"), diskLogLabel]).relate(
         (c) => [
           Constraint.align({ y: "middle" }, [c.m, c.diskLogLabel]),
           Constraint.align({ x: "end" }, [c.a, c.diskLogLabel]),
@@ -550,7 +550,7 @@ export const DFSCQ: StoryObj<Args> = {
         ref(applierleft).name("a"),
         ref(diskdataStack).name("s"),
         diskDataLabel,
-      ]).constrain((c) => [
+      ]).relate((c) => [
         Constraint.align({ y: "middle" }, [c.s, c.diskDataLabel]),
         Constraint.align({ x: "end" }, [c.a, c.diskDataLabel]),
       ]),

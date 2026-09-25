@@ -171,7 +171,7 @@ const coordTransform = makeDef("coord");
 export const MARK_BASE_FIELDS: FieldGroup = group({
   name: { type: t.string, doc: 'Layer name, from `.name("...")`.' },
   label: { type: t.ref("LabelIR") },
-  constraints: { type: t.array(t.ref("ConstraintIR")) },
+  relate: { type: t.array(t.ref("RelateClauseIR")) },
   zOrder: { type: t.number },
   translate: { type: t.ref("TranslateIR") },
   debug: {
@@ -182,7 +182,7 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
 
 /** The base fields the Python generator exposes as leaf-mark kwargs (the
  *  rest of MARK_BASE_FIELDS ride Mark methods: `.name()`, `.z_order()`,
- *  `.translate()`, `.constrain()`, `.label()`). Labeling a leaf mark is done
+ *  `.translate()`, `.relate()`, `.label()`). Labeling a leaf mark is done
  *  exclusively via the `.label(accessor, options?)` chain — there is no
  *  leaf-mark `label` kwarg. */
 export const PY_LEAF_BASE_KWARGS: FieldGroup = group({

@@ -82,7 +82,7 @@ console.log("# coord paint order: zAbove/zBelow constraints are honored inside c
   // flattened order must be [B, A].
   const A = rect().name("a");
   const B = rect().name("b");
-  const layerNode = Layer([A, B]).constrain((c: any) => [
+  const layerNode = Layer([A, B]).relate((c: any) => [
     Constraint.zAbove(c.a, c.b),
   ]);
   const order = await paintOrder(layerNode);

@@ -107,7 +107,7 @@ export const Scatter = createNodeOperator(
       { key, ...fancyDims } as any,
       childList
     )) as GoFishNode;
-    node.constrain((g) => {
+    await node.relate((g) => {
       const refs = names.map((name) => g[name]);
       const cs: ConstraintSpec[] = [];
       childList.forEach((_, i) => {

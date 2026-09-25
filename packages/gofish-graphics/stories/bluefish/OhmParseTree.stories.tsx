@@ -62,7 +62,7 @@ import type { GoFishAST } from "../../src/ast/_ast";
 // - `Constraint.align`/`distribute` targets below are built directly as
 //   `{ name: token.__tag }` `ConstraintRef` handles (`src/ast/constraints
 //   /shared.ts`) rather than
-//   through the destructured `.constrain(({a,b,c}) => ...)` callback
+//   through the destructured `.relate(({a,b,c}) => ...)` callback
 //   param — the trace generates ~30 dynamically-named nodes, not a fixed
 //   set of statically-known names a literal destructure could spell out.
 //   This is exactly the `Record<string, ConstraintRef>` the callback would
@@ -80,7 +80,7 @@ import type { GoFishAST } from "../../src/ast/_ast";
 //   node, but a bare `text(...)` call is itself a still-deferred mark (see
 //   `EmptySlot`/`ControlDot` in QuantumCircuit.stories.tsx) — wrapping one
 //   directly in `createMark` crashes at render time. A plain function
-//   returning the mark call (or a resolved `Layer(...).constrain(...)` when
+//   returning the mark call (or a resolved `Layer(...).relate(...)` when
 //   there's a note) sidesteps that, same as `EmptySlot`/`ControlDot`.
 
 const meta: Meta = {
@@ -200,7 +200,7 @@ const CharBox = createMark(({ ch }: { ch: string }) =>
   Layer([
     rect({ w: CHAR_W, h: CHAR_H, fill: "transparent" }).name("box"),
     text({ text: ch, ...BIG_FONT }).name("glyph"),
-  ]).constrain(({ box, glyph }) => [
+  ]).relate(({ box, glyph }) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, glyph]),
   ])
 );
@@ -212,7 +212,7 @@ const LabelText = ({ main, note }: { main: string; note?: string }) =>
     ? Layer([
         text({ text: main, ...LABEL_FONT }).name("main"),
         text({ text: `- ${note}`, ...NOTE_FONT }).name("note"),
-      ]).constrain(({ main: m, note: n }) => [
+      ]).relate(({ main: m, note: n }) => [
         Constraint.align({ y: "middle" }, [m, n]),
         Constraint.distribute({ dir: "x", spacing: 4 }, [m, n]),
       ])
@@ -241,7 +241,7 @@ export const OhmParseTree: StoryObj<Args> = {
     const constraints: any[] = [];
 
     // ── Tier 1: the character row — a self-contained sub-layer with its own
-    // `.constrain()` call, exactly the two-tier pattern house style uses for
+    // `.relate()` call, exactly the two-tier pattern house style uses for
     // "inner Layer fully places a unit, later tiers build off it." The
     // character glyphs' pixel geometry is ALSO reproduced analytically below
     // (`charLeft`/`charRight`) for the span markers — see the comment at
@@ -262,7 +262,7 @@ export const OhmParseTree: StoryObj<Args> = {
           rect({ w: END_W, h: CHAR_H, fill: "transparent" }).name(endTok),
         ]
       )
-        .constrain(() => [
+        .relate(() => [
           Constraint.align({ y: "start" }, rowRefs),
           Constraint.distribute({ dir: "x", spacing: CHAR_GAP }, rowRefs),
         ])
@@ -414,7 +414,7 @@ export const OhmParseTree: StoryObj<Args> = {
     );
 
     Layer({ x: 20, y: 20 }, children)
-      .constrain(() => constraints)
+      .relate(() => constraints)
       .render(container, { w: args.w, h: args.h });
 
     return container;

@@ -120,7 +120,7 @@ export const COMBINATOR_FACTORIES: Record<
   table: (opts, marks) => (table as any)(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => (layer as any)(opts, marks) as unknown as Mark<any>,
   // A graphical wrapping operator (padding/rx/ry border) — combinator-only,
-  // like layer but with no `.constrain`; opts ride in `options`.
+  // like layer but with no `.relate`; opts ride in `options`.
   enclose: (opts, marks) =>
     (enclose as any)(opts, marks) as unknown as Mark<any>,
   // Absolute-offset placement primitive — sets its single child's min-corner

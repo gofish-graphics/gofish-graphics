@@ -1,7 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { titanic } from "../../src/data/titanic";
-import { layer, spreadX, spreadY, stackY, rect, For, ribbon, ref } from "../../src/lib";
+import {
+  layer,
+  spreadX,
+  spreadY,
+  stackY,
+  rect,
+  For,
+  ribbon,
+} from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
 import { groupBy } from "lodash";
 import _ from "lodash";
@@ -74,12 +82,14 @@ export const Default: StoryObj = {
                         alignment: "middle",
                         reverse: true,
                       },
-                      For(groupBy(items, "survived"), (survivedItems, survived) =>
-                        rect({
-                          w: 40,
-                          h: _(survivedItems).sumBy("count") / 10,
-                          fill: sex === "Female" ? color6[4] : color6[5],
-                        }).name(`${cls}-${sex}-${survived}-src`)
+                      For(
+                        groupBy(items, "survived"),
+                        (survivedItems, survived) =>
+                          rect({
+                            w: 40,
+                            h: _(survivedItems).sumBy("count") / 10,
+                            fill: sex === "Female" ? color6[4] : color6[5],
+                          }).name(`${cls}-${sex}-${survived}-src`)
                       )
                     ).name(`${cls}-${sex}-tgt`),
                     spreadY(
@@ -89,19 +99,22 @@ export const Default: StoryObj = {
                         alignment: "middle",
                         reverse: true,
                       },
-                      For(groupBy(items, "survived"), (survivedItems, survived) => {
-                        return rect({
-                          h: _(survivedItems).sumBy("count") / 10,
-                          fill:
-                            sex === "Female"
-                              ? survived === "No"
-                                ? gray
-                                : color6[4]
-                              : survived === "No"
-                                ? gray
-                                : color6[5],
-                        }).name(`${cls}-${sex}-${survived}-tgt`);
-                      })
+                      For(
+                        groupBy(items, "survived"),
+                        (survivedItems, survived) => {
+                          return rect({
+                            h: _(survivedItems).sumBy("count") / 10,
+                            fill:
+                              sex === "Female"
+                                ? survived === "No"
+                                  ? gray
+                                  : color6[4]
+                                : survived === "No"
+                                  ? gray
+                                  : color6[5],
+                          }).name(`${cls}-${sex}-${survived}-tgt`);
+                        }
+                      )
                     ),
                   ])
                 )
@@ -110,55 +123,58 @@ export const Default: StoryObj = {
           )
         ),
       ]),
-      For(groupBy(titanic, "class"), (items, cls) => [
-        ribbon(
-          {
-            dir: "x",
-            fill: classColor[cls],
-            curve: "bezier",
-            opacity: 0.7,
-            mixBlendMode: "multiply",
-          },
-          [ref(`${cls}-src`), ref(`${cls}-tgt`)]
-        ),
-        For(groupBy(items, "sex"), (sexItems, sex) => [
+    ])
+      .relate((names) =>
+        For(groupBy(titanic, "class"), (items, cls) => [
           ribbon(
             {
               dir: "x",
-              fill: sex === "Female" ? color6[4] : color6[5],
+              fill: classColor[cls],
               curve: "bezier",
               opacity: 0.7,
               mixBlendMode: "multiply",
             },
-            [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
+            [names[`${cls}-src`], names[`${cls}-tgt`]]
           ),
-          For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
+          For(groupBy(items, "sex"), (sexItems, sex) => [
             ribbon(
               {
                 dir: "x",
-                fill:
-                  sex === "Female"
-                    ? survived === "No"
-                      ? gray
-                      : color6[4]
-                    : survived === "No"
-                      ? gray
-                      : color6[5],
+                fill: sex === "Female" ? color6[4] : color6[5],
                 curve: "bezier",
                 opacity: 0.7,
                 mixBlendMode: "multiply",
               },
-              [
-                ref(`${cls}-${sex}-${survived}-src`),
-                ref(`${cls}-${sex}-${survived}-tgt`),
-              ]
-            )
-          ),
-        ]),
-      ]),
-    ]).render(container, {
-      axes: true,
-    });
+              [names[`${cls}-${sex}-src`], names[`${cls}-${sex}-tgt`]]
+            ),
+            For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
+              ribbon(
+                {
+                  dir: "x",
+                  fill:
+                    sex === "Female"
+                      ? survived === "No"
+                        ? gray
+                        : color6[4]
+                      : survived === "No"
+                        ? gray
+                        : color6[5],
+                  curve: "bezier",
+                  opacity: 0.7,
+                  mixBlendMode: "multiply",
+                },
+                [
+                  names[`${cls}-${sex}-${survived}-src`],
+                  names[`${cls}-${sex}-${survived}-tgt`],
+                ]
+              )
+            ),
+          ]),
+        ])
+      )
+      .render(container, {
+        axes: true,
+      });
     return container;
-  }
-}
+  },
+};

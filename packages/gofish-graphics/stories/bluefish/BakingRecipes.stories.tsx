@@ -37,10 +37,9 @@ import { Constraint, Layer, enclose, ref, rect, text } from "../../src/lib";
 // 0 -> col0's union sizes step cell A1's x -> A1 sizes step cell B's x ->
 // a union of A1+B+A2 sizes step cell C's x -> ...). A materialized
 // group-of-refs union can only be built from cells that are ALREADY
-// placed, and a union sibling that reads still-being-placed cells via
-// `ref()` from the SAME layer that is placing them races the constraint
-// solver — so each "place some cells, then
-// union them" step becomes its own nested `Layer`, wrapping the previous
+// placed. A union is a `.relate()` clause, laid out after the clauses that
+// place the cells it reads, and each "place some cells, then
+// union them" step is still its own nested `Layer`, wrapping the previous
 // tier as its first child (mirroring the Wire/ArrayEntry cross-tier
 // pattern from QuantumCircuit/InsertionSort, chained 8 times instead of
 // just 2). This is more tiers than any prior Bluefish port needed, direct
@@ -61,7 +60,8 @@ const Pad = (t: string) =>
     text({ text: t }),
   ]);
 
-// Bluefish's `<Group>`: a pure bbox union of named refs, no paint.
+// Bluefish's `<Group>`: a pure bbox union of named refs, no paint. It is a
+// `.relate()` clause of the tier that holds the cells it unions.
 const union = (names: string[], name: string) =>
   enclose(
     { padding: 0, fill: "none", stroke: "none" },
@@ -75,7 +75,7 @@ const union = (names: string[], name: string) =>
 const border = (name: string) =>
   rect({ fill: "transparent", stroke: GREEN, strokeWidth: 1 }).name(name);
 
-// Each tier's `.constrain()` names cells that live in earlier, nested tiers
+// Each tier's `.relate()` names cells that live in earlier, nested tiers
 // (`col0`, `row0_1`, ...) directly: a constraint operand resolves anywhere
 // inside the constraining layer, and a nested operand is a fixed reference
 // the tier's own new cells are placed against.
@@ -103,7 +103,7 @@ export const BakingRecipes: StoryObj = {
       Pad("3 large eggs").name("r3"),
       Pad("1 tsp. (5 mL) vanilla extract").name("r4"),
       Pad("1 cup (125 g) all-purpose flour").name("r5"),
-    ]).constrain(({ title, r0, r1, r2, r3, r4, r5 }) => [
+    ]).relate(({ title, r0, r1, r2, r3, r4, r5 }) => [
       Constraint.align({ x: "start" }, [title, r0, r1, r2, r3, r4, r5]),
       Constraint.distribute({ dir: "y", spacing: 0 }, [
         title,
@@ -117,8 +117,7 @@ export const BakingRecipes: StoryObj = {
     ]);
 
     // ── Tier 1: row/column unions over the ingredient column ──
-    const tier1 = Layer([
-      tier0,
+    const tier1 = Layer([tier0]).relate(() => [
       union(["r0", "r1", "r2", "r3", "r4", "r5"], "col0"),
       union(["r0", "r1"], "row0_1"),
       union(["r0", "r1", "r2"], "row0_2"),
@@ -136,7 +135,7 @@ export const BakingRecipes: StoryObj = {
       Pad("melt in double boiler").name("A1"),
       Pad("stir in").name("B"),
       Pad("lightly beat").name("A2"),
-    ]).constrain(({ col0, row0_1, row0_2, row3_4, A1, B, A2 }) => [
+    ]).relate(({ col0, row0_1, row0_2, row3_4, A1, B, A2 }) => [
       Constraint.distribute({ dir: "x", spacing: 0 }, [col0, A1]),
       Constraint.align({ y: "middle" }, [row0_1, A1]),
       Constraint.distribute({ dir: "x", spacing: 0 }, [A1, B]),
@@ -147,19 +146,22 @@ export const BakingRecipes: StoryObj = {
 
     // ── Tier 3: col1_2 = union(A1, B, A2) — the column-group C is
     // distributed after.
-    const tier3 = Layer([tier2, union(["A1", "B", "A2"], "col1_2")]);
-
-    // ── Tier 4: "stir in" (C), right of col1_2, centered on rows 0-4 ──
-    const tier4 = Layer([
-      tier3,
-      Pad("stir in").name("C"),
-    ]).constrain(({ col1_2, row0_4, C }) => [
-      Constraint.distribute({ dir: "x", spacing: 0 }, [col1_2, C]),
-      Constraint.align({ y: "middle" }, [row0_4, C]),
+    const tier3 = Layer([tier2]).relate(() => [
+      union(["A1", "B", "A2"], "col1_2"),
     ]);
 
+    // ── Tier 4: "stir in" (C), right of col1_2, centered on rows 0-4 ──
+    const tier4 = Layer([tier3, Pad("stir in").name("C")]).relate(
+      ({ col1_2, row0_4, C }) => [
+        Constraint.distribute({ dir: "x", spacing: 0 }, [col1_2, C]),
+        Constraint.align({ y: "middle" }, [row0_4, C]),
+      ]
+    );
+
     // ── Tier 5: col1_3 = union(col1_2, C) ──
-    const tier5 = Layer([tier4, union(["col1_2", "C"], "col1_3")]);
+    const tier5 = Layer([tier4]).relate(() => [
+      union(["col1_2", "C"], "col1_3"),
+    ]);
 
     // ── Tier 6: "stir in" (D), right of C; "bake..." (E), right of D —
     // both centered on rows 0-5.
@@ -167,7 +169,7 @@ export const BakingRecipes: StoryObj = {
       tier5,
       Pad("stir in").name("D"),
       Pad("bake 325°F (160°C) for 35 min.").name("E"),
-    ]).constrain(({ C, row0_5, D, E }) => [
+    ]).relate(({ C, row0_5, D, E }) => [
       Constraint.distribute({ dir: "x", spacing: 0 }, [C, D]),
       Constraint.align({ y: "middle" }, [row0_5, D]),
       Constraint.distribute({ dir: "x", spacing: 0 }, [D, E]),
@@ -176,7 +178,7 @@ export const BakingRecipes: StoryObj = {
 
     // ── Tier 7: col0_5 = union(r0, E) — full table width, used to span
     // the title's border underneath it.
-    const tier7 = Layer([tier6, union(["r0", "E"], "col0_5")]);
+    const tier7 = Layer([tier6]).relate(() => [union(["r0", "E"], "col0_5")]);
 
     // ── Tier 8: the 12 cell borders, each sized by align's new "span"
     // value against the horizontal/vertical group it bounds — the direct
@@ -195,7 +197,7 @@ export const BakingRecipes: StoryObj = {
       border("bC"),
       border("bE"),
       border("bTitle"),
-    ]).constrain(
+    ]).relate(
       ({
         col0,
         r0,
@@ -280,7 +282,7 @@ export const BakingRecipes: StoryObj = {
         "recipeName"
       ),
       tableBg.name("table"),
-    ]).constrain(({ recipeName, table }) => [
+    ]).relate(({ recipeName, table }) => [
       Constraint.align({ x: "start" }, [recipeName, table]),
       Constraint.distribute({ dir: "y", spacing: 10 }, [recipeName, table]),
     ]);
@@ -299,7 +301,7 @@ export const BakingRecipes: StoryObj = {
 // ── Friction log ─────────────────────────────────────────────────────────
 //
 // 1. (Resolved.) The first draft named cells from nested tiers straight
-//    out of an outer tier's `.constrain()` callback, and it silently did
+//    out of an outer tier's `.relate()` callback, and it silently did
 //    nothing: the solver only saw direct children. The port worked around
 //    it with a `pull(name) = ref(name).name(name)` proxy child per name.
 //    Constraint operands now resolve anywhere inside the constraining

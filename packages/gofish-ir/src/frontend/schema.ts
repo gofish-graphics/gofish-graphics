@@ -97,7 +97,7 @@ export interface ChartIR extends BaseIRNode {
   /**
    * Chart-level name (from `chart(...).name("scatter")` in Python /
    * `node.name(...)` on a resolved chart in JS) so a sibling
-   * `Layer([...]).constrain(...)` callback can reference this chart. A
+   * `Layer([...]).relate(...)` callback can reference this chart. A
    * `createName(...)` token sentinel is also accepted on the wire.
    */
   name?: string;
@@ -111,9 +111,9 @@ export interface LayerIR extends BaseIRNode {
   type: "layer";
   charts: Array<ChartIR | RawMarkIR>;
   options?: Record<string, unknown>;
-  /** Layer-level constraints (from `Layer([...]).constrain(...)`), resolving
-   *  refs against the child charts' `name`s. */
-  constraints?: ConstraintIR[];
+  /** Layer-level relate clauses (from `Layer([...]).relate(...)`), resolving
+   *  names against the child charts' `name`s. */
+  relate?: RelateClauseIR[];
   /** True when this came from the v3 `chart(...).layer(...)` builder chain
    *  (rather than the low-level `layer([...])` combinator). The deserializer
    *  reconstructs it through the real `LayerBuilder` so JS — not the wrapper —
@@ -466,7 +466,7 @@ export interface LeafMarkIR extends BaseIRNode {
   type: LeafMarkType;
   name?: string;
   label?: LabelIR;
-  constraints?: ConstraintIR[];
+  relate?: RelateClauseIR[];
   zOrder?: number;
   translate?: TranslateIR;
   [key: string]: unknown;
@@ -484,7 +484,7 @@ export interface CombinatorMarkIR extends BaseIRNode {
   children: MarkIR[];
   name?: string;
   label?: LabelIR;
-  constraints?: ConstraintIR[];
+  relate?: RelateClauseIR[];
   zOrder?: number;
   translate?: TranslateIR;
 }
@@ -684,6 +684,19 @@ export interface ConstraintIR {
    *  `{ x?: number, y?: number }` (per-axis padding) over `refs: [outer, inner]`. */
   options?: Record<string, unknown>;
   refs: string[];
+}
+
+/**
+ * One clause of a `.relate()` callback: a constraint over names
+ * (`ConstraintIR`, which always carries `refs`), or a mark that draws, whose
+ * children may include `{ type: "ref", selection: name }` references to the
+ * layer's names (`MarkIR`, which never carries `refs`).
+ */
+export type RelateClauseIR = ConstraintIR | MarkIR;
+
+/** A relate clause is a constraint exactly when it carries `refs`. */
+export function isConstraintIR(clause: RelateClauseIR): clause is ConstraintIR {
+  return Array.isArray((clause as { refs?: unknown }).refs);
 }
 
 // ---------------------------------------------------------------------------

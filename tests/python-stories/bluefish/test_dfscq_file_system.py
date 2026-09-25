@@ -2,11 +2,11 @@
 
 Port of the DFSCQ write-ahead log pipeline diagram, structured like
 Pulley/QuantumCircuit: tier 1 (`_pipeline_head`) fully places every row via
-nested `spread`s and `.constrain()`; tier 2 (funnels, the commit arrow, the
+nested `spread`s and `.relate()`; tier 2 (funnels, the commit arrow, the
 fan-out arrows, the tick marks/labels beneath DiskLog, and the side labels)
 reads those placed nodes via `createName` tokens + `ref()`. Small
-self-contained `layer([ref(anchor), fresh_shape]).constrain(...)` micro-layers
-mirror the JS file's workaround for `.constrain()` destructures only reliably
+self-contained `layer([ref(anchor), fresh_shape]).relate(...)` micro-layers
+mirror the JS file's workaround for `.relate()` destructures only reliably
 reaching one level of nested plain layers deep — do not collapse them.
 """
 
@@ -74,7 +74,7 @@ def _with_min_width(width, content):
             rect(w=width, h=0, fill="transparent").name("filler"),
             content.name("content"),
         ]
-    ).constrain(
+    ).relate(
         lambda filler, content: [
             Constraint.align([filler, content], x="start", y="middle"),
         ]
@@ -121,7 +121,7 @@ def _action_label(box_name, slot_name, label_text):
             ref(slot_name).name("slot"),
             _action_text(label_text).name("t"),
         ]
-    ).constrain(
+    ).relate(
         lambda box, slot, t: [
             Constraint.align([box, t], x="end"),
             Constraint.align([slot, t], y="middle"),
@@ -137,7 +137,7 @@ def _boxed_align(width, content):
             rect(w=width, h=0, fill="transparent").name("slot"),
             content.name("content"),
         ]
-    ).constrain(
+    ).relate(
         lambda slot, content: [
             Constraint.align([slot, content], x="end", y="middle"),
         ]
@@ -146,7 +146,7 @@ def _boxed_align(width, content):
 
 def _tick(anchor, side, tick_name=None):
     """A tick mark anchored via a global `ref(token)` (depth-independent),
-    with its own local `.constrain()` — the fix for cross-tier destructures
+    with its own local `.relate()` — the fix for cross-tier destructures
     that stop resolving past one level of nesting (see the module docstring).
     `tick_name` (optional): a global token so a funnel side can `ref()` this
     tick later."""
@@ -158,7 +158,7 @@ def _tick(anchor, side, tick_name=None):
                 tick_name if tick_name is not None else "t"
             ),
         ]
-    ).constrain(
+    ).relate(
         lambda **kw: [
             Constraint.distribute([kw["a"], kw[key]], dir="y", spacing=15),
             Constraint.align([kw["a"], kw[key]], x=side),
@@ -174,7 +174,7 @@ def _label(anchor, label_text):
                 text=label_text, fontFamily="serif", fontWeight=300, fontSize=18
             ).name("t"),
         ]
-    ).constrain(
+    ).relate(
         lambda a, t: [
             Constraint.distribute([a, t], dir="y", spacing=30),
             Constraint.align([a, t], x="middle"),
@@ -198,7 +198,7 @@ def _label_lines(anchor, lines):
                 alignment="middle",
             ).name("t"),
         ]
-    ).constrain(
+    ).relate(
         lambda a, t: [
             Constraint.distribute([a, t], dir="y", spacing=30),
             Constraint.align([a, t], x="middle"),
@@ -222,7 +222,7 @@ def _funnel_side(top_anchor, top_edge, bottom_anchor, bottom_edge, id_prefix):
                 ref(top_anchor).name("a"),
                 rect(w=1, h=1, fill="transparent").name(top_stub),
             ]
-        ).constrain(
+        ).relate(
             lambda **kw: [
                 Constraint.distribute(
                     [kw["a"], kw[top_key]], dir="y", spacing=FUNNEL_STUB
@@ -236,7 +236,7 @@ def _funnel_side(top_anchor, top_edge, bottom_anchor, bottom_edge, id_prefix):
                 rect(w=1, h=1, fill="transparent").name(bottom_stub),
                 ref(bottom_anchor).name("b"),
             ]
-        ).constrain(
+        ).relate(
             lambda **kw: [
                 Constraint.distribute(
                     [kw[bottom_key], kw["b"]], dir="y", spacing=FUNNEL_STUB
@@ -398,7 +398,7 @@ def story_dfscq():
     ).name(mem)
 
     # Divider: the SPAN SITE. `mem` is a direct (one-level) named child of
-    # `disk_log_inner`, the depth at which `.constrain()`'s cross-tier
+    # `disk_log_inner`, the depth at which `.relate()`'s cross-tier
     # lookup reliably resolves. `labelSpace`: an invisible spacer that
     # stretches `disk_log_inner`'s own bbox down far enough to include the
     # tick marks and label row beneath them (placed by tier-2 `_tick`/
@@ -411,7 +411,7 @@ def story_dfscq():
             rect(h=3, fill="black").name("line"),
             rect(w=1, h=1, fill="transparent").name("labelSpace"),
         ]
-    ).constrain(
+    ).relate(
         lambda mem, line, labelSpace: [
             # ── SPAN SITE: the divider line adopts `mem`'s exact
             # horizontal extent.
@@ -471,7 +471,7 @@ def story_dfscq():
             disk_data_row,
             disk_data_table.name("diskDataTable"),
         ]
-    ).constrain(
+    ).relate(
         lambda diskdata, diskDataTable: [
             Constraint.distribute([diskdata, diskDataTable], dir="y", spacing=50),
             # Centered (not start-aligned) so the disk-data row sits
@@ -525,7 +525,7 @@ def story_dfscq():
             rect(w=80, h=1, fill="transparent").name(fanout_anchor_name),
             ref(diskdata_stack).name("target"),
         ]
-    ).constrain(
+    ).relate(
         lambda fanoutAnchor, target: [
             Constraint.distribute([fanoutAnchor, target], dir="y", spacing=50),
             Constraint.align([target, fanoutAnchor], x="middle"),
@@ -536,7 +536,7 @@ def story_dfscq():
             rect(w=10, h=10, fill="transparent").name(blocks1_arrow_anchor_name),
             ref(blocks1).name("target"),
         ]
-    ).constrain(
+    ).relate(
         lambda blocks1ArrowAnchor, target: [
             Constraint.distribute(
                 [blocks1ArrowAnchor, target], dir="y", spacing=70
@@ -563,7 +563,7 @@ def story_dfscq():
                 log_data_anchor
             ),
         ]
-    ).constrain(
+    ).relate(
         lambda a, logDataAnchor: [
             Constraint.align([a, logDataAnchor], x="start", y="start"),
         ]
@@ -595,7 +595,7 @@ def story_dfscq():
                         ref(mem).name("m"),
                         disk_log_label,
                     ]
-                ).constrain(
+                ).relate(
                     lambda a, m, diskLogLabel: [
                         Constraint.align([m, diskLogLabel], y="middle"),
                         Constraint.align([a, diskLogLabel], x="end"),
@@ -607,7 +607,7 @@ def story_dfscq():
                         ref(diskdata_stack).name("s"),
                         disk_data_label,
                     ]
-                ).constrain(
+                ).relate(
                     lambda a, s, diskDataLabel: [
                         Constraint.align([s, diskDataLabel], y="middle"),
                         Constraint.align([a, diskDataLabel], x="end"),

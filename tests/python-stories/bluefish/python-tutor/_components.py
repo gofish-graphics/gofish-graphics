@@ -54,7 +54,7 @@ def stack_slot(variable: str, value=None):
                     rect(h=40, w=2, fill="#a6b3b6").name("boxBorderLeft"),
                     val_text,
                 ]
-            ).constrain(
+            ).relate(
                 lambda box, boxBorderBottom, boxBorderLeft, value: [
                     Constraint.align([box, value], x="middle", y="middle"),
                     Constraint.align(
@@ -101,7 +101,7 @@ def elm_tuple(tupleIndex: str, tupleData=None):
             ).name("label"),
             val_text,
         ]
-    ).constrain(
+    ).relate(
         lambda box, label, val: [
             Constraint.align([val, box], x="middle", y="middle"),
             Constraint.align([label, box], x="start", y="start"),
@@ -213,7 +213,7 @@ def global_frame(stack: list):
                 spacing=10,
             ).name(variables_tag),
         ]
-    ).constrain(
+    ).relate(
         lambda label, frame, frameBorder, variables: [
             Constraint.align([label, frame], x="middle", y="start"),
             Constraint.align([frameBorder, frame], x="start", y="middle"),

@@ -51,7 +51,7 @@ import {
   paint as Paint,
   mask as Mask,
 } from "../graphicalOperators/porterDuff";
-import type { ConstraintRef, ConstraintSpec } from "../constraints";
+import type { RelateFn } from "../constraints";
 import {
   splitEntries,
   type SplitBy,
@@ -353,7 +353,7 @@ export function selectAll(
 // `zBelow(self, operand)` paint-order constraint — the connector paints
 // under whatever it references — in every call form, including the
 // low-level one used standalone inside a manual `layer([...])`. An explicit
-// `.zOrder(...)` or `.constrain(...)` on the connector's node overrides the
+// `.zOrder(...)` or `.relate(...)` on the connector's node overrides the
 // default (the tag is only consulted when neither has been set).
 type RelationalMarkOptions = {
   from?: string;
@@ -922,7 +922,7 @@ type BlendMode = "color" | "multiply" | "screen" | "overlay";
 type PdOptions = { blendMode?: BlendMode };
 
 /**
- * A mark with chainable .name, .label, .constrain, and a top-level .render()
+ * A mark with chainable .name, .label, .relate, and a top-level .render()
  * for combinator-form callsites whose children carry their own data
  * (e.g. `layer([Chart(...).flow(...).mark(...), ...]).render(container, opts)`).
  *
@@ -930,13 +930,11 @@ type PdOptions = { blendMode?: BlendMode };
  * if you call `.render()` directly — for those, wrap in a Chart instead:
  *   `chart(data).mark(layer([rect({h: "v"}), ...])).render(container, opts)`.
  */
-export type ConstrainableMark<T> = Mark<T> & {
-  name(layerName: string | Token): ConstrainableMark<T>;
-  label(accessor: LabelAccessor, options?: LabelOptions): ConstrainableMark<T>;
-  zOrder(value: ZOrderValue<T>): ConstrainableMark<T>;
-  constrain(
-    fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
-  ): ConstrainableMark<T>;
+export type RelatableMark<T> = Mark<T> & {
+  name(layerName: string | Token): RelatableMark<T>;
+  label(accessor: LabelAccessor, options?: LabelOptions): RelatableMark<T>;
+  zOrder(value: ZOrderValue<T>): RelatableMark<T>;
+  relate(fn: RelateFn): RelatableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
@@ -952,27 +950,25 @@ export type ConstrainableMark<T> = Mark<T> & {
 };
 
 /**
- * `.constrain(fn)` — attaches a constraint callback to each produced node.
- * Unlike `.name()`/`.label()`, it intentionally carries no `tag`: a
- * constrained mark drops its IR-serialize tag (constrained marks aren't
+ * `.relate(fn)` — runs a relate callback on each produced node (see
+ * `GoFishNode.relate`). Unlike `.name()`/`.label()`, it intentionally carries
+ * no `tag`: a related mark drops its IR-serialize tag (related marks aren't
  * serialized), matching the pre-factory behavior.
  */
-const constrainModifier = {
-  name: "constrain",
-  apply: (node, _layerContext, _datum, fn) => {
-    node.constrain(fn);
+const relateModifier = {
+  name: "relate",
+  apply: async (node, _layerContext, _datum, fn) => {
+    await node.relate(fn);
   },
-} satisfies ModifierConfig<
-  [fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]]
->;
+} satisfies ModifierConfig<[fn: RelateFn]>;
 
-function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
+function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
   return attachModifiers(base, [
     nameModifier,
     labelModifier,
-    constrainModifier,
+    relateModifier,
     zOrderModifier,
-  ]) as unknown as ConstrainableMark<T>;
+  ]) as unknown as RelatableMark<T>;
 }
 
 /**
@@ -981,19 +977,17 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
  *   - Mark functions (called with the parent's data),
  *   - ChartBuilders (resolved via their own bound data),
  *   - already-resolved GoFishNodes (e.g. ref(...)).
- * Supports `.name()`, `.label()`, `.constrain()`, and a top-level `.render()`.
+ * Supports `.name()`, `.label()`, `.relate()`, and a top-level `.render()`.
  */
-export function layer<T>(
-  marks: (Mark<any> | GoFishRef)[]
-): ConstrainableMark<T>;
+export function layer<T>(marks: (Mark<any> | GoFishRef)[]): RelatableMark<T>;
 export function layer<T>(
   opts: Record<string, any>,
   marks: (Mark<any> | GoFishRef)[]
-): ConstrainableMark<T>;
+): RelatableMark<T>;
 export function layer<T>(
   marksOrOpts: (Mark<any> | GoFishRef)[] | Record<string, any>,
   maybeMarks?: (Mark<any> | GoFishRef)[]
-): ConstrainableMark<T> {
+): RelatableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
   const base: Mark<T> = async (d, key, _layerContext) => {
@@ -1027,7 +1021,7 @@ export function layer<T>(
     (node as any).datum = d;
     return node;
   };
-  return tagCombinator(makeConstrainableMark(base), "layer", opts, marks);
+  return tagCombinator(makeRelatableMark(base), "layer", opts, marks);
 }
 
 function makePorterDuffCombinator(

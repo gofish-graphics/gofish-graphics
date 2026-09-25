@@ -143,7 +143,7 @@ type ChartIR = {
   zOrder?: number | null;
   connect?: any;
   // Set when a chart is layered via `Layer([chart.name(...), ...])` so a
-  // `.constrain(...)` callback can reference it by name.
+  // `.relate(...)` callback can reference it by name.
   name?: string | any | null;
 };
 
@@ -157,7 +157,7 @@ type IRResult =
       charts: ChartIR[];
       options: any;
       deriveIds: string[];
-      constraints?: any[];
+      relate?: any[];
       builder?: boolean;
     }
   | {
@@ -212,7 +212,7 @@ async function loadStory(story: PythonStory): Promise<IRResult> {
       charts: json.charts,
       options: json.options ?? {},
       deriveIds: json.deriveIds ?? [],
-      constraints: json.constraints,
+      relate: json.relate,
       builder: json.builder,
     };
   }
@@ -331,7 +331,7 @@ async function captureStory(
       type: "layer",
       charts: ir.charts,
       options: ir.options,
-      constraints: ir.constraints,
+      relate: ir.relate,
       builder: ir.builder,
       deriveServerUrl,
     };

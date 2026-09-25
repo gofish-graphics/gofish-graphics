@@ -67,8 +67,18 @@ import type { ScaleContext } from "./gofish";
 import type { TokenContext } from "./tokenContext";
 import type { FlipScope } from "./_displayObject";
 import { isToken, Token } from "./createName";
-import type { ConstraintSpec, ConstraintRef } from "./constraints";
-import { constraintEnv, validateOperands } from "./constraints";
+import type { ConstraintSpec } from "./constraints";
+import {
+  relateEnv,
+  resolveConstraintOperands,
+  scheduleRelate,
+  validateOperands,
+} from "./constraints";
+import {
+  reifyRelateTerms,
+  splitRelateClauses,
+  type RelateFn,
+} from "./constraints/relate";
 import {
   BBox,
   type BBoxKey,
@@ -344,11 +354,18 @@ export class GoFishNode {
    * String-name scope boundary. Set ONLY by createMark — manual `.scope()`
    * (which flips `_isScope`) does not flip this. String-name lookup
    * (`resolveScopedName` in _ref.tsx, shared by `ref("name")` and
-   * `.constrain()` operands) stops walking up at the nearest `_isComponent`
+   * `.relate()` operands) stops walking up at the nearest `_isComponent`
    * ancestor and does not descend into nested ones, so names don't leak
    * across component boundaries in either direction.
    */
   public _isComponent: boolean = false;
+  /** Set when this node is a drawing clause of its parent layer's
+   *  `.relate()`: its 1-based position in the callback's clause list (for
+   *  error messages). It was returned from the callback, not written as a
+   *  plain child. A string
+   *  `ref` is legal only inside such a clause, and the layer schedules the
+   *  clause after the clauses that place what it reads. */
+  public _relateClause?: number;
   public _scopeMap?: Map<string, GoFishNode>;
   public parent?: GoFishNode;
   public datum?: any;
@@ -685,12 +702,18 @@ export class GoFishNode {
         ancestor = ancestor.parent;
       }
     }
-    // A string _name registers nowhere: `ref(string)` and `.constrain()`
+    // A string _name registers nowhere: `ref(string)` and `.relate()`
     // operands find it by walking the component scope (`resolveScopedName`
     // in _ref.tsx), bounded by the nearest createMark.
     this.children.forEach((child) => {
       child.resolveNames();
     });
+    // With every ref resolved, check the relate clauses' dependency order
+    // now: a cycle would otherwise recurse forever in the space pass (a ref
+    // proxies its target's space, and a cyclic target contains the ref).
+    if (this.children.some((c) => c instanceof GoFishNode && c._relateClause)) {
+      scheduleRelate(this, resolveConstraintOperands(this));
+    }
   }
 
   public resolveUnderlyingSpace(): Size<UnderlyingSpace> {
@@ -1718,13 +1741,38 @@ export class GoFishNode {
     return this;
   }
 
-  public constrain(
-    fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
-  ): this {
-    const env = constraintEnv(this);
-    const specs = fn(env);
-    validateOperands(specs, env);
-    this.constraints = specs;
+  /**
+   * Relate nodes inside this layer. `fn` receives the layer's environment
+   * (`relateEnv`: one operand per name inside the layer) and returns a list of
+   * clauses. A clause is either a constraint (`Constraint.align`, ...), which
+   * places its operands, or a term that draws: an operator or mark such as
+   * `arrow(opts, [a, b])` or `background(opts, [a, b])`, whose children may
+   * mix operands from the environment with fresh marks. A drawing clause
+   * becomes a child of this layer (flagged `_relateClause`), and the layer
+   * lays it out after the clauses that write the positions it reads (see
+   * `scheduleRelate` in `constraints/relate.ts`). A later call replaces the
+   * clauses of an earlier one.
+   */
+  public async relate(fn: RelateFn): Promise<this> {
+    // Only a layer schedules clauses around its solve (layer.tsx).
+    if (this.type !== "layer" && this.type !== "box") {
+      throw new Error(
+        `.relate() is a layer method, but it was called on a ${this.type}. ` +
+          `Wrap the nodes to relate in a layer([...]) and relate that.`
+      );
+    }
+    const env = relateEnv(this);
+    const { constraints, terms } = await splitRelateClauses(fn(env));
+    validateOperands(constraints, env);
+    this.constraints = constraints;
+    const nodes = await reifyRelateTerms(terms);
+    this.children = this.children.filter(
+      (c) => !(c instanceof GoFishNode && c._relateClause)
+    );
+    for (const node of nodes) {
+      node.parent = this;
+      this.children.push(node);
+    }
     return this;
   }
 

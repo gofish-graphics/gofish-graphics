@@ -2,7 +2,8 @@
 
 All six exports port directly now that the Python wrapper exposes the
 necessary low-level combinators (`layer`, `spread([marks], ...)`, `arrow`)
-and leaves (`text(text=...)`, `ref(name)`). The shared `PLANETS` constant
+and leaves (`text(text=...)`, `ref(name)`); the label column and the arrow
+are `.relate()` clauses over the planet row's names. The shared `PLANETS` constant
 mirrors the JS file. Where JS uses `For(planets, planet => ellipse({...}))`,
 Python uses a list comprehension to the same effect.
 """
@@ -42,75 +43,80 @@ def story_planets_only():
 
 def story_planets_with_label_above():
     return (
-        layer([
-            _planet_row(),
-            spread(
-                [text(text="Mercury"), ref("Mercury")],
-                dir="y",
-                spacing=60,
-                alignment="middle",
-            ),
-        ]),
+        layer([_planet_row()]).relate(
+            lambda Mercury: [
+                spread(
+                    [text(text="Mercury"), Mercury],
+                    dir="y",
+                    spacing=60,
+                    alignment="middle",
+                ),
+            ]
+        ),
         {},
     )
 
 
 def story_planets_with_label_below():
     return (
-        layer([
-            _planet_row(),
-            spread(
-                [ref("Mercury"), text(text="Mercury")],
-                dir="y",
-                spacing=60,
-                alignment="middle",
-            ),
-        ]),
+        layer([_planet_row()]).relate(
+            lambda Mercury: [
+                spread(
+                    [Mercury, text(text="Mercury")],
+                    dir="y",
+                    spacing=60,
+                    alignment="middle",
+                ),
+            ]
+        ),
         {},
     )
 
 
 def story_planets_with_label_above_no_spacing():
     return (
-        layer([
-            _planet_row(),
-            spread(
-                [text(text="Mercury", debugBoundingBox=True), ref("Mercury")],
-                dir="y",
-                spacing=0,
-                alignment="middle",
-            ),
-        ]),
+        layer([_planet_row()]).relate(
+            lambda Mercury: [
+                spread(
+                    [text(text="Mercury", debugBoundingBox=True), Mercury],
+                    dir="y",
+                    spacing=0,
+                    alignment="middle",
+                ),
+            ]
+        ),
         {},
     )
 
 
 def story_planets_with_label_below_no_spacing():
     return (
-        layer([
-            _planet_row(),
-            spread(
-                [ref("Mercury"), text(text="Mercury", debugBoundingBox=True)],
-                dir="y",
-                spacing=0,
-                alignment="middle",
-            ),
-        ]),
+        layer([_planet_row()]).relate(
+            lambda Mercury: [
+                spread(
+                    [Mercury, text(text="Mercury", debugBoundingBox=True)],
+                    dir="y",
+                    spacing=0,
+                    alignment="middle",
+                ),
+            ]
+        ),
         {},
     )
 
 
 def story_planets_with_arrow():
     return (
-        layer([
-            _planet_row(),
-            spread(
-                [text(text="Mercury").name("label"), ref("Mercury")],
-                dir="y",
-                spacing=60,
-                alignment="middle",
-            ),
-            arrow([ref("label"), ref("Mercury")]),
-        ]),
+        layer([_planet_row()]).relate(
+            lambda Mercury: [
+                spread(
+                    [text(text="Mercury").name("label"), Mercury],
+                    dir="y",
+                    spacing=60,
+                    alignment="middle",
+                ),
+                arrow([ref("label"), Mercury]),
+            ]
+        ),
         {},
     )

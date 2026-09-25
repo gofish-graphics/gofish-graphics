@@ -249,11 +249,11 @@ export function slider(opts: SliderOptions): Control {
           })
         )
       ).name("readout");
-      const node = (await Layer({}, [track, handle, readout])).constrain(
-        ({ track: t, readout: r }) => [
-          Constraint.align({ y: "middle" }, [t, r]),
-        ]
-      );
+      const node = await (
+        await Layer({}, [track, handle, readout])
+      ).relate(({ track: t, readout: r }) => [
+        Constraint.align({ y: "middle" }, [t, r]),
+      ]);
       // The track and the handle are this widget's drag targets; the readout is
       // not one.
       return { node, targets: [track, handle] };
@@ -316,11 +316,11 @@ export function button(opts: ButtonOptions): Control {
       const glyph = (
         await leaf(text({ text: label, fontSize: 12, fill: "#333" }))
       ).name("label");
-      const node = (await Layer({}, [box, glyph])).constrain(
-        ({ box: b, label: l }) => [
-          Constraint.align({ x: "middle", y: "middle" }, [b, l]),
-        ]
-      );
+      const node = await (
+        await Layer({}, [box, glyph])
+      ).relate(({ box: b, label: l }) => [
+        Constraint.align({ x: "middle", y: "middle" }, [b, l]),
+      ]);
       return { node, targets: [box, glyph] };
     },
   });

@@ -88,7 +88,7 @@ export const distribute = (opts: DistributeOptions): Combiner => {
     const named = children.map((c, i) => Layer([c]).name(`__distribute-${i}`));
     const refs = (c: any) => named.map((_, i) => c[`__distribute-${i}`]);
     const orthogonal = opts.dir === "x" ? "y" : "x";
-    return Layer(named).constrain((c: any) => {
+    return Layer(named).relate((c: any) => {
       const cs: any[] = [
         Constraint.distribute(
           {
@@ -152,7 +152,7 @@ export const combine = (opts: CombineOptions): Combiner => {
   const combiner: Combiner = (children: any[]) => {
     const named = children.map((c, i) => Layer([c]).name(`__combine-${i}`));
     const refs = (c: any) => named.map((_, i) => c[`__combine-${i}`]);
-    return Layer(named).constrain((c: any) => {
+    return Layer(named).relate((c: any) => {
       const cs: any[] = [];
       for (const axis of ["x", "y"] as const) {
         const spec = normalizeAxis(opts[axis]);
@@ -235,7 +235,7 @@ export const nest =
     const [outer, inner] = children;
     const namedOuter = Layer([outer]).name(OUTER_NAME);
     const namedInner = Layer([inner]).name(INNER_NAME);
-    return Layer([namedOuter, namedInner]).constrain((c: any) => [
+    return Layer([namedOuter, namedInner]).relate((c: any) => [
       Constraint.nest(opts, [c[OUTER_NAME], c[INNER_NAME]]),
     ]);
   };

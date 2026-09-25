@@ -136,7 +136,7 @@ interface ChartHarnessSpec {
   options: Record<string, any>;
   zOrder?: number | null;
   // Name tagged via `Layer([chart.name(...), ...])` so a layer-level
-  // `.constrain(...)` callback can reference the resolved child node.
+  // `.relate(...)` callback can reference the resolved child node.
   name?: string | TokenSentinel | null;
 }
 
@@ -149,8 +149,8 @@ interface LayerHarnessSpec {
   type: "layer";
   charts: ChartHarnessSpec[];
   options: Record<string, any>;
-  // Constraints relating the named children of a `Layer([...]).constrain(...)`.
-  constraints?: ConstraintSpec[];
+  // Relate clauses over the named children of a `Layer([...]).relate(...)`.
+  relate?: RelateClauseSpec[];
   // True for a v3 `chart(...).layer(...)` builder chain: reconstruct through
   // the real LayerBuilder so JS owns the builder's render logic.
   builder?: boolean;
@@ -182,13 +182,33 @@ interface ConstraintSpec {
   refs: string[];
 }
 
+/** A relate clause: a constraint (carries `refs`) or a mark that draws. */
+type RelateClauseSpec = ConstraintSpec | MarkSpec;
+
+function isConstraintSpec(c: RelateClauseSpec): c is ConstraintSpec {
+  return Array.isArray((c as ConstraintSpec).refs);
+}
+
+/** Rebuild a constraint clause. JS positioning constraints take
+ *  `(options, refs)`; z-order constraints (`zAbove` / `zBelow`) take two refs
+ *  directly. Python surfaces refs-first ergonomically
+ *  (`Constraint.align([a, b], x=...)`) but serializes to the same
+ *  `{ options, refs }` IR. */
+function constraintFromSpec(c: ConstraintSpec): unknown {
+  const operands = c.refs.map((name) => ({ name }));
+  if (c.type === "zAbove" || c.type === "zBelow") {
+    return (Constraint as any)[c.type](...operands);
+  }
+  return (Constraint as any)[c.type](c.options, operands);
+}
+
 interface MarkSpec {
   type: string;
   name?: string;
   __combinator?: boolean;
   options?: Record<string, any>;
   children?: MarkSpec[];
-  constraints?: ConstraintSpec[];
+  relate?: RelateClauseSpec[];
   [key: string]: any;
 }
 
@@ -302,8 +322,8 @@ function isTokenSentinel(v: any): v is TokenSentinel {
  * Python wrapper's `@mark` decorator flags its output with `__scope: true`;
  * this wrapper does the post-resolve call.
  *
- * The inner mark may be a `NameableMark`/`ConstrainableMark` (which has
- * `.name` / `.label` / `.render` / `.constrain` properties); forward all
+ * The inner mark may be a `NameableMark`/`RelatableMark` (which has
+ * `.name` / `.label` / `.render` / `.relate` properties); forward all
  * of these so callers can still chain or directly `.render()` a scoped
  * combinator-form mark used at the raw-mark level.
  */
@@ -347,7 +367,7 @@ function wrapWithScope(inner: any): any {
       return node.render(container, options);
     });
   }
-  for (const key of ["name", "label", "constrain"] as const) {
+  for (const key of ["name", "label", "relate"] as const) {
     if (typeof inner[key] === "function") {
       define(key, (...args: any[]) => wrapWithScope(inner[key](...args)));
     }
@@ -588,7 +608,7 @@ function mapMark(
     // `.name(...)` on the Python `_InputRef` (issue #556) — `GoFishRef.name()`
     // mutates in place and returns `this`, so this renames the SAME live ref
     // the rest of the tree already shares, letting an enclosing
-    // `.layer([...]).constrain(...)` target it by name.
+    // `.layer([...]).relate(...)` target it by name.
     if (
       (spec as any).name != null &&
       typeof (inputRef as any)?.name === "function"
@@ -668,7 +688,7 @@ function mapMark(
     const refNode = ref(resolveRefSelection(spec.selection, resolveToken));
     // A named ref stand-in, `ref(token).name("a")`. GoFishRef's
     // `.name()` mutates in place and returns `this`, making the ref a
-    // constraint target of the enclosing layer (same as the __inputRef
+    // relate operand of the enclosing layer (same as the __inputRef
     // branch above).
     if (spec.name != null) {
       (refNode as any).name(resolveNameField(spec.name, resolveToken));
@@ -726,9 +746,9 @@ function mapMark(
   // Combinator-form marks: a layout operator (`spread`, `layer`, or
   // `arrow`) used as a mark, with explicit nested children instead of
   // repeating a single mark across data. Python emits `{type,
-  // __combinator: true, options, children, name?, label?, constraints?}`;
+  // __combinator: true, options, children, name?, label?, relate?}`;
   // rebuild it by calling the JS operator's `(opts, marks)` overload,
-  // then chain `.constrain(...)` if present.
+  // then chain `.relate(...)` if present.
   if (spec.__combinator) {
     const childMarks = mapMarkChildren(
       spec.children ?? [],
@@ -747,29 +767,18 @@ function mapMark(
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
     let mark = factory(opts, childMarks);
-    // Constraint chain. The Python side serializes refs by name, and a
-    // by-name operand is `{ name }` (as in fromJSON.ts): the layer resolves it
-    // at layout, and reports a name that matches nothing, by name.
-    if (spec.constraints && typeof (mark as any).constrain === "function") {
-      const constraints = spec.constraints;
-      mark = (mark as any).constrain(() =>
-        constraints.map((c) => {
-          // JS positioning constraints take (options, refs); z-order
-          // constraints (`zAbove` / `zBelow`) take two refs directly.
-          if (c.type === "zAbove" || c.type === "zBelow") {
-            return (Constraint as any)[c.type](
-              ...c.refs.map((name) => ({ name }))
-            );
-          }
-          // Align/distribute: Python surfaces refs-first ergonomically
-          // (`Constraint.align([a,b], x=...)`) but serializes to the same
-          // `{options, refs}` IR. See
-          // packages/gofish-graphics/src/ast/constraints/index.ts.
-          return (Constraint as any)[c.type](
-            c.options,
-            c.refs.map((name) => ({ name }))
-          );
-        })
+    // Relate chain. A clause is a constraint (it carries `refs`, operand
+    // NAMES; a by-name operand is `{ name }`, as in fromJSON.ts, and the layer
+    // resolves it at layout) or a mark that draws, rebuilt like any mark: its
+    // `{ type: "ref", selection }` children name the layer's nodes.
+    if (spec.relate && typeof (mark as any).relate === "function") {
+      const clauses = spec.relate;
+      mark = (mark as any).relate(() =>
+        clauses.map((c) =>
+          isConstraintSpec(c)
+            ? constraintFromSpec(c)
+            : mapMark(c, deriveServerUrl, resolveToken, inputRefs)
+        )
       );
     }
     // `@mark`-decorated components flag their output for a
@@ -995,11 +1004,11 @@ function renderChart(spec: HarnessSpec) {
             : buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
         );
 
-        if (spec.constraints && spec.constraints.length > 0) {
-          // Constrained layer-of-charts. Mirror the JS storybook spelling:
+        if (spec.relate && spec.relate.length > 0) {
+          // Related layer-of-charts. Mirror the JS storybook spelling:
           // resolve each chart to a node, `.name(...)` it, then wrap the
-          // resolved nodes in the combinator-form `layer([...]).constrain(...)`.
-          const constraints = spec.constraints;
+          // resolved nodes in the combinator-form `layer([...]).relate(...)`.
+          const clauses = spec.relate;
           const resolvedNodes: any[] = [];
           for (let i = 0; i < childCharts.length; i++) {
             const node: any = await (childCharts[i] as any).resolve();
@@ -1011,18 +1020,12 @@ function renderChart(spec: HarnessSpec) {
             Object.keys(layerOpts).length > 0
               ? layer(layerOpts as any, resolvedNodes)
               : layer(resolvedNodes);
-          layerMark = layerMark.constrain(() =>
-            constraints.map((c) => {
-              if (c.type === "zAbove" || c.type === "zBelow") {
-                return (Constraint as any)[c.type](
-                  ...c.refs.map((name) => ({ name }))
-                );
-              }
-              return (Constraint as any)[c.type](
-                c.options,
-                c.refs.map((name) => ({ name }))
-              );
-            })
+          layerMark = layerMark.relate(() =>
+            clauses.map((c) =>
+              isConstraintSpec(c)
+                ? constraintFromSpec(c)
+                : mapMark(c, spec.deriveServerUrl, resolveToken)
+            )
           );
           await layerMark.render(container, {
             w,
