@@ -68,6 +68,7 @@ import {
   setMeasureProvenance,
   PREVIOUS_LAYER_MARKS,
   GoFishRef,
+  Serialize,
   type ChartBuilder,
   type MeasureProvenance,
   type Operator,
@@ -292,65 +293,6 @@ function isTokenSentinel(v: any): v is TokenSentinel {
     typeof v.__gofish_token === "string" &&
     typeof v.__tag === "string"
   );
-}
-
-/**
- * Wrap a Mark so its resolved GoFishNode gets `.scope()` called on it —
- * matches what JS `createMark` does for any component-defined mark. The
- * Python wrapper's `@mark` decorator flags its output with `__scope: true`;
- * this wrapper does the post-resolve call.
- *
- * The inner mark may be a `NameableMark`/`ConstrainableMark` (which has
- * `.name` / `.label` / `.render` / `.constrain` properties); forward all
- * of these so callers can still chain or directly `.render()` a scoped
- * combinator-form mark used at the raw-mark level.
- */
-function wrapWithScope(inner: any): any {
-  const wrapped: any = async (data: any, key: any, layerContext: any) => {
-    const node: any = await Promise.resolve(inner(data, key, layerContext));
-    // Match JS `createMark`'s post-resolve sequence: stamp datum, then
-    // declare a scope boundary. Layout reads `node.datum` during some
-    // bbox / inferRaw passes — missing the stamp shifts text positions
-    // by a pixel or two in the python-tutor stories. We skip the
-    // `node.name(key)` step JS createMark does because (a) the harness's
-    // mapMark already chains `.name(spec.name)` when set, and (b) calling
-    // `.name("")` on a nested combinator child disrupts layer-context
-    // registration when the parent expects un-named children.
-    if (node) {
-      node.datum = data;
-      if (typeof node.scope === "function") {
-        node.scope();
-      }
-      // Match JS `createMark`: the composite is an opaque unit. Ref-name
-      // resolution and z-order flattening both stop at `_isComponent`,
-      // which is otherwise only set by `createMark` itself. Without this,
-      // an inner `layer` produced by a Python `@mark`-decorated function
-      // would be transparent — flattenForZOrder would descend into it and
-      // emit its children as separate paint items.
-      node._isComponent = true;
-    }
-    return node;
-  };
-  // `Function.prototype.name` and other built-ins are read-only — use
-  // defineProperty to override them on the wrapper function.
-  const define = (key: string, value: any) =>
-    Object.defineProperty(wrapped, key, {
-      value,
-      writable: true,
-      configurable: true,
-    });
-  if (typeof inner.render === "function") {
-    define("render", async (container: any, options: any) => {
-      const node: any = await wrapped(undefined, undefined, undefined);
-      return node.render(container, options);
-    });
-  }
-  for (const key of ["name", "label", "constrain"] as const) {
-    if (typeof inner[key] === "function") {
-      define(key, (...args: any[]) => wrapWithScope(inner[key](...args)));
-    }
-  }
-  return wrapped;
 }
 
 declare global {
@@ -770,10 +712,10 @@ function mapMark(
         })
       );
     }
-    // `@mark`-decorated components flag their output for a
-    // `node.scope()` post-resolution pass — wrap before applying name.
+    // `@mark`-decorated components flag their output as a scope boundary
+    // (what JS `createMark` makes a component) — wrap before applying name.
     if (spec.__scope) {
-      mark = wrapWithScope(mark);
+      mark = Serialize.wrapWithScope(mark);
     }
     mark = applyTranslate(mark);
     const nameVal = resolveNameField(spec.name, resolveToken);
@@ -822,7 +764,7 @@ function mapMark(
     }
   }
   if (spec.__scope) {
-    mark = wrapWithScope(mark);
+    mark = Serialize.wrapWithScope(mark);
   }
   mark = applyTranslate(mark);
   const nameVal = resolveNameField(layerName, resolveToken);

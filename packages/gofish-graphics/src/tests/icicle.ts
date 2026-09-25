@@ -15,7 +15,7 @@ import {
 } from "../color";
 import { titanic } from "../data/titanic";
 import { mix } from "spectral.js";
-import { For, rect, stackX, stackY } from "../lib";
+import { map, rect, stackX, stackY } from "../lib";
 
 const data = [
   { origin: "Europe", cylinders: "4", count: 66 },
@@ -138,14 +138,14 @@ export const testIcicleWithFor = () =>
     }),
     stackY(
             { alignment: "middle" },
-      For(groupBy(titanic, "class"), (items, cls) =>
+      map(groupBy(titanic, "class"), (items, cls) =>
         stackX(
           { h: _(items).sumBy("count") / 10, alignment: "start" },
           [
             rect({ w: 40, fill: classColor[cls as keyof typeof classColor] }),
             stackY(
                     { alignment: "middle" },
-              For(groupBy(items, "sex"), (items, sex) =>
+              map(groupBy(items, "sex"), (items, sex) =>
                 stackX({ alignment: "middle" }, [
                   rect({
                     w: 40,
@@ -157,7 +157,7 @@ export const testIcicleWithFor = () =>
                       w: 40,
 
                     },
-                    For(
+                    map(
                       groupBy(items, "survived"),
                       (survivedItems, survived) => {
                         return rect({

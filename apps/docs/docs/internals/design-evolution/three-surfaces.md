@@ -48,9 +48,10 @@ capitalized second spelling, but they are now internal (#146): each lowercase
 operator works both inside `.flow(...)` and as a combinator over marks, and a
 `createMark` body may return that combinator's mark directly, because
 `createMark` resolves whatever its body returns the same way a combinator
-resolves a child. `For` (an async map over a collection) and `Constraint`
-(the constraint factory namespace) have no lowercase counterpart in use. The
-fluent surface also carries the
+resolves a child. The async map over a collection, once the capitalized
+`For`, is now the lowercase `map`, so `Constraint` (the constraint factory
+namespace) is the only capitalized function-like export left. The fluent
+surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
 `derive`, `resolve`, and `join` (`resolve` dereferences reference columns into
 drawn node refs, driving the ribbon / node-link / labeling patterns via

@@ -74,7 +74,7 @@ const doc4 = await Serialize.toJSONRawMark(mark, opts); // for bare marks
 ```
 
 `toJSON` is async because combinator-form marks may carry their child
-list as a `Promise<Mark[]>` (e.g. from `For(...)` helpers); the emitter
+list as a `Promise<Mark[]>` (e.g. from `map(...)` helpers); the emitter
 resolves these to walk into them.
 
 Python (via the wrapper):

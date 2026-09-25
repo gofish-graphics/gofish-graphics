@@ -96,7 +96,7 @@ All paths are relative to `packages/gofish-graphics/`:
   - Render terminal for a bare node (no `chart()` at the root): `gofish(container, options, node | () => node)`
   - Example: `layer([rect({ x: 0, y: 0, w: 90, h: 40 }), rect({ x: 30, y: 50, w: 90, h: 40 })]).render(container, {})`
 
-- **One lowercase surface**: each operator has one lowercase name that works both inside `.flow(...)` and as a combinator over an explicit child list (`stack(opts, [a, b])`, `layer([...])`, `intersect([a, b])`). A combinator child may be a mark or an already-built node (e.g. `ref(...)`), and a `createMark` body may return a combinator's mark directly. The node-level building blocks (`Spread`, `Layer`, `Treemap`, the region-compositing node operators, …) are internal and not exported (#146). Apart from classes and namespaces (`GoFishRef`, `FieldExpr`, `Serialize`, …), only `For` (async map over a collection) and `Constraint` (the constraint factory namespace) stay capitalized.
+- **One lowercase surface**: each operator has one lowercase name that works both inside `.flow(...)` and as a combinator over an explicit child list (`stack(opts, [a, b])`, `layer([...])`, `intersect([a, b])`). A combinator child may be a mark or an already-built node (e.g. `ref(...)`), and a `createMark` body may return a combinator's mark directly. The node-level building blocks (`Spread`, `Layer`, `Treemap`, the region-compositing node operators, …) are internal and not exported (#146). Apart from classes and namespaces (`GoFishRef`, `FieldExpr`, `Serialize`, …), only `Constraint` (the constraint factory namespace) stays capitalized; the async map over a collection is the lowercase `map`.
 
 ### Context System
 

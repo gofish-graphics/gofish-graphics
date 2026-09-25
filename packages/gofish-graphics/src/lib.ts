@@ -32,7 +32,7 @@ export type { FieldOp, BetweenOptions } from "./ast/fieldExpr";
 // it to RPC-returned rows (the array symbol can't cross the bridge).
 export { setMeasureProvenance } from "./ast/data";
 export type { MeasureProvenance } from "./ast/data";
-export { For as map } from "./ast/iterators/for";
+export { map } from "./ast/iterators/map";
 
 // Coordinate Transforms
 export { coord } from "./ast/coordinateTransforms/coord";
@@ -70,7 +70,6 @@ export { createMark } from "./ast/withGoFish";
 
 /* Low-level operators */
 // Data
-export { For } from "./ast/iterators/for";
 // export { groupBy } from "./ast/iterators/groupBy";
 export { groupBy, sumBy, orderBy, meanBy };
 export { bin } from "./ast/transforms";

@@ -958,7 +958,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         layerContext?: LayerContext
       ) => {
         // Marks may be a Promise<Mark[]> when produced by helpers like
-        // `For(...)` — await before mapping. Entries may also be already
+        // `map(...)` — await before mapping. Entries may also be already
         // resolved nodes (e.g. `ref(...)`) rather than mark functions, so
         // pass non-functions through as-is.
         const resolvedMarks = await Promise.resolve(marks);

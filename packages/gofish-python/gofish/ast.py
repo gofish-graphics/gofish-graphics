@@ -260,8 +260,7 @@ def mark(fn: Callable) -> Callable:
     reusable component factory.
 
     Calling the decorated function eagerly runs `fn(**props)` to produce
-    a Mark tree, then flags the result as a scope boundary so the
-    harness wraps it in `node.scope()` post-resolution. Internal names
+    a Mark tree, then flags the result as a scope boundary. Internal names
     declared via `createName(...)` therefore don't leak to outer scope.
 
     Mirrors JS `createMark(shapeFn)`

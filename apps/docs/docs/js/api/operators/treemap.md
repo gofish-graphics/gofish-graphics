@@ -28,7 +28,7 @@ gf.treemap(
     paddingOuter: 2,
     round: true,
   },
-  gf.For(items, (d) =>
+  gf.map(items, (d) =>
     gf
       .rect({
         fill: gf.v(d.name),

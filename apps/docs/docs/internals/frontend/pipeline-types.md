@@ -92,7 +92,7 @@ That is, given an array of data and some user-supplied options, produce a
 ```ts
 spread(field, opts) := (mark: Mark<T[]>) =>
   (data: T[]) =>
-    Spread(For(groupBy(data, field), mark))
+    Spread(map(groupBy(data, field), mark))
 ```
 
 Given a continuation `mark` and the upstream data, group the data by `field`,
@@ -135,7 +135,7 @@ lift: (rel: (children: GoFishNode[]) => GoFishNode) => Operator<T[], T[]>
 
 lift(rel) := (mark: Mark<T[]>) =>
   (data: T[]) =>
-    rel(For(groupBy(data, field), mark))
+    rel(map(groupBy(data, field), mark))
 ```
 
 This is the spine of [`createOperator`](/internals/frontend/operator-factory)

@@ -128,13 +128,14 @@ function isExportExempt(
 //   - **Storybook chrome** — story-level `title`, `tags`, and `parameters`
 //     (e.g. the gallery annotation) are presentation metadata. Python stories
 //     key off the file path and `story_*` function name, not these.
-//   - **API casing** — the public surface is lowercase-only (#146, #416): the
-//     capitalized spellings (`Chart`, `Layer`, `Spread`, `StackY`, `Frame`,
-//     ...) were aliases or node-level forms of the lowercase operators and are
-//     no longer exported. A pure `Layer`→`layer` / `Spread`→`spread` rename in
-//     a JS story has no Python counterpart, since Python was always
-//     lowercase. Canonicalizing the case of those retired names before
-//     comparing folds such renames out.
+//   - **Retired API names** — the public surface is lowercase-only (#146,
+//     #416): the capitalized spellings (`Chart`, `Layer`, `Spread`, `StackY`,
+//     `Frame`, ...) were aliases or node-level forms of the lowercase
+//     operators and are no longer exported, and `For` was renamed to `map`.
+//     A pure `Layer`→`layer` / `For`→`map` rename in a JS story has no Python
+//     counterpart, since Python was always lowercase (and uses list
+//     comprehensions where JS maps). Rewriting each retired name to its
+//     current name before comparing folds such renames out.
 //   - **Comments and whitespace** — a Python story mirrors the spec, not the
 //     prose around it, so a comment-only edit needs no Python change.
 //     Tokenizing with the TypeScript scanner drops comments without touching
@@ -177,7 +178,7 @@ function stripComments(source: string): string {
   return tokens.join(" ");
 }
 
-/** The retired capitalized API spellings (#146, #416). */
+/** The retired capitalized API spellings (#146, #416); each is now its lowercase form. */
 const RETIRED_CAPITALIZED_NAMES = [
   "Chart",
   "Layer",
@@ -203,21 +204,31 @@ const RETIRED_CAPITALIZED_NAMES = [
   "Offset",
   "GoFish",
 ];
-const RETIRED_CAPITALIZED_RE = new RegExp(
-  `\\b(${RETIRED_CAPITALIZED_NAMES.join("|")})\\b`,
+/** Every retired public API name, mapped to the name that replaced it. */
+const RETIRED_API_NAMES: Record<string, string> = {
+  ...Object.fromEntries(
+    RETIRED_CAPITALIZED_NAMES.map((name) => [
+      name,
+      name[0].toLowerCase() + name.slice(1),
+    ])
+  ),
+  For: "map",
+};
+const RETIRED_API_NAMES_RE = new RegExp(
+  `\\b(${Object.keys(RETIRED_API_NAMES).join("|")})\\b`,
   "g"
 );
 
-/** Fold the retired capitalized spellings to lowercase so a pure casing rename is spec-neutral. */
-function canonicalizeApiCasing(source: string): string {
+/** Rewrite retired API names to their current names so a pure rename is spec-neutral. */
+function canonicalizeRetiredApiNames(source: string): string {
   return source.replace(
-    RETIRED_CAPITALIZED_RE,
-    (name) => name[0].toLowerCase() + name.slice(1)
+    RETIRED_API_NAMES_RE,
+    (name) => RETIRED_API_NAMES[name]
   );
 }
 
 /** True when the file's change between baseRef's merge-base and HEAD touches
- * only spec-neutral content (Storybook chrome, retired API casing, comments,
+ * only spec-neutral content (Storybook chrome, retired API names, comments,
  * whitespace). */
 function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
   try {
@@ -232,7 +243,7 @@ function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
     });
     const headContent = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
     const normalize = (s: string) =>
-      stripComments(canonicalizeApiCasing(stripStorybookChrome(s)));
+      stripComments(canonicalizeRetiredApiNames(stripStorybookChrome(s)));
     return normalize(baseContent) === normalize(headContent);
   } catch {
     return false; // can't prove it — fall through to the strict check
@@ -596,7 +607,7 @@ for (const jsFile of modifiedJs) {
         pythonFile,
         changeType: "modified",
         status: "ok",
-        message: `Only spec-neutral content changed (Storybook chrome / Chart·Layer casing / comments) — no Python update needed`,
+        message: `Only spec-neutral content changed (Storybook chrome / retired API names / comments) — no Python update needed`,
       });
       console.log(`  OK (spec-neutral): ${jsFile}`);
       continue;

@@ -19,7 +19,7 @@ To start, duplicate this tab to follow along in the live editor!
 
 <!-- ```ts index.ts
 // prettier-ignore
-import { stackX, stackY, ConnectX, rect, ref, For, v, color, frame, polar, groupBy, sumBy, orderBy } from "gofish-graphics";
+import { stackX, stackY, ConnectX, rect, ref, map, v, color, frame, polar, groupBy, sumBy, orderBy } from "gofish-graphics";
 import { seafood } from "./dataset";
 
 const root = document.getElementById("app");
@@ -394,7 +394,7 @@ not tied to an argument like `h`, we'll need to pass a `key` field to the object
 ```ts
 stackX(
   { spacing: 8, sharedScale: true },
-  For(_.groupBy(seafood, "lake"), (lake, key) =>
+  map(_.groupBy(seafood, "lake"), (lake, key) =>
     rect({ key, w: 32, h: v(_.sumBy(lake, "count")), fill: gf.color.green[5] })
   )
 ).render(root, { w: 500, h: 300 });
@@ -556,10 +556,10 @@ gf.layer({ axes: true }, [
 frame([
   stackX(
     { spacing: 64, sharedScale: true },
-    For(_.groupBy(seafood, "lake"), (lake, key) =>
+    map(_.groupBy(seafood, "lake"), (lake, key) =>
       stackY(
         { key, spacing: 1 },
-        For(_.orderBy(lake, "count", "desc"), (d) =>
+        map(_.orderBy(lake, "count", "desc"), (d) =>
           rect({ w: 16, h: v(d.count), fill: v(d.species) }).name(
             `${d.lake}-${d.species}`
           )
@@ -567,10 +567,10 @@ frame([
       )
     )
   ),
-  For(_.groupBy(seafood, "species"), (items) =>
+  map(_.groupBy(seafood, "species"), (items) =>
     ConnectX(
       { opacity: 0.8 },
-      For(items, (d) => ref(`${d.lake}-${d.species}`))
+      map(items, (d) => ref(`${d.lake}-${d.species}`))
     )
   ),
 ]).render(root, { w: 500, h: 300 });

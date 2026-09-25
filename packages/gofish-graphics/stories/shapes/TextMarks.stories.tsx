@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { coord, ellipse, For, polar, stack, spread, text } from "../../src/lib";
+import { coord, ellipse, map, polar, stack, spread, text } from "../../src/lib";
 
 const meta: Meta = {
   title: "Shapes/Text Marks",
@@ -33,7 +33,7 @@ export const TextStack: StoryObj<Args> = {
 
     container.innerHTML = "";
     spread({ dir: "y", spacing: 18, alignment: "start" },
-      For(labels, (label) =>
+      map(labels, (label) =>
         text({
           text: label.text,
           fill: label.color,
@@ -59,7 +59,7 @@ export const TextStackMiddleAlignment: StoryObj<Args> = {
 
     container.innerHTML = "";
     spread({ dir: "y", spacing: 18, alignment: "middle" },
-      For(labels, (label) =>
+      map(labels, (label) =>
         text({
           text: label.text,
           fill: label.color,
@@ -85,7 +85,7 @@ export const TextStackHorizontal: StoryObj<Args> = {
 
     container.innerHTML = "";
     spread({ dir: "x", spacing: 18, alignment: "start" },
-      For(labels, (label) =>
+      map(labels, (label) =>
         text({
           text: label.text,
           fill: label.color,

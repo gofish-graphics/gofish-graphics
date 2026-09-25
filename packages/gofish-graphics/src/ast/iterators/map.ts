@@ -1,6 +1,6 @@
 import _, { Dictionary } from "lodash";
 
-export async function For<T, R>(
+export async function map<T, R>(
   data:
     | T[]
     | Record<string, T>

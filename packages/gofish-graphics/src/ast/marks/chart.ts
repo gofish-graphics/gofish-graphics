@@ -616,8 +616,8 @@ export function createRelationalMark<O extends Record<string, unknown>>(
 
     // Low-level combinator form: connect the given children directly.
     if (children !== undefined) {
-      // The children may be a PROMISE of an array rather than an array: `For`
-      // is async, so the low-level `line(opts, For(rows, ...))` form hands one
+      // The children may be a PROMISE of an array rather than an array: `map`
+      // is async, so the low-level `line(opts, map(rows, ...))` form hands one
       // in. `produce` awaits it internally; the group datum and the operand
       // tagging are read off the children too, so they have to await it as
       // well. The result stays a thenable carrying the node methods, which is

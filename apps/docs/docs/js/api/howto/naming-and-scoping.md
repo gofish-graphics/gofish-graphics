@@ -53,7 +53,7 @@ layer([
 
 ## Scope roots with createMark
 
-A _scope root_ is a node whose tagged descendants form a named scope. Every mark built with `createMark` is automatically a scope root — `createMark` calls `.scope()` on its output. Built-in marks (`rect`, `text`, …) are leaves so the scope is inert there; user-defined component-style marks (no `channels` arg, just a `(props) => Node` function) get hygienic naming for free:
+A _scope root_ is a node whose tagged descendants form a named scope. Every mark built with `createMark` is automatically a scope root. Built-in marks (`rect`, `text`, …) are leaves so the scope is inert there; user-defined component-style marks (no `channels` arg, just a `(props) => Node` function) get hygienic naming for free:
 
 ```ts
 import { createMark, createName } from "gofish-graphics";
@@ -76,12 +76,6 @@ export const stackSlot = createMark(({ variable, value }: StackSlotProps) => {
 - The mark's output (the `spread` here) is the scope root.
 - `valueTag` and `boxTag` are Tokens: they register in `stackSlot`'s scope under tags `"value"` and `"box"`.
 - `"variable"` (the left-side text) is a plain string: layer-local only, not path-addressable from outside.
-
-You can also call `.scope()` directly on any node if you're working without `createMark`:
-
-```ts no-check
-return frame(...).scope();
-```
 
 ## Paths
 

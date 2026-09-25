@@ -350,7 +350,7 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 /**
  * A mark with chainable .name and .label, plus a top-level .render() for
  * combinator-form callsites whose children carry their own data — typically
- * `For(...)` closures over pre-computed values, refs to other layers, or
+ * `map(...)` closures over pre-computed values, refs to other layers, or
  * already-resolved nodes. Calling `.render()` invokes the mark with
  * `undefined` data, so marks that read field accessors (e.g. `rect({h: "v"})`)
  * won't get any data — for those, wrap in a Chart instead:
