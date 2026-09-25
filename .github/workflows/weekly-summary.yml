@@ -59,14 +59,17 @@ jobs:
         id: prs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The maintainer's PRs (and bots') carry no Author line, so the
+          # summary only credits outside contributors.
+          MAINTAINER: joshpoll
         run: |
           # Half-open interval [lower, upper): a PR merged exactly on a boundary
           # belongs to one window only, never both.
           PRS=$(gh pr list \
             --state merged \
             --search "merged:>=${{ steps.dates.outputs.lower }} merged:<${{ steps.dates.outputs.upper }}" \
-            --json number,title,body,mergedAt,url \
-            --jq '.[] | "### PR #\(.number): \(.title)\n- **Merged:** \(.mergedAt[:10])\n- **URL:** \(.url)\n- **Description:** \(.body // "No description" | split("\n")[0:3] | join(" ") | .[0:300])\n"')
+            --json number,title,body,author,mergedAt,url \
+            --jq '.[] | "### PR #\(.number): \(.title)\(if .author.is_bot or .author.login == env.MAINTAINER then "" else "\n- **Author:** \(.author.login)" end)\n- **Merged:** \(.mergedAt[:10])\n- **URL:** \(.url)\n- **Description:** \(.body // "No description" | split("\n")[0:3] | join(" ") | .[0:300])\n"')
           if [ -z "$PRS" ]; then
             PRS="No PRs merged this week."
           fi
