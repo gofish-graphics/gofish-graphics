@@ -74,13 +74,14 @@ type Draft =
 type Leaf = { effects: TimedEffect[]; targets: GoFishNode[] };
 
 /** Read the timeline off `root`, solve it, and put every animated mark on
- *  one clock. A chart in which nothing enters is left as it is. */
+ *  one clock. A chart in which nothing enters is left as it is. Returns what
+ *  stops the clock, when there is one. */
 export function installBuildIn(
   root: GoFishNode,
   options: BuildClockOptions = {}
-): void {
+): (() => void) | undefined {
   const draft = clipOf(root, false);
-  if (draft === undefined) return;
+  if (draft === undefined) return undefined;
   const schedule = solveSchedule(timeLeaves(draft));
   const { total } = schedule;
   const clock = timer<number>({
@@ -107,6 +108,7 @@ export function installBuildIn(
       }
     }
   }
+  return clock.pause;
 }
 
 /** The longest value a field-valued duration reaches, which the shortcut

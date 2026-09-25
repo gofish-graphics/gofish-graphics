@@ -22,6 +22,7 @@
  */
 
 import type { GoFishNode } from "../_node";
+import type { RenderPass } from "../../interaction/renderTerminal";
 
 /** Options a terminal call carries through to the node method. */
 export type RenderOptions = Record<string, unknown>;
@@ -30,17 +31,19 @@ export type RenderOptions = Record<string, unknown>;
 export type ResolvedSurface = { node: GoFishNode; options: RenderOptions };
 
 /** A surface's resolution strategy. Called with `this` bound to the surface so
- *  a class can attach terminals to its prototype. */
+ *  a class can attach terminals to its prototype. `pass` is set when `render`
+ *  runs under the interactive render loop, which can re-render the chart. */
 export type ResolveForRender = (
   this: any,
-  options: RenderOptions
+  options: RenderOptions,
+  pass?: RenderPass
 ) => Promise<ResolvedSurface>;
 
 /** How `render` drives a resolve. The default resolves and renders directly;
  *  the chart builders pass `renderWithInteraction`, which runs the resolve
  *  under the ambient interactive context so reactive reads can register. */
 export type RenderStrategy = (
-  resolve: () => Promise<ResolvedSurface>,
+  resolve: (pass?: RenderPass) => Promise<ResolvedSurface>,
   container: any
 ) => Promise<HTMLElement>;
 
@@ -133,7 +136,8 @@ export function attachBuilderTerminals(
   for (const t of TERMINALS) {
     Object.defineProperty(target, t.name, {
       value: function (this: unknown, ...args: any[]) {
-        const resolveHere = () => resolve.call(this, args[t.optionsArg] ?? {});
+        const resolveHere = (pass?: RenderPass) =>
+          resolve.call(this, args[t.optionsArg] ?? {}, pass);
         return t.viaRenderStrategy
           ? render(resolveHere, args[0])
           : resolveHere().then(({ node, options }) =>

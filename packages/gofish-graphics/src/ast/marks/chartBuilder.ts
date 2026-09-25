@@ -17,7 +17,10 @@ import {
 } from "../datumProjection";
 // The shared interactive render terminal lives in the interaction layer
 // (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too.
-import { renderWithInteraction } from "../../interaction/renderTerminal";
+import {
+  renderWithInteraction,
+  type RenderPass,
+} from "../../interaction/renderTerminal";
 import {
   attachBuilderTerminals,
   type RenderOptions,
@@ -1271,13 +1274,23 @@ export class LayerBuilder extends RenderableBuilder {
  */
 async function resolveForRender(
   this: RenderableBuilder,
-  options: RenderOptions & BuildClockOptions
+  options: RenderOptions & BuildClockOptions,
+  pass?: RenderPass
 ) {
   const node = await this.resolve();
   // The build-in: marks with enter transitions enter once, on one clock for
   // the whole chart, which the render options `playing` / `at` can hold (see
-  // `src/animation/install.ts`). A chart with none is untouched.
-  installBuildIn(node, options);
+  // `src/animation/install.ts`). A chart with none is untouched. It plays on
+  // the chart's first render only: a re-render (an input changed) draws the
+  // marks at rest, which is the build's final frame, and the render loop
+  // stops the first render's clock.
+  // DECLARED SHORTCUT: marks that genuinely enter or exit on a re-render just
+  // appear or vanish. The right fix is a keyed enter/update/exit join against
+  // the previous render (#914).
+  if (!pass?.rerender) {
+    const stop = installBuildIn(node, options);
+    if (stop !== undefined) pass?.onCleanup(stop);
+  }
   const meta = this.renderMeta();
   return {
     node,

@@ -22,8 +22,18 @@ import "./interactionDomSetup";
 import * as GoFish from "../../dist/index.js";
 import { categoryBrands, everyYearBrands } from "../data/categoryBrands";
 
-const { animation, chart, field, rect, selectAll, spread, stack, time } =
-  GoFish as any;
+const {
+  animation,
+  chart,
+  derive,
+  field,
+  rect,
+  selectAll,
+  signal,
+  spread,
+  stack,
+  time,
+} = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -519,6 +529,49 @@ console.log("# the race: chained .transition() vs .layer(time.transition())");
     JSON.stringify(at.get(last)) === JSON.stringify(lastTarget.get(last)) &&
       localAt(36, 0.25) === 0,
     `${at.get(last)} vs ${lastTarget.get(last)}`
+  );
+}
+
+console.log("# a re-render lands on the build's final frame (#914)");
+{
+  // A signal read in derive() makes the chart re-render when it is set. The
+  // build plays on the first render only, so the re-render, held at t = 0
+  // like the first, draws every bar at rest.
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const s = signal(1);
+  await chart(alphabet.slice(0, 4))
+    .flow(
+      derive((rows: any) => (s(), rows)),
+      spread({ by: "letter", dir: "x" })
+    )
+    .mark(
+      rect({ h: "frequency" }).transition({
+        enter: animation.grow({ duration: 600 }),
+      })
+    )
+    .render(container, { w: 200, h: 120, axes: false, playing: false });
+  const heights = () =>
+    [...container.querySelectorAll("rect")].map((r) =>
+      Number(r.getAttribute("height"))
+    );
+  const settle = async () => {
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+  };
+  await settle();
+  const first = heights();
+  ok(
+    "the first render is held at the build's start",
+    first.length === 4 && first.every((h) => h === 0),
+    JSON.stringify(first)
+  );
+  s.set(2);
+  await settle();
+  const again = heights();
+  ok(
+    "the re-render draws every bar at rest",
+    again.length === 4 && again.every((h) => h > 0),
+    JSON.stringify(again)
   );
 }
 

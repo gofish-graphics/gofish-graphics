@@ -17,7 +17,10 @@
  *      (`hasWork()`), so `data-gf-id` hooks + delegated events light up; a
  *      resolve where nothing registered renders down the static path untouched;
  *   4. wire the rerender thunk so a pipeline-dependency change re-invokes the
- *      whole resolve → render into the SAME container.
+ *      whole resolve → render into the SAME container;
+ *   5. tell each resolve which render it is for (a {@link RenderPass}): the
+ *      first, or a re-render of the chart already on screen; and before a
+ *      re-render, stop what the previous render started (its build clock).
  *
  * Three callers share it: `ChartBuilder.render` and `LayerBuilder.render` (the
  * v3 chart pipeline) and the low-level `gofish()` terminal when handed a
@@ -36,19 +39,37 @@ import { InteractionRuntime } from "./runtime";
 import { withInteractiveResolve } from "./resolveContext";
 import type { GoFishNode } from "../ast/_node";
 
+/** What the render loop tells a resolve about the render it is for. */
+export type RenderPass = {
+  /** True for a re-render of a chart already on screen (a pipeline
+   *  dependency changed), false for its first render. */
+  rerender: boolean;
+  /** Stop something this render starts (a clock) before the next render. */
+  onCleanup(fn: () => void): void;
+};
+
 export async function renderWithInteraction<O extends Record<string, unknown>>(
-  resolveForRender: () => Promise<{
+  resolveForRender: (pass: RenderPass) => Promise<{
     node: GoFishNode;
     options: O;
   }>,
   container: HTMLElement
 ): Promise<HTMLElement> {
   const runtime = new InteractionRuntime();
+  let rerender = false;
+  let cleanups: (() => void)[] = [];
   const doRender = async (): Promise<HTMLElement> => {
+    for (const fn of cleanups) fn();
+    cleanups = [];
+    const pass: RenderPass = {
+      rerender,
+      onCleanup: (fn) => void cleanups.push(fn),
+    };
+    rerender = true;
     // Reset per-resolve dependency flags before reads re-register inputs.
     runtime.beginResolve();
     const { node, options } = await withInteractiveResolve(runtime, () =>
-      resolveForRender()
+      resolveForRender(pass)
     );
     if (runtime.hasWork()) {
       (options as Record<string, unknown>).interaction = runtime;

@@ -656,6 +656,12 @@ The charting libraries suggest two defaults. Skip the animation when the reader
 has asked for reduced motion (`prefers-reduced-motion`, as Recharts does), and
 skip it above a mark count (ECharts' `animationThreshold` is 2000).
 
+The prototype plays the build-in on a chart's first render only. When an input
+changes and the chart renders again, it draws the final frame and stops the
+first render's clock. This is a declared shortcut: a mark that really enters or
+leaves on a re-render just appears or vanishes. The right fix is a keyed
+enter/update/exit join against the previous render (#914).
+
 ### 4.8 Axes, labels and other chrome
 
 - Keynote and PowerPoint can draw the chart background (the axes) first and

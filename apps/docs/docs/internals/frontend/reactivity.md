@@ -104,7 +104,11 @@ run under the ambient context. It is regime- and pipeline-agnostic: given a
 it creates a fresh `InteractionRuntime`, calls `beginResolve()`, evaluates the
 thunk under `withInteractiveResolve`, threads `options.interaction = runtime`
 **iff** `hasWork()`, and wires `setRerender` to re-invoke the whole resolve into
-the same container. Three callers share it:
+the same container. It hands each resolve a `RenderPass` that says whether this
+is the chart's first render or a re-render, and lets the resolve register a
+cleanup that runs before the next render. The chart pipeline uses it to play the
+build-in on the first render only and to stop that render's build clock (a
+declared shortcut, #914). Three callers share it:
 
 - `ChartBuilder.render` and `LayerBuilder.render` — the v3 chart pipeline. Both
   get `render` from the shared terminal registry (`marks/terminals.ts`) with
