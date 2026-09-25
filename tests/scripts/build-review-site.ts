@@ -128,10 +128,11 @@ const meta = {
   sha: process.env.REVIEW_SHA ?? "unknown",
   /** The orphan branch that receives accepted snapshots. */
   snapshotBranch: `snapshots/${codeBranch}`,
-  /** Workflow run id, used by the commit endpoint to trigger rerun-failed-jobs
-   *  after Commit Accepted. That re-runs only the cheap `visual-test` compare
-   *  job against the newly accepted baselines; it reuses the JS capture that
-   *  the first attempt uploaded as an artifact. */
+  /** Workflow run id. After Commit Accepted, the commit endpoint sends it in a
+   *  repository_dispatch; the rerun-visual-tests workflow waits for the run to
+   *  finish and re-runs its failed jobs. That re-runs only the cheap
+   *  `visual-test` compare job against the newly accepted baselines; it reuses
+   *  the JS capture that the first attempt uploaded as an artifact. */
   runId: process.env.REVIEW_RUN_ID ?? "",
 };
 
