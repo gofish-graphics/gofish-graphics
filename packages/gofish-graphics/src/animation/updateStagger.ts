@@ -22,16 +22,51 @@
 import { GoFishNode } from "../ast/_node";
 import { locate } from "../interpolate";
 import { groupEntries, rowsOf } from "./grouping";
-import { solveSchedule, wavesOf, type Arrangement } from "./schedule";
-import { nodeTransition } from "./transition";
+import { solveSchedule, type Arrangement, type Schedule } from "./schedule";
+import { nodeTransition, type ArrangementSpec } from "./transition";
 
-/** Where one keyframe mark sits in its operator's update arrangement. */
-export type UpdateSlot = {
+/** One operator node's staggered update: its arrangement, how many groups
+ *  its children fall into, and the time layout of a stretch of each length,
+ *  solved once and shared by every key that moves in it. */
+type Stagger = {
   arrangement: Arrangement;
-  /** Its wave: the groups the stagger starts together, in start order. */
-  wave: number;
-  waves: number;
+  groups: number;
+  layouts: Map<number, Schedule<number>>;
 };
+
+/** Where one keyframe mark sits in its operator's update arrangement: the
+ *  stagger, and which of its groups holds the mark. */
+export type UpdateSlot = { stagger: Stagger; group: number };
+
+/** Each staggering operator node's children, by the slot each one holds. */
+const slotsByOperator = new WeakMap<GoFishNode, Map<GoFishNode, UpdateSlot>>();
+
+/** The update slots of an operator node's children, grouped once. */
+function slotsOf(
+  node: GoFishNode,
+  spec: ArrangementSpec
+): Map<GoFishNode, UpdateSlot> {
+  let slots = slotsByOperator.get(node);
+  if (slots === undefined) {
+    const kids = node.children.filter(
+      (c): c is GoFishNode => c instanceof GoFishNode
+    );
+    const { by, ...arrangement } = spec;
+    const groups = [...groupEntries(kids, rowsOf, by).values()];
+    const stagger: Stagger = {
+      arrangement,
+      groups: groups.length,
+      layouts: new Map(),
+    };
+    slots = new Map(
+      groups.flatMap((members, group) =>
+        members.map((kid) => [kid, { stagger, group }] as const)
+      )
+    );
+    slotsByOperator.set(node, slots);
+  }
+  return slots;
+}
 
 /** The update slot of a keyframe mark: the nearest operator above it whose
  *  `.transition({ update })` arranges its children, and which of those
@@ -40,29 +75,33 @@ export function updateSlotOf(mark: GoFishNode): UpdateSlot | undefined {
   for (let n: GoFishNode = mark; n.parent instanceof GoFishNode; ) {
     const parent: GoFishNode = n.parent;
     const spec = nodeTransition(parent)?.update;
-    if (spec !== undefined) {
-      const kids = parent.children.filter(
-        (c): c is GoFishNode => c instanceof GoFishNode
-      );
-      const groups = [...groupEntries(kids, rowsOf, spec.by).values()];
-      const group = groups.findIndex((g) => g.includes(n));
-      const { by: _by, ...arrangement } = spec;
-      const from =
-        arrangement.kind === "stagger" ? arrangement.from : undefined;
-      const waves = wavesOf(groups.length, from ?? "first");
-      return {
-        // The waves are already in start order.
-        arrangement:
-          arrangement.kind === "stagger"
-            ? { ...arrangement, from: "first" }
-            : arrangement,
-        wave: waves.findIndex((w) => w.includes(group)),
-        waves: waves.length,
-      };
-    }
+    if (spec !== undefined) return slotsOf(parent, spec).get(n);
     n = parent;
   }
   return undefined;
+}
+
+/** When the key in `slot` moves, as shares of a stretch that lasts `move`
+ *  ms: its fitted start and length. `undefined` for a stretch with no time
+ *  in it. */
+function fitOf(
+  { stagger, group }: UpdateSlot,
+  move: number
+): { start: number; length: number } | undefined {
+  let layout = stagger.layouts.get(move);
+  if (layout === undefined) {
+    layout = solveSchedule({
+      kind: "group",
+      arrangement: stagger.arrangement,
+      groups: Array.from({ length: stagger.groups }, (_, g) => [
+        { kind: "leaf" as const, duration: move, payload: g },
+      ]),
+    });
+    stagger.layouts.set(move, layout);
+  }
+  const { items, total } = layout;
+  if (!(total > 0)) return undefined;
+  return { start: items[group].start / total, length: move / total };
 }
 
 /**
@@ -86,38 +125,15 @@ export function updateWarp(
     return (t) => t;
   }
   const slotAt = new Map(knots.map((k, i) => [k, slots[i]]));
-  /** Per stretch: the key's fitted start and length, as shares of it. */
-  const fitted = new Map<number, { start: number; length: number } | null>();
-  const fitOf = (i: number) => {
-    let fit = fitted.get(i);
-    if (fit !== undefined) return fit;
+  return (t) => {
+    if (!(t > frames[0] && t < frames[frames.length - 1])) return t;
+    const { i, u } = locate(frames, t);
     const [a, b] = [frames[i], frames[i + 1]];
     // The order the stretch ends in: the key's slot at `b`, or at `a` for a
     // key that leaves.
     const slot = slotAt.get(b) ?? slotAt.get(a);
-    if (slot === undefined) {
-      fit = null;
-    } else {
-      const move = (b - a) * msPerUnit();
-      const { items, total } = solveSchedule({
-        kind: "group",
-        arrangement: slot.arrangement,
-        groups: Array.from({ length: slot.waves }, (_, w) => [
-          { kind: "leaf" as const, duration: move, payload: w },
-        ]),
-      });
-      const start = items.find((it) => it.payload === slot.wave)!.start;
-      fit = total > 0 ? { start: start / total, length: move / total } : null;
-    }
-    fitted.set(i, fit);
-    return fit;
-  };
-  return (t) => {
-    if (!(t > frames[0] && t < frames[frames.length - 1])) return t;
-    const { i, u } = locate(frames, t);
-    const fit = fitOf(i);
-    if (fit === null) return t;
-    const [a, b] = [frames[i], frames[i + 1]];
+    const fit = slot && fitOf(slot, (b - a) * msPerUnit());
+    if (fit === undefined) return t;
     const local =
       fit.length > 0
         ? Math.min(1, Math.max(0, (u - fit.start) / fit.length))

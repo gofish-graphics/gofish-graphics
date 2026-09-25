@@ -328,7 +328,7 @@ export const transition = createRelationalMark<TransitionOptions>(
         sequence,
         method: resolveMethod(o.curve),
         ease: o.ease,
-        msPerUnit: sequence !== undefined ? tier?.msPerUnit : undefined,
+        msPerUnit: tier?.msPerUnit,
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth,
