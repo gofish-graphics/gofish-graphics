@@ -145,9 +145,6 @@ export function relateEnv(layer: GoFishNode): RelateEnv {
   const env: RelateEnv = {};
   for (const n of visibleNodes(layer)) {
     if (n === layer) continue;
-    // A drawing clause of an earlier `.relate()` call is replaced by this one.
-    if (n instanceof GoFishNode && n._relateClause && n.parent === layer)
-      continue;
     const name = childNameKey(n);
     if (name !== undefined && !(name in env))
       env[name] = new RelateOperand(name);

@@ -1761,14 +1761,15 @@ export class GoFishNode {
           `Wrap the nodes to relate in a layer([...]) and relate that.`
       );
     }
+    // A later call replaces the drawing clauses of an earlier one.
+    this.children = this.children.filter(
+      (c) => !(c instanceof GoFishNode && c._relateClause)
+    );
     const env = relateEnv(this);
     const { constraints, terms } = await splitRelateClauses(fn(env));
     validateOperands(constraints, env);
     this.constraints = constraints;
     const nodes = await reifyRelateTerms(terms);
-    this.children = this.children.filter(
-      (c) => !(c instanceof GoFishNode && c._relateClause)
-    );
     for (const node of nodes) {
       node.parent = this;
       this.children.push(node);
