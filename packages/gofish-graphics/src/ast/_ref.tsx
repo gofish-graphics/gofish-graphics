@@ -16,7 +16,7 @@ import {
   translateForAnchor,
 } from "./dims";
 import type { AxisScale } from "./domain";
-import { GoFishNode } from "./_node";
+import { GoFishNode, isRelateClause } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
 import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
@@ -376,7 +376,7 @@ export class GoFishRef {
 export function relatingLayerOf(node: GoFishAST): GoFishNode | undefined {
   let cur: GoFishAST | undefined = node;
   while (cur) {
-    if (cur instanceof GoFishNode && cur._relateClause) return cur.parent;
+    if (isRelateClause(cur)) return cur.parent;
     cur = cur.parent;
   }
   return undefined;

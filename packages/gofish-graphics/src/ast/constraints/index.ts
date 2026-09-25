@@ -37,7 +37,7 @@ import {
   type RigidAttachment,
 } from "./placementSolver";
 import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
-import { RelateOperand, type RelateEnv } from "./relate";
+import { RelateOperand, directChildIndex, type RelateEnv } from "./relate";
 
 export type {
   Axis,
@@ -78,6 +78,7 @@ export { BBox } from "./bbox";
 export {
   RelateOperand,
   scheduleRelate,
+  relateScheduleForLayout,
   type RelateEnv,
   type RelateClause,
   type RelateFn,
@@ -208,10 +209,7 @@ export function resolveConstraintOperands(
         ref.name,
         `Constraint.${c.type} operand`
       );
-      // Walk up to the layer's direct child that contains `node`.
-      let cur: GoFishAST | undefined = node;
-      while (cur && cur.parent !== layer) cur = cur.parent;
-      const child = cur ? layer.children.indexOf(cur) : -1;
+      const child = directChildIndex(layer, node);
       if (child < 0) {
         throw new Error(
           `Constraint.${c.type}: operand "${ref.name}" is not inside the ` +
@@ -220,7 +218,11 @@ export function resolveConstraintOperands(
             `contains every operand.`
         );
       }
-      out.set(ref.name, { node, child, direct: cur === node });
+      out.set(ref.name, {
+        node,
+        child,
+        direct: layer.children[child] === node,
+      });
     }
   }
   return out;

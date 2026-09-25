@@ -202,12 +202,14 @@ throw: the target of `"span"` or `"size"` must be a direct child.
 A clause that is not a constraint draws: an operator or mark such as `arrow`,
 `background`, a relational `line`, or an open term that mixes operands with
 fresh marks, e.g., `spread({ dir: "y" }, [bar, text(...)])`.
-`splitRelateClauses` (`constraints/relate.ts`) awaits and flattens the
-callback's result the way an operator treats its children, and splits it into
-constraints (plain objects built by a `Constraint.*` factory) and terms.
-`reifyRelateTerms` resolves each term to its node, and `GoFishNode.relate`
-appends those nodes to the layer's children, each flagged `_relateClause`
-with its position in the list. A later `.relate()` call replaces the clauses
+`resolveRelateClauses` (`constraints/relate.ts`) awaits and flattens the
+callback's result the way an operator treats its children (with the shared
+`flattenAndAwaitPromises`; it also awaits any thenable and drops `false`, and
+it skips the awaiting when the result holds no promise). It splits the result
+into constraints (plain objects built by a `Constraint.*` factory) and terms,
+checks the constraints' operands, and resolves each term to its node, one at a
+time. `GoFishNode.relate` appends those nodes to the layer's children, each
+flagged `_relateClause` with its position in the list. A later `.relate()` call replaces the clauses
 of an earlier one. `.relate()` is a layer method: it throws on any other node,
 because only `layer.tsx` knows how to schedule clauses.
 
@@ -234,7 +236,10 @@ at itself, two clauses that read each other, or a constraint that moves a
 clause which reads the nodes that constraint places. `GoFishNode.resolveNames`
 runs the check as soon as the refs are resolved. It cannot wait for layout,
 because the space pass would recurse forever first (a ref proxies its target's
-space, and a cyclic target contains the ref).
+space, and a cyclic target contains the ref). `resolveNames` keeps the
+schedule it computed on the layer, and layout reuses it while the layer has
+the same children and constraints (`relateScheduleForLayout`); a pass that
+rewrites the tree runs `resolveNames` again, which recomputes it.
 
 A clause paints after the plain children, in clause order. The default
 `zBelow` that puts a relational connector under its operands is not applied to

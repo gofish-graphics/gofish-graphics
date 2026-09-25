@@ -43,7 +43,7 @@ import {
   gridCellSizeByName,
   gridTracksFromSizes,
   Constraint,
-  scheduleRelate,
+  relateScheduleForLayout,
   type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
@@ -573,12 +573,7 @@ export const layer = createNodeOperatorSequential(
           // solve: a clause that reads positions lays out after the solve
           // that writes them (#878). Plain children lay out before it, as
           // always.
-          const relateOrder = scheduleRelate(node, operands);
-          // (`instanceof` first: a token `ref` proxy answers every property.)
-          const isClause = (i: number) => {
-            const c = node.children[i];
-            return c instanceof GoFishNode && c._relateClause !== undefined;
-          };
+          const relateOrder = relateScheduleForLayout(node, operands);
 
           const layoutChild = (i: number) => {
             const child = children[i];
@@ -627,7 +622,7 @@ export const layer = createNodeOperatorSequential(
           };
 
           for (const i of layoutPlan.layoutOrder) {
-            if (!isClause(i)) layoutChild(i);
+            if (!relateOrder.clauses.has(i)) layoutChild(i);
           }
           for (const i of relateOrder.beforeSolve) layoutChild(i);
 

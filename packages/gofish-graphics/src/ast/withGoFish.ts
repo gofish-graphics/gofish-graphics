@@ -190,7 +190,7 @@ export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
  * Always returns a flat array.
  * ChartBuilder instances are automatically resolved.
  */
-async function flattenAndAwaitPromises<T>(
+export async function flattenAndAwaitPromises<T>(
   value:
     | T
     | Promise<T>

@@ -68,16 +68,12 @@ import type { TokenContext } from "./tokenContext";
 import type { FlipScope } from "./_displayObject";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
+import { relateEnv, resolveConstraintOperands } from "./constraints";
 import {
-  relateEnv,
-  resolveConstraintOperands,
-  scheduleRelate,
-  validateOperands,
-} from "./constraints";
-import {
-  reifyRelateTerms,
-  splitRelateClauses,
+  computeRelateSchedule,
+  resolveRelateClauses,
   type RelateFn,
+  type RelateSchedule,
 } from "./constraints/relate";
 import {
   BBox,
@@ -366,6 +362,17 @@ export class GoFishNode {
    *  `ref` is legal only inside such a clause, and the layer schedules the
    *  clause after the clauses that place what it reads. */
   public _relateClause?: number;
+  /** Set by `.relate()`: whether it added drawing clauses to this layer, so
+   *  a layer without any skips looking for them in `resolveNames`. */
+  public _hasRelateClauses: boolean = false;
+  /** This layer's relate schedule as `resolveNames` last computed it, with
+   *  the children and constraints it was computed from (see
+   *  `relateScheduleForLayout` in `constraints/relate.ts`). */
+  public _relateSchedule?: {
+    children: GoFishAST[];
+    constraints: ConstraintSpec[];
+    schedule: RelateSchedule;
+  };
   public _scopeMap?: Map<string, GoFishNode>;
   public parent?: GoFishNode;
   public datum?: any;
@@ -711,8 +718,8 @@ export class GoFishNode {
     // With every ref resolved, check the relate clauses' dependency order
     // now: a cycle would otherwise recurse forever in the space pass (a ref
     // proxies its target's space, and a cyclic target contains the ref).
-    if (this.children.some((c) => c instanceof GoFishNode && c._relateClause)) {
-      scheduleRelate(this, resolveConstraintOperands(this));
+    if (this._hasRelateClauses && this.children.some(isRelateClause)) {
+      computeRelateSchedule(this, resolveConstraintOperands(this));
     }
   }
 
@@ -1762,18 +1769,15 @@ export class GoFishNode {
       );
     }
     // A later call replaces the drawing clauses of an earlier one.
-    this.children = this.children.filter(
-      (c) => !(c instanceof GoFishNode && c._relateClause)
-    );
+    this.children = this.children.filter((c) => !isRelateClause(c));
     const env = relateEnv(this);
-    const { constraints, terms } = await splitRelateClauses(fn(env));
-    validateOperands(constraints, env);
+    const { constraints, nodes } = await resolveRelateClauses(fn(env), env);
     this.constraints = constraints;
-    const nodes = await reifyRelateTerms(terms);
     for (const node of nodes) {
       node.parent = this;
       this.children.push(node);
     }
+    this._hasRelateClauses = nodes.length > 0;
     return this;
   }
 
@@ -1789,6 +1793,12 @@ export class GoFishNode {
   public getZOrder(): number | undefined {
     return this._zOrder;
   }
+}
+
+/** Whether `c` is a drawing clause of some layer's `.relate()`. (`instanceof`
+ *  first: a token `ref` proxy answers every property.) */
+export function isRelateClause(c: GoFishAST | undefined): c is GoFishNode {
+  return c instanceof GoFishNode && c._relateClause !== undefined;
 }
 
 const isGoFishNode = (node: GoFishNode | GoFishAST): node is GoFishNode => {
