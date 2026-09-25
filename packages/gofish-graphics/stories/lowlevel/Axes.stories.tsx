@@ -4,7 +4,6 @@ import {
   Constraint,
   createName,
   layer,
-  Layer,
   datum,
   rect,
   ref,
@@ -116,7 +115,7 @@ export const ContinuousYAxis: StoryObj<Args> = {
         ]
       ).name(`t${i}`);
 
-    Layer([
+    layer([
       // bars wrapped in a spread so the outer constraints address them as one
       spread({ dir: "x", alignment: "start" }, bars()).name("bars"),
       // axis line spanning the plot height (= the data range mapped to pixels)
@@ -179,7 +178,7 @@ export const NonUniformYAxis: StoryObj<Args> = {
         ]
       ).name(`t${i}`);
 
-    Layer([
+    layer([
       // axis line spanning the plot height (the [0, 100] domain in pixels)
       rect({ w: 1, h: args.h, fill: "#999" }).name("axis"),
       ...tickValues.map(tick),

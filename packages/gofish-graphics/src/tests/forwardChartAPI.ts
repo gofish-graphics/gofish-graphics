@@ -1,7 +1,7 @@
 import { mix } from "spectral.js";
 import { chart } from "../lib";
 import { seafood } from "../data/catch";
-import { color6_old, For, groupBy, rect, spreadX, stackX, stackY, v } from "../lib";
+import { color6_old, map, groupBy, rect, spreadX, stackX, stackY, v } from "../lib";
 import _ from "lodash";
 
 // export const testIcicleForwardChartAPI = () => {
@@ -34,7 +34,7 @@ pipe(
   ])
 );
 
-/* export const testIcicleAPIv2 = () =>
+/* export const testIcicleWithFor = () =>
   stackX({ spacing: 0, alignment: "middle" }, [
     rect({
       w: 40,
@@ -43,12 +43,12 @@ pipe(
     }),
     stackY(
       { spacing: 0, alignment: "middle" },
-      For(groupBy(titanic, "class"), (items, cls) =>
+      map(groupBy(titanic, "class"), (items, cls) =>
         stackX({ h: _(items).sumBy("count") / 10, spacing: 0, alignment: "start" }, [
           rect({ w: 40, fill: classColor[cls as keyof typeof classColor] }),
           stackY(
             { spacing: 0, alignment: "middle" },
-            For(groupBy(items, "sex"), (items, sex) =>
+            map(groupBy(items, "sex"), (items, sex) =>
               stackX({ spacing: 0, alignment: "middle" }, [
                 rect({
                   w: 40,
@@ -61,7 +61,7 @@ pipe(
                     spacing: 0,
                     alignment: "middle",
                   },
-                  For(groupBy(items, "survived"), (survivedItems, survived) => {
+                  map(groupBy(items, "survived"), (survivedItems, survived) => {
                     return rect({
                       // w: _(items).sumBy("count"),
                       // w: _(survivedItems).sumBy("count") / 10,
@@ -90,7 +90,7 @@ pipe(
 export const chartRectBF = () =>
   spreadX(
     { spacing: 2, sharedScale: true },
-    For(groupBy(seafood, "species"), (d) =>
+    map(groupBy(seafood, "species"), (d) =>
       rect({ w: 32, h: v(_.sumBy(d, "count")), fill: v(d[0].species) })
     )
   );

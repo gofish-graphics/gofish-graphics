@@ -106,11 +106,10 @@ relates two named siblings. A ref reaches a named node from somewhere else in
 the picture. Both need names that mean something specific, and a component
 boundary is what makes a name specific.
 
-One practical seam is worth knowing. The body of a `createMark` function has to
-return a node, so it uses the capitalized operators `Layer`, `Spread` and
-`Stack`. The lowercase `layer`, `spread` and `stack` are the chart-side
-spelling and return a mark. Shapes like `rect` and `text` have one spelling and
-work in both places.
+Every operator has one spelling that works in both places. `spread` and
+`stack` go inside a chart's `.flow(...)`, and they, like `layer`, also take an
+explicit list of children, which is how a `createMark` body builds its
+picture. Shapes like `rect` and `text` work the same way.
 
 ## Neither is a layer on top of the other
 

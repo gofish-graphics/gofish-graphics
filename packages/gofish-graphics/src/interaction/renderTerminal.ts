@@ -23,7 +23,7 @@
  *      re-render, stop what the previous render started (its build clock).
  *
  * Three callers share it: `ChartBuilder.render` and `LayerBuilder.render` (the
- * v3 chart pipeline) and the low-level `gofish()` terminal when handed a
+ * fluent chart pipeline) and the low-level `gofish()` terminal when handed a
  * COMPONENT THUNK (`() => node`) — a raw shape/operator composition with no
  * `chart()` builder. The thunk is what lets a component re-run its spec: a raw
  * node is built once and cannot re-evaluate, so component-level pipeline

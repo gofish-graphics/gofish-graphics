@@ -123,17 +123,35 @@ function isExportExempt(
 // Spec-neutral change detection.
 //
 // A modified JS story whose spec-relevant content is unchanged does not
-// require a Python update. Two kinds of difference are spec-neutral:
+// require a Python update. These kinds of difference are spec-neutral:
 //
 //   - **Storybook chrome** — story-level `title`, `tags`, and `parameters`
 //     (e.g. the gallery annotation) are presentation metadata. Python stories
 //     key off the file path and `story_*` function name, not these.
-//   - **API-alias casing** — the v3 fluent surface is lowercase-only
-//     (`chart`, `layer`); the capitalized aliases `Chart` / `Layer` resolve to
-//     the same factories (and `Chart` was removed outright). A pure
-//     `Chart`→`chart` / `Layer`→`layer` rename in a JS story has no Python
-//     counterpart, since Python was always lowercase. Canonicalizing the case
-//     before comparing folds those renames out.
+//   - **Retired API names** — the public surface is lowercase-only (#146,
+//     #416): the capitalized spellings (`Chart`, `Layer`, `Spread`, `StackY`,
+//     `Frame`, ...) were aliases or node-level forms of the lowercase
+//     operators and are no longer exported, and `For` was renamed to `map`.
+//     A pure `Layer`→`layer` / `For`→`map` rename in a JS story has no Python
+//     counterpart, since Python was always lowercase (and uses list
+//     comprehensions where JS maps). Rewriting each retired name to its
+//     current name before comparing folds such renames out.
+//   - **Import declarations** — a Python story mirrors the spec, not the JS
+//     module's imports, which Python spells its own way (`from gofish import
+//     ...`). Adding, removing, or reordering an import changes no spec: if a
+//     spec starts using a new name, the spec body changes too. Dropping whole
+//     `ImportDeclaration`s from the parsed file handles multi-line and
+//     `import type` forms alike.
+//   - **Import aliases** — `import { mask as maskOp }` binds a JS-local name
+//     for an exported one, so renaming the alias (or dropping it) changes no
+//     spec. Before the imports are dropped, every aliased identifier in the
+//     body is renamed back to its exported name; the retired-name fold then
+//     canonicalizes it (`MaskOp` → `Mask` → `mask`). Default and namespace
+//     imports have no exported name to resolve to and are left alone.
+//   - **Type annotations** — TypeScript types have no Python counterpart.
+//     `ts.transpileModule` erases them (annotations, `as` casts, type
+//     aliases, interfaces) after the imports are gone, so it cannot elide or
+//     re-emit any import.
 //   - **Comments and whitespace** — a Python story mirrors the spec, not the
 //     prose around it, so a comment-only edit needs no Python change.
 //     Tokenizing with the TypeScript scanner drops comments without touching
@@ -161,6 +179,74 @@ function stripStorybookChrome(source: string): string {
   return out.join("\n");
 }
 
+/** The source with every top-level import declaration removed. */
+function stripImports(source: string): string {
+  const file = ts.createSourceFile(
+    "story.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    ts.ScriptKind.TSX
+  );
+  let out = "";
+  let pos = 0;
+  for (const stmt of file.statements) {
+    if (!ts.isImportDeclaration(stmt)) continue;
+    out += source.slice(pos, stmt.getStart(file));
+    pos = stmt.getEnd();
+  }
+  return out + source.slice(pos);
+}
+
+/** The source with each `{ exported as local }` import alias renamed back to
+ * `exported` wherever `local` appears as an identifier (strings untouched). */
+function resolveImportAliases(source: string): string {
+  const file = ts.createSourceFile(
+    "story.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    ts.ScriptKind.TSX
+  );
+  const aliases = new Map<string, string>();
+  for (const stmt of file.statements) {
+    const bindings = ts.isImportDeclaration(stmt)
+      ? stmt.importClause?.namedBindings
+      : undefined;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const el of bindings.elements) {
+      if (el.propertyName) aliases.set(el.name.text, el.propertyName.text);
+    }
+  }
+  if (aliases.size === 0) return source;
+  const edits: [start: number, end: number, name: string][] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node)) return;
+    if (ts.isIdentifier(node) && aliases.has(node.text)) {
+      edits.push([node.getStart(file), node.getEnd(), aliases.get(node.text)!]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  let out = source;
+  for (const [start, end, name] of edits.reverse()) {
+    out = out.slice(0, start) + name + out.slice(end);
+  }
+  return out;
+}
+
+/** The source with its TypeScript types erased (JSX left as written). */
+function eraseTypes(source: string): string {
+  return ts.transpileModule(source, {
+    fileName: "story.tsx",
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      jsx: ts.JsxEmit.Preserve,
+    },
+  }).outputText;
+}
+
 /** The source as a whitespace-separated token stream, comments dropped. */
 function stripComments(source: string): string {
   const scanner = ts.createScanner(
@@ -176,14 +262,58 @@ function stripComments(source: string): string {
   return tokens.join(" ");
 }
 
-/** Fold the lowercased v3 aliases so a pure casing rename is spec-neutral. */
-function canonicalizeApiCasing(source: string): string {
-  return source.replace(/\bChart\b/g, "chart").replace(/\bLayer\b/g, "layer");
+/** The retired capitalized API spellings (#146, #416); each is now its lowercase form. */
+const RETIRED_CAPITALIZED_NAMES = [
+  "Chart",
+  "Layer",
+  "Spread",
+  "Stack",
+  "Scatter",
+  "Treemap",
+  "Table",
+  "Intersect",
+  "Exclude",
+  "Subtract",
+  "Paint",
+  "Mask",
+  "StackX",
+  "StackY",
+  "SpreadX",
+  "SpreadY",
+  "Enclose",
+  "Frame",
+  "Position",
+  "Arrow",
+  "Cut",
+  "Offset",
+  "GoFish",
+];
+/** Every retired public API name, mapped to the name that replaced it. */
+const RETIRED_API_NAMES: Record<string, string> = {
+  ...Object.fromEntries(
+    RETIRED_CAPITALIZED_NAMES.map((name) => [
+      name,
+      name[0].toLowerCase() + name.slice(1),
+    ])
+  ),
+  For: "map",
+};
+const RETIRED_API_NAMES_RE = new RegExp(
+  `\\b(${Object.keys(RETIRED_API_NAMES).join("|")})\\b`,
+  "g"
+);
+
+/** Rewrite retired API names to their current names so a pure rename is spec-neutral. */
+function canonicalizeRetiredApiNames(source: string): string {
+  return source.replace(
+    RETIRED_API_NAMES_RE,
+    (name) => RETIRED_API_NAMES[name]
+  );
 }
 
 /** True when the file's change between baseRef's merge-base and HEAD touches
- * only spec-neutral content (Storybook chrome, `Chart`/`Layer` casing,
- * comments, whitespace). */
+ * only spec-neutral content (Storybook chrome, retired API names, imports,
+ * import aliases, type annotations, comments, whitespace). */
 function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
   try {
     const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {
@@ -197,7 +327,13 @@ function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
     });
     const headContent = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
     const normalize = (s: string) =>
-      stripComments(canonicalizeApiCasing(stripStorybookChrome(s)));
+      stripComments(
+        eraseTypes(
+          canonicalizeRetiredApiNames(
+            stripStorybookChrome(stripImports(resolveImportAliases(s)))
+          )
+        )
+      );
     return normalize(baseContent) === normalize(headContent);
   } catch {
     return false; // can't prove it — fall through to the strict check
@@ -561,7 +697,7 @@ for (const jsFile of modifiedJs) {
         pythonFile,
         changeType: "modified",
         status: "ok",
-        message: `Only spec-neutral content changed (Storybook chrome / Chart·Layer casing / comments) — no Python update needed`,
+        message: `Only spec-neutral content changed (Storybook chrome / retired API names / comments) — no Python update needed`,
       });
       console.log(`  OK (spec-neutral): ${jsFile}`);
       continue;

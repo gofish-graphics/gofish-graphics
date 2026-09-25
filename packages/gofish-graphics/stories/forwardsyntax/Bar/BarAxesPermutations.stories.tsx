@@ -5,7 +5,7 @@ import { chart, spread, rect } from "../../../src/lib";
 import type { AxesOptions, AxisOptions } from "../../../src/ast/gofish";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Bar/Axes Permutations",
+  title: "Forward Syntax/Bar/Axes Permutations",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

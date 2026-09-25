@@ -7,7 +7,7 @@ import { chart, spread, scatter, circle, rect, layer } from "../../src/lib";
 // overall size is computed during layout rather than propagating NaN. Each
 // story omits both dimensions; the caption notes the expected computed extent.
 const meta: Meta = {
-  title: "Forward Syntax V3/Inferred Size",
+  title: "Forward Syntax/Inferred Size",
 };
 export default meta;
 

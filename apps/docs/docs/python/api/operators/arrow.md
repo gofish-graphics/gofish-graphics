@@ -38,7 +38,7 @@ arrow(children, *,
       padStart=None, padEnd=None, flip=None, straights=None) -> Mark
 ```
 
-`Arrow` is the capitalized alias for the same factory. The children are usually
+The children are usually
 two [`ref(...)`](/python/api/selection/ref) calls (or datum-level sub-refs)
 pointing at named elements placed by an earlier tier: the arrow runs **from the
 first child to the second**. Fewer than two children renders nothing.

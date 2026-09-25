@@ -4,7 +4,7 @@ import { circle } from "../../../src/lib";
 import { barChart } from "../../../src/charts/bar";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Bar/Template",
+  title: "Forward Syntax/Bar/Template",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

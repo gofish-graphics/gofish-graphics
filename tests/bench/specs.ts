@@ -1,7 +1,7 @@
 /**
  * Synthetic micro-benchmark spec generators.
  *
- * Each family is a function of a single scale parameter `n` that builds a v3
+ * Each family is a function of a single scale parameter `n` that builds a
  * `chart(...)` and returns a `BenchSpec` whose `render` paints it into a
  * container. The bench runner (`tests/harness/bench-runner.ts`) sweeps `n` over
  * a family and records the per-pass timings reported by the engine's perf

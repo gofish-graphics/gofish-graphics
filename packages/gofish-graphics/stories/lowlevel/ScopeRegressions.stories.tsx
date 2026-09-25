@@ -7,7 +7,7 @@ import {
   layer,
   enclose,
   Constraint,
-  For,
+  map,
   v,
 } from "../../src/lib";
 import { color6 } from "../../src/color";
@@ -25,7 +25,7 @@ export default meta;
 const bars = () =>
   spreadX(
     { spacing: 10, alignment: "start", h: 160 },
-    For([40, 90, 60, 80, 55], (b, i) =>
+    map([40, 90, 60, 80, 55], (b, i) =>
       rect({ key: `b${i}`, w: 20, h: v(b), fill: color6[0] })
     )
   );
@@ -34,10 +34,10 @@ const bars = () =>
 const heat = () =>
   spreadY(
     { spacing: 3, alignment: "start" },
-    For(["A", "B", "C"], (row) =>
+    map(["A", "B", "C"], (row) =>
       spreadX(
         { key: row, spacing: 3, alignment: "middle" },
-        For([0, 1, 2, 3], (c) =>
+        map([0, 1, 2, 3], (c) =>
           rect({ w: 20, h: 20, fill: `rgba(189,0,38,${0.2 + 0.2 * c})` })
         )
       )

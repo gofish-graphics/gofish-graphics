@@ -5,7 +5,7 @@ import { chart, spread, rect, scatter, circle } from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Faceted Chart",
+  title: "Forward Syntax/Faceted Chart",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

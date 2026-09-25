@@ -9,7 +9,7 @@ Image assets: the JS storybook imports `bottle.jpg`,
 `schwarzenarzisse-isolated-2437759_1280.png` via Vite, which serves them from
 the dev server via the `/@fs/<absolute-path>` form in dev (see
 tests/python-stories/piccl/test_bottle.py and
-tests/python-stories/forward-syntax-v3/test_cut.py for the same pattern); the
+tests/python-stories/forward-syntax/test_cut.py for the same pattern); the
 DOM normalizer collapses these to their basenames for comparison against the
 JS baseline. The inline SVG badge is a `data:image/svg+xml;utf8,` URI built
 inline in the JS story itself (not a Vite-resolved asset) via

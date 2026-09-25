@@ -1,9 +1,9 @@
-"""Forward Syntax V3/Line Chart — mirrors LineChart.stories.tsx"""
+"""Forward Syntax/Line Chart — mirrors LineChart.stories.tsx"""
 
 from gofish import layer, chart, scatter, blank, selectAll, line
 from stories.data.seafood import catch_locations_array
 
-TITLE = "Forward Syntax V3/Line Chart"
+TITLE = "Forward Syntax/Line Chart"
 
 
 def default(w=400, h=400):

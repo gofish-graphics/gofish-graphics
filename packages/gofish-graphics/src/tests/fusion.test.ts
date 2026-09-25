@@ -24,7 +24,7 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 
-const { chart, group, scatter, circle, line, ribbon, text, selectAll, Layer } =
+const { chart, group, scatter, circle, line, ribbon, text, selectAll, layer } =
   GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -175,13 +175,13 @@ async function main() {
   // child (`withLayerContext`); a LayerBuilder child used to drop it and resolve
   // into a private registry of its own, so a `.name(...)` inside it was invisible
   // from outside and a sibling's `selectAll` threw `Layer "bars" not found`.
-  // `Layer(...)` resolves its children sequentially, so the second child's
+  // `layer(...)` resolves its children sequentially, so the second child's
   // selection is read after the first child has registered its names.
   const crossTier = (producerHasSecondTier: boolean) => {
     const root = chart(data, { w: 200, h: 200 })
       .flow(scatter({ by: "id", x: "x", y: "y" }))
       .mark(circle({ r: 3, fill: "steelblue" }).name("bars"));
-    return Layer({}, [
+    return layer({}, [
       // A ChartBuilder child, or the same chain with a `.layer(...)` tier on it
       // — which makes it a LayerBuilder instead.
       producerHasSecondTier ? root.layer(text({ text: "caption" })) : root,
@@ -196,7 +196,8 @@ async function main() {
     let crossTierNode: any;
     let crossTierThrew: unknown;
     try {
-      crossTierNode = await crossTier(hasSecondTier);
+      // A combinator mark resolves to its node when called (no datum).
+      crossTierNode = await crossTier(hasSecondTier)(undefined);
     } catch (e) {
       crossTierThrew = e;
     }

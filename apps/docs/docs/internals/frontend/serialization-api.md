@@ -46,7 +46,7 @@ Four entry points, all returning `Promise<FrontendIRDocument>`:
 | `Serialize.toJSONRawMark(mark, options?)`          | A bare mark used without a chart wrapper.                                      |
 
 All entry points are async because combinator-form marks may carry their
-child list as a `Promise<Mark[]>` (e.g. from `For(...)` helpers); the
+child list as a `Promise<Mark[]>` (e.g. from `map(...)` helpers); the
 emitter resolves these to walk into them.
 
 ## Emit (Python)

@@ -1,9 +1,9 @@
-"""Forward Syntax V3/Streamgraph — mirrors Streamgraph.stories.tsx"""
+"""Forward Syntax/Streamgraph — mirrors Streamgraph.stories.tsx"""
 
 from gofish import layer, chart, spread, stack, blank, selectAll, ribbon, group
 from stories.data.seafood import seafood
 
-TITLE = "Forward Syntax V3/Streamgraph"
+TITLE = "Forward Syntax/Streamgraph"
 
 
 def default(w=400, h=400):

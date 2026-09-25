@@ -3,7 +3,7 @@ import { initializeContainer } from "../../helper";
 import { chart, spread, rect } from "../../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Bar/Negative",
+  title: "Forward Syntax/Bar/Negative",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

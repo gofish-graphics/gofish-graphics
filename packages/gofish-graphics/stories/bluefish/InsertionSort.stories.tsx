@@ -7,7 +7,7 @@ import {
   createName,
   ellipse,
   enclose,
-  Layer,
+  layer,
   rect,
   ref,
   spreadX,
@@ -107,7 +107,7 @@ const ArrayEntry = createMark(
     color: string;
     highlight: boolean;
   }) =>
-    Layer([
+    layer([
       rect({ w: CELL_SIZE, h: CELL_SIZE, fill: color, rx: 8, ry: 8 }).name(
         "body"
       ),
@@ -161,7 +161,7 @@ export const InsertionSort: StoryObj = {
       // NB: `spreadX`, not `stackX` — `stack` is spacing-less by design
       // (StackOptions omits `spacing`; the option is silently dropped and
       // children touch), so the inter-cell gap needs spread.
-      return Layer([
+      return layer([
         // Row outline — upstream ArrayOutline: <Rect fill="none"
         // stroke="black" stroke-width={2} rx={8} />.
         enclose(
@@ -252,7 +252,7 @@ export const InsertionSort: StoryObj = {
     // shifts the whole diagram right/down so the leftward-placed labels
     // don't land at negative coordinates (the root render does not auto-fit
     // — same trick as Pulley).
-    Layer({ x: 90, y: 20 }, [
+    layer({ x: 90, y: 20 }, [
       spreadY({ spacing: 15, alignment: "start" }, rows),
       ...stages.map((_, stage) =>
         spreadX({ spacing: 20, alignment: "middle" }, [

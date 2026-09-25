@@ -1,4 +1,4 @@
-"""Forward Syntax V3/Pie — mirrors Pie.stories.tsx"""
+"""Forward Syntax/Pie — mirrors Pie.stories.tsx"""
 
 import math
 
@@ -6,7 +6,7 @@ from gofish import chart, stack, derive, rect, clock
 from stories.data.seafood import seafood
 from stories.data.nightingale import nightingale
 
-TITLE = "Forward Syntax V3/Pie"
+TITLE = "Forward Syntax/Pie"
 
 
 def basic(w=400, h=400):

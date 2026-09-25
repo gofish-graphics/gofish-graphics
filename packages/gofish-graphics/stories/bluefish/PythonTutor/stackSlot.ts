@@ -2,9 +2,9 @@ import {
   Constraint,
   createMark,
   createName,
-  Layer,
+  layer,
   rect,
-  Spread,
+  spread,
   text,
 } from "../../../src/lib";
 
@@ -19,13 +19,13 @@ export const stackSlot = createMark(
   ({ variable, value }: StackSlotProps) => {
     const boxTag = createName("box");
     const valueTag = createName("value");
-    return Spread({ dir: "x", alignment: "middle", spacing: 5 }, [
+    return spread({ dir: "x", alignment: "middle", spacing: 5 }, [
       text({
         fontSize: 24,
         fontFamily,
         text: variable,
       }).name("variable"),
-      Layer([
+      layer([
         rect({ h: 40, w: 40, fill: "#e2ebf6" }).name(boxTag),
         rect({ h: 2, w: 40, fill: "#a6b3b6" }).name("boxBorderBottom"),
         rect({ h: 40, w: 2, fill: "#a6b3b6" }).name("boxBorderLeft"),

@@ -26,7 +26,7 @@ const sunflower = Array.from({ length: 500 }, (_, i) => {
 });
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Equal Scale",
+  title: "Forward Syntax/Equal Scale",
   argTypes: {
     w: { control: { type: "number", min: 200, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 200, max: 1000, step: 10 } },

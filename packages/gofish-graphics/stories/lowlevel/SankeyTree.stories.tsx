@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { titanic } from "../../src/data/titanic";
-import { layer, spreadX, spreadY, stackY, rect, For, ribbon, ref } from "../../src/lib";
+import { layer, spreadX, spreadY, stackY, rect, map, ribbon, ref } from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
 import { groupBy } from "lodash";
 import _ from "lodash";
@@ -37,7 +37,7 @@ export const Default: StoryObj = {
           // y-down: reverse every vertical ordering so the tiers read the same
           // way they did under the old y-up convention. See issue #143/#16.
           { spacing: 0, alignment: "middle", reverse: true },
-          For(groupBy(titanic, "class"), (items, cls) =>
+          map(groupBy(titanic, "class"), (items, cls) =>
             rect({
               w: 40,
               h: _(items).sumBy("count") / 10,
@@ -47,11 +47,11 @@ export const Default: StoryObj = {
         ),
         spreadY(
           { spacing: internalSpacing, alignment: "middle", reverse: true },
-          For(groupBy(titanic, "class"), (items, cls) =>
+          map(groupBy(titanic, "class"), (items, cls) =>
             spreadX({ spacing: layerSpacing, alignment: "middle" }, [
               stackY(
                 { spacing: 0, alignment: "middle", reverse: true },
-                For(groupBy(items, "sex"), (items, sex) =>
+                map(groupBy(items, "sex"), (items, sex) =>
                   rect({
                     w: 40,
                     h: _(items).sumBy("count") / 10,
@@ -66,7 +66,7 @@ export const Default: StoryObj = {
                   alignment: "middle",
                   reverse: true,
                 },
-                For(groupBy(items, "sex"), (items, sex) =>
+                map(groupBy(items, "sex"), (items, sex) =>
                   spreadX({ spacing: layerSpacing, alignment: "middle" }, [
                     stackY(
                       {
@@ -74,7 +74,7 @@ export const Default: StoryObj = {
                         alignment: "middle",
                         reverse: true,
                       },
-                      For(groupBy(items, "survived"), (survivedItems, survived) =>
+                      map(groupBy(items, "survived"), (survivedItems, survived) =>
                         rect({
                           w: 40,
                           h: _(survivedItems).sumBy("count") / 10,
@@ -89,7 +89,7 @@ export const Default: StoryObj = {
                         alignment: "middle",
                         reverse: true,
                       },
-                      For(groupBy(items, "survived"), (survivedItems, survived) => {
+                      map(groupBy(items, "survived"), (survivedItems, survived) => {
                         return rect({
                           h: _(survivedItems).sumBy("count") / 10,
                           fill:
@@ -110,7 +110,7 @@ export const Default: StoryObj = {
           )
         ),
       ]),
-      For(groupBy(titanic, "class"), (items, cls) => [
+      map(groupBy(titanic, "class"), (items, cls) => [
         ribbon(
           {
             dir: "x",
@@ -121,7 +121,7 @@ export const Default: StoryObj = {
           },
           [ref(`${cls}-src`), ref(`${cls}-tgt`)]
         ),
-        For(groupBy(items, "sex"), (sexItems, sex) => [
+        map(groupBy(items, "sex"), (sexItems, sex) => [
           ribbon(
             {
               dir: "x",
@@ -132,7 +132,7 @@ export const Default: StoryObj = {
             },
             [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
           ),
-          For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
+          map(groupBy(sexItems, "survived"), (survivedItems, survived) =>
             ribbon(
               {
                 dir: "x",

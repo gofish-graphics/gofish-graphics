@@ -5,7 +5,7 @@ import { chart, spread, scatter, field, rect, text, layer, Constraint } from "..
 import { ribbon } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Ridgeline Chart",
+  title: "Forward Syntax/Ridgeline Chart",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
