@@ -8,11 +8,13 @@
  * display items a mark lowered at rest to the items it shows at a progress
  * `p` in [0, 1] (see `paint.ts`, which schedules `p` from the build clock).
  * `p = 0` is the ENTER state the mark shows before its turn; `p = 1` is the
- * mark as laid out, which it keeps once it has arrived.
+ * mark as laid out, which it keeps once it has arrived. Each effect carries
+ * what it does at `p` (its `Look`), so adding one is writing its constructor.
  *
  * WHEN is not here: that is `time.*` (`time.stagger`, `time.parallel`).
  */
 import type { DisplayList } from "gofish-ir";
+import { BOX_SHAPES } from "../ast/graphicalOperators/tween";
 
 /** A time warp `u -> u'` on [0, 1], or the name of a standard one. */
 export type Ease =
@@ -80,17 +82,37 @@ export type EffectKind =
   | "appear"
   | "wipe";
 
+/** What an effect does to a mark at a progress `p` in [0, 1]. */
+type Look = {
+  /** One of the mark's own items at `p`. */
+  host(
+    item: DisplayList.DisplayItem,
+    p: number,
+    frame: EffectFrame
+  ): DisplayList.DisplayItem;
+  /** The opacity an item ATTACHED to the mark (its label) takes at `p`: a
+   *  label follows its mark's timing. */
+  rider(p: number): number;
+  /** The fields `host` can change on `item`: what the paint tier patches. */
+  channels(item: DisplayList.DisplayItem): readonly string[];
+  /** Throw unless the effect can draw a mark of this node type. Checked when
+   *  the build is installed, so a mismatch fails before anything paints. */
+  fits(nodeType: string): void;
+};
+
 /** One effect, resolved: what it does, how long it takes, and its warp. */
-export type Effect = {
+export type Effect = Look & {
   readonly __effect: true;
+  /** Its name, for messages. */
   kind: EffectKind;
   duration: number;
   /** A field-valued duration (see `EffectOptions.duration`), resolved per
    *  mark when the build is installed; `duration` is NaN until then. */
   durationField?: string;
   ease: (u: number) => number;
-  from?: WipeSide;
-  shape?: "circle";
+  /** Where the effect is at local time `t` (ms since the mark's start), given
+   *  its duration and warp: 0 before the start, 1 from the end on. */
+  progress(t: number, duration: number, ease: (u: number) => number): number;
   /** The options as written, so a context that fixes the timing itself (a
    *  sequence's fade over a whole stretch) can refuse a duration it would
    *  otherwise ignore. */
@@ -114,9 +136,24 @@ export type TweenEffect = {
 
 export const DEFAULT_DURATION = 500;
 
+/** The usual timing: the eased share of its duration an effect has played
+ *  by `t`. A 0-length effect jumps to its end at its start. */
+function ramp(
+  t: number,
+  duration: number,
+  ease: (u: number) => number
+): number {
+  const raw = duration > 0 ? t / duration : t >= 0 ? 1 : 0;
+  if (!(raw > 0)) return 0;
+  if (raw >= 1) return 1;
+  return ease(raw);
+}
+
 function effect(
   kind: EffectKind,
-  opts: EffectOptions & { from?: WipeSide; shape?: "circle" } = {}
+  opts: EffectOptions = {},
+  look: Look,
+  progress: Effect["progress"] = ramp
 ): Effect {
   const field = typeof opts.duration === "string" ? opts.duration : undefined;
   const duration =
@@ -136,35 +173,106 @@ function effect(
     ...(field !== undefined ? { durationField: field } : {}),
     ease: resolveEase(opts.ease),
     written: { duration: opts.duration, ease: opts.ease },
-    ...(opts.from !== undefined ? { from: opts.from } : {}),
-    ...(opts.shape !== undefined ? { shape: opts.shape } : {}),
+    progress,
+    ...look,
   };
 }
+
+/** `look` played backward: at progress `p` it shows what `look` shows at
+ *  `1 − p`. */
+const reversed = (look: Look): Look => ({
+  ...look,
+  host: (item, p, frame) => look.host(item, 1 - p, frame),
+  rider: (p) => look.rider(1 - p),
+});
+
+/** A geometric effect's rider waits until the mark has arrived (Highcharts'
+ *  "labels wait") rather than float beside a mark that is still moving.
+ *  DECLARED PROTOTYPE BEHAVIOR: riding the growing bar's end (issue #894) is
+ *  not built. */
+const waits = (p: number): number => (p === 1 ? 1 : 0);
+
+/** Scale the mark's SIZE axes toward its baseline by `p` (see `collapse`). */
+const collapsing = (kind: "grow" | "shrink"): Look => ({
+  host: collapse,
+  rider: waits,
+  channels: boxFieldsOf,
+  fits: (nodeType) => {
+    if (BOX_SHAPES.has(nodeType)) return;
+    throw new Error(
+      `[gofish] animation.${kind}(): collapses a rect or an ellipse ` +
+        `toward its baseline, and this mark is a "${nodeType}". Use ` +
+        `animation.fadeIn() or animation.appear() for it.`
+    );
+  },
+});
+
+/** Multiply the mark's opacity by `p`; its rider fades with it. */
+const fading: Look = {
+  host: (item, p) => withOpacity(item, p),
+  rider: (p) => p,
+  channels: () => ["opacity"],
+  fits: () => {},
+};
+
+/** Show the part of the mark a wipe from `from` (or a circular reveal) has
+ *  uncovered by `p`. */
+const revealing = (
+  from: WipeSide | undefined,
+  shape: "circle" | undefined
+): Look => ({
+  host: (item, p) => reveal(item, p, from, shape),
+  rider: waits,
+  channels: boxFieldsOf,
+  fits: (nodeType) => {
+    const circle = shape === "circle";
+    const boxy = nodeType === "rect" || nodeType === "blank";
+    if (circle ? nodeType === "ellipse" : boxy) return;
+    throw new Error(
+      `[gofish] animation.wipe(${
+        circle ? `{ shape: "circle" }` : `{ from: "${from}" }`
+      }): ` +
+        (circle
+          ? `a circular reveal is built for circles (it grows the radius)`
+          : `a side wipe is built for rects (it clips the box)`) +
+        `, and this mark is a "${nodeType}". A general clip needs a clip ` +
+        `item in the display list, which this prototype does not have.`
+    );
+  },
+});
 
 /** Collapse the mark's SIZE axes toward its baseline, then let it grow to its
  *  laid-out size. A bar grows up from 0 (down, for a negative value); a
  *  stacked segment grows in place from its own stack start. A mark with no
  *  data size (a fixed-radius dot) has no baseline, so it grows from its
  *  center. */
-export const grow = (opts?: EffectOptions): Effect => effect("grow", opts);
+export const grow = (opts?: EffectOptions): Effect =>
+  effect("grow", opts, collapsing("grow"));
 /** `grow` reversed: from the laid-out size down to the baseline. */
-export const shrink = (opts?: EffectOptions): Effect => effect("shrink", opts);
+export const shrink = (opts?: EffectOptions): Effect =>
+  effect("shrink", opts, reversed(collapsing("shrink")));
 /** Opacity from 0 to the mark's own. */
-export const fadeIn = (opts?: EffectOptions): Effect => effect("fadeIn", opts);
-/** Opacity from the mark's own to 0. */
+export const fadeIn = (opts?: EffectOptions): Effect =>
+  effect("fadeIn", opts, fading);
+/** `fadeIn` reversed: opacity from the mark's own to 0. */
 export const fadeOut = (opts?: EffectOptions): Effect =>
-  effect("fadeOut", opts);
+  effect("fadeOut", opts, reversed(fading));
 /** No motion: hidden until the mark's start, then shown at once (Keynote and
  *  PowerPoint "Appear"). It holds for its duration, which only matters to
  *  what waits for it. */
-export const appear = (opts?: EffectOptions): Effect => effect("appear", opts);
+export const appear = (opts?: EffectOptions): Effect =>
+  effect("appear", opts, fading, (t) => (t >= 0 ? 1 : 0));
 /** Reveal the mark from one side (a clip), or from its center outward with
  *  `shape: "circle"`. */
 export const wipe = (opts: WipeOptions = {}): Effect =>
-  effect("wipe", {
-    ...opts,
-    from: opts.shape === undefined ? (opts.from ?? "bottom") : undefined,
-  });
+  effect(
+    "wipe",
+    opts,
+    revealing(
+      opts.shape === undefined ? (opts.from ?? "bottom") : undefined,
+      opts.shape
+    )
+  );
 
 export const isEffect = (v: unknown): v is Effect | TweenEffect =>
   typeof v === "object" && v !== null && (v as Effect).__effect === true;
@@ -212,6 +320,17 @@ const boxOf = (item: DisplayList.DisplayItem): Box | undefined => {
   return undefined;
 };
 
+/** The fields that hold a box item's box, which a geometric effect reshapes
+ *  (`withBox` writes them). Its other items it leaves as they are. */
+const BOX_FIELDS: Partial<
+  Record<DisplayList.DisplayItem["kind"], readonly string[]>
+> = {
+  rect: ["x", "y", "w", "h"],
+  ellipse: ["cx", "cy", "rx", "ry"],
+};
+const boxFieldsOf = (item: DisplayList.DisplayItem): readonly string[] =>
+  BOX_FIELDS[item.kind] ?? [];
+
 const withBox = (
   item: DisplayList.DisplayItem,
   b: Box
@@ -258,14 +377,15 @@ function collapse(
 function reveal(
   item: DisplayList.DisplayItem,
   p: number,
-  e: Effect
+  from: WipeSide | undefined,
+  shape: "circle" | undefined
 ): DisplayList.DisplayItem {
   if (p === 1) return item;
-  if (e.shape === "circle" && item.kind === "ellipse")
+  if (shape === "circle" && item.kind === "ellipse")
     return { ...item, rx: item.rx * p, ry: item.ry * p };
   if (item.kind !== "rect") return item;
   const { x, y, w, h } = item;
-  switch (e.from) {
+  switch (from) {
     case "top":
       return { ...item, h: h * p };
     case "left":
@@ -288,13 +408,9 @@ const withOpacity = (
         style: { ...item.style, opacity: (item.style?.opacity ?? 1) * factor },
       };
 
-/** Where an effect is at local time `t` (ms since the mark's start): its
- *  eased progress, 0 before the start and 1 from the end on. */
+/** Where an effect is at local time `t` (ms since the mark's start). */
 export function progressOf(e: Effect, t: number): number {
-  const raw = e.duration > 0 ? t / e.duration : t >= 0 ? 1 : 0;
-  if (!(raw > 0)) return 0;
-  if (raw >= 1) return 1;
-  return e.ease(raw);
+  return e.progress(t, e.duration, e.ease);
 }
 
 /**
@@ -308,38 +424,14 @@ export function paintHost(
   frame: EffectFrame
 ): DisplayList.DisplayItem {
   let out = item;
-  for (const e of effects) {
-    const p = progressOf(e, t);
-    switch (e.kind) {
-      case "grow":
-        out = collapse(out, p, frame);
-        break;
-      case "shrink":
-        out = collapse(out, 1 - p, frame);
-        break;
-      case "wipe":
-        out = reveal(out, p, e);
-        break;
-      case "fadeIn":
-        out = withOpacity(out, p);
-        break;
-      case "fadeOut":
-        out = withOpacity(out, 1 - p);
-        break;
-      case "appear":
-        out = withOpacity(out, t >= 0 ? 1 : 0);
-        break;
-    }
-  }
+  for (const e of effects) out = e.host(out, progressOf(e, t), frame);
   return out;
 }
 
 /**
  * An item ATTACHED to the mark (its label) at local time `t`. A label follows
  * its mark's timing: it fades or appears with it, and for a geometric effect
- * it waits until the mark has arrived (Highcharts' "labels wait") rather than
- * float beside a mark that is still growing. DECLARED PROTOTYPE BEHAVIOR:
- * riding the growing bar's end (issue #894) is not built.
+ * it waits until the mark has arrived.
  */
 export function paintRider(
   item: DisplayList.DisplayItem,
@@ -347,73 +439,21 @@ export function paintRider(
   t: number
 ): DisplayList.DisplayItem {
   let factor = 1;
-  for (const e of effects) {
-    const p = progressOf(e, t);
-    switch (e.kind) {
-      case "fadeIn":
-        factor *= p;
-        break;
-      case "fadeOut":
-        factor *= 1 - p;
-        break;
-      case "appear":
-        factor *= t >= 0 ? 1 : 0;
-        break;
-      case "shrink":
-        factor *= p === 0 ? 1 : 0;
-        break;
-      default:
-        factor *= p === 1 ? 1 : 0;
-    }
-  }
+  for (const e of effects) factor *= e.rider(progressOf(e, t));
   return withOpacity(item, factor);
 }
 
-/** The display-item fields an effect list can change, per item kind: what
- *  the paint tier has to patch. */
+/** The display-item fields an effect list can change on `item`: what the
+ *  paint tier has to patch. A rider only ever changes its opacity. */
 export function channelsOf(
-  kind: DisplayList.DisplayItem["kind"],
+  item: DisplayList.DisplayItem,
   effects: Effect[],
   role: "host" | "rider"
 ): string[] {
   const out = new Set<string>();
   for (const e of effects) {
-    const geometric =
-      e.kind === "grow" || e.kind === "shrink" || e.kind === "wipe";
-    if (!geometric || role === "rider") out.add("opacity");
-    else if (kind === "rect") ["x", "y", "w", "h"].forEach((f) => out.add(f));
-    else if (kind === "ellipse")
-      ["cx", "cy", "rx", "ry"].forEach((f) => out.add(f));
+    for (const c of role === "host" ? e.channels(item) : ["opacity"])
+      out.add(c);
   }
   return [...out];
-}
-
-/** Can `effect` draw a mark of this node type? Checked when the build is
- *  installed, so a mismatch fails before anything paints. */
-export function checkEffectFits(effect: Effect, nodeType: string): void {
-  const boxy = nodeType === "rect" || nodeType === "blank";
-  const round = nodeType === "ellipse";
-  if (effect.kind === "grow" || effect.kind === "shrink") {
-    if (boxy || round) return;
-    throw new Error(
-      `[gofish] animation.${effect.kind}(): collapses a rect or an ellipse ` +
-        `toward its baseline, and this mark is a "${nodeType}". Use ` +
-        `animation.fadeIn() or animation.appear() for it.`
-    );
-  }
-  if (effect.kind === "wipe") {
-    if (effect.shape === "circle" ? round : boxy) return;
-    throw new Error(
-      `[gofish] animation.wipe(${
-        effect.shape === "circle"
-          ? `{ shape: "circle" }`
-          : `{ from: "${effect.from}" }`
-      }): ` +
-        (effect.shape === "circle"
-          ? `a circular reveal is built for circles (it grows the radius)`
-          : `a side wipe is built for rects (it clips the box)`) +
-        `, and this mark is a "${nodeType}". A general clip needs a clip ` +
-        `item in the display list, which this prototype does not have.`
-    );
-  }
 }

@@ -122,7 +122,7 @@ export function makeRule(
         return cache.items;
       };
       items.forEach((item, j) => {
-        const channels = channelsOf(item.kind, effects, role);
+        const channels = channelsOf(item, effects, role);
         if (channels.length === 0) return;
         assignPaint(item, cache.items[j], channels);
         const slots: Record<string, () => unknown> = {};

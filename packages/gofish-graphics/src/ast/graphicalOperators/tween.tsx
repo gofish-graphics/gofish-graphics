@@ -125,8 +125,9 @@ export type TweenOptions = {
  *  extent is the measure of its string, which is not something to blend, so
  *  it moves RIGIDLY: its position is interpolated and it keeps the source
  *  keyframe's own drawing (string, font, paint), the way a box leaf keeps the
- *  source keyframe's color. */
-const BOX_SHAPES = new Set(["ellipse", "rect", "blank"]);
+ *  source keyframe's color. A build-in `grow` collapses the same box shapes
+ *  (`src/animation/effects.ts`). */
+export const BOX_SHAPES = new Set(["ellipse", "rect", "blank"]);
 const RIGID_SHAPES = new Set(["text"]);
 
 /**

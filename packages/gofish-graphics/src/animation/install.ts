@@ -32,7 +32,7 @@
 import { GoFishNode } from "../ast/_node";
 import type { GoFishAST } from "../ast/_ast";
 import { timer, type Timer } from "../interaction/inputs";
-import { checkEffectFits, fadeIn, type Effect } from "./effects";
+import { fadeIn, type Effect } from "./effects";
 import { groupEntries, rowsOf } from "./grouping";
 import { projectPath } from "../ast/datumProjection";
 import { makeRule } from "./paint";
@@ -76,7 +76,7 @@ export function installBuildIn(
     const rule = makeRule(playhead, start, payload.effects);
     for (const target of payload.targets) {
       for (const leaf of leavesOf(target)) {
-        for (const e of payload.effects) checkEffectFits(e, leaf.type);
+        for (const e of payload.effects) e.fits(leaf.type);
         if (leaf.__gfAnimate !== undefined) {
           throw new Error(
             `[gofish] build-in: a "${leaf.type}" mark is animated twice, ` +
