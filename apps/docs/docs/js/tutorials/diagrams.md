@@ -279,7 +279,7 @@ together during layout.
 
 ::: gofish
 
-```js{19-21,23-26}
+```js{10,22-26}
 const data = [
   { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
   { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
@@ -288,19 +288,18 @@ const data = [
 ];
 
 gf.layer([
-  gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
-    gf.spread(
-      { dir: "x", spacing: 50, alignment: "middle" },
-      data.map((d) =>
-        gf
-          .circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
-          .name(d.name)
-      )
-    ),
-  ]),
   gf
     .layer([
-      gf.ref("mercury").name("mercury"),
+      gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+        gf.spread(
+          { dir: "x", spacing: 50, alignment: "middle" },
+          data.map((d) =>
+            gf
+              .circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
+              .name(d.name)
+          )
+        ),
+      ]),
       gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
     ])
     .constrain(({ mercury, label }) => [
@@ -313,24 +312,24 @@ gf.layer([
 
 :::
 
-The picture is the same again. `.constrain()` receives the names of the layer's
-children and returns a list of constraints. `Constraint.align` lines up the
+The picture is the same again. `.constrain()` receives the names of marks in
+its layer and returns a list of constraints. `Constraint.align` lines up the
 centers of Mercury and the label from left to right, and
 `Constraint.distribute` puts the label 20 pixels below Mercury.
 
-A constraint can only arrange marks inside its own layer. Mercury lives in the
-other layer, inside the row, so we bring it into this layer with
-`ref("mercury")` and give that reference a name too.
+The constraint's layer holds the background and the label, so it can name
+Mercury even though Mercury sits inside the row. The arrow sits outside that
+layer, so it is drawn after the layer is arranged.
 
 ## Spacing the label off the whole background
 
 Now each rule can point at a different mark. We name the dark background
-`"planets"`, bring it into the layer with a reference, and distribute the label
-from the background instead of from Mercury:
+`"planets"` and distribute the label from the background instead of from
+Mercury:
 
 ::: gofish
 
-```js{20,24,27,29}
+```js{22,25,27}
 const data = [
   { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
   { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
@@ -340,21 +339,19 @@ const data = [
 
 gf.layer([
   gf
-    .background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
-      gf.spread(
-        { dir: "x", spacing: 50, alignment: "middle" },
-        data.map((d) =>
-          gf
-            .circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
-            .name(d.name)
-        )
-      ),
-    ])
-    .name("planets"),
-  gf
     .layer([
-      gf.ref("mercury").name("mercury"),
-      gf.ref("planets").name("planets"),
+      gf
+        .background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+          gf.spread(
+            { dir: "x", spacing: 50, alignment: "middle" },
+            data.map((d) =>
+              gf
+                .circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
+                .name(d.name)
+            )
+          ),
+        ])
+        .name("planets"),
       gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
     ])
     .constrain(({ mercury, planets, label }) => [

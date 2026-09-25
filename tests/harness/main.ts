@@ -666,7 +666,7 @@ function mapMark(
   // sentinels that need resolving.
   if (spec.type === "ref" && !spec.__combinator) {
     const refNode = ref(resolveRefSelection(spec.selection, resolveToken));
-    // `ref(name).name(name)` — the cross-tier name proxy (`pull`). GoFishRef's
+    // A named ref stand-in, `ref(token).name("a")`. GoFishRef's
     // `.name()` mutates in place and returns `this`, making the ref a
     // constraint target of the enclosing layer (same as the __inputRef
     // branch above).

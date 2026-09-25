@@ -208,7 +208,13 @@ export class GoFishRef {
     // A named ref stand-in is an alias for the node it points at.
     if (found instanceof GoFishRef) {
       if (found === this) {
-        throw new Error(`ref("${name}") refers to itself.`);
+        throw new Error(
+          `ref("${name}") refers to itself: it is named "${name}" too, and ` +
+            `it is the nearest node with that name. A ref named after its own ` +
+            `target is no longer needed. Constrain the named node directly ` +
+            `(names are visible anywhere inside the layer), or give the ref a ` +
+            `different name.`
+        );
       }
       found.resolveNames();
       const target = found.targetNode;

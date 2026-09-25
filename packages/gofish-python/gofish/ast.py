@@ -1560,10 +1560,10 @@ class _RefProxy(Mark):
         # `(selection, multiplicity=None)` instead, so that reconstruction
         # raises. Mirrors the `translate()` override immediately above and
         # JS `RefProxy`'s inherited `Node.name()` (`_node.ts`), which just
-        # sets `_name` and returns `this`. Lets `ref(name).name(name)`
-        # re-expose an existing selection as a new named node — the
-        # `pull(name)` cross-tier-name-proxy pattern used by ported
-        # Bluefish stories (e.g. `tests/python-stories/bluefish/test_baking_recipes.py`).
+        # sets `_name` and returns `this`. Lets `ref(token).name("a")`
+        # re-expose a node from outside a layer as a named constraint
+        # operand of that layer (e.g. the tick/label helpers in
+        # `tests/python-stories/bluefish/test_dfscq_file_system.py`).
         named = _RefProxy(self._sel(), multiplicity=self.multiplicity)
         self._copy_meta(named)
         named._name = name_or_token
@@ -1591,9 +1591,9 @@ class _RefProxy(Mark):
             d = {"type": "ref", "selection": serialized[0]}
         else:
             d = {"type": "ref", "selection": serialized}
-        # `ref(name).name(name)` — the cross-tier name proxy (`pull`) —
-        # must carry its name on the wire so the reconstructed GoFishRef
-        # is visible to the enclosing layer's constraint solver (RefMarkIR
+        # A named ref stand-in (`ref(token).name("a")`) must carry its
+        # name on the wire so the reconstructed GoFishRef answers to it as
+        # a constraint operand of the enclosing layer (RefMarkIR
         # declares `name`; same emission shape as Mark.to_dict above).
         if self._name is not None:
             d["name"] = (

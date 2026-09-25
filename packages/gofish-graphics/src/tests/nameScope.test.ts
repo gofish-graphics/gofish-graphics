@@ -178,6 +178,25 @@ async function main() {
     check("an inner match hides an outer one", ok, detail);
   }
 
+  // 3c. The old stand-in workaround, `ref("x").name("x")`, is its own nearest
+  //     match. It errors and says what to do instead.
+  await rejects(
+    "a ref named after its own target is a self-reference error",
+    () =>
+      gf.layer([
+        gf.rect({ w: 10, h: 10 }).name("x"),
+        gf
+          .layer([
+            gf.ref("x").name("x"),
+            gf.rect({ w: 5, h: 5 }).name("label"),
+          ])
+          .constrain(({ x, label }: any) => [
+            gf.Constraint.align({ x: "middle" }, [x, label]),
+          ]),
+      ]),
+    /ref\("x"\) refers to itself.*Constrain the named node directly/
+  );
+
   // 4. A name that matches nothing.
   await rejects(
     "missing constraint operand is an error",

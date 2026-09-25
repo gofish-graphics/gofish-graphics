@@ -452,7 +452,7 @@ export function mapMark(
   // Leaf-form `ref(name)` — not a combinator, not a mark factory.
   if (spec.type === "ref" && !spec.__combinator) {
     const refNode = ref(resolveRefSelection(spec.selection, resolveToken));
-    // `ref(name).name(name)` — the cross-tier name proxy. GoFishRef's
+    // A named ref stand-in, `ref(token).name("a")`. GoFishRef's
     // `.name()` mutates in place and returns `this`, making the ref a
     // constraint target of the enclosing layer (RefMarkIR carries `name`;
     // mirrors the __inputRef rename branch above).

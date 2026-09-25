@@ -158,6 +158,13 @@ around the gap with a proxy child, `ref("x").name("x")`, to re-expose a nested
 name to an outer layer (#724), and an operand that matched nothing did nothing
 (#819). The single lookup above replaced both behaviors.
 
+That proxy no longer works, and is no longer needed. Its nearest match for
+`"x"` is itself, so `ref("x")` inside `ref("x").name("x")` throws a "refers to
+itself" error that says to constrain the named node directly. The Diagrams
+tutorial shows the replacement: the constrained layer holds the node's
+container, so the constraint names the nested node, and anything that reads
+the result (an arrow) sits one layer out.
+
 ## Open questions
 
 - An inline string `ref` that is a child of a constrained layer resolves its
