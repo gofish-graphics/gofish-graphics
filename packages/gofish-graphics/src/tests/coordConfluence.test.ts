@@ -39,13 +39,17 @@ const staticWedge = (radians: number) =>
   Rect({ w: radians, h: 40, emX: true, emY: true });
 
 // Wrap children in a distribute (the `Layer + Constraint.distribute` shape the
-// gotree `combine`/`distribute` helpers emit).
+// gotree `combine`/`distribute` helpers emit). Each call gets fresh names, as
+// the gotree helpers do: a nested `dist` inside this one would otherwise put a
+// second `__d-0` in this layer's subtree, and the name would be ambiguous.
+let distCalls = 0;
 const dist = (cs: any[]) => {
-  const named = cs.map((c, i) => Layer([c]).name(`__d-${i}`));
+  const prefix = `__d${distCalls++}`;
+  const named = cs.map((c, i) => Layer([c]).name(`${prefix}-${i}`));
   return Layer(named).constrain((c: any) => [
     Constraint.distribute(
       { dir: "x", spacing: 0, anchor: "edge", order: "forward" },
-      named.map((_: any, i: number) => c[`__d-${i}`])
+      named.map((_: any, i: number) => c[`${prefix}-${i}`])
     ),
   ]);
 };

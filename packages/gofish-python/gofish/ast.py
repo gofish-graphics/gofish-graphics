@@ -1,6 +1,7 @@
 """AST classes for building GoFish chart specifications."""
 
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+import inspect
 import uuid
 
 T = TypeVar("T")
@@ -699,11 +700,46 @@ class RefSentinel:
     """Opaque handle for a named layer child, passed to a constrain callback.
 
     `layer([rect(...).name("a")]).constrain(lambda a, b: [...])` receives one
-    of these per child, keyed by the child's `.name(...)` tag.
+    of these per callback parameter, carrying the parameter's name; JS
+    resolves the name at layout.
     """
 
     def __init__(self, ref_name: str):
         self.ref_name = ref_name
+
+
+def _subtree_names(children: Optional[List[Any]]) -> List[str]:
+    """Every string name (or token tag) inside `children`, not descending into
+    `@mark` components (a component's own name still counts). The JS
+    `visibleNodes` walk, over the Python tree."""
+    out: List[str] = []
+    for child in children or []:
+        n = getattr(child, "_name", None)
+        if n is not None:
+            out.append(n.tag if isinstance(n, Token) else n)
+        if not getattr(child, "_is_scope", False):
+            out.extend(_subtree_names(getattr(child, "_children", None)))
+    return out
+
+
+def _callback_refs(
+    callback: Callable[..., Any], children: Optional[List[Any]]
+) -> Dict[str, RefSentinel]:
+    """The keyword arguments a `.constrain()` callback receives: one
+    `RefSentinel` per parameter it declares, named after the parameter. A
+    callback with a `**rest` catch-all also receives every name inside the
+    layer (`_subtree_names`), so it can look names up dynamically
+    (`rest[key]`). Mirrors the JS `constraintEnv` proxy: every name becomes a
+    by-name operand, resolved on the JS side at layout."""
+    params = inspect.signature(callback).parameters.values()
+    named = (
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.KEYWORD_ONLY,
+    )
+    names = [p.name for p in params if p.kind in named]
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params):
+        names += _subtree_names(children)
+    return {name: RefSentinel(name) for name in names}
 
 
 class AlignConstraint:
@@ -1000,10 +1036,11 @@ class ConstrainableMark(Mark):
         return target
 
     def constrain(self, callback: Callable[..., List[Any]]) -> "ConstrainableMark":
-        """Apply constraints relating named children of this layer.
+        """Apply constraints relating named nodes inside this layer.
 
-        The callback receives one `RefSentinel` per named child as a kwarg
-        and must return a list of constraint specs:
+        The callback receives one `RefSentinel` per parameter it declares,
+        named after the parameter (a `**rest` catch-all also receives every
+        name inside the layer), and must return a list of constraint specs:
 
             layer([rect(...).name("a"), rect(...).name("b")]).constrain(
                 lambda a, b: [
@@ -1012,13 +1049,13 @@ class ConstrainableMark(Mark):
                 ]
             )
 
-        Direct children are collected first; then the walker descends into
-        any **non-component** nested `layer(...)` children (i.e. those not
-        produced by `@mark`) so the callback can reach across tier
-        boundaries — e.g. an outer layer's `Constraint.z_above` can
-        reference a name declared inside an inner shapes layer. Direct
-        children win on name collision. Mirrors JS-side
-        `collectConstraintRefs` in
+        Names are resolved on the JS side, at layout, by the same lookup
+        `ref("name")` uses: start at this layer, widen one ancestor at a
+        time, stop at the first level that has the name, never cross a
+        `@mark` boundary. So a parameter can name a node nested anywhere
+        inside the layer. A name with no match, or with two matches at the
+        stopping level, is an error at render time. Mirrors the JS
+        `constraintEnv` proxy in
         `packages/gofish-graphics/src/ast/constraints/index.ts`.
         """
         if self._children is None:
@@ -1027,66 +1064,7 @@ class ConstrainableMark(Mark):
                 "`layer([...]).constrain(...)`"
             )
 
-        def _name_key(child: "Mark") -> Optional[str]:
-            n = getattr(child, "_name", None)
-            if n is None:
-                return None
-            return n.tag if isinstance(n, Token) else n
-
-        # Two phases, mirroring the JS-side descent: collect direct-child
-        # names first (so they win on collision), then recurse into any
-        # unnamed nested non-component layer.
-        refs: Dict[str, RefSentinel] = {}
-        seen_dupes: List[str] = []
-
-        def collect(children: List["Mark"], is_direct: bool) -> None:
-            # Phase 1 (this layer): named children.
-            for child in children:
-                key = _name_key(child)
-                if key is None:
-                    continue
-                if is_direct and key in refs:
-                    seen_dupes.append(key)
-                elif key not in refs:
-                    refs[key] = RefSentinel(key)
-            # Phase 2 (this layer): recurse into non-component plain layers.
-            for child in children:
-                if not isinstance(child, ConstrainableMark):
-                    continue
-                if getattr(child, "_is_scope", False):
-                    continue
-                if child._children is None:
-                    continue
-                collect(child._children, is_direct=False)
-
-        # Validate that every direct child can contribute names — either
-        # by being named itself, or by being a non-component layer the
-        # walker will descend into.
-        for child in self._children:
-            name = _name_key(child)
-            if name is not None:
-                continue
-            if (
-                isinstance(child, ConstrainableMark)
-                and not getattr(child, "_is_scope", False)
-                and child._children is not None
-            ):
-                continue
-            raise ValueError(
-                "every child of layer(...) used with .constrain() must be "
-                "named via .name(...) so the callback can reference it "
-                "(or be an unnamed non-component nested layer)"
-            )
-
-        collect(self._children, is_direct=True)
-
-        if seen_dupes:
-            raise ValueError(
-                ".constrain() children must have unique names; saw "
-                f"duplicates: {sorted(set(seen_dupes))}"
-            )
-
-        constraints = callback(**refs)
+        constraints = callback(**_callback_refs(callback, self._children))
         new_mark = type(self)(
             self.mark_type, _children=self._children, **self.kwargs
         )
@@ -2967,41 +2945,19 @@ class LayerBuilder:
         )
 
     def constrain(self, callback: Callable[..., List[Any]]) -> "LayerBuilder":
-        """Apply constraints relating the named children of this layer.
+        """Apply constraints relating named nodes inside this layer.
 
         Mirrors the JS storybook spelling
-        ``layer([sc.name("a"), other.name("b")]).constrain(({a, b}) => [...])``:
-        each child must be tagged with ``.name(...)`` so the callback can
-        reference it. The callback receives one ``RefSentinel`` per named child
-        as a kwarg and returns a list of constraint specs
-        (``Constraint.align(...)`` / ``Constraint.position(...)`` / ...).
+        ``layer([sc.name("a"), other.name("b")]).constrain(({a, b}) => [...])``.
+        The callback receives one ``RefSentinel`` per parameter it declares
+        and returns a list of constraint specs (``Constraint.align(...)`` /
+        ``Constraint.position(...)`` / ...). Names resolve on the JS side, as
+        for ``ConstrainableMark.constrain``.
 
         Returns:
             A new LayerBuilder carrying the resolved constraints.
         """
-
-        def _name_key(child: ChartBuilder) -> Optional[str]:
-            n = getattr(child, "_name", None)
-            if n is None:
-                return None
-            return n.tag if isinstance(n, Token) else n
-
-        refs: Dict[str, RefSentinel] = {}
-        for child in self.children:
-            key = _name_key(child)
-            if key is None:
-                raise ValueError(
-                    "every child of layer(...) used with .constrain() must be "
-                    "named via .name(...) so the callback can reference it"
-                )
-            if key in refs:
-                raise ValueError(
-                    f".constrain() children must have unique names; saw "
-                    f"duplicate: {key!r}"
-                )
-            refs[key] = RefSentinel(key)
-
-        constraints = callback(**refs)
+        constraints = callback(**_callback_refs(callback, self.children))
         new_layer = LayerBuilder(
             self.children, self.options, builder_chain=self._builder_chain
         )

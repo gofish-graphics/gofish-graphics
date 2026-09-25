@@ -25,8 +25,20 @@ export type AlignAnchor = Alignment | "baseline";
  *  a box, so `position`/`distribute` do not accept them. */
 export type AlignValue = AlignAnchor | "span" | "size";
 
-/** Lightweight handle for referencing a named child inside .constrain() */
-export type ConstraintRef = { readonly name: string };
+/**
+ * A constraint operand. Either BY NAME (`child` absent) — resolved at layout
+ * from the constrained layer, exactly like `ref("name")` — or BY POSITION
+ * (`child` present): the layer's `child`-th direct child, for operators that
+ * elaborate to a constrained layer and know their children's slots (spread,
+ * scatter, table, axis/legend/label chrome). A position, not a node object,
+ * because elaboration may later swap a child for a wrapper in the same slot
+ * (`node.children[i] = wrapped`); the slot is what the operator meant. `name`
+ * is always the operand's key in the placement solve.
+ */
+export type ConstraintRef = {
+  readonly name: string;
+  readonly child?: number;
+};
 
 /** Per-axis data→pixel position maps, as built by `layer.tsx` and consumed
  *  by `Constraint.position` (a literal coordinate is a raw pixel; a `datum`

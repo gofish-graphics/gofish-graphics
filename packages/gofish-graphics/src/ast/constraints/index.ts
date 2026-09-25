@@ -25,13 +25,17 @@ import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, TrackLayout } from "./grid";
+import { resolveScopedName } from "../_ref";
 import {
   childNameKey,
   isPlacedOn,
   type ConstraintPosScales,
   type ConstraintRef,
 } from "./shared";
-import { solvePlacementConstraints } from "./placementSolver";
+import {
+  solvePlacementConstraints,
+  type RigidAttachment,
+} from "./placementSolver";
 import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
 
 export type {
@@ -115,35 +119,93 @@ export const Constraint = {
 // --- Resolution ---
 
 /**
- * Build a name->ConstraintRef map from the named children of a node. Descends
- * into non-component plain `layer` children so a layer's `.constrain()` can
- * name elements in nested tiers (mirrors `_ref.tsx`'s `findInComponent`).
- *
- * Direct children win on name collision (collected before descent).
+ * The environment a user `.constrain(fn)` callback receives: every property
+ * read is a BY-NAME operand (`{ name }`), resolved later, at layout, from the
+ * constraining layer — the same innermost-enclosing lookup `ref("name")` uses
+ * (`resolveScopedName`). So `({ mercury, label }) => ...` can name any
+ * string-named node inside the layer, however deeply nested (up to a
+ * `createMark` boundary), and a name that matches nothing, or matches two
+ * nodes equally close, is a loud error at layout rather than a silent no-op.
  */
-export function collectConstraintRefs(
-  children: GoFishAST[]
+export function constraintEnv(): Record<string, ConstraintRef> {
+  return new Proxy({} as Record<string, ConstraintRef>, {
+    get(_target, prop) {
+      if (typeof prop !== "string") return undefined;
+      return { name: prop };
+    },
+  });
+}
+
+/**
+ * BY-POSITION operands for the named direct children of an elaborated layer
+ * (spread, scatter, table, axis/legend/label chrome). These operators know
+ * their children's slots, so their constraints never go through the name
+ * lookup — their synthesized names can repeat across the scope without
+ * colliding.
+ */
+export function childRefs(
+  children: readonly GoFishAST[]
 ): Record<string, ConstraintRef> {
   const refs: Record<string, ConstraintRef> = {};
-  collect(children);
+  children.forEach((c, child) => {
+    const name = childNameKey(c);
+    if (name && !(name in refs)) refs[name] = { name, child };
+  });
   return refs;
+}
 
-  function collect(cs: GoFishAST[]): void {
-    // Phase 1: collect direct children (so they win on collision). Both
-    // GoFishNode and GoFishRef carry `_name`, so a named ref (used as a
-    // cross-tier stand-in) is a valid constraint target too.
-    for (const child of cs) {
-      const name = childNameKey(child);
-      if (name && !(name in refs)) refs[name] = { name };
-    }
-    // Phase 2: recurse into non-component plain layers (refs have no children).
-    for (const child of cs) {
-      if (!(child instanceof GoFishNode)) continue;
-      if (child._isComponent) continue;
-      if (child.type !== "layer") continue;
-      collect(child.children);
+/** A layer constraint operand resolved to a node inside the layer: `child` is
+ *  the index of the layer's direct child that is (`node === children[child]`)
+ *  or contains `node`. */
+export type ResolvedOperand = { node: GoFishAST; child: number };
+
+/**
+ * Resolve every placement operand of `layer`'s constraints to a node inside
+ * the layer. By-name operands resolve from the layer outward
+ * (`resolveScopedName` — missing or ambiguous names throw); by-position
+ * operands name a direct child slot. Every operand must lie inside the layer (a layer
+ * can only place what it contains), and one operand key must always mean one
+ * node. z-order constraints are excluded: they relate SETS of nodes at paint
+ * time (`paintOrder.ts`), not single placeables.
+ */
+export function resolveConstraintOperands(
+  layer: GoFishNode
+): Map<string, ResolvedOperand> {
+  const out = new Map<string, ResolvedOperand>();
+  for (const c of layer.constraints) {
+    if (isZOrderConstraint(c)) continue;
+    for (const ref of c.children) {
+      if (!ref) continue;
+      const node =
+        ref.child !== undefined
+          ? layer.children[ref.child]
+          : resolveScopedName(layer, ref.name, `Constraint.${c.type} operand`);
+      const prior = out.get(ref.name);
+      if (prior) {
+        if (prior.node !== node) {
+          throw new Error(
+            `Constraint.${c.type}: operand key "${ref.name}" refers to two ` +
+              `different nodes in one layer.`
+          );
+        }
+        continue;
+      }
+      // Walk up to the layer's direct child that contains `node`.
+      let cur: GoFishAST | undefined = node;
+      while (cur && cur.parent !== layer) cur = cur.parent;
+      const child = cur ? layer.children.indexOf(cur) : -1;
+      if (child < 0) {
+        throw new Error(
+          `Constraint.${c.type}: operand "${ref.name}" is not inside the ` +
+            `layer this .constrain() is attached to. A layer can only place ` +
+            `nodes it contains; attach the constraint to a layer that ` +
+            `contains every operand.`
+        );
+      }
+      out.set(ref.name, { node, child });
     }
   }
+  return out;
 }
 
 /**
@@ -238,6 +300,8 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
  * @param nameToPlaceable - Map from child name to its Placeable
  * @param sizes - The layer's box size `[w, h]`, used by grid placement
  * @param posScales - Per-axis data→pixel scales for `position` constraints
+ * @param rigid - Nested operands (operand name → container name + gap), tied
+ *   rigidly to the layer child that contains them
  * @param dataPositioned - Per-axis sets of child names anchored to a data scale
  *   (baseline fixed at `posScale(0)`); `align` leaves these where their own scale
  *   puts them. The space/scope fact that replaced the `placementOn` guard read.
@@ -248,7 +312,8 @@ export function applyConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales,
   gridTracks?: [TrackLayout, TrackLayout],
-  dataPositioned?: [Set<string>, Set<string>]
+  dataPositioned?: [Set<string>, Set<string>],
+  rigid?: Map<string, RigidAttachment>
 ): void {
   const placement = constraints.filter(
     (
@@ -282,7 +347,8 @@ export function applyConstraints(
     sizes,
     posScales,
     gridTracks,
-    dataPositioned
+    dataPositioned,
+    rigid
   );
 
   if (prePlaced) {
