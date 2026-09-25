@@ -1216,6 +1216,12 @@ export class LayerBuilder extends RenderableBuilder {
         // empty `Chart()` scope, a relational mark, or a leaf annotation.
         let autoName: string | undefined;
         if (hasNext) {
+          // The registry may be an enclosing builder's, which has auto-named
+          // its own tiers already: skip the names it holds, or this tier's
+          // scope would take in that builder's marks too.
+          while (sharedContext[`__gofish_layer_${autoIdx}`] !== undefined) {
+            autoIdx++;
+          }
           const named = tier.ensureNamedMark(`__gofish_layer_${autoIdx}`);
           if (named.name === `__gofish_layer_${autoIdx}`) autoIdx++;
           tier = named.builder;
