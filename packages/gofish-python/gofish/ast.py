@@ -312,7 +312,7 @@ class Mark:
         self._is_scope: bool = False
         # When set, the harness invokes the JS-side mark with this datum
         # and key — mirrors the JS `rect({...})(d, key)` pattern used by
-        # `Treemap(opts, [rect(...)(d1, k1), rect(...)(d2, k2), ...])`.
+        # `treemap([rect(...)(d1, k1), rect(...)(d2, k2), ...], **opts)`.
         # Set via `.bind_data(d, key)`.
         self._datum: Any = None
         self._datum_set: bool = False
@@ -335,7 +335,7 @@ class Mark:
         return target
 
     def bind_data(self, datum: Any, key: Optional[str] = None) -> "Mark":
-        """Bind a datum (and optional key) to this Mark for the Treemap
+        """Bind a datum (and optional key) to this Mark for the treemap
         combinator pattern.
 
         Mirrors JS storybook spelling `rect({...})(d, d.key)` — the mark
@@ -529,7 +529,7 @@ class Mark:
         if self._is_scope:
             d["__scope"] = True
         # `bind_data()` pre-binds a datum + key for the
-        # `rect({...})(d, key)` Treemap-style invocation pattern.
+        # `rect({...})(d, key)` treemap-combinator invocation pattern.
         if self._datum_set:
             d["__datum"] = self._datum
             d["__key"] = self._key
@@ -1649,38 +1649,6 @@ def ref(target: Union[str, Token]) -> _RefProxy:
     return _RefProxy([target])
 
 
-def Treemap(  # noqa: N802  — match JS storybook spelling
-    children: List["Mark"],
-    **options: Any,
-) -> Mark:
-    """
-    Low-level combinator-form treemap.
-
-    Takes a list of pre-data-bound marks (typically `rect(...).bind_data(d, key)`
-    or `circle(...).bind_data(d, key)`) and lays them out by the per-leaf
-    weight given as `size` — one value per child, in child order (an
-    explicit list; there's no per-child data to group here).
-
-        Treemap(
-            [rect(fill=datum(genre)).bind_data({"worldwideGross": gross}, genre)
-             for genre, gross in groups],
-            size=[gross for genre, gross in groups],
-            paddingInner=2,
-            paddingOuter=2,
-            round=True,
-            tile="squarify",
-        ).render(w=700, h=420)
-
-    Mirrors JS `Treemap({size, ...}, nodes)` from
-    `packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx`.
-    """
-    return Mark(
-        "treemap",
-        _children=list(children),
-        **_treemap_combinator_opts(**options),
-    )
-
-
 # `arrow` and the region-compositing quartet (Porter-Duff-style
 # inside/xor/out/atop, renamed intersect/exclude/subtract/paint per #196/#202,
 # plus `over`/`mask`) are generated (packages/gofish-python/gofish/_generated.py)
@@ -1887,17 +1855,37 @@ def scatter(
 
 
 def treemap(
+    children: Optional[List["Mark"]] = None,
     *,
     by: Optional[Union[str, "FieldAccessor"]] = None,
     **options: Any,
-) -> Operator:
+) -> Union[Operator, "Mark"]:
     """
-    Treemap operator — lay out children in weight-proportional rectangles.
+    Treemap — polymorphic. Lays out children in weight-proportional rectangles.
+
+    Operator form (no positional arg): partitions data by `by` (or iterates
+    per-item when omitted). Used inside `.flow(...)`.
+
+        treemap(by="genre", size="gross")
+
+    Combinator form (positional list of marks): returns a low-level Mark that
+    lays out the given pre-data-bound child marks (typically
+    `rect(...).bind_data(d, key)`) by the per-leaf weight given as `size`, one
+    value per child, in child order.
+
+        treemap(
+            [rect(fill=datum(genre)).bind_data({"worldwideGross": gross}, genre)
+             for genre, gross in groups],
+            size=[gross for genre, gross in groups],
+            paddingInner=2,
+        ).render(w=700, h=420)
 
     Args:
-        by: Field name to partition rows by (like ``spread``/``group``), or a
-            ``field(...)`` accessor carrying domain ops
-            (``field("site").sort("yield")``, ``field("genre").drop_nulls()``).
+        children: When provided, switches to combinator form. List of child
+            Marks to lay out.
+        by: Field name to partition rows by (operator form only, like
+            ``spread``/``group``), or a ``field(...)`` accessor carrying domain
+            ops (``field("site").sort("yield")``, ``field("genre").drop_nulls()``).
             Without ``by``, one leaf is emitted per row.
         **options: ``size`` (a field name, pixel number, or ``field(...)``
             accessor sizing each leaf's tile area — entry-flagged, one value
@@ -1905,8 +1893,22 @@ def treemap(
             ``paddingOuter``, ``round``, ``leafIntrinsicRadiusField``.
 
     Mirrors JS ``treemap({ by, size, tile, sort, flipY, ... })`` in
-    ``.flow()``.
+    ``.flow()`` and ``treemap({ size, ... }, marks)`` as a combinator.
+
+    Returns:
+        Operator (no children) or Mark (with children).
     """
+    if children is not None:
+        if by is not None:
+            raise ValueError(
+                "treemap() combinator form (with children) does not accept "
+                "`by` — the layout is over the explicit child list, not data."
+            )
+        return Mark(
+            "treemap",
+            _children=list(children),
+            **_treemap_combinator_opts(**options),
+        )
     if by is not None:
         options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))

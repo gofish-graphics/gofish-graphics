@@ -178,9 +178,15 @@ Walking `createOperator.ts:391-415`:
 
 Same machinery, simpler:
 
-1. Apply each mark in `marks` to the same `d`. Marks may be any of:
-   `Mark<T>` functions, already-resolved `GoFishNode`s (e.g. `ref(...)`),
-   or a `Promise<Mark<T>[]>` (e.g. when produced by SolidJS `For(...)`).
+1. Apply each mark in `marks` to the same `d`. Each child is a `MarkChild`
+   (`src/ast/types.ts`): a `Mark<T>` function, an already-resolved node
+   (e.g. `ref(...)`), a promise of one (e.g. a `cut(...)` slice), or a chart
+   or layer builder. The list itself may be a promise (e.g. when produced by
+   `For(...)`). Every child goes through `resolveMarkResult`. `layer` and the
+   Porter-Duff combinators in `chart.ts` take the same `MarkChild` type. The
+   internal node-level operators (`Spread`, `Layer`, ...) that `layout` wraps
+   are not exported; the combinator form is the public way to pass explicit
+   children.
 2. Apply channels (no per-entry inference — there's no split).
 3. Strip factory keys.
 4. Combine.

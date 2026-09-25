@@ -11,7 +11,6 @@
 
 import {
   chart,
-  Layer,
   selectAll,
   spread,
   stack,
@@ -66,7 +65,6 @@ import {
   cutMark,
   offset as offsetOp,
   createName,
-  Treemap,
   setMeasureProvenance,
   PREVIOUS_LAYER_MARKS,
   GoFishRef,
@@ -105,7 +103,7 @@ const COMBINATOR_FACTORIES: Record<
   // line/ribbon low-level combinator form (replaces the removed connect).
   line: (opts, marks) => line(opts, marks) as unknown as Mark<any>,
   ribbon: (opts, marks) => ribbon(opts, marks) as unknown as Mark<any>,
-  treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
+  treemap: (opts, marks) => treemap(opts, marks) as unknown as Mark<any>,
   // Keys are the IR wire types (UNCHANGED — the serializer never renamed
   // them); values are the renamed (#196/#202) combinator factories. Mirrors
   // packages/gofish-graphics/src/serialize/registry.ts's COMBINATOR_FACTORIES.
@@ -135,7 +133,7 @@ interface ChartHarnessSpec {
   mark: MarkSpec;
   options: Record<string, any>;
   zOrder?: number | null;
-  // Name tagged via `Layer([chart.name(...), ...])` so a layer-level
+  // Name tagged via `layer([chart.name(...), ...])` so a layer-level
   // `.constrain(...)` callback can reference the resolved child node.
   name?: string | TokenSentinel | null;
 }
@@ -149,7 +147,7 @@ interface LayerHarnessSpec {
   type: "layer";
   charts: ChartHarnessSpec[];
   options: Record<string, any>;
-  // Constraints relating the named children of a `Layer([...]).constrain(...)`.
+  // Constraints relating the named children of a `layer([...]).constrain(...)`.
   constraints?: ConstraintSpec[];
   // True for a `chart(...).layer(...)` builder chain: reconstruct through
   // the real LayerBuilder so JS owns the builder's render logic.
@@ -1038,7 +1036,7 @@ function renderChart(spec: HarnessSpec) {
           // already wired (producer mark named, consumer reads selectAll), so
           // chaining `.layer()` just stacks them.
           //
-          // Unlike the combinator `Layer(...)` path below, a real builder
+          // Unlike the combinator `layer(...)` path below, a real builder
           // chain's `.render()` is normally called *without* an `axes` key at
           // all — LayerBuilder.render → resolveForRender reads `axes` from
           // the root tier's own chart options (`rootChart().renderMeta()`)
@@ -1061,8 +1059,8 @@ function renderChart(spec: HarnessSpec) {
         } else {
           const layerNode =
             Object.keys(layerOpts).length > 0
-              ? Layer(layerOpts as any, childCharts)
-              : Layer(childCharts);
+              ? layer(layerOpts as any, childCharts)
+              : layer(childCharts);
 
           await layerNode.render(container, {
             w,

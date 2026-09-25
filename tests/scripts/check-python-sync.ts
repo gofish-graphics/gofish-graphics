@@ -128,12 +128,13 @@ function isExportExempt(
 //   - **Storybook chrome** — story-level `title`, `tags`, and `parameters`
 //     (e.g. the gallery annotation) are presentation metadata. Python stories
 //     key off the file path and `story_*` function name, not these.
-//   - **API-alias casing** — the fluent chart surface is lowercase-only
-//     (`chart`, `layer`); the capitalized aliases `Chart` / `Layer` resolve to
-//     the same factories (and `Chart` was removed outright). A pure
-//     `Chart`→`chart` / `Layer`→`layer` rename in a JS story has no Python
-//     counterpart, since Python was always lowercase. Canonicalizing the case
-//     before comparing folds those renames out.
+//   - **API casing** — the public surface is lowercase-only (#146, #416): the
+//     capitalized spellings (`Chart`, `Layer`, `Spread`, `StackY`, `Frame`,
+//     ...) were aliases or node-level forms of the lowercase operators and are
+//     no longer exported. A pure `Layer`→`layer` / `Spread`→`spread` rename in
+//     a JS story has no Python counterpart, since Python was always
+//     lowercase. Canonicalizing the case of those retired names before
+//     comparing folds such renames out.
 //   - **Comments and whitespace** — a Python story mirrors the spec, not the
 //     prose around it, so a comment-only edit needs no Python change.
 //     Tokenizing with the TypeScript scanner drops comments without touching
@@ -176,14 +177,48 @@ function stripComments(source: string): string {
   return tokens.join(" ");
 }
 
-/** Fold the capitalized `Chart`/`Layer` aliases to lowercase so a pure casing rename is spec-neutral. */
+/** The retired capitalized API spellings (#146, #416). */
+const RETIRED_CAPITALIZED_NAMES = [
+  "Chart",
+  "Layer",
+  "Spread",
+  "Stack",
+  "Scatter",
+  "Treemap",
+  "Table",
+  "Intersect",
+  "Exclude",
+  "Subtract",
+  "Paint",
+  "Mask",
+  "StackX",
+  "StackY",
+  "SpreadX",
+  "SpreadY",
+  "Enclose",
+  "Frame",
+  "Position",
+  "Arrow",
+  "Cut",
+  "Offset",
+  "GoFish",
+];
+const RETIRED_CAPITALIZED_RE = new RegExp(
+  `\\b(${RETIRED_CAPITALIZED_NAMES.join("|")})\\b`,
+  "g"
+);
+
+/** Fold the retired capitalized spellings to lowercase so a pure casing rename is spec-neutral. */
 function canonicalizeApiCasing(source: string): string {
-  return source.replace(/\bChart\b/g, "chart").replace(/\bLayer\b/g, "layer");
+  return source.replace(
+    RETIRED_CAPITALIZED_RE,
+    (name) => name[0].toLowerCase() + name.slice(1)
+  );
 }
 
 /** True when the file's change between baseRef's merge-base and HEAD touches
- * only spec-neutral content (Storybook chrome, `Chart`/`Layer` casing,
- * comments, whitespace). */
+ * only spec-neutral content (Storybook chrome, retired API casing, comments,
+ * whitespace). */
 function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
   try {
     const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {

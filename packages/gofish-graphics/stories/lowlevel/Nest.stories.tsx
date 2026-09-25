@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Constraint, Layer, rect, spread, value } from "../../src/lib";
+import { Constraint, layer, rect, spread, value } from "../../src/lib";
 
 /**
  * `Constraint.nest({x?, y?}, [outer, inner])`: the relation `outer = inner +
@@ -36,7 +36,7 @@ export const Basic: StoryObj<Args> = {
   args: { w: 200, h: 160 },
   render: (args: Args) => {
     const container = initializeContainer();
-    Layer([
+    layer([
       rect({ fill: "#dbe6f3", stroke: "#5a7da6", strokeWidth: 1.5, rx: 6 }).name(
         "outer"
       ),
@@ -57,7 +57,7 @@ export const Chained: StoryObj<Args> = {
   args: { w: 220, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
-    const mid = Layer([
+    const mid = layer([
       rect({ fill: "#cfdcec", stroke: "#5a7da6", strokeWidth: 1.25, rx: 5 }).name(
         "midOuter"
       ),
@@ -66,7 +66,7 @@ export const Chained: StoryObj<Args> = {
       Constraint.nest({ x: 8, y: 8 }, [midOuter, core]),
     ]);
 
-    Layer([
+    layer([
       rect({ fill: "#fafbfd", stroke: "#9bb1c4", strokeWidth: 1.5, rx: 6 }).name(
         "shell"
       ),
@@ -97,7 +97,7 @@ export const AutoFit: StoryObj<Args> = {
     spread(
       { dir: "x", spacing: 10, alignment: "middle" },
       INNER_WIDTHS.map((v, i) =>
-        Layer([
+        layer([
           rect({ fill: "#eef2f7", stroke: "#9bb1c4", strokeWidth: 1, rx: 4 }).name(
             "outer"
           ),
@@ -121,7 +121,7 @@ export const OutsideIn: StoryObj<Args> = {
   args: { w: 280, h: 220 },
   render: (args: Args) => {
     const container = initializeContainer();
-    Layer([
+    layer([
       rect({ w: 200, h: 140, fill: "#dbe6f3", stroke: "#5a7da6", strokeWidth: 1.5, rx: 6 }).name(
         "outer"
       ),
@@ -144,7 +144,7 @@ export const FillOuter: StoryObj<Args> = {
   args: { w: 240, h: 180 },
   render: (args: Args) => {
     const container = initializeContainer();
-    Layer([
+    layer([
       rect({ fill: "#dbe6f3", stroke: "#5a7da6", strokeWidth: 1.5, rx: 6 }).name(
         "outer"
       ),

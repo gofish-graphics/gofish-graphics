@@ -9,8 +9,6 @@ import {
   Constraint,
   spread,
   stack,
-  Spread,
-  Stack,
   cut,
   datum,
 } from "../../src/lib";
@@ -258,7 +256,7 @@ export const LowLevelForm: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Spread(
+    spread(
       { dir: "y", spacing: 4, reverse: true },
       cut(image({ href: bottlePng, w: 193, h: 600 }), {
         dir: "y",
@@ -281,7 +279,7 @@ export const RectAbsoluteSizes: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Spread(
+    spread(
       { dir: "x", spacing: 8 },
       cut(rect({ w: 600, h: 80, fill: "seagreen" }), {
         dir: "x",
@@ -304,7 +302,7 @@ export const MixedSizes: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Spread(
+    spread(
       { dir: "x", spacing: 8 },
       cut(
         rect({
@@ -375,10 +373,10 @@ export const CroissantStack: StoryObj<Args> = {
     const spacer = () =>
       rect({ w: inset / 2, h: 0, fill: "none", stroke: "none" });
     const padded = slices.map((slice) =>
-      Stack({ dir: "x" }, [spacer(), slice, spacer()])
+      stack({ dir: "x" }, [spacer(), slice, spacer()])
     );
 
-    const bands = Stack({ dir: "x" }, padded).name("bands");
+    const bands = stack({ dir: "x" }, padded).name("bands");
 
     // Hand-composed continuous x axis. The low-level Stack of masked slices has
     // SIZE space (no continuous POSITION domain), so the renderer's `axes`

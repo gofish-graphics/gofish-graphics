@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, line, Layer, frame } from "gofish-graphics";
+import { ellipse, line, layer, frame } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -166,7 +166,7 @@ export const RadialPhylogeneticTree: StoryObj = {
   render: () => {
     const container = initializeContainer({ w: CANVAS, h: CANVAS });
     // Node=hidden: the layer holds only links.
-    frame({}, [Layer([...links])]).render(container, { w: CANVAS, h: CANVAS });
+    frame({}, [layer([...links])]).render(container, { w: CANVAS, h: CANVAS });
     return container;
   },
 };

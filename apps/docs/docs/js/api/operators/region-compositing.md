@@ -32,7 +32,7 @@ Union (`A ∪ B`) is intentionally **not** exported — it is conceptually
 ::: gofish
 
 ```js
-gf.Paint([
+gf.paint([
   gf.rect({ x: 0, y: 0, w: 120, h: 120, fill: gf.color.blue[3] }),
   gf.rect({ x: 40, y: 40, w: 120, h: 120, fill: gf.color.red[3] }),
 ]).render(root, { w: 160, h: 160 });
@@ -54,11 +54,8 @@ paint(options?, [A, B]);
 mask([A, B]);
 ```
 
-`Intersect`, `Exclude`, `Subtract`, `Paint`, and `Mask` are the node-level
-forms. They take two already-built nodes and return a node, while the
-lowercase forms are marks that resolve their children against the incoming
-data. The two levels are not aliases of each other
-([#146](https://github.com/joshpoll/gofish/issues/146)).
+Each child may be a mark or an already-built node, such as a `ref(...)`.
+Marks are resolved against the incoming data.
 
 ## Parameters
 

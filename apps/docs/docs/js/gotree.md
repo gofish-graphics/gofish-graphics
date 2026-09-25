@@ -55,10 +55,10 @@ rectangles where each parent box wraps its children.
 
 ```ts
 import { tree, spread, nest } from "gofish-gotree";
-import { Layer, Constraint, rect, text } from "gofish-graphics";
+import { layer, Constraint, rect, text } from "gofish-graphics";
 
 const labeledNode = (d) =>
-  Layer({ w: 96, h: 22 }, [
+  layer({ w: 96, h: 22 }, [
     rect({ w: 96, h: 22, rx: 4, fill: "#e3edf7" }).name("box"),
     text({ text: d.data.name, fontSize: 11 }).name("label"),
   ]).constrain(({ box, label }) => [
@@ -150,7 +150,7 @@ sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
 
 #### `nest({ x?, y? })`
 
-Returns a combiner that wraps `[outer, inner]` in a Layer with
+Returns a combiner that wraps `[outer, inner]` in a layer with
 `Constraint.nest({x?, y?}, [outer, inner])`. The outer is sized to inner's
 intrinsic dims plus `2 * padding` symmetrically per constrained axis; inner is
 centered inside outer. Missing axis (e.g. `{x: 8}` only) leaves the other axis
@@ -246,7 +246,7 @@ Any function with shape `(children: any[]) => any` works. For example, a sibling
 combiner that adds a small label below each spread group:
 
 ```ts no-check
-import { Layer, stackY } from "gofish-graphics";
+import { layer, stackY } from "gofish-graphics";
 
 sibling: (kids) => stackY({ spacing: 8 }, [
   spread({ dir: "x", spacing: 16 })(kids),

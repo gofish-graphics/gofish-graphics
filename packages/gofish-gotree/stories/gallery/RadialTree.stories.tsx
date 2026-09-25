@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, line, Layer, frame, polar } from "gofish-graphics";
+import { ellipse, line, layer, frame, polar } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -170,7 +170,7 @@ export const RadialTree: StoryObj = {
     // Inside a coord, paint order = array order (coord's flattenLayout ignores
     // zOrder — resolved by the ROOT bake, and coord is a bake boundary). Links
     // go FIRST to draw under the nodes; the root node is last within `nodes`.
-    frame({ coord: polar() as any }, [Layer([...links, ...nodes])]).render(
+    frame({ coord: polar() as any }, [layer([...links, ...nodes])]).render(
       container,
       { w: 560, h: 560 }
     );

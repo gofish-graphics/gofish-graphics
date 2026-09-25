@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, Layer, frame, polar } from "gofish-graphics";
+import { rect, layer, frame, polar } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -167,7 +167,7 @@ const marks = wedges
 export const OutsideInTree: StoryObj = {
   render: () => {
     const container = initializeContainer({ w: 540, h: 540 });
-    frame({ coord: polar() as any }, [Layer(marks)]).render(container, {
+    frame({ coord: polar() as any }, [layer(marks)]).render(container, {
       w: 540,
       h: 540,
     });

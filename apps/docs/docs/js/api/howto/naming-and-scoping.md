@@ -11,10 +11,10 @@ When you build composable components — a `stackSlot` that itself contains a `b
 
 ## Strings: layer-local names
 
-`.name("x")` on a child of a `Layer` makes `x` available inside that layer's `.constrain()` callback, and to a local `ref("x")` lookup. Strings never cross component boundaries, never register globally, and never show up as path segments.
+`.name("x")` on a child of a `layer` makes `x` available inside that layer's `.constrain()` callback, and to a local `ref("x")` lookup. Strings never cross component boundaries, never register globally, and never show up as path segments.
 
 ```ts
-Layer([
+layer([
   rect({ w: 200, h: 150, fill: "#eee" }).name("bg"),
   text({ text: "Title" }).name("label"),
 ]).constrain(({ bg, label }) => [
@@ -43,7 +43,7 @@ When you attach a token to a node with `.name(token)`:
 ```ts
 const valueName = createName("value");
 
-Layer([
+layer([
   rect({ w: 40, h: 40 }).name("box"),
   text({ text: "5" }).name(valueName),
 ]).constrain(({ box, value }) => [
@@ -61,9 +61,9 @@ import { createMark, createName } from "gofish-graphics";
 export const stackSlot = createMark(({ variable, value }: StackSlotProps) => {
   const boxTag = createName("box");
   const valueTag = createName("value");
-  return Spread({ dir: "x", spacing: 5 }, [
+  return spread({ dir: "x", spacing: 5 }, [
     text({ text: variable }).name("variable"),
-    Layer([
+    layer([
       rect({ w: 40, h: 40 }).name(boxTag),
       text({ text: value }).name(valueTag),
     ]).constrain(({ box, value }) => [
@@ -73,14 +73,14 @@ export const stackSlot = createMark(({ variable, value }: StackSlotProps) => {
 });
 ```
 
-- The mark's output (the `Spread` here) is the scope root.
+- The mark's output (the `spread` here) is the scope root.
 - `valueTag` and `boxTag` are Tokens: they register in `stackSlot`'s scope under tags `"value"` and `"box"`.
 - `"variable"` (the left-side text) is a plain string: layer-local only, not path-addressable from outside.
 
 You can also call `.scope()` directly on any node if you're working without `createMark`:
 
 ```ts no-check
-return Spread(...).scope();
+return frame(...).scope();
 ```
 
 ## Paths
@@ -105,8 +105,8 @@ Because scopes are per-instance, you can have many stackSlots with inner tag `"v
 const globalFrameName = createName("globalFrame");
 const heapName = createName("heap");
 
-Layer([
-  Spread({ dir: "x", spacing: 100 }, [
+layer([
+  spread({ dir: "x", spacing: 100 }, [
     globalFrame({ stack }).name(globalFrameName),
     heap({ heap, heapArrangement }).name(heapName),
   ]),

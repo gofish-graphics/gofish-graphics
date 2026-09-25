@@ -30,7 +30,7 @@ import {
 import { isValue } from "./data";
 import { splitLiveChannels } from "../interaction/live";
 import { KNOWN_ALIAS_KEYS } from "./dims";
-import { Mark } from "./types";
+import { Mark, MarkChild } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
@@ -412,7 +412,9 @@ export type MarkSerializeConfig<P = any> =
  *
  * Omitting `channels` is just the empty-annotations special case: all props
  * pass through as-is, which is the right default for `(props) => Node`-style
- * components composed from existing marks.
+ * components composed from existing marks. A component's body may return a
+ * built node or a mark (e.g. `layer([...])`, `spread(opts, [...])`): the
+ * result is reified like any combinator child, in a fresh name context.
  *
  * The output node is always made a scope root, so any `.name(token)`
  * registrations inside the shape function are hygienic — external paths like
@@ -424,10 +426,10 @@ export type MarkSerializeConfig<P = any> =
  * `selectAll("layerName")`.
  */
 export function createMark<P extends Record<string, any>>(
-  shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>
+  shapeFn: (props: P) => MarkChild
 ): (props: P) => NameableMark<P>;
 export function createMark<P extends Record<string, any>>(
-  shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>,
+  shapeFn: (props: P) => MarkChild,
   channels: undefined,
   serialize: MarkSerializeConfig<P>
 ): (props: P) => NameableMark<P>;
@@ -541,10 +543,13 @@ function buildCreatedMark(
 
     // For expand-kind marks, hand the data array to shapeFn so it can
     // build N output nodes 1:1 with input rows. shapeFn may be async.
-    const result = await shapeFn(
-      shapeProps,
-      kind === "expand" ? data : undefined
-    );
+    // A component body may return anything a combinator child may be (a
+    // built node, or a mark such as `layer([...])`), so it is reified through
+    // the same `resolveMarkResult` path. The name context is fresh: the
+    // component is a naming boundary. An expand mark's array of slice nodes
+    // passes through as-is.
+    const raw = await shapeFn(shapeProps, kind === "expand" ? data : undefined);
+    const result = Array.isArray(raw) ? raw : await resolveMarkResult(raw, {});
     if (Array.isArray(result)) {
       // Expand path: stamp each slice with its own datum.
       for (let i = 0; i < result.length; i++) {

@@ -513,7 +513,7 @@ gf.layer({ axes: true }, [
 Great! This is already a ribbon chart but it's a little funky. We'll fix the funkiness in a second,
 but first let's understand what's going on.
 
-To add some ribbons, we first created a `Layer` so we can add the ribbons as a second layer. Then
+To add some ribbons, we first created a `layer` so we can add the ribbons as a second layer. Then
 we name the marks in the first layer using `.name("bars")` and `selectAll` those marks in the second
 layer. `selectAll("bars")` hands us one [`ref`](/js/api/marks/ref) per bar; we group them by species
 using `gf.group({ by: "species" })` and finally draw a `ribbon` mark for each group.
@@ -581,7 +581,7 @@ frame([
 ## Polar Ribbon Chart
 
 Finally it's time to make our polar ribbon chart! To do so, we'll add a `clock` coordinate transform
-to the `Layer` and adjust the parameters to `spread`
+to the `layer` and adjust the parameters to `spread`
 so that it looks better in polar space.
 
 :::gofish

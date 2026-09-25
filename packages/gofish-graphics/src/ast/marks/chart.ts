@@ -26,7 +26,7 @@ import {
 } from "../../interaction/live";
 import { rect as generatedRect, baseBlank } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
-import { Mark, Operator } from "../types";
+import { Mark, MarkChild, Operator } from "../types";
 import { addRenderMethod, createMark, type NameableMark } from "../withGoFish";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
@@ -983,16 +983,14 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
  *   - already-resolved GoFishNodes (e.g. ref(...)).
  * Supports `.name()`, `.label()`, `.constrain()`, and a top-level `.render()`.
  */
-export function layer<T>(
-  marks: (Mark<any> | GoFishRef)[]
-): ConstrainableMark<T>;
+export function layer<T>(marks: MarkChild[]): ConstrainableMark<T>;
 export function layer<T>(
   opts: Record<string, any>,
-  marks: (Mark<any> | GoFishRef)[]
+  marks: MarkChild[]
 ): ConstrainableMark<T>;
 export function layer<T>(
-  marksOrOpts: (Mark<any> | GoFishRef)[] | Record<string, any>,
-  maybeMarks?: (Mark<any> | GoFishRef)[]
+  marksOrOpts: MarkChild[] | Record<string, any>,
+  maybeMarks?: MarkChild[]
 ): ConstrainableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
@@ -1034,19 +1032,19 @@ function makePorterDuffCombinator(
   lowLevel: (opts: any, children: any) => any,
   irType: string
 ) {
-  function fn<T>(marks: [Mark<any>, Mark<any>]): NameableMark<T>;
+  function fn<T>(marks: [MarkChild, MarkChild]): NameableMark<T>;
   function fn<T>(
     opts: PdOptions,
-    marks: [Mark<any>, Mark<any>]
+    marks: [MarkChild, MarkChild]
   ): NameableMark<T>;
   function fn<T>(
-    optsOrMarks: PdOptions | [Mark<any>, Mark<any>],
-    maybeMarks?: [Mark<any>, Mark<any>]
+    optsOrMarks: PdOptions | [MarkChild, MarkChild],
+    maybeMarks?: [MarkChild, MarkChild]
   ): NameableMark<T> {
     const opts = Array.isArray(optsOrMarks) ? {} : optsOrMarks;
     const marks = (Array.isArray(optsOrMarks) ? optsOrMarks : maybeMarks) as [
-      Mark<any>,
-      Mark<any>,
+      MarkChild,
+      MarkChild,
     ];
     const base: Mark<T> = async (d, key, layerContext) => {
       const [child0, child1] = await Promise.all(

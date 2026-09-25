@@ -11,7 +11,7 @@ padded by `padding`. Use it to group elements of a diagram visually.
 
 ```js
 gf.enclose({ padding: 10, stroke: gf.color.blue[4] }, [
-  gf.Stack({ dir: "x", spacing: 12 }, [
+  gf.stack({ dir: "x" }, [
     gf.rect({ w: 40, h: 40, fill: gf.color.blue[2] }),
     gf.rect({ w: 40, h: 60, fill: gf.color.red[2] }),
   ]),

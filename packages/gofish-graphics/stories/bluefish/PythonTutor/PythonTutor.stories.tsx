@@ -3,9 +3,9 @@ import { initializeContainer } from "../../helper";
 import {
   arrow,
   createName,
-  Layer,
+  layer,
   ref,
-  Spread,
+  spread,
 } from "../../../src/lib";
 import { globalFrame } from "./globalFrame";
 import { heap } from "./heap";
@@ -102,10 +102,10 @@ export const PythonTutor: StoryObj = {
       )
     );
 
-    Layer([
+    layer([
       // y-down free space: cross-axis "start" tops-aligns the global frame and
       // the heap (issue #143/#16).
-      Spread({ dir: "x", alignment: "start", spacing: 100 }, [
+      spread({ dir: "x", alignment: "start", spacing: 100 }, [
         globalFrame({ stack: data.stack }).name(globalFrameName),
         heap({
           heap: data.heap,

@@ -8,11 +8,11 @@ order: 60
 Lays children out into a treemap: a 2D tiling of rectangles (or circles) whose
 **areas are proportional to a weight**.
 
-GoFish exposes two spellings:
+`treemap` has two forms:
 
 - **`treemap(...)`** — an operator for use inside
   [`.flow()`](/python/api/core/flow); it tiles the partitioned data of a chart.
-- **`Treemap(children, ...)`** — the low-level **combinator** form: it takes an
+- **`treemap(children, ...)`** — the low-level **combinator** form: it takes an
   explicit list of pre-data-bound marks and assigns each one its `(x, y, w, h)`.
 
 The two share the same options below.
@@ -48,7 +48,7 @@ chart(movies_raw).flow(
 treemap(**options) -> Operator
 
 # Combinator form (explicit children)
-Treemap(children, **options) -> Mark
+treemap(children, **options) -> Mark
 ```
 
 ## Parameters
@@ -59,7 +59,7 @@ Treemap(children, **options) -> Mark
 ## Notes
 
 - A treemap accepts a **flat list of children**; for multi-level treemaps,
-  compose by nesting `Treemap(...)` calls (or add a higher-level wrapper).
+  compose by nesting `treemap(...)` calls (or add a higher-level wrapper).
 - In the combinator form, each child is bound to its row with
   `mark.bind_data(d, key)`; chain `.label(accessor, ...)` on the mark to show
   a field's value on each tile. `size` in combinator form is an **explicit

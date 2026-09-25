@@ -27,10 +27,10 @@ center one on the other.
 
 ```js
 const slot = gf.createMark(({ variable, value }) =>
-  gf.Spread({ dir: "x", alignment: "middle", spacing: 6 }, [
+  gf.spread({ dir: "x", alignment: "middle", spacing: 6 }, [
     gf.text({ text: variable, fontSize: 16 }),
     gf
-      .Layer([
+      .layer([
         gf.rect({ w: 40, h: 40, fill: "#e2ebf6" }).name("box"),
         gf.text({ text: value, fontSize: 16 }).name("value"),
       ])
@@ -40,7 +40,7 @@ const slot = gf.createMark(({ variable, value }) =>
   ])
 );
 
-gf.Spread({ dir: "y", spacing: 8, alignment: "end" }, [
+gf.spread({ dir: "y", spacing: 8, alignment: "end" }, [
   slot({ variable: "x", value: "5" }),
   slot({ variable: "y", value: "8" }),
   slot({ variable: "z", value: "3" }),
@@ -114,10 +114,10 @@ itself that it is willing to expose. Everything else stays a string.
 ```js
 const slot = gf.createMark(({ variable, value }) => {
   const valueTag = gf.createName("value");
-  return gf.Spread({ dir: "x", alignment: "middle", spacing: 6 }, [
+  return gf.spread({ dir: "x", alignment: "middle", spacing: 6 }, [
     gf.text({ text: variable, fontSize: 16 }),
     gf
-      .Layer([
+      .layer([
         gf.rect({ w: 40, h: 40, fill: "#e2ebf6" }).name("box"),
         gf.text({ text: value, fontSize: 16 }).name(valueTag),
       ])
@@ -130,8 +130,8 @@ const slot = gf.createMark(({ variable, value }) => {
 const first = gf.createName("first");
 const second = gf.createName("second");
 
-gf.Layer([
-  gf.Spread({ dir: "y", spacing: 40, alignment: "end" }, [
+gf.layer([
+  gf.spread({ dir: "y", spacing: 40, alignment: "end" }, [
     slot({ variable: "x", value: "5" }).name(first),
     slot({ variable: "y", value: "5" }).name(second),
   ]),

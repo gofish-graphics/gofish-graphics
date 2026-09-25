@@ -1,13 +1,13 @@
 # constrain
 
-`.constrain()` positions named children of a `Layer` relative to each other using declarative alignment and distribution rules. It is the low-level alternative to `Spread` when you need precise control over how individual elements relate — for example, aligning a label to the edge of a background, or distributing a set of elements with different spacings on different subsets.
+`.constrain()` positions named children of a `layer` relative to each other using declarative alignment and distribution rules. It is the low-level alternative to `spread` when you need precise control over how individual elements relate — for example, aligning a label to the edge of a background, or distributing a set of elements with different spacings on different subsets.
 
 ## Usage
 
-Name each child you want to position using `.name("key")`, then chain `.constrain()` on the `Layer`. The callback receives a destructured object of `ConstraintRef` handles — one per named child.
+Name each child you want to position using `.name("key")`, then chain `.constrain()` on the `layer`. The callback receives a destructured object of `ConstraintRef` handles — one per named child.
 
 ```ts
-Layer([
+layer([
   rect({ w: 200, h: 150, fill: "#e2ebf6" }).name("bg"),
   text({ text: "Title", fontSize: 18 }).name("label"),
 ])
@@ -61,7 +61,7 @@ The first already-placed child in the list acts as the anchor on each specified 
 Like the point-anchor form, the source is the first already-placed child; every other listed child is a target.
 
 ```ts
-Layer([group, rect({ fill: "none", stroke: "#333" }).name("border")]).constrain(
+layer([group, rect({ fill: "none", stroke: "#333" }).name("border")]).constrain(
   ({ group, border }) => [
     Constraint.align({ x: "span" }, [group, border]), // border adopts group's left AND right
     Constraint.align({ y: "span" }, [group, border]), // together: border exactly bounds the group
@@ -132,7 +132,7 @@ or a coordinate transform), it solves for the scale factor that makes the
 children fit, and proposes equal budget slices to children
 with no size claim of their own. With `glue: true` the composed extents commit
 to an anchored positional axis instead — that's a stacked bar chart. In other
-words: a constraint-assembled layer auto-fits the same way a `Spread`/`Stack`
+words: a constraint-assembled layer auto-fits the same way a `spread`/`stack`
 does.
 
 ::: gofish
@@ -158,7 +158,7 @@ Places a child at an `x` and/or `y` coordinate — the data-driven counterpart t
 `align`/`distribute`, which only relate children to each other. It mirrors how
 you position a shape: each coordinate is either a **literal** pixel value or a
 **`datum`** (`datum(n)`). A literal is placed as-is; a datum is mapped through a
-scale the `Layer` infers from the datum coordinates of its `position`
+scale the `layer` infers from the datum coordinates of its `position`
 constraints (their union is the layer's domain on that axis, mapped onto the
 layer's pixel size). This is how a hand-drawn continuous axis places each tick
 at its value rather than assuming uniform spacing.
@@ -208,9 +208,9 @@ the same thing is written with plain arithmetic: `datum(0) - 6`.
 
 ```ts
 // A continuous y-axis: each tick centered at its data value. Passing `datum(v)`
-// maps it through the y-scale the Layer derives from these constraints (domain
+// maps it through the y-scale the layer derives from these constraints (domain
 // [0, 300] → plot height). A bare number would be a raw pixel instead.
-Layer([
+layer([
   rect({ w: 1, h: 300 }).name("axis"),
   ...tickValues.map((v, i) => tick(v).name(`t${i}`)),
 ]).constrain((g) => [
@@ -244,7 +244,7 @@ resolved from which side carries the size:
 - **Inside-out** (`outer = inner + 2·padding`): the inner is sized and the outer
   is not — a box that shrink-wraps its content. Because the derived outer size
   enters the layer's size request, a nested pair inside an auto-fit context
-  (a `Spread` of nested pairs) participates in the scale solve.
+  (a `spread` of nested pairs) participates in the scale solve.
 - **Outside-in** (`inner = outer − 2·padding`): the outer carries the size and
   the inner is claim-less — exactly CSS `padding`.
 - **Center only**: when neither side is sized, the layer fills the outer, then
@@ -252,7 +252,7 @@ resolved from which side carries the size:
 
 ```ts
 // inner 60×40, padding 10 → outer 80×60; inner centered (inner.min = 10).
-Layer([
+layer([
   rect({ fill: "#dbe6f3" }).name("outer"),
   rect({ w: 60, h: 40, fill: "#e63946" }).name("inner"),
 ]).constrain(({ outer, inner }) => [
@@ -288,14 +288,14 @@ Constraint.zBelow(a, b); // a paints behind b (under in z)
 `zBelow(a, b)` is equivalent to `zAbove(b, a)`; both are provided so the spec
 reads naturally either way.
 
-When a `Layer` carries any z-order constraint, the render flattens the
+When a `layer` carries any z-order constraint, the render flattens the
 (non-component) subtree into a single paint list and **topologically sorts**
 it. Within the order constraints don't pin, the existing default order is
 preserved (`.zOrder(n)` hints first, then declaration order). A cycle
 (`zAbove(a, b) + zAbove(b, a)`) throws an error at render time.
 
 ```ts
-Layer([
+layer([
   rect({ w: 80, h: 40, fill: "lightgray" }).name("bg"),
   rect({ w: 60, h: 60, fill: "steelblue" }).name("box"),
   text({ text: "label", fontSize: 14 }).name("label"),
@@ -309,14 +309,14 @@ Layer([
 ### Cross-tier references
 
 Z-order refs can reach into the layer's _direct_ children and into any
-**plain (non-component) nested `Layer`** below — the same descent rule
+**plain (non-component) nested `layer`** below — the same descent rule
 `ref()` uses inside `createMark` composites. This makes patterns like
 "rope on the outer layer slots in z between two pulleys in the inner layer"
 expressible without restructuring the AST.
 
 ```ts
-Layer([
-  Layer([
+layer([
+  layer([
     PulleyCircle({ r: 25 }).name(A),
     PulleyCircle({ r: 25 }).name(B),
   ]).constrain(/* … */),
@@ -337,23 +337,23 @@ Layer([
 The two compose: `.zOrder(n)` sets the default order; z-order constraints
 override it for the pairs they name.
 
-## Spread equivalences
+## spread equivalences
 
-Constraints are the primitive `Spread` and `Stack` are built on — literally:
+Constraints are the primitive `spread` and `stack` are built on — literally:
 the operators delegate their space resolution, budget slicing, and placement
 walks to the same machinery the constraint path uses. These pairs are
 equivalent, **including** scale solving and auto-fit, not just placement:
 
-| Spread                                                       | Constraint equivalent                                           |
+| Operator                                                     | Constraint equivalent                                           |
 | ------------------------------------------------------------ | --------------------------------------------------------------- |
-| `Spread({ dir: "y", alignment: "start" }, items)`            | `align({ x: "start" })` + `distribute({ dir: "y" })`            |
-| `Spread({ dir: "x", alignment: "end", spacing: 10 }, items)` | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })` |
-| `Spread({ dir: "x", spacing: 60, anchor: "middle" }, items)` | `distribute({ dir: "x", spacing: 60, anchor: "middle" })`       |
-| `Spread({ dir: "y", reverse: true }, items)`                 | `distribute({ dir: "y", order: "reverse" })`                    |
-| `Stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
+| `spread({ dir: "y", alignment: "start" }, items)`            | `align({ x: "start" })` + `distribute({ dir: "y" })`            |
+| `spread({ dir: "x", alignment: "end", spacing: 10 }, items)` | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })` |
+| `spread({ dir: "x", spacing: 60, anchor: "middle" }, items)` | `distribute({ dir: "x", spacing: 60, anchor: "middle" })`       |
+| `spread({ dir: "y", reverse: true }, items)`                 | `distribute({ dir: "y", order: "reverse" })`                    |
+| `stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
 
 When **no child is pre-placed**, the cross-axis alignment fallback depends on
-the **axis**, not the API — `Spread` and the `align` constraint resolve the
+the **axis**, not the API — `spread` and the `align` constraint resolve the
 same fallback, so the pairs above are exact. A scaled (POSITION) axis falls
 back to the scale origin `posScale(0)` (so SIZE-derived bars hang from the zero
 line); a pixel-pure axis falls back to the layer-box edge (`start` → 0,
@@ -364,7 +364,7 @@ line); a pixel-pure axis falls back to the layer-box edge (`start` → 0,
 Constraints only apply to the axes you specify. Unmentioned axes fall back to 0. This lets you mix manually-positioned children with constraint-placed ones:
 
 ```ts
-Layer([
+layer([
   rect({ w: 80, h: 40, y: 20 }).name("a"), // y manually set
   rect({ w: 120, h: 40 }).name("b"),
   rect({ w: 60, h: 40 }).name("c"),
@@ -376,10 +376,10 @@ Layer([
 
 ## Subset selection
 
-A single `Layer` can have multiple constraints that each target different subsets of children:
+A single `layer` can have multiple constraints that each target different subsets of children:
 
 ```ts
-Layer([
+layer([
   rect({ w: 100, h: 50 }).name("a"),
   rect({ w: 80, h: 50 }).name("b"),
   rect({ w: 120, h: 50 }).name("c"),

@@ -32,8 +32,7 @@
 
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { GoFishRef } from "../_ref";
-import { Mark, Operator } from "../types";
+import { Mark, MarkChild, Operator } from "../types";
 import {
   LayerContext,
   resolveMarkResult,
@@ -682,7 +681,7 @@ export type DualModeOperator<Datum, Options> = {
   (opts: Options): TranslatableOperator<Datum[], Datum[]>;
   (
     opts: Options,
-    marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
+    marks: MarkChild[] | Promise<MarkChild[]>
   ): NameableMark<Datum>;
 };
 
@@ -945,11 +944,11 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(opts: Options): TranslatableOperator<Datum[], Datum[]>;
   function dual(
     opts: Options,
-    marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
+    marks: MarkChild[] | Promise<MarkChild[]>
   ): NameableMark<Datum>;
   function dual(
     opts: Options,
-    marks?: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
+    marks?: MarkChild[] | Promise<MarkChild[]>
   ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum> {
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.

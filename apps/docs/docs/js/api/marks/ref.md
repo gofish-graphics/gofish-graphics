@@ -35,10 +35,10 @@ ref(
 
 ### String — layer-local
 
-`ref("x")` walks up the parent chain to the nearest `Layer` and picks the direct child named `.name("x")`. Strings do **not** cross component boundaries.
+`ref("x")` walks up the parent chain to the nearest `layer` and picks the direct child named `.name("x")`. Strings do **not** cross component boundaries.
 
 ```ts
-Layer([
+layer([
   rect({ w: 80, h: 40 }).name("bg"),
   ref("bg"), // resolves to the rect above
 ]);
@@ -51,7 +51,7 @@ A `Token` (from [`createName`](/js/api/howto/naming-and-scoping#createname)) is 
 ```ts
 const targetName = createName("target");
 
-Layer([
+layer([
   rect({ w: 80, h: 40 }).name(targetName),
   // ...somewhere in a sibling subtree:
   ref(targetName),
@@ -91,7 +91,7 @@ Pass a `GoFishNode` (or a `.__ref` wrapper) to reference it without name resolut
 
 ```ts
 const bar = rect({ h: "value" });
-Layer([bar, ref(bar)]);
+layer([bar, ref(bar)]);
 ```
 
 ## Parameters

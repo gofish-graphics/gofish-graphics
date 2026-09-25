@@ -41,12 +41,14 @@ many of them were plain aliases of a lowercase export (`StackX` for `stackX`,
 terminal, and so on). Those aliases were removed (#416), so that surface has
 collapsed into the lowercase low-level combinator form. The fluent builder was
 already lowercase-only: its entry point is `chart`, with no capitalized `Chart`
-alias. What remains capitalized is not an alias. `Spread`, `Stack`, `Scatter`,
-`Layer`, `Treemap`, `Table`, and the region-compositing operators (`Intersect`,
-`Exclude`, `Subtract`, `Paint`, `Mask`) are node-level operators: they take
-already-built nodes and return a node, where their lowercase namesakes are
-marks that resolve children against the incoming data. Folding each pair into
-one function is #146. `For` (an async map over a collection) and `Constraint`
+alias. The node-level operators that the lowercase ones are built from
+(`Spread`, `Layer`, `Treemap`, the region-compositing node operators, and so
+on) take already-built nodes and return a node. They used to be exported as a
+capitalized second spelling, but they are now internal (#146): each lowercase
+operator works both inside `.flow(...)` and as a combinator over marks, and a
+`createMark` body may return that combinator's mark directly, because
+`createMark` resolves whatever its body returns the same way a combinator
+resolves a child. `For` (an async map over a collection) and `Constraint`
 (the constraint factory namespace) have no lowercase counterpart in use. The
 fluent surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,

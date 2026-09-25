@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Constraint, Layer, enclose, ref, rect, text } from "../../src/lib";
+import { Constraint, layer, enclose, ref, rect, text } from "../../src/lib";
 
 // Ported from Bluefish's example-gallery brownie.tsx (#437): a recipe card
 // ("Dark Chocolate Brownies, makes 24 squares") — a title line above a
@@ -105,7 +105,7 @@ export const BakingRecipes: StoryObj = {
     const container = initializeContainer();
 
     // ── Tier 0: ingredient column, stacked top-to-bottom, left-aligned ──
-    const tier0 = Layer([
+    const tier0 = layer([
       Pad(
         "Preheat oven to 325°F (160°C) and butter a 9x13-in. baking pan"
       ).name("title"),
@@ -129,7 +129,7 @@ export const BakingRecipes: StoryObj = {
     ]);
 
     // ── Tier 1: row/column unions over the ingredient column ──
-    const tier1 = Layer([
+    const tier1 = layer([
       tier0,
       union(["r0", "r1", "r2", "r3", "r4", "r5"], "col0"),
       union(["r0", "r1"], "row0_1"),
@@ -143,7 +143,7 @@ export const BakingRecipes: StoryObj = {
     // beat" (A2) — A1 sits right of col0 centered on rows 0-1; B sits
     // right of A1 centered on rows 0-2; A2 shares A1's column (left-
     // aligned to A1, not B) centered on rows 3-4.
-    const tier2 = Layer([
+    const tier2 = layer([
       tier1,
       pull("col0"),
       pull("row0_1"),
@@ -163,10 +163,10 @@ export const BakingRecipes: StoryObj = {
 
     // ── Tier 3: col1_2 = union(A1, B, A2) — the column-group C is
     // distributed after.
-    const tier3 = Layer([tier2, union(["A1", "B", "A2"], "col1_2")]);
+    const tier3 = layer([tier2, union(["A1", "B", "A2"], "col1_2")]);
 
     // ── Tier 4: "stir in" (C), right of col1_2, centered on rows 0-4 ──
-    const tier4 = Layer([
+    const tier4 = layer([
       tier3,
       pull("col1_2"),
       pull("row0_4"),
@@ -177,11 +177,11 @@ export const BakingRecipes: StoryObj = {
     ]);
 
     // ── Tier 5: col1_3 = union(col1_2, C) ──
-    const tier5 = Layer([tier4, union(["col1_2", "C"], "col1_3")]);
+    const tier5 = layer([tier4, union(["col1_2", "C"], "col1_3")]);
 
     // ── Tier 6: "stir in" (D), right of C; "bake..." (E), right of D —
     // both centered on rows 0-5.
-    const tier6 = Layer([
+    const tier6 = layer([
       tier5,
       pull("C"),
       pull("row0_5"),
@@ -196,12 +196,12 @@ export const BakingRecipes: StoryObj = {
 
     // ── Tier 7: col0_5 = union(r0, E) — full table width, used to span
     // the title's border underneath it.
-    const tier7 = Layer([tier6, union(["r0", "E"], "col0_5")]);
+    const tier7 = layer([tier6, union(["r0", "E"], "col0_5")]);
 
     // ── Tier 8: the 12 cell borders, each sized by align's new "span"
     // value against the horizontal/vertical group it bounds — the direct
     // translation of Bluefish's `CellBorder`'s two `LayoutFunction` calls.
-    const tier8 = Layer([
+    const tier8 = layer([
       tier7,
       pull("col0"),
       pull("r0"),
@@ -313,7 +313,7 @@ export const BakingRecipes: StoryObj = {
     // Bluefish's `Background` wraps the TITLE and the TABLE together (10px
     // gap between them, 50px padding around the pair) — the title sits
     // INSIDE the pale-green card, not floating above/outside it.
-    const titledTable = Layer([
+    const titledTable = layer([
       text({ text: "Dark Chocolate Brownies (makes 24 squares)" }).name(
         "recipeName"
       ),
@@ -328,7 +328,7 @@ export const BakingRecipes: StoryObj = {
       [titledTable]
     );
 
-    Layer([greenBg]).render(container, {});
+    layer([greenBg]).render(container, {});
 
     return container;
   },

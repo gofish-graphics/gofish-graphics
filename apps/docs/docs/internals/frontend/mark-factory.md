@@ -141,7 +141,14 @@ Walking `withGoFish.ts:431-477`:
      hint (used to infer axis titles) also falls back to the alias field names.
    - Anything else → pass through.
 4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
-   producing the `GoFishNode`.
+   producing the `GoFishNode`. A component body (the no-`channels` form) may
+   instead return a mark, such as `layer([...])` or `spread(opts, [...])`, or
+   a chart builder. That result goes through `resolveMarkResult`, the same
+   path a combinator uses for each child, with a fresh name context because the
+   component is a naming boundary. So a component is written with the same
+   lowercase operators as a chart, and there is no separate node-level
+   spelling to reach for. An expand mark's array of slice nodes passes through
+   unchanged.
 5. **Tag the node** with `name = key` and `datum = d` so downstream
    coordinators (`ref` / `selectAll`, label placement) can find it back.
 

@@ -3,11 +3,9 @@ title: treemap
 order: 60
 ---
 
-# Treemap
+# treemap
 
 Lays out children into a treemap: a 2D tiling of rectangles whose **areas are proportional to a weight**.
-
-<!-- This is currently a **low-level** operator (use `Treemap(...)` directly), not a `chart(...).flow(...)` operator. -->
 
 :::: gofish
 
@@ -20,10 +18,10 @@ const items = [
   { name: "Horror", value: 40 },
 ];
 
-// Each child gets its own rectangle; Treemap assigns its (x,y,w,h).
+// Each child gets its own rectangle; treemap assigns its (x,y,w,h).
 // `size` is an explicit per-child weight array (one value per child, in
 // child order) that drives each leaf's tile area.
-gf.Treemap(
+gf.treemap(
   {
     size: items.map((d) => d.value),
     paddingInner: 2,
@@ -60,8 +58,8 @@ this mirrors.
 ## Signature
 
 ```ts
-Treemap(options?, children)
-treemap(options) // .flow() operator form
+treemap(options); // .flow() operator form
+treemap(options, children); // combinator form
 ```
 
 ## Parameters
@@ -71,5 +69,5 @@ treemap(options) // .flow() operator form
 
 ## Notes
 
-- Treemap accepts a **flat list of children**; for multi-level treemaps, compose by nesting `Treemap(...)` calls (or add a higher-level wrapper).
+- A treemap accepts a **flat list of children**; for multi-level treemaps, compose by nesting `treemap(...)` calls (or add a higher-level wrapper).
 - In the combinator form, `size` is an **explicit array**, one weight per child in child order — it does not read back off each child's bound datum.

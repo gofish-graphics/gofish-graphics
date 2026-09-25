@@ -11,14 +11,14 @@ slices tile it.
 
 `cut` **never lays out**. It always returns an **array** of slice nodes and
 leaves the arrangement to whatever you wrap it in — a combinator
-([`Stack`](/js/api/operators/stack), [`Spread`](/js/api/operators/spread)) or
+([`stack`](/js/api/operators/stack), [`spread`](/js/api/operators/spread)) or
 a chart-flow operator. (APIs in GoFish are named by the shape of value they
 return; `cut` returns an array, so there is no fused single-shape mode.)
 
 ::: gofish
 
 ```js
-gf.Spread(
+gf.spread(
   { dir: "x", spacing: 8 },
   gf.cut(gf.rect({ w: 600, h: 80, fill: gf.color.green[5] }), {
     dir: "x",
@@ -30,7 +30,7 @@ gf.Spread(
 :::
 
 The `rect` is cut into three windows weighted `1 : 1 : 2`; the `datum()`
-weights are normalized to fill the source width exactly, and `Spread` then
+weights are normalized to fill the source width exactly, and `spread` then
 explodes the slices apart with an 8px gap.
 
 ## Two forms
@@ -41,7 +41,7 @@ The core primitive. Returns `Promise<GoFishNode>[]` — an array you can drop
 straight into a combinator's children, synchronously:
 
 ```js
-gf.Stack(
+gf.stack(
   { dir: "y" },
   gf.cut(gf.image({ href, w: 193, h: 600 }), {
     dir: "y",
@@ -163,11 +163,11 @@ Because `cut` only ever returns the slice array, the surrounding combinator
 decides everything spatial. The same `cut(...)` re-arranges freely:
 
 ```js
-// Stack recomposes the slices back into the whole source (no gaps):
-gf.Stack({ dir: "y" }, gf.cut(source, { dir: "y", size }));
+// stack recomposes the slices back into the whole source (no gaps):
+gf.stack({ dir: "y" }, gf.cut(source, { dir: "y", size }));
 
-// Spread explodes them apart:
-gf.Spread(
+// spread explodes them apart:
+gf.spread(
   { dir: "y", spacing: 20, reverse: true },
   gf.cut(source, { dir: "y", size })
 );
@@ -178,14 +178,14 @@ gf.Spread(
 `inset` shrinks both the visible window **and** the slice's reported bounding
 box — a slice reports the bounds of its visible region, not its full logical
 extent. That is deliberate (`mask` reports the region's bounds). It does mean a
-plain flush `Stack` pulls the inset slices flush and drops the gaps (`Stack`
+plain flush `stack` pulls the inset slices flush and drops the gaps (`stack`
 recomposes its children flush by design — it has no `spacing` option).
 
 To recompose the slices back into the source's **continuous** space while
 keeping the inset gaps — a
 [croissant chart](https://vis.khoury.northeastern.edu/pubs/Fygenson2026CroissantChartsModulating/) —
 pad each slice back to its full logical extent in user space: add `inset / 2`
-of transparent space on each side along `dir` (an inner `Stack` with
+of transparent space on each side along `dir` (an inner `stack` with
 zero-cross-extent spacer rects), then flush-stack the padded slices.
 The padding amount is the constant `inset / 2`, independent of each slice's
 extent, so the same wrapper works for any `size`:
@@ -198,10 +198,10 @@ const slices = gf.cut(source, { dir: "x", size, inset });
 const spacer = () =>
   gf.rect({ w: inset / 2, h: 0, fill: "none", stroke: "none" });
 const padded = slices.map((slice) =>
-  gf.Stack({ dir: "x" }, [spacer(), slice, spacer()])
+  gf.stack({ dir: "x" }, [spacer(), slice, spacer()])
 );
 
-gf.Stack({ dir: "x" }, padded);
+gf.stack({ dir: "x" }, padded);
 ```
 
 The recomposed row spans the source's **exact** extent, with an even `inset`-wide

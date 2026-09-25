@@ -12,7 +12,7 @@ import { childNameKey } from "../constraints/shared";
  * both partitions (columns on x, rows on y), sizes each cell to its flex track,
  * and centers it. See `constraints/grid.ts`.
  */
-export const Table = createNodeOperator(
+const Table = createNodeOperator(
   async (
     {
       key,

@@ -110,19 +110,17 @@ export type {
 } from "./ast/constraints";
 
 // Graphical Operators
-// The capitalized names below (`Spread`, `Stack`, `Scatter`, `Layer`,
-// `Treemap`, `Table`, and the region-compositing five) are node-level
-// operators: they take already-built nodes as children and return a node.
-// They are distinct from their lowercase mark-level counterparts, not aliases
-// of them; folding the two levels together is #146.
+// Each operator has one lowercase name that works at both levels: inside
+// `chart(...).flow(...)` and as a combinator over marks (`stack(opts, [a, b])`,
+// `layer([...]).render(...)`). The node-level building blocks they are made
+// from (`Spread`, `Layer`, the region-compositing node operators, ...) are
+// internal and not exported (#146).
 export { stackX } from "./ast/graphicalOperators/stackX";
 export { stackY } from "./ast/graphicalOperators/stackY";
-export { Spread, spread, stack } from "./ast/graphicalOperators/spread";
-export { stack as Stack } from "./ast/graphicalOperators/stack";
-export { Scatter, scatter } from "./ast/graphicalOperators/scatter";
+export { spread, stack } from "./ast/graphicalOperators/spread";
+export { scatter } from "./ast/graphicalOperators/scatter";
 export { spreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY } from "./ast/graphicalOperators/spreadY";
-export { layer as Layer } from "./ast/graphicalOperators/layer";
 export {
   registerRoute,
   getRoute,
@@ -138,7 +136,7 @@ export {
   type Curve,
   type CurveSpec,
 } from "./ast/graphicalOperators/routers";
-export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
+export { treemap } from "./ast/graphicalOperators/treemap";
 export {
   enclose,
   enclose as background,
@@ -147,18 +145,9 @@ export { Frame as frame } from "./ast/graphicalOperators/frame";
 export { group } from "./ast/graphicalOperators/group";
 export { position } from "./ast/graphicalOperators/position";
 export { arrow } from "./ast/graphicalOperators/arrow";
-export { Table, table } from "./ast/graphicalOperators/table";
+export { table } from "./ast/graphicalOperators/table";
 export { cut, cutMark } from "./ast/graphicalOperators/cut";
 export { offset } from "./ast/graphicalOperators/offset";
-// Region-compositing node operators (Figma-inspired names, #196/#202). `over`
-// is intentionally not exported — it is conceptually `layer` (#196).
-export {
-  intersect as Intersect,
-  exclude as Exclude,
-  subtract as Subtract,
-  paint as Paint,
-  mask as Mask,
-} from "./ast/graphicalOperators/porterDuff";
 
 // Marks (lowercase, from createMark)
 export { ellipse } from "./ast/shapes/ellipse";
@@ -234,6 +223,7 @@ export type {
   ChartOptions,
   ChartBuilder,
 } from "./ast/marks/chart";
+export type { MarkChild } from "./ast/types";
 // Side-effect import: attaches .facet() / .stack() to ChartBuilder.
 import "./ast/marks/builderMixins";
 

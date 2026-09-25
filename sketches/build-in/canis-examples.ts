@@ -37,7 +37,6 @@ import {
   time,
   animation,
   createMark,
-  Spread,
 } from "gofish-graphics";
 
 // ---------------------------------------------------------------------------
@@ -130,7 +129,7 @@ chart(counties)
 // the label and the body.
 const LabeledBar = createMark(
   ({ category, amount }) =>
-    Spread({ dir: "x", spacing: 4 }, [
+    spread({ dir: "x", spacing: 4 }, [
       text({ text: category }).transition({
         enter: animation.fadeIn({ duration: 200 }),
       }),
@@ -144,7 +143,7 @@ const LabeledBar = createMark(
 // Constraint.align relates parts in space (NodeLink.stories.tsx):
 const LabeledBar2 = createMark(
   ({ category, amount }) =>
-    Spread({ dir: "x", spacing: 4 }, [
+    spread({ dir: "x", spacing: 4 }, [
       text({ text: category })
         .name("label")
         .transition({ enter: animation.fadeIn({ duration: 200 }) }),

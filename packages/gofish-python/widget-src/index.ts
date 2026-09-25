@@ -17,7 +17,7 @@
 
 import * as Arrow from "apache-arrow";
 import {
-  Layer,
+  layer,
   Serialize,
   serializeSVG,
   type ChartBuilder,
@@ -331,12 +331,12 @@ function renderLayer(
       .reduce((acc: any, c) => acc.layer(c), childTiers[0] as any);
     layerBuilder.render(container, renderOptions);
   } else if (Object.keys(resolvedLayerOptions).length > 0) {
-    (Layer as any)(resolvedLayerOptions, childTiers).render(
+    (layer as any)(resolvedLayerOptions, childTiers).render(
       container,
       renderOptions
     );
   } else {
-    (Layer as any)(childTiers).render(container, renderOptions);
+    (layer as any)(childTiers).render(container, renderOptions);
   }
   log("Layer rendered successfully!");
 }

@@ -17,7 +17,7 @@ import { layer } from "./layer";
 import { Constraint } from "../constraints";
 import { ensureChildNames, type AlignAnchor } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
-import { Mark, Operator } from "../types";
+import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
 
 // Utility function to unwrap lodash wrapped arrays
@@ -256,12 +256,12 @@ export type StackOptions<T = any> = Omit<SpreadOptions<T>, "spacing" | "glue">;
 
 export function stack(
   opts: StackOptions,
-  marks: Mark<any>[]
+  marks: MarkChild[]
 ): ReturnType<typeof spread>;
 export function stack(opts: StackOptions): Operator<any[], any[]>;
 export function stack(
   opts: StackOptions,
-  marks?: Mark<any>[]
+  marks?: MarkChild[]
 ): ReturnType<typeof spread> | Operator<any[], any[]> {
   const stackOpts: SpreadOptions = { ...opts, glue: true };
   const result =
