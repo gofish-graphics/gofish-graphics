@@ -65,7 +65,7 @@ All paths are relative to `packages/gofish-graphics/`:
 - `src/ast/shapes/` - Basic visual elements (rect, ellipse, petal, text, ref)
 - `src/ast/graphicalOperators/` - Composition operators (stack, stackX, stackY, spread, spreadX, spreadY, layer, connect, wrap, arrow, enclose, frame, position)
 - `src/ast/coordinateTransforms/` - Coordinate system transformations (linear, polar, bipolar, arcLengthPolar, wavy, clock)
-- `src/ast/marks/` - Higher-level fluent/builder chart API (v3)
+- `src/ast/marks/` - Fluent chart builder (`chart(data).flow(...).mark(...)`) and the mark factories
 - `src/tests/` - Example charts and visual test cases (not automated unit tests)
 - `src/data/` - Sample datasets used in examples
 - `src/templates/` - Reusable chart templates
@@ -73,37 +73,31 @@ All paths are relative to `packages/gofish-graphics/`:
 
 ### Main Entry Points (packages/gofish-graphics/)
 
-- `src/lib.ts` - Main library exports (includes v1, v2, and v3 APIs)
+- `src/lib.ts` - Main library exports (all three API surfaces)
 - `src/ast/gofish.tsx` - Core rendering engine and context management
 - `src/index.tsx` - Development entry point (imports and renders development examples)
 - `stories/` - Storybook stories providing visual development playground
 
-### API Versions
+### API Surfaces
 
-The library exports three API versions from `src/lib.ts`:
+`src/lib.ts` exports three surfaces over the same core AST (see
+`apps/docs/docs/internals/design-evolution/three-surfaces.md`):
 
-- **v1 (Lowercase)**: Original functional API for backwards compatibility
-  - Functions: `ellipse()`, `petal()`, `text()`, `ref()`, `stackX()`, `stackY()`, `layer()`, `wrap()`, `connect()`, etc.
-  - Example: `gofish(stack([rect({ w: 10, h: 20 }), ellipse({ r: 5 })]), { w: 400, h: 300 })`
+- **Fluent chart builder** (recommended): `chart(data)` returns a builder with chainable methods
+  - Builder methods: `.flow()`, `.mark()`, `.layer()`, `.render()`
+  - Operators (used within `.flow()`): `spread()`, `stack()`, `scatter()`, `group()`, `treemap()`, `derive()`, `filter()`, `resolve()`, `join()`
+  - Data helpers (used within `derive()`): `normalize()`, `repeat()`, etc.
+  - Marks (used within `.mark()`): `rect()`, `circle()`, `ellipse()`, `line()`, `ribbon()`, `text()`, `image()`, `polygon()`, `blank()`, etc.
+  - Layer naming: call `.name("bars")` on a mark so another chart can read it with `chart(selectAll("bars"))`
+  - Example: `chart(data).flow(spread({ by: "category", dir: "x" })).mark(rect({ h: "value" }).name("bars")).render(container, { w: 400, h: 300 })`
 
-- **v2 (Capitalized)**: Component-style API with capitalized function names
-  - Functions: `Rect()`, `Ellipse()`, `Petal()`, `Text()`, `Stack()`, `Spread()`, `Layer()`, etc.
-  - Same functionality as v1 but follows component naming conventions
-  - Example: `gofish(Stack([Rect({ w: 10, h: 20 }), Ellipse({ r: 5 })]), { w: 400, h: 300 })`
+- **Low-level operators (combinator form)**: operators and marks applied to an explicit array of children, with no data binding
+  - Functions: `layer([...])`, `stackX()`, `stackY()`, `spreadX()`, `spreadY()`, `spread()`, `stack()`, `enclose()`, `arrow()`, `position()`, `offset()`, `cut()`, `ref()`, etc.
+  - Example: `layer([rect({ x: 0, y: 0, w: 90, h: 40 }), rect({ x: 30, y: 50, w: 90, h: 40 })]).render(container, {})`
 
-- **v3 (Fluent/Builder)**: Modern fluent API using method chaining (recommended for new projects)
-  - Main function: `chart(data)` returns a builder with chainable methods
-  - Builder methods: `.flow()`, `.mark()`, `.render()`
-  - Layer naming: call `.name("layerName")` on a mark so it can be referenced via `select("layerName")` in another chart (e.g. `rect({ h: "value" }).name("bars")`)
-  - Operators (used within `.flow()`):
-    - Visual layout: `spread()`, `stack()`, `scatter()`, `group()`
-    - Data transformation: `derive()`. Takes a callback to do arbitrary data transforms
-  - Utility functions (used within `.derive()`): Return data
-    - `normalize()`, `repeat()`, etc.
-  - Selection (used within `chart()`): `select()`
-  - Marks (used within `.mark()`): Return visual node; support `.name("layerName")` for layer selection
-    - `rect()`, `circle()`, `line()`, `area()`, `blank()`, etc.
-  - Example: `chart(data).flow(spread("category", { dir: "x" })).mark(rect({ h: "value" }).name("bars")).render(container, { w: 400, h: 300 })`
+- **Capitalized aliases**: component-style names for the same low-level operators
+  - Functions: `Stack()`, `StackX()`, `Spread()`, `Layer()`, `Frame()`, `Enclose()`, `Arrow()`, `Position()`, `Offset()`, `Intersect()`, etc.
+  - Marks have no capitalized aliases, and the fluent builder has no capitalized `Chart`
 
 ### Context System
 

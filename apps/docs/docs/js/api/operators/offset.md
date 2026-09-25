@@ -36,7 +36,7 @@ shifted by `(20, 15)`.
 offset({ x?, y? }, [child]);
 ```
 
-`Offset` is the v2 (capitalized) alias for the same factory.
+`Offset` is the capitalized alias for the same factory.
 
 ## Parameters
 

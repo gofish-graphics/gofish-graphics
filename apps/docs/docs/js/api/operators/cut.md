@@ -215,7 +215,7 @@ the spacer rects are the spelling.)
 // Pure primitive — returns Promise<GoFishNode>[]
 cut(source, { dir, size, inset? });
 
-// v3 expand-mark modifier — chainable on image()/rect()
+// expand-mark modifier — chainable on image()/rect()
 image({ ... }).cut({ dir, size?, inset? });
 ```
 

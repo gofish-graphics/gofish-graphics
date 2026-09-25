@@ -2,7 +2,7 @@
  * Test harness entry point.
  *
  * Reads a chart spec (IR + data + options) from `window.__GOFISH_SPEC__`
- * and renders it using the GoFish v3 API. For derive operators, calls out
+ * and renders it using the GoFish fluent chart API. For derive operators, calls out
  * to the Python derive server over HTTP instead of AnyWidget RPC.
  *
  * The caller (Playwright) sets __GOFISH_SPEC__ via page.evaluate() and then
@@ -59,7 +59,7 @@ import {
   paint,
   mask,
   // `cut` (pure slice primitive → array of slice-node promises) and `cutMark`
-  // (v3 expand-mark form). A `cut` IR node used as a chart `.mark(...)` →
+  // (expand-mark form). A `cut` IR node used as a chart `.mark(...)` →
   // `cutMark`; used as a combinator child → expanded into slices via `cut`.
   // `offset` is the public node operator a `{type:"offset"}` IR node maps to.
   cut as cutSlices,
@@ -88,7 +88,7 @@ const COMBINATOR_FACTORIES: Record<
   spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
   // stack/scatter/group/table are dual-mode operators (createOperator) whose
   // `(opts, marks)` overload yields a combinator-form Mark — Python emits the
-  // matching `__combinator: true` IR (e.g. the v1 `stackX`/`stackY` ports).
+  // matching `__combinator: true` IR (e.g. the `stackX`/`stackY` ports).
   stack: (opts, marks) => stack(opts, marks) as unknown as Mark<any>,
   scatter: (opts, marks) => scatter(opts, marks) as unknown as Mark<any>,
   group: (opts, marks) => group(opts, marks) as unknown as Mark<any>,
@@ -151,7 +151,7 @@ interface LayerHarnessSpec {
   options: Record<string, any>;
   // Constraints relating the named children of a `Layer([...]).constrain(...)`.
   constraints?: ConstraintSpec[];
-  // True for a v3 `chart(...).layer(...)` builder chain: reconstruct through
+  // True for a `chart(...).layer(...)` builder chain: reconstruct through
   // the real LayerBuilder so JS owns the builder's render logic.
   builder?: boolean;
   deriveServerUrl?: string;
@@ -437,7 +437,7 @@ function mapOperator(
         })
       );
     }
-    // Modern v3 operators all take a single options object with `by`,
+    // The fluent operators all take a single options object with `by`,
     // `dir`, etc. as keyword args. The previous `field`-positional shape
     // was stale and silently miscalled most ops.
     case "spread":
@@ -692,7 +692,7 @@ function mapMark(
     );
   }
 
-  // `cut` mark in a chart `.mark(...)` position → the v3 expand-mark form
+  // `cut` mark in a chart `.mark(...)` position → the expand-mark form
   // (`cutMark`). The field-name-string `size` sugar resolves per-row here. (A
   // `cut` used as a combinator CHILD is expanded into its N slice nodes in
   // place by `mapMarkChildren` — extent resolution lives in ONE place, JS.)
@@ -1032,7 +1032,7 @@ function renderChart(spec: HarnessSpec) {
             ...paddingOpt,
           } as any);
         } else if (spec.builder) {
-          // v3 `chart(...).layer(...)` chain: reconstruct through the real
+          // Fluent `chart(...).layer(...)` chain: reconstruct through the real
           // LayerBuilder so JS owns the builder's render logic (inferred axis
           // titles, etc.) instead of re-deriving it here. The child charts are
           // already wired (producer mark named, consumer reads selectAll), so

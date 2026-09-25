@@ -353,7 +353,7 @@ Findings from the wider sweep, each one line plus why it is interesting here:
   generators over the encoding IR (transpose, permute channels, shift a channel to
   facet/color, switch to a sibling chart type), and the deduplicated orbit of a spec under
   these generators is the "alternate views" menu. Clean formalization, close to our
-  categorical reading of the v3 API; worth a look for any future "suggest variants"
+  categorical reading of the fluent chart API; worth a look for any future "suggest variants"
   feature.
 - **Channel re-binding as minimum-cost assignment.** When the chart type changes, existing
   field→channel bindings are re-assigned by a small cost matrix (same role and channel: 0,

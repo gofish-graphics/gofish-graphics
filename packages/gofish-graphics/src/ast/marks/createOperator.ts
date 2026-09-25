@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 /**
- * createOperator: a factory for v3 layout operators.
+ * createOperator: a factory for the fluent API's layout operators.
  *
  * Every layout operator (spread, stack, scatter, table, group) has the same
  * underlying shape: split the data into pieces, apply a mark to each piece,
@@ -17,7 +17,7 @@
  * High-level opts are passed to `layout` directly (after channels apply and
  * meta merges). This requires high-level `OperatorOptions` to match the
  * low-level layout function's opts shape — naming and types should align
- * between the two. v3-only keys (`by`, `debug`) are stripped before layout.
+ * between the two. Fluent-only keys (`by`, `debug`) are stripped before layout.
  *
  * The returned function has two call shapes, disambiguated by whether a
  * marks-shape is passed as the second argument:

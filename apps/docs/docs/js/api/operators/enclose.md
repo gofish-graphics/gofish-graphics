@@ -27,7 +27,7 @@ enclose(options?, [child1, child2, ...]);
 ```
 
 `background` is an alias for the same factory: it takes the same options and
-produces the same node. `Enclose` is the v2 (capitalized) alias. The enclosure is
+produces the same node. `Enclose` is the capitalized alias. The enclosure is
 the children's bbox union grown by `padding`, so it draws nothing of its own
 beyond that box — reach for [`position`](/js/api/operators/position) when one
 child needs a precise absolute offset with its own styling instead.

@@ -35,7 +35,7 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
  * the scale handling match (fresh child array, no parent mutation), and the
  * layer honors `sharedScale` as a scale scope (layer.tsx). `stack` is
  * `spread({ glue: true })`; `spreadX`/`spreadY` fix `dir`. The IR keeps `spread`/
- * `stack` (the v3 wrapper's `serialize` tag), so this elaboration is below the IR.
+ * `stack` (the fluent operator wrapper's `serialize` tag), so this elaboration is below the IR.
  *
  * `size` (per-entry stack-axis extent, #700 Phase 2) wraps each child in its
  * own sized layer BEFORE the align/distribute elaboration below: `layer({ [w|h]:

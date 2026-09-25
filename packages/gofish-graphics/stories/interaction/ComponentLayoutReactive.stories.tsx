@@ -1,7 +1,7 @@
 /**
  * Component layout-reactive — the reactive PIPELINE tier, off the chart pipeline.
  *
- * A low-level v1 COMPONENT rendered through the THUNK form of the terminal:
+ * A low-level COMPONENT rendered through the THUNK form of the terminal:
  * `GoFish(container, opts, () => node)`. Because a raw node is built once and
  * cannot re-evaluate its spec, component-level pipeline reactivity needs a thunk
  * the scheduler can re-invoke — the thunk plays exactly the role the chart

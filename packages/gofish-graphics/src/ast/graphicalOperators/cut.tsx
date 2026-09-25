@@ -27,7 +27,7 @@
  *        entries carry incompatible measure tags (a unit error).
  *    N = `size.length`. Equal slices = `Array(n).fill(datum(1))`.
  *
- * 2. The v3 expand-mark form `image({...}).cut({ dir, size, inset })` stays,
+ * 2. The expand-mark form `image({...}).cut({ dir, size, inset })` stays,
  *    built ON the pure function. Its `size` additionally accepts a field-name
  *    string (resolved per-row → datum-provenance, i.e. relative weights) or
  *    `undefined` (equal slices, N from data). It resolves sizes and delegates
@@ -64,7 +64,7 @@ export type CutOptions = {
   inset?: number;
 };
 
-/** Options for the v3 expand-mark form `mark.cut(opts)`. Adds the field-name /
+/** Options for the expand-mark form `mark.cut(opts)`. Adds the field-name /
  *  undefined sugar on top of the pure form's `size`. */
 export type CutMarkOptions = {
   dir: "x" | "y";
@@ -268,7 +268,7 @@ export function cut(
 }
 
 /**
- * The cut shape function for the v3 expand-mark form. createMark resolves the
+ * The cut shape function for the expand-mark form. createMark resolves the
  * entry-flagged `size` channel before calling us — a field name becomes a
  * per-row `datum()` array, an explicit array passes through, and `undefined`
  * stays `undefined`. We default `undefined` to equal slices (`datum(1)` ×N from
@@ -295,7 +295,7 @@ const cutFactory = createMark<
 });
 
 /**
- * Build the v3 expand-kind cut mark directly from an options object — the
+ * Build the expand-kind cut mark directly from an options object — the
  * deserializer entry point for a `cut` mark used in a chart `.mark(...)`
  * position. Equivalent to `source.cut(opts)` / what `attachCut` produces, but
  * callable without first having the source mark in hand as a method receiver.

@@ -320,7 +320,7 @@ function renderLayer(
   };
 
   if ((spec as any).builder) {
-    // v3 `chart(...).layer(...)` chain: reconstruct through the real
+    // Fluent `chart(...).layer(...)` chain: reconstruct through the real
     // LayerBuilder so JS owns the builder's render logic (inferred axis
     // titles, etc.) instead of the wrapper re-deriving it. The child charts
     // are already wired (the producer mark is named, the consumer reads

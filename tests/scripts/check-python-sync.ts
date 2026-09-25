@@ -128,7 +128,7 @@ function isExportExempt(
 //   - **Storybook chrome** — story-level `title`, `tags`, and `parameters`
 //     (e.g. the gallery annotation) are presentation metadata. Python stories
 //     key off the file path and `story_*` function name, not these.
-//   - **API-alias casing** — the v3 fluent surface is lowercase-only
+//   - **API-alias casing** — the fluent chart surface is lowercase-only
 //     (`chart`, `layer`); the capitalized aliases `Chart` / `Layer` resolve to
 //     the same factories (and `Chart` was removed outright). A pure
 //     `Chart`→`chart` / `Layer`→`layer` rename in a JS story has no Python
@@ -176,7 +176,7 @@ function stripComments(source: string): string {
   return tokens.join(" ");
 }
 
-/** Fold the lowercased v3 aliases so a pure casing rename is spec-neutral. */
+/** Fold the capitalized `Chart`/`Layer` aliases to lowercase so a pure casing rename is spec-neutral. */
 function canonicalizeApiCasing(source: string): string {
   return source.replace(/\bChart\b/g, "chart").replace(/\bLayer\b/g, "layer");
 }

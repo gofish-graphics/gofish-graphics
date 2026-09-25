@@ -68,7 +68,7 @@ export { createName } from "./ast/createName";
 export type { Token } from "./ast/createName";
 export { createMark } from "./ast/withGoFish";
 
-/* API v2 */
+/* Low-level operators and capitalized aliases */
 // Data
 export { For } from "./ast/iterators/for";
 // export { groupBy } from "./ast/iterators/groupBy";

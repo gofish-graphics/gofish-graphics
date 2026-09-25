@@ -43,7 +43,7 @@ arrow({
 }, [from, to])
 ```
 
-`Arrow` is the v2 alias for the same factory. The children are usually two
+`Arrow` is the capitalized alias for the same factory. The children are usually two
 [`ref(...)`](/js/api/selection/ref) calls (or datum-level sub-refs) pointing at
 named elements placed by an earlier tier: the arrow runs **from the first child
 to the second**. Fewer than two children renders nothing.

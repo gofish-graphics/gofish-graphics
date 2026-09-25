@@ -54,8 +54,8 @@ paint(options?, [A, B]);
 mask([A, B]);
 ```
 
-`Intersect`, `Exclude`, `Subtract`, `Paint`, and `Mask` are the v2
-(capitalized) aliases for the same factories.
+`Intersect`, `Exclude`, `Subtract`, `Paint`, and `Mask` are the
+capitalized aliases for the same factories.
 
 ## Parameters
 

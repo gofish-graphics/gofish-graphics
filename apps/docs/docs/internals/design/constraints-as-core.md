@@ -446,7 +446,7 @@ suggest it will not be needed.
   comparison: low-level constraint languages are viscous; ours stay bundled
   behind operator sugar).
 - Not a removal of operators from the _surface_. `spread`/`stack` remain the
-  v3 vocabulary; they become guaranteed-faithful sugar (per
+  fluent API's vocabulary; they become guaranteed-faithful sugar (per
   [[operators-vs-constraints]] option 1), which is also what keeps authoring
   viscosity low — the paper's §8.2 lesson is that making users assemble
   relations by hand pushes specs diffuse early.

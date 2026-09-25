@@ -479,7 +479,7 @@ export function mapMark(
     );
   }
 
-  // `cut` mark in a chart `.mark(...)` position → the v3 expand-mark form
+  // `cut` mark in a chart `.mark(...)` position → the expand-mark form
   // (`cutMark`). The data-bound expand path treats it as an expand mark; the
   // field-name-string `size` sugar resolves per-row here. (A `cut` used as a
   // combinator CHILD is instead expanded into its N slice nodes IN PLACE — see

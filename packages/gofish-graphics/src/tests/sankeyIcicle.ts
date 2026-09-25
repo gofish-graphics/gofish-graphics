@@ -278,7 +278,7 @@ export const testSankeyIcicle = () =>
       .value(),
   ]);
 
-export const testSankeyIcicleAPIv2 = () =>
+export const testSankeyIcicleWithFor = () =>
   frame([
     spreadX({ spacing: layerSpacing, alignment: "middle" }, [
       stackY(

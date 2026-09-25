@@ -129,7 +129,7 @@ export const testIcicle = () =>
     ),
   ]);
 
-export const testIcicleAPIv2 = () =>
+export const testIcicleWithFor = () =>
   stackX({ alignment: "middle" }, [
     rect({
       w: 40,

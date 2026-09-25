@@ -2,7 +2,7 @@
 
 Replications of the unit-visualization examples from **Atom** — Park, Drucker,
 Fernandez & Heer, *"Atom: A Grammar for Unit Visualizations"* (IEEE TVCG 2017) —
-ported to the GoFish v3 fluent API.
+ported to the GoFish fluent chart API.
 
 - Reference implementation & example specs: <https://github.com/intuinno/unit>
   (example specs live under [`app/data/`](https://github.com/intuinno/unit/tree/master/app/data)).

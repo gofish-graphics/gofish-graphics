@@ -43,7 +43,7 @@ export const testFishWaffle = (opts) =>
       .value()
   );
 
-export const testFishWaffleAPIv2 = () =>
+export const testFishWaffleWithFor = () =>
   stackX(
     { spacing: 8, sharedScale: true },
     For(groupBy(seafood, "lake"), (d) =>

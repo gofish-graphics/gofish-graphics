@@ -49,7 +49,7 @@ gf.Treemap(
 
 ::::
 
-Inside `.flow(...)` (the v3 API), `treemap({ by, size, ... })` partitions the
+Inside `.flow(...)` (the fluent chart API), `treemap({ by, size, ... })` partitions the
 rows itself, mirroring `spread`/`group`: `by` groups the flow's rows (a field
 name or a `field(...)` accessor carrying domain ops, e.g.
 `field("genre").dropNulls()`), and `size` — an entry-flagged channel — sums a

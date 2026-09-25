@@ -1,7 +1,7 @@
 /**
  * Component paint-only — the reactive PAINT tier with ZERO runtime.
  *
- * This is a low-level v1 COMPONENT: a `layer` of a `spreadX` of raw `rect`s plus
+ * This is a low-level COMPONENT: a `layer` of a `spreadX` of raw `rect`s plus
  * a `text` label, with no `chart()` builder and no data binding. It is rendered
  * through the plain `GoFish(container, opts, NODE)` terminal — a NODE, not a
  * thunk — so NO `InteractionRuntime` is ever created and NO DOM event listeners

@@ -56,7 +56,7 @@ import {
   Treemap,
 } from "../ast/graphicalOperators/treemap";
 // `cut` (the pure slice primitive, returns an array of slice node promises)
-// and `cutMark` (the v3 expand-mark form) — the deserializer dispatches
+// and `cutMark` (the expand-mark form) — the deserializer dispatches
 // between them by context: a `cut` IR node used as a chart `.mark(...)` →
 // `cutMark`, used as a combinator child → expanded into slices via `cut`.
 // `offset` is the public node operator a `{type:"offset"}` IR node maps to.

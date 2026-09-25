@@ -416,7 +416,7 @@ class Mark:
         size: Optional[Union[str, List[Any]]] = None,
         inset: Optional[float] = None,
     ) -> "CutMark":
-        """Slice this mark into N clipped sub-shapes along `dir` — the v3
+        """Slice this mark into N clipped sub-shapes along `dir` — the
         expand-mark form. Mirrors JS `image(...).cut({ dir, size, inset })`.
 
         Returns a `CutMark` (the `{type:"cut"}` IR node) with `self` as the
@@ -690,7 +690,7 @@ from ._generated import (  # noqa: E402
 
 # Low-level constraint surface — mirrors JS `Constraint.align` / `Constraint.distribute`
 # from packages/gofish-graphics/src/ast/constraints/index.ts. Used only by the
-# v2-style `layer([marks]).constrain(...)` combinator. The Python user authors
+# low-level `layer([marks]).constrain(...)` combinator. The Python user authors
 # constraints by name; the IR carries the names; the harness/widget rebuilds
 # the JS-side ref objects from those names.
 
@@ -1475,7 +1475,7 @@ def spread(
             )
         # Combinator form: the low-level `Spread`/`SpreadOptions` factory
         # additionally takes the full box-dims passthrough (x/y/w/h/key/...),
-        # which the v3-operator IR doesn't — stays open (see the `w`/`h` drift
+        # which the fluent operator's IR doesn't — stays open (see the `w`/`h` drift
         # note on COMBINATOR_MARKS.spread in the descriptor table).
         return Mark("spread", _children=list(children), **options)
     if by is not None:
@@ -1710,7 +1710,7 @@ def stack(
     Combinator form (positional list of marks): returns a low-level Mark
     that stacks the given child marks along an axis. Used inside `.mark()`
     when you want explicit nested marks instead of repeating a single mark
-    across data. Mirrors the v1 `stackX`/`stackY` operators.
+    across data. Mirrors the JS `stackX`/`stackY` operators.
 
         stack([rect(h="A"), rect(h="B")], dir="y")
 
@@ -2768,7 +2768,7 @@ def ribbon(
 # extent resolution (the flexbox-style number/datum split) lives entirely on
 # the JS side — see the harness/serializer. The SAME IR node serves both
 # surfaces:
-#   - As a chart `.mark(...)` spec → the v3 expand-mark form (`cutMark`); a
+#   - As a chart `.mark(...)` spec → the expand-mark form (`cutMark`); a
 #     field-name string `size` resolves per-row.
 #   - As a combinator CHILD (a value dropped into a `Spread`/`Stack` children
 #     list) → flat-expanded in place into its N slice nodes via the pure
@@ -2824,7 +2824,7 @@ def cut(
 
     The returned node is usable as a child (or list position) in a `Spread` /
     `Stack` combinator's children list; the JS side flat-expands it into its N
-    slice nodes in place. Used inside `.mark(...)`, the same node is the v3
+    slice nodes in place. Used inside `.mark(...)`, the same node is the
     expand-mark form.
 
     Args:
@@ -2949,7 +2949,7 @@ class LayerBuilder:
         self.children = children
         self.options = options or {}
         self._constraints: Optional[List[Any]] = None
-        # True only for the fluent ``chart(...).layer(...)`` chain (v3 builder
+        # True only for the fluent ``chart(...).layer(...)`` chain (fluent builder
         # semantics — JS reconstructs it through its own LayerBuilder, inferred
         # axis titles and all). The array form ``layer([chart1, chart2])`` is
         # the low-level combinator (mirrors JS ``layer([...])``), so it stays
@@ -3012,7 +3012,7 @@ class LayerBuilder:
         """Convert the layer specification to JSON IR.
 
         A fluent ``chart(...).layer(...)`` chain tags the node ``builder: True``
-        so JS reconstructs it through the real v3 ``LayerBuilder`` (which owns
+        so JS reconstructs it through the real ``LayerBuilder`` (which owns
         the builder's render logic — inferred axis titles, etc.) rather than the
         low-level ``layer([...])`` combinator. This keeps that logic in one place
         (JS) instead of re-deriving it in the wrapper. The array form

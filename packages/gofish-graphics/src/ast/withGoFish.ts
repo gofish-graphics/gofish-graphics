@@ -51,7 +51,7 @@ export interface RenderOptions {
 
 /**
  * A single child element: a GoFishAST node, a promise of one, a mark (function),
- * or a v3 builder (`chart(...).mark(...)`, with or without `.layer(...)` tiers).
+ * or a chart builder (`chart(...).mark(...)`, with or without `.layer(...)` tiers).
  * Marks are resolved by calling them with `undefined` (no data) to produce a
  * node; builders are resolved through their own `resolve()`.
  */
@@ -122,7 +122,7 @@ function hasRenderMethod(value: any): value is GoFishNode {
 }
 
 /**
- * Reify one operator child into a node. A child is a thunk/mark, a v3 BUILDER
+ * Reify one operator child into a node. A child is a thunk/mark, a chart BUILDER
  * (a single-tier `chart(...).mark(...)` or a layered `....layer(...)`), a
  * thenable, or an already-built node; `resolveMarkResult` is the one place that
  * knows all four, so both child loops below go through here. A thunk is called

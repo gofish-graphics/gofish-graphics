@@ -2,7 +2,7 @@
 
 `cut` slices a single source shape (image or rect) into N clipped sub-shapes
 along `dir`. Two surfaces, one IR node:
-  - chart `.mark(image(...).cut({...}))` — the v3 expand-mark form (a field-name
+  - chart `.mark(image(...).cut({...}))` — the expand-mark form (a field-name
     string `size` resolves per-row);
   - pure `cut(source, ...)` dropped into a `Spread` / `Stack` combinator's
     children — the JS side flat-expands it into its N slice nodes in place.

@@ -181,7 +181,7 @@ that knows all the shapes. Four get in:
   `rect({ … })` becomes a node inside `spreadX([...])`, and how a control mark
   (`slider(...)`) is rebuilt on every resolve;
 - a **thunk** (sequential form only) — called, then reified again;
-- a **v3 builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
+- a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
   — resolved through its own `resolve()`. A `LayerBuilder` must go through its
   own, not the root tier's: that is where a root `coord` is hoisted around every
   tier, so resolving the tiers by hand would drop the shared projection.
@@ -208,7 +208,7 @@ that knows all the shapes. Four get in:
 - a **mark** (a function) — invoked with `undefined` data, which is how a bare
   `rect({ … })` becomes a node inside `spreadX([...])`;
 - a **thunk** (sequential form only) — called, then reified again;
-- a **v3 builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
+- a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
   — resolved through its own `resolve()`. A `LayerBuilder` must go through its
   own, not the root tier's: that is where a root `coord` is hoisted around every
   tier, so resolving the tiers by hand would drop the shared projection.

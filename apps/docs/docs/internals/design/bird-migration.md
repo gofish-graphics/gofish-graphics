@@ -105,7 +105,7 @@ geo("equalEarth" | "mercator" | ((lonLat: [number, number]) => [number, number])
 - Position scales under a geo transform are identity in degrees: no nicing, no
   zero inclusion. Measures are types: a degree is a unit, and the transform
   consumes degrees. This is the one piece of the geo work touching layout code.
-- `polygon` in the v3 API takes `points` as a field name, so a data row can
+- `polygon` in the fluent chart API takes `points` as a field name, so a data row can
   carry a ring. Adaptive resampling under the transform already exists
   (`src/adaptive-resampling.ts`) so curved edges look right under Equal Earth.
 

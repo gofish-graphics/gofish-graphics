@@ -34,7 +34,7 @@ pipe(
   ])
 );
 
-/* export const testIcicleAPIv2 = () =>
+/* export const testIcicleWithFor = () =>
   stackX({ spacing: 0, alignment: "middle" }, [
     rect({
       w: 40,

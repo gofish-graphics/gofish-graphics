@@ -268,7 +268,7 @@ request in a dedicated unit.** A fill child asking for 2 shares requests
 There is no need for a `flex()` wrapper type: `datum` already carries a
 number plus a measure, and the flex measure is what distinguishes "2 shares
 of leftover" from "2 data units." The eventual surface is a channel value
-(`w: …` on the mark), consistent with the v3 philosophy that per-child layout
+(`w: …` on the mark), consistent with the fluent API's philosophy that per-child layout
 inputs are channels — the same judgment that retired the weights array.
 
 **The unit boundary is the entire design.** The flex solve must run over
