@@ -17,7 +17,7 @@ the liquid inside a photograph.
 ::: tip Before you start
 This page assumes [Basics](/js/tutorials/basics), then
 [Charts](/js/tutorials/charts) for `chart`, `flow` and `mark`, and
-[Diagrams](/js/tutorials/diagrams) for `.name()` and `.constrain()`.
+[Diagrams](/js/tutorials/diagrams) for `.name()` and `.relate()`.
 :::
 
 ## The bar chart underneath
@@ -190,7 +190,7 @@ gf.chart(data, { axes: false })
           .text({ fontSize: 35, fill: "#666", text: (d) => `${d.amount}%` })
           .name("label"),
       ])
-      .constrain(({ line, label, bottle }) => [
+      .relate(({ line, label, bottle }) => [
         gf.Constraint.align({ x: "start" }, [bottle, line]),
         gf.Constraint.distribute({ dir: "y", spacing: 0 }, [line, label]),
         gf.Constraint.align({ x: "end" }, [label, line]),
@@ -253,5 +253,5 @@ That last snippet is the whole example. Here it is as the gallery renders it.
   work, and what other options the mark takes.
 - [**Region compositing**](/js/api/operators/region-compositing). The other
   four operators and the rest of the blend modes.
-- [**`constrain`**](/js/api/constraints/constrain). Every constraint, including
+- [**`relate`**](/js/api/constraints/relate). Every constraint, including
   `position` for data driven placement and `nest` for padding.

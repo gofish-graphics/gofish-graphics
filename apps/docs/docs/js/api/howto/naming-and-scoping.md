@@ -11,13 +11,13 @@ When you build composable components — a `stackSlot` that itself contains a `b
 
 ## Strings: component-local names
 
-`.name("x")` on a child of a `Layer` makes `x` available inside that layer's `.constrain()` callback, and to a local `ref("x")` lookup. Strings never cross component boundaries, never register globally, and never show up as path segments.
+`.name("x")` on a child of a `Layer` makes `x` available inside that layer's `.relate()` callback, and to a `ref("x")` inside that callback. Strings never cross component boundaries, never register globally, and never show up as path segments.
 
 ```ts
 Layer([
   rect({ w: 200, h: 150, fill: "#eee" }).name("bg"),
   text({ text: "Title" }).name("label"),
-]).constrain(({ bg, label }) => [
+]).relate(({ bg, label }) => [
   Constraint.align({ x: "middle", y: "end" }, [label, bg]),
 ]);
 ```
@@ -46,7 +46,7 @@ const valueName = createName("value");
 Layer([
   rect({ w: 40, h: 40 }).name("box"),
   text({ text: "5" }).name(valueName),
-]).constrain(({ box, value }) => [
+]).relate(({ box, value }) => [
   Constraint.align({ x: "middle", y: "middle" }, [box, value]),
 ]);
 ```
@@ -66,7 +66,7 @@ export const stackSlot = createMark(({ variable, value }: StackSlotProps) => {
     Layer([
       rect({ w: 40, h: 40 }).name(boxTag),
       text({ text: value }).name(valueTag),
-    ]).constrain(({ box, value }) => [
+    ]).relate(({ box, value }) => [
       Constraint.align({ x: "middle", y: "middle" }, [box, value]),
     ]),
   ]);
@@ -123,8 +123,8 @@ Layer([
 
 | I want to…                                                   | Use                                                    |
 | ------------------------------------------------------------ | ------------------------------------------------------ |
-| Reference a sibling by name in a Layer's `.constrain()`      | `.name("x")` string                                    |
-| Reference a sibling with `ref("x")` inside the same Layer    | `.name("x")` string                                    |
+| Reference a sibling by name in a Layer's `.relate()`         | `.name("x")` string                                    |
+| Reference a sibling with `ref("x")` in a `.relate()` clause  | `.name("x")` string                                    |
 | Make an inner node reachable from outside the component      | `createName("tag")` + `.name(token)`                   |
 | Give a component instance a global handle the caller can use | Caller calls `createName("foo")`, then `.name(handle)` |
 | Reach deep into another component                            | Path: `ref(token).tag[i]...` (or `ref([token, ...])`)  |

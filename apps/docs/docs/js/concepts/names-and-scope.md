@@ -34,7 +34,7 @@ const slot = gf.createMark(({ variable, value }) =>
         gf.rect({ w: 40, h: 40, fill: "#e2ebf6" }).name("box"),
         gf.text({ text: value, fontSize: 16 }).name("value"),
       ])
-      .constrain(({ box, value }) => [
+      .relate(({ box, value }) => [
         gf.Constraint.align({ x: "middle", y: "middle" }, [box, value]),
       ]),
   ])
@@ -51,7 +51,7 @@ gf.Spread({ dir: "y", spacing: 8, alignment: "end" }, [
 
 Three slots are on the screen and every one of them has a child called `box`
 and a child called `value`. Nothing collides, and nothing had to be made
-unique. Each `.constrain()` callback looks its names up inside its own `slot`,
+unique. Each `.relate()` callback looks its names up inside its own `slot`,
 and it cannot see into anybody else's.
 
 Make it ten slots, or one per row of a dataset, and the picture is the same.
@@ -60,11 +60,14 @@ copies would exist.
 
 ## The nearest match wins
 
-Inside a component, a string name is looked up from where it is used. A
-`ref("box")` starts at the layer it sits in, and a `.constrain()` callback
-starts at the layer it is attached to. If that layer's contents have a node
-named `box`, at any depth, that is the one. If not, the lookup moves out one
-level and tries again, and so on up to the component boundary.
+Inside a component, a string name is looked up from the layer that uses it.
+A string name is used in one place only: a `.relate()` callback on a layer,
+either as one of the names the callback receives or as a `ref("box")` inside
+one of the clauses it returns. Both start at that layer. If the layer's
+contents have a node named `box`, at any depth, that is the one. If not, the
+lookup moves out one level and tries again, and so on up to the component
+boundary. A string `ref` anywhere else is an error that says to move it into
+`.relate()`.
 
 This means a nearer name hides a farther one. That is on purpose. It is what
 lets a layer that is repeated, once per row of a chart or once per call of a
@@ -151,7 +154,7 @@ const slot = gf.createMark(({ variable, value }) => {
         gf.rect({ w: 40, h: 40, fill: "#e2ebf6" }).name("box"),
         gf.text({ text: value, fontSize: 16 }).name(valueTag),
       ])
-      .constrain(({ box, value }) => [
+      .relate(({ box, value }) => [
         gf.Constraint.align({ x: "middle", y: "middle" }, [box, value]),
       ]),
   ]);
