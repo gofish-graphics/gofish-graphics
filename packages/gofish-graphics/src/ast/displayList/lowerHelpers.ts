@@ -140,6 +140,17 @@ export const lowerStyle = (vals: {
   return style;
 };
 
+/** A display item with its opacity (1 when unset) multiplied by `alpha`. How
+ *  a paint-time animation fades an item it has already lowered
+ *  (`time.transition()`, a build-in). */
+export const fadeItem = (
+  item: DisplayList.DisplayItem,
+  alpha: number
+): DisplayList.DisplayItem => ({
+  ...item,
+  style: { ...item.style, opacity: (item.style?.opacity ?? 1) * alpha },
+});
+
 /** Install a baked entry's flip scope onto the render session (issue #629): set
  *  the active scope and derive its `toPixel` via the published per-scope factory
  *  (`session.toPixelFor`), so the entry lowers under its own scope's map. Shared

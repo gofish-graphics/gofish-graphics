@@ -94,7 +94,12 @@ to a non-interactive build.
 > charts resolving _concurrently_ (interleaving at `await` points — e.g. a Python
 > `derive` RPC) could cross-register. Registration sites are synchronous
 > spec-evaluation code in practice; a scoped-storage mechanism can replace the
-> module var if async marks ever make the race real.
+> module var if async marks ever make the race real. Paint is the exception
+> that showed up: a live slot re-runs on a clock tick, and the tick can land
+> while another chart's resolve is suspended at an `await`. So every slot
+> `setLiveSlots` stores reads under `runInLiveEval`, and a paint read never
+> becomes a pipeline dependency of whatever chart is resolving. (It can still
+> register the input with that chart's runtime, which only wires events.)
 
 ## One terminal, three callers — including components
 
@@ -104,7 +109,11 @@ run under the ambient context. It is regime- and pipeline-agnostic: given a
 it creates a fresh `InteractionRuntime`, calls `beginResolve()`, evaluates the
 thunk under `withInteractiveResolve`, threads `options.interaction = runtime`
 **iff** `hasWork()`, and wires `setRerender` to re-invoke the whole resolve into
-the same container. Three callers share it:
+the same container. It hands each resolve a `RenderPass` that says whether this
+is the chart's first render or a re-render, and lets the resolve register a
+cleanup that runs before the next render. The chart pipeline uses it to play the
+build-in on the first render only and to stop that render's build clock (a
+declared shortcut, #914). Three callers share it:
 
 - `ChartBuilder.render` and `LayerBuilder.render` — the v3 chart pipeline. Both
   get `render` from the shared terminal registry (`marks/terminals.ts`) with
@@ -293,6 +302,12 @@ With no domain the scale is the identity onto `[0, duration]`, which is the plai
 elapsed-milliseconds clock every other library exposes — the degenerate case, not
 a separate mode.
 
+Because it is a scale, a timer also exposes its range, `duration`, beside its
+`domain`. A reader that needs to turn a stretch of the domain into time reads
+them together: a staggered update inside a `time.sequence` gives its lag in
+milliseconds, and fits it to the milliseconds between two keyframes
+(`TimeTier.msPerUnit`, `src/animation/updateStagger.ts`).
+
 ## Controls are marks, not nodes
 
 `widgets.ts` builds `slider` and `button` out of the same three pieces every
@@ -382,9 +397,13 @@ frame, in paint position.
 and paints the one mark the run passes through at the playhead. Two facts, two
 tiers: which keyframes there are and where layout put them is decided at
 resolve; which point of that run is showing is read at paint, inside live
-geometry slots, so a tick patches four attributes of one item. What licenses the
-split is subtree containment. The node makes no size claim of its own and
-contributes no domain values, so no value it produces can be seen above it; and
+geometry slots, so a tick patches four attributes of one item. The slots come
+from one helper in `liveSlots.ts`, `setLiveItems`, which the build-in's paint
+rule (`src/animation/paint.ts`) shares: it rebuilds the moving items at most
+once per distinct playhead value, and each slot reads its own field off them.
+What licenses the split is subtree containment. The node makes no size claim of
+its own and contributes no domain values, so no value it produces can be seen
+above it; and
 it has no children to place, so "lay this subtree out again" IS "recompute this
 one display item" — which is exactly what a paint-time thunk does. Containment
 asks for one thing in exchange, and the node pays it: its layout box is the

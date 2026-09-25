@@ -93,6 +93,14 @@ it as a bare name rather than inside the namespace, because it is not a temporal
 construct at all: it is a pure function over rows, the data-space reading a
 `derive` hands an ordinary chart.
 
+The build-in prototype (draft PR #901) adds a second namespace beside it,
+`animation`. The split is WHEN against WHAT: `time.stagger` and
+`time.parallel` say when a chart's pieces enter, and `animation.grow`,
+`animation.fadeIn`, `animation.wipe` and the rest say how each one looks while
+it does. The effects are named by what they do, not by the phase they are used
+in, so the same value serves `enter` or `exit`. It is JavaScript-only for the
+same reason `time` is.
+
 ## Planned contents
 
 - The three surfaces side by side — the same chart in each.

@@ -345,8 +345,9 @@ async function wrapWithLabelTexts(
         texts.push(label);
         // The label is part of its target as a mark, though it lives out of
         // the target's subtree; record that, so whatever takes the mark over
-        // (a `time.transition()`) takes the label with it.
-        (target._attachments ??= []).push(label);
+        // (a `time.transition()`) takes the label with it, and the label
+        // paints under its mark's build-in animation.
+        target.INTERNAL_attach(label);
         pending.push({ refName, textName, spec });
       }
     }

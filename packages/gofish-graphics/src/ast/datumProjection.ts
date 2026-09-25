@@ -140,6 +140,10 @@ export type TimeTier = {
    *  split on. A transition reads it to tell a gap in one mark's run (two of
    *  its knots that are NOT neighbors here) from a step between neighbors. */
   knots: () => number[];
+  /** Wall-clock milliseconds per unit of `by` on the clock (ms per year, say),
+   *  so a timing written in ms (a stagger's `lag`) can be read against a
+   *  stretch between two keyframes. */
+  msPerUnit: () => number;
 };
 
 /** Build the grouping key-function for a single split. Exists so that path

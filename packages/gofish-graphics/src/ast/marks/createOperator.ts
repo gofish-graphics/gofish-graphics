@@ -60,7 +60,14 @@ import {
   positionNode,
   type PositionNodeOptions,
 } from "../graphicalOperators/positionNode";
-import { attachTerminals } from "./terminals";
+import { attachBuilderTerminals } from "./terminals";
+import { installBuildIn } from "../../animation/install";
+import {
+  recordMarkTransition,
+  recordOperatorTransition,
+  type MarkTransition,
+  type OperatorTransition,
+} from "../../animation/transition";
 
 export type { LayerContext } from "./chartBuilder";
 export { resolveMarkResult } from "./chartBuilder";
@@ -241,6 +248,11 @@ function modifierMethod(
     if ((base as any).__relationalFusable) {
       (wrapped as any).__relationalFusable = (base as any).__relationalFusable;
     }
+    // Same for a chained `.transition(...)`: the chart builder reads it off
+    // the final mark (see `transitionModifier`), whatever was chained after.
+    if ((base as any).__transition) {
+      (wrapped as any).__transition = (base as any).__transition;
+    }
     cfg.tag?.(wrapped, base, ...args);
     return redecorate(wrapped);
   };
@@ -287,11 +299,16 @@ export function attachModifiers<T>(
   });
   // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
   // from the shared registry, so adding one touches a single list. A mark
-  // resolves to a node by calling it with `undefined`. See terminals.ts.
-  attachTerminals(
-    base,
-    () => resolveMarkResult((base as any)(undefined)) as Promise<GoFishNode>
-  );
+  // resolves to a node by calling it with `undefined`, and plays its own
+  // `.transition({ enter })` as a chart does (`installBuildIn`, which the
+  // render options `playing` / `at` can hold). See terminals.ts.
+  attachBuilderTerminals(base, async (options) => {
+    const node = (await resolveMarkResult(
+      (base as any)(undefined)
+    )) as GoFishNode;
+    installBuildIn(node, options);
+    return { node, options };
+  });
   return base;
 }
 
@@ -419,6 +436,25 @@ export const zOrderModifier = {
 } satisfies ModifierConfig<[value: ZOrderValue]>;
 
 /**
+ * `.transition({ enter, update, exit })` — how the mark looks in each phase
+ * of an animation (`animation.grow()`, `animation.fadeIn()`, …). It records
+ * the effects on each produced node, where the build-in reads them
+ * (`src/animation/install.ts`), and tags the mark with the spec, which the
+ * chart builder reads when the flow has a `time.sequence` (then the phases
+ * are `time.transition()`'s). Animation is JS-only, so nothing reaches the IR.
+ */
+export const transitionModifier = {
+  name: "transition",
+  apply: (node, _layerContext, _datum, spec) => {
+    recordMarkTransition(node, spec);
+  },
+  tag: (wrapped, base, spec) => {
+    propagateSerialize(base, wrapped, () => {});
+    (wrapped as any).__transition = spec;
+  },
+} satisfies ModifierConfig<[spec: MarkTransition]>;
+
+/**
  * Attach chainable .name(), .label(), and .zOrder() to a mark, registering it
  * into the layer context when named so that ref(...)/selectAll(...) can find
  * it back.
@@ -428,6 +464,7 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
     nameModifier,
     labelModifier,
     zOrderModifier,
+    transitionModifier,
   ]) as NameableMark<T>;
 }
 
@@ -655,6 +692,9 @@ export type TranslatableOperator<T, U> = Operator<T, U> & {
     accessor: LabelAccessor,
     options?: LabelOptions
   ): TranslatableOperator<T, U>;
+  /** How this operator's CHILDREN are arranged in time in each phase of an
+   *  animation: `time.stagger({ ... })` or `time.parallel()`. */
+  transition(spec: OperatorTransition): TranslatableOperator<T, U>;
 };
 
 function attachTranslateOption<T extends object>(
@@ -683,6 +723,27 @@ function attachLabelOption<T extends object>(
   Object.defineProperty(target, "label", {
     value: (accessor: LabelAccessor, options?: LabelOptions) => {
       setLabel(accessor, options);
+      return target;
+    },
+    writable: true,
+    configurable: true,
+  });
+  return target;
+}
+
+/**
+ * Attach `.transition(spec)` to an operator (traversal form). Like `.label()`,
+ * the spec is closed-over state the executing operator reads (once per
+ * `.flow()` run) and records on the node it builds. Returns `target` so the
+ * call chains.
+ */
+function attachTransitionOption<T extends object>(
+  target: T,
+  setTransition: (spec: OperatorTransition) => void
+): T {
+  Object.defineProperty(target, "transition", {
+    value: (spec: OperatorTransition) => {
+      setTransition(spec);
       return target;
     },
     writable: true,
@@ -730,6 +791,12 @@ function translateOperator<T, U>(
         pushLabelField(tag, labelIRField(accessor, options));
       }
     });
+  }
+  // `.transition()` delegates the same way, so either chain order works.
+  if (typeof (operator as any).transition === "function") {
+    attachTransitionOption(withTranslate, (spec) =>
+      (operator as any).transition(spec)
+    );
   }
   return withTranslate;
 }
@@ -940,6 +1007,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     // deferred label per call.
     let labelState: Array<{ accessor: LabelAccessor; options?: LabelOptions }> =
       [];
+    // `.transition(spec)` chained after `dual(opts)`: read at execution time
+    // like `labelState`, and recorded on the node `layout` builds.
+    let transitionState: OperatorTransition | undefined;
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
       return (async (
         d: Datum[],
@@ -1061,7 +1131,11 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         ) {
           (lowOpts as any).axisMeasures = groupMeasures;
         }
-        return (await layout(lowOpts, nodes)) as unknown as GoFishNode;
+        const built = (await layout(lowOpts, nodes)) as unknown as GoFishNode;
+        if (transitionState !== undefined) {
+          recordOperatorTransition(built, transitionState);
+        }
+        return built;
       }) as Mark<Datum[]>;
     };
     // Tag the operator with its declared spatial classification, so the
@@ -1092,6 +1166,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       if (tag) {
         pushLabelField(tag, labelIRField(accessor, options));
       }
+    });
+    attachTransitionOption(withTranslate, (spec) => {
+      transitionState = spec;
     });
     return withTranslate;
   }

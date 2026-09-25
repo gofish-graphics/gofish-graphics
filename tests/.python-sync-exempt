@@ -188,3 +188,11 @@ packages/gofish-graphics/stories/animated-vega-lite/GapminderTower.stories.tsx
 # year readout reads it through `live()`. Frame2000 is a pure spec, but
 # exemption is per FILE (same trade-off as issue #856).
 packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx
+
+# The build-in animation prototype (draft PR #901). Every story renders a
+# build-in: `.transition()` on operators and marks, `time.stagger` /
+# `time.transition({ enter })`, and a `timer()` clock the build owns, all
+# JS-only like the rest of the animation surface (no IR, no Python bridge).
+# The race example holds a `time.sequence` clock, exempt for the same reason
+# as BarChartRace above.
+packages/gofish-graphics/stories/animation/BuildInPrototype.stories.tsx

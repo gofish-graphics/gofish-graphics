@@ -39,6 +39,9 @@ import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
 import { sourceIndex, type InterpolationMethod } from "../../interpolate";
+import { buildIn, stagger, parallel } from "../../animation/timeArrangements";
+import { effectList, type Effect } from "../../animation/effects";
+import { checkSequencePhases } from "../../animation/transition";
 
 export type SequenceOptions = {
   /** The data field whose values are the keyframes. Must be numeric: the
@@ -163,28 +166,35 @@ export function sequence(opts: SequenceOptions) {
     }
   )(opts);
 
+  /** The clock, built on first use (see the note above `sequence`). */
+  const ownClock = (): Timer<number> => {
+    if (clock === undefined) {
+      if (keyframes.length === 0) {
+        throw new Error(
+          `[gofish] time.sequence({ by: "${opts.by}" }): "${opts.by}" has no ` +
+            `numeric values to play through — a sequence's field is the ` +
+            `playhead's own units, so it must be a number (a year, a day, a ` +
+            `step index).`
+        );
+      }
+      clock = timer<number>({
+        domain: [keyframes[0], keyframes.at(-1)!],
+        duration: opts.duration ?? 5000,
+        loop: opts.loop ?? true,
+        playing: opts.playing ?? true,
+      });
+      if (opts.at !== undefined) clock.set(opts.at);
+    }
+    return clock;
+  };
   const tier: TimeTier = {
     by: opts.by,
     knots: () => keyframes,
-    clock: () => {
-      if (clock === undefined) {
-        if (keyframes.length === 0) {
-          throw new Error(
-            `[gofish] time.sequence({ by: "${opts.by}" }): "${opts.by}" has no ` +
-              `numeric values to play through — a sequence's field is the ` +
-              `playhead's own units, so it must be a number (a year, a day, a ` +
-              `step index).`
-          );
-        }
-        clock = timer<number>({
-          domain: [keyframes[0], keyframes.at(-1)!],
-          duration: opts.duration ?? 5000,
-          loop: opts.loop ?? true,
-          playing: opts.playing ?? true,
-        });
-        if (opts.at !== undefined) clock.set(opts.at);
-      }
-      return clock();
+    clock: () => ownClock()(),
+    msPerUnit: () => {
+      const c = ownClock();
+      const [lo, hi] = c.domain as readonly [number, number];
+      return hi > lo ? c.duration / (hi - lo) : 0;
     },
   };
   (operator as any).__timeTier = tier;
@@ -222,6 +232,13 @@ export type TransitionOptions = {
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
   opacity?: number;
+  /** How the marks enter. With no `time.sequence` (and no `along`/`at`) this
+   *  is a BUILD-IN: the marks enter once, from the empty chart, with these
+   *  effects (`src/animation/`). Under a sequence it can only be the default
+   *  fade, `animation.fadeIn()`. */
+  enter?: Effect | Effect[];
+  /** How the marks leave; under a sequence only `animation.fadeOut()`. */
+  exit?: Effect | Effect[];
 };
 
 /**
@@ -245,6 +262,24 @@ export const transition = createRelationalMark<TransitionOptions>(
   "time.transition",
   (o, children, inferred) => {
     const tier = inferred.time;
+    // BUILD MODE: no keyframes at all, so the transition is from the empty
+    // chart and every selected mark enters (`src/animation/`), which checks
+    // the phases against that clock.
+    if (
+      tier === undefined &&
+      o.along === undefined &&
+      o.at === undefined &&
+      o.enter !== undefined
+    ) {
+      return buildIn(
+        {
+          enter: effectList(o.enter, "time.transition({ enter })")!,
+          exit: effectList(o.exit, "time.transition({ exit })"),
+        },
+        children
+      );
+    }
+    checkSequencePhases(o, "time.transition()");
     // Both halves of "which run, read where" can be written out instead of
     // inferred: `along` names the keyframes' time field and `at` supplies the
     // playhead. Explicit wins, and either one alone is enough to drop the
@@ -290,6 +325,7 @@ export const transition = createRelationalMark<TransitionOptions>(
         sequence,
         method: resolveMethod(o.curve),
         ease: o.ease,
+        msPerUnit: tier?.msPerUnit,
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth,
@@ -368,4 +404,4 @@ function knotOf(child: GoFishAST, by: string): number {
   return value;
 }
 
-export const time = { sequence, transition };
+export const time = { sequence, transition, stagger, parallel };

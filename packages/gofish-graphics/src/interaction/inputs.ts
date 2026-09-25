@@ -525,6 +525,10 @@ export interface Timer<T = number> {
   readonly domain: readonly [number, number] | TimerValues<T>;
   /** The resolved `step`, if any. */
   readonly step: number | undefined;
+  /** Wall-clock milliseconds one sweep of the domain takes: the scale's
+   *  range, so a reader can turn a stretch of the domain into time (a
+   *  stagger inside a `time.sequence` fits its lag to it). */
+  readonly duration: number;
 }
 
 /**
@@ -734,6 +738,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   };
   (acc as { domain: Timer<T>["domain"] }).domain = values ?? [lo, hi];
   (acc as { step: number | undefined }).step = step;
+  (acc as { duration: number }).duration = duration;
   return acc;
 }
 

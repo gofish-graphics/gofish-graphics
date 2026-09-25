@@ -63,6 +63,7 @@ import { GoFishNode, type Placeable, type ToPixel } from "../_node";
 import { GoFishRef } from "../_ref";
 import { resolveColorChannel } from "../../color";
 import {
+  fadeItem,
   lowerStyle,
   rectItemFromBox,
   roleFor,
@@ -74,7 +75,7 @@ import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { Size } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { readLive } from "../../interaction/live";
-import { GEOMETRY_CHANNELS, setLiveSlots } from "../../interaction/liveSlots";
+import { GEOMETRY_CHANNELS, setLiveItems } from "../../interaction/liveSlots";
 import {
   interpolateAt,
   knotOrder,
@@ -84,6 +85,11 @@ import {
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
 import { targetOf } from "./layer";
+import {
+  updateSlotOf,
+  updateWarp,
+  type UpdateSlot,
+} from "../../animation/updateStagger";
 
 export type TweenOptions = {
   /** The playhead, in the time field's own units (a year, not a fraction).
@@ -105,6 +111,10 @@ export type TweenOptions = {
    *  `[0, 1]`. Easing is a warp of the parameter, not of the values, so it
    *  composes with either interpolation method. */
   ease?: (u: number) => number;
+  /** The clock's milliseconds per unit of the time field, for an operator
+   *  whose `.transition({ update: time.stagger(...) })` staggers the moves
+   *  (`src/animation/updateStagger.ts`): its lag is in ms. */
+  msPerUnit?: () => number;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -116,8 +126,9 @@ export type TweenOptions = {
  *  extent is the measure of its string, which is not something to blend, so
  *  it moves RIGIDLY: its position is interpolated and it keeps the source
  *  keyframe's own drawing (string, font, paint), the way a box leaf keeps the
- *  source keyframe's color. */
-const BOX_SHAPES = new Set(["ellipse", "rect", "blank"]);
+ *  source keyframe's color. A build-in `grow` collapses the same box shapes
+ *  (`src/animation/effects.ts`). */
+export const BOX_SHAPES = new Set(["ellipse", "rect", "blank"]);
 const RIGID_SHAPES = new Set(["text"]);
 
 /**
@@ -214,15 +225,6 @@ function lifecycle(
   };
 }
 
-/** A display item with its opacity multiplied by `alpha`. */
-function fadeItem(
-  item: DisplayList.DisplayItem,
-  alpha: number
-): DisplayList.DisplayItem {
-  const own = item.style?.opacity ?? 1;
-  return { ...item, style: { ...item.style, opacity: own * alpha } };
-}
-
 /** A display item moved by `(dx, dy)` pixels: its position fields shifted,
  *  everything else as it was. */
 function moveItem(
@@ -238,9 +240,14 @@ function moveItem(
   return moved as unknown as DisplayList.DisplayItem;
 }
 
-/** The run a tween paints: the keyframes' time values and one track per
- *  matched leaf of the keyed mark. */
-type Run = { knots: number[]; tracks: Track[] };
+/** The run a tween paints: the keyframes' time values, one track per
+ *  matched leaf of the keyed mark, and where each keyframe sits in a
+ *  staggered update (`updateSlotOf`), if one arranges it. */
+type Run = {
+  knots: number[];
+  tracks: Track[];
+  slots: (UpdateSlot | undefined)[];
+};
 
 /**
  * Locate `t` in a run: a reader for any per-keyframe channel at `t`, and the
@@ -288,6 +295,7 @@ export const tween = createNodeOperator(
       sequence,
       method,
       ease,
+      msPerUnit,
       fill,
       stroke,
       strokeWidth,
@@ -448,7 +456,13 @@ export const tween = createNodeOperator(
               colors: leaves.map((leaf) => leaf.color),
             };
           });
-          const run: Run = { knots: order.map((i) => knots[i]), tracks };
+          const run: Run = {
+            knots: order.map((i) => knots[i]),
+            tracks,
+            slots: keyframes.map((k) =>
+              k instanceof GoFishNode ? updateSlotOf(k) : undefined
+            ),
+          };
 
           // The box is the whole TRAJECTORY, not the point the mark is at:
           // the union of the keyframes' placed boxes, which is the room the
@@ -568,12 +582,16 @@ export const tween = createNodeOperator(
             track.kind === "box" ? boxPainter(track) : rigidPainter(track)
           );
           const knots = run.knots;
+          /** The playhead as this key reads it: itself, unless an operator
+           *  staggers the moves between keyframes, when each key moves in its
+           *  own fitted slice of the stretch. */
+          const warp = updateWarp(sequence, knots, run.slots, msPerUnit);
 
           /** The moving mark as it stands at one playhead: every leaf's items,
            *  in leaf order. Everything it needs was computed by layout or
            *  lowering, so the paint tier can call it per frame. */
           const build = (at: number): DisplayList.DisplayItem[] => {
-            const phase = life(at);
+            const phase = life(warp(at));
             const s = sampleRun(knots, phase.at, method, ease);
             const items = painters.flatMap((paint) => paint(s.at, s.source));
             // Every leaf fades together, box and text alike: they are one
@@ -590,30 +608,21 @@ export const tween = createNodeOperator(
             // position so Solid patches that attribute and nothing else. The
             // items are rebuilt at most once per distinct playhead value, and
             // the attributes then read their own field off them.
-            let cache = { at: t, items };
-            const itemsAt = (): DisplayList.DisplayItem[] => {
-              const now = readPlayhead();
-              if (now !== cache.at) cache = { at: now, items: build(now) };
-              return cache.items;
-            };
-            items.forEach((item, j) => {
-              const current = () =>
-                itemsAt()[j] as unknown as Record<string, any>;
-              const slots: Record<string, () => unknown> = {};
-              for (const field of GEOMETRY_CHANNELS) {
-                if (!(field in item)) continue;
-                slots[field] = () => current()?.[field];
-              }
+            const channels = items.map((item) => [
+              ...[...GEOMETRY_CHANNELS].filter((field) => field in item),
               // A text's string comes from the source keyframe, like paint.
-              if (item.kind === "text") slots.text = () => current()?.text;
+              ...(item.kind === "text" ? ["text"] : []),
               // Paint moves with the mark: which keyframe a run reads its
               // color off depends on where the playhead is.
-              slots.fill = () => current()?.style?.fill;
-              slots.stroke = () => current()?.style?.stroke;
+              "fill",
+              "stroke",
               // And so does presence: the mark fades in and out as it enters
               // and leaves the run.
-              slots.opacity = () => current()?.style?.opacity;
-              setLiveSlots(item, slots);
+              "opacity",
+            ]);
+            setLiveItems(items, channels, readPlayhead, build, {
+              key: t,
+              items,
             });
           }
           return items;

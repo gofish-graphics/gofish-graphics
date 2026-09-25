@@ -22,6 +22,7 @@
  */
 
 import type { GoFishNode } from "../_node";
+import type { RenderPass } from "../../interaction/renderTerminal";
 
 /** Options a terminal call carries through to the node method. */
 export type RenderOptions = Record<string, unknown>;
@@ -30,17 +31,19 @@ export type RenderOptions = Record<string, unknown>;
 export type ResolvedSurface = { node: GoFishNode; options: RenderOptions };
 
 /** A surface's resolution strategy. Called with `this` bound to the surface so
- *  a class can attach terminals to its prototype. */
+ *  a class can attach terminals to its prototype. `pass` is set when `render`
+ *  runs under the interactive render loop, which can re-render the chart. */
 export type ResolveForRender = (
   this: any,
-  options: RenderOptions
+  options: RenderOptions,
+  pass?: RenderPass
 ) => Promise<ResolvedSurface>;
 
 /** How `render` drives a resolve. The default resolves and renders directly;
  *  the chart builders pass `renderWithInteraction`, which runs the resolve
  *  under the ambient interactive context so reactive reads can register. */
 export type RenderStrategy = (
-  resolve: () => Promise<ResolvedSurface>,
+  resolve: (pass?: RenderPass) => Promise<ResolvedSurface>,
   container: any
 ) => Promise<HTMLElement>;
 
@@ -79,22 +82,23 @@ export const TERMINALS: TerminalConfig[] = [
 ];
 
 /** The terminal methods {@link attachTerminals} defines, for a class surface
- *  that merges them into its declared type. */
-export interface TerminalMethods {
+ *  that merges them into its declared type. `Extra` is the options the
+ *  surface's own resolution reads on top of the node's. */
+export interface TerminalMethods<Extra = unknown> {
   render(
     container: Parameters<GoFishNode["render"]>[0],
-    options?: Parameters<GoFishNode["render"]>[1]
+    options?: Parameters<GoFishNode["render"]>[1] & Extra
   ): Promise<Awaited<ReturnType<GoFishNode["render"]>>>;
-  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
+  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0] & Extra): Promise<string>;
   toSVGElement(
-    options?: Parameters<GoFishNode["toSVGElement"]>[0]
+    options?: Parameters<GoFishNode["toSVGElement"]>[0] & Extra
   ): Promise<SVGSVGElement>;
   save(
     filename: string,
-    options?: Parameters<GoFishNode["save"]>[1]
+    options?: Parameters<GoFishNode["save"]>[1] & Extra
   ): Promise<void>;
   toDisplayList(
-    options?: Parameters<GoFishNode["toDisplayList"]>[0]
+    options?: Parameters<GoFishNode["toDisplayList"]>[0] & Extra
   ): ReturnType<GoFishNode["toDisplayList"]>;
 }
 
@@ -132,7 +136,8 @@ export function attachBuilderTerminals(
   for (const t of TERMINALS) {
     Object.defineProperty(target, t.name, {
       value: function (this: unknown, ...args: any[]) {
-        const resolveHere = () => resolve.call(this, args[t.optionsArg] ?? {});
+        const resolveHere = (pass?: RenderPass) =>
+          resolve.call(this, args[t.optionsArg] ?? {}, pass);
         return t.viaRenderStrategy
           ? render(resolveHere, args[0])
           : resolveHere().then(({ node, options }) =>

@@ -334,6 +334,18 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   serialize as the opaque `{type: "derive"}` fallback, losing both
   `translate` and any chained `.label()`.
 
+`.transition(spec)` on the operator form (the build-in prototype, see
+`src/animation/`) is built the same way. `dual` closes over a
+`transitionState` that `.transition()` (`attachTransitionOption`) sets, and
+the execution closure records it on the node `layout` builds
+(`recordOperatorTransition`), so the build-in can read the operator's
+arrangement of its children off the resolved tree. `translateOperator`
+delegates `.transition()` to the base operator, as it does `.label()`. Which
+phases can play depends on the chart's clock, so the build-in checks the
+recorded phases when it reads them (`checkPhases`), including an arrangement
+under a `time.sequence`, where it is not built yet. Animation is
+JavaScript-only, so nothing reaches the IR.
+
 ## 8. The relationship with `createMark`
 
 The two factories are siblings:
@@ -365,6 +377,11 @@ by-split-form relational marks (see
 Without this, `ribbon(opts).name("area")` would lose the tag the moment
 `.name(...)` wraps it in a new function, and `.mark(ribbon(opts).name("area"))`
 would silently stop fusing.
+It propagates a chained `.transition(...)` spec (`__transition`) the same way,
+for the same reason: the chart builder reads it off the final mark whatever was
+chained after it. The `transition` modifier itself (`transitionModifier`, in
+`nameableMark`'s set) records the mark's effects on each produced node, where
+the build-in reads them.
 
 A modifier's `apply(node, layerContext, datum, ...args)` receives the
 **per-instance datum** the mark was called with — the same value the shape
@@ -386,12 +403,16 @@ produced node and returns a chainable mark, a terminal _resolves_ the surface to
 a final `GoFishNode` and calls through to that node's method, ending the chain.
 They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
 `attachTerminals(target, resolveNode)`, where each surface supplies only its own
-node-resolution strategy (a combinator mark resolves by calling itself with
-`undefined`; a `withGoFish` promise resolves by awaiting). The chart surfaces go
-through the same list via `attachBuilderTerminals(target, resolveForRender,
-render)`, which lets a surface also prepare the render options (`ChartBuilder`
-and `LayerBuilder` merge in the chart-level `axes`/`color` config) and drive
-`render` through its own strategy (`renderWithInteraction`). So the set of
+node-resolution strategy (a `withGoFish` promise resolves by awaiting). The
+other surfaces go through the same list via `attachBuilderTerminals(target,
+resolveForRender, render)`, which lets a surface also prepare the render options
+and drive `render` through its own strategy. A combinator mark resolves by
+calling itself with `undefined` and installs the build-in its own
+`.transition({ enter })` asks for, reading the clock's `playing`/`at`.
+`ChartBuilder` and `LayerBuilder` merge in the chart-level `axes`/`color` config,
+read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to
+their options type), and drive `render` through `renderWithInteraction`. So the
+set of
 terminals is defined once — adding one (as `toDisplayList` was) touches a single
 list and lands on every surface at once, instead of being hand-rolled per
 surface (which previously left `toDisplayList` off the combinator surface and
