@@ -8,10 +8,8 @@ instead of one.
 Glyphs are usually treated as a feature that needs a grammar of its own, the
 same way the other pages in this row of the tutorials index treat pictorial
 charts, interaction, and trees. In GoFish there is nothing new to learn. A
-glyph is a function that returns a layer. You already wrote one in
-[Basics](/js/tutorials/basics), where `labeledBox = (d) => layer(...)` drew a
-box with a centered label. This page takes that same function and hands it to a
-chart.
+glyph is a function that returns a layer. This page writes one and hands it to
+a chart.
 
 ::: tip Before you start
 This page assumes [Basics](/js/tutorials/basics) for marks, operators and
@@ -176,6 +174,5 @@ That last snippet is the whole example.
 - [**Pictorial Charts**](/js/tutorials/pictorial-charts). A glyph whose parts
   are held together by constraints rather than by fixed offsets, with an image
   and compositing inside the mark.
-- [**Diagrams**](/js/tutorials/diagrams). `createMark` turns a glyph function
-  into a component with its own name scope, so its inner parts can be named and
-  pointed at from outside.
+- [**Diagrams**](/js/tutorials/diagrams). Names, references, and constraints
+  tie the parts of a picture together, even parts that live in different places.

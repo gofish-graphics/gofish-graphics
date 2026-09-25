@@ -2,20 +2,30 @@
 
 GoFish graphics are made of two kinds of things: **marks** that render shapes like circles, lines, and compound shapes, and **operators** that take two or more marks and compose them into a new mark, putting them in a row for instance. Both charts and diagrams are composed with marks and operators. In this tutorial we will get our first taste of these concepts. Afterwards, you can complete the [Charts tutorial](/js/tutorials/charts) or the [Diagrams tutorial](/js/tutorials/diagrams) in either order.
 
-## The `rect` mark
+We'll build this diagram of the four planets closest to the sun, one small step at a time:
 
-A mark is a function call that takes an object of attributes. For example, the `rect()` mark draws a rectangle. You can give it a width, a height, and a fill color (among other things):
+::: gofish story:tutorials-basics--basics hidden
+:::
+
+## The `circle` mark
+
+A mark is a function call that takes an object of attributes. For example, the `circle()` mark draws a circle. You can give it a radius, a fill color, and an outline (among other things):
 
 ```js
-gf.rect({ w: 150, h: 44, fill: "#e2ebf6" });
+gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 });
 ```
+
+`r` is the radius in pixels. `stroke` is the color of the outline, and `strokeWidth` is how thick it is.
 
 To render it, you can call the `render` method with a root HTML container and the width and height you want for the GoFish graphic:
 
 ::: gofish
 
 ```js
-gf.rect({ w: 150, h: 44, fill: "#e2ebf6" }).render(root, { w: 200, h: 80 });
+gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 }).render(
+  root,
+  { w: 30, h: 30 }
+);
 ```
 
 :::
@@ -26,6 +36,8 @@ would write something like `document.getElementById("chart")`.
 The second argument to `.render()` is the size of the drawing surface in
 pixels. If you leave `w` or `h` out, GoFish works out a size that fits the
 content.
+
+This circle is Mercury. Next we'll add the other three planets.
 
 ## Layering marks
 
@@ -39,15 +51,16 @@ union of its children.
 
 ```js
 gf.layer([
-  gf.rect({ w: 150, h: 44, fill: "#e2ebf6" }),
-  gf.rect({ w: 150, h: 4, fill: "#a6b3b6" }),
-]).render(root, { w: 200, h: 80 });
+  gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 }),
+  gf.circle({ r: 36, fill: "#D2913C", stroke: "#A96F26", strokeWidth: 3 }),
+  gf.circle({ r: 38, fill: "#3E8CCC", stroke: "#2F6FA6", strokeWidth: 3 }),
+  gf.circle({ r: 21, fill: "#F4BC80", stroke: "#E0954C", strokeWidth: 3 }),
+]).render(root, { w: 80, h: 80 });
 ```
 
 :::
 
-Both rectangles start at the same corner, so the thin gray one lands on the top
-edge of the blue one and looks like a border. But this is just a coincidence! Nothing in the code above describes the placement of the rectangles relative to each other.
+All four circles start at the same corner, so they pile up on top of each other. Earth hides Venus, and Mars hides Mercury. Nothing in the code above describes the placement of the circles relative to each other.
 
 ## Placing marks side by side: `spread`
 
@@ -56,126 +69,103 @@ GoFish provides a standard library of operators that lay out child marks. A comm
 ::: gofish
 
 ```js
-gf.spread({ dir: "x", spacing: 10 }, [
-  gf.rect({ w: 40, h: 40, fill: "#e63946" }),
-  gf.rect({ w: 40, h: 40, fill: "#457b9d" }),
-  gf.rect({ w: 40, h: 40, fill: "#2a9d8f" }),
-]).render(root, { w: 220, h: 80 });
+gf.spread({ dir: "x", spacing: 50 }, [
+  gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 }),
+  gf.circle({ r: 36, fill: "#D2913C", stroke: "#A96F26", strokeWidth: 3 }),
+  gf.circle({ r: 38, fill: "#3E8CCC", stroke: "#2F6FA6", strokeWidth: 3 }),
+  gf.circle({ r: 21, fill: "#F4BC80", stroke: "#E0954C", strokeWidth: 3 }),
+]).render(root, { w: 370, h: 76 });
 ```
 
 :::
+
+Now the planets are in a row, 50 pixels apart. But they are lined up along their top edges, so the small planets hang near the top of the row.
+
+## Aligning marks
+
+To fix that, we can add an `alignment` attribute to the `spread()`:
+
+::: gofish
+
+```js
+gf.spread({ dir: "x", spacing: 50, alignment: "middle" }, [
+  gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 }),
+  gf.circle({ r: 36, fill: "#D2913C", stroke: "#A96F26", strokeWidth: 3 }),
+  gf.circle({ r: 38, fill: "#3E8CCC", stroke: "#2F6FA6", strokeWidth: 3 }),
+  gf.circle({ r: 21, fill: "#F4BC80", stroke: "#E0954C", strokeWidth: 3 }),
+]).render(root, { w: 370, h: 76 });
+```
+
+:::
+
+The `alignment` attribute on `spread()` specifies that its children should be middle-aligned, which in this case means their centers sit on one horizontal line. You can also use `"start"` to line up their top edges or `"end"` to line up their bottom edges.
 
 ## Data-driven graphics
 
-Instead of defining all our marks manually, we can specify their properties using some data! To do so, we can define a small dataset and use JavaScript's map function to programmatically generate some rectangles. The `d` variable inside the `map` takes on one value of the `data` array at a time.
+Instead of defining all our marks manually, we can specify their properties using some data! To do so, we can define a small dataset and use JavaScript's map function to programmatically generate some circles. The `d` variable inside the `map` takes on one value of the `data` array at a time.
 
 ::: gofish
 
 ```js
 const data = [
-  { label: "x", value: 5 },
-  { label: "y", value: 8 },
-  { label: "z", value: 3 },
+  { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
+  { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
+  { name: "earth", r: 38, fill: "#3E8CCC", stroke: "#2F6FA6" },
+  { name: "mars", r: 21, fill: "#F4BC80", stroke: "#E0954C" },
 ];
 
 gf.spread(
-  { dir: "x", spacing: 10, alignment: "end" },
-  data.map((d) => gf.rect({ w: 30, h: d.value * 12, fill: "#4c78a8" }))
-).render(root, { w: 200, h: 120 });
-```
-
-:::
-
-The `alignment` attribute on `spread()` specifies that its children should be end-aligned, which in this case means to their bottom edges.
-
-(We'll see how to describe a bar chart more simply in the charts tutorial.)
-
-## Text
-
-`text()` draws a string. It measures the string, so the operator around it
-knows how wide it is and can lay it out like any other mark.
-
-::: gofish
-
-```js
-const data = [
-  { label: "x", value: 5 },
-  { label: "y", value: 8 },
-  { label: "z", value: 3 },
-];
-
-gf.spread(
-  { dir: "x", spacing: 10, alignment: "end" },
+  { dir: "x", spacing: 50, alignment: "middle" },
   data.map((d) =>
-    gf.spread({ dir: "y", spacing: 4, alignment: "middle" }, [
-      gf.text({ text: d.label, fontSize: 14 }),
-      gf.rect({ w: 30, h: d.value * 12, fill: "#4c78a8" }),
-    ])
+    gf.circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
   )
-).render(root, { w: 200, h: 140 });
+).render(root, { w: 370, h: 76 });
 ```
 
 :::
 
-Operators nest. Each bar here is its own little column of a label and a
-rectangle, and the outer `spread` arranges those columns.
+The picture is the same, but now the sizes and colors of the planets live in one place instead of in four copies of `circle()`.
 
-## Putting a label inside a box
+(We'll see how to turn data into marks more simply in the charts tutorial.)
 
-Children of a `layer` all sit at the same corner, so a label dropped into a box
-lands in the top left, not the middle. To center it, name the two children and
-add an **alignment constraint**, which is a rule that ties two nodes together
-during layout.
+## Drawing a background: `enclose`
+
+Some operators draw something of their own. `enclose()` is an operator that draws a box around its children. The box is as big as the children, plus `padding` pixels on every side. Let's put the planets on a dark background:
 
 ::: gofish
 
 ```js
 const data = [
-  { label: "x", value: 5 },
-  { label: "y", value: 8 },
-  { label: "z", value: 3 },
+  { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
+  { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
+  { name: "earth", r: 38, fill: "#3E8CCC", stroke: "#2F6FA6" },
+  { name: "mars", r: 21, fill: "#F4BC80", stroke: "#E0954C" },
 ];
 
-const labeledBox = (d) =>
-  gf
-    .layer([
-      gf.rect({ w: 150, h: 44, fill: "#e2ebf6" }).name("box"),
-      gf
-        .text({
-          text: `${d.label} = ${d.value}`,
-          fontSize: 20,
-          fontFamily: "Andale Mono, monospace",
-        })
-        .name("label"),
-    ])
-    .constrain(({ box, label }) => [
-      gf.Constraint.align({ x: "middle", y: "middle" }, [box, label]),
-    ]);
-
-gf.spread(
-  { dir: "y", spacing: 8, alignment: "middle" },
-  data.map(labeledBox)
-).render(root, { w: 150, h: 160 });
+gf.enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+  gf.spread(
+    { dir: "x", spacing: 50, alignment: "middle" },
+    data.map((d) =>
+      gf.circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
+    )
+  ),
+]).render(root, { w: 410, h: 116 });
 ```
 
 :::
 
-`.name("box")` gives a child a name that its own layer can see. `.constrain()`
-receives those names and returns a list of constraints. Here
-`Constraint.align({ x: "middle", y: "middle" }, [box, label])` says the two
-nodes share a center point.
+`fill` is the color of the box. The box gets a thin gray outline by default, so `stroke: "none"` turns it off. `rx` and `ry` round its corners.
 
-Names and constraints are the backbone of hand made diagrams, and the Diagrams
-tutorial builds on them.
+Notice how the code mirrors the picture. The row of planets is inside the `enclose()` call, and it is drawn inside the box.
 
 ## Where next
 
 This page is the only thing either branch depends on. Take whichever one you
 want first.
 
-- [**Charts**](/js/tutorials/charts). Wrap it in `chart(data)` to get scales and
-  axes. The same `spread` and `rect` you used above become a bar chart whose
-  heights come from the data instead of from a magic number.
-- [**Diagrams**](/js/tutorials/diagrams). Wrap it in `createMark` and add refs
-  and arrows. The labeled box above becomes a reusable component, and arrows
-  connect one component to another.
+- [**Charts**](/js/tutorials/charts). Wrap your data in `chart(data)` to get
+  scales and axes. The same `spread` you used above becomes a bar chart whose
+  bar heights come from the data.
+- [**Diagrams**](/js/tutorials/diagrams). Label one of these planets and point
+  an arrow at it. You'll see how a single planet can be part of the row and
+  part of its label at the same time.

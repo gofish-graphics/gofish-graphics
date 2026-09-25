@@ -28,7 +28,7 @@ so start there, and everything else builds on it.
 
 <TutorialCard title="Diagrams" href="/js/tutorials/diagrams">
 
-::: gofish example:python-tutor-memory-diagram image hidden
+::: gofish story:tutorials-diagrams--diagrams image hidden
 :::
 
 </TutorialCard>
