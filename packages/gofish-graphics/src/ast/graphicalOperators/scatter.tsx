@@ -32,7 +32,7 @@ export type ScatterProps = {
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 } & FancyDims<MaybeValue<number>>;
 
-export const Scatter = createNodeOperator(
+const Scatter = createNodeOperator(
   async (
     options: ScatterProps,
     children: GoFishAST[] | Collection<GoFishAST>

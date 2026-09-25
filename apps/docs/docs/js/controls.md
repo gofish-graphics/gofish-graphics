@@ -56,7 +56,7 @@ const levelSlider = slider({
 });
 const resetButton = button({ label: "0", onClick: () => level.set(0) });
 
-GoFish(container, { w: 420, h: 120 }, () =>
+gofish(container, { w: 420, h: 120 }, () =>
   spreadX({ spacing: 8 }, [resetButton, levelSlider])
 );
 ```
@@ -83,7 +83,7 @@ that matters for where you call it.
   its value, and geometry cannot be `live()` — `live()` patches attributes at
   paint, it does not move a node — so the spec itself must be re-evaluable. That
   is exactly what the thunk form of the terminal,
-  `GoFish(container, options, () => node)`, is for.
+  `gofish(container, options, () => node)`, is for.
 
 ## Panel E: a play button and a scrub slider over a clock
 
@@ -132,9 +132,9 @@ const playButton = button({
   onClick: () => (day.isPlaying() ? day.pause() : day.play()),
 });
 
-GoFish(container, { w: 600, h: 660, legend: false }, () =>
+gofish(container, { w: 600, h: 660, legend: false }, () =>
   spreadY({ spacing: 12 }, [
-    Frame({ w: 600, h: 600 }, [map]),
+    frame({ w: 600, h: 600 }, [map]),
     spreadX({ spacing: 8 }, [playButton, timeSlider]),
   ])
 );

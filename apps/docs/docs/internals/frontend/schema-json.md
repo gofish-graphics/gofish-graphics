@@ -25,7 +25,7 @@ for the API.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gofish.graphics/schema/frontend/v0.json",
   "title": "GoFish Frontend IR",
-  "description": "Source-level chart specification produced by the v3 fluent API.",
+  "description": "Source-level chart specification produced by the fluent chart API.",
   "type": "object",
   "required": ["irVersion", "ir", "root"],
   "additionalProperties": false,
@@ -181,7 +181,7 @@ for the API.
         },
         "charts": {
           "type": "array",
-          "description": "Layer tiers. Each is a ChartIR; the v3 chart(...).layer(mark) builder chain may also include a RawMarkIR tier (a component-level, datumless annotation overlay).",
+          "description": "Layer tiers. Each is a ChartIR; the chart(...).layer(mark) builder chain may also include a RawMarkIR tier (a component-level, datumless annotation overlay).",
           "items": {
             "oneOf": [
               {
@@ -205,7 +205,7 @@ for the API.
         },
         "builder": {
           "type": "boolean",
-          "description": "True when this came from the v3 chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.)."
+          "description": "True when this came from the chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.)."
         },
         "origin": {
           "$ref": "#/$defs/Origin"
@@ -484,7 +484,7 @@ for the API.
       }
     },
     "CutMarkIR": {
-      "description": "Slice a single `source` mark into N clipped sub-shapes along `dir`. As a chart `.mark(...)` spec it deserializes to the v3 expand-mark form; as a combinator child it expands in place into its N slice nodes. `size` is a field-name string (expand form) or an array of absolute-pixel numbers / datum() flex-weight wrappers; omitted means equal slices.",
+      "description": "Slice a single `source` mark into N clipped sub-shapes along `dir`. As a chart `.mark(...)` spec it deserializes to the expand-mark form; as a combinator child it expands in place into its N slice nodes. `size` is a field-name string (expand form) or an array of absolute-pixel numbers / datum() flex-weight wrappers; omitted means equal slices.",
       "type": "object",
       "required": ["type", "source", "dir"],
       "properties": {

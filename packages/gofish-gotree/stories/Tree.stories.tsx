@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, rect, text, Layer, Constraint, polar } from "gofish-graphics";
+import { circle, rect, text, layer, Constraint, polar } from "gofish-graphics";
 import { tree, nest, distribute } from "../src";
 
 const meta: Meta = {
@@ -106,7 +106,7 @@ export const NodeLink: StoryObj<Args> = {
 // label, built from gofish-graphics primitives. The node factory closes over the
 // hierarchy datum, so `d.data.name` flows from the user's tree into the label.
 const labeledNode = (d: any) =>
-  Layer({ w: 96, h: 26 }, [
+  layer({ w: 96, h: 26 }, [
     rect({
       w: 96,
       h: 26,
@@ -203,7 +203,7 @@ export const NestedBoxes: StoryObj<Args> = {
 // stack. Demonstrates that `parentChild` accepts any function with the
 // `(children) => GoFishAST` shape — helpers are conveniences, not the API.
 const labeledHeader = (d: any) =>
-  Layer({ w: 96, h: 22 }, [
+  layer({ w: 96, h: 22 }, [
     rect({
       w: 96,
       h: 22,

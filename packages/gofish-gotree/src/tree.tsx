@@ -2,7 +2,7 @@
 // primitives. Paper: https://doi.org/10.1145/3313831.3376297 — source, editor,
 // and gallery at https://github.com/BIT-VIS/gotree (https://bit-vis.github.io/gotree/).
 // See README.md for the concept mapping and citation.
-import { Layer, Frame, rect } from "gofish-graphics";
+import { layer, frame, rect } from "gofish-graphics";
 import type { GoTreeSpec, TreeData, NodeFactory } from "./spec";
 import { normalize } from "./data";
 import { renderSubtree } from "./recursion";
@@ -21,10 +21,10 @@ export function tree(spec: GoTreeSpec, data: TreeData): any {
   // try to resolve their refs (matches the sankey pattern); edges come after.
   // Paint order is also this, so edges draw on top of nodes — that's fine for
   // thin connector strokes passing through node bodies.
-  const composed = Layer([nodeTree, ...edges]);
+  const composed = layer([nodeTree, ...edges]);
 
   if (filledSpec.coord !== undefined) {
-    return Frame({ coord: filledSpec.coord as any }, [composed]);
+    return frame({ coord: filledSpec.coord as any }, [composed]);
   }
   return composed;
 }

@@ -10,8 +10,8 @@ import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
 import { ChartBuilder, LayerBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
-// Direct from chartBuilder (not the `chart` barrel): the one-way dependency
-// rule is createOperator/withGoFish → chartBuilder, never the reverse.
+// From markResult, which imports neither chartBuilder nor createOperator, so
+// the dependency between those modules keeps running one way.
 import { resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
@@ -30,7 +30,7 @@ import {
 import { isValue } from "./data";
 import { splitLiveChannels } from "../interaction/live";
 import { KNOWN_ALIAS_KEYS } from "./dims";
-import { Mark } from "./types";
+import { Mark, MarkChild } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
@@ -51,7 +51,7 @@ export interface RenderOptions {
 
 /**
  * A single child element: a GoFishAST node, a promise of one, a mark (function),
- * or a v3 builder (`chart(...).mark(...)`, with or without `.layer(...)` tiers).
+ * or a chart builder (`chart(...).mark(...)`, with or without `.layer(...)` tiers).
  * Marks are resolved by calling them with `undefined` (no data) to produce a
  * node; builders are resolved through their own `resolve()`.
  */
@@ -122,7 +122,7 @@ function hasRenderMethod(value: any): value is GoFishNode {
 }
 
 /**
- * Reify one operator child into a node. A child is a thunk/mark, a v3 BUILDER
+ * Reify one operator child into a node. A child is a thunk/mark, a chart BUILDER
  * (a single-tier `chart(...).mark(...)` or a layered `....layer(...)`), a
  * thenable, or an already-built node; `resolveMarkResult` is the one place that
  * knows all four, so both child loops below go through here. A thunk is called
@@ -350,7 +350,7 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 /**
  * A mark with chainable .name and .label, plus a top-level .render() for
  * combinator-form callsites whose children carry their own data — typically
- * `For(...)` closures over pre-computed values, refs to other layers, or
+ * `map(...)` closures over pre-computed values, refs to other layers, or
  * already-resolved nodes. Calling `.render()` invokes the mark with
  * `undefined` data, so marks that read field accessors (e.g. `rect({h: "v"})`)
  * won't get any data — for those, wrap in a Chart instead:
@@ -412,7 +412,9 @@ export type MarkSerializeConfig<P = any> =
  *
  * Omitting `channels` is just the empty-annotations special case: all props
  * pass through as-is, which is the right default for `(props) => Node`-style
- * components composed from existing marks.
+ * components composed from existing marks. A component's body may return a
+ * built node or a mark (e.g. `layer([...])`, `spread(opts, [...])`): the
+ * result is reified like any combinator child, in a fresh name context.
  *
  * The output node is always made a scope root, so any `.name(token)`
  * registrations inside the shape function are hygienic — external paths like
@@ -424,10 +426,10 @@ export type MarkSerializeConfig<P = any> =
  * `selectAll("layerName")`.
  */
 export function createMark<P extends Record<string, any>>(
-  shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>
+  shapeFn: (props: P) => MarkChild
 ): (props: P) => NameableMark<P>;
 export function createMark<P extends Record<string, any>>(
-  shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>,
+  shapeFn: (props: P) => MarkChild,
   channels: undefined,
   serialize: MarkSerializeConfig<P>
 ): (props: P) => NameableMark<P>;
@@ -541,10 +543,13 @@ function buildCreatedMark(
 
     // For expand-kind marks, hand the data array to shapeFn so it can
     // build N output nodes 1:1 with input rows. shapeFn may be async.
-    const result = await shapeFn(
-      shapeProps,
-      kind === "expand" ? data : undefined
-    );
+    // A component body may return anything a combinator child may be (a
+    // built node, or a mark such as `layer([...])`), so it is reified through
+    // the same `resolveMarkResult` path. The name context is fresh: the
+    // component is a naming boundary. An expand mark's array of slice nodes
+    // passes through as-is.
+    const raw = await shapeFn(shapeProps, kind === "expand" ? data : undefined);
+    const result = Array.isArray(raw) ? raw : await resolveMarkResult(raw, {});
     if (Array.isArray(result)) {
       // Expand path: stamp each slice with its own datum.
       for (let i = 0; i < result.length; i++) {

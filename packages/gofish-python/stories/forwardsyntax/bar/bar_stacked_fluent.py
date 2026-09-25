@@ -1,4 +1,4 @@
-"""Forward Syntax V3/Bar/Stacked Fluent — mirrors BarStackedFluent.stories.tsx
+"""Forward Syntax/Bar/Stacked Fluent — mirrors BarStackedFluent.stories.tsx
 
 Uses .facet() and .stack() convenience methods instead of .flow(spread(...), stack(...)).
 """
@@ -6,7 +6,7 @@ Uses .facet() and .stack() convenience methods instead of .flow(spread(...), sta
 from gofish import chart, rect
 from stories.data.seafood import seafood
 
-TITLE = "Forward Syntax V3/Bar/Stacked Fluent"
+TITLE = "Forward Syntax/Bar/Stacked Fluent"
 
 
 def default(w=400, h=400):

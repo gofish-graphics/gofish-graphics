@@ -62,7 +62,7 @@ function readOptional(p: string): string | null {
 /**
  * Builds a map from Storybook story ID → relative JS file path.
  * Story ID is the title converted to kebab-case, e.g.
- *   "Forward Syntax V3/Bar/Basic" → "forward-syntax-v3/bar/basic"
+ *   "Forward Syntax/Bar/Basic" → "forward-syntax/bar/basic"
  */
 function buildStoryIndex(): Map<string, string> {
   const index = new Map<string, string>();
@@ -139,7 +139,7 @@ function extractPythonCode(source: string): string {
 
 /**
  * Derives the Python story file path from a DOM snapshot id.
- * e.g. "forward-syntax-v3/bar/basic--default" → "tests/python-stories/forward-syntax-v3/bar/test_basic.py"
+ * e.g. "forward-syntax/bar/basic--default" → "tests/python-stories/forward-syntax/bar/test_basic.py"
  */
 function domIdToPythonFile(id: string): string {
   const storyId = id.replace(/--[^/]*$/, "");
@@ -158,7 +158,7 @@ function domIdToPythonFile(id: string): string {
 interface ExportEntry {
   /** Camel-cased export name from the JS file, e.g. "Default", "AxesXOnly". */
   name: string;
-  /** Story-level id, e.g. "forward-syntax-v3/bar/basic--default". Matches
+  /** Story-level id, e.g. "forward-syntax/bar/basic--default". Matches
    * the path produced by capture-python's story-discovery + DOM diffs. */
   id: string;
   /** "story_default", "story_axes_xonly" — what we look for in Python. */
@@ -180,7 +180,7 @@ interface ExportEntry {
 
 interface StoryPair {
   /** File-level id derived from the Storybook title, e.g.
-   * "forward-syntax-v3/bar/basic". Shares a prefix with each child's id. */
+   * "forward-syntax/bar/basic". Shares a prefix with each child's id. */
   id: string;
   jsFile: string;
   pythonFile: string;
@@ -386,7 +386,7 @@ for (const [fileId, jsFile] of storyIndex) {
 }
 
 // Overlay DOM parity diffs onto specific exports. diff.path is e.g.
-// "forward-syntax-v3/bar/basic--default.html"; split into file id +
+// "forward-syntax/bar/basic--default.html"; split into file id +
 // export suffix, find the matching pair + export entry.
 for (const diff of parityDiffs) {
   const id = diff.path.replace(/\.html$/, "");

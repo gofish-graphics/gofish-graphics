@@ -38,7 +38,7 @@ ref(
 `ref("x")` finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to where the ref sits. It searches the subtree of the ref's parent first, then the subtree of each ancestor in turn, and stops at the first level that has a match. Within that level the closest match wins, counted in steps down from the level, so a direct child beats a node with the same name nested deeper. The search never crosses a `createMark` boundary, in either direction. A nearer match hides a farther one with the same name. Two matches at the same smallest distance is an error, and so is no match at all. A data key is not a name, so `ref("a")` does not find a mark just because its row is keyed `"a"`.
 
 ```ts
-Layer([
+layer([
   rect({ w: 80, h: 40 }).name("bg"),
   ref("bg"), // resolves to the rect above
 ]);
@@ -53,7 +53,7 @@ A `Token` (from [`createName`](/js/api/howto/naming-and-scoping#createname)) is 
 ```ts
 const targetName = createName("target");
 
-Layer([
+layer([
   rect({ w: 80, h: 40 }).name(targetName),
   // ...somewhere in a sibling subtree:
   ref(targetName),
@@ -93,7 +93,7 @@ Pass a `GoFishNode` (or a `.__ref` wrapper) to reference it without name resolut
 
 ```ts
 const bar = rect({ h: "value" });
-Layer([bar, ref(bar)]);
+layer([bar, ref(bar)]);
 ```
 
 ## Parameters

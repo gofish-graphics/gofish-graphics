@@ -376,7 +376,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   both remain hand-maintained; see the CLAUDE.md checklist's step 2 note.
 - **Closing the `spread`/`stack`/`scatter` operator-vs-combinator `w`/`h`
   schema drift** — the low-level combinator forms accept explicit `w`/`h`
-  passthrough that the v3-operator IR doesn't expose; `descriptors.ts`
+  passthrough that the fluent operators' IR doesn't expose; `descriptors.ts`
   documents this as IR truth rather than resolving it (see the `NOTE`
   comments on `OPERATORS.spread`/`OPERATORS.stack`).
 - **Flipping leaf-mark validation from warn to strict** — waiting on the

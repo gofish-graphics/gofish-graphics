@@ -42,7 +42,6 @@ const {
   derive,
   group,
   interpolate,
-  Layer,
   layer,
   line,
   orthogonal,
@@ -735,7 +734,7 @@ async function main(): Promise<void> {
     // A chained mark inside a component moves too: the chart reads the
     // transition off the marks it built, wherever the chained one sits.
     const Head = createMark(() =>
-      Layer([head("red", animation.tween({ curve: "linear" }))])
+      layer([head("red", animation.tween({ curve: "linear" }))])
     );
     const inComponent = await headsAt(Head({}));
     ok(

@@ -15,8 +15,8 @@ import { initializeContainer } from "../helper";
 import { birds } from "../../src/data/birds";
 import { world110m } from "../../src/data/world110m";
 import {
-  Frame,
-  GoFish,
+  frame,
+  gofish,
   button,
   chart,
   circle,
@@ -299,11 +299,11 @@ export const E_Controls: StoryObj<Args> = {
     // `legend: false` and the map's size are options of the ROOT render here,
     // not of the chart: the chart is no longer the root, so it is the enclosing
     // composition that decides how big the map box is and whether the canvas
-    // grows a swatch column. `Frame({ w, h })` is the low-level "this child is
+    // grows a swatch column. `frame({ w, h })` is the low-level "this child is
     // this many pixels" wrapper.
-    GoFish(container, { w: args.w, h: args.h, legend: false }, () =>
+    gofish(container, { w: args.w, h: args.h, legend: false }, () =>
       spreadY({ spacing: 12 }, [
-        Frame({ w: 600, h: 600 }, [map]),
+        frame({ w: 600, h: 600 }, [map]),
         spreadX({ spacing: 8 }, [playButton, timeSlider]),
       ])
     );

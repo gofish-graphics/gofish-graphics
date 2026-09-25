@@ -40,7 +40,7 @@ export function titleToStoryId(title: string): string {
  * Convert a Storybook story title + export name into a stable file-system path
  * used for snapshots/screenshots.
  *
- * e.g. ("Forward Syntax V3/Bar/Basic", "Default") → "forward-syntax-v3/bar/basic--default"
+ * e.g. ("Forward Syntax/Bar/Basic", "Default") → "forward-syntax/bar/basic--default"
  *
  * Shared by capture-js-dom.ts (full corpus) and capture-one.ts (single story) so
  * the two stay in lockstep if the kebab-casing rule ever changes.
@@ -58,7 +58,7 @@ export function storyToPath(title: string, name: string): string {
  */
 export function mapJsToPython(jsFile: string): string {
   // Read the Storybook title from the JS file and derive the Python path from it.
-  // e.g. title: "Forward Syntax V3/Bar/Basic" → "tests/python-stories/forward-syntax-v3/bar/test_basic.py"
+  // e.g. title: "Forward Syntax/Bar/Basic" → "tests/python-stories/forward-syntax/bar/test_basic.py"
   const absPath = join(ROOT_DIR, jsFile);
   let title: string | null = null;
   try {

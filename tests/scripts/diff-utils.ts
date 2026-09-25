@@ -56,7 +56,7 @@ export const PYTHON_DIR = join(import.meta.dirname, "../tmp/python");
 // ---------------------------------------------------------------------------
 
 export interface DiffEntry {
-  /** Relative path like "forward-syntax-v3/bar--basic.html" */
+  /** Relative path like "forward-syntax/bar--basic.html" */
   path: string;
   /**
    * "removed" = baseline exists, story no longer captured (deleted/renamed

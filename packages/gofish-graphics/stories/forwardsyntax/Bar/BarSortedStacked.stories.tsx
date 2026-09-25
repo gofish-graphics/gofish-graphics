@@ -4,7 +4,7 @@ import { seafood } from "../../../src/data/catch";
 import { chart, spread, rect, stack, field } from "../../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Bar/Sorted Stacked",
+  title: "Forward Syntax/Bar/Sorted Stacked",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

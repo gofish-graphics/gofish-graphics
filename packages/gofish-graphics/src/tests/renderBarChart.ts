@@ -7,7 +7,7 @@ export const renderBarChart = () => {
   container.style.margin = "20px";
   document.body.appendChild(container);
 
-  // Create the bar chart from v2 API
+  // Create the bar chart
   rect(seafood, { fill: "lake", h: "count" })
     .spreadX("lake")
     .render(container, {

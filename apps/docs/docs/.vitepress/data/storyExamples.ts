@@ -1020,7 +1020,7 @@ let storyTitles: Map<string, string> | undefined;
  * A readable name for an untagged story: the last segment of its Storybook
  * title, plus the export name when that adds something ("Tutorials/Basics" +
  * `Basics` → "Basics"; "Interaction/Draggable Threshold" + `Default` →
- * "Draggable Threshold"; "Forward Syntax/V3/Ribbon" + `Polar` → "Ribbon: Polar").
+ * "Draggable Threshold"; "Forward Syntax/Ribbon" + `Polar` → "Ribbon: Polar").
  */
 function readableStoryTitle(metaTitle: string, exportName: string): string {
   const name = metaTitle.split("/").pop()!.trim();

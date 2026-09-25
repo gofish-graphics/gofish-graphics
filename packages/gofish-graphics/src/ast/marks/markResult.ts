@@ -13,7 +13,7 @@
 
 import { GoFishNode } from "../_node";
 import { isToken } from "../createName";
-import type { Mark } from "../types";
+import type { Mark, MarkChild } from "../types";
 
 /** Per-chart registry of named layers for ref()/selectAll() lookup. A string
  *  name is its own key. A `createName` token is keyed by its symbol, which no
@@ -66,7 +66,7 @@ function isChartPipeline(raw: unknown): raw is ChartPipeline {
  * Resolves whatever a Mark returns into a GoFishNode.
  */
 export async function resolveMarkResult(
-  raw: ReturnType<Mark<any>> | ChartPipeline,
+  raw: MarkChild,
   layerContext?: LayerContext
 ): Promise<GoFishNode> {
   // Mark functions are typed as sync-returning, but async marks are a

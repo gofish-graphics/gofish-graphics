@@ -74,7 +74,7 @@ const doc4 = await Serialize.toJSONRawMark(mark, opts); // for bare marks
 ```
 
 `toJSON` is async because combinator-form marks may carry their child
-list as a `Promise<Mark[]>` (e.g. from `For(...)` helpers); the emitter
+list as a `Promise<Mark[]>` (e.g. from `map(...)` helpers); the emitter
 resolves these to walk into them.
 
 Python (via the wrapper):
@@ -112,11 +112,11 @@ type FrontendIRDocument = {
 };
 ```
 
-The root types mirror the v3 fluent builder shapes:
+The root types mirror the fluent builder shapes:
 
 - `ChartIR` — `{ type: "chart", data?, operators?, mark, options?, zOrder? }`
 - `LayerIR` — `{ type: "layer", charts, options? }` (each `charts` tier is a
-  `ChartIR`, or a `RawMarkIR` for a component-level annotation tier from the v3
+  `ChartIR`, or a `RawMarkIR` for a component-level annotation tier from the
   `chart(...).layer(mark)` builder chain)
 - `RawMarkIR` — `{ type: "raw-mark", mark, options? }`
 
@@ -158,7 +158,7 @@ flex-weights; omitted means equal slices. It has **two deserialization surfaces
 over one JS core**, dispatched by context so extent resolution (flexbox sizing,
 absolute-vs-weight mixing, measure-unit checks) lives in ONE place, JS-side:
 
-- used as a chart `.mark(...)` → the v3 expand-mark form (`cutMark` /
+- used as a chart `.mark(...)` → the expand-mark form (`cutMark` /
   `source.cut(opts)`), so a chart flow treats it as an expand mark;
 - used as a **combinator child** (inside a Spread/Stack `children` array) → the
   deserializer expands it in place into its N slice nodes — the pure
@@ -529,7 +529,7 @@ in the design improvements:
 - **`__combinator` removal** — discriminate operator-form vs
   combinator-form by position (inside `operators[]` vs inside the mark
   tree's `children`) rather than a flag.
-- **`ChannelExpr`-only IR** — the v3 API would desugar all shorthand
+- **`ChannelExpr`-only IR** — the fluent API would desugar all shorthand
   strings to `field()` at construction time; the IR sees only the
   canonical tagged-object form.
 - **Multi-stage sibling schemas** — distinct frontend / core /

@@ -1,4 +1,4 @@
-"""Forward Syntax V3/Scatter — mirrors Scatter.stories.tsx
+"""Forward Syntax/Scatter — mirrors Scatter.stories.tsx
 
 Basic scatter plot only. Connected and WithPieGlyphs variants require
 layer support (not yet in Python wrapper).
@@ -7,7 +7,7 @@ layer support (not yet in Python wrapper).
 from gofish import chart, scatter, circle
 from stories.data.seafood import catch_locations_array
 
-TITLE = "Forward Syntax V3/Scatter"
+TITLE = "Forward Syntax/Scatter"
 
 
 def basic(w=400, h=400):

@@ -11,7 +11,7 @@ import { circle, scatter } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Scatter",
+  title: "Forward Syntax/Scatter",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

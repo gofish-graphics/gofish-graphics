@@ -1,4 +1,4 @@
-import { createMark, createName, Spread, text } from "../../../src/lib";
+import { createMark, createName, spread, text } from "../../../src/lib";
 import { elmTuple } from "./elmTuple";
 
 const fontFamily = "verdana, arial, helvetica, sans-serif";
@@ -11,7 +11,7 @@ export interface HeapObjectProps {
 export const heapObject = createMark(
   ({ objectType, objectValues }: HeapObjectProps) => {
     const elmTuplesTag = createName("elmTuples");
-    return Spread(
+    return spread(
       { dir: "y", alignment: "start", spacing: 10 },
       [
         text({
@@ -20,7 +20,7 @@ export const heapObject = createMark(
           fill: "grey",
           text: objectType,
         }),
-        Spread(
+        spread(
           { dir: "x", spacing: 0 },
           objectValues.map((elementData, index) =>
             elmTuple({

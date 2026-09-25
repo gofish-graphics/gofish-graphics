@@ -7,7 +7,7 @@ beside an ordinal heatmap — the bars grow UP while the heatmap reads top→bot
 (before the fix the whole boundary rendered y-down). `ZOrderedMixed`: the same
 mix inside a layer carrying a `z_above` constraint — the z-order hoist must carry
 the flip scope through, so adding the constraint never changes orientation.
-Combinator `spread` in the `dir` variants stands in for v1 `spreadX`/`spreadY`; a
+Combinator `spread` in the `dir` variants stands in for JS `spreadX`/`spreadY`; a
 data-bound SIZE uses `datum(v)` (JS `value(v)`).
 """
 

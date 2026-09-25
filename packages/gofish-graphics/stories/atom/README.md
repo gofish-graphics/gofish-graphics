@@ -2,7 +2,7 @@
 
 Replications of the unit-visualization examples from **Atom** — Park, Drucker,
 Fernandez & Heer, *"Atom: A Grammar for Unit Visualizations"* (IEEE TVCG 2017) —
-ported to the GoFish v3 fluent API.
+ported to the GoFish fluent chart API.
 
 - Reference implementation & example specs: <https://github.com/intuinno/unit>
   (example specs live under [`app/data/`](https://github.com/intuinno/unit/tree/master/app/data)).
@@ -85,12 +85,12 @@ around them as noted; these are candidates for new operators.
    story does exactly this: a horizontal `stack` with a `w: "classTotal"` claim resolves
    column widths ∝ class size, composed with a `normalize`d vertical `stack` for heights —
    a verified, variable-width mosaic with no `count` operator. (The existing
-   *Forward Syntax V3 / Mosaic Chart* still renders equal-width because it uses `spread`.)
+   *Forward Syntax / Mosaic Chart* still renders equal-width because it uses `spread`.)
 
    A related coupling — making *one data unit measure the same on both axes* —
    now exists, **driven by measure** rather than a knob (**issue #582**; see
    [chart › Equal scale](../../../../apps/docs/docs/js/api/core/chart.md) and the
-   *Forward Syntax V3 / Equal Scale* sunflower demo). When the x and y channels
+   *Forward Syntax / Equal Scale* sunflower demo). When the x and y channels
    carry the same measure (`field(name, measure)` on both), their **data→pixel
    position scales** are equated, so circles stay circular and maps stay
    undistorted. That is the POSITION case; it does **not** by itself give the

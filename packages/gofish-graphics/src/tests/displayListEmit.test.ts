@@ -1,7 +1,7 @@
 /**
  * Tests for the display-list (render-IR) emitter — `toDisplayList()`.
  *
- * Builds a bar chart via the v3 fluent API, runs `toDisplayList({w, h})`, and
+ * Builds a bar chart via the fluent chart API, runs `toDisplayList({w, h})`, and
  * asserts the emitted document is (a) schema-valid against the canonical
  * display-list schema in `gofish-ir`, and (b) geometrically faithful: bars
  * share a baseline, heights are proportional to their data value, x-positions

@@ -1,8 +1,8 @@
 /**
  * Component pointer — event inputs off the chart pipeline.
  *
- * A low-level v1 COMPONENT (a `spreadX` of raw `rect`s, no `chart()`, no data)
- * rendered through the THUNK form: `GoFish(container, opts, () => node)`. A
+ * A low-level COMPONENT (a `spreadX` of raw `rect`s, no `chart()`, no data)
+ * rendered through the THUNK form: `gofish(container, opts, () => node)`. A
  * `pointer()` is read INSIDE a `live()` fill, so hovering a box recolors only
  * that box — a paint patch with zero pipeline re-runs.
  *
@@ -15,7 +15,7 @@
  * listeners). A plain-node render would install no runtime, so a component that
  * wants pointer hit-testing must use the thunk form.
  *
- * The reference-equality trick: a v1 mark carries no datum on its own (there is
+ * The reference-equality trick: a low-level mark carries no datum on its own (there is
  * no data binding), so we give each box one by INVOKING the mark with a small
  * object — `rect({…})(box)`. That object becomes the box's datum, and it is the
  * very object `pointer().datum()` returns on hit-test — so `d === p.datum()`
@@ -26,7 +26,7 @@
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { GoFish, spreadX, rect, live, pointer } from "../../src/lib";
+import { gofish, spreadX, rect, live, pointer } from "../../src/lib";
 
 const meta: Meta = {
   title: "Interaction/Component Pointer",
@@ -49,7 +49,7 @@ export const Default: StoryObj<Args> = {
     // One small object per box — its identity is the box's datum (below).
     const boxes = Array.from({ length: 5 }, (_unused, i) => ({ i }));
 
-    GoFish(container, { w: args.w, h: args.h }, () =>
+    gofish(container, { w: args.w, h: args.h }, () =>
       spreadX(
         { spacing: 14, alignment: "middle" },
         boxes.map((box) =>

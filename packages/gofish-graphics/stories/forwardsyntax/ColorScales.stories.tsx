@@ -6,7 +6,7 @@ import { ribbon } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Color Scales",
+  title: "Forward Syntax/Color Scales",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },

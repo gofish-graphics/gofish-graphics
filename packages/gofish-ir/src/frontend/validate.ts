@@ -210,7 +210,7 @@ function walkLayerChild(node: unknown, path: string, ctx: Context): void {
     walkChart(node, path, ctx);
     return;
   }
-  // A v3 `chart(...).layer(mark)` builder chain drops a component-level
+  // A `chart(...).layer(mark)` builder chain drops a component-level
   // annotation tier straight into `charts` as a raw-mark.
   if (isObject(node) && node.type === "raw-mark") {
     walkRawMark(node, path, ctx);

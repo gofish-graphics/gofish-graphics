@@ -2,8 +2,8 @@
 
 Each case pins a behavior from the descriptor-table codegen review: the
 `debug` base kwarg on every leaf mark, the universal operator debug flag,
-combinator-only fields on Treemap, required wire fields, and callable
-accessors on undeclared channels.
+combinator-only fields on the treemap combinator, required wire fields, and
+callable accessors on undeclared channels.
 
 Labeling a leaf mark is done exclusively via the `.label(accessor, options?)`
 chain (there is no leaf-mark `label` kwarg — the legacy boolean/string
@@ -13,7 +13,6 @@ shorthand kwarg was removed).
 import pytest
 
 from gofish import (
-    Treemap,
     circle,
     group,
     polygon,
@@ -76,7 +75,7 @@ def test_stack_operator_accepts_spread_parity_options():
 
 
 def test_treemap_combinator_accepts_key():
-    node = Treemap([], size="gross", key="genre")
+    node = treemap([], size="gross", key="genre")
     d = node.to_dict()
     assert d["options"]["key"] == "genre"
     assert d["options"]["size"] == "gross"

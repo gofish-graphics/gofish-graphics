@@ -1,9 +1,9 @@
-"""Forward Syntax V3/Scatter (Connected & WithPieGlyphs) — mirrors Scatter.stories.tsx"""
+"""Forward Syntax/Scatter (Connected & WithPieGlyphs) — mirrors Scatter.stories.tsx"""
 
 from gofish import layer, chart, scatter, circle, selectAll, line
 from stories.data.driving_shifts import driving_shifts
 
-TITLE = "Forward Syntax V3/Scatter (Connected)"
+TITLE = "Forward Syntax/Scatter (Connected)"
 
 
 def connected(w=400, h=400):

@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 /**
- * createOperator: a factory for v3 layout operators.
+ * createOperator: a factory for the fluent API's layout operators.
  *
  * Every layout operator (spread, stack, scatter, table, group) has the same
  * underlying shape: split the data into pieces, apply a mark to each piece,
@@ -17,7 +17,7 @@
  * High-level opts are passed to `layout` directly (after channels apply and
  * meta merges). This requires high-level `OperatorOptions` to match the
  * low-level layout function's opts shape — naming and types should align
- * between the two. v3-only keys (`by`, `debug`) are stripped before layout.
+ * between the two. Fluent-only keys (`by`, `debug`) are stripped before layout.
  *
  * The returned function has two call shapes, disambiguated by whether a
  * marks-shape is passed as the second argument:
@@ -32,8 +32,7 @@
 
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { GoFishRef } from "../_ref";
-import { Mark, Operator } from "../types";
+import { Mark, MarkChild, Operator } from "../types";
 import {
   layerKey,
   resolveMarkResult,
@@ -685,7 +684,7 @@ export type DualModeOperator<Datum, Options> = {
   (opts: Options): TranslatableOperator<Datum[], Datum[]>;
   (
     opts: Options,
-    marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
+    marks: MarkChild[] | Promise<MarkChild[]>
   ): NameableMark<Datum>;
 };
 
@@ -948,11 +947,11 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(opts: Options): TranslatableOperator<Datum[], Datum[]>;
   function dual(
     opts: Options,
-    marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
+    marks: MarkChild[] | Promise<MarkChild[]>
   ): NameableMark<Datum>;
   function dual(
     opts: Options,
-    marks?: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
+    marks?: MarkChild[] | Promise<MarkChild[]>
   ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum> {
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
@@ -962,7 +961,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         layerContext?: LayerContext
       ) => {
         // Marks may be a Promise<Mark[]> when produced by helpers like
-        // `For(...)` — await before mapping. Entries may also be already
+        // `map(...)` — await before mapping. Entries may also be already
         // resolved nodes (e.g. `ref(...)`) rather than mark functions, so
         // pass non-functions through as-is.
         const resolvedMarks = await Promise.resolve(marks);

@@ -25,7 +25,7 @@ gf.layer([
       gf.Constraint.distribute({ dir: "x", spacing: 120 }, [a, b]),
       gf.Constraint.align({ y: "middle" }, [a, b]),
     ]),
-  gf.Arrow({ stroke: "#333", strokeWidth: 3 }, [gf.ref("a"), gf.ref("b")]),
+  gf.arrow({ stroke: "#333", strokeWidth: 3 }, [gf.ref("a"), gf.ref("b")]),
 ]).render(root, { w: 320, h: 100 });
 ```
 
@@ -43,7 +43,7 @@ arrow({
 }, [from, to])
 ```
 
-`Arrow` is the v2 alias for the same factory. The children are usually two
+The children are usually two
 [`ref(...)`](/js/api/selection/ref) calls (or datum-level sub-refs) pointing at
 named elements placed by an earlier tier: the arrow runs **from the first child
 to the second**. Fewer than two children renders nothing.
@@ -65,16 +65,16 @@ to it unchanged.
 
 ```ts
 // Labeled callout: a text label pointing at a named shape (gently bowed default)
-Arrow({}, [ref("label"), ref("Mercury")]);
+arrow({}, [ref("label"), ref("Mercury")]);
 
 // Pointer edge: straight, with a dot at the source (e.g. a heap/stack reference)
-Arrow({ bow: 0, stretch: 0, padStart: 0, stroke: "#1A5683", start: true }, [
+arrow({ bow: 0, stretch: 0, padStart: 0, stroke: "#1A5683", start: true }, [
   ref("stackSlot"),
   ref("heapCell"),
 ]);
 
 // Datum-level endpoints: arrow into a specific selected sub-element
-Arrow({ bow: 0, padEnd: 25, padStart: 0, stroke: "#1A5683", start: true }, [
+arrow({ bow: 0, padEnd: 25, padStart: 0, stroke: "#1A5683", start: true }, [
   ref("heap").path(0, 1).val,
   ref("heap").path(0, 2).elmTuples[0],
 ]);

@@ -142,7 +142,14 @@ Walking `withGoFish.ts:431-477`:
      hint (used to infer axis titles) also falls back to the alias field names.
    - Anything else → pass through.
 4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
-   producing the `GoFishNode`.
+   producing the `GoFishNode`. A component body (the no-`channels` form) may
+   instead return a mark, such as `layer([...])` or `spread(opts, [...])`, or
+   a chart builder. That result goes through `resolveMarkResult`, the same
+   path a combinator uses for each child, with a fresh name context because the
+   component is a naming boundary. So a component is written with the same
+   lowercase operators as a chart, and there is no separate node-level
+   spelling to reach for. An expand mark's array of slice nodes passes through
+   unchanged.
 5. **Tag the node** with `datum = d` so downstream coordinators (label
    placement, `selectAll` projections) can find its row. The factory does not
    name the node after its data key: the key is data, and a name made from it
@@ -185,7 +192,7 @@ that knows all the shapes. Four get in:
   `rect({ … })` becomes a node inside `spreadX([...])`, and how a control mark
   (`slider(...)`) is rebuilt on every resolve;
 - a **thunk** (sequential form only) — called, then reified again;
-- a **v3 builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
+- a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
   — resolved through its own `resolve()`. A `LayerBuilder` must go through its
   own, not the root tier's: that is where a root `coord` is hoisted around every
   tier, so resolving the tiers by hand would drop the shared projection.
@@ -217,7 +224,7 @@ that knows all the shapes. Four get in:
 - a **mark** (a function) — invoked with `undefined` data, which is how a bare
   `rect({ … })` becomes a node inside `spreadX([...])`;
 - a **thunk** (sequential form only) — called, then reified again;
-- a **v3 builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
+- a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
   — resolved through its own `resolve()`. A `LayerBuilder` must go through its
   own, not the root tier's: that is where a root `coord` is hoisted around every
   tier, so resolving the tiers by hand would drop the shared projection.

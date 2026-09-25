@@ -1,4 +1,4 @@
-// v3 `group` operator. Lives in its own file (not in frame.tsx with the
+// The fluent `group` operator. Lives in its own file (not in frame.tsx with the
 // low-level `Frame`) because chartBuilder.ts imports `Frame` and we don't
 // want that import to transitively pull in createOperator → ChartBuilder.
 import { createOperator } from "../marks/createOperator";

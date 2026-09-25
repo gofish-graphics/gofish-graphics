@@ -20,7 +20,7 @@ import data from "vega-datasets";
 import { titanicPassengers } from "../../src/data/titanicPassengers";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Labels",
+  title: "Forward Syntax/Labels",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },

@@ -76,7 +76,7 @@ interface OperatorFlagsIR {
 }
 
 export interface Origin {
-  /** User-supplied name via `.name("bars")` on the v3 fluent builder. */
+  /** User-supplied name via `.name("bars")` on the fluent builder. */
   name?: string;
   /** Optional captured call-site stack — unset in v0. */
   stack?: string;
@@ -104,7 +104,7 @@ export interface ChartIR extends BaseIRNode {
 }
 
 /** Multiple tiers composed on the same canvas. Each tier is a `ChartIR`; the
- *  v3 `chart(...).layer(mark)` builder chain may also drop in a `RawMarkIR`
+ *  `chart(...).layer(mark)` builder chain may also drop in a `RawMarkIR`
  *  tier (a component-level, datumless annotation overlay). The field stays
  *  named `charts` for wire-format stability. */
 export interface LayerIR extends BaseIRNode {
@@ -114,7 +114,7 @@ export interface LayerIR extends BaseIRNode {
   /** Layer-level constraints (from `Layer([...]).constrain(...)`), resolving
    *  refs against the child charts' `name`s. */
   constraints?: ConstraintIR[];
-  /** True when this came from the v3 `chart(...).layer(...)` builder chain
+  /** True when this came from the `chart(...).layer(...)` builder chain
    *  (rather than the low-level `layer([...])` combinator). The deserializer
    *  reconstructs it through the real `LayerBuilder` so JS — not the wrapper —
    *  owns the builder's render logic (inferred axis titles, etc.). */
@@ -519,7 +519,7 @@ export interface OffsetMarkIR extends BaseIRNode {
  * `dir`. Two deserialization surfaces over the same JS core (extent resolution
  * stays in JS in ONE place):
  *
- *  - as a chart `.mark(...)` spec → the v3 expand-mark form (`cutMark` /
+ *  - as a chart `.mark(...)` spec → the expand-mark form (`cutMark` /
  *    `source.cut(opts)`); a field-name string `size` resolves per-row.
  *  - as a combinator CHILD (inside a Spread/Stack `children` array) → expanded
  *    in place into its N slice nodes via the pure `cut(source, opts)`.
@@ -555,7 +555,7 @@ export interface CutMarkIR extends BaseIRNode {
  * Python-bridge sentinel — it encodes a remote callable that the widget
  * resolves via the DeriveBridge.
  *
- * v0.1+ will move the v3 API to desugar string shorthand to explicit
+ * v0.1+ will move the fluent API to desugar string shorthand to explicit
  * constructors eagerly, so the IR carries only canonical forms.
  */
 export type ChannelValue =

@@ -1,9 +1,9 @@
-"""Forward Syntax V3/Bar/Stacked — mirrors BarStacked.stories.tsx"""
+"""Forward Syntax/Bar/Stacked — mirrors BarStacked.stories.tsx"""
 
 from gofish import chart, spread, stack, rect
 from stories.data.seafood import seafood
 
-TITLE = "Forward Syntax V3/Bar/Stacked"
+TITLE = "Forward Syntax/Bar/Stacked"
 
 
 def default(w=400, h=400):

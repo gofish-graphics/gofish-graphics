@@ -6,7 +6,7 @@ import { chart, spread, stack } from "../../src/lib";
 import { ribbon, group } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Area",
+  title: "Forward Syntax/Area",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

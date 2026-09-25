@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, line, Layer, Frame, polar } from "gofish-graphics";
+import { ellipse, line, layer, frame, polar } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -196,7 +196,7 @@ export const RadialDeep: StoryObj = {
     // zOrder — that's resolved by the ROOT bake, and coord is a bake boundary).
     // So links go FIRST in the array to draw under the nodes, and the root node
     // is last within `nodes` so its dark disc caps the spoke convergence.
-    Frame({ coord: polar() as any }, [Layer([...links, ...nodes])]).render(
+    frame({ coord: polar() as any }, [layer([...links, ...nodes])]).render(
       container,
       { w: 520, h: 520 }
     );

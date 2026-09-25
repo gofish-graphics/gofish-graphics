@@ -12,7 +12,7 @@ import {
 } from "../../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Bar/With Labels",
+  title: "Forward Syntax/Bar/With Labels",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
