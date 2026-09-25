@@ -1471,8 +1471,7 @@ def spread(
 
 
 def layer(
-    children_or_options: Union[List[Any], dict],
-    children: Optional[List[Any]] = None,
+    children: List[Any],
     **options: Any,
 ) -> Union["LayerBuilder", "ConstrainableMark"]:
     """Layer marks or charts — a single dual-form `layer` (like spread/stack).
@@ -1480,8 +1479,8 @@ def layer(
     Two element kinds, dispatched by child type:
 
     - **Chart tiers** — ``layer([chart(...), chart(...)])`` stacks each chart and
-      emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``). An
-      options dict may lead: ``layer({"coord": clock()}, [chart1, chart2])``.
+      emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``).
+      Options are keyword arguments: ``layer([chart1, chart2], coord=clock())``.
     - **Marks** — ``layer([rect(...).name("a"), ...])`` wraps child marks in a
       layer node (returns a ``ConstrainableMark`` that renders directly), with
       ``.constrain(...)`` for cross-mark constraints::
@@ -1494,16 +1493,10 @@ def layer(
     Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
     charts and marks.
     """
-    if isinstance(children_or_options, dict):
-        opts = {**children_or_options, **options}
-        kids = children or []
-    else:
-        opts = options
-        kids = children_or_options
     # Chart tiers → LayerBuilder; marks → combinator mark.
-    if kids and all(isinstance(c, ChartBuilder) for c in kids):
-        return LayerBuilder(list(kids), opts or None)
-    return ConstrainableMark("layer", _children=list(kids), **opts)
+    if children and all(isinstance(c, ChartBuilder) for c in children):
+        return LayerBuilder(list(children), options or None)
+    return ConstrainableMark("layer", _children=list(children), **options)
 
 
 # `enclose` is generated (packages/gofish-python/gofish/_generated.py) —
@@ -2316,7 +2309,7 @@ def polar(
 def wavy() -> dict:
     """
     Wavy coordinate transform — adds a sinusoidal ripple to both axes. Use as:
-    `layer({"coord": wavy()}, [...])`.
+    `layer([...], coord=wavy())`.
 
     The actual transform/domain is reconstructed on the JS side from this tag
     (the function body can't cross the IR bridge), mirroring `clock()`.

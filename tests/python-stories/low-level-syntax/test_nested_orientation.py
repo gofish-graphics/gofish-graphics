@@ -65,7 +65,6 @@ _PIE_DATA = [
 
 def _pie():
     return layer(
-        {"coord": polar()},
         [
             stack(
                 [rect(w=datum(d["count"]), fill=d["color"]) for d in _PIE_DATA],
@@ -76,6 +75,7 @@ def _pie():
                 sharedScale=True,
             )
         ],
+        coord=polar(),
     )
 
 

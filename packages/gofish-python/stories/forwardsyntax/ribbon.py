@@ -60,4 +60,4 @@ def polar(w=400, h=400):
         .flow(group(by="species"))
         .mark(ribbon(opacity=0.8))
     )
-    return layer({"coord": clock()}, [bars, overlay])
+    return layer([bars, overlay], coord=clock())

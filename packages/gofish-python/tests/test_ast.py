@@ -329,7 +329,7 @@ class TestClockCoord:
     def test_clock_in_layer_options_ir(self):
         """Test clock() in layer options IR."""
         child = chart([{"x": 1}]).mark(rect(h="x"))
-        ir = layer({"coord": clock()}, [child]).to_ir()
+        ir = layer([child], coord=clock()).to_ir()
         assert ir["options"]["coord"] == {"type": "clock"}
 
 
@@ -347,10 +347,10 @@ class TestLayerBuilder:
         assert len(lb.children) == 2
 
     def test_layer_with_options(self):
-        """Test layer(options, [...]) with options dict."""
+        """Test layer([...], **options) with keyword options."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x"))
-        lb = layer({"coord": "clock"}, [c1])
+        lb = layer([c1], coord="clock")
         assert isinstance(lb, LayerBuilder)
         assert lb.options == {"coord": "clock"}
         assert len(lb.children) == 1
@@ -386,7 +386,7 @@ class TestLayerBuilder:
         """Test layer options appear in IR."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x"))
-        ir = layer({"coord": "clock"}, [c1]).to_ir()
+        ir = layer([c1], coord="clock").to_ir()
         assert ir["options"] == {"coord": "clock"}
 
     def test_layer_collect_derive_functions(self):
