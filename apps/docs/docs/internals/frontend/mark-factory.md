@@ -142,8 +142,11 @@ Walking `withGoFish.ts:431-477`:
    - Anything else → pass through.
 4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
    producing the `GoFishNode`.
-5. **Tag the node** with `name = key` and `datum = d` so downstream
-   coordinators (`ref` / `selectAll`, label placement) can find it back.
+5. **Tag the node** with `datum = d` so downstream coordinators (label
+   placement, `selectAll` projections) can find its row. The factory does not
+   name the node after its data key: the key is data, and a name made from it
+   could clash with a name the user wrote (see
+   [Name Resolution & Scoping](/internals/core/names-and-scoping)).
 
 ### `live()` channels
 

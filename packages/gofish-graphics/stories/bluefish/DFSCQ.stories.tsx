@@ -255,10 +255,9 @@ export const DFSCQ: StoryObj<Args> = {
     ]).name(mem);
 
     // Divider: the SPAN SITE (see file header). `mem` is a direct (one-level)
-    // named child of `diskLogInner`, which is the depth this port confirmed
-    // `collectConstraintRefs`-based cross-tier lookup (`src/ast/constraints/
-    // index.ts`) resolves correctly — see FRICTION LOG #4 below for the
-    // depth-2 case that did NOT resolve correctly and the workaround.
+    // named child of `diskLogInner`. (At the time of the port, only this
+    // depth resolved from an outer `.constrain()`; see FRICTION LOG #4
+    // below. Constraint operands now resolve at any depth inside the layer.)
     // `labelSpace`: an invisible spacer that stretches `diskLogInner`'s own
     // bbox down far enough to include the tick marks AND the "Log header" /
     // "Log data" / "Available log / space" label row beneath them (those are

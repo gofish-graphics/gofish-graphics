@@ -222,8 +222,8 @@ export const Pulley: StoryObj<Args> = {
         ]),
 
         // ── granular paint order: relative z-order constraints ────────────
-        // Cross-tier refs (c.A, c.B, c.C) work because collectConstraintRefs
-        // descends into the (plain) inner shapes layer. The ropes' default
+        // Cross-tier refs (c.A, c.B, c.C) work because a constraint operand
+        // resolves anywhere inside the constraining layer. The ropes' default
         // .zOrder(-1) keeps the unmentioned ropes (Y/Z/P/Q) behind their
         // circles; these constraints carve out the four exceptions.
         Constraint.zAbove(c.ropeX, c.A), // x over A

@@ -666,7 +666,7 @@ function mapMark(
   // sentinels that need resolving.
   if (spec.type === "ref" && !spec.__combinator) {
     const refNode = ref(resolveRefSelection(spec.selection, resolveToken));
-    // `ref(name).name(name)` — the cross-tier name proxy (`pull`). GoFishRef's
+    // A named ref stand-in, `ref(token).name("a")`. GoFishRef's
     // `.name()` mutates in place and returns `this`, making the ref a
     // constraint target of the enclosing layer (same as the __inputRef
     // branch above).
@@ -747,18 +747,18 @@ function mapMark(
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
     let mark = factory(opts, childMarks);
-    // Constraint chain. The Python side serializes refs by name; reify the
-    // JS-side ConstraintRef objects from those names by looking them up in
-    // the `refs` map the JS callback receives.
+    // Constraint chain. The Python side serializes refs by name, and a
+    // by-name operand is `{ name }` (as in fromJSON.ts): the layer resolves it
+    // at layout, and reports a name that matches nothing, by name.
     if (spec.constraints && typeof (mark as any).constrain === "function") {
       const constraints = spec.constraints;
-      mark = (mark as any).constrain((refs: Record<string, any>) =>
+      mark = (mark as any).constrain(() =>
         constraints.map((c) => {
           // JS positioning constraints take (options, refs); z-order
           // constraints (`zAbove` / `zBelow`) take two refs directly.
           if (c.type === "zAbove" || c.type === "zBelow") {
             return (Constraint as any)[c.type](
-              ...c.refs.map((name) => refs[name])
+              ...c.refs.map((name) => ({ name }))
             );
           }
           // Align/distribute: Python surfaces refs-first ergonomically
@@ -767,7 +767,7 @@ function mapMark(
           // packages/gofish-graphics/src/ast/constraints/index.ts.
           return (Constraint as any)[c.type](
             c.options,
-            c.refs.map((name) => refs[name])
+            c.refs.map((name) => ({ name }))
           );
         })
       );
@@ -1011,16 +1011,16 @@ function renderChart(spec: HarnessSpec) {
             Object.keys(layerOpts).length > 0
               ? layer(layerOpts as any, resolvedNodes)
               : layer(resolvedNodes);
-          layerMark = layerMark.constrain((refs: Record<string, any>) =>
+          layerMark = layerMark.constrain(() =>
             constraints.map((c) => {
               if (c.type === "zAbove" || c.type === "zBelow") {
                 return (Constraint as any)[c.type](
-                  ...c.refs.map((name) => refs[name])
+                  ...c.refs.map((name) => ({ name }))
                 );
               }
               return (Constraint as any)[c.type](
                 c.options,
-                c.refs.map((name) => refs[name])
+                c.refs.map((name) => ({ name }))
               );
             })
           );

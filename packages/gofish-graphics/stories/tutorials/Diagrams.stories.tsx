@@ -40,22 +40,20 @@ export const Diagrams: StoryObj = {
     const container = initializeContainer();
 
     layer([
-      background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
-        spread(
-          { dir: "x", spacing: 50, alignment: "middle" },
-          data.map((d) =>
-            circle({
-              r: d.r,
-              fill: d.fill,
-              stroke: d.stroke,
-              strokeWidth: 3,
-            }).name(d.name)
-          )
-        ),
-      ]).name("planets"),
       layer([
-        ref("mercury").name("mercury"),
-        ref("planets").name("planets"),
+        background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+          spread(
+            { dir: "x", spacing: 50, alignment: "middle" },
+            data.map((d) =>
+              circle({
+                r: d.r,
+                fill: d.fill,
+                stroke: d.stroke,
+                strokeWidth: 3,
+              }).name(d.name)
+            )
+          ),
+        ]).name("planets"),
         text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
       ]).constrain(({ mercury, planets, label }) => [
         Constraint.align({ x: "middle" }, [mercury, label]),

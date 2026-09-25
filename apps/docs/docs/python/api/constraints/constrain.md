@@ -1,6 +1,6 @@
 # constrain
 
-`.constrain()` positions named children of a `layer` relative to each other
+`.constrain()` positions named nodes inside a `layer` relative to each other
 using declarative rules. It is the low-level alternative to `spread` when you
 need precise control over how individual elements relate — for example, aligning
 a label to the edge of a background, or placing tick marks at their data values.
@@ -11,9 +11,13 @@ keyword arguments, `z_above` / `z_below` snake-cased).
 
 ## Usage
 
-Name each child you want to position with `.name("key")`, then chain
-`.constrain()` on the `layer`. The callback receives one ref per named child as
-a keyword argument.
+Name each node you want to position with `.name("key")`, then chain
+`.constrain()` on the `layer`. The callback receives one ref per parameter it
+declares without a default, named after the parameter. A parameter with a
+default keeps its default and gets no ref, so the loop idiom
+`lambda a, b, gap=gap: [...]` binds the loop value as usual. A `**rest`
+parameter also receives every other name inside the layer, for dynamic lookups
+like `rest[key]`.
 
 ```python
 from gofish import layer, rect, text, Constraint
@@ -24,6 +28,41 @@ layer([
 ]).constrain(
     lambda bg, label: [
         Constraint.align([label, bg], x="middle", y="end"),
+    ]
+)
+```
+
+## Names
+
+A parameter name resolves the same way as [`ref("name")`](/python/api/marks/ref#string-nearest-match), starting at the constrained layer: the closest node with that name inside the layer wins, and the search never crosses a `@mark` boundary. So an operand can be nested anywhere inside the layer, not only a direct child, and a direct child beats a node with the same name nested deeper.
+
+- **Direct child.** The constraint places it.
+- **Nested node.** It is fixed to the direct child that contains it. If that child is also named in a constraint, the two move together. If not, the child stays where it was laid out and the nested node is a fixed point the other operands move to.
+- **Errors.** A name with no match inside the layer, or two matches at the same smallest distance, raises when the chart renders. A nested node cannot be resized from outside, so the target of `"span"` or `"size"` must be a direct child.
+
+```python
+from gofish import Constraint, circle, enclose, layer, rect, spread
+
+planets = ["mercury", "venus", "earth"]
+layer([
+    enclose(
+        [
+            spread(
+                [circle(r=6 + 4 * i, fill="#4a90d9").name(p) for i, p in enumerate(planets)],
+                dir="x",
+                spacing=30,
+                alignment="middle",
+            )
+        ],
+        padding=12,
+        fill="#e2ebf6",
+        stroke="none",
+    ).name("row"),
+    rect(w=40, h=12, fill="#e94560").name("label"),
+]).constrain(
+    lambda mercury, row, label: [
+        Constraint.align([mercury, label], x="middle"),
+        Constraint.distribute([row, label], dir="y", spacing=10),
     ]
 )
 ```
@@ -309,8 +348,9 @@ layer([
 ### Cross-tier references
 
 Z-order refs can reach into the layer's _direct_ children and into any
-**plain (non-component) nested `layer`** below — the same descent rule `ref()`
-uses inside `mark` composites. This makes patterns like "rope on the outer
+**plain (non-component) nested `layer`** below, without crossing a `@mark`
+boundary. Unlike placement operands, a z-order name applies to every node it
+matches there. This makes patterns like "rope on the outer
 layer slots in z between two pulleys in the inner layer" expressible without
 restructuring the AST.
 
