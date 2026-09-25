@@ -38,7 +38,8 @@ import {
   resolveMarkResult,
   stashLayerName,
 } from "./chartBuilder";
-import { CHANNEL_INFER, resolveMeasure } from "../channels";
+import { CHANNEL_INFER, inferAxisDims, resolveMeasure } from "../channels";
+
 import type {
   ChannelAnnotations as MarkChannelAnnotations,
   ChannelSpec as MarkChannelSpec,
@@ -620,8 +621,12 @@ export type OperatorConfig<Datum, Options> = {
    * Injected into the node operator as `axisMeasures` so it can stamp the
    * ORDINAL space's `measure` — e.g. `spread({by: "lake", dir: "x"})` reports
    * `{x: "lake"}`, the x-axis names itself "lake" off its own resolved space.
+   * Keyed by axis name, the way the operator names its axes (`x`/`y`, or a
+   * coord-declared name such as spread's `dir: "theta"`).
    */
-  axisFields?: (opts: Options) => { x?: string; y?: string } | undefined;
+  axisFields?: (
+    opts: Options
+  ) => Record<string, string | undefined> | undefined;
   /**
    * Optional declaration of how this operator arranges its groups in space,
    * read by the relational-mark travel-axis rule (`classifyOperator` in
@@ -837,64 +842,74 @@ function applyChannels<Options extends Record<string, any>>(
     const spec = channels[key];
     const val = out[key];
     if (val === undefined || spec === undefined) continue;
-    // User already supplied the final-form array — leave it alone. This is
-    // also the path for combinator-form callsites that pre-built per-child
-    // arrays (e.g. `scatter({x: [0, 1, 2]}, [...marks])`), and for entry-
-    // flagged channels where the user passed an explicit array.
-    if (Array.isArray(val)) continue;
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
     const perEntry = typeof spec === "object" && spec.entry === true;
     const discrete = typeof spec === "object" && spec.discrete === true;
-    // The measure is loop-invariant across split entries (it depends only on
-    // the accessor and `wholeData`'s provenance, not on which items a given
-    // entry holds), so resolve it once per channel. Only size/pos consume it;
-    // computing it for color/raw would add a spurious conflict-throw site.
-    const measure =
-      type === "size" || type === "pos"
-        ? resolveMeasure(wholeData, val)
-        : undefined;
-    if (perEntry && entries !== undefined) {
-      if (
-        type === "pos" &&
-        discrete &&
-        isNonNumericEntryField(val, wholeData)
-      ) {
-        out[key] = [...entries.keys()].map((_, i) =>
-          discretePosition(i, entries.size)
-        );
-        continue;
-      }
-      // Windowed normalize (`field(...).normalize()` on an operator's
-      // entry-flagged size channel): this is expression evaluation, not
-      // channel logic, so the WINDOW is all this factory supplies — run the
-      // per-entry channel with the PRE-normalize
-      // expression (an aggregate op if present, else the channel's own
-      // default sum, exactly as any size accessor would), then hand the
-      // collected per-entry values to fieldExpr.ts's applyEntryNormalize to
-      // compute shares across the window. `channels.ts` gains no ops
-      // knowledge from this.
-      if (type === "size" && hasNormalizeOp(val)) {
-        const { pre } = splitAtNormalize(val);
-        const rawEntryValues = [...entries.values()].map((items) =>
-          CHANNEL_INFER[type](pre, items, measure)
-        );
-        out[key] = applyEntryNormalize(
-          rawEntryValues,
-          fieldNameOf((opts as any).by)
-        );
-        continue;
-      }
-      // Value aggregation uses each entry's items; the measure comes from
-      // `wholeData` (the binned array still carries the symbol — each per-entry
-      // slice does not).
-      out[key] = [...entries.values()].map((items) =>
-        CHANNEL_INFER[type](val, items, measure)
-      );
-    } else {
-      out[key] = CHANNEL_INFER[type](val, wholeData, measure);
-    }
+    // A `dims` bag is one channel per slot, each a size or a position by its
+    // structure, with the bag's entry/discrete flags.
+    out[key] =
+      type === "dims"
+        ? inferAxisDims(val, (v, kind) =>
+            applyChannel(kind, perEntry, discrete, v, wholeData, entries, opts)
+          )
+        : applyChannel(type, perEntry, discrete, val, wholeData, entries, opts);
   }
   return out as Options;
+}
+
+/** One channel of {@link applyChannels}: infer `val` as a `type` channel. */
+function applyChannel(
+  type: Exclude<ChannelType, "dims">,
+  perEntry: boolean,
+  discrete: boolean,
+  val: any,
+  wholeData: any[],
+  entries: Map<string | number, any> | undefined,
+  opts: Record<string, any>
+): any {
+  // User already supplied the final-form array — leave it alone. This is
+  // also the path for combinator-form callsites that pre-built per-child
+  // arrays (e.g. `scatter({x: [0, 1, 2]}, [...marks])`), and for entry-
+  // flagged channels where the user passed an explicit array.
+  if (Array.isArray(val)) return val;
+  // The measure is loop-invariant across split entries (it depends only on
+  // the accessor and `wholeData`'s provenance, not on which items a given
+  // entry holds), so resolve it once per channel. Only size/pos consume it;
+  // computing it for color/raw would add a spurious conflict-throw site.
+  const measure =
+    type === "size" || type === "pos"
+      ? resolveMeasure(wholeData, val)
+      : undefined;
+  if (perEntry && entries !== undefined) {
+    if (type === "pos" && discrete && isNonNumericEntryField(val, wholeData)) {
+      return [...entries.keys()].map((_, i) =>
+        discretePosition(i, entries.size)
+      );
+    }
+    // Windowed normalize (`field(...).normalize()` on an operator's
+    // entry-flagged size channel): this is expression evaluation, not
+    // channel logic, so the WINDOW is all this factory supplies — run the
+    // per-entry channel with the PRE-normalize
+    // expression (an aggregate op if present, else the channel's own
+    // default sum, exactly as any size accessor would), then hand the
+    // collected per-entry values to fieldExpr.ts's applyEntryNormalize to
+    // compute shares across the window. `channels.ts` gains no ops
+    // knowledge from this.
+    if (type === "size" && hasNormalizeOp(val)) {
+      const { pre } = splitAtNormalize(val);
+      const rawEntryValues = [...entries.values()].map((items) =>
+        CHANNEL_INFER[type](pre, items, measure)
+      );
+      return applyEntryNormalize(rawEntryValues, fieldNameOf(opts.by));
+    }
+    // Value aggregation uses each entry's items; the measure comes from
+    // `wholeData` (the binned array still carries the symbol — each per-entry
+    // slice does not).
+    return [...entries.values()].map((items) =>
+      CHANNEL_INFER[type](val, items, measure)
+    );
+  }
+  return CHANNEL_INFER[type](val, wholeData, measure);
 }
 
 /**
@@ -1126,7 +1141,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const groupMeasures = cfg.axisFields?.(opts);
         if (
           groupMeasures &&
-          (groupMeasures.x !== undefined || groupMeasures.y !== undefined)
+          Object.values(groupMeasures).some((m) => m !== undefined)
         ) {
           (lowOpts as any).axisMeasures = groupMeasures;
         }

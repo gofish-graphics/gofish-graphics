@@ -1,11 +1,11 @@
 import { Spread } from "./spread";
-import { FancyDims } from "../dims";
+import { AxisName, FancyDims } from "../dims";
 import { MaybeValue } from "../data";
 
 // Type definition for props
 type StackProps = {
   key?: string;
-  dir: "x" | "y";
+  dir: AxisName;
   alignment?: "start" | "middle" | "end";
   sharedScale?: boolean;
   reverse?: boolean;

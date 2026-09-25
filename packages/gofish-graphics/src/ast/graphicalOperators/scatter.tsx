@@ -1,7 +1,14 @@
 import { GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
 import { MaybeValue, type PositionValue } from "../data";
-import { FancyDims } from "../dims";
+import {
+  FancyDims,
+  isAxisInterval,
+  resolveAxisName,
+  type AxisDims,
+  type AxisInterval,
+  type AxisScope,
+} from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
@@ -10,7 +17,7 @@ import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { Constraint, type ConstraintSpec } from "../constraints";
-import { ensureChildNames } from "../constraints/shared";
+import { axisName, ensureChildNames } from "../constraints/shared";
 
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
   if (typeof value === "object" && value !== null && "value" in value) {
@@ -28,9 +35,111 @@ export type ScatterProps = {
   xMax?: MaybeValue<number>[];
   yMin?: MaybeValue<number>[];
   yMax?: MaybeValue<number>[];
+  /** Per-child placement by axis name; see {@link ScatterOptions}. */
+  dims?: AxisDims<PositionValue[]>;
   alignment?: Alignment;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
-} & FancyDims<MaybeValue<number>>;
+} & Omit<FancyDims<MaybeValue<number>>, "dims">;
+
+/** One axis of a scatter's placement: a point per child, or a span. */
+type AxisPlacement = {
+  point?: PositionValue[];
+  min?: MaybeValue<number>[];
+  max?: MaybeValue<number>[];
+};
+
+/** The top-level option that fills each placement slot, per axis. */
+const TOP_LEVEL_SLOT: Record<keyof AxisPlacement, [string, string]> = {
+  point: ["x", "y"],
+  min: ["xMin", "yMin"],
+  max: ["xMax", "yMax"],
+};
+
+/** A `dims` interval as scatter placement slots: `center` is the point,
+ *  `min`/`max` the span. A scatter sizes nothing, so `size` is an error. */
+const intervalSlots = (name: string, iv: AxisInterval<any>): AxisPlacement => {
+  for (const key of Object.keys(iv)) {
+    if (key !== "min" && key !== "max" && key !== "center") {
+      throw new Error(
+        `scatter dims.${name}: "${key}" is not a scatter placement. A ` +
+          `scatter puts each child at a point (a bare value or { center }) ` +
+          `or across a span ({ min, max }); size the child mark instead.`
+      );
+    }
+  }
+  if ((iv.min === undefined) !== (iv.max === undefined)) {
+    throw new Error(`scatter dims.${name}: a span needs both min and max.`);
+  }
+  return { point: iv.center, min: iv.min, max: iv.max };
+};
+
+/**
+ * Merge a scatter's top-level x/y/xMin/... with its axis-name-keyed `dims`
+ * into one placement per axis, resolving the names against `scope`. Each slot
+ * may be set once, and every array must have one entry per child.
+ */
+function scatterAxes(
+  xy: {
+    x?: PositionValue[];
+    y?: PositionValue[];
+    xMin?: MaybeValue<number>[];
+    xMax?: MaybeValue<number>[];
+    yMin?: MaybeValue<number>[];
+    yMax?: MaybeValue<number>[];
+  },
+  dims: AxisDims<PositionValue[]> | undefined,
+  scope: AxisScope,
+  count: number
+): [AxisPlacement, AxisPlacement] {
+  const axes: [AxisPlacement, AxisPlacement] = [
+    { point: xy.x, min: xy.xMin, max: xy.xMax },
+    { point: xy.y, min: xy.yMin, max: xy.yMax },
+  ];
+  const label: Record<string, string> = {};
+  for (const axis of [0, 1] as const) {
+    for (const slot of ["point", "min", "max"] as const) {
+      label[`${slot}:${axis}`] = TOP_LEVEL_SLOT[slot][axis];
+    }
+  }
+  for (const [name, entry] of Object.entries(dims ?? {})) {
+    if (entry === undefined) continue;
+    const axis = resolveAxisName(scope, name, `scatter dims.${name}`);
+    const slots: AxisPlacement = isAxisInterval(entry)
+      ? intervalSlots(name, entry)
+      : { point: entry };
+    for (const slot of ["point", "min", "max"] as const) {
+      if (slots[slot] === undefined) continue;
+      const key = `${slot}:${axis}`;
+      if (axes[axis][slot] !== undefined) {
+        throw new Error(
+          `scatter dims.${name}: axis ${axis} already has a ${slot} ` +
+            `placement, from ${label[key]}. Place each axis once.`
+        );
+      }
+      (axes[axis] as any)[slot] = slots[slot];
+      label[key] = `dims.${name}`;
+    }
+  }
+  for (const axis of [0, 1] as const) {
+    for (const slot of ["point", "min", "max"] as const) {
+      const arr = axes[axis][slot];
+      if (arr !== undefined && arr.length !== count) {
+        throw new Error(
+          `Scatter operator ${label[`${slot}:${axis}`]} array must match ` +
+            `children length`
+        );
+      }
+    }
+  }
+  if (!axes.some(isPlaced)) {
+    throw new Error("Scatter operator requires at least one of x or y");
+  }
+  return axes;
+}
+
+/** Does this axis place the children (a point, or a full span)? */
+const isPlaced = (a: AxisPlacement): boolean =>
+  a.point !== undefined || (a.min !== undefined && a.max !== undefined);
 
 const Scatter = createNodeOperator(
   async (
@@ -45,44 +154,15 @@ const Scatter = createNodeOperator(
       xMax,
       yMin,
       yMax,
+      dims,
       alignment = "baseline",
       axes,
       ...fancyDims
     } = options;
     children = unwrapLodashArray(children);
 
-    const { x: hasX, y: hasY } = scatterPositions({
-      x,
-      xMin,
-      xMax,
-      y,
-      yMin,
-      yMax,
-    });
-
     if (children.length === 0) {
       throw new Error("Scatter operator expects at least one child");
-    }
-    if (!hasX && !hasY) {
-      throw new Error("Scatter operator requires at least one of x or y");
-    }
-    if (x !== undefined && x.length !== children.length) {
-      throw new Error("Scatter operator x array must match children length");
-    }
-    if (y !== undefined && y.length !== children.length) {
-      throw new Error("Scatter operator y array must match children length");
-    }
-    if (xMin !== undefined && xMin.length !== children.length) {
-      throw new Error("Scatter operator xMin array must match children length");
-    }
-    if (xMax !== undefined && xMax.length !== children.length) {
-      throw new Error("Scatter operator xMax array must match children length");
-    }
-    if (yMin !== undefined && yMin.length !== children.length) {
-      throw new Error("Scatter operator yMin array must match children length");
-    }
-    if (yMax !== undefined && yMax.length !== children.length) {
-      throw new Error("Scatter operator yMax array must match children length");
     }
 
     // Elaborate to a layer carrying per-child placement constraints (#546),
@@ -107,38 +187,51 @@ const Scatter = createNodeOperator(
       { key, ...fancyDims } as any,
       childList
     )) as GoFishNode;
-    node.constrain((g) => {
-      const refs = names.map((name) => g[name]);
-      const cs: ConstraintSpec[] = [];
-      childList.forEach((_, i) => {
-        const pos: {
-          x?: PositionValue;
-          y?: PositionValue;
-          override: boolean;
-        } = { override: true };
-        if (x?.[i] !== undefined) pos.x = x[i];
-        if (y?.[i] !== undefined) pos.y = y[i];
-        if (pos.x !== undefined || pos.y !== undefined)
-          cs.push(Constraint.position(pos, [refs[i]]));
-
-        const span: {
-          x?: [MaybeValue<number>, MaybeValue<number>];
-          y?: [MaybeValue<number>, MaybeValue<number>];
-        } = {};
-        if (xMin?.[i] !== undefined && xMax?.[i] !== undefined)
-          span.x = [xMin[i], xMax[i]];
-        if (yMin?.[i] !== undefined && yMax?.[i] !== undefined)
-          span.y = [yMin[i], yMax[i]];
-        if (span.x !== undefined || span.y !== undefined)
-          cs.push(Constraint.position(span, [refs[i]]));
+    // `dims` names its axes the way the enclosing coordinate space does
+    // (`theta`, `lon`, ...), so the per-axis placement, and the constraints
+    // built from it, wait for the resolveAliases pass.
+    node._elaborateInAxisScope = (scope) => {
+      const placement = scatterAxes(
+        { x, y, xMin, xMax, yMin, yMax },
+        dims,
+        scope,
+        childList.length
+      );
+      node.constrain((g) => {
+        const refs = names.map((name) => g[name]);
+        const cs: ConstraintSpec[] = [];
+        childList.forEach((_, i) => {
+          const pos: {
+            x?: PositionValue;
+            y?: PositionValue;
+            override: boolean;
+          } = { override: true };
+          const span: {
+            x?: [MaybeValue<number>, MaybeValue<number>];
+            y?: [MaybeValue<number>, MaybeValue<number>];
+          } = {};
+          ([0, 1] as const).forEach((axis) => {
+            const name = axisName(axis);
+            const { point, min, max } = placement[axis];
+            if (point?.[i] !== undefined) pos[name] = point[i];
+            if (min?.[i] !== undefined && max?.[i] !== undefined)
+              span[name] = [min[i], max[i]];
+          });
+          if (pos.x !== undefined || pos.y !== undefined)
+            cs.push(Constraint.position(pos, [refs[i]]));
+          if (span.x !== undefined || span.y !== undefined)
+            cs.push(Constraint.position(span, [refs[i]]));
+        });
+        // A cross-axis align over the (data-positioned) points: it shares the
+        // frame; `align` leaves the points where their own scale puts them by
+        // reading their abstract placement (no guard flag needed).
+        ([0, 1] as const).forEach((axis) => {
+          if (!isPlaced(placement[axis]))
+            cs.push(Constraint.align({ [axisName(axis)]: alignment }, refs));
+        });
+        return cs;
       });
-      // A cross-axis align over the (data-positioned) points: it shares the
-      // frame; `align` leaves the points where their own scale puts them by
-      // reading their abstract placement (no guard flag needed).
-      if (!hasX) cs.push(Constraint.align({ x: alignment }, refs));
-      if (!hasY) cs.push(Constraint.align({ y: alignment }, refs));
-      return cs;
-    });
+    };
     if (axes !== undefined) {
       const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
         opt === undefined ? undefined : opt === false ? false : true;
@@ -158,12 +251,19 @@ const Scatter = createNodeOperator(
  *   - a scalar (applied to all children)
  * Per-entry channel inference handles the polymorphism.
  *
+ * `dims` places children by axis NAME, the way the enclosing coordinate space
+ * names its axes (`{ theta: "bearing", r: "distance" }` in polar,
+ * `{ lon: "lon", lat: "lat" }` in geo; `x`/`y` always work). A bare value is
+ * the point position, like `x`; `{ min, max }` is the span, like
+ * `xMin`/`xMax`; `{ center }` is the point again.
+ *
  * `by` is a groupBy field — omit for per-item scatter.
  */
 export type ScatterOptions = {
   by?: SplitBy;
   x?: string | number | PositionValue[];
   y?: string | number | PositionValue[];
+  dims?: AxisDims<string | number | PositionValue[]>;
   xMin?: string | MaybeValue<number>[];
   xMax?: string | MaybeValue<number>[];
   yMin?: string | MaybeValue<number>[];
@@ -187,6 +287,7 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
     xMax: { type: "pos", entry: true },
     yMin: { type: "pos", entry: true },
     yMax: { type: "pos", entry: true },
+    dims: { type: "dims", entry: true, discrete: true },
   },
   axisFields: ({ x, y, xMin, xMax, yMin, yMax }) => {
     const fields: { x?: string; y?: string } = {};
@@ -199,6 +300,9 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
     return fields;
   },
   // `x`/`y` are literal per-item coordinates — a continuous value channel.
+  // `dims` is read only once the enclosing coordinate space is known, so the
+  // travel-axis rule, which runs at build time, does not see it.
+  // TODO(#838 follow-up): resolve the travel axis by name too.
   arrangement: { kind: "value", positions: scatterPositions },
   serialize: { type: "scatter" },
 });
