@@ -10,10 +10,6 @@ overrides:
 importers:
 
   .:
-    dependencies:
-      seedrandom:
-        specifier: ^3.0.5
-        version: 3.0.5
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.3
@@ -203,9 +199,6 @@ importers:
       rybitten:
         specifier: ^0.22.0
         version: 0.22.0
-      seedrandom:
-        specifier: ^3.0.5
-        version: 3.0.5
       solid-js:
         specifier: ^1.9.5
         version: 1.9.5
@@ -237,9 +230,6 @@ importers:
       '@types/lodash':
         specifier: ^4.17.16
         version: 4.17.20
-      '@types/seedrandom':
-        specifier: ^3.0.8
-        version: 3.0.8
       '@types/topojson-client':
         specifier: ^3.1.5
         version: 3.1.5
@@ -278,7 +268,7 @@ importers:
         version: 6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0)
       vite-plugin-dts:
         specifier: ^5.0.1
-        version: 5.0.1(esbuild@0.24.0)(rollup@4.59.0)(typescript@5.7.2)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0))
+        version: 5.0.1(esbuild@0.27.2)(rollup@4.59.0)(typescript@5.7.2)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0))
       vite-plugin-solid:
         specifier: ^2.11.6
         version: 2.11.8(@testing-library/jest-dom@6.8.0)(solid-js@1.9.5)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0))
@@ -1940,9 +1930,6 @@ packages:
 
   '@types/react@19.1.13':
     resolution: {integrity: sha512-hHkbU/eoO3EG5/MZkuFSKmYqPbSVk5byPFa3e7y/8TybHiLMACgI8seVYlicwk7H5K/rI2px9xrQp/C+AUDTiQ==}
-
-  '@types/seedrandom@3.0.8':
-    resolution: {integrity: sha512-TY1eezMU2zH2ozQoAFAQFOPpvP15g+ZgSfTZt31AUUH/Rxtnz3H+A/Sv1Snw2/amp//omibc+AEkTaA8KUeOLQ==}
 
   '@types/topojson-client@3.1.5':
     resolution: {integrity: sha512-C79rySTyPxnQNNguTZNI1Ct4D7IXgvyAs3p9HPecnl6mNrJ5+UhvGNYcZfpROYV2lMHI48kJPxwR+F9C6c7nmw==}
@@ -3724,9 +3711,6 @@ packages:
   section-matter@1.0.0:
     resolution: {integrity: sha512-vfD3pmTzGpufjScBh50YHKzEu2lxBWhVEHsNGoEXmCmn2hKGfeNLYMzCJpe8cD7gqX7TJluOVpBkAequ6dgMmA==}
     engines: {node: '>=4'}
-
-  seedrandom@3.0.5:
-    resolution: {integrity: sha512-8OwmbklUNzwezjGInmZ+2clQmExQPvomqjL7LFqOYqtmuxRgQYqOD3mHaU+MvZn5FLUeVxVfQjwLZW/n/JFuqg==}
 
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
@@ -6039,8 +6023,6 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
-  '@types/seedrandom@3.0.8': {}
-
   '@types/topojson-client@3.1.5':
     dependencies:
       '@types/geojson': 7946.0.4
@@ -8180,8 +8162,6 @@ snapshots:
       extend-shallow: 2.0.1
       kind-of: 6.0.3
 
-  seedrandom@3.0.5: {}
-
   semver@6.3.1: {}
 
   semver@7.7.2: {}
@@ -8573,7 +8553,7 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.0.2
 
-  unplugin-dts@1.0.1(esbuild@0.24.0)(rollup@4.59.0)(typescript@5.7.2)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0)):
+  unplugin-dts@1.0.1(esbuild@0.27.2)(rollup@4.59.0)(typescript@5.7.2)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0)):
     dependencies:
       '@rollup/pluginutils': 5.3.0(rollup@4.59.0)
       '@volar/typescript': 2.4.28
@@ -8585,7 +8565,7 @@ snapshots:
       typescript: 5.7.2
       unplugin: 2.3.11
     optionalDependencies:
-      esbuild: 0.24.0
+      esbuild: 0.27.2
       rollup: 4.59.0
       vite: 6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0)
     transitivePeerDependencies:
@@ -8941,9 +8921,9 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite-plugin-dts@5.0.1(esbuild@0.24.0)(rollup@4.59.0)(typescript@5.7.2)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0)):
+  vite-plugin-dts@5.0.1(esbuild@0.27.2)(rollup@4.59.0)(typescript@5.7.2)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0)):
     dependencies:
-      unplugin-dts: 1.0.1(esbuild@0.24.0)(rollup@4.59.0)(typescript@5.7.2)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0))
+      unplugin-dts: 1.0.1(esbuild@0.27.2)(rollup@4.59.0)(typescript@5.7.2)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0))
     optionalDependencies:
       rollup: 4.59.0
       vite: 6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0)

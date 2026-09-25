@@ -72,7 +72,6 @@
     "@types/d3-dsv": "^3.0.7",
     "@types/d3-hierarchy": "^3.1.7",
     "@types/lodash": "^4.17.16",
-    "@types/seedrandom": "^3.0.8",
     "@types/topojson-client": "^3.1.5",
     "d3-dsv": "^3.0.1",
     "fast-kde": "^0.2.2",
@@ -99,7 +98,6 @@
     "lodash": "^4.17.21",
     "perfect-arrows": "^0.3.7",
     "rybitten": "^0.22.0",
-    "seedrandom": "^3.0.5",
     "solid-js": "^1.9.5",
     "spectral.js": "^2.0.2"
   },

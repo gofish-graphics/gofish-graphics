@@ -49,9 +49,6 @@
     "prettier": "^3.6.2",
     "typescript-eslint": "^8.56.1"
   },
-  "dependencies": {
-    "seedrandom": "^3.0.5"
-  },
   "pnpm": {
     "overrides": {
       "vue": "3.5.24"
