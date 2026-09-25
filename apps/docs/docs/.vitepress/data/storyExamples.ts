@@ -16,6 +16,10 @@
  * A story's dataset is synthesized twice: in full for the live editor, and as
  * a preview (the first few rows of each array) for the docs pages.
  *
+ * The same pass also records a readable title for every story, tagged or not
+ * (`getStoryTitle`), which the markdown plugin uses as the alt text of a
+ * `::: gofish story:<id> image` picture.
+ *
  * This module is imported at build time by the VitePress data loader
  * (`storyExamples.data.js`) and may also be consumed by markdown-it plugins, so
  * it is synchronous and depends only on `node:fs` / `node:path` / `typescript`
@@ -1009,6 +1013,22 @@ function computeNpmDeps(
 // ---------------------------------------------------------------------------
 
 let cache: StoryExample[] | undefined;
+/** Harness story id → readable title, for EVERY story (see getStoryTitle). */
+let storyTitles: Map<string, string> | undefined;
+
+/**
+ * A readable name for an untagged story: the last segment of its Storybook
+ * title, plus the export name when that adds something ("Tutorials/Basics" +
+ * `Basics` → "Basics"; "Interaction/Draggable Threshold" + `Default` →
+ * "Draggable Threshold"; "Forward Syntax/V3/Ribbon" + `Polar` → "Ribbon: Polar").
+ */
+function readableStoryTitle(metaTitle: string, exportName: string): string {
+  const name = metaTitle.split("/").pop()!.trim();
+  const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return exportName === "Default" || squash(exportName) === squash(name)
+    ? name
+    : `${name}: ${exportName}`;
+}
 
 export function loadStoryExamples(): StoryExample[] {
   if (cache) return cache;
@@ -1016,6 +1036,7 @@ export function loadStoryExamples(): StoryExample[] {
   const files = [...walk(STORIES_DIR), ...walk(GOTREE_STORIES_DIR)].sort();
   const examples: StoryExample[] = [];
   const seenIds = new Map<string, string>();
+  const titles = new Map<string, string>();
 
   for (const storyFile of files) {
     let parsed: ParsedFile;
@@ -1029,6 +1050,24 @@ export function loadStoryExamples(): StoryExample[] {
           (err as Error).message
         }`
       );
+    }
+    // Every exported binding of a titled story file, tagged or not. A
+    // non-story export gets an entry too; no story id ever looks it up.
+    if (parsed.metaTitle) {
+      for (const stmt of parsed.sourceFile.statements) {
+        if (
+          !ts.isVariableStatement(stmt) ||
+          !stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+        )
+          continue;
+        for (const decl of stmt.declarationList.declarations) {
+          if (!ts.isIdentifier(decl.name)) continue;
+          titles.set(
+            harnessStoryId(parsed.metaTitle, decl.name.text),
+            readableStoryTitle(parsed.metaTitle, decl.name.text)
+          );
+        }
+      }
     }
     if (galleryExports.length === 0) continue;
     if (!parsed.metaTitle) {
@@ -1046,6 +1085,10 @@ export function loadStoryExamples(): StoryExample[] {
         );
       }
       seenIds.set(id, relative(REPO_ROOT, storyFile));
+      titles.set(
+        harnessStoryId(parsed.metaTitle, ex.exportName),
+        ex.galleryTitle
+      );
 
       let result: TransformResult;
       try {
@@ -1077,9 +1120,20 @@ export function loadStoryExamples(): StoryExample[] {
 
   examples.sort((a, b) => a.title.localeCompare(b.title));
   cache = examples;
+  storyTitles = titles;
   return examples;
 }
 
 export function getStoryExampleById(id: string): StoryExample | undefined {
   return loadStoryExamples().find((ex) => ex.id === id);
+}
+
+/**
+ * Title of ANY story by its harness story id: the gallery title for a
+ * gallery-tagged story, otherwise a readable name from its Storybook title.
+ * `undefined` means no story has that id.
+ */
+export function getStoryTitle(storyId: string): string | undefined {
+  loadStoryExamples();
+  return storyTitles!.get(storyId);
 }

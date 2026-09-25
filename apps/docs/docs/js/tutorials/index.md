@@ -14,21 +14,21 @@ so start there, and everything else builds on it.
 
 <TutorialCard title="Basics" href="/js/tutorials/basics">
 
-::: gofish story:tutorials-basics--basics hidden
+::: gofish story:tutorials-basics--basics image hidden
 :::
 
 </TutorialCard>
 
 <TutorialCard title="Charts" href="/js/tutorials/charts">
 
-::: gofish example:polar-ribbon-chart hidden
+::: gofish example:polar-ribbon-chart image hidden
 :::
 
 </TutorialCard>
 
 <TutorialCard title="Diagrams" href="/js/tutorials/diagrams">
 
-::: gofish example:python-tutor-memory-diagram hidden
+::: gofish example:python-tutor-memory-diagram image hidden
 :::
 
 </TutorialCard>
@@ -41,37 +41,37 @@ so start there, and everything else builds on it.
 
 <TutorialCard title="Glyphs" href="/js/tutorials/glyphs">
 
-::: gofish story:tutorials-glyphs--glyphs hidden
+::: gofish story:tutorials-glyphs--glyphs image hidden
 :::
 
 </TutorialCard>
 
 <TutorialCard title="Pictorial Charts" href="/js/tutorials/pictorial-charts">
 
-::: gofish example:bottle-fill-chart hidden
+::: gofish example:bottle-fill-chart image hidden
 :::
 
 </TutorialCard>
 
 <TutorialCard title="Reactivity &amp; Interaction" href="/js/tutorials/reactivity" pointer="52% 41%">
 
-::: gofish story:interaction-draggable-threshold--default hidden
+::: gofish story:interaction-draggable-threshold--default image hidden
 :::
 
 </TutorialCard>
 
 <TutorialCard title="Tree Diagrams" href="/js/tutorials/tree-diagrams">
 
-::: gofish story:gotree-node-link--nodelink hidden
+::: gofish story:gotree-node-link--nodelink image hidden
 :::
 
-::: gofish story:gotree-gallery-treemap--treemap hidden
+::: gofish story:gotree-gallery-treemap--treemap image hidden
 :::
 
-::: gofish story:gotree-gallery-sunburst--sunburst hidden
+::: gofish story:gotree-gallery-sunburst--sunburst image hidden
 :::
 
-::: gofish story:gotree-gallery-indentedtree--indentedtree hidden
+::: gofish story:gotree-gallery-indentedtree--indentedtree image hidden
 :::
 
 </TutorialCard>

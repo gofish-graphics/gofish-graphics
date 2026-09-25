@@ -9,6 +9,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Development server**: `pnpm docs:dev` - Starts VitePress dev server with hot reload
 - **Build documentation**: `pnpm docs:build` - Builds static documentation site
 - **Preview build**: `pnpm docs:preview` - Serves built documentation for testing
+- **Static story pictures**: `pnpm docs:images` - Renders the example gallery's
+  thumbnails + OG cards (`docs/public/gallery/`) and the pictures of `::: gofish … image`
+  containers (`docs/public/previews/`) headlessly. `docs:build` runs it first; `docs:dev`
+  does not, so run it once for local dev if you want those pictures (without it the
+  gallery wall is empty and each `image` shows its alt text). Needs the gofish-graphics
+  `dist/` (`pnpm --filter gofish-graphics build`) and Playwright's Chromium.
 
 ### Dependencies
 
@@ -39,6 +45,7 @@ This is a documentation site for the GoFish Graphics library built with VitePres
 #### Interactive Code Execution
 
 - **GoFishVue.vue** (`components/GoFishVue.vue`): Vue component that executes GoFish code in a sandboxed environment using `new Function()`. Provides access to lodash, datasets, and the full GoFish API. Used by the inline fenced-code `::: gofish` mode and by `internal-*` wiki diagrams.
+- **GoFishImage.vue** (`components/GoFishImage.vue`): the static counterpart of `GoFishExample`, for `::: gofish … image` containers: an `<img>` of the story's build-time PNG, its URL bound at runtime through `withBase` (a static `<img src="/…">` in markdown would compile to a build-time import and break the page when the PNG is missing).
 - **GoFishExample.vue** (`components/GoFishExample.vue`): client-only renderer that executes the **real Storybook story module** (SolidJS) for a gallery example. Targeted by `id` (gallery story id) or `storyId` (any story's harness id). Story `.stories.tsx` are compiled by `vite-plugin-solid` (scoped to the gofish-graphics package in `config.mts`; vue-jsx is excluded from that package so the two JSX compilers don't collide).
 - **GoFishLive.tsx** (`components/GoFishLive.tsx`): Sandpack-based live code editor component for interactive examples
 - **Markdown integration**: Custom markdown-it plugin (`docs/.vitepress/markdown-it-gofish.ts`) processes `::: gofish` containers
@@ -82,6 +89,21 @@ The `::: gofish` container has four modes:
   its harness story id (kebab of `meta.title--ExportName`). No code fence.
 - inline fenced-code — a `::: gofish` wrapping a ` ```ts ` block runs that code
   via `GoFishVue`. `hidden` renders the chart only (no visible code).
+
+Two flags go after the mode, and each does one thing:
+
+- `hidden` — no code fence (nor dataset, nor CodePen link).
+- `image` — the chart is a static PNG of the story instead of the live story
+  (`GoFishImage`, alt text = the story's title). Only the two story modes take it
+  (`example:<id>`, `story:<storyId>`); on any other mode it is a build error, as is an
+  unknown story id. It changes nothing else, so a picture with no code is
+  `image hidden`. The PNG is `docs/public/previews/<storyId>.png` (an `example:<id>` is
+  keyed by its story id), cropped to the drawing, captured by `pnpm docs:images`
+  (`tests/scripts/capture-docs-images.ts`). That script finds the pictures to take by
+  reading the docs markdown through this same plugin (`findImageStoryIds()` in
+  `markdown-it-gofish.ts`), so adding `image` to a container is all it takes. Use it
+  where a page shows many previews that need no interaction, like the tutorials index
+  cards.
 
 #### Coordinate System Integration
 

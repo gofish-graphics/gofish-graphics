@@ -51,7 +51,7 @@ const SOLID_WEB_CLIENT = join(SOLID_DIR, "web/dist/web.js");
 
 // Gallery example-page ids (kebab of each gallery story's title). Each such page
 // previews with its own branded 1200×630 OG card at
-// public/gallery/og/<id>.png — generated at docs build (predocs:build), not
+// public/gallery/og/<id>.png — generated at docs build (docs:images), not
 // committed. Other pages fall back to the site card.
 const EXAMPLE_IDS = new Set(loadStoryExamples().map((e) => e.id));
 
