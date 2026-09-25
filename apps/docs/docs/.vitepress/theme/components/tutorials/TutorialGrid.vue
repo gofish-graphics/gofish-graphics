@@ -3,9 +3,10 @@
  * TutorialGrid — the card grid on the tutorials index page.
  *
  * It is only a layout container: each child is a <TutorialCard> whose default
- * slot holds the live previews (`::: gofish story:<id> hidden` containers that
- * the markdown plugin turns into <GoFishExample>s). `cols` is the desktop
- * column count; the grid drops to two columns on tablets and one on phones.
+ * slot holds the previews (`::: gofish story:<id> image hidden` containers
+ * that the markdown plugin turns into <GoFishImage>s, pictures captured at
+ * docs-build time). `cols` is the desktop column count; the grid drops to two
+ * columns on tablets and one on phones.
  * Styling tokens come from VitePress' own theme variables so the grid follows
  * light/dark mode.
  */
