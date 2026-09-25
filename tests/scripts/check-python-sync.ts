@@ -142,6 +142,16 @@ function isExportExempt(
 //     spec starts using a new name, the spec body changes too. Dropping whole
 //     `ImportDeclaration`s from the parsed file handles multi-line and
 //     `import type` forms alike.
+//   - **Import aliases** — `import { mask as maskOp }` binds a JS-local name
+//     for an exported one, so renaming the alias (or dropping it) changes no
+//     spec. Before the imports are dropped, every aliased identifier in the
+//     body is renamed back to its exported name; the retired-name fold then
+//     canonicalizes it (`MaskOp` → `Mask` → `mask`). Default and namespace
+//     imports have no exported name to resolve to and are left alone.
+//   - **Type annotations** — TypeScript types have no Python counterpart.
+//     `ts.transpileModule` erases them (annotations, `as` casts, type
+//     aliases, interfaces) after the imports are gone, so it cannot elide or
+//     re-emit any import.
 //   - **Comments and whitespace** — a Python story mirrors the spec, not the
 //     prose around it, so a comment-only edit needs no Python change.
 //     Tokenizing with the TypeScript scanner drops comments without touching
@@ -186,6 +196,55 @@ function stripImports(source: string): string {
     pos = stmt.getEnd();
   }
   return out + source.slice(pos);
+}
+
+/** The source with each `{ exported as local }` import alias renamed back to
+ * `exported` wherever `local` appears as an identifier (strings untouched). */
+function resolveImportAliases(source: string): string {
+  const file = ts.createSourceFile(
+    "story.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    ts.ScriptKind.TSX
+  );
+  const aliases = new Map<string, string>();
+  for (const stmt of file.statements) {
+    const bindings = ts.isImportDeclaration(stmt)
+      ? stmt.importClause?.namedBindings
+      : undefined;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const el of bindings.elements) {
+      if (el.propertyName) aliases.set(el.name.text, el.propertyName.text);
+    }
+  }
+  if (aliases.size === 0) return source;
+  const edits: [start: number, end: number, name: string][] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node)) return;
+    if (ts.isIdentifier(node) && aliases.has(node.text)) {
+      edits.push([node.getStart(file), node.getEnd(), aliases.get(node.text)!]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  let out = source;
+  for (const [start, end, name] of edits.reverse()) {
+    out = out.slice(0, start) + name + out.slice(end);
+  }
+  return out;
+}
+
+/** The source with its TypeScript types erased (JSX left as written). */
+function eraseTypes(source: string): string {
+  return ts.transpileModule(source, {
+    fileName: "story.tsx",
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      jsx: ts.JsxEmit.Preserve,
+    },
+  }).outputText;
 }
 
 /** The source as a whitespace-separated token stream, comments dropped. */
@@ -254,7 +313,7 @@ function canonicalizeRetiredApiNames(source: string): string {
 
 /** True when the file's change between baseRef's merge-base and HEAD touches
  * only spec-neutral content (Storybook chrome, retired API names, imports,
- * comments, whitespace). */
+ * import aliases, type annotations, comments, whitespace). */
 function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
   try {
     const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {
@@ -269,7 +328,11 @@ function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
     const headContent = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
     const normalize = (s: string) =>
       stripComments(
-        canonicalizeRetiredApiNames(stripStorybookChrome(stripImports(s)))
+        eraseTypes(
+          canonicalizeRetiredApiNames(
+            stripStorybookChrome(stripImports(resolveImportAliases(s)))
+          )
+        )
       );
     return normalize(baseContent) === normalize(headContent);
   } catch {
