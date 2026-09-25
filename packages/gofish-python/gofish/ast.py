@@ -708,7 +708,11 @@ class RefSentinel(Mark):
 
     def __init__(self, ref_name: str):
         super().__init__("ref", selection=ref_name)
-        self.ref_name = ref_name
+
+    @property
+    def ref_name(self) -> str:
+        """The name this operand stands for."""
+        return self.kwargs["selection"]
 
 
 def _subtree_names(children: Optional[List[Any]]) -> List[str]:
