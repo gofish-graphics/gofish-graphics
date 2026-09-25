@@ -38,7 +38,6 @@ import {
   polar,
   wavy,
   layer,
-  Constraint,
   ref,
   arrow,
   enclose,
@@ -174,31 +173,21 @@ interface OperatorSpec {
   [key: string]: any;
 }
 
-interface ConstraintSpec {
-  type: "align" | "distribute" | "position" | "zAbove" | "zBelow";
-  // Positioning constraints carry `options`; z-order constraints don't.
-  options?: Record<string, any>;
-  refs: string[];
-}
-
 /** A relate clause: a constraint (carries `refs`) or a mark that draws. */
-type RelateClauseSpec = ConstraintSpec | MarkSpec;
+type RelateClauseSpec = Frontend.ConstraintIR | MarkSpec;
 
-function isConstraintSpec(c: RelateClauseSpec): c is ConstraintSpec {
-  return Array.isArray((c as ConstraintSpec).refs);
-}
-
-/** Rebuild a constraint clause. JS positioning constraints take
- *  `(options, refs)`; z-order constraints (`zAbove` / `zBelow`) take two refs
- *  directly. Python surfaces refs-first ergonomically
- *  (`Constraint.align([a, b], x=...)`) but serializes to the same
- *  `{ options, refs }` IR. */
-function constraintFromSpec(c: ConstraintSpec): unknown {
-  const operands = c.refs.map((name) => ({ name }));
-  if (c.type === "zAbove" || c.type === "zBelow") {
-    return (Constraint as any)[c.type](...operands);
-  }
-  return (Constraint as any)[c.type](c.options, operands);
+/** Rebuild a `.relate()` callback's clauses: a constraint through the shared
+ *  deserializer (`Serialize.constraintFromIR`, the one fromJSON.ts uses), a
+ *  mark through `mapClause`. */
+function relateClausesFromSpec(
+  clauses: RelateClauseSpec[],
+  mapClause: (m: MarkSpec) => unknown
+): unknown[] {
+  return clauses.map((c) =>
+    Frontend.isConstraintIR(c as Frontend.RelateClauseIR)
+      ? Serialize.constraintFromIR(c as Frontend.ConstraintIR)
+      : mapClause(c as MarkSpec)
+  );
 }
 
 interface MarkSpec {
@@ -708,16 +697,14 @@ function mapMark(
     }
     let mark = factory(opts, childMarks);
     // Relate chain. A clause is a constraint (it carries `refs`, operand
-    // NAMES; a by-name operand is `{ name }`, as in fromJSON.ts, and the layer
-    // resolves it at layout) or a mark that draws, rebuilt like any mark: its
-    // `{ type: "ref", selection }` children name the layer's nodes.
+    // NAMES, which the layer resolves at layout) or a mark that draws, rebuilt
+    // like any mark: its `{ type: "ref", selection }` children name the
+    // layer's nodes.
     if (spec.relate && typeof (mark as any).relate === "function") {
       const clauses = spec.relate;
       mark = (mark as any).relate(() =>
-        clauses.map((c) =>
-          isConstraintSpec(c)
-            ? constraintFromSpec(c)
-            : mapMark(c, deriveServerUrl, resolveToken, inputRefs)
+        relateClausesFromSpec(clauses, (c) =>
+          mapMark(c, deriveServerUrl, resolveToken, inputRefs)
         )
       );
     }
@@ -961,10 +948,8 @@ function renderChart(spec: HarnessSpec) {
               ? layer(layerOpts as any, resolvedNodes)
               : layer(resolvedNodes);
           layerMark = layerMark.relate(() =>
-            clauses.map((c) =>
-              isConstraintSpec(c)
-                ? constraintFromSpec(c)
-                : mapMark(c, spec.deriveServerUrl, resolveToken)
+            relateClausesFromSpec(clauses, (c) =>
+              mapMark(c, spec.deriveServerUrl, resolveToken)
             )
           );
           await layerMark.render(container, {

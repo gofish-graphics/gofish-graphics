@@ -18,6 +18,7 @@ import {
   type CombinatorMarkIR,
   type ConstraintIR,
   type RelateClauseIR,
+  isConstraintIR,
   type CutMarkIR,
   type DataIR,
   type FrontendIRDocument,
@@ -1154,7 +1155,7 @@ function walkLabel(node: unknown, path: string, ctx: Context): void {
 
 /** A relate clause is a constraint when it carries `refs`, else a mark. */
 function walkRelateClause(node: unknown, path: string, ctx: Context): void {
-  if (isObject(node) && Array.isArray(node.refs))
+  if (isObject(node) && isConstraintIR(node as RelateClauseIR))
     walkConstraint(node, path, ctx);
   else walkMark(node, path, ctx);
 }
