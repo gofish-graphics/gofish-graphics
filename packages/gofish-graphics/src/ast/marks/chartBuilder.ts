@@ -27,6 +27,7 @@ import {
   type TerminalMethods,
 } from "./terminals";
 import { expandComposedOperator } from "./compose";
+import { nameableMark } from "./createOperator";
 import { markDataTime, chainedUpdates } from "../../animation/transition";
 import {
   installBuildIn,
@@ -63,9 +64,10 @@ function mintLayerName(layerContext: LayerContext): string {
 }
 
 /**
- * Resolves whatever a Mark returns into a GoFishNode. Lives here (not in
- * createOperator.ts) so the dependency between the two files runs one-way:
- * createOperator imports from chartBuilder, never the other direction.
+ * Resolves whatever a Mark returns into a GoFishNode. createOperator.ts
+ * imports it from here. The two modules import each other (this one takes
+ * `nameableMark` for `ensureNamedMark`), and each uses the other's exports
+ * only at call time, so they load in either order.
  */
 export async function resolveMarkResult(
   raw: ReturnType<Mark<any>> | LayerBuilder,
@@ -921,7 +923,16 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       return { builder: this, name: existing };
     }
     const autoName = mintLayerName(layerContext);
-    const named = (this.state.finalMark as any).name(autoName) as Mark<TOutput>;
+    // A mark is any function from a datum to a node; the `.name` modifier is
+    // on the ones the mark factories build. A plain function gets it here, on
+    // a wrapper, so the caller's function is left as it was.
+    const finalMark = this.state.finalMark as any;
+    const nameable =
+      typeof finalMark.name === "function"
+        ? finalMark
+        : nameableMark(((d, key, layerContext) =>
+            finalMark(d, key, layerContext)) as Mark<TOutput>);
+    const named = nameable.name(autoName) as Mark<TOutput>;
     // Swap the mark in directly instead of re-entering `mark()`: `named` can
     // still carry `__relationalFusable`, and fusion was already decided (and
     // skipped) when this mark was first attached.
