@@ -23,8 +23,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Frame,
-  GoFish,
+  frame,
+  gofish,
   chart,
   circle,
   filter,
@@ -267,7 +267,7 @@ const curvesRow = (
   readings: { caption: string; curve: Reading }[] = CURVES,
   below: any[] = []
 ) =>
-  GoFish(
+  gofish(
     container,
     { w: args.w, h: args.h, legend: false, axes: true } as any,
     () =>
@@ -282,7 +282,7 @@ const curvesRow = (
           readings.map(({ caption, curve }) =>
             spreadY({ spacing: 8, alignment: "middle" }, [
               text({ text: caption, fontSize: 12, fill: "#555" }),
-              Frame({ w: PANEL_W, h: 280 }, [curvePanel(rows, clock, curve)]),
+              frame({ w: PANEL_W, h: 280 }, [curvePanel(rows, clock, curve)]),
             ])
           )
         ),
@@ -596,8 +596,8 @@ const sparkRow = (samples: Sample[], clock: any) =>
   // itself, and an `axes: false` on the operators only silences the operator
   // that carries it, not the frame above it that ends up drawing the axis. A
   // coordinate frame owns its space, so no Cartesian axis is drawn inside one.
-  Frame({ w: SPARK_W, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
-    Frame({ w: SPARK_W, h: SPARK_H_PX }, [
+  frame({ w: SPARK_W, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
+    frame({ w: SPARK_W, h: SPARK_H_PX }, [
       sparkSamples(samples)
         // `curve: "straight"` is not a default worth leaning on here, it is
         // the whole point: an omitted curve is `auto`, and `auto` over a
@@ -609,7 +609,7 @@ const sparkRow = (samples: Sample[], clock: any) =>
         // interpolation in time rather than a path in space.)
         .layer(line({ stroke: "#999", strokeWidth: 1, curve: "straight" })),
     ]),
-    Frame({ w: SPARK_W, h: SPARK_H_PX }, [
+    frame({ w: SPARK_W, h: SPARK_H_PX }, [
       sparkSamples(samples).layer(
         time.transition({
           along: "t",
@@ -643,10 +643,10 @@ const kinematicsBlock = (rows: any[], clock: any) => {
       QUANTITIES.map((q) =>
         spreadX({ spacing: PANEL_GAP, alignment: "middle" }, [
           // The label's cell is as wide as the "no interpolation" column, and
-          // an empty `rect` is what gives it that width: a `Frame`'s own `w`
+          // an empty `rect` is what gives it that width: a `frame`'s own `w`
           // sizes the box it lays out in, but a lone text mark does not fill
           // it, so the cell would collapse to the word.
-          Frame({ w: SPARK_LABEL_W, h: SPARK_H_PX }, [
+          frame({ w: SPARK_LABEL_W, h: SPARK_H_PX }, [
             rect({ w: SPARK_LABEL_W, h: SPARK_H_PX, fill: "none" }),
             text({ text: q, fontSize: 11, fill: "#888" }),
           ]),

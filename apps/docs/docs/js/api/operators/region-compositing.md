@@ -54,8 +54,11 @@ paint(options?, [A, B]);
 mask([A, B]);
 ```
 
-`Intersect`, `Exclude`, `Subtract`, `Paint`, and `Mask` are the
-capitalized aliases for the same factories.
+`Intersect`, `Exclude`, `Subtract`, `Paint`, and `Mask` are the node-level
+forms. They take two already-built nodes and return a node, while the
+lowercase forms are marks that resolve their children against the incoming
+data. The two levels are not aliases of each other
+([#146](https://github.com/joshpoll/gofish/issues/146)).
 
 ## Parameters
 

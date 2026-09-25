@@ -403,9 +403,9 @@ const playButton = button({
   onClick: () => (day.isPlaying() ? day.pause() : day.play()),
 });
 
-GoFish(container, { w: 600, h: 660, legend: false }, () =>
+gofish(container, { w: 600, h: 660, legend: false }, () =>
   spreadY({ spacing: 12 }, [
-    Frame({ w: 600, h: 600 }, [map]),
+    frame({ w: 600, h: 600 }, [map]),
     spreadX({ spacing: 8 }, [playButton, timeSlider]),
   ])
 );
@@ -450,7 +450,7 @@ Three shape decisions worth recording:
   The `drag()`/`click()` input and the write effect are created ONCE, when the
   widget is made. So the widget is constructed outside the render thunk and its
   node inside it, and a composition with no `chart()` at its root needs the
-  THUNK form of the terminal, `GoFish(container, opts, () => node)`.
+  THUNK form of the terminal, `gofish(container, opts, () => node)`.
 - **The pixel to domain map is absolute, through the frame.** The pointer's
   position along the handle's travel IS the value: `valueAt((x - (track.x + r)) /
 (track.w - 2r))`, quantized by `step`. Track and handle are both drag targets,
@@ -495,7 +495,7 @@ siblings are stacked against - in panel E the controls first landed inside the
 map. `padding: 0` on a composed chart is the fix, and the spacing then belongs
 to the composition. Related: under a low-level operator the geo coord's box
 follows the proposal it gets rather than its lon/lat window, so panel E wraps
-the map in `Frame({ w: 600, h: 600 })` to say how big the map is. Both deserve a
+the map in `frame({ w: 600, h: 600 })` to say how big the map is. Both deserve a
 follow-up: a composed chart should report the box it actually paints.
 
 ### Sequencing
@@ -521,7 +521,7 @@ a `rescale: false` spelling for domains that must ignore a filter.
    `LayerBuilder` as well as `ChartBuilder` (step 5). What it exposed is that a
    composed chart's box does not cover what it paints — its padding is drawn
    outside the box — so a composed chart wants `padding: 0` and an explicit
-   `Frame({ w, h })`. That is the real open question now.
+   `frame({ w, h })`. That is the real open question now.
 3. Basemap relayout every frame. Josh: ignore performance for now.
 4. Holes in the basemap drawn as filled rings (declared shortcut).
 5. `circle({ r })` takes a number only, so panel E has no hover-size highlight

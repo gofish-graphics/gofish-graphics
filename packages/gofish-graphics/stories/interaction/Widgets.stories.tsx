@@ -8,7 +8,7 @@
  * picture is a GoFish node in the one `<svg>`, laid out by `spreadX`.
  *
  * The root is the THUNK form of the low-level terminal
- * (`GoFish(container, opts, () => node)`): a control's geometry depends on the
+ * (`gofish(container, opts, () => node)`): a control's geometry depends on the
  * value, so the spec must be re-evaluable — a plain node is built once and
  * cannot re-place its handle.
  *
@@ -21,7 +21,7 @@
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { GoFish, button, signal, slider, spreadX } from "../../src/lib";
+import { gofish, button, signal, slider, spreadX } from "../../src/lib";
 
 const meta: Meta = {
   title: "Interaction/Widgets",
@@ -56,7 +56,7 @@ export const Default: StoryObj<Args> = {
       onClick: () => level.set(0),
     });
 
-    GoFish(container, { w: args.w, h: args.h }, () =>
+    gofish(container, { w: args.w, h: args.h }, () =>
       spreadX({ spacing: 8 }, [resetButton, levelSlider])
     );
 
@@ -93,7 +93,7 @@ export const Wrapping: StoryObj<Args> = {
       onClick: () => bearing.set(0),
     });
 
-    GoFish(container, { w: args.w, h: args.h }, () =>
+    gofish(container, { w: args.w, h: args.h }, () =>
       spreadX({ spacing: 8 }, [northButton, bearingSlider])
     );
 

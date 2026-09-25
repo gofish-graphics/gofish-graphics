@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import {
-  Arrow,
+  arrow,
   createName,
   Layer,
   ref,
@@ -60,7 +60,7 @@ export const PythonTutor: StoryObj = {
     const stackArrows = data.stack.flatMap((slot, i) =>
       isPointer(slot.value)
         ? [
-            Arrow(
+            arrow(
               {
                 bow: 0,
                 stretch: 0,
@@ -84,7 +84,7 @@ export const PythonTutor: StoryObj = {
       obj.values.flatMap((v, j) =>
         isPointer(v)
           ? [
-              Arrow(
+              arrow(
                 {
                   bow: 0,
                   padEnd: 25,

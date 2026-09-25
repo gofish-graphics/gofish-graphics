@@ -73,14 +73,14 @@ All paths are relative to `packages/gofish-graphics/`:
 
 ### Main Entry Points (packages/gofish-graphics/)
 
-- `src/lib.ts` - Main library exports (all three API surfaces)
+- `src/lib.ts` - Main library exports (both API surfaces)
 - `src/ast/gofish.tsx` - Core rendering engine and context management
 - `src/index.tsx` - Development entry point (imports and renders development examples)
 - `stories/` - Storybook stories providing visual development playground
 
 ### API Surfaces
 
-`src/lib.ts` exports three surfaces over the same core AST (see
+`src/lib.ts` exports two surfaces over the same core AST (see
 `apps/docs/docs/internals/design-evolution/three-surfaces.md`):
 
 - **Fluent chart builder** (recommended): `chart(data)` returns a builder with chainable methods
@@ -92,12 +92,11 @@ All paths are relative to `packages/gofish-graphics/`:
   - Example: `chart(data).flow(spread({ by: "category", dir: "x" })).mark(rect({ h: "value" }).name("bars")).render(container, { w: 400, h: 300 })`
 
 - **Low-level operators (combinator form)**: operators and marks applied to an explicit array of children, with no data binding
-  - Functions: `layer([...])`, `stackX()`, `stackY()`, `spreadX()`, `spreadY()`, `spread()`, `stack()`, `enclose()`, `arrow()`, `position()`, `offset()`, `cut()`, `ref()`, etc.
+  - Functions: `layer([...])`, `stackX()`, `stackY()`, `spreadX()`, `spreadY()`, `spread()`, `stack()`, `frame()`, `enclose()`, `arrow()`, `position()`, `offset()`, `cut()`, `ref()`, etc.
+  - Render terminal for a bare node (no `chart()` at the root): `gofish(container, options, node | () => node)`
   - Example: `layer([rect({ x: 0, y: 0, w: 90, h: 40 }), rect({ x: 30, y: 50, w: 90, h: 40 })]).render(container, {})`
 
-- **Capitalized aliases**: component-style names for the same low-level operators
-  - Functions: `Stack()`, `StackX()`, `Spread()`, `Layer()`, `Frame()`, `Enclose()`, `Arrow()`, `Position()`, `Offset()`, `Intersect()`, etc.
-  - Marks have no capitalized aliases, and the fluent builder has no capitalized `Chart`
+- **No capitalized aliases**: the capitalized alias spellings (`StackX`, `Frame`, `Arrow`, `GoFish`, …) were removed. The remaining capitalized exports (`Spread`, `Stack`, `Scatter`, `Layer`, `Treemap`, `Table`, `Intersect`, `Exclude`, `Subtract`, `Paint`, `Mask`) are node-level operators, not aliases: they take already-built nodes and return a node, which is what a `createMark` body needs. Folding them into their lowercase counterparts is #146. `For` (async map over a collection) and `Constraint` (the constraint factory namespace) also stay capitalized.
 
 ### Context System
 

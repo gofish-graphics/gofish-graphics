@@ -35,9 +35,9 @@ const {
   timer,
   click,
   signal,
-  // The low-level render terminal (`gofish as GoFish`) + a low-level operator, for the
+  // The low-level render terminal (`gofish`) + a low-level operator, for the
   // component-level (no chart(), no data) reactive cases.
-  GoFish: gofish,
+  gofish,
   spreadX,
   geo,
   group,
@@ -52,7 +52,7 @@ const {
   slider,
   button,
   spreadY,
-  Frame,
+  frame,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -1648,7 +1648,7 @@ async function main() {
     });
     await gofish(container, { w: 400, h: 400, legend: false }, () =>
       spreadY({ spacing: 12 }, [
-        Frame({ w: 300, h: 300 }, [map]),
+        frame({ w: 300, h: 300 }, [map]),
         spreadX({ spacing: 8 }, [playButton, timeSlider]),
       ])
     );

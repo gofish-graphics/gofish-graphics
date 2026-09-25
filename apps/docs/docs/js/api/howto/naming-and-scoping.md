@@ -110,7 +110,7 @@ Layer([
     globalFrame({ stack }).name(globalFrameName),
     heap({ heap, heapArrangement }).name(heapName),
   ]),
-  Arrow({ stroke: "#1A5683" }, [
+  arrow({ stroke: "#1A5683" }, [
     // "value" text of the 0th stack slot inside globalFrame's "variables"
     ref(globalFrameName).variables[0].value,
     // "elm-0" of the heap cell at row 0, col 0

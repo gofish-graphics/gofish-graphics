@@ -34,13 +34,21 @@ all three desugar onto the same core AST, and made the newest surface sound
 provisional in a way it isn't. They are three _surfaces_ over one core, not
 three _versions_ of a library that supersedes itself.
 
-Casing is the user-visible seam between the surfaces. The capitalized,
-component-style surface owns the capitalized names (`Rect`, `Stack`, `Layer`,
-…), so the fluent builder is deliberately lowercase-only: its entry point is
-`chart`, with no capitalized `Chart` alias — that alias was removed to keep
-the casing convention unambiguous (capital `Layer`, for instance, still
-exports, but only as the capitalized-surface combinator, distinct from the
-fluent builder's `.layer()` method). The fluent surface also carries the
+Casing used to be the user-visible seam between the surfaces. The capitalized,
+component-style surface once had a capitalized spelling for most operators, and
+many of them were plain aliases of a lowercase export (`StackX` for `stackX`,
+`Frame` for `frame`, `Arrow` for `arrow`, `GoFish` for the `gofish` render
+terminal, and so on). Those aliases were removed (#416), so that surface has
+collapsed into the lowercase low-level combinator form. The fluent builder was
+already lowercase-only: its entry point is `chart`, with no capitalized `Chart`
+alias. What remains capitalized is not an alias. `Spread`, `Stack`, `Scatter`,
+`Layer`, `Treemap`, `Table`, and the region-compositing operators (`Intersect`,
+`Exclude`, `Subtract`, `Paint`, `Mask`) are node-level operators: they take
+already-built nodes and return a node, where their lowercase namesakes are
+marks that resolve children against the incoming data. Folding each pair into
+one function is #146. `For` (an async map over a collection) and `Constraint`
+(the constraint factory namespace) have no lowercase counterpart in use. The
+fluent surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
 `derive`, `resolve`, and `join` (`resolve` dereferences reference columns into
 drawn node refs, driving the ribbon / node-link / labeling patterns via
@@ -61,8 +69,7 @@ test that decides this.
 
 `background` is a second lowercase name for `enclose`: `lib.ts` exports the
 same factory under both names, so a `background(...)` call builds and
-serializes the same `"enclose"` node. It has no capitalized `Background`
-spelling; `Enclose` remains the capitalized-surface name. The Python package
+serializes the same `"enclose"` node. The Python package
 mirrors this with `background = enclose` in `gofish/ast.py`.
 
 The fluent builder went through the same consolidation one layer up. It

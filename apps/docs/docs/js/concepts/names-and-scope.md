@@ -135,7 +135,7 @@ gf.Layer([
     slot({ variable: "x", value: "5" }).name(first),
     slot({ variable: "y", value: "5" }).name(second),
   ]),
-  gf.Arrow({ bow: 0, stretch: 0, stroke: "#1a5683" }, [
+  gf.arrow({ bow: 0, stretch: 0, stroke: "#1a5683" }, [
     gf.ref(first).value,
     gf.ref(second).value,
   ]),

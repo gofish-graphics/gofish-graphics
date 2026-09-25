@@ -206,7 +206,7 @@ gf.Stack({ dir: "x" }, padded);
 
 The recomposed row spans the source's **exact** extent, with an even `inset`-wide
 gap at every cut point. (There is no built-in one-axis padding operator —
-`Frame`/`layer` size to their content, so they can't pad a smaller child;
+`frame`/`layer` size to their content, so they can't pad a smaller child;
 the spacer rects are the spelling.)
 
 ## Signatures

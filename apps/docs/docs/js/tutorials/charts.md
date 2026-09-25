@@ -19,7 +19,7 @@ To start, duplicate this tab to follow along in the live editor!
 
 <!-- ```ts index.ts
 // prettier-ignore
-import { StackX, StackY, ConnectX, rect, ref, For, v, color, Frame, polar, groupBy, sumBy, orderBy } from "gofish-graphics";
+import { stackX, stackY, ConnectX, rect, ref, For, v, color, frame, polar, groupBy, sumBy, orderBy } from "gofish-graphics";
 import { seafood } from "./dataset";
 
 const root = document.getElementById("app");
@@ -392,7 +392,7 @@ not tied to an argument like `h`, we'll need to pass a `key` field to the object
 :::gofish
 
 ```ts
-StackX(
+stackX(
   { spacing: 8, sharedScale: true },
   For(_.groupBy(seafood, "lake"), (lake, key) =>
     rect({ key, w: 32, h: v(_.sumBy(lake, "count")), fill: gf.color.green[5] })
@@ -553,11 +553,11 @@ gf.layer({ axes: true }, [
 <!-- :::gofish
 
 ```ts
-Frame([
-  StackX(
+frame([
+  stackX(
     { spacing: 64, sharedScale: true },
     For(_.groupBy(seafood, "lake"), (lake, key) =>
-      StackY(
+      stackY(
         { key, spacing: 1 },
         For(_.orderBy(lake, "count", "desc"), (d) =>
           rect({ w: 16, h: v(d.count), fill: v(d.species) }).name(

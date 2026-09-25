@@ -10,7 +10,7 @@ GoFish. It ships as a separate workspace package — install and import it along
 
 ```ts
 import { tree, spread, nest } from "gofish-gotree";
-import { GoFish, circle } from "gofish-graphics";
+import { gofish, circle } from "gofish-graphics";
 ```
 
 A single function — `tree(spec, data)` — produces a tree visualization. Varying the
@@ -246,9 +246,9 @@ Any function with shape `(children: any[]) => any` works. For example, a sibling
 combiner that adds a small label below each spread group:
 
 ```ts no-check
-import { Layer, StackY } from "gofish-graphics";
+import { Layer, stackY } from "gofish-graphics";
 
-sibling: (kids) => StackY({ spacing: 8 }, [
+sibling: (kids) => stackY({ spacing: 8 }, [
   spread({ dir: "x", spacing: 16 })(kids),
   text({ text: `${kids.length} items` }),
 ]),

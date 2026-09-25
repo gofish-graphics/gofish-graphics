@@ -2,7 +2,7 @@
  * Component pointer — event inputs off the chart pipeline.
  *
  * A low-level COMPONENT (a `spreadX` of raw `rect`s, no `chart()`, no data)
- * rendered through the THUNK form: `GoFish(container, opts, () => node)`. A
+ * rendered through the THUNK form: `gofish(container, opts, () => node)`. A
  * `pointer()` is read INSIDE a `live()` fill, so hovering a box recolors only
  * that box — a paint patch with zero pipeline re-runs.
  *
@@ -26,7 +26,7 @@
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { GoFish, spreadX, rect, live, pointer } from "../../src/lib";
+import { gofish, spreadX, rect, live, pointer } from "../../src/lib";
 
 const meta: Meta = {
   title: "Interaction/Component Pointer",
@@ -49,7 +49,7 @@ export const Default: StoryObj<Args> = {
     // One small object per box — its identity is the box's datum (below).
     const boxes = Array.from({ length: 5 }, (_unused, i) => ({ i }));
 
-    GoFish(container, { w: args.w, h: args.h }, () =>
+    gofish(container, { w: args.w, h: args.h }, () =>
       spreadX(
         { spacing: 14, alignment: "middle" },
         boxes.map((box) =>

@@ -70,19 +70,19 @@ for **components** — low-level compositions built from raw shapes and graphica
 operators (`rect`, `text`, `stackX`, `layer`, …) with no data binding. The same
 read-location rule applies.
 
-Render a component with the low-level terminal, `GoFish(container, options,
+Render a component with the low-level terminal, `gofish(container, options,
 child)`. The `child` can be a node **or a thunk** — `() => node` — and the thunk
 form is what makes a component reactive:
 
 ```ts
-import { GoFish, spreadX, rect, live, wheel, timer } from "gofish-graphics";
+import { gofish, spreadX, rect, live, wheel, timer } from "gofish-graphics";
 
 const n = wheel({ range: [1, 8], initial: 3, round: true });
 const t = timer({ domain: [0, 1], step: 1, duration: 1000 }); // 0, 1, 0, 1, …
 
 // A thunk: reading n() here (outside live) makes it a pipeline dependency, so a
 // scroll re-runs the whole component and re-lays-out.
-GoFish(container, { w: 460, h: 260 }, () => {
+gofish(container, { w: 460, h: 260 }, () => {
   const count = n();
   return spreadX(
     { spacing: 16 },
@@ -109,14 +109,14 @@ at paint whether or not a runtime exists, so a plain node works:
 
 ```ts
 import { createSignal } from "solid-js";
-import { GoFish, rect, live } from "gofish-graphics";
+import { gofish, rect, live } from "gofish-graphics";
 
 const [hot, setHot] = createSignal(false);
 
 // A plain NODE (not a thunk). No InteractionRuntime is created and no event
 // listeners are attached, yet the live() fill still patches when `hot` changes —
 // even over a RAW Solid signal, since paint reactivity is runtime-independent.
-GoFish(
+gofish(
   container,
   { w: 120, h: 80 },
   rect({

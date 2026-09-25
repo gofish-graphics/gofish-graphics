@@ -2,7 +2,7 @@
  * Component layout-reactive — the reactive PIPELINE tier, off the chart pipeline.
  *
  * A low-level COMPONENT rendered through the THUNK form of the terminal:
- * `GoFish(container, opts, () => node)`. Because a raw node is built once and
+ * `gofish(container, opts, () => node)`. Because a raw node is built once and
  * cannot re-evaluate its spec, component-level pipeline reactivity needs a thunk
  * the scheduler can re-invoke — the thunk plays exactly the role the chart
  * builder's immutable rebuild plays.
@@ -18,7 +18,7 @@
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { GoFish, spreadX, rect, live, wheel, timer } from "../../src/lib";
+import { gofish, spreadX, rect, live, wheel, timer } from "../../src/lib";
 
 const meta: Meta = {
   title: "Interaction/Component Layout Reactive",
@@ -42,7 +42,7 @@ export const Default: StoryObj<Args> = {
     // Read only inside live() → paint pulse, never a pipeline dependency.
     const t = timer({ domain: [0, 1], step: 1, duration: 1000 });
 
-    GoFish(container, { w: args.w, h: args.h }, () => {
+    gofish(container, { w: args.w, h: args.h }, () => {
       const count = n(); // spec read → re-runs on scroll
       return spreadX(
         { spacing: 16 },
