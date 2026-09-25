@@ -407,8 +407,10 @@ node-resolution strategy (a combinator mark resolves by calling itself with
 `undefined`; a `withGoFish` promise resolves by awaiting). The chart surfaces go
 through the same list via `attachBuilderTerminals(target, resolveForRender,
 render)`, which lets a surface also prepare the render options (`ChartBuilder`
-and `LayerBuilder` merge in the chart-level `axes`/`color` config) and drive
-`render` through its own strategy (`renderWithInteraction`). So the set of
+and `LayerBuilder` merge in the chart-level `axes`/`color` config and read the
+build-in clock's `playing`/`at`, which `TerminalMethods<Extra>` adds to their
+options type) and drive `render` through its own strategy
+(`renderWithInteraction`). So the set of
 terminals is defined once — adding one (as `toDisplayList` was) touches a single
 list and lands on every surface at once, instead of being hand-rolled per
 surface (which previously left `toDisplayList` off the combinator surface and

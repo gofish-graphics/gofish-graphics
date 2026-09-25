@@ -35,7 +35,7 @@
  */
 import { GoFishNode } from "../ast/_node";
 import type { GoFishAST } from "../ast/_ast";
-import { timer, type Timer } from "../interaction/inputs";
+import { timer } from "../interaction/inputs";
 import {
   DEFAULT_DURATION,
   fadeIn,
@@ -46,13 +46,13 @@ import {
 import { groupEntries, rowsOf } from "./grouping";
 import { projectPath } from "../ast/datumProjection";
 import { makeRule } from "./paint";
+import { solveSchedule, type Arrangement, type Clip } from "./schedule";
 import {
-  solveSchedule,
-  type Arrangement,
-  type Clip,
-  type Schedule,
-} from "./schedule";
-import { checkPhases, nodeTransition, playsDataTime } from "./transition";
+  checkPhases,
+  nodeTransition,
+  playsDataTime,
+  type ArrangementSpec,
+} from "./transition";
 
 /** How to play the build clock: the render options `playing` and `at`,
  *  which mirror `time.sequence`'s. `playing: false` holds the chart still at
@@ -73,19 +73,14 @@ type Draft =
 /** A leaf of the build: its effects, timed for its marks, and the marks. */
 type Leaf = { effects: TimedEffect[]; targets: GoFishNode[] };
 
-export type BuildIn = {
-  schedule: Schedule<Leaf>;
-  clock: Timer<number>;
-};
-
 /** Read the timeline off `root`, solve it, and put every animated mark on
- *  one clock. `undefined` when nothing in the chart enters. */
+ *  one clock. A chart in which nothing enters is left as it is. */
 export function installBuildIn(
   root: GoFishNode,
   options: BuildClockOptions = {}
-): BuildIn | undefined {
+): void {
   const draft = clipOf(root, false);
-  if (draft === undefined) return undefined;
+  if (draft === undefined) return;
   const schedule = solveSchedule(timeLeaves(draft));
   const { total } = schedule;
   const clock = timer<number>({
@@ -113,7 +108,6 @@ export function installBuildIn(
       }
     }
   }
-  return { schedule, clock };
 }
 
 /** The longest value a field-valued duration reaches, which the shortcut
@@ -197,6 +191,9 @@ function leavesOf(node: GoFishNode): GoFishNode[] {
  * enter arrangement: a mark under one with no effect of its own enters with
  * `animation.fadeIn()`, the default #892 gives an entering mark. Every record
  * the walk meets is checked against the clock that plays it (`checkPhases`).
+ *
+ * The walk runs on every render, animated or not, so a node with no record
+ * allocates nothing unless something under it enters.
  */
 function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
   if (!(node instanceof GoFishNode)) return undefined;
@@ -205,43 +202,54 @@ function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
     return undefined;
   }
   const record = nodeTransition(node);
-  if (record !== undefined) checkPhases(record, false);
-  if (record?.kind === "mark" && record.enter !== undefined) {
-    return {
-      kind: "leaf",
-      found: { effects: record.enter, targets: record.targets ?? [node] },
-    };
+  if (record !== undefined) {
+    checkPhases(record, false);
+    if (record.kind === "mark" && record.enter !== undefined) {
+      return {
+        kind: "leaf",
+        found: { effects: record.enter, targets: record.targets ?? [node] },
+      };
+    }
+    if (record.kind === "operator" && record.enter !== undefined) {
+      return arranged(node, record.enter);
+    }
   }
-  const kids = node.children.filter(
-    (c): c is GoFishNode => c instanceof GoFishNode
-  );
-  if (record?.kind === "operator" && record.enter !== undefined) {
-    const { by, ...arrangement } = record.enter;
-    const children = kids
-      .map((kid) => ({ kid, clip: clipOf(kid, true) }))
-      .filter((c): c is { kid: GoFishNode; clip: Draft } => !!c.clip);
-    const groups = [
-      ...groupEntries(children, (c) => rowsOf(c.kid), by).values(),
-    ];
-    return {
-      kind: "group",
-      arrangement,
-      groups: groups.map((g) => g.map((c) => c.clip)),
-    };
+  // Anything else is `parallel` over the clips under it.
+  let clips: Draft[] | undefined;
+  let drawsItself = true;
+  for (const kid of node.children) {
+    if (!(kid instanceof GoFishNode)) continue;
+    drawsItself = false;
+    const clip = clipOf(kid, underArrangement);
+    if (clip !== undefined) (clips ??= []).push(clip);
   }
-  if (kids.length === 0) {
-    if (!underArrangement) return undefined;
+  if (drawsItself && underArrangement) {
     return { kind: "leaf", found: { effects: [fadeIn()], targets: [node] } };
   }
-  const clips = kids
-    .map((kid) => clipOf(kid, underArrangement))
-    .filter((c): c is Draft => c !== undefined);
-  if (clips.length === 0) return undefined;
+  if (clips === undefined) return undefined;
   if (clips.length === 1) return clips[0];
   return {
     kind: "group",
     arrangement: { kind: "parallel" },
     groups: clips.map((c) => [c]),
+  };
+}
+
+/** An operator's enter arrangement over the clips of its children, which the
+ *  stagger's own `by` groups. */
+function arranged(node: GoFishNode, spec: ArrangementSpec): Draft {
+  const { by, ...arrangement } = spec;
+  const children: { kid: GoFishNode; clip: Draft }[] = [];
+  for (const kid of node.children) {
+    if (!(kid instanceof GoFishNode)) continue;
+    const clip = clipOf(kid, true);
+    if (clip !== undefined) children.push({ kid, clip });
+  }
+  const groups = groupEntries(children, (c) => rowsOf(c.kid), by);
+  return {
+    kind: "group",
+    arrangement,
+    groups: [...groups.values()].map((g) => g.map((c) => c.clip)),
   };
 }
 

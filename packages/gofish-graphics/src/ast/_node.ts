@@ -1593,9 +1593,11 @@ export class GoFishNode {
     // Paint-time animation (see `INTERNAL_animate`): this node's own rule, or
     // the rule of the mark it is attached to. Like visibility, a taken-over
     // drawing skips it: its new owner decides how it shows.
-    const frame = { transform, toPixel };
-    if (this.__gfAnimate) this.__gfAnimate.paint(items, frame, this, "host");
-    else this._attachedTo?.__gfAnimate?.paint(items, frame, this, "rider");
+    const rule = this.__gfAnimate ?? this._attachedTo?.__gfAnimate;
+    if (rule) {
+      const role = this.__gfAnimate ? "host" : "rider";
+      rule.paint(items, { transform, toPixel }, this, role);
+    }
     // Paint-time visibility (see `INTERNAL_visibleWhile`): the item keeps the
     // opacity it was lowered with while it is showing, and goes to 0 while it
     // is not. The STATIC value is read here, so a headless lowering and a

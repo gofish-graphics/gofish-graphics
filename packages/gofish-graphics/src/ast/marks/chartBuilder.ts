@@ -29,7 +29,10 @@ import {
   tweenTierFor,
   type MarkTransition,
 } from "../../animation/transition";
-import { installBuildIn } from "../../animation/install";
+import {
+  installBuildIn,
+  type BuildClockOptions,
+} from "../../animation/install";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -581,17 +584,19 @@ type RenderMeta = {
  * resolve itself to a node, and the chart-level config to render it with.
  *
  * The methods are `declare`d (their bodies come from `attachBuilderTerminals`
- * below) so the terminal list stays defined in exactly one place.
+ * below) so the terminal list stays defined in exactly one place. Their
+ * options also take the build-in clock's (`BuildClockOptions`), which
+ * `resolveForRender` reads.
  */
 abstract class RenderableBuilder {
   abstract resolve(): Promise<GoFishNode>;
   abstract renderMeta(): RenderMeta;
 
-  declare render: TerminalMethods["render"];
-  declare toSVG: TerminalMethods["toSVG"];
-  declare toSVGElement: TerminalMethods["toSVGElement"];
-  declare save: TerminalMethods["save"];
-  declare toDisplayList: TerminalMethods["toDisplayList"];
+  declare render: TerminalMethods<BuildClockOptions>["render"];
+  declare toSVG: TerminalMethods<BuildClockOptions>["toSVG"];
+  declare toSVGElement: TerminalMethods<BuildClockOptions>["toSVGElement"];
+  declare save: TerminalMethods<BuildClockOptions>["save"];
+  declare toDisplayList: TerminalMethods<BuildClockOptions>["toDisplayList"];
 }
 
 /** Everything a `ChartBuilder` carries. The builder is immutable: every
@@ -1266,16 +1271,13 @@ export class LayerBuilder extends RenderableBuilder {
  */
 async function resolveForRender(
   this: RenderableBuilder,
-  options: RenderOptions
+  options: RenderOptions & BuildClockOptions
 ) {
   const node = await this.resolve();
   // The build-in: marks with enter transitions enter once, on one clock for
   // the whole chart, which the render options `playing` / `at` can hold (see
   // `src/animation/install.ts`). A chart with none is untouched.
-  installBuildIn(node, {
-    playing: options.playing as boolean | undefined,
-    at: options.at as number | undefined,
-  });
+  installBuildIn(node, options);
   const meta = this.renderMeta();
   return {
     node,

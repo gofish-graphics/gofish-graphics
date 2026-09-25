@@ -59,12 +59,13 @@ const runGofish = async (): Promise<LayoutData> => {
 
 The chart builders do one thing between resolving a chart and handing it to
 `gofish()`: they install the build-in (`installBuildIn` in
-`src/animation/install.ts`, called from `resolveForRender`). It reads the enter
-transitions off the resolved tree, solves their timing, and puts every animated
-mark on one clock for the chart. The timing depends on the tree's structure and
-data, not on layout, so it is read before the chrome passes below add axes and
-legends, which therefore appear at once. The render options `playing` and `at`
-hold that clock, as the options of the same names hold a `time.sequence`'s.
+`src/animation/install.ts`, called from `resolveForRender`). It reads the
+transitions off the resolved tree, checks each one's phases against the clock
+that plays it, solves the enter timing, and puts every animated mark on one
+clock for the chart. The timing depends on the tree's structure and data, not on
+layout, so it is read before the chrome passes below add axes and legends, which
+therefore appear at once. The builders' render options `playing` and `at` hold
+that clock, as the options of the same names hold a `time.sequence`'s.
 
 ## Layout Phase
 

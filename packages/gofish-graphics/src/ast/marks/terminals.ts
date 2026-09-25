@@ -79,22 +79,23 @@ export const TERMINALS: TerminalConfig[] = [
 ];
 
 /** The terminal methods {@link attachTerminals} defines, for a class surface
- *  that merges them into its declared type. */
-export interface TerminalMethods {
+ *  that merges them into its declared type. `Extra` is the options the
+ *  surface's own resolution reads on top of the node's. */
+export interface TerminalMethods<Extra = unknown> {
   render(
     container: Parameters<GoFishNode["render"]>[0],
-    options?: Parameters<GoFishNode["render"]>[1]
+    options?: Parameters<GoFishNode["render"]>[1] & Extra
   ): Promise<Awaited<ReturnType<GoFishNode["render"]>>>;
-  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
+  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0] & Extra): Promise<string>;
   toSVGElement(
-    options?: Parameters<GoFishNode["toSVGElement"]>[0]
+    options?: Parameters<GoFishNode["toSVGElement"]>[0] & Extra
   ): Promise<SVGSVGElement>;
   save(
     filename: string,
-    options?: Parameters<GoFishNode["save"]>[1]
+    options?: Parameters<GoFishNode["save"]>[1] & Extra
   ): Promise<void>;
   toDisplayList(
-    options?: Parameters<GoFishNode["toDisplayList"]>[0]
+    options?: Parameters<GoFishNode["toDisplayList"]>[0] & Extra
   ): ReturnType<GoFishNode["toDisplayList"]>;
 }
 

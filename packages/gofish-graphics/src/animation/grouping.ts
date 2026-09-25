@@ -22,7 +22,8 @@ export function groupEntries<C>(
   if (by === undefined) {
     return new Map(children.map((child, i) => [i, [child]]));
   }
-  const allRows = children.flatMap(rowsOf) as Record<string, unknown>[];
+  const rows = children.map(rowsOf);
+  const allRows = rows.flat() as Record<string, unknown>[];
   const groups = new Map<string | number, C[]>(
     [...splitEntries(by, allRows).keys()].map((k) => [k, []])
   );
@@ -35,8 +36,8 @@ export function groupEntries<C>(
     const keys = new Set(rows.map(rowKey));
     return keys.size === 1 ? [...keys][0] : undefined;
   };
-  for (const child of children) {
-    const key = keyOf(rowsOf(child));
+  children.forEach((child, i) => {
+    const key = keyOf(rows[i]);
     const group = key === undefined ? undefined : groups.get(key);
     if (group === undefined) {
       throw new Error(
@@ -48,7 +49,7 @@ export function groupEntries<C>(
       );
     }
     group.push(child);
-  }
+  });
   for (const [key, group] of groups) if (group.length === 0) groups.delete(key);
   return groups;
 }

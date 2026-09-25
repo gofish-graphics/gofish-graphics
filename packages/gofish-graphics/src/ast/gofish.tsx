@@ -838,15 +838,6 @@ export type GoFishRenderOptions = {
    */
   yUp?: boolean;
   /**
-   * The build-in clock (`src/animation/`): a chart whose marks have enter
-   * transitions and no `time.sequence` plays them once on one clock. `false`
-   * holds it still, at `at` — the same two options `time.sequence` takes for
-   * its own clock. Default `true`.
-   */
-  playing?: boolean;
-  /** Where the build-in clock starts, in milliseconds into the build. */
-  at?: number;
-  /**
    * Interaction runtime (see src/interaction/). When present, the render pass
    * publishes each lowered frame to it, emits `data-gf-id` hit-test hooks, and
    * attaches its delegated event listeners to the produced <svg>. Absent (the
