@@ -65,8 +65,8 @@ jobs:
           PRS=$(gh pr list \
             --state merged \
             --search "merged:>=${{ steps.dates.outputs.lower }} merged:<${{ steps.dates.outputs.upper }}" \
-            --json number,title,body,author,mergedAt,url \
-            --jq '.[] | "### PR #\(.number): \(.title)\n- **Author:** \(.author.login)\n- **Merged:** \(.mergedAt[:10])\n- **URL:** \(.url)\n- **Description:** \(.body // "No description" | split("\n")[0:3] | join(" ") | .[0:300])\n"')
+            --json number,title,body,mergedAt,url \
+            --jq '.[] | "### PR #\(.number): \(.title)\n- **Merged:** \(.mergedAt[:10])\n- **URL:** \(.url)\n- **Description:** \(.body // "No description" | split("\n")[0:3] | join(" ") | .[0:300])\n"')
           if [ -z "$PRS" ]; then
             PRS="No PRs merged this week."
           fi
