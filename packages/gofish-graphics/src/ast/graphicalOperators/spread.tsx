@@ -17,7 +17,7 @@ import { layer } from "./layer";
 import { Constraint } from "../constraints";
 import { ensureChildNames, type AlignAnchor } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
-import { Mark, Operator } from "../types";
+import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
 
 // Utility function to unwrap lodash wrapped arrays
@@ -35,7 +35,7 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
  * the scale handling match (fresh child array, no parent mutation), and the
  * layer honors `sharedScale` as a scale scope (layer.tsx). `stack` is
  * `spread({ glue: true })`; `spreadX`/`spreadY` fix `dir`. The IR keeps `spread`/
- * `stack` (the v3 wrapper's `serialize` tag), so this elaboration is below the IR.
+ * `stack` (the fluent operator wrapper's `serialize` tag), so this elaboration is below the IR.
  *
  * `size` (per-entry stack-axis extent, #700 Phase 2) wraps each child in its
  * own sized layer BEFORE the align/distribute elaboration below: `layer({ [w|h]:
@@ -256,12 +256,12 @@ export type StackOptions<T = any> = Omit<SpreadOptions<T>, "spacing" | "glue">;
 
 export function stack(
   opts: StackOptions,
-  marks: Mark<any>[]
+  marks: MarkChild[]
 ): ReturnType<typeof spread>;
 export function stack(opts: StackOptions): Operator<any[], any[]>;
 export function stack(
   opts: StackOptions,
-  marks?: Mark<any>[]
+  marks?: MarkChild[]
 ): ReturnType<typeof spread> | Operator<any[], any[]> {
   const stackOpts: SpreadOptions = { ...opts, glue: true };
   const result =

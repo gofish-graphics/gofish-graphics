@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  For,
+  map,
   stack,
   spread,
   ellipse,
@@ -39,7 +39,7 @@ export const PlanetsOnly: StoryObj<Args> = {
 
     spread(
       { dir: "x", spacing: 50, alignment: "middle" },
-      For(planets, (planet) =>
+      map(planets, (planet) =>
         ellipse({
           w: planet.radius * 2,
           h: planet.radius * 2,
@@ -61,7 +61,7 @@ export const PlanetsWithLabelAbove: StoryObj<Args> = {
     layer([
       spread(
         { dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,
@@ -93,7 +93,7 @@ export const PlanetsWithLabelBelow: StoryObj<Args> = {
     layer([
       spread(
         { dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,
@@ -124,7 +124,7 @@ export const PlanetsWithLabelAboveNoSpacing: StoryObj<Args> = {
     layer([
       spread(
         { dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,
@@ -155,7 +155,7 @@ export const PlanetsWithLabelBelowNoSpacing: StoryObj<Args> = {
     layer([
       spread(
         { dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,
@@ -194,7 +194,7 @@ export const PlanetsWithArrow: StoryObj<Args> = {
     layer([
       spread(
         { dir: "x", spacing: 50, alignment: "middle" },
-        For(planets, (planet) =>
+        map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
             h: planet.radius * 2,

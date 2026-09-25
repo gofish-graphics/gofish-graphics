@@ -36,11 +36,11 @@ arrow(children, *,
       padStart=None, padEnd=None, flip=None, straights=None) -> Mark
 ```
 
-`Arrow` is the capitalized alias for the same factory. The children are usually
-two named elements: parameters of a [`.relate()`](/python/api/constraints/relate)
-callback, or [`ref(...)`](/python/api/selection/ref) calls (or datum-level
-sub-refs of a `createName` token). The arrow runs **from the first child to the
-second**. Fewer than two children renders nothing.
+The children are usually two named elements: parameters of a
+[`.relate()`](/python/api/constraints/relate) callback, or
+[`ref(...)`](/python/api/selection/ref) calls (or datum-level sub-refs of a
+`createName` token). The arrow runs **from the first child to the second**.
+Fewer than two children renders nothing.
 
 ## Parameters
 

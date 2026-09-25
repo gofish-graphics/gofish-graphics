@@ -211,7 +211,7 @@ async function main() {
 
   // 5. createMark is a boundary in both directions.
   const Inside = gf.createMark(() =>
-    gf.Layer([gf.rect({ w: 10, h: 10 }).name("inner")])
+    gf.layer([gf.rect({ w: 10, h: 10 }).name("inner")])
   );
   await rejects(
     "a string name inside a createMark is invisible outside it",
@@ -223,7 +223,7 @@ async function main() {
   );
   const ReachesOut = gf.createMark(() =>
     gf
-      .Layer([gf.rect({ w: 10, h: 10 }).name("x")])
+      .layer([gf.rect({ w: 10, h: 10 }).name("x")])
       .relate(() => [gf.arrow({}, [gf.ref("x"), gf.ref("outer")])])
   );
   await rejects(
@@ -235,7 +235,7 @@ async function main() {
   {
     const tag = gf.createName("inner");
     const Exposed = gf.createMark(() =>
-      gf.Layer([gf.rect({ w: 10, h: 10 }).name(tag)])
+      gf.layer([gf.rect({ w: 10, h: 10 }).name(tag)])
     );
     const handle = gf.createName("handle");
     let ok = true;

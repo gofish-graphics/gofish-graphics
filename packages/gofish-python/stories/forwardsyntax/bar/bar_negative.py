@@ -1,8 +1,8 @@
-"""Forward Syntax V3/Bar/Negative — mirrors BarNegative.stories.tsx"""
+"""Forward Syntax/Bar/Negative — mirrors BarNegative.stories.tsx"""
 
 from gofish import chart, spread, rect
 
-TITLE = "Forward Syntax V3/Bar/Negative"
+TITLE = "Forward Syntax/Bar/Negative"
 
 _data = [
     {"category": "A", "value": -30},

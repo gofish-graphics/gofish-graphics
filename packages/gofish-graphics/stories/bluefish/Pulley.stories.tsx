@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Layer,
+  layer,
   Constraint,
   line,
   createMark,
@@ -41,7 +41,7 @@ const rope = {
 } as const;
 
 const PulleyCircle = createMark(({ r = 25 }: { r?: number }) =>
-  Layer([
+  layer([
     circle({ r, stroke: "#828282", strokeWidth: 3, fill: "#C1C1C1" }).name(
       "wheel"
     ),
@@ -62,7 +62,7 @@ const Weight = createMark(
     height: number;
     label: string;
   }) =>
-    Layer([
+    layer([
       polygon({
         // y-down free space (issue #143/#16): the inset top edge is at y=0, the
         // full-width bottom edge at y=height — a weight wider at the bottom.
@@ -105,9 +105,9 @@ export const Pulley: StoryObj<Args> = {
 
     // x/y shift the resolved bounding box to start at (20, 20) — the constraint
     // layout produces negative coordinates and the root render does not auto-fit.
-    Layer({ x: 20, y: 20 }, [
+    layer({ x: 20, y: 20 }, [
       // ── tier 1: shapes + letter labels — a finished, fully-placed unit ──
-      Layer([
+      layer([
         rect({
           h: 20,
           w: 9 * r,

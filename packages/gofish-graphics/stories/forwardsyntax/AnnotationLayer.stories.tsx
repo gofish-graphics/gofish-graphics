@@ -9,7 +9,7 @@ import { initializeContainer } from "../helper";
 import { chart, spread, rect, text, datum } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Annotation Layer",
+  title: "Forward Syntax/Annotation Layer",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },

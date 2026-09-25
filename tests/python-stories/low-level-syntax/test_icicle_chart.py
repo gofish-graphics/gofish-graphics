@@ -2,7 +2,7 @@
 
 A horizontal icicle of the Titanic cohort: a root band, then class bands, then
 (in Default) sex and survived bands nested inside. Built from combinator-form
-`stack` (the v1 `stackX`/`stackY` are sugar for `stack(dir=...)`), with each
+`stack` (the JS `stackX`/`stackY` are sugar for `stack(dir=...)`), with each
 band's height proportional to its summed `count`.
 """
 

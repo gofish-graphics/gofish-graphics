@@ -1,13 +1,14 @@
 # Stories exempt from Python parity requirement.
-# These use v1/v2 APIs, Layer/select, or features not yet available in gofish-python.
+# These use the low-level operators or capitalized aliases, Layer/select, or
+# features not yet available in gofish-python.
 #
 # Remove entries as Python support is added.
 
-# Low-level API stories (v1/v2)
+# Low-level API stories
 # Ported to tests/python-stories/low-level-syntax/ (#433): BalloonChart,
 # IcicleChart, NestedWaffleChart, SankeyTree,
 # StringlineChart, Whisker — all byte-identical to the JS baseline. The ports
-# map the v1 directional operators to combinator-form spread/stack/connect,
+# map the directional operators (stackX, spreadY, ...) to combinator-form spread/stack/connect,
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
 # IR bridge.
 #

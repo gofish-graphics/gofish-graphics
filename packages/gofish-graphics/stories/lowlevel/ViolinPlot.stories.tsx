@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { penguins } from "../../src/data/penguins";
-import { spreadX, For, layer, stackY, rect, ribbon, v } from "../../src/lib";
+import { spreadX, map, layer, stackY, rect, ribbon, v } from "../../src/lib";
 import { groupBy } from "lodash";
 import { density1d } from "fast-kde";
 
@@ -26,14 +26,14 @@ export const Default: StoryObj<Args> = {
 
     spreadX(
       { spacing: 64, sharedScale: true },
-      For(groupBy(penguins, "Species"), (d, species) => {
+      map(groupBy(penguins, "Species"), (d, species) => {
         const density = Array.from(
           density1d(d.map((p) => p["Body Mass (g)"]).filter((w) => w !== null))
         );
         return layer({}, [
           stackY(
             { alignment: "middle" },
-            For(density, (d) =>
+            map(density, (d) =>
               rect({
                 y: -d.x / 40,
                 w: d.y * 100000,
@@ -45,7 +45,7 @@ export const Default: StoryObj<Args> = {
         ]).relate((names) => [
           ribbon(
             { dir: "y", opacity: 1, mixBlendMode: "normal" },
-            For(density, (d) => names[`${species}-${d.x}`])
+            map(density, (d) => names[`${species}-${d.x}`])
           ),
         ]);
       })

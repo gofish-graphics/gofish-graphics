@@ -2,7 +2,7 @@ import {
   Constraint,
   createMark,
   createName,
-  Layer,
+  layer,
   rect,
   text,
 } from "../../../src/lib";
@@ -17,7 +17,7 @@ export interface ElmTupleProps {
 export const elmTuple = createMark(
   ({ tupleIndex, tupleData }: ElmTupleProps) => {
     const valTag = createName("val");
-    return Layer([
+    return layer([
       rect({
         h: 60,
         w: 70,

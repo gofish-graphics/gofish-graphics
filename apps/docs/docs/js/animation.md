@@ -190,11 +190,11 @@ const panel = (curve) =>
     .mark(circle({ r: 4, fill: "country" }))
     .layer(time.transition({ curve }));
 
-GoFish(container, { w: 1160, h: 400, legend: false, axes: true }, () =>
+gofish(container, { w: 1160, h: 400, legend: false, axes: true }, () =>
   spreadX({ spacing: 16 }, [
-    Frame({ w: 240, h: 280 }, [panel("step")]),
-    Frame({ w: 240, h: 280 }, [panel("linear")]),
-    Frame({ w: 240, h: 280 }, [panel("catmullRom")]),
+    frame({ w: 240, h: 280 }, [panel("step")]),
+    frame({ w: 240, h: 280 }, [panel("linear")]),
+    frame({ w: 240, h: 280 }, [panel("catmullRom")]),
   ])
 );
 ```

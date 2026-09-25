@@ -1,4 +1,4 @@
-"""Forward Syntax V3/Bar/Axes — mirrors BarAxesPermutations.stories.tsx.
+"""Forward Syntax/Bar/Axes — mirrors BarAxesPermutations.stories.tsx.
 
 Demonstrates the chart-level ``axes`` option (moved off ``.render()``):
 a bool, a per-dimension dict, and per-axis titles. Mirrors the JS
@@ -8,7 +8,7 @@ a bool, a per-dimension dict, and per-axis titles. Mirrors the JS
 from gofish import chart, spread, rect
 from stories.data.seafood import seafood
 
-TITLE = "Forward Syntax V3/Bar/Axes"
+TITLE = "Forward Syntax/Bar/Axes"
 
 
 def both(w=400, h=400):

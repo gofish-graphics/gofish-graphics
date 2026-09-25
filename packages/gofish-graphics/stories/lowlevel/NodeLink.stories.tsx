@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Layer,
+  layer,
   Constraint,
   line,
   createMark,
@@ -31,7 +31,7 @@ type Args = { w: number; h: number };
 
 // A node: a rounded box with a centered label.
 const Node = createMark(({ label }: { label: string }) =>
-  Layer({ w: 76, h: 40 }, [
+  layer({ w: 76, h: 40 }, [
     rect({
       w: 76,
       h: 40,
@@ -68,9 +68,9 @@ export const NodeLink: StoryObj<Args> = {
     const C = createName("C");
     const D = createName("D");
 
-    Layer({ x: 20, y: 20 }, [
+    layer({ x: 20, y: 20 }, [
       // ── tier 1: nodes — placed by constraints, a finished unit ──────────
-      Layer([
+      layer([
         Node({ label: "A" }).name(A),
         Node({ label: "B" }).name(B),
         Node({ label: "C" }).name(C),

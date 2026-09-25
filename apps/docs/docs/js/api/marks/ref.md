@@ -39,7 +39,7 @@ ref(
 A string `ref("x")` is legal only inside a [`.relate()`](/js/api/constraints/relate) clause. Anywhere else it throws, and the message says to move it into `.relate()`. Inside a clause it finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to the layer that relates it: the closest match inside that layer wins, counted in steps down from the layer, so a direct child beats a node with the same name nested deeper. The search never crosses a `createMark` boundary, in either direction, and the match must lie inside the related layer. Two matches at the same smallest distance is an error, and so is no match at all. A data key is not a name, so `ref("a")` does not find a mark just because its row is keyed `"a"`.
 
 ```ts
-Layer([
+layer([
   rect({ w: 80, h: 40 }).name("bg"),
   text({ text: "label" }).name("label"),
 ]).relate(() => [
@@ -56,7 +56,7 @@ A `Token` (from [`createName`](/js/api/howto/naming-and-scoping#createname)) is 
 ```ts
 const targetName = createName("target");
 
-Layer([
+layer([
   rect({ w: 80, h: 40 }).name(targetName),
   // ...somewhere in a sibling subtree:
   ref(targetName),
@@ -96,7 +96,7 @@ Pass a `GoFishNode` (or a `.__ref` wrapper) to reference it without name resolut
 
 ```ts
 const bar = rect({ h: "value" });
-Layer([bar, ref(bar)]);
+layer([bar, ref(bar)]);
 ```
 
 ## Parameters

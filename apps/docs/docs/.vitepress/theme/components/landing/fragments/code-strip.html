@@ -22,9 +22,9 @@
 ]).<span class="tok-kw">render</span>(el, { <span class="tok-field">w</span>: <span class="tok-num">400</span>, <span class="tok-field">h</span>: <span class="tok-num">400</span>, <span class="tok-field">axes</span>: <span class="tok-kw">true</span> });</pre>
     <pre
       class="hero-lang-python"
-    ><span class="tok-kw">from</span> gofish <span class="tok-kw">import</span> chart, Layer, selectAll
+    ><span class="tok-kw">from</span> gofish <span class="tok-kw">import</span> chart, layer, selectAll
 
-<span class="tok-kw">Layer</span>([
+<span class="tok-kw">layer</span>([
 <span class="cblk" data-label="bars">    <span class="tok-kw">chart</span>(seafood)
     .<span class="tok-kw">flow</span>(
         <span class="tok-kw">spread</span>(<span class="tok-field">by</span>=<span class="tok-str">"lake"</span>, <span class="tok-field">dir</span>=<span class="tok-str">"x"</span>, <span class="tok-field">spacing</span>=<span class="tok-num">64</span>),

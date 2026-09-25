@@ -187,7 +187,7 @@ spread(
 # Pure primitive — emits a `cut` node usable as a combinator child
 cut(source, *, dir, size=None, inset=None)
 
-# v3 expand-mark modifier — chainable on image()/rect()
+# expand-mark modifier — chainable on image()/rect()
 image(...).cut(dir=..., size=None, inset=None)
 ```
 

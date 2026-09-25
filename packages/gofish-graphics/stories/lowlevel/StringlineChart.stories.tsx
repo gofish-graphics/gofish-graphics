@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { caltrain, caltrainStopOrder } from "../../src/data/caltrain";
-import { layer, spreadY, For, rect, ellipse, line, v } from "../../src/lib";
+import { layer, spreadY, map, rect, ellipse, line, v } from "../../src/lib";
 import { groupBy, orderBy } from "lodash";
 import _ from "lodash";
 
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
           spacing: 8,
           alignment: "start",
         },
-        For(
+        map(
           groupBy(
             _.orderBy(
               caltrainProcessed,
@@ -43,7 +43,7 @@ export const Default: StoryObj<Args> = {
           (d, key) =>
             layer({ key }, [
               rect({ w: 0, h: 0 }),
-              For(d, (d) =>
+              map(d, (d) =>
                 ellipse({
                   x: d.Time / 3,
                   w: 4,
@@ -56,12 +56,12 @@ export const Default: StoryObj<Args> = {
       ),
     ])
       .relate((names) =>
-        For(groupBy(caltrainProcessed, "Train"), (d) =>
+        map(groupBy(caltrainProcessed, "Train"), (d) =>
           line(
             // Default curve: the connection (y) axis is the ordinal station
             // stack, so it resolves to a straight polyline between stops.
             { dir: "y", strokeWidth: 1 },
-            For(d, (d) => names[`${d.Train}-${d.Station}-${d.Time}`])
+            map(d, (d) => names[`${d.Train}-${d.Station}-${d.Time}`])
           )
         )
       )

@@ -6,7 +6,7 @@ import { chart, rect, stack, spread, derive } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Pie",
+  title: "Forward Syntax/Pie",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

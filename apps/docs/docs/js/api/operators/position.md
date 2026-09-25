@@ -26,7 +26,7 @@ gf.layer([
 position({ x?, y?, key? }, [child]);
 ```
 
-`Position` is the v2 alias for the same factory. `position` takes **exactly
+`position` takes **exactly
 one** child; passing more is not meaningful (the operator only tracks one
 child's box).
 

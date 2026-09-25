@@ -305,7 +305,7 @@ Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then `.re
 
 ## `.layer(child)` vs. the `layer([...])` operator
 
-This page documents the **v3 builder method** `ChartBuilder.layer(child)`, which
+This page documents the **builder method** `ChartBuilder.layer(child)`, which
 stacks a `chart(...)` tier over the current one and auto-wires an empty `chart()`
 scope to the previous tier's marks. It's sugar over the lower-level
 [`layer([...])` operator](/js/api/operators/layer) (which composes an explicit

@@ -1,4 +1,4 @@
-import { spread as gfSpread, Layer, Constraint } from "gofish-graphics";
+import { spread as gfSpread, layer, Constraint } from "gofish-graphics";
 import type { Combiner, DepthCombiner, Alignment } from "./spec";
 
 /**
@@ -85,10 +85,10 @@ export const distribute = (opts: DistributeOptions): Combiner => {
     // Wrap in a thin Layer (chainable .name()) rather than calling .name on
     // the child directly — the latter loses chainability for createMark-
     // produced NameableMarks.
-    const named = children.map((c, i) => Layer([c]).name(`__distribute-${i}`));
+    const named = children.map((c, i) => layer([c]).name(`__distribute-${i}`));
     const refs = (c: any) => named.map((_, i) => c[`__distribute-${i}`]);
     const orthogonal = opts.dir === "x" ? "y" : "x";
-    return Layer(named).relate((c: any) => {
+    return layer(named).relate((c: any) => {
       const cs: any[] = [
         Constraint.distribute(
           {
@@ -150,9 +150,9 @@ const normalizeAxis = (a: CombineAxis | undefined) =>
  */
 export const combine = (opts: CombineOptions): Combiner => {
   const combiner: Combiner = (children: any[]) => {
-    const named = children.map((c, i) => Layer([c]).name(`__combine-${i}`));
+    const named = children.map((c, i) => layer([c]).name(`__combine-${i}`));
     const refs = (c: any) => named.map((_, i) => c[`__combine-${i}`]);
-    return Layer(named).relate((c: any) => {
+    return layer(named).relate((c: any) => {
       const cs: any[] = [];
       for (const axis of ["x", "y"] as const) {
         const spec = normalizeAxis(opts[axis]);
@@ -219,7 +219,7 @@ const INNER_NAME = "__nest-inner";
  * just call `.name()` on the user's nodeMark because createMark's NameableMark
  * loses chainability after the first `.name()` (the result is a plain Mark
  * whose `.name` is the built-in function property). Wrapping in a fresh Layer
- * sidesteps that — `Layer(...).name(...)` chains correctly through the
+ * sidesteps that — `layer(...).name(...)` chains correctly through the
  * createNodeOperatorSequential PromiseWithRender. The wrapper Layer has no
  * fixed size, so nest's size-override propagates through to the user's
  * mark inside.
@@ -233,9 +233,9 @@ export const nest =
       );
     }
     const [outer, inner] = children;
-    const namedOuter = Layer([outer]).name(OUTER_NAME);
-    const namedInner = Layer([inner]).name(INNER_NAME);
-    return Layer([namedOuter, namedInner]).relate((c: any) => [
+    const namedOuter = layer([outer]).name(OUTER_NAME);
+    const namedInner = layer([inner]).name(INNER_NAME);
+    return layer([namedOuter, namedInner]).relate((c: any) => [
       Constraint.nest(opts, [c[OUTER_NAME], c[INNER_NAME]]),
     ]);
   };

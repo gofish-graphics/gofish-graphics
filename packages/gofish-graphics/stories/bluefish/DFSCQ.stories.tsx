@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Layer,
+  layer,
   Constraint,
   line,
   arrow,
@@ -107,7 +107,7 @@ const BigComma = () => text({ text: ",", fontFamily: "monospace", fontSize: 30 }
 // any one of them.
 const CONTENT_WIDTH = 680;
 const withMinWidth = (width: number, content: ReturnType<typeof spread>) =>
-  Layer([
+  layer([
     rect({ w: width, h: 0, fill: "transparent" }).name("filler"),
     content.name("content"),
   ]).relate(({ filler, content }) => [
@@ -140,7 +140,7 @@ const ActionLabel = (
   slotName: ReturnType<typeof createName>,
   labelText: string
 ) =>
-  Layer([
+  layer([
     ref(boxName).name("box"),
     ref(slotName).name("slot"),
     ActionText(labelText).name("t"),
@@ -154,7 +154,7 @@ const ActionLabel = (
 // "activeTxn:" / "committedTxns:" left-column labels so every stage's
 // content column starts at the same x regardless of label length.
 const BoxedAlign = (width: number, content: ReturnType<typeof text>) =>
-  Layer([
+  layer([
     rect({ w: width, h: 0, fill: "transparent" }).name("slot"),
     content.name("content"),
   ]).relate(({ slot, content }) => [
@@ -265,7 +265,7 @@ export const DFSCQ: StoryObj<Args> = {
     // `ref()` — see FRICTION LOG #4 — so they aren't structurally nested
     // under this node and wouldn't otherwise contribute to its bbox). Ground
     // truth's DiskLog box border sits below that label row, not above it.
-    const diskLogInner = Layer([
+    const diskLogInner = layer([
       memRow,
       rect({ h: 3, fill: "black" }).name("line"),
       rect({ w: 1, h: 1, fill: "transparent" }).name("labelSpace"),
@@ -301,7 +301,7 @@ export const DFSCQ: StoryObj<Args> = {
       tickName?: ReturnType<typeof createName>
     ) => {
       const key = tickName ? tickName.__tag : "t";
-      return Layer([
+      return layer([
         ref(anchor).name("a"),
         rect({ w: 3, h: 13, fill: "black" }).name(tickName ?? "t"),
       ]).relate((c) => [
@@ -310,7 +310,7 @@ export const DFSCQ: StoryObj<Args> = {
       ]);
     };
     const Label = (anchor: ReturnType<typeof createName>, labelText: string) =>
-      Layer([
+      layer([
         ref(anchor).name("a"),
         text({ text: labelText, fontFamily: "serif", fontWeight: 300, fontSize: 18 }).name(
           "t"
@@ -323,7 +323,7 @@ export const DFSCQ: StoryObj<Args> = {
     // rows via a nested StackV — the single-line text is wider than rect4
     // (100px), so it overflows into the "apply" action label below).
     const LabelLines = (anchor: ReturnType<typeof createName>, lines: string[]) =>
-      Layer([
+      layer([
         ref(anchor).name("a"),
         spread(
           { dir: "y", spacing: 0, alignment: "middle" },
@@ -362,7 +362,7 @@ export const DFSCQ: StoryObj<Args> = {
       diskDataCells,
     ]);
 
-    const applierInner = Layer([
+    const applierInner = layer([
       diskDataRow,
       diskDataTable.name("diskDataTable"),
     ]).relate((c) => [
@@ -416,14 +416,14 @@ export const DFSCQ: StoryObj<Args> = {
     // trailing "flush" callout arrow. Each layer's OWN `.relate()` reads
     // only its own direct children (never a deep cross-tier destructure), so
     // it isn't subject to FRICTION LOG #4.
-    const fanoutAnchorLayer = Layer([
+    const fanoutAnchorLayer = layer([
       rect({ w: 80, h: 1, fill: "transparent" }).name(fanoutAnchorName),
       ref(diskdataStack).name("target"),
     ]).relate((c) => [
       Constraint.distribute({ dir: "y", spacing: 50 }, [c.fanoutAnchor, c.target]),
       Constraint.align({ x: "middle" }, [c.target, c.fanoutAnchor]),
     ]);
-    const blocks1ArrowLayer = Layer([
+    const blocks1ArrowLayer = layer([
       rect({ w: 10, h: 10, fill: "transparent" }).name(blocks1ArrowAnchorName),
       ref(blocks1).name("target"),
     ]).relate((c) => [
@@ -446,7 +446,7 @@ export const DFSCQ: StoryObj<Args> = {
     // the way a `.relate()`-driven node does, so that more literal port
     // of the original doesn't work either.)
     const LOG_DATA_WIDTH = 80 /* rect2 */ + 80 /* rect3 */ + 7 * 10 /* blocks1 */ + 3 * 10; /* blocks2 */
-    const logDataAnchorLayer = Layer([
+    const logDataAnchorLayer = layer([
       ref(rect2).name("a"),
       rect({ w: LOG_DATA_WIDTH, h: BLOCK_H, fill: "transparent" }).name(logDataAnchor),
     ]).relate((c) => [
@@ -478,7 +478,7 @@ export const DFSCQ: StoryObj<Args> = {
       const bottomKey = bottomStub.__tag;
       return [
         // Short vertical drop below the top anchor's edge.
-        Layer([
+        layer([
           ref(topAnchor).name("a"),
           rect({ w: 1, h: 1, fill: "transparent" }).name(topStub),
         ]).relate((c) => [
@@ -486,7 +486,7 @@ export const DFSCQ: StoryObj<Args> = {
           Constraint.align({ x: topEdge }, [c.a, c[topKey]]),
         ]),
         // Short vertical entry above the bottom anchor's edge.
-        Layer([
+        layer([
           rect({ w: 1, h: 1, fill: "transparent" }).name(bottomStub),
           ref(bottomAnchor).name("b"),
         ]).relate((c) => [
@@ -521,7 +521,7 @@ export const DFSCQ: StoryObj<Args> = {
       ];
     };
 
-    Layer({ x: 20, y: 20 }, [
+    layer({ x: 20, y: 20 }, [
       pipelineHead,
       Tick(rect1, "start"),
       Tick(rect2, "start", disklogtick2),
@@ -540,13 +540,13 @@ export const DFSCQ: StoryObj<Args> = {
 
       // "disk log:" / "disk data:" side labels — small, self-contained,
       // ref-anchored (same reasoning as Tick/Label above).
-      Layer([ref(disklogleft).name("a"), ref(mem).name("m"), diskLogLabel]).relate(
+      layer([ref(disklogleft).name("a"), ref(mem).name("m"), diskLogLabel]).relate(
         (c) => [
           Constraint.align({ y: "middle" }, [c.m, c.diskLogLabel]),
           Constraint.align({ x: "end" }, [c.a, c.diskLogLabel]),
         ]
       ),
-      Layer([
+      layer([
         ref(applierleft).name("a"),
         ref(diskdataStack).name("s"),
         diskDataLabel,

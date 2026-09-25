@@ -327,7 +327,7 @@ const DUAL_FORM_OPERATOR_CORES: Array<[string, string]> = [
 ];
 for (const [opType, fnName] of DUAL_FORM_OPERATOR_CORES) {
   const d = OPERATORS[opType];
-  // `debug` (OPERATOR_BASE_FIELDS) is the universal v3-operator escape hatch
+  // `debug` (OPERATOR_BASE_FIELDS) is the universal fluent-operator escape hatch
   // (stripped JS-side by FACTORY_ONLY_KEYS) — every core accepts it.
   parts.push(
     renderOptsCore(

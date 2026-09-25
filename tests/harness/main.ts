@@ -2,7 +2,7 @@
  * Test harness entry point.
  *
  * Reads a chart spec (IR + data + options) from `window.__GOFISH_SPEC__`
- * and renders it using the GoFish v3 API. For derive operators, calls out
+ * and renders it using the GoFish fluent chart API. For derive operators, calls out
  * to the Python derive server over HTTP instead of AnyWidget RPC.
  *
  * The caller (Playwright) sets __GOFISH_SPEC__ via page.evaluate() and then
@@ -11,7 +11,6 @@
 
 import {
   chart,
-  Layer,
   selectAll,
   spread,
   stack,
@@ -59,17 +58,17 @@ import {
   paint,
   mask,
   // `cut` (pure slice primitive → array of slice-node promises) and `cutMark`
-  // (v3 expand-mark form). A `cut` IR node used as a chart `.mark(...)` →
+  // (expand-mark form). A `cut` IR node used as a chart `.mark(...)` →
   // `cutMark`; used as a combinator child → expanded into slices via `cut`.
   // `offset` is the public node operator a `{type:"offset"}` IR node maps to.
   cut as cutSlices,
   cutMark,
   offset as offsetOp,
   createName,
-  Treemap,
   setMeasureProvenance,
   PREVIOUS_LAYER_MARKS,
   GoFishRef,
+  Serialize,
   type ChartBuilder,
   type MeasureProvenance,
   type Operator,
@@ -88,7 +87,7 @@ const COMBINATOR_FACTORIES: Record<
   spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
   // stack/scatter/group/table are dual-mode operators (createOperator) whose
   // `(opts, marks)` overload yields a combinator-form Mark — Python emits the
-  // matching `__combinator: true` IR (e.g. the v1 `stackX`/`stackY` ports).
+  // matching `__combinator: true` IR (e.g. the `stackX`/`stackY` ports).
   stack: (opts, marks) => stack(opts, marks) as unknown as Mark<any>,
   scatter: (opts, marks) => scatter(opts, marks) as unknown as Mark<any>,
   group: (opts, marks) => group(opts, marks) as unknown as Mark<any>,
@@ -105,7 +104,7 @@ const COMBINATOR_FACTORIES: Record<
   // line/ribbon low-level combinator form (replaces the removed connect).
   line: (opts, marks) => line(opts, marks) as unknown as Mark<any>,
   ribbon: (opts, marks) => ribbon(opts, marks) as unknown as Mark<any>,
-  treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
+  treemap: (opts, marks) => treemap(opts, marks) as unknown as Mark<any>,
   // Keys are the IR wire types (UNCHANGED — the serializer never renamed
   // them); values are the renamed (#196/#202) combinator factories. Mirrors
   // packages/gofish-graphics/src/serialize/registry.ts's COMBINATOR_FACTORIES.
@@ -135,7 +134,7 @@ interface ChartHarnessSpec {
   mark: MarkSpec;
   options: Record<string, any>;
   zOrder?: number | null;
-  // Name tagged via `Layer([chart.name(...), ...])` so a layer-level
+  // Name tagged via `layer([chart.name(...), ...])` so a layer-level
   // `.relate(...)` callback can reference the resolved child node.
   name?: string | TokenSentinel | null;
 }
@@ -149,9 +148,9 @@ interface LayerHarnessSpec {
   type: "layer";
   charts: ChartHarnessSpec[];
   options: Record<string, any>;
-  // Relate clauses over the named children of a `Layer([...]).relate(...)`.
+  // Relate clauses over the named children of a `layer([...]).relate(...)`.
   relate?: RelateClauseSpec[];
-  // True for a v3 `chart(...).layer(...)` builder chain: reconstruct through
+  // True for a `chart(...).layer(...)` builder chain: reconstruct through
   // the real LayerBuilder so JS owns the builder's render logic.
   builder?: boolean;
   deriveServerUrl?: string;
@@ -316,65 +315,6 @@ function isTokenSentinel(v: any): v is TokenSentinel {
   );
 }
 
-/**
- * Wrap a Mark so its resolved GoFishNode gets `.scope()` called on it —
- * matches what JS `createMark` does for any component-defined mark. The
- * Python wrapper's `@mark` decorator flags its output with `__scope: true`;
- * this wrapper does the post-resolve call.
- *
- * The inner mark may be a `NameableMark`/`RelatableMark` (which has
- * `.name` / `.label` / `.render` / `.relate` properties); forward all
- * of these so callers can still chain or directly `.render()` a scoped
- * combinator-form mark used at the raw-mark level.
- */
-function wrapWithScope(inner: any): any {
-  const wrapped: any = async (data: any, key: any, layerContext: any) => {
-    const node: any = await Promise.resolve(inner(data, key, layerContext));
-    // Match JS `createMark`'s post-resolve sequence: stamp datum, then
-    // declare a scope boundary. Layout reads `node.datum` during some
-    // bbox / inferRaw passes — missing the stamp shifts text positions
-    // by a pixel or two in the python-tutor stories. We skip the
-    // `node.name(key)` step JS createMark does because (a) the harness's
-    // mapMark already chains `.name(spec.name)` when set, and (b) calling
-    // `.name("")` on a nested combinator child disrupts layer-context
-    // registration when the parent expects un-named children.
-    if (node) {
-      node.datum = data;
-      if (typeof node.scope === "function") {
-        node.scope();
-      }
-      // Match JS `createMark`: the composite is an opaque unit. Ref-name
-      // resolution and z-order flattening both stop at `_isComponent`,
-      // which is otherwise only set by `createMark` itself. Without this,
-      // an inner `layer` produced by a Python `@mark`-decorated function
-      // would be transparent — flattenForZOrder would descend into it and
-      // emit its children as separate paint items.
-      node._isComponent = true;
-    }
-    return node;
-  };
-  // `Function.prototype.name` and other built-ins are read-only — use
-  // defineProperty to override them on the wrapper function.
-  const define = (key: string, value: any) =>
-    Object.defineProperty(wrapped, key, {
-      value,
-      writable: true,
-      configurable: true,
-    });
-  if (typeof inner.render === "function") {
-    define("render", async (container: any, options: any) => {
-      const node: any = await wrapped(undefined, undefined, undefined);
-      return node.render(container, options);
-    });
-  }
-  for (const key of ["name", "label", "relate"] as const) {
-    if (typeof inner[key] === "function") {
-      define(key, (...args: any[]) => wrapWithScope(inner[key](...args)));
-    }
-  }
-  return wrapped;
-}
-
 declare global {
   interface Window {
     __GOFISH_SPEC__: HarnessSpec | null;
@@ -457,7 +397,7 @@ function mapOperator(
         })
       );
     }
-    // Modern v3 operators all take a single options object with `by`,
+    // The fluent operators all take a single options object with `by`,
     // `dir`, etc. as keyword args. The previous `field`-positional shape
     // was stale and silently miscalled most ops.
     case "spread":
@@ -712,7 +652,7 @@ function mapMark(
     );
   }
 
-  // `cut` mark in a chart `.mark(...)` position → the v3 expand-mark form
+  // `cut` mark in a chart `.mark(...)` position → the expand-mark form
   // (`cutMark`). The field-name-string `size` sugar resolves per-row here. (A
   // `cut` used as a combinator CHILD is expanded into its N slice nodes in
   // place by `mapMarkChildren` — extent resolution lives in ONE place, JS.)
@@ -781,10 +721,10 @@ function mapMark(
         )
       );
     }
-    // `@mark`-decorated components flag their output for a
-    // `node.scope()` post-resolution pass — wrap before applying name.
+    // `@mark`-decorated components flag their output as a scope boundary
+    // (what JS `createMark` makes a component) — wrap before applying name.
     if (spec.__scope) {
-      mark = wrapWithScope(mark);
+      mark = Serialize.wrapWithScope(mark);
     }
     mark = applyTranslate(mark);
     const nameVal = resolveNameField(spec.name, resolveToken);
@@ -833,7 +773,7 @@ function mapMark(
     }
   }
   if (spec.__scope) {
-    mark = wrapWithScope(mark);
+    mark = Serialize.wrapWithScope(mark);
   }
   mark = applyTranslate(mark);
   const nameVal = resolveNameField(layerName, resolveToken);
@@ -1035,13 +975,13 @@ function renderChart(spec: HarnessSpec) {
             ...paddingOpt,
           } as any);
         } else if (spec.builder) {
-          // v3 `chart(...).layer(...)` chain: reconstruct through the real
+          // Fluent `chart(...).layer(...)` chain: reconstruct through the real
           // LayerBuilder so JS owns the builder's render logic (inferred axis
           // titles, etc.) instead of re-deriving it here. The child charts are
           // already wired (producer mark named, consumer reads selectAll), so
           // chaining `.layer()` just stacks them.
           //
-          // Unlike the combinator `Layer(...)` path below, a real builder
+          // Unlike the combinator `layer(...)` path below, a real builder
           // chain's `.render()` is normally called *without* an `axes` key at
           // all — LayerBuilder.render → resolveForRender reads `axes` from
           // the root tier's own chart options (`rootChart().renderMeta()`)
@@ -1064,8 +1004,8 @@ function renderChart(spec: HarnessSpec) {
         } else {
           const layerNode =
             Object.keys(layerOpts).length > 0
-              ? Layer(layerOpts as any, childCharts)
-              : Layer(childCharts);
+              ? layer(layerOpts as any, childCharts)
+              : layer(childCharts);
 
           await layerNode.render(container, {
             w,

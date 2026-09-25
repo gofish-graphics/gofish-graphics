@@ -1,4 +1,4 @@
-import { createMark, rect, Spread } from "../../../src/lib";
+import { createMark, rect, spread } from "../../../src/lib";
 import { heapObject } from "./heapObject";
 import { Address, formatValue, HeapObject } from "./types";
 
@@ -9,10 +9,10 @@ export interface HeapProps {
 
 export const heap = createMark(
   ({ heap: heapObjects, heapArrangement }: HeapProps) =>
-    Spread(
+    spread(
       { dir: "y", alignment: "start", spacing: 75 },
       heapArrangement.map((row) =>
-        Spread(
+        spread(
           { dir: "x", alignment: "end", spacing: 75 },
           row.map((address) =>
             address === null

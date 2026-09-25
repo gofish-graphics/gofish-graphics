@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { newCarColors } from "../../src/data/newCarColors";
-import { frame, spread, line, ellipse, For, v } from "../../src/lib";
+import { frame, spread, line, ellipse, map, v } from "../../src/lib";
 import { groupBy } from "lodash";
 import _ from "lodash";
 
@@ -25,7 +25,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     frame({}, [
-      For(groupBy(newCarColors, "Year"), (d, key) =>
+      map(groupBy(newCarColors, "Year"), (d, key) =>
         spread(
           {
             dir: "y",
@@ -33,7 +33,7 @@ export const Default: StoryObj<Args> = {
             spacing: 16,
             alignment: "start",
           },
-          For(_.sortBy(d, "Rank"), (d) =>
+          map(_.sortBy(d, "Rank"), (d) =>
             ellipse({ w: 8, h: 8, fill: v(d.Color) }).name(
               `${d.Color}-${d.Year}`
             )
@@ -42,12 +42,12 @@ export const Default: StoryObj<Args> = {
       ),
     ])
       .relate((names) =>
-        For(groupBy(newCarColors, "Color"), (d) =>
+        map(groupBy(newCarColors, "Color"), (d) =>
           line(
             // Default curve: the connection (y) axis is the ordinal rank stack,
             // so it resolves to straight segments between each year's rank.
             { dir: "y", strokeWidth: 2 },
-            For(d, (d) => names[`${d.Color}-${d.Year}`])
+            map(d, (d) => names[`${d.Color}-${d.Year}`])
           )
         )
       )

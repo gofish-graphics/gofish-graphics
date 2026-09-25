@@ -2,7 +2,7 @@ import { GoFishNode } from "../_node";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
 import type { AxesOptions } from "../gofish";
-import { Mark, Operator } from "../types";
+import { Mark, MarkChild, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
@@ -59,7 +59,7 @@ export type LayerContext = {
  * createOperator imports from chartBuilder, never the other direction.
  */
 export async function resolveMarkResult(
-  raw: ReturnType<Mark<any>> | LayerBuilder,
+  raw: MarkChild,
   layerContext?: LayerContext
 ): Promise<GoFishNode> {
   // Mark functions are typed as sync-returning, but async marks are a

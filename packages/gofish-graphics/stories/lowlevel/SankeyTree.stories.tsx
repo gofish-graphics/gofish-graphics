@@ -7,7 +7,7 @@ import {
   spreadY,
   stackY,
   rect,
-  For,
+  map,
   ribbon,
 } from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
@@ -45,7 +45,7 @@ export const Default: StoryObj = {
           // y-down: reverse every vertical ordering so the tiers read the same
           // way they did under the old y-up convention. See issue #143/#16.
           { spacing: 0, alignment: "middle", reverse: true },
-          For(groupBy(titanic, "class"), (items, cls) =>
+          map(groupBy(titanic, "class"), (items, cls) =>
             rect({
               w: 40,
               h: _(items).sumBy("count") / 10,
@@ -55,11 +55,11 @@ export const Default: StoryObj = {
         ),
         spreadY(
           { spacing: internalSpacing, alignment: "middle", reverse: true },
-          For(groupBy(titanic, "class"), (items, cls) =>
+          map(groupBy(titanic, "class"), (items, cls) =>
             spreadX({ spacing: layerSpacing, alignment: "middle" }, [
               stackY(
                 { spacing: 0, alignment: "middle", reverse: true },
-                For(groupBy(items, "sex"), (items, sex) =>
+                map(groupBy(items, "sex"), (items, sex) =>
                   rect({
                     w: 40,
                     h: _(items).sumBy("count") / 10,
@@ -74,7 +74,7 @@ export const Default: StoryObj = {
                   alignment: "middle",
                   reverse: true,
                 },
-                For(groupBy(items, "sex"), (items, sex) =>
+                map(groupBy(items, "sex"), (items, sex) =>
                   spreadX({ spacing: layerSpacing, alignment: "middle" }, [
                     stackY(
                       {
@@ -82,7 +82,7 @@ export const Default: StoryObj = {
                         alignment: "middle",
                         reverse: true,
                       },
-                      For(
+                      map(
                         groupBy(items, "survived"),
                         (survivedItems, survived) =>
                           rect({
@@ -99,7 +99,7 @@ export const Default: StoryObj = {
                         alignment: "middle",
                         reverse: true,
                       },
-                      For(
+                      map(
                         groupBy(items, "survived"),
                         (survivedItems, survived) => {
                           return rect({
@@ -125,7 +125,7 @@ export const Default: StoryObj = {
       ]),
     ])
       .relate((names) =>
-        For(groupBy(titanic, "class"), (items, cls) => [
+        map(groupBy(titanic, "class"), (items, cls) => [
           ribbon(
             {
               dir: "x",
@@ -136,7 +136,7 @@ export const Default: StoryObj = {
             },
             [names[`${cls}-src`], names[`${cls}-tgt`]]
           ),
-          For(groupBy(items, "sex"), (sexItems, sex) => [
+          map(groupBy(items, "sex"), (sexItems, sex) => [
             ribbon(
               {
                 dir: "x",
@@ -147,7 +147,7 @@ export const Default: StoryObj = {
               },
               [names[`${cls}-${sex}-src`], names[`${cls}-${sex}-tgt`]]
             ),
-            For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
+            map(groupBy(sexItems, "survived"), (survivedItems, survived) =>
               ribbon(
                 {
                   dir: "x",

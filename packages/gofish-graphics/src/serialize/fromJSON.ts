@@ -174,11 +174,19 @@ export function unwrapValues(value: any): any {
 export function wrapWithScope(inner: any): any {
   const wrapped: any = async (data: any, key: any, layerContext: any) => {
     const node: any = await Promise.resolve(inner(data, key, layerContext));
+    // Match JS `createMark`'s post-resolve sequence: stamp datum, then
+    // declare a scope boundary. Layout reads `node.datum` during some
+    // bbox / inferRaw passes. The `node.name(key)` step createMark does is
+    // skipped: `mapMark` already chains `.name(spec.name)` when set, and
+    // `.name("")` on a nested combinator child disrupts layer-context
+    // registration when the parent expects un-named children.
     if (node) {
       node.datum = data;
       if (typeof node.scope === "function") {
         node.scope();
       }
+      // The composite is an opaque unit: ref-name resolution and z-order
+      // flattening both stop at `_isComponent`.
       node._isComponent = true;
     }
     return node;
@@ -494,7 +502,7 @@ export function mapMark(
     );
   }
 
-  // `cut` mark in a chart `.mark(...)` position → the v3 expand-mark form
+  // `cut` mark in a chart `.mark(...)` position → the expand-mark form
   // (`cutMark`). The data-bound expand path treats it as an expand mark; the
   // field-name-string `size` sugar resolves per-row here. (A `cut` used as a
   // combinator CHILD is instead expanded into its N slice nodes IN PLACE — see
