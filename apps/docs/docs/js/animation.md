@@ -207,7 +207,8 @@ so the window is a single moment and a threaded line draws nothing.
 When the marks a line connects are made of several parts, e.g., a
 `layer([...])` with a `time.history` around one of them, the line uses the
 window of the part that stays longest, the way the mark's box holds all of its
-parts. A `time.history` around the line itself is an error, because the line
+parts. In the same way, when the marks it connects stay for different spans of
+time, the line uses the longest one. A `time.history` around the line itself is an error, because the line
 takes its window from the marks it connects.
 
 A line is threaded through the keyframes when its points belong to different

@@ -368,6 +368,33 @@ console.log("# lifetimes: the nearest time.history, and the union of parts");
     "a history outside the keyframe does not reach into it",
     lifetimeOf(head) === 0
   );
+  ok(
+    "a ref lives as long as the mark it refers to",
+    lifetimeOf({ targetNode: dot }) === 10
+  );
+}
+
+console.log("# one rule per keyframe and lifetime");
+{
+  let T = 2000;
+  const sequence = sequenceWindow(
+    () => [1999, 2000, 2001],
+    () => T
+  );
+  const rule = sequence.rule(1, 0);
+  ok(
+    "every mark of a keyframe with one lifetime shares its rule",
+    sequence.rule(1, 0) === rule &&
+      sequence.rule(1, 5) !== rule &&
+      sequence.rule(0, 0) !== rule
+  );
+  const shownThen = rule();
+  T = 2001;
+  ok("and the rule reads the playhead", shownThen && !rule());
+  ok(
+    "a keyframe's place, and none for a time that is not one",
+    sequence.indexOf(2001) === 2 && sequence.indexOf(2002) === -1
+  );
 }
 
 console.log("# a cyclic time axis");

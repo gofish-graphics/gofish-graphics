@@ -101,19 +101,6 @@ function sequenceKeyframes(children: GoFishAST[]): Keyframe[] | undefined {
   return found;
 }
 
-/**
- * The lifetime of the marks a connector's operands are (`lifetimeOf`), the
- * one `last` of every operand. Undefined when the operands' lifetimes differ,
- * which a line threaded through them cannot be drawn over yet: its window
- * would change from one step to the next.
- */
-function operandLifetime(children: GoFishAST[]): number | undefined {
-  const lifetimes = new Set(
-    children.map((child) => lifetimeOf(targetOf(child) as any))
-  );
-  return lifetimes.size === 1 ? [...lifetimes][0] : undefined;
-}
-
 /** Whether `node` sits under a `time.history`. */
 function underHistory(node: GoFishNode): boolean {
   for (let n = node.parent; n !== undefined; n = n.parent) {
@@ -272,24 +259,16 @@ export const connect = createNodeOperator(
           const threadsTime =
             keyframes !== undefined &&
             keyframes.some((k) => k.t !== keyframes[0].t);
+          // The lifetime the connector is read by is the union of its
+          // operands' (`lifetimeOf`), as a mark's is the union of its parts'.
+          const last =
+            keyframes === undefined
+              ? undefined
+              : Math.max(...children.map((c) => lifetimeOf(c as any)));
           if (keyframes !== undefined && !threadsTime) {
             node.INTERNAL_visibleWhile(
               keyframes[0].sequence,
-              lifetimeRule(
-                keyframes[0],
-                Math.max(...children.map((c) => lifetimeOf(targetOf(c) as any)))
-              )
-            );
-          }
-          const last = threadsTime ? operandLifetime(children) : undefined;
-          if (threadsTime && last === undefined) {
-            throw new Error(
-              `[gofish] line(): this line threads the keyframes of a ` +
-                `time.sequence, and the marks it connects stay on screen for ` +
-                `different spans of time (different time.history windows), ` +
-                `so its own window would change from one step to the next. ` +
-                `That is not built yet: give every keyframe's mark the same ` +
-                `time.history.`
+              lifetimeRule(keyframes[0], last!)
             );
           }
           if (threadsTime && underHistory(node)) {

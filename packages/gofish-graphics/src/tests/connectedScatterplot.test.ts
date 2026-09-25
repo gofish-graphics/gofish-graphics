@@ -655,6 +655,34 @@ async function main(): Promise<void> {
     ok("keyframes spanning more than one period throw", !why, why);
   }
 
+  console.log("\n# a line over marks that stay for different spans");
+  {
+    // The years before 1970 keep five years back, the rest everything: the
+    // line is read by the union of its operands' lifetimes, the longest.
+    const mixed = (d: any, key: any, ctx: any) => {
+      const row = Array.isArray(d) ? d[0] : d;
+      const dot = [circle({ r: 4 })];
+      return (
+        row.year < 1970 ? time.history({ last: 5 }, dot) : time.history(dot)
+      )(d, key, ctx);
+    };
+    const drawn = async (mark: any) =>
+      JSON.stringify(
+        lineSegments(
+          await keyframes(drivingShifts, 1979.5)
+            .mark(mark)
+            .layer(line({ along: "year", curve: "linear" }))
+            .toDisplayList(OPTIONS)
+        )
+      );
+    const union = await drawn(mixed);
+    ok(
+      "is drawn over the union of their windows",
+      union === (await drawn(time.history([circle({ r: 4 })]))),
+      union.slice(0, 120)
+    );
+  }
+
   console.log("\n# several chained marks in one keyframe");
   {
     const near = (p: Point, q: Point) =>

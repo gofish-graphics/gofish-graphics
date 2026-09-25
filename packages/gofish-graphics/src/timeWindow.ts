@@ -309,7 +309,13 @@ export function markSequence(frame: object, sequence: SequenceWindow): void {
   sequences.set(frame, sequence);
 }
 
-type TreeNode = { parent?: unknown; key?: unknown; children?: unknown[] };
+/** A node of the tree, or a ref to one (`targetNode`). */
+type TreeNode = {
+  parent?: unknown;
+  key?: unknown;
+  children?: unknown[];
+  targetNode?: TreeNode;
+};
 
 /**
  * The keyframe `node` is part of. A sequence lays its keyframes out as the
@@ -379,9 +385,11 @@ export function historiesIn(node: TreeNode): TreeNode[] {
  * keyframe's band (`last = 0`) when there is none between it and its
  * keyframe. A `time.history` sets the lifetime of everything under it, and
  * one nearer a mark wins. Lifetimes of one keyframe are nested windows ending
- * at the playhead, so their union is the longest.
+ * at the playhead, so their union is the longest. A ref lives as long as the
+ * mark it refers to.
  */
-export function lifetimeOf(node: TreeNode): number {
+export function lifetimeOf(mark: TreeNode): number {
+  const node = mark.targetNode ?? mark;
   let inherited = 0;
   for (let n: TreeNode | undefined = node; n !== undefined; ) {
     const last = histories.get(n);
