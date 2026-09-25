@@ -29,7 +29,9 @@
  *
  * A chart whose flow has a `time.sequence` plays DATA time instead: its marks
  * enter, move and leave with the data, through `time.transition()`, so the
- * walk leaves those tiers alone (`playsDataTime`).
+ * walk plays none of those tiers (`playsDataTime`). It still checks their
+ * records, as it checks every record against the clock that plays it
+ * (`checkPhases`): the walk is where that clock is known.
  */
 import { GoFishNode } from "../ast/_node";
 import type { GoFishAST } from "../ast/_ast";
@@ -50,7 +52,7 @@ import {
   type Clip,
   type Schedule,
 } from "./schedule";
-import { nodeTransition, playsDataTime } from "./transition";
+import { checkPhases, nodeTransition, playsDataTime } from "./transition";
 
 /** How to play the build clock: the render options `playing` and `at`,
  *  which mirror `time.sequence`'s. `playing: false` holds the chart still at
@@ -193,26 +195,18 @@ function leavesOf(node: GoFishNode): GoFishNode[] {
 /**
  * The timeline under `node`. `underArrangement` says an operator above has an
  * enter arrangement: a mark under one with no effect of its own enters with
- * `animation.fadeIn()`, the default #892 gives an entering mark.
+ * `animation.fadeIn()`, the default #892 gives an entering mark. Every record
+ * the walk meets is checked against the clock that plays it (`checkPhases`).
  */
 function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
-  if (!(node instanceof GoFishNode) || playsDataTime(node)) return undefined;
-  const record = nodeTransition(node);
-  const phases = [
-    ...(record?.update !== undefined ? ["update"] : []),
-    ...(record?.exit !== undefined || record?.exitArrangement !== undefined
-      ? ["exit"]
-      : []),
-  ];
-  if (phases.length > 0) {
-    throw new Error(
-      `[gofish] .transition({ ${phases.join(", ")} }): in a chart with no ` +
-        `time.sequence, marks enter once, on the first render, and nothing ` +
-        `updates or leaves after that. Update and exit phases need a data ` +
-        `change to trigger them, which this prototype does not have.`
-    );
+  if (!(node instanceof GoFishNode)) return undefined;
+  if (playsDataTime(node)) {
+    checkDataTime(node);
+    return undefined;
   }
-  if (record?.enter !== undefined) {
+  const record = nodeTransition(node);
+  if (record !== undefined) checkPhases(record, false);
+  if (record?.kind === "mark" && record.enter !== undefined) {
     return {
       kind: "leaf",
       found: { effects: record.enter, targets: record.targets ?? [node] },
@@ -221,8 +215,8 @@ function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
   const kids = node.children.filter(
     (c): c is GoFishNode => c instanceof GoFishNode
   );
-  if (record?.arrangement !== undefined) {
-    const { by, ...arrangement } = record.arrangement;
+  if (record?.kind === "operator" && record.enter !== undefined) {
+    const { by, ...arrangement } = record.enter;
     const children = kids
       .map((kid) => ({ kid, clip: clipOf(kid, true) }))
       .filter((c): c is { kid: GoFishNode; clip: Draft } => !!c.clip);
@@ -249,4 +243,13 @@ function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
     arrangement: { kind: "parallel" },
     groups: clips.map((c) => [c]),
   };
+}
+
+/** Check the records under a subtree that plays data time. The build-in
+ *  plays none of it: its marks enter and leave with the data. */
+function checkDataTime(node: GoFishAST): void {
+  if (!(node instanceof GoFishNode)) return;
+  const record = nodeTransition(node);
+  if (record !== undefined) checkPhases(record, true);
+  for (const child of node.children) checkDataTime(child);
 }

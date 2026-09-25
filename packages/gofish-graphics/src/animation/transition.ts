@@ -54,20 +54,28 @@ export type OperatorTransition = {
   exit?: TimeArrangement;
 };
 
-/** What a node records. A mark records effects; the selection form's leaf
- *  also names the marks it animates (`targets`), where a chained mark
- *  animates itself. An operator records how its children are arranged in
- *  time, per phase: `arrangement` as they enter (the build-in reads it),
- *  `update` as they move between two keyframes of a sequence
- *  (`time.transition()` reads it), `exitArrangement` as they leave. */
-export type NodeTransition = {
-  enter?: Effect[];
-  exit?: Effect[];
-  targets?: GoFishNode[];
-  arrangement?: ArrangementSpec;
-  update?: ArrangementSpec;
-  exitArrangement?: ArrangementSpec;
-};
+/** What a node records, per phase. A MARK records how it looks: its enter
+ *  and exit effects, and under a sequence the tween it moves by; the
+ *  selection form's leaf also names the marks it animates (`targets`), where
+ *  a chained mark animates itself. An OPERATOR records how its children are
+ *  arranged in time: as they enter (the build-in reads it), as they move
+ *  between two keyframes of a sequence (`time.transition()` reads it), and as
+ *  they leave. Which phases can play depends on the chart's clock, so they
+ *  are checked where that is known (`checkPhases`). */
+export type NodeTransition =
+  | {
+      kind: "mark";
+      enter?: Effect[];
+      update?: TweenEffect;
+      exit?: Effect[];
+      targets?: GoFishNode[];
+    }
+  | {
+      kind: "operator";
+      enter?: ArrangementSpec;
+      update?: ArrangementSpec;
+      exit?: ArrangementSpec;
+    };
 
 const records = new WeakMap<GoFishNode, NodeTransition>();
 
@@ -93,12 +101,14 @@ export function recordMarkTransition(
     );
   }
   records.set(node, {
+    kind: "mark",
     enter: effectList(spec.enter, `${where} enter`),
+    update: spec.update,
     exit: effectList(spec.exit, `${where} exit`),
   });
 }
 
-export function arrangementOf(
+function arrangementOf(
   value: unknown,
   where: string
 ): ArrangementSpec | undefined {
@@ -121,9 +131,10 @@ export function recordOperatorTransition(
 ): void {
   const where = "operator.transition()";
   records.set(node, {
-    arrangement: arrangementOf(spec.enter, `${where} enter`),
+    kind: "operator",
+    enter: arrangementOf(spec.enter, `${where} enter`),
     update: arrangementOf(spec.update, `${where} update`),
-    exitArrangement: arrangementOf(spec.exit, `${where} exit`),
+    exit: arrangementOf(spec.exit, `${where} exit`),
   });
 }
 
@@ -137,17 +148,53 @@ export const markDataTime = (node: GoFishNode): void => {
 export const playsDataTime = (node: GoFishNode): boolean => dataTime.has(node);
 
 /**
+ * Check a node's record against the clock that plays it. With no
+ * `time.sequence` (the build-in) marks enter once, on the first render, and
+ * nothing updates or leaves after that. Under one, marks enter, move and
+ * leave with the data, one stretch at a time: an operator can arrange only
+ * its children's moves (`update`), and a mark enters and leaves only by the
+ * tween's fade in place (`checkSequencePhases`).
+ */
+export function checkPhases(
+  record: NodeTransition,
+  underSequence: boolean
+): void {
+  if (!underSequence) {
+    const phases = (["update", "exit"] as const).filter(
+      (phase) => record[phase] !== undefined
+    );
+    if (phases.length > 0) {
+      throw new Error(
+        `[gofish] .transition({ ${phases.join(", ")} }): in a chart with no ` +
+          `time.sequence, marks enter once, on the first render, and nothing ` +
+          `updates or leaves after that. Update and exit phases need a data ` +
+          `change to trigger them, which this prototype does not have.`
+      );
+    }
+  } else if (record.kind === "mark") {
+    checkSequencePhases(record, "mark.transition() under a time.sequence");
+  } else if (record.enter !== undefined || record.exit !== undefined) {
+    throw new Error(
+      `[gofish] operator.transition({ enter / exit }) under a ` +
+        `time.sequence: marks enter and leave with the data there, one ` +
+        `stretch at a time, so arranging them is not in this prototype. ` +
+        `\`update: time.stagger(...)\` is.`
+    );
+  }
+}
+
+/**
  * Under a `time.sequence`, a mark's `.transition()` is the chained spelling
  * of today's `.layer(time.transition({ curve, ease }))`: `update` says how the
  * mark moves between years, and the tier that moves it is returned here for
  * the chart builder to layer. Entering and leaving marks fade in place over
  * the stretch between two keyframes (the #892 default), which is what
  * `enter: animation.fadeIn()` and `exit: animation.fadeOut()` say; other
- * enter and exit effects under a sequence are not in this prototype.
+ * enter and exit effects under a sequence are not in this prototype (the
+ * build checks them, `checkPhases`).
  */
 export function tweenTierFor(spec: MarkTransition): unknown {
   const where = "mark.transition() under a time.sequence";
-  checkSequencePhases(spec, where);
   if (spec.update === undefined) {
     throw new Error(
       `[gofish] ${where}: give \`update: animation.tween({ curve })\`, how ` +

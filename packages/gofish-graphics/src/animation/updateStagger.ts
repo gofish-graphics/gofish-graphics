@@ -74,8 +74,10 @@ function slotsOf(
 export function updateSlotOf(mark: GoFishNode): UpdateSlot | undefined {
   for (let n: GoFishNode = mark; n.parent instanceof GoFishNode; ) {
     const parent: GoFishNode = n.parent;
-    const spec = nodeTransition(parent)?.update;
-    if (spec !== undefined) return slotsOf(parent, spec).get(n);
+    const record = nodeTransition(parent);
+    if (record?.kind === "operator" && record.update !== undefined) {
+      return slotsOf(parent, record.update).get(n);
+    }
     n = parent;
   }
   return undefined;

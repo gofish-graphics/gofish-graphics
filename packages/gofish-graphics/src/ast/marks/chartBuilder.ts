@@ -984,25 +984,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     collectLayerRegistrations(node, this.state.layerContext);
 
     // A flow with a `time.sequence` plays DATA time: its marks enter and
-    // leave with the data, so the build-in leaves this tier alone.
-    if (findTimeTier(this.state.operators) !== undefined) {
-      markDataTime(node);
-      // An operator's `update` arrangement is read by `time.transition()`
-      // (a staggered move between keyframes). Its children never enter or
-      // leave all at once under a sequence, so those phases are not built.
-      const arranged = this.state.operators.find((op) => {
-        const spec = (op as any).__transition;
-        return spec?.enter !== undefined || spec?.exit !== undefined;
-      });
-      if (arranged !== undefined) {
-        throw new Error(
-          `[gofish] operator.transition({ enter / exit }) under a ` +
-            `time.sequence: marks enter and leave with the data there, one ` +
-            `stretch at a time, so arranging them is not in this prototype. ` +
-            `\`update: time.stagger(...)\` is.`
-        );
-      }
-    }
+    // leave with the data, so the build-in only checks this tier's
+    // transitions against that clock (`src/animation/install.ts`).
+    if (findTimeTier(this.state.operators) !== undefined) markDataTime(node);
 
     // Embed colorConfig on the node so it survives .resolve() inside Layer
     if (this.state.options?.color) {

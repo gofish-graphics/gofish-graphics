@@ -728,9 +728,8 @@ function attachLabelOption<T extends object>(
 /**
  * Attach `.transition(spec)` to an operator (traversal form). Like `.label()`,
  * the spec is closed-over state the executing operator reads (once per
- * `.flow()` run) and records on the node it builds; it is also tagged on the
- * operator (`__transition`) so the chart builder can see it. Returns `target`
- * so the call chains.
+ * `.flow()` run) and records on the node it builds. Returns `target` so the
+ * call chains.
  */
 function attachTransitionOption<T extends object>(
   target: T,
@@ -739,7 +738,6 @@ function attachTransitionOption<T extends object>(
   Object.defineProperty(target, "transition", {
     value: (spec: OperatorTransition) => {
       setTransition(spec);
-      (target as any).__transition = spec;
       return target;
     },
     writable: true,
@@ -793,9 +791,6 @@ function translateOperator<T, U>(
     attachTransitionOption(withTranslate, (spec) =>
       (operator as any).transition(spec)
     );
-  }
-  if ((operator as any).__transition) {
-    (withTranslate as any).__transition = (operator as any).__transition;
   }
   return withTranslate;
 }

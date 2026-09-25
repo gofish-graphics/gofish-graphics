@@ -69,7 +69,7 @@ function timeOperator(spec: ArrangementSpec): TimeArrangementOperator {
       const node = (await Frame({}, children)) as GoFishNode;
       // The split below already put each group in its own child.
       const { by: _spent, ...arrangement } = spec;
-      setNodeTransition(node, { arrangement });
+      setNodeTransition(node, { kind: "operator", enter: arrangement });
       return node;
     },
     {
@@ -92,14 +92,18 @@ export const parallel = (): TimeArrangementOperator =>
   timeOperator({ kind: "parallel" });
 
 /**
- * The selection form's leaf: the marks `operands` point at enter with
- * `effects`, together. It lays its operands out the way a connector does (by
- * their own placed boxes) so its box is theirs and it moves nothing, and it
- * draws nothing itself: the marks animate in place, under the rule the build
+ * The selection form's leaf: the marks `operands` point at enter with the
+ * `enter` effects, together (and would leave with `exit`, which the build
+ * refuses). It lays its operands out the way a connector does (by their own
+ * placed boxes) so its box is theirs and it moves nothing, and it draws
+ * nothing itself: the marks animate in place, under the rule the build
  * installs on them.
  */
 export const buildIn = createNodeOperator(
-  ({ effects }: { effects: Effect[] }, children: GoFishAST[]) => {
+  (
+    { enter, exit }: { enter: Effect[]; exit?: Effect[] },
+    children: GoFishAST[]
+  ) => {
     const node = new GoFishNode(
       {
         type: "buildIn",
@@ -137,7 +141,9 @@ export const buildIn = createNodeOperator(
     // siblings no constraint relates; remove this once it doesn't.
     node.zOrder(0);
     setNodeTransition(node, {
-      enter: effects,
+      kind: "mark",
+      enter,
+      exit,
       targets: children
         .map(targetOf)
         .filter((t): t is GoFishNode => t !== undefined),

@@ -340,10 +340,11 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
 the execution closure records it on the node `layout` builds
 (`recordOperatorTransition`), so the build-in can read the operator's
 arrangement of its children off the resolved tree. `translateOperator`
-delegates `.transition()` to the base operator, as it does `.label()`. The
-spec is also tagged on the operator itself (`__transition`), so the chart
-builder can refuse an arrangement under a `time.sequence`, where it is not
-built yet. Animation is JavaScript-only, so nothing reaches the IR.
+delegates `.transition()` to the base operator, as it does `.label()`. Which
+phases can play depends on the chart's clock, so the build-in checks the
+recorded phases when it reads them (`checkPhases`), including an arrangement
+under a `time.sequence`, where it is not built yet. Animation is
+JavaScript-only, so nothing reaches the IR.
 
 ## 8. The relationship with `createMark`
 

@@ -263,22 +263,19 @@ export const transition = createRelationalMark<TransitionOptions>(
   (o, children, inferred) => {
     const tier = inferred.time;
     // BUILD MODE: no keyframes at all, so the transition is from the empty
-    // chart and every selected mark enters (`src/animation/`).
+    // chart and every selected mark enters (`src/animation/`), which checks
+    // the phases against that clock.
     if (
       tier === undefined &&
       o.along === undefined &&
       o.at === undefined &&
       o.enter !== undefined
     ) {
-      if (o.exit !== undefined) {
-        throw new Error(
-          `[gofish] time.transition({ exit }): with no time.sequence the ` +
-            `marks enter once and never leave, so an exit has nothing to ` +
-            `trigger it in this prototype.`
-        );
-      }
       return buildIn(
-        { effects: effectList(o.enter, "time.transition({ enter })")! },
+        {
+          enter: effectList(o.enter, "time.transition({ enter })")!,
+          exit: effectList(o.exit, "time.transition({ exit })"),
+        },
         children
       );
     }
