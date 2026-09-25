@@ -1,5 +1,4 @@
-import { GoFishNode, type Placeable } from "../_node";
-import { GoFishRef } from "../_ref";
+import type { Placeable } from "../_node";
 import type { GoFishAST } from "../_ast";
 import type { AxisMap } from "../domain";
 import { isToken, type Token } from "../createName";
@@ -25,7 +24,11 @@ export type AlignAnchor = Alignment | "baseline";
  *  a box, so `position`/`distribute` do not accept them. */
 export type AlignValue = AlignAnchor | "span" | "size";
 
-/** Lightweight handle for referencing a named child inside .constrain() */
+/**
+ * A constraint operand: a node NAME, resolved at layout from the constrained
+ * layer with the same lookup `ref("name")` uses (`resolveScopedName`), and the
+ * operand's key in the placement solve.
+ */
 export type ConstraintRef = { readonly name: string };
 
 /** Per-axis data→pixel position maps, as built by `layer.tsx` and consumed
@@ -58,33 +61,43 @@ export const childNameKey = (node: NamedNode): string | undefined => {
   return isToken(n) ? n.__tag : n;
 };
 
+let internalNameCount = 0;
+
 /**
- * Give every child a UNIQUE constraint name and return the names in order, so an
- * operator that elaborates to `layer(children).constrain(...)` (spread, scatter)
- * can reference each child. Reuses an existing name/key; else synthesizes
- * `__${prefix}_${i}`. Two subtleties both elaborations need:
- *   - `||` not `??`: an EMPTY-string name is as useless as a missing one (it's
- *     falsy, so the layer's phase-1 `!childName` guard would baseline-place a
- *     constraint target).
- *   - duplicates are disambiguated (cut returns N slices that all carry the
- *     source mark's name — without this they collapse onto one placeable).
- * The (possibly new) name is written back to `_name` ONLY when it changed, so an
- * unchanged `createName` Token survives for token-based `ref`/`selectAll`. A
- * `ref` child is a GoFishRef proxy (not a GoFishNode) but carries `_name` too.
+ * A fresh name for a node the library itself names so a constraint can refer
+ * to it (an operator's child, an axis tier, a label). Unique per call, so it
+ * can never equal a name a user wrote or another library name: a library name
+ * never clashes with a user's `.name("…")` in the string-name lookup, and two
+ * operators' names never make each other ambiguous.
+ */
+export const internalName = (kind: string): string =>
+  `__${kind}#${++internalNameCount}`;
+
+/**
+ * Give every child a constraint name that is unique among the children and
+ * return the names in order, so an operator that elaborates to
+ * `layer(children).constrain(...)` (spread, scatter, table) can refer to each
+ * child. A child the user named keeps its name; an unnamed child, or a second
+ * child with the same user name (cut returns N slices that all carry the
+ * source mark's name), gets an `internalName`. The data key is never used as a
+ * name: it is data, not a name the user wrote. The (possibly new) name is
+ * written back to `_name` ONLY when it changed, so an unchanged `createName`
+ * Token survives for token-based `ref`/`selectAll`. A `ref` child is a
+ * GoFishRef proxy (not a GoFishNode) but carries `_name` too.
  */
 export const ensureChildNames = (
   children: GoFishAST[],
   prefix: string
 ): string[] => {
   const used = new Set<string>();
-  return children.map((c, i) => {
+  return children.map((c) => {
     const existing = childNameKey(c);
-    let nm =
-      existing || (c instanceof GoFishNode && c.key) || `__${prefix}_${i}`;
-    if (used.has(nm)) nm = `${nm}__${prefix}_${i}`;
+    const nm =
+      existing !== undefined && !used.has(existing)
+        ? existing
+        : internalName(prefix);
     used.add(nm);
-    if (nm !== existing && (c instanceof GoFishNode || c instanceof GoFishRef))
-      c._name = nm;
+    if (nm !== existing) c._name = nm;
     return nm;
   });
 };

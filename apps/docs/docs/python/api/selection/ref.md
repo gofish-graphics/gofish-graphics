@@ -101,6 +101,11 @@ internal to that component — it is not selectable from outside. This is the sa
 component-boundary rule that string-name `ref` resolution always followed
 inline, so the inline-layout and chart-data lookup paths share one scoping rule.
 
+Within that boundary the two positions differ in reach. As chart data, a name
+selects every node it was given in the chart, so a mark repeated per row can
+carry one name. Inline, a string `ref` (and a `.constrain()` operand) takes the
+nearest match to where it is used; see the [`ref`](/python/api/marks/ref) mark.
+
 ## Inline `selectAll` is not supported yet
 
 `selectAll` is a chart-data verb only. Using it inline inside a layout raises —

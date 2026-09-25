@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { layer, Constraint, StackY, rect, text } from "../../src/lib";
+import { Layer, Constraint, StackY, createMark, rect, text } from "../../src/lib";
 
 // A tree visualization built purely from Constraint.nest.
 // Each subtree is a Layer of [outerRect, innerStack] with a nest constraint
@@ -51,9 +51,18 @@ const leafFill = "#fff3e0";
 
 // Each node renders as a rounded rect labeled with its name. Internal nodes
 // also wrap their children in a containing rect via Constraint.nest.
+// Each subtree is its own createMark component, so its "outer"/"inner" names
+// stay inside it: without the boundary, a subtree's layer would also see the
+// outer/inner pairs of every subtree nested in it, and the names would be
+// ambiguous.
+const Subtree = createMark(
+  ({ node, depth }: { node: TreeNode; depth: number }) =>
+    buildSubtree(node, depth)
+);
+
 function buildSubtree(node: TreeNode, depth: number): any {
   // The labeled "header" block: a small rect with the node's name centered.
-  const header = layer({ w: 96, h: 22 }, [
+  const header = Layer({ w: 96, h: 22 }, [
     rect({
       w: 96,
       h: 22,
@@ -79,11 +88,11 @@ function buildSubtree(node: TreeNode, depth: number): any {
   // Stack [header, ...childSubtrees] vertically — header on top, children below.
   const inner = StackY({ spacing: 8, alignment: "middle" }, [
     header,
-    ...node.children.map((c) => buildSubtree(c, depth + 1)),
+    ...node.children.map((c) => Subtree({ node: c, depth: depth + 1 })),
   ]);
 
   // Wrap the inner stack in a containing rect.
-  return layer([
+  return Layer([
     rect({
       rx: 6,
       fill: "#fafbfd",
@@ -107,7 +116,7 @@ export const NestedBoxesTree: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    buildSubtree(sample, 0).render(container, {});
+    Subtree({ node: sample, depth: 0 }).render(container, {});
     return container;
   },
 };

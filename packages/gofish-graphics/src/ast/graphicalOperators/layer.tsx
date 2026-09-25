@@ -31,8 +31,12 @@ import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
+import { NestedOperand, nestedGap } from "../constraints/nestedOperand";
+import type { RigidAttachment } from "../constraints/placementSolver";
 import {
   applyConstraints,
+  resolveConstraintOperands,
+  type ResolvedOperand,
   collectPositionDomains,
   gridSpaces,
   resolveGridTracks,
@@ -43,7 +47,11 @@ import {
   type ZOrderConstraint,
 } from "../constraints";
 import { GoFishRef, findPathToRoot } from "../_ref";
-import { childNameKey, type ConstraintPosScales } from "../constraints/shared";
+import {
+  childNameKey,
+  internalName,
+  type ConstraintPosScales,
+} from "../constraints/shared";
 import { anchorOffset } from "../constraints/placementProgramLowerer";
 import {
   applyNestLayoutProposal,
@@ -89,13 +97,13 @@ export function targetOf(n: GoFishAST): GoFishNode | undefined {
 }
 
 /** Give `node` a resolvable constraint name if it doesn't already have one
- *  (mirrors `ensureChildNames`'s synthesis, scoped to this one-off use). */
-function ensureConstraintName(node: GoFishNode, synth: string): string {
+ *  (a fresh `internalName`, as `ensureChildNames` does). */
+function ensureConstraintName(node: GoFishNode): string {
   if (node._name !== undefined) {
-    return typeof node._name === "string" ? node._name : synth;
+    return typeof node._name === "string" ? node._name : internalName("z");
   }
-  node._name = synth;
-  return synth;
+  node._name = internalName("z");
+  return node._name;
 }
 
 /**
@@ -132,7 +140,6 @@ function applyRelationalZBelowDefaults(
   if (connectors.length === 0) return;
 
   const pairs: [string, string][] = [];
-  let synthIdx = 0;
   for (const connector of connectors) {
     const operands: GoFishAST[] | undefined = (connector as any)
       .__relationalOperands;
@@ -166,14 +173,8 @@ function applyRelationalZBelowDefaults(
         (c) => c !== connector && path.includes(c as GoFishAST)
       );
       if (!withinScope) continue;
-      const connectorName = ensureConstraintName(
-        connector,
-        `__gofish_z_${synthIdx++}`
-      );
-      const targetName = ensureConstraintName(
-        target,
-        `__gofish_z_${synthIdx++}`
-      );
+      const connectorName = ensureConstraintName(connector);
+      const targetName = ensureConstraintName(target);
       pairs.push([connectorName, targetName]);
       claimedAny = true;
     }
@@ -550,6 +551,23 @@ export const layer = createNodeOperatorSequential(
             node.children,
             node.constraints
           );
+          // Every placement operand resolved to a node inside this layer, by
+          // name from this layer outward (like `ref`). Throws on a missing,
+          // ambiguous, or out-of-layer operand (#819).
+          const operands =
+            node.constraints.length > 0
+              ? resolveConstraintOperands(node)
+              : new Map<string, ResolvedOperand>();
+          // A child skips phase-1 baseline placement only when a positioning
+          // operand names the child itself. A nested operand does not: it is
+          // a fixed reference into its container, which stays where its own
+          // placement puts it unless the container is named too (then the
+          // two move together — see `NestedOperand`).
+          const constrainedChildren = new Set<number>();
+          for (const name of layoutPlan.constrainedNames) {
+            const op = operands.get(name);
+            if (op?.direct) constrainedChildren.add(op.child);
+          }
 
           for (const i of layoutPlan.layoutOrder) {
             const child = children[i];
@@ -590,7 +608,7 @@ export const layer = createNodeOperatorSequential(
               axisScale(childScaleFactors[0], childMaps[0]),
               axisScale(childScaleFactors[1], childMaps[1]),
             ]);
-            if (!childName || !layoutPlan.constrainedNames.has(childName)) {
+            if (!constrainedChildren.has(i)) {
               childPlaceable.place("x", 0, "baseline");
               childPlaceable.place("y", 0, "baseline");
             }
@@ -609,6 +627,38 @@ export const layer = createNodeOperatorSequential(
               if (childName !== undefined) {
                 nameToPlaceable.set(childName, childPlaceables[i]);
               }
+            }
+            // Operands override by resolution: a direct operand is its child's
+            // placeable; a nested one is a `NestedOperand` rigidly tied to the
+            // child that contains it (keyed by that child's operand name, or a
+            // synthetic key when the child itself is not an operand).
+            const containerKey = new Map<number, string>();
+            const nested: [string, ResolvedOperand][] = [];
+            for (const [name, op] of operands) {
+              if (op.direct) {
+                nameToPlaceable.set(name, childPlaceables[op.child]);
+                containerKey.set(op.child, name);
+              } else nested.push([name, op]);
+            }
+            const rigid = new Map<string, RigidAttachment>();
+            for (const [name, op] of nested) {
+              let container = containerKey.get(op.child);
+              if (container === undefined) {
+                container = `\u0000child:${op.child}`;
+                containerKey.set(op.child, container);
+                nameToPlaceable.set(container, childPlaceables[op.child]);
+              }
+              const gap = nestedGap(op.node, node.children[op.child]);
+              nameToPlaceable.set(
+                name,
+                new NestedOperand(
+                  name,
+                  op.node,
+                  childPlaceables[op.child],
+                  gap
+                ) as unknown as (typeof childPlaceables)[number]
+              );
+              rigid.set(name, { container, gap });
             }
 
             // Compose and solve placement constraints as one per-axis relational
@@ -664,7 +714,8 @@ export const layer = createNodeOperatorSequential(
               size,
               effectivePosScales,
               gridTracks,
-              dataPositioned
+              dataPositioned,
+              rigid
             );
 
             // Place any child the constraints left unplaced at the layer's

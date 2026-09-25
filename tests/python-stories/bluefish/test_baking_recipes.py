@@ -2,12 +2,10 @@
 
 An 8-nested-tier `layer(...).constrain(...)` chain (`tier0`..`tier8`), each
 tier wrapping the previous one as its first child, mirroring the JS story's
-own order-dependent Bluefish alignment chain node-for-node — including its
-`pull(name)` cross-tier-name-proxy workaround (`.constrain()` only resolves
-*direct* children by name, so a name declared several tiers deep has to be
-re-exposed at each tier boundary via `ref(name).name(name)`). See the JS
-file's header/friction-log comments for the full rationale; this port does
-not "fix" `pull` — the tree must match exactly for the DOM diff to pass.
+own order-dependent Bluefish alignment chain node-for-node. Each tier's
+`.constrain()` names cells from earlier, nested tiers directly: an operand
+resolves anywhere inside the constraining layer. See the JS file's
+header/friction-log comments for the full rationale.
 """
 
 from gofish import Constraint, enclose, layer, ref, rect, text
@@ -33,13 +31,6 @@ def union(names: list, name: str):
 # declared by the caller (the rect itself has no w/h).
 def border(name: str):
     return rect(fill="transparent", stroke=GREEN, strokeWidth=1).name(name)
-
-
-# The tier-boundary proxy that re-exposes a nested name as a direct child so
-# `.constrain()` can resolve it (`.constrain()` only walks direct children +
-# non-component nested plain layers — see module docstring).
-def pull(name: str):
-    return ref(name).name(name)
 
 
 def story_baking_recipes():
@@ -85,10 +76,6 @@ def story_baking_recipes():
     tier2 = layer(
         [
             tier1,
-            pull("col0"),
-            pull("row0_1"),
-            pull("row0_2"),
-            pull("row3_4"),
             Pad("melt in double boiler").name("A1"),
             Pad("stir in").name("B"),
             Pad("lightly beat").name("A2"),
@@ -112,8 +99,6 @@ def story_baking_recipes():
     tier4 = layer(
         [
             tier3,
-            pull("col1_2"),
-            pull("row0_4"),
             Pad("stir in").name("C"),
         ]
     ).constrain(
@@ -131,8 +116,6 @@ def story_baking_recipes():
     tier6 = layer(
         [
             tier5,
-            pull("C"),
-            pull("row0_5"),
             Pad("stir in").name("D"),
             Pad("bake 325°F (160°C) for 35 min.").name("E"),
         ]
@@ -155,24 +138,6 @@ def story_baking_recipes():
     tier8 = layer(
         [
             tier7,
-            pull("col0"),
-            pull("r0"),
-            pull("r1"),
-            pull("r2"),
-            pull("r3"),
-            pull("r4"),
-            pull("r5"),
-            pull("A1"),
-            pull("row0_1"),
-            pull("col1_2"),
-            pull("row0_2"),
-            pull("row3_4"),
-            pull("col1_3"),
-            pull("row0_4"),
-            pull("E"),
-            pull("row0_5"),
-            pull("col0_5"),
-            pull("title"),
             border("bR0"),
             border("bR1"),
             border("bR2"),

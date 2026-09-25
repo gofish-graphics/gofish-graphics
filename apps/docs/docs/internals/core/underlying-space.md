@@ -621,6 +621,26 @@ throws) when a constraint ends up with nothing movable — every listed
 operand already placed — except the deliberate `isDataPositionedAlignTarget`
 skip (a self-scaled scatter facet), which stays silent.
 
+Before any of this, the layer resolves every placement operand to a node
+inside it (`resolveConstraintOperands`, `constraints/index.ts`). Every
+operand is a name, and it goes through the same lookup as `ref("name")` (see
+[Name Resolution & Scoping](/internals/core/names-and-scoping)), once per
+distinct name. Operators such as `spread` and the axis, legend, and label
+chrome name their own direct children, and the closest match rule makes a
+direct child win over any deeper node with the same name. A missing, ambiguous, or
+out-of-layer operand throws (#819), so a constraint can no longer bind nothing
+in silence. An operand that is a direct child is its child's placeable, as
+before. An operand nested inside a direct child is a `NestedOperand`
+(`constraints/nestedOperand.ts`): its box is the container's box plus the
+constant offset the container's own layout gave it, and the solve adds one
+rigid `anchor-relation` (container `start` → operand `start`) per axis the
+operand takes part in. Only a directly named child skips phase-1 baseline
+placement, so an unnamed container stays put and the nested operand is a
+fixed reference; a named container moves in the solve and carries the
+operand with it. The container does the write-back; the stand-in's own
+placement writes are no-ops, and its size writes throw, because a layer
+cannot resize something another child already laid out.
+
 The placement-coordinate compiler preserves the literal/datum distinction until
 facts are emitted: literals are pixels, while datum coordinates elaborate
 through the already-solved data→pixel scale plus any post-scale offset. This

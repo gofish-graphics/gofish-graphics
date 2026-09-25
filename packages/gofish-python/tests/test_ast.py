@@ -24,6 +24,7 @@ from gofish import (
     petal,
     text,
     image,
+    Constraint,
 )
 from gofish.ast import _RefProxy
 
@@ -457,3 +458,44 @@ class TestChartBuilder:
         ir = c.to_ir()
         assert ir["data"] == {"type": "select", "layer": "bars", "mode": "one"}
         assert ir["mark"]["type"] == "line"
+
+
+class TestConstrainCallback:
+    """`.constrain()` hands the callback one ref per parameter, by name."""
+
+    def test_defaulted_parameter_keeps_its_default(self):
+        """The loop idiom `lambda a, b, gap=gap: ...` binds a value, not a
+        node: the parameter keeps its default and gets no ref."""
+        m = layer(
+            [rect(w=10, h=10).name("a"), rect(w=5, h=5).name("b")]
+        ).constrain(
+            lambda a, b, gap=7: [
+                Constraint.distribute([a, b], dir="x", spacing=gap)
+            ]
+        )
+        assert m.to_dict()["constraints"] == [
+            {
+                "type": "distribute",
+                "options": {"dir": "x", "spacing": 7},
+                "refs": ["a", "b"],
+            }
+        ]
+
+    def test_rest_gets_the_other_names_inside_the_layer(self):
+        """`**rest` receives every name inside the layer that is not a
+        declared parameter, including nested names, and never a defaulted
+        parameter's name."""
+        seen = {}
+
+        def cb(a, gap=3, **rest):
+            seen["gap"] = gap
+            seen["rest"] = sorted(rest)
+            return [Constraint.align([a, rest["c"]], x="middle")]
+
+        layer(
+            [
+                rect(w=10, h=10).name("a"),
+                layer([rect(w=5, h=5).name("c")]).name("gap"),
+            ]
+        ).constrain(cb)
+        assert seen == {"gap": 3, "rest": ["c"]}

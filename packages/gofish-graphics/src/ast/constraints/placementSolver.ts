@@ -249,13 +249,18 @@ function solveRank2Axis(
   return { cells, sizeOnly, conflicts: [...sizeConflicts, ...graphConflicts] };
 }
 
+/** A nested operand (see `NestedOperand`) rigidly attached to the layer
+ *  child that contains it: `operand.min = container.min + gap` per axis. */
+export type RigidAttachment = { container: string; gap: [number, number] };
+
 export function solvePlacementConstraints(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales,
   gridTracks?: [TrackLayout, TrackLayout],
-  dataPositioned?: [Set<string>, Set<string>]
+  dataPositioned?: [Set<string>, Set<string>],
+  rigid?: Map<string, RigidAttachment>
 ): PlacementConflict[] {
   const lowered = lowerPlacementConstraints(
     constraints,
@@ -265,6 +270,29 @@ export function solvePlacementConstraints(
     gridTracks,
     dataPositioned
   );
+  // Tie each nested operand to its container on every axis it takes part in,
+  // so the solve moves the container with it (one rigid body).
+  if (rigid) {
+    lowered.anchorProgram.axes.forEach((facts, idx) => {
+      const axis = axisName(idx as 0 | 1);
+      for (const [operand, { container, gap }] of rigid) {
+        const mentioned = facts.some((f) =>
+          f.type === "anchor-relation"
+            ? f.from.node === operand || f.to.node === operand
+            : f.node === operand
+        );
+        if (!mentioned) continue;
+        facts.push({
+          type: "anchor-relation",
+          axis,
+          from: { node: container, anchor: "start" },
+          to: { node: operand, anchor: "start" },
+          gap: gap[idx],
+          owner: `nested operand "${operand}"`,
+        });
+      }
+    });
+  }
 
   const solved = [
     solveRank2Axis("x", lowered.anchorProgram.axes[0], targets),
