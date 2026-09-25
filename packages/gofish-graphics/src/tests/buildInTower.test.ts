@@ -568,6 +568,22 @@ console.log("# a grow or a wipe on a pie wedge fails loudly");
   ok("fadeIn on a wedge draws", fadeError === undefined, String(fadeError));
 }
 
+console.log("# a bare mark plays its own enter transition");
+{
+  const box = async (at: number) =>
+    (paint(
+      await rect({ w: 40, h: 30 })
+        .transition({ enter: animation.grow({ duration: 400 }) })
+        .toDisplayList({ w: 100, h: 100, playing: false, at })
+    ) as any[]).find((i) => i.kind === "rect");
+  const [start, end] = [await box(0), await box(1000)];
+  ok(
+    "at t = 0 it is collapsed, and after its end it is at rest",
+    start.h === 0 && start.w === 0 && end.h > 0 && end.w > 0,
+    `${JSON.stringify(start)} / ${JSON.stringify(end)}`
+  );
+}
+
 console.log("# a re-render lands on the build's final frame (#914)");
 {
   // A signal read in derive() makes the chart re-render when it is set. The

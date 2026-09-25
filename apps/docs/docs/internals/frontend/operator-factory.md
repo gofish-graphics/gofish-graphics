@@ -403,14 +403,16 @@ produced node and returns a chainable mark, a terminal _resolves_ the surface to
 a final `GoFishNode` and calls through to that node's method, ending the chain.
 They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
 `attachTerminals(target, resolveNode)`, where each surface supplies only its own
-node-resolution strategy (a combinator mark resolves by calling itself with
-`undefined`; a `withGoFish` promise resolves by awaiting). The chart surfaces go
-through the same list via `attachBuilderTerminals(target, resolveForRender,
-render)`, which lets a surface also prepare the render options (`ChartBuilder`
-and `LayerBuilder` merge in the chart-level `axes`/`color` config and read the
-build-in clock's `playing`/`at`, which `TerminalMethods<Extra>` adds to their
-options type) and drive `render` through its own strategy
-(`renderWithInteraction`). So the set of
+node-resolution strategy (a `withGoFish` promise resolves by awaiting). The
+other surfaces go through the same list via `attachBuilderTerminals(target,
+resolveForRender, render)`, which lets a surface also prepare the render options
+and drive `render` through its own strategy. A combinator mark resolves by
+calling itself with `undefined` and installs the build-in its own
+`.transition({ enter })` asks for, reading the clock's `playing`/`at`.
+`ChartBuilder` and `LayerBuilder` merge in the chart-level `axes`/`color` config,
+read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to
+their options type), and drive `render` through `renderWithInteraction`. So the
+set of
 terminals is defined once — adding one (as `toDisplayList` was) touches a single
 list and lands on every surface at once, instead of being hand-rolled per
 surface (which previously left `toDisplayList` off the combinator surface and

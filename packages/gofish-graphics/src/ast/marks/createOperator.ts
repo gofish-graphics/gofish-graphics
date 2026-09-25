@@ -60,7 +60,8 @@ import {
   positionNode,
   type PositionNodeOptions,
 } from "../graphicalOperators/positionNode";
-import { attachTerminals } from "./terminals";
+import { attachBuilderTerminals } from "./terminals";
+import { installBuildIn } from "../../animation/install";
 import {
   recordMarkTransition,
   recordOperatorTransition,
@@ -298,11 +299,16 @@ export function attachModifiers<T>(
   });
   // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
   // from the shared registry, so adding one touches a single list. A mark
-  // resolves to a node by calling it with `undefined`. See terminals.ts.
-  attachTerminals(
-    base,
-    () => resolveMarkResult((base as any)(undefined)) as Promise<GoFishNode>
-  );
+  // resolves to a node by calling it with `undefined`, and plays its own
+  // `.transition({ enter })` as a chart does (`installBuildIn`, which the
+  // render options `playing` / `at` can hold). See terminals.ts.
+  attachBuilderTerminals(base, async (options) => {
+    const node = (await resolveMarkResult(
+      (base as any)(undefined)
+    )) as GoFishNode;
+    installBuildIn(node, options);
+    return { node, options };
+  });
   return base;
 }
 
