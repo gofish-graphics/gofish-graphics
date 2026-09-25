@@ -163,16 +163,6 @@ export function sequence(opts: SequenceOptions) {
     );
   }
 
-  if ((opts as { history?: unknown }).history !== undefined) {
-    throw new Error(
-      `[gofish] time.sequence({ by: "${opts.by}", history }): \`history\` is ` +
-        `no longer an option of the sequence. Say how long marks stay on ` +
-        `screen with time.history({ last }), in the flow after the sequence ` +
-        `(\`.flow(time.sequence({ by: "${opts.by}" }), time.history({ last }), ` +
-        `...)\`) or around the marks it keeps (\`time.history([circle(...)])\`).`
-    );
-  }
-
   if (opts.on !== undefined) {
     const owned = CLOCK_OPTIONS.filter((k) => opts[k] !== undefined);
     if (owned.length > 0) {

@@ -4,7 +4,7 @@
  *
  * Panel A is the static picture the ornithologist starts from; panel B adds
  * hover; panel C plays the year through with `timer()` and `filter()`; panel D
- * adds trails; panel E adds the play/scrub controls — a `slider` and a `button`
+ * adds trails with `time.history`; panel E adds the play/scrub controls — a `slider` and a `button`
  * as ordinary low-level marks, laid out under the map with `spreadY`/`spreadX`,
  * with the `timer()` as the single source of truth (the slider displays it one
  * way and writes it the other, and a scrub pauses it). See the plan note at
@@ -17,7 +17,6 @@ import { world110m } from "../../src/data/world110m";
 import {
   Frame,
   GoFish,
-  between,
   button,
   chart,
   circle,
@@ -191,20 +190,21 @@ export const D_Trails: StoryObj<Args> = {
       .layer(
         chart(birds)
           .flow(
-            // Day-of-year is cyclic, so the 20-day trail is a window on the
-            // WRAPPED distance back from the playhead — it stays 20 days long
-            // across the loop boundary instead of shrinking at the new year.
-            filter((d: any) =>
-              between((day() - d.day + 365) % 365, 0, 20, { closed: "left" })
-            ),
+            // One keyframe per day. Day-of-year is cyclic, so early in January
+            // the trail reaches back into December instead of stopping.
+            time.sequence({ by: "day", on: day, cyclic: true }),
             scatter({ x: "lon", y: "lat" })
           )
           .mark(
-            circle({
-              r: 3,
-              fill: "species",
-              opacity: (d: any) => (d.day === day() ? 1 : 0.1),
-            })
+            // Each day's mark is two layers: a faint circle kept on screen
+            // for 20 days after its own (the trail), and a solid circle
+            // shown during its day.
+            layer([
+              time.history({ last: 20 }, [
+                circle({ r: 3, fill: "species", opacity: 0.1 }),
+              ]),
+              circle({ r: 3, fill: "species" }),
+            ])
           )
       )
       .render(container, { w: args.w, h: args.h });
@@ -226,38 +226,8 @@ const pausedDay = (at: number) => {
   return day;
 };
 
-/** Panel D as it ships: a filter on the wrapped distance back from the
- *  playhead. */
-const filterTrails = (day: ReturnType<typeof timer>) =>
-  chart(birds)
-    .flow(
-      filter((d: any) =>
-        between((day() - d.day + 365) % 365, 0, 20, { closed: "left" })
-      ),
-      scatter({ x: "lon", y: "lat" })
-    )
-    .mark(
-      circle({
-        r: 3,
-        fill: "species",
-        opacity: (d: any) => (d.day === day() ? 1 : 0.1),
-      })
-    );
-
-/**
- * Panel D spelled with `time.history`: one keyframe per day of a cyclic
- * year, each species a circle placed by its position that day. Each day's
- * mark is two layers. The faint circle is kept for 20 days after its own
- * (`time.history`), which is the trail, and the solid circle is that day's
- * position, shown during its day. The year is cyclic, so early in January
- * the trail reaches back into December.
- *
- * Only paused pictures are built this way for now. Played, every one of the
- * 52,560 circles (365 days × 72 species × 2 layers) re-reads the clock each
- * tick to decide whether it shows, which costs far more than panel D's frame
- * budget (#848), so the playing panels D and E keep the filter.
- */
-const historyTrails = (day: ReturnType<typeof timer>) =>
+/** Panel D's trails on the clock `day`. */
+const trails = (day: ReturnType<typeof timer>) =>
   chart(birds)
     .flow(
       time.sequence({ by: "day", on: day, cyclic: true }),
@@ -272,11 +242,8 @@ const historyTrails = (day: ReturnType<typeof timer>) =>
       ])
     );
 
-/** A paused panel D story: `trails` held still on day `at`. */
-const pausedPanel = (
-  trails: (day: ReturnType<typeof timer>) => any,
-  at: number
-): StoryObj<Args> => ({
+/** Panel D held still on day `at`, for a deterministic capture. */
+const pausedPanel = (at: number): StoryObj<Args> => ({
   args: { w: 600, h: 600 },
   render: (args: Args) => {
     const container = initializeContainer();
@@ -287,15 +254,12 @@ const pausedPanel = (
   },
 });
 
-/** Panel D held still on day 120, as the birds head north in spring: the
- *  filter as it ships, and the same picture spelled with `time.history`. */
-export const D_TrailsPaused = pausedPanel(filterTrails, 120);
-export const D_TrailsHistoryPaused = pausedPanel(historyTrails, 120);
+/** Panel D held still on day 120, as the birds head north in spring. */
+export const D_TrailsPaused = pausedPanel(120);
 
 /** Panel D held still on day 5, where the trail reaches back across the new
  *  year into December. */
-export const D_TrailsPausedDay5 = pausedPanel(filterTrails, 5);
-export const D_TrailsHistoryPausedDay5 = pausedPanel(historyTrails, 5);
+export const D_TrailsPausedDay5 = pausedPanel(5);
 
 export const E_Controls: StoryObj<Args> = {
   args: { w: 600, h: 660 },
@@ -320,20 +284,16 @@ export const E_Controls: StoryObj<Args> = {
     const map = basemap({ padding: 0 }).layer(
       chart(birds)
         .flow(
-          // Day-of-year is cyclic, so the 20-day trail is a window on the
-          // WRAPPED distance back from the playhead — it stays 20 days long
-          // across the loop boundary instead of shrinking at the new year.
-          filter((d: any) =>
-            between((day() - d.day + 365) % 365, 0, 20, { closed: "left" })
-          ),
+          time.sequence({ by: "day", on: day, cyclic: true }),
           scatter({ x: "lon", y: "lat" })
         )
         .mark(
-          circle({
-            r: 3,
-            fill: "species",
-            opacity: (d: any) => (d.day === day() ? 1 : 0.1),
-          })
+          layer([
+            time.history({ last: 20 }, [
+              circle({ r: 3, fill: "species", opacity: 0.1 }),
+            ]),
+            circle({ r: 3, fill: "species" }),
+          ])
         )
     );
 
@@ -350,7 +310,7 @@ export const E_Controls: StoryObj<Args> = {
       domain: day.domain as readonly [number, number],
       step: day.step,
       w: 300,
-      // Day-of-year is a cycle, like the trail filter above: a scrub off either
+      // Day-of-year is a cycle, like the time axis above: a scrub off either
       // end of the track continues around the year instead of stopping.
       wrap: true,
       format: (d) => `day ${d}`,
@@ -361,7 +321,7 @@ export const E_Controls: StoryObj<Args> = {
     });
 
     // The THUNK form of the low-level terminal: the clock and the handle both
-    // change the SPEC (a filter, a placement), so the whole picture has to be
+    // change the SPEC (which day shows, a placement), so the whole picture has to be
     // re-evaluable — which is what a thunk gives a composition with no
     // `chart()` builder at its root.
     // `legend: false` and the map's size are options of the ROOT render here,

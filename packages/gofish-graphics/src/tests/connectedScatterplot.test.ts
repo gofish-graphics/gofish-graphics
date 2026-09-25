@@ -698,18 +698,6 @@ async function main(): Promise<void> {
   );
   ok("a threaded line that goes back and forth in time", !why, why);
   why = await throws(
-    async () =>
-      chart(drivingShifts)
-        .flow(
-          time.sequence({ by: "year", on: clockAt(1979), history: Infinity }),
-          scatter({ x: "miles", y: "gas" })
-        )
-        .mark(circle({ r: 4 }))
-        .toDisplayList(OPTIONS),
-    /no longer an option of the sequence/
-  );
-  ok("history on the sequence is gone", !why, why);
-  why = await throws(
     () =>
       threaded()
         .layer(time.history([line({ along: "year" })]))
