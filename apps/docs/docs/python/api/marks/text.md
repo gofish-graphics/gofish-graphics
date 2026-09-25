@@ -59,7 +59,7 @@ layer([
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count").name("bars")),
     chart(selectAll("bars"))
-        .flow(group(by="datum.lake"))
+        .flow(group(by="lake"))
         .mark(lambda d: spread(
             [d[0], text(text=str(sum(r["count"] for r in d[0].datum)))],
             dir="y", alignment="middle", spacing=10,

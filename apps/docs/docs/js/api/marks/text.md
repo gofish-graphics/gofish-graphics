@@ -45,7 +45,7 @@ layer([
     .flow(spread({ by: "lake", dir: "x" }))
     .mark(rect({ h: "count" }).name("bars")),
   chart(selectAll("bars"))
-    .flow(group({ by: "datum.lake" }))
+    .flow(group({ by: "lake" }))
     .mark((d) =>
       spread({ dir: "y", alignment: "middle", spacing: 10 }, [
         d[0],

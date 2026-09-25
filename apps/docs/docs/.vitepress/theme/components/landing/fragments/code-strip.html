@@ -17,7 +17,7 @@
     )
     .<span class="tok-kw">mark</span>(<span class="tok-kw">rect</span>({ <span class="tok-field">h</span>: <span class="tok-str">"count"</span>, <span class="tok-field">fill</span>: <span class="tok-str">"species"</span> }).<span class="tok-kw">name</span>(<span class="tok-str">"bars"</span>)),</span>
 <span class="cblk" id="cblk-ribbons" data-label="ribbons">  <span class="tok-kw">Chart</span>(<span class="tok-kw">selectAll</span>(<span class="tok-str">"bars"</span>))
-    .<span class="tok-kw">flow</span>(<span class="tok-kw">group</span>({ <span class="tok-field">by</span>: <span class="tok-str">"datum.species"</span> }))
+    .<span class="tok-kw">flow</span>(<span class="tok-kw">group</span>({ <span class="tok-field">by</span>: <span class="tok-str">"species"</span> }))
     .<span class="tok-kw">mark</span>(<span class="tok-kw">area</span>({ <span class="tok-field">opacity</span>: <span class="tok-num">0.8</span> })),</span>
 ]).<span class="tok-kw">render</span>(el, { <span class="tok-field">w</span>: <span class="tok-num">400</span>, <span class="tok-field">h</span>: <span class="tok-num">400</span>, <span class="tok-field">axes</span>: <span class="tok-kw">true</span> });</pre>
     <pre
@@ -33,7 +33,7 @@
     )
     .<span class="tok-kw">mark</span>(<span class="tok-kw">rect</span>(<span class="tok-field">h</span>=<span class="tok-str">"count"</span>, <span class="tok-field">fill</span>=<span class="tok-str">"species"</span>).<span class="tok-kw">name</span>(<span class="tok-str">"bars"</span>)),</span>
 <span class="cblk" data-label="ribbons">    <span class="tok-kw">chart</span>(<span class="tok-kw">selectAll</span>(<span class="tok-str">"bars"</span>))
-    .<span class="tok-kw">flow</span>(<span class="tok-kw">group</span>(<span class="tok-field">by</span>=<span class="tok-str">"datum.species"</span>))
+    .<span class="tok-kw">flow</span>(<span class="tok-kw">group</span>(<span class="tok-field">by</span>=<span class="tok-str">"species"</span>))
     .<span class="tok-kw">mark</span>(<span class="tok-kw">area</span>(<span class="tok-field">opacity</span>=<span class="tok-num">0.8</span>)),</span>
 ]).<span class="tok-kw">render</span>(<span class="tok-field">w</span>=<span class="tok-num">400</span>, <span class="tok-field">h</span>=<span class="tok-num">400</span>, <span class="tok-field">axes</span>=<span class="tok-kw">True</span>)</pre>
     <div class="code-brackets" aria-hidden="true"></div>

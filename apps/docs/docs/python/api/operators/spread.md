@@ -49,28 +49,29 @@ chart(seafood).flow(
 
 ## Path-aware `by` {#path-aware-by}
 
-`by` accepts a **field name**, a **dotted path string**, a **callable**, or a
+`by` accepts a **field name**, a **dotted path string**, or a
 [`field(...)`](#field-expression-pipeline) accessor:
 
 ```python
-spread(by="species", dir="x")            # field on a raw record
-spread(by="datum.species", dir="x")      # path (e.g. after a selection)
-spread(by=lambda r: r.datum.species, dir="x")  # callable escape hatch
-spread(by=field("species").sort(), dir="x")    # field(...) accessor
+spread(by="species", dir="x")                # field name
+spread(by="origin.country", dir="x")         # nested path
+spread(by=field("species").sort(), dir="x")  # field(...) accessor
 ```
 
-Path strings matter after a `ref` / `selectAll` selection: the stream items are then
-**refs**, not raw records, so you re-encode by the datum path —
-`by="datum.species"`.
+The same bare field name works after a `ref` / `selectAll` selection. The stream
+items are then **refs**, not raw records, but a ref is read through its `.datum`
+rows automatically, so you still write `by="species"`. Do **not** add a `datum.`
+prefix: `by="datum.species"` looks for a field named `datum` inside each row,
+finds nothing, and puts every ref in one group.
 
-### How a `datum.field` path resolves (homogeneity collapse) {#homogeneity-collapse}
+### How `by` resolves on a ref (homogeneity collapse) {#homogeneity-collapse}
 
 A ref's `.datum` is the **raw bag of rows** that flowed into the node (a list; a
-fully-split leaf is a 1-row list). A `by="datum.field"` path does **not** just
+fully-split leaf is a 1-row list). A `by="field"` path on a ref does **not** just
 read the field off the first row — it **projects with homogeneity collapse**:
 
-> `datum.field` resolves to a scalar **iff every row in the node's bag agrees on
-> that field**; otherwise it is `None` — the "this field is multi-valued here,
+> `field` resolves to a scalar **iff every row in the node's bag agrees on that
+> field**; otherwise it is `None` — the "this field is multi-valued here,
 > grouping by it is ill-posed" signal.
 
 This is exactly SQL's `ONLY_FULL_GROUP_BY` / functional-dependency rule: you may
@@ -80,37 +81,22 @@ only group by a column that is constant within each row-bag.
 species rows:
 
 ```python
-group(by="datum.lake")     # resolves — all 5 rows share one lake
-group(by="datum.species")  # None — 5 distinct species; ill-posed
+group(by="lake")     # resolves — all 5 rows share one lake
+group(by="species")  # None — 5 distinct species; ill-posed
 ```
 
 To group by a field that is multi-valued in the current bag, **disaggregate
 first** (split the bag so each child is homogeneous in that field). A fully-split
-cell (1 row) trivially collapses, so `by="datum.species"` works once each node
-holds a single record.
-
-### `by` vs. channel: an intentional asymmetry
-
-`by` operates on the **selection stream**, but a mark's channels operate on the
-**raw record** — and they are addressed differently:
-
-| Place                                 | Reads          | How to write `species`   |
-| ------------------------------------- | -------------- | ------------------------ |
-| `by` on an operator after a selection | the ref stream | `"datum.species"` (path) |
-| a channel on a mark, e.g. `rect(...)` | the raw record | `"species"` (bare field) |
+cell (1 row) trivially collapses, so `by="species"` works once each node holds a
+single record.
 
 So a ribbon chart reads:
 
 ```python
 chart(selectAll("bars")) \
-    .flow(group(by="datum.species")) \
-    .mark(ribbon(opacity=0.8))         # channel → raw record, no prefix
+    .flow(group(by="species")) \
+    .mark(ribbon(opacity=0.8))
 ```
-
-Do **not** "consistency-refactor" channels into `datum.count` — a channel like
-`rect(h="count")` reads the bound record directly and is never path-prefixed.
-Only `by` (on `group`/`spread`/`stack`/`scatter`) is path-aware, because only
-`by` sees the selection stream.
 
 ## Field-expression pipeline {#field-expression-pipeline}
 

@@ -124,22 +124,21 @@ hand to connect _another_ chart's marks.
 ## Path-aware `by` after a selection {#path-aware-by-after-a-selection}
 
 After `selectAll`, the stream items are refs, not raw records. Operators' `by`
-option is path-aware, so re-encode by the **datum path**:
+option reads a ref through its `datum` rows, so you write the same bare field
+name you would on raw records:
 
 ```python
 chart(selectAll("bars")) \
-    .flow(group(by="datum.species")) \
-    .mark(ribbon(opacity=0.8))
+    .flow(group(by="species")) \
+    .mark(ribbon(opacity=0.8))  # not by="datum.species"
 ```
 
-A `datum.field` path resolves to a scalar **only if every row in the ref's bag
+On a ref, a field resolves to a scalar **only if every row in the ref's bag
 agrees on that field** (homogeneity collapse — SQL's `ONLY_FULL_GROUP_BY` rule);
-otherwise it is `None`. So `by="datum.lake"` works on lake-aggregate bars (all
-rows share a lake) but `by="datum.species"` does not until you disaggregate. `by`
-also accepts a callable as an escape hatch:
-`group(by=lambda r: r.datum.species)`. See
+otherwise it is `None`. So `by="lake"` works on lake-aggregate bars (all rows
+share a lake) but `by="species"` does not until you disaggregate. See
 [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by) for the
-full explanation of why `by` is path-prefixed but mark channels are not.
+full explanation.
 
 ::: info `pluck` is JavaScript only
 The JS package exports `pluck(source, path)` — the un-collapsed counterpart to

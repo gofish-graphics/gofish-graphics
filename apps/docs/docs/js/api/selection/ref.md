@@ -149,22 +149,20 @@ hand to connect _another_ chart's marks.
 ## Path-aware `by` after a selection {#path-aware-by-after-a-selection}
 
 After `selectAll`, the stream items are refs, not raw records. Operators' `by`
-option is path-aware (lodash `_.get`), so re-encode by the **datum path**:
+option reads a ref through its [`.datum`](/js/api/marks/ref#datum) rows, so you
+write the same bare field name you would on raw records:
 
 ```ts
 gf.chart(gf.selectAll("bars"))
-  .flow(gf.group({ by: "datum.species" })) // not "species"
+  .flow(gf.group({ by: "species" })) // not "datum.species"
   .mark(gf.ribbon({ opacity: 0.8 }));
 ```
 
-A `datum.field` path resolves to a scalar **only if every row in the ref's bag
+On a ref, a field resolves to a scalar **only if every row in the ref's bag
 agrees on that field** (homogeneity collapse — SQL's `ONLY_FULL_GROUP_BY` rule);
-otherwise it is `undefined`. So `by: "datum.lake"` works on lake-aggregate bars
-(all rows share a lake) but `by: "datum.species"` does not until you
-disaggregate. `by` also accepts a function as an escape hatch:
-`group({ by: (r) => r.datum.species })`. See
-[`spread`](/js/api/operators/spread#path-aware-by) for the full explanation of
-why `by` is path-prefixed but mark channels are not.
+otherwise it is `undefined`. So `by: "lake"` works on lake-aggregate bars (all
+rows share a lake) but `by: "species"` does not until you disaggregate. See
+[`spread`](/js/api/operators/spread#path-aware-by) for the full explanation.
 
 ## `pluck(source, path)` — every value at a path {#pluck}
 
@@ -182,7 +180,7 @@ pluck(ref, "species"); // → ["Bass", "Trout", ...] (distinct across the bag)
 `source` may be a [`ref`](/js/api/marks/ref) (reads its
 [`.datum`](/js/api/marks/ref#datum) bag), a row array, or a single row. Reach for
 `pluck` when a field is multi-valued in the current bag and you want to enumerate
-its values rather than group by it — the case where `by: "datum.field"` would
+its values rather than group by it — the case where `by: "field"` would
 resolve to `undefined`.
 
 ::: info JavaScript only
