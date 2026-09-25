@@ -142,10 +142,6 @@ jobs:
         if: steps.plan.outputs.skip == 'false'
         run: pnpm --filter gofish-graphics build
 
-      - name: Generate TypeScript declarations
-        if: steps.plan.outputs.skip == 'false'
-        run: pnpm exec tsc --project packages/gofish-graphics/tsconfig.build.json || true
-
       # gofish-ir publishes first so the workspace:* dependency in
       # gofish-graphics resolves to a real published version on the registry
       # at the moment gofish-graphics publishes. `pnpm publish` rewrites
