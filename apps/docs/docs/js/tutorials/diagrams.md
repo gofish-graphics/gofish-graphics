@@ -38,7 +38,7 @@ const data = [
   { name: "mars", r: 21, fill: "#F4BC80", stroke: "#E0954C" },
 ];
 
-gf.enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
   gf.spread(
     { dir: "x", spacing: 50, alignment: "middle" },
     data.map((d) =>
@@ -73,7 +73,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+  gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -101,8 +101,8 @@ once: the row of planets and the label's column.
 ## Drawing a box around the label
 
 To show that the label and Mercury go together, we can draw a box around them.
-That's another job for `enclose()`. This time we give it an outline and no
-fill:
+That's a job for `enclose()`, which is another name for `background()`. This
+time we give it an outline and no fill:
 
 ::: gofish
 
@@ -115,7 +115,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+  gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -157,7 +157,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+  gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -198,7 +198,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+  gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -241,7 +241,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+  gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -288,7 +288,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+  gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -340,7 +340,7 @@ const data = [
 
 gf.layer([
   gf
-    .enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+    .background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
       gf.spread(
         { dir: "x", spacing: 50, alignment: "middle" },
         data.map((d) =>

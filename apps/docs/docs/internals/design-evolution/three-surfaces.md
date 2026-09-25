@@ -59,6 +59,12 @@ routers). `curve: "auto"` smooths automatically on continuous axes — see
 [Underlying Space](/internals/core/underlying-space) for the positioning-space
 test that decides this.
 
+`background` is a second lowercase name for `enclose`: `lib.ts` exports the
+same factory under both names, so a `background(...)` call builds and
+serializes the same `"enclose"` node. It has no capitalized `Background`
+spelling; `Enclose` remains the capitalized-surface name. The Python package
+mirrors this with `background = enclose` in `gofish/ast.py`.
+
 The fluent builder went through the same consolidation one layer up. It
 briefly had its own `.connect(connectorMark)` method — sugar for threading a
 single ref-consuming mark under a chart's own marks. That method has since

@@ -128,9 +128,9 @@ The picture is the same, but now the sizes and colors of the planets live in one
 
 (We'll see how to turn data into marks more simply in the charts tutorial.)
 
-## Drawing a background: `enclose`
+## Drawing a background
 
-Some operators draw something of their own. `enclose()` is an operator that draws a box around its children. The box is as big as the children, plus `padding` pixels on every side. Let's put the planets on a dark background:
+Some operators draw something of their own. `background()` is an operator that draws a box behind its children. The box is as big as the children, plus `padding` pixels on every side. Let's put the planets on a dark background:
 
 ::: gofish
 
@@ -142,21 +142,24 @@ const data = [
   { name: "mars", r: 21, fill: "#F4BC80", stroke: "#E0954C" },
 ];
 
-gf.enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
-  gf.spread(
-    { dir: "x", spacing: 50, alignment: "middle" },
-    data.map((d) =>
-      gf.circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
-    )
-  ),
-]).render(root, { w: 410, h: 116 });
+gf.background(
+  { padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 },
+  [
+    gf.spread(
+      { dir: "x", spacing: 50, alignment: "middle" },
+      data.map((d) =>
+        gf.circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
+      )
+    ),
+  ]
+).render(root, { w: 410, h: 116 });
 ```
 
 :::
 
 `fill` is the color of the box. The box gets a thin gray outline by default, so `stroke: "none"` turns it off. `rx` and `ry` round its corners.
 
-Notice how the code mirrors the picture. The row of planets is inside the `enclose()` call, and it is drawn inside the box.
+Notice how the code mirrors the picture. The row of planets is inside the `background()` call, and it is drawn inside the box.
 
 ## Where next
 

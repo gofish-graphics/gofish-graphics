@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { circle, enclose, spread } from "../../src/lib";
+import { background, circle, spread } from "../../src/lib";
 
 // The finished example of the Basics tutorial
 // (apps/docs/docs/js/tutorials/basics.md): the four planets closest to the
@@ -29,7 +29,7 @@ export const Basics: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+    background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
       spread(
         { dir: "x", spacing: 50, alignment: "middle" },
         data.map((d) =>

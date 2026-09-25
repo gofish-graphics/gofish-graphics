@@ -3,8 +3,8 @@ import { initializeContainer } from "../helper";
 import {
   Constraint,
   arrow,
+  background,
   circle,
-  enclose,
   layer,
   ref,
   spread,
@@ -40,7 +40,7 @@ export const Diagrams: StoryObj = {
     const container = initializeContainer();
 
     layer([
-      enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+      background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
         spread(
           { dir: "x", spacing: 50, alignment: "middle" },
           data.map((d) =>
