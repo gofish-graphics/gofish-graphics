@@ -1,32 +1,42 @@
 /**
- * capture-gallery-thumbnails.ts
+ * capture-docs-images.ts
  *
- * Pre-renders every gallery-tagged Storybook story to a PNG thumbnail (2× retina)
- * + a branded 1200×630 Open Graph card, plus a dimensions manifest, so the docs
- * example gallery can hang <img> thumbnails instead of executing ~98 SolidJS chart
- * pipelines live on page load (the old measure-on-mount pass — see GalleryPage.vue),
- * and shared example links unfurl as a branded chart card.
+ * Pre-renders the docs site's static story pictures (2× retina PNGs):
  *
- * These are docs BUILD ARTIFACTS (gitignored, not committed): `predocs:build` runs
- * this before `vitepress build`, which copies public/ into the deployed site.
+ *   1. The example gallery: every gallery-tagged Storybook story as a thumbnail
+ *      + a branded 1200×630 Open Graph card, plus a dimensions manifest, so the
+ *      docs example gallery can hang <img> thumbnails instead of executing ~98
+ *      SolidJS chart pipelines live on page load (the old measure-on-mount pass —
+ *      see GalleryPage.vue), and shared example links unfurl as a branded chart
+ *      card.
+ *   2. Story images: every story a `::: gofish … image` container pictures (the
+ *      tutorials index cards, for one), cropped to its drawing. See
+ *      markdown-it-gofish.ts.
+ *
+ * These are docs BUILD ARTIFACTS (gitignored, not committed): `docs:build` runs
+ * this (`docs:images`) before `vitepress build`, which copies public/ into the
+ * deployed site.
  *
  * It reuses the same headless harness as capture-one.ts / capture-js-dom.ts:
  *   1. Start a Vite dev server serving the stories-runner page
  *   2. Navigate Playwright to that page ONCE (deviceScaleFactor 2 → retina PNGs)
- *   3. Render each gallery example by its harness story id and screenshot the <svg>
+ *   3. Render each story by its harness story id and screenshot the <svg>
  *
- * The example list (and each example's `id` / `storyId`) comes from the SAME source
- * the gallery and docs config use — `loadStoryExamples()` — so the PNG/manifest keys
- * line up with the runtime `ex.id` and the `/js/examples/<id>` page slugs by
- * construction (no re-derived id to drift out of sync).
+ * Both lists come from the SAME sources the docs use, so the file names line up
+ * with what the pages load by construction (no re-derived id to drift out of
+ * sync): the gallery examples (`id` / `storyId`) from `loadStoryExamples()`, the
+ * gallery and docs config's loader; the story images from `findImageStoryIds()`,
+ * which reads the docs markdown through the `::: gofish` plugin itself, and
+ * their paths from the plugin's `storyImagePath()`.
  *
  * Output:
  *   apps/docs/docs/public/gallery/<id>.png        (chart thumbnail, for the wall)
  *   apps/docs/docs/public/gallery/og/<id>.png     (branded 1200×630 card, og:image)
  *   apps/docs/docs/public/gallery/manifest.json   ({ id: { w, h } }, fetched at runtime)
+ *   apps/docs/docs/public/previews/<storyId>.png  (story image, for <GoFishImage>)
  */
 
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from "fs";
 import { join } from "path";
 import { startViteServer, waitForVite } from "./capture-core";
@@ -48,10 +58,29 @@ async function loadGalleryExamples(): Promise<
   return load();
 }
 
+// The `::: gofish` markdown plugin: which stories the docs picture with
+// `image`, and where each picture lives. Same interop dance as above.
+async function loadImagePlugin(): Promise<{
+  findImageStoryIds: () => string[];
+  STORY_IMAGES_DIR: string;
+  storyImagePath: (storyId: string) => string;
+}> {
+  const mod: any = await import(
+    "../../apps/docs/docs/.vitepress/markdown-it-gofish.ts"
+  );
+  const plugin = mod.findImageStoryIds ? mod : mod.default;
+  if (typeof plugin?.findImageStoryIds !== "function")
+    throw new Error(
+      "findImageStoryIds export not found in markdown-it-gofish.ts"
+    );
+  return plugin;
+}
+
 const TESTS_DIR = join(import.meta.dirname, "..");
 const HARNESS_DIR = join(TESTS_DIR, "harness");
 const REPO_ROOT = join(TESTS_DIR, "..");
-const PUBLIC_DIR = join(REPO_ROOT, "apps/docs/docs/public/gallery");
+const DOCS_PUBLIC_DIR = join(REPO_ROOT, "apps/docs/docs/public");
+const PUBLIC_DIR = join(DOCS_PUBLIC_DIR, "gallery");
 // Branded 1200×630 social-preview cards (logo + wordmark + marcom + the chart),
 // used as each example page's og:image so shared links keep GoFish branding.
 const OG_DIR = join(PUBLIC_DIR, "og");
@@ -106,9 +135,30 @@ html,body{width:1200px;height:630px}
 const dataUrl = (png: Buffer) =>
   "data:image/png;base64," + png.toString("base64");
 
+/** Render one story into the runner page; throws when it fails. */
+async function renderStory(page: Page, storyId: string): Promise<void> {
+  const ok = await page.evaluate(
+    async (sid) => (window as any).__renderStory__(sid),
+    storyId
+  );
+  if (!ok) {
+    throw new Error(
+      await page.evaluate(() => (window as any).__STORY_RENDER_ERROR__)
+    );
+  }
+  await page.waitForFunction(
+    () => (window as any).__STORY_RENDER_DONE__ === true,
+    { timeout: 15_000 }
+  );
+}
+
 async function main() {
   const examples = await loadGalleryExamples();
-  console.log(`Found ${examples.length} gallery examples.\n`);
+  console.log(`Found ${examples.length} gallery examples.`);
+  const { findImageStoryIds, STORY_IMAGES_DIR, storyImagePath } =
+    await loadImagePlugin();
+  const imageStoryIds = findImageStoryIds();
+  console.log(`Found ${imageStoryIds.length} story image(s) in the docs.\n`);
 
   const viteProc = startViteServer(HARNESS_DIR, VITE_PORT);
   viteProc.stdout?.on("data", (d) => {
@@ -164,22 +214,7 @@ async function main() {
     for (const ex of examples) {
       process.stdout.write(`  ${ex.title} (${ex.id}) ... `);
       try {
-        const ok = await page.evaluate(
-          async (sid) => (window as any).__renderStory__(sid),
-          ex.storyId
-        );
-        if (!ok) {
-          const err = await page.evaluate(
-            () => (window as any).__STORY_RENDER_ERROR__
-          );
-          console.log(`FAILED: ${err}`);
-          failed.push(ex.id);
-          continue;
-        }
-        await page.waitForFunction(
-          () => (window as any).__STORY_RENDER_DONE__ === true,
-          { timeout: 15_000 }
-        );
+        await renderStory(page, ex.storyId);
 
         // Measure the svg in one evaluate and screenshot the page clipped to
         // that box, rather than holding an element handle: an animated story
@@ -232,6 +267,67 @@ async function main() {
       `\nWrote ${captured.length} PNG(s) to ${PUBLIC_DIR}` +
         `\nWrote manifest (${captured.length} entries) to ${MANIFEST_PATH}`
     );
+
+    // ---- Story images for `::: gofish … image` containers, in their own
+    // directory, also rebuilt fresh each run.
+    const imagesDir = join(DOCS_PUBLIC_DIR, STORY_IMAGES_DIR);
+    console.log(`\nCapturing ${imageStoryIds.length} story image(s)...`);
+    if (existsSync(imagesDir)) rmSync(imagesDir, { recursive: true });
+    mkdirSync(imagesDir, { recursive: true });
+    let imageCount = 0;
+    for (const storyId of imageStoryIds) {
+      process.stdout.write(`  ${storyId} ... `);
+      try {
+        await renderStory(page, storyId);
+
+        // Crop to the drawing, not the story's own canvas (its margins would
+        // only shrink the drawing inside a small preview cell): give the svg a
+        // viewBox of its getBBox() plus 2% of the longer side (slack so strokes
+        // on the outermost marks are not clipped), drawn at one CSS px per
+        // user unit, and screenshot that. The viewBox also brings in any
+        // marks that overflow the story's own canvas.
+        const box = await page.evaluate(() => {
+          const svg =
+            document.querySelector<SVGSVGElement>("#stories-root svg");
+          if (!svg) return null;
+          const b = svg.getBBox();
+          if (!(b.width > 0 && b.height > 0)) return null;
+          const pad = 0.02 * Math.max(b.width, b.height);
+          const w = b.width + 2 * pad;
+          const h = b.height + 2 * pad;
+          svg.setAttribute("viewBox", `${b.x - pad} ${b.y - pad} ${w} ${h}`);
+          svg.style.width = `${w}px`;
+          svg.style.height = `${h}px`;
+          const r = svg.getBoundingClientRect();
+          return {
+            x: r.x + window.scrollX,
+            y: r.y + window.scrollY,
+            width: r.width,
+            height: r.height,
+          };
+        });
+        if (!box) {
+          console.log("SKIP (no svg, or an empty drawing)");
+          failed.push(storyId);
+          continue;
+        }
+        // fullPage so a drawing wider or taller than the viewport is not
+        // trimmed to it; `clip` is then in page coordinates.
+        const png = await page.screenshot({
+          type: "png",
+          omitBackground: true,
+          fullPage: true,
+          clip: box,
+        });
+        writeFileSync(join(DOCS_PUBLIC_DIR, storyImagePath(storyId)), png);
+        imageCount++;
+        console.log(`OK (${Math.round(box.width)}×${Math.round(box.height)})`);
+      } catch (err) {
+        console.log(`FAILED: ${err instanceof Error ? err.message : err}`);
+        failed.push(storyId);
+      }
+    }
+    console.log(`Wrote ${imageCount} story image(s) to ${imagesDir}`);
     await context.close();
 
     // ---- Branded OG cards (1200×630, deviceScaleFactor 1 for exact dimensions).
@@ -263,7 +359,7 @@ async function main() {
     console.log(`Wrote ${captured.length} OG card(s) to ${OG_DIR}`);
 
     if (failed.length) {
-      console.error(`\n${failed.length} example(s) failed to capture:`);
+      console.error(`\n${failed.length} image(s) failed to capture:`);
       for (const id of failed) console.error(`  ${id}`);
       process.exitCode = 1;
     }

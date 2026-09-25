@@ -61,6 +61,12 @@ written as the bare string `"linear"`). `curve: "auto"` smooths automatically
 on continuous axes — see [Underlying Space](/internals/core/underlying-space)
 for the positioning-space test that decides this.
 
+`background` is a second lowercase name for `enclose`: `lib.ts` exports the
+same factory under both names, so a `background(...)` call builds and
+serializes the same `"enclose"` node. It has no capitalized `Background`
+spelling; `Enclose` remains the capitalized-surface name. The Python package
+mirrors this with `background = enclose` in `gofish/ast.py`.
+
 The fluent builder went through the same consolidation one layer up. It
 briefly had its own `.connect(connectorMark)` method — sugar for threading a
 single ref-consuming mark under a chart's own marks. That method has since
@@ -88,6 +94,14 @@ clock, which is a live signal with no Python bridge. `interpolate` sits beside
 it as a bare name rather than inside the namespace, because it is not a temporal
 construct at all: it is a pure function over rows, the data-space reading a
 `derive` hands an ordinary chart.
+
+The build-in prototype (draft PR #901) adds a second namespace beside it,
+`animation`. The split is WHEN against WHAT: `time.stagger` and
+`time.parallel` say when a chart's pieces enter, and `animation.grow`,
+`animation.fadeIn`, `animation.wipe` and the rest say how each one looks while
+it does. The effects are named by what they do, not by the phase they are used
+in, so the same value serves `enter` or `exit`. It is JavaScript-only for the
+same reason `time` is.
 
 ## Planned contents
 

@@ -30,6 +30,9 @@ enclose(children, *, padding=None, rx=None, ry=None, fill=None,
         opacity=None) -> Mark
 ```
 
+`background` is an alias for the same function: it takes the same arguments
+and produces the same node.
+
 The enclosure is the children's bbox union grown by `padding`, so it draws
 nothing of its own beyond that box — reach for
 [`position`](/python/api/operators/position) when one child needs a precise

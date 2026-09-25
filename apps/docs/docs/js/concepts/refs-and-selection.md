@@ -85,16 +85,15 @@ group its endpoints differently than the chart that drew them did.
 A stream chart is the standard case. The bars were laid out one per month, and
 the ribbons run one per product. The ribbon chart is not re-reading the
 original table. It is re-partitioning the refs, by the data the refs carry:
-`group({ by: "datum.kind" })` rather than `group({ by: "kind" })`.
+`group({ by: "kind" })`.
 
-The `datum.` prefix is not decoration. It records the fact that the stream you
-are operating on is made of refs, not rows. A mark's own channels, like
-`rect({ h: "count" })`, read a row and are not prefixed. Keeping the two
-spellings apart is what makes it obvious, in the source, which of the two
-things a given operator is looking at.
+The field name is the same one you would use on the original rows, because an
+operator reads each ref through its datum. Do not write
+`group({ by: "datum.kind" })`. That looks for a field named `datum` inside each
+row, finds nothing, and puts every ref in one group.
 
 One consequence is worth naming. A ref's datum is a bag of rows, not a single
-row, because a mark may aggregate. Reading `datum.kind` off it gives an answer
+row, because a mark may aggregate. Grouping it by `kind` gives an answer
 only when every row in the bag agrees. When they disagree there is no honest
 single value, so the answer is nothing rather than an arbitrary pick.
 

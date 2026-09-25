@@ -88,8 +88,8 @@ layer([
 
 Connectors often need to re-partition the selected nodes — a ribbon/stream chart
 draws one area **per species** through bars that were laid out **per lake**.
-Because the selected stream is now refs (not raw records), you re-encode by the
-**datum path**: `group(by="datum.species")` rather than `group(by="species")`.
+Even though the selected stream is now refs (not raw records), you still group by
+the bare field name: `group(by="species")`, not `group(by="datum.species")`.
 
 ::: gofish example:highlighted-ribbon-chart hidden
 :::
@@ -106,18 +106,15 @@ layer([
         )
         .mark(rect(h="count", fill="species").name("bars")),
     chart(selectAll("bars"))
-        .flow(group(by="datum.species"))
+        .flow(group(by="species"))
         .mark(ribbon(opacity=0.8)),
 ]).render(w=500, h=300, axes=True)
 ```
 
-Here each bar is a single species row, so `datum.species` collapses cleanly to
-one value. A `datum.field` path resolves only when every row in the ref's bag
-agrees on that field (homogeneity collapse); if it is multi-valued the path is
-`None` and you must disaggregate first. `by` also accepts a callable escape
-hatch: `group(by=lambda r: r.datum.species)`. Note the asymmetry: `by` reads the
-**selection stream** (refs, so `datum.` paths), while a mark's channel like
-`rect(h="count")` reads the **raw record** and is _not_ path-prefixed. See
+Here each bar is a single species row, so `species` collapses cleanly to
+one value. On a ref, a field resolves only when every row in the ref's bag
+agrees on that field (homogeneity collapse); if it is multi-valued the result is
+`None` and you must disaggregate first. See
 [path-aware `by`](/python/api/operators/spread#path-aware-by).
 
 When the chart being re-partitioned is the first chart's own marks, skip this
@@ -162,9 +159,9 @@ Each ref:
 
 ## Common use cases
 
-| Goal                | Pattern                                                                                |
-| ------------------- | -------------------------------------------------------------------------------------- |
-| Line through points | `circle().name("points")` → `selectAll("points")` + `line()`                           |
-| Area under line     | `blank().name("points")` → `selectAll("points")` + `ribbon()`                          |
-| Ribbon / stream     | `rect().name("bars")` → `selectAll("bars")` + `group(by="datum.species")` + `ribbon()` |
-| Single annotation   | Name one mark → `chart(ref("name"))` borrows that one node                             |
+| Goal                | Pattern                                                                          |
+| ------------------- | -------------------------------------------------------------------------------- |
+| Line through points | `circle().name("points")` → `selectAll("points")` + `line()`                     |
+| Area under line     | `blank().name("points")` → `selectAll("points")` + `ribbon()`                    |
+| Ribbon / stream     | `rect().name("bars")` → `selectAll("bars")` + `group(by="species")` + `ribbon()` |
+| Single annotation   | Name one mark → `chart(ref("name"))` borrows that one node                       |

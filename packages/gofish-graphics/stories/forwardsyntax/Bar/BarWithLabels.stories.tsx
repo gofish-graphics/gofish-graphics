@@ -70,7 +70,7 @@ export const Default: StoryObj<Args> = {
 
 // Demonstrates `pluck` — the un-collapsed sibling of the `by: "field"`
 // homogeneity collapse. Within a lake the `species` field is multi-valued, so
-// `datum.species` would NOT resolve (the "ill-posed" undefined). `pluck` is how
+// `by: "species"` would NOT resolve (the "ill-posed" undefined). `pluck` is how
 // you ask for *every* distinct value: here, the count of species in each lake.
 export const SpeciesCountPerLake: StoryObj<Args> = {
   args: { w: 400, h: 400 },

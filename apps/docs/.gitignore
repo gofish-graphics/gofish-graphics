@@ -2,6 +2,8 @@
 /docs/.vitepress/cache/
 /docs/.vitepress/dist/
 /docs/internals/api/
-# Generated at docs build by `pnpm --filter @gofish/tests capture-gallery`
-# (predocs:build) — gallery thumbnails, branded OG cards, and the dims manifest.
+# Generated at docs build by `pnpm docs:images` (the first step of docs:build):
+# gallery thumbnails, branded OG cards, and the dims manifest; and the pictures
+# of `::: gofish … image` containers, e.g. the tutorials index cards.
 /docs/public/gallery/
+/docs/public/previews/

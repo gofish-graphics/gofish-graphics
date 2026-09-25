@@ -166,7 +166,7 @@ open tests/tmp/diff-report.html
 The `Visual Tests` workflow splits the work into three jobs:
 
 - `js-capture` captures every story once (the slow part) and uploads `tests/tmp/js/` as the `js-dom-capture` artifact.
-- `visual-test` downloads that artifact and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there commits the new baselines and re-runs only this job, which reuses the capture from the first attempt instead of capturing again.
+- `visual-test` downloads that artifact and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there commits the new baselines and sends a `visual-baselines-accepted` repository_dispatch. The `Rerun Visual Tests` workflow (`rerun-visual-tests.yml`) waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and then re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again.
 - `python-parity` downloads the same artifact, captures the Python stories, and runs `compare-python.ts` against the JS capture. It runs at the same time as `visual-test` and does not wait on the visual review.
 
 ## Python Parity

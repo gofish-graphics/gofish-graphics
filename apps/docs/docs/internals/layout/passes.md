@@ -57,6 +57,16 @@ const runGofish = async (): Promise<LayoutData> => {
 };
 ```
 
+The chart builders do one thing between resolving a chart and handing it to
+`gofish()`: they install the build-in (`installBuildIn` in
+`src/animation/install.ts`, called from `resolveForRender`). It reads the
+transitions off the resolved tree, checks each one's phases against the clock
+that plays it, solves the enter timing, and puts every animated mark on one
+clock for the chart. The timing depends on the tree's structure and data, not on
+layout, so it is read before the chrome passes below add axes and legends, which
+therefore appear at once. The builders' render options `playing` and `at` hold
+that clock, as the options of the same names hold a `time.sequence`'s.
+
 ## Layout Phase
 
 The layout phase is handled by the `layout()` function, which performs multiple passes over the chart tree.
@@ -731,7 +741,7 @@ rewrite](/internals/frontend/mark-factory) synthesizes one anchor `blank` per ro
 26,000-row line chart used to emit 26,000 zero-size `<rect>` elements (and 26,000
 entries in the interaction hit-test map) that nobody could see or click.
 
-Its sibling is **`INTERNAL_visibleWhile(visible)`**, and the pair is worth reading
+Its sibling is **`INTERNAL_visibleWhile(owner, visible)`**, and the pair is worth reading
 together because the difference is which tier decides. `INTERNAL_emitNothing` is
 for a node that must never draw, and it answers at resolve. `INTERNAL_visibleWhile`
 is for a node whose drawing comes and goes with a signal — a `time.sequence`'s
@@ -769,6 +779,17 @@ taken it. A node keeps the lowering it was built with, so it lends its real draw
 even after it has been silenced. The lent drawing lowers through the same body as
 `INTERNAL_lower`, so its items keep their ids and live channels, but it skips the
 visibility rule: the transition decides when the moving copy shows.
+
+A build-in (`src/animation/`) uses a third hook, `INTERNAL_animate(rule)`, which
+also answers at paint. The node lowers at rest. The rule then rewrites the items
+to the build clock's current state and registers a live slot for each field that
+changes: the geometry for a grow or a wipe, the opacity for a fade. The node keeps
+its layout box, the room it takes at rest, so nothing above it sees the effect
+play, and the chart is laid out once. A mark's labels paint under the same rule
+as riders that follow its timing. They find it through `_attachedTo`, which the
+label pass sets with `INTERNAL_attach` (the inverse of `_attachments`), so the
+order in which a mark and its label lower does not matter. A taken-over drawing
+skips the rule, as it skips visibility.
 
 ### Render Pass 5: Per-Shape Lowering and Painting
 

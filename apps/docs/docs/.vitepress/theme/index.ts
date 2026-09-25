@@ -6,6 +6,7 @@ import custom from "./custom.css";
 import "./style.css";
 import GoFishVue from "../../../components/GoFishVue.vue";
 import GoFishExample from "../../../components/GoFishExample.vue";
+import GoFishImage from "../../../components/GoFishImage.vue";
 import CheatSheet from "../../../components/MarksCheatSheet.vue";
 import CoordinateTransformsCheatSheet from "../../../components/CoordinateTransformsCheatSheet.vue";
 import OverallCheatSheet from "../../../components/OverallCheatSheet.vue";
@@ -47,6 +48,7 @@ export default {
     app.use(TwoslashFloatingVue);
     app.component("GoFishVue", GoFishVue);
     app.component("GoFishExample", GoFishExample);
+    app.component("GoFishImage", GoFishImage);
     app.component("Sandbox", Sandbox);
     app.component("GoFishLive", GoFishLive);
     app.component("CheatSheet", CheatSheet);

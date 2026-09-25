@@ -103,6 +103,9 @@ importers:
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
+      markdown-it:
+        specifier: ^14.1.1
+        version: 14.1.1
       markdown-it-mathjax3:
         specifier: ^4.3.2
         version: 4.3.2

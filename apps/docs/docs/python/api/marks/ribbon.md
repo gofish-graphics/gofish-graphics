@@ -44,7 +44,7 @@ one chart positions named [`blank`](/python/api/marks/blank) marks, a second
 `selectAll`s them and draws the `ribbon()`. `selectAll(name)` reads a named layer
 from an earlier chart as an array of refs, and `layer([chartA, chartB])` composes
 multiple charts into one figure. To re-partition the selection first (e.g. one
-ribbon per series), run it through `group(by="datum.field")` — see
+ribbon per series), run it through `group(by="field")` — see
 [`group`](/python/api/operators/group).
 
 Stack several ribbons in one `layer` — with `opacity` or `mixBlendMode` — for

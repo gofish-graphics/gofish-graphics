@@ -1520,7 +1520,9 @@ def layer(
 
 
 # `enclose` is generated (packages/gofish-python/gofish/_generated.py) —
-# pure kwargs-collection, imported above.
+# pure kwargs-collection, imported above. `background` is an alias: the same
+# function, so it serializes as the same "enclose" IR node.
+background = enclose
 
 
 # Attribute names reserved on `_RefProxy` so they pass through normal

@@ -684,11 +684,77 @@ condition, and would not otherwise. The four are asserted equal (at a midpoint
 playhead and at an exact keyframe) by `src/tests/gapminderTower.test.ts`, and
 drawn side by side by the `Gapminder Tower` stories.
 
-Everything else in §§5-9 is unbuilt: clip composition (sequence/parallel/
-stagger), timing constraints, lifecycle options beyond the default fade
-(`enter`/`exit`), segues, and reveals.
 The transition tweens rects, ellipses, blanks and text, one track per leaf of
 the keyed mark and its attached labels, and throws for other shapes.
+
+**Build-ins (prototype, draft PR #901, `src/animation/`).** A build-in is the
+ENTER case of a transition from the empty chart: with no `time.sequence` in
+the flow, every mark with an enter effect enters once, on the first render.
+The surface is the one in `sketches/build-in/` (see also
+[Build-in Animations](/internals/design/build-in-animation)), with two
+namespaces: `time.*` says WHEN (`time.stagger`, `time.parallel`) and
+`animation.*` says WHAT (`grow`, `shrink`, `fadeIn`, `fadeOut`, `appear`,
+`wipe`, and `tween` for the update phase).
+
+- Two frontends, one core. CHAINED: `operator.transition({ enter:
+time.stagger(...) })` arranges the operator's children in time, and
+  `mark.transition({ enter: animation.grow() })` says how the mark enters.
+  SELECTION: `.layer(chart(selectAll("bars")).flow(time.stagger({ by }))
+.mark(time.transition({ enter })))`, for timings that regroup the spatial
+  nesting. Both record what they say on the nodes they produce, and one walk
+  (`install.ts`) reads the records off the resolved tree: an arranged
+  operator is a time frame over its children, a mark with effects is a leaf,
+  anything else is `parallel`. A selection stagger groups its refs by `by` in
+  its own flow; a chained one groups the operator's children by its `by` when
+  the build is installed. `src/tests/buildInTower.test.ts` asserts that the
+  chained and selection forms draw the same display items at every playhead.
+- A time layout (`schedule.ts`): §5's `stagger ≡ distribute on t` taken
+  literally. Durations bottom up (a leaf lasts its longest effect; `parallel`
+  its longest child; a stagger until its last child ends), starts top down (a
+  child starts at its parent's start plus its offset), so nested arrangements
+  are nested time frames. A stagger takes one of `lag` (step between starts),
+  `spacing` (gap between one end and the next start) or `dwell` (the share of
+  the time spent between starts, from which the lag is derived), plus `by`
+  (children with equal keys start together, in the key's order) and `from`
+  (first, last, center, edges, or an index).
+- One clock per chart: a `timer` over [0, total] ms that plays once, built
+  right after the chart resolves (the timing depends on structure and data,
+  not layout). This is the hoisted-clock direction of #881, at the chart root.
+  The render options `playing: false, at` hold it still.
+- PAINT tier, like the transition: layout runs once, and each animated mark
+  carries a rule (`GoFishNode.INTERNAL_animate`) that rewrites its lowered
+  items to the clock's current state and patches the changing fields through
+  live slots. Before its start a mark shows its enter state (§2.1 fill), after
+  its end its rest state. `grow` collapses the mark's SIZE axes toward its
+  baseline (its local 0), read off the node, so a negative bar grows down and a
+  stacked segment grows in place from its own stack start (declared: gaps open
+  between segments; riding on the segments below is not built). A mark with no
+  size axis grows from its center. `wipe` clips a rect from a side, or grows a
+  circle's radius. Labels follow their mark's timing through `_attachedTo`: they
+  fade or appear with it, and wait for a geometric effect to finish (riding the
+  bar's end, #894, is not built). Under an arrangement, a mark with no effect of
+  its own fades in, the #892 default. An effect's `duration` may name a field
+  (`wipe({ duration: "days" })`, the CAST+ Gantt), a size claim on t read per
+  mark; the time scale for it is a declared shortcut (linear, the largest value
+  at 1000 ms).
+- Under a `time.sequence`, a mark's `.transition()` with
+  `update: animation.tween(...)` is the chained spelling of
+  `.layer(time.transition(...))`, and its enter and exit can only be the
+  default fade.
+- A staggered UPDATE (sketch 6a, D3's Sortable Bar Chart):
+  `spread(...).transition({ update: time.stagger({ lag }) })` under a
+  sequence. The tween reads it as a per-key warp of the playhead
+  (`updateStagger.ts`): between two keyframes each key moves in its own slice
+  of the stretch, in the order the stretch ends in, placed by the same time
+  layout. The default is FIT: the lag and every move shrink by one factor so
+  the last key arrives at the next keyframe, which keeps the dwell and keeps
+  every keyframe exact. The lag is in milliseconds, so the sequence's clock
+  exposes its milliseconds per unit (`TimeTier.msPerUnit`, from
+  `Timer.duration`).
+
+Everything else in §§5-9 is unbuilt: `sequence` as a composition of clips,
+timing constraints (`time.after`), enter and exit styling during a sequence,
+exit on a data change, segues, and reveals of chrome.
 
 ## Sources
 

@@ -139,8 +139,8 @@ connectors like [`line`](/python/api/marks/line) and [`ribbon`](/python/api/mark
 consume directly. Use `ref("layerName")` as data for the singular case: it returns a
 **single ref** and raises if the layer matched zero or more than one node.
 
-After a selection the stream is refs, so re-encode with a datum path —
-`group(by="datum.species")`; see
+After a selection the stream is refs, but `by` reads a ref through its rows, so
+the bare field name still works — `group(by="species")`; see
 [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by). See
 [`mark`](/python/api/core/mark) for `.name()` on a mark.
 

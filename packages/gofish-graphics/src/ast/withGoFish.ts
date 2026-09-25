@@ -34,6 +34,7 @@ import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
+import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
 
 export interface RenderOptions {
@@ -359,6 +360,9 @@ export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
   zOrder(value: ZOrderValue<T>): NameableMark<T>;
+  /** How the mark looks in each phase of an animation: `animation.grow()`,
+   *  `animation.fadeIn()`, … (see `src/animation/`). */
+  transition(spec: MarkTransition): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],

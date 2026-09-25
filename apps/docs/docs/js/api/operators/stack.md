@@ -39,7 +39,7 @@ stack({ dir, ... }, [m1, m2, ...])
 
 Same as [`spread`](/js/api/operators/spread) without `spacing` or `glue` —
 `stack` always glues, so neither is configurable. Its `by` is the same
-path-aware option (`"field"`, `"datum.field"` after a
+path-aware option (`"field"`, which also works on refs after a
 [selection](/js/api/selection/ref), a function, or a
 [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor); see
 [`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by). If you want gaps between
