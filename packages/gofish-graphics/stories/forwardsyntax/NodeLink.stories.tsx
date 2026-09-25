@@ -10,7 +10,7 @@ import {
 } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/NodeLink",
+  title: "Forward Syntax/NodeLink",
   tags: ["gallery"],
   parameters: {
     gallery: {

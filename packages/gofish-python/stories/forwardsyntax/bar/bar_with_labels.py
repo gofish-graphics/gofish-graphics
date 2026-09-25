@@ -1,4 +1,4 @@
-"""Forward Syntax V3/Bar/With Labels — mirrors BarWithLabels.stories.tsx
+"""Forward Syntax/Bar/With Labels — mirrors BarWithLabels.stories.tsx
 
 Only the `Default` export is ported. `SpeciesCountPerLake` uses `pluck()`
 (the un-collapsed sibling of the `by: "field"` homogeneity collapse), which
@@ -9,7 +9,7 @@ mark-fn bridge implemented here.
 from gofish import chart, spread, rect, text, group
 from stories.data.seafood import seafood
 
-TITLE = "Forward Syntax V3/Bar/With Labels"
+TITLE = "Forward Syntax/Bar/With Labels"
 
 
 def default(w=400, h=400):

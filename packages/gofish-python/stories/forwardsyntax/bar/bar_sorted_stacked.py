@@ -1,4 +1,4 @@
-"""Forward Syntax V3/Bar/Sorted Stacked — mirrors BarSortedStacked.stories.tsx
+"""Forward Syntax/Bar/Sorted Stacked — mirrors BarSortedStacked.stories.tsx
 
 Uses derive() to sort each group by count ascending before stacking.
 JS equivalent: derive((d) => orderBy(d, "count", "asc"))
@@ -7,7 +7,7 @@ JS equivalent: derive((d) => orderBy(d, "count", "asc"))
 from gofish import chart, spread, stack, derive, rect
 from stories.data.seafood import seafood
 
-TITLE = "Forward Syntax V3/Bar/Sorted Stacked"
+TITLE = "Forward Syntax/Bar/Sorted Stacked"
 
 
 def default(w=400, h=400):

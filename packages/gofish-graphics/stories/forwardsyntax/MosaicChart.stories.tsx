@@ -3,7 +3,7 @@ import { initializeContainer } from "../helper";
 import { chart, rect, stack, field } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Mosaic Chart",
+  title: "Forward Syntax/Mosaic Chart",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },

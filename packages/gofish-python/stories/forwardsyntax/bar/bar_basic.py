@@ -1,9 +1,9 @@
-"""Forward Syntax V3/Bar/Basic — mirrors BarBasic.stories.tsx"""
+"""Forward Syntax/Bar/Basic — mirrors BarBasic.stories.tsx"""
 
 from gofish import chart, spread, rect
 from stories.data.seafood import seafood
 
-TITLE = "Forward Syntax V3/Bar/Basic"
+TITLE = "Forward Syntax/Bar/Basic"
 
 
 def default(w=400, h=400):

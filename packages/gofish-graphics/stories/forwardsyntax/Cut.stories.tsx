@@ -35,7 +35,7 @@ const abcdData = [
 ];
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Cut",
+  title: "Forward Syntax/Cut",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1200, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1200, step: 10 } },
