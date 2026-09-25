@@ -427,16 +427,18 @@ async function main() {
   // A ref laid out again lands in the same place (#928). The ref's
   // translate is recomputed on every layout, so the walk from the ref up to
   // the common ancestor must not include the ref's own translate from the
-  // previous layout.
+  // previous layout. (Token refs: a string ref is legal only in .relate(),
+  // whose callback builds a fresh arrow on every render.)
   {
-    const node = gf
-      .layer([
-        gf.spread({ dir: "x", spacing: 60 }, [
-          gf.rect({ w: 20, h: 20 }).name("a"),
-          gf.rect({ w: 20, h: 20 }).name("b"),
-        ]),
-      ])
-      .relate(({ a, b }: any) => [gf.arrow({}, [a, b])]);
+    const a = gf.createName("a");
+    const b = gf.createName("b");
+    const node = gf.layer([
+      gf.spread({ dir: "x", spacing: 60 }, [
+        gf.rect({ w: 20, h: 20 }).name(a),
+        gf.rect({ w: 20, h: 20 }).name(b),
+      ]),
+      gf.arrow({}, [gf.ref(a), gf.ref(b)]),
+    ]);
     const paths: string[] = [];
     for (let i = 0; i < 3; i++) {
       const out = await node.toDisplayList({ w: 300, h: 100 });
