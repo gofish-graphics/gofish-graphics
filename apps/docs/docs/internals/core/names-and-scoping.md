@@ -217,4 +217,9 @@ altogether (see the open questions).
   position before that layer's constraints run (#878).
 - Library names still share `_name` with user names, and the fixed chrome
   names (`__axisContent`, `__legend`, and similar) are not yet made unique
-  per call. Chart-tier names have the same problem (#905).
+  per call (#927). Chart-tier names have the same problem (#905).
+- A nested operand moves its container only when the container is named too.
+  Treating every operand as a direct child plus a constant offset would
+  remove that rule (#925).
+- A named ref is a scope member in some places and an alias for its target
+  in others (#926).
