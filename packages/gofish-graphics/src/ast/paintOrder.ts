@@ -35,23 +35,16 @@ type PaintItem<P = undefined> = {
    *  pass no fold; the root `bake` threads the flip scope through here so a
    *  hoisted unit lowers under the same scope it would without the constraint. */
   payload: P;
+  /** The names of the plain layers this unit was hoisted through, outermost
+   *  first. A z-order constraint that names one of those layers orders the
+   *  units it paints, since the layer itself is not a unit. */
+  hoistedThrough: string[];
 };
 
 /** Whether the z-order flatten hoists through `node`: a plain (non-component)
  *  layer is transparent, and its children are the paint units. */
 const hoistsForZOrder = (node: GoFishNode): boolean =>
   !node._isComponent && node.type === "layer";
-
-/**
- * The paint units `node` is drawn as when a z-order constraint orders it: the
- * node itself, or, for a plain layer the flatten hoists through, the units of
- * its children. A constraint names units, so a constraint meant for `node`
- * names these.
- */
-export function paintUnitsOf(node: GoFishAST): GoFishAST[] {
-  if (!(node instanceof GoFishNode) || !hoistsForZOrder(node)) return [node];
-  return node.children.flatMap(paintUnitsOf);
-}
 
 /**
  * Flatten a layer's children into a paint list at COMPONENT granularity: plain
@@ -77,7 +70,7 @@ function flattenForZOrder<P = undefined>(
 ): PaintItem<P>[] {
   const out: PaintItem<P>[] = [];
   let order = 0;
-  walk(children, 0, 0, fold?.seed as P);
+  walk(children, 0, 0, fold?.seed as P, []);
   return out;
 
   // NB: only translates are accumulated across transparent ancestors. A
@@ -89,7 +82,8 @@ function flattenForZOrder<P = undefined>(
     cs: GoFishAST[],
     accTx: number,
     accTy: number,
-    payload: P
+    payload: P,
+    through: string[]
   ): void {
     for (const child of cs) {
       if (!(child instanceof GoFishNode)) {
@@ -99,6 +93,7 @@ function flattenForZOrder<P = undefined>(
           defaultOrder: order++,
           defaultZ: 0,
           payload,
+          hoistedThrough: through,
         });
         continue;
       }
@@ -117,7 +112,16 @@ function flattenForZOrder<P = undefined>(
         const nextPayload = fold
           ? fold.onHoist(payload, child, nextAccTx, nextAccTy)
           : payload;
-        walk(child.children, nextAccTx, nextAccTy, nextPayload);
+        // The layer's name goes with its children, so a constraint that
+        // names the layer still finds what it paints.
+        const name = nodeName(child);
+        walk(
+          child.children,
+          nextAccTx,
+          nextAccTy,
+          nextPayload,
+          name === undefined ? through : [...through, name]
+        );
       } else {
         out.push({
           node: child,
@@ -125,6 +129,7 @@ function flattenForZOrder<P = undefined>(
           defaultOrder: order++,
           defaultZ: child.getZOrder() ?? 0,
           payload,
+          hoistedThrough: through,
         });
       }
     }
@@ -224,15 +229,20 @@ function topoSortByZOrder<P>(
 ): PaintItem<P>[] {
   const n = items.length;
 
-  // name → indices. Descent through nested layers can produce duplicates if
-  // names collide; the constraint is applied to all matches.
+  // name → indices. A unit answers to its own name and to the names of the
+  // plain layers it was hoisted through (a constraint naming such a layer
+  // orders what the layer paints). Descent through nested layers can produce
+  // duplicates if names collide; the constraint is applied to all matches.
   const nameToIndices = new Map<string, number[]>();
-  for (let i = 0; i < n; i++) {
-    const name = nodeName(items[i].node);
-    if (name === undefined) continue;
+  const index = (name: string, i: number) => {
     const arr = nameToIndices.get(name);
     if (arr) arr.push(i);
     else nameToIndices.set(name, [i]);
+  };
+  for (let i = 0; i < n; i++) {
+    const name = nodeName(items[i].node);
+    if (name !== undefined) index(name, i);
+    for (const layer of items[i].hoistedThrough) index(layer, i);
   }
 
   // Adjacency is allocated LAZILY: a layer can hold tens of thousands of paint

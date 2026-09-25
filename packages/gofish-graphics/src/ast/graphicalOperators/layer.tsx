@@ -29,7 +29,6 @@ import { axisScale } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
-import { paintUnitsOf } from "../paintOrder";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { NestedOperand, nestedGap } from "../constraints/nestedOperand";
@@ -174,14 +173,13 @@ function applyRelationalZBelowDefaults(
         (c) => c !== connector && path.includes(c as GoFishAST)
       );
       if (!withinScope) continue;
-      const connectorName = ensureConstraintName(connector);
       // An operand that is itself a plain layer (a `layer([...])` mark, a
-      // `time.history`) is hoisted away too, so the connector goes under
-      // the marks it paints instead (`paintUnitsOf`).
-      for (const unit of paintUnitsOf(target)) {
-        if (!(unit instanceof GoFishNode)) continue;
-        pairs.push([connectorName, ensureConstraintName(unit)]);
-      }
+      // `time.history`) is hoisted away too, and its name goes with what it
+      // paints (`flattenForZOrder`), so the connector goes under those.
+      pairs.push([
+        ensureConstraintName(connector),
+        ensureConstraintName(target),
+      ]);
       claimedAny = true;
     }
     // Consumed (fully or partially) at this level — don't let an outer layer
