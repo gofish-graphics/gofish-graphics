@@ -123,7 +123,7 @@ function isExportExempt(
 // Spec-neutral change detection.
 //
 // A modified JS story whose spec-relevant content is unchanged does not
-// require a Python update. Two kinds of difference are spec-neutral:
+// require a Python update. These kinds of difference are spec-neutral:
 //
 //   - **Storybook chrome** — story-level `title`, `tags`, and `parameters`
 //     (e.g. the gallery annotation) are presentation metadata. Python stories
@@ -136,6 +136,12 @@ function isExportExempt(
 //     counterpart, since Python was always lowercase (and uses list
 //     comprehensions where JS maps). Rewriting each retired name to its
 //     current name before comparing folds such renames out.
+//   - **Import declarations** — a Python story mirrors the spec, not the JS
+//     module's imports, which Python spells its own way (`from gofish import
+//     ...`). Adding, removing, or reordering an import changes no spec: if a
+//     spec starts using a new name, the spec body changes too. Dropping whole
+//     `ImportDeclaration`s from the parsed file handles multi-line and
+//     `import type` forms alike.
 //   - **Comments and whitespace** — a Python story mirrors the spec, not the
 //     prose around it, so a comment-only edit needs no Python change.
 //     Tokenizing with the TypeScript scanner drops comments without touching
@@ -161,6 +167,25 @@ function stripStorybookChrome(source: string): string {
     out.push(line);
   }
   return out.join("\n");
+}
+
+/** The source with every top-level import declaration removed. */
+function stripImports(source: string): string {
+  const file = ts.createSourceFile(
+    "story.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    ts.ScriptKind.TSX
+  );
+  let out = "";
+  let pos = 0;
+  for (const stmt of file.statements) {
+    if (!ts.isImportDeclaration(stmt)) continue;
+    out += source.slice(pos, stmt.getStart(file));
+    pos = stmt.getEnd();
+  }
+  return out + source.slice(pos);
 }
 
 /** The source as a whitespace-separated token stream, comments dropped. */
@@ -228,8 +253,8 @@ function canonicalizeRetiredApiNames(source: string): string {
 }
 
 /** True when the file's change between baseRef's merge-base and HEAD touches
- * only spec-neutral content (Storybook chrome, retired API names, comments,
- * whitespace). */
+ * only spec-neutral content (Storybook chrome, retired API names, imports,
+ * comments, whitespace). */
 function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
   try {
     const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {
@@ -243,7 +268,9 @@ function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
     });
     const headContent = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
     const normalize = (s: string) =>
-      stripComments(canonicalizeRetiredApiNames(stripStorybookChrome(s)));
+      stripComments(
+        canonicalizeRetiredApiNames(stripStorybookChrome(stripImports(s)))
+      );
     return normalize(baseContent) === normalize(headContent);
   } catch {
     return false; // can't prove it — fall through to the strict check
