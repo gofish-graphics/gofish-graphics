@@ -22,7 +22,7 @@ _data = [
 
 def default(w=400, h=300):
     return (
-        chart(_data, {"color": palette("tableau10")})
+        chart(_data, color=palette("tableau10"))
         .flow(
             spread(by="category", dir="x", spacing=24),
             spread(by="group", dir="x", spacing=0),

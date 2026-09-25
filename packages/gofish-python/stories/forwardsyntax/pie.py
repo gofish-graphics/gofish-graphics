@@ -12,7 +12,7 @@ TITLE = "Forward Syntax V3/Pie"
 def basic(w=400, h=400):
     """Simple pie chart: species stacked by count in clock coordinate space."""
     return (
-        chart(seafood, {"coord": clock()})
+        chart(seafood, coord=clock())
         .flow(stack(by="species", dir="x"))
         .mark(rect(w="count", fill="species"))
     )
@@ -21,7 +21,7 @@ def basic(w=400, h=400):
 def donut(w=400, h=400):
     """Donut chart: pie with a hole via y and h offsets on the stack."""
     return (
-        chart(seafood, {"coord": clock()})
+        chart(seafood, coord=clock())
         .flow(stack(by="species", dir="x", y=50, h=50))
         .mark(rect(w="count", fill="species"))
     )
@@ -30,7 +30,7 @@ def donut(w=400, h=400):
 def rose(w=400, h=400):
     """Nightingale rose chart: months × type stacked in clock coordinate space."""
     return (
-        chart(nightingale, {"coord": clock()})
+        chart(nightingale, coord=clock())
         .flow(
             stack(by="Month", dir="x"),
             stack(by="Type", dir="y"),

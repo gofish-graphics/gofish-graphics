@@ -19,7 +19,7 @@ def default(data=None, w=500, h=400):
     if data is None:
         data = load_data()
     return (
-        chart(data, {"color": palette("tableau10")})
+        chart(data, color=palette("tableau10"))
         .flow(
             spread(by="variety", dir="y"),
             stack(by="site", dir="x"),

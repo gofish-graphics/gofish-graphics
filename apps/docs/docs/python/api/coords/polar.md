@@ -64,10 +64,6 @@ chart(data, coord=polar()) \
     .render(w=400, h=300)
 ```
 
-`coord` may also be passed as a positional options dict —
-`chart(data, {"coord": polar()})` — but the keyword form above is preferred in
-Python.
-
 ## Coordinate Mapping
 
 | Cartesian | Polar                  |

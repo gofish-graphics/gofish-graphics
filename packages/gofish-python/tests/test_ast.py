@@ -180,7 +180,7 @@ class TestColorConfig:
 
     def test_palette_in_chart_options(self):
         """Test palette flows through chart options to IR."""
-        c = chart([{"x": 1}], {"color": palette("tableau10")}).mark(rect(h="x"))
+        c = chart([{"x": 1}], color=palette("tableau10")).mark(rect(h="x"))
         ir = c.to_ir()
         assert ir["options"]["color"] == {"_tag": "palette", "values": "tableau10"}
 
@@ -322,7 +322,7 @@ class TestClockCoord:
 
     def test_clock_in_chart_options_ir(self):
         """Test clock() serializes correctly through chart options."""
-        c = chart([{"x": 1}], {"coord": clock()}).mark(rect(h="x"))
+        c = chart([{"x": 1}], coord=clock()).mark(rect(h="x"))
         ir = c.to_ir()
         assert ir["options"]["coord"] == {"type": "clock"}
 
@@ -435,7 +435,7 @@ class TestChartBuilder:
         """Test a full chart spec round-trips to IR correctly."""
         data = [{"cat": "a", "grp": "x", "value": 1}]
         c = (
-            chart(data, {"color": palette("tableau10")})
+            chart(data, color=palette("tableau10"))
             .facet(by="cat", dir="x")
             .stack(by="grp", dir="y")
             .mark(rect(h="value", fill="grp").name("bars"))

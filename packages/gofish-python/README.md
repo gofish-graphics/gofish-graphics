@@ -32,7 +32,7 @@ from gofish import chart, spread, stack, rect
 # Create a chart specification
 data = [{"lake": "A", "species": "B", "count": 10}]
 c = (
-    chart(data, options={"w": 800, "h": 600})
+    chart(data, axes=True)
     .flow(
         spread("lake", dir="x", spacing=64),
         stack("species", dir="y", spacing=0),
@@ -50,7 +50,7 @@ print(ir)
 #         {"type": "stack", "field": "species", "dir": "y", "spacing": 0}
 #     ],
 #     "mark": {"type": "rect", "h": "count", "fill": "species"},
-#     "options": {"w": 800, "h": 600}
+#     "options": {"axes": True}
 # }
 ```
 

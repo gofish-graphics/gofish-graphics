@@ -2873,18 +2873,15 @@ def offset(
 
 def chart(
     data: Any = _PREVIOUS_LAYER_MARKS,
-    options: Optional[dict] = None,
-    **kwargs: Any,
+    **options: Any,
 ) -> ChartBuilder:
     """
     Create a new chart builder.
 
-    Chart-level options can be passed either as a positional dict (mirroring
-    the JS ``Chart(data, { axes, coord, ... })``) or as keyword arguments —
-    both forms are accepted and merged (kwargs win on conflict):
+    Chart-level options are keyword arguments (the JS options object
+    ``chart(data, { axes, coord, ... })`` becomes kwargs):
 
-        chart(data, {"color": palette("tableau10")})   # JS-style options object
-        chart(data, color=palette("tableau10"))         # keyword form
+        chart(data, color=palette("tableau10"))
         chart(data, color=gradient("blues"), coord=clock())
 
     Axes are a chart option (not a render option). ``axes`` accepts:
@@ -2905,16 +2902,13 @@ def chart(
     Args:
         data: Input data, or `ref(name)` / `selectAll(name)` for cross-chart
             layer references
-        options: Chart options as a dict (JS-style positional object)
-        **kwargs: Chart options as keywords — ``axes``, ``color``, ``coord``,
-            ``padding``, ... (merged over ``options``)
+        **options: Chart options as keywords — ``axes``, ``color``, ``coord``,
+            ``padding``, ...
 
     Returns:
         ChartBuilder instance
     """
-    merged: dict = dict(options) if options else {}
-    merged.update(kwargs)
-    return ChartBuilder(data, merged if merged else None)
+    return ChartBuilder(data, options or None)
 
 
 class LayerBuilder:
