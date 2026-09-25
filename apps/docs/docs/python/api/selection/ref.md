@@ -2,8 +2,10 @@
 
 `ref` is the single reference noun in GoFish, and it works in two positions:
 
-- **Inline in a layout** — `arrow(ref("a"), ref("b"))` — it resolves at layout
-  time against the name tree, hygienically scoped (see [scoping](#hygienic-scoping)).
+- **Inline in a layout** — `ref("a")` inside a
+  [`.relate()`](/python/api/constraints/relate) clause, `ref(token)` anywhere —
+  it resolves at layout time against the name tree, hygienically scoped (see
+  [scoping](#hygienic-scoping)).
 - **As chart data** — `chart(ref("maxBar")).mark(text(...))` — it resolves at
   build time against the named-layer registry and stands in for the one node
   registered under that name.
@@ -103,8 +105,8 @@ inline, so the inline-layout and chart-data lookup paths share one scoping rule.
 
 Within that boundary the two positions differ in reach. As chart data, a name
 selects every node it was given in the chart, so a mark repeated per row can
-carry one name. Inline, a string `ref` (and a `.constrain()` operand) takes the
-nearest match to where it is used; see the [`ref`](/python/api/marks/ref) mark.
+carry one name. Inline, a string `ref` (and a `.relate()` operand) takes the
+nearest match to the layer that relates it; see the [`ref`](/python/api/marks/ref) mark.
 
 ## Inline `selectAll` is not supported yet
 

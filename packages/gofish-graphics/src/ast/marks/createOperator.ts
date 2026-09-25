@@ -148,7 +148,7 @@ export async function applyMark<T>(
 /* ------------------------------------------------------------------------ *
  * Modifier factory
  *
- * Every chainable mark method (`.name`, `.label`, `.constrain`) shares one
+ * Every chainable mark method (`.name`, `.label`, `.relate`) shares one
  * shape: calling it returns a NEW mark that, when invoked, applies a mutation
  * to each node the base mark produced — one node for a per-item mark, every
  * slice for an expand mark (`cut`) — then returns the node(s). The returned
@@ -158,7 +158,7 @@ export async function applyMark<T>(
  * `createModifier` captures that shape as a config; `attachModifiers` wires a
  * set of them (plus the export terminals from `terminals.ts`) onto a base mark.
  * This is the one system behind `nameableMark` (here), `createMark`
- * (withGoFish.ts), and `makeConstrainableMark` (chart.ts) — replacing three
+ * (withGoFish.ts), and `makeRelatableMark` (chart.ts) — replacing three
  * hand-rolled copies.
  * ------------------------------------------------------------------------ */
 
@@ -169,7 +169,7 @@ export async function applyMark<T>(
  * the IR-serialize tag or the stashed layer name.
  */
 export type ModifierConfig<Args extends any[] = any[]> = {
-  /** Method name exposed on the mark, e.g. "name" | "label" | "constrain". */
+  /** Method name exposed on the mark, e.g. "name" | "label" | "relate". */
   name: string;
   /** `datum` is the per-instance data the mark was called with (the same value
    *  the shape factory saw). Modifiers that don't need it ignore it; `.zOrder`
@@ -179,7 +179,7 @@ export type ModifierConfig<Args extends any[] = any[]> = {
     layerContext: LayerContext | undefined,
     datum: unknown,
     ...args: Args
-  ) => void;
+  ) => void | Promise<void>;
   tag?: (wrapped: Mark<any>, base: Mark<any>, ...args: Args) => void;
 };
 
@@ -228,11 +228,12 @@ function modifierMethod(
         const nodes = await Promise.all(
           raw.map((r) => resolveMarkResult(r, layerContext))
         );
-        for (const node of nodes) cfg.apply(node, layerContext, d, ...args);
+        for (const node of nodes)
+          await cfg.apply(node, layerContext, d, ...args);
         return nodes as unknown as GoFishNode;
       }
       const node = await resolveMarkResult(raw, layerContext);
-      cfg.apply(node, layerContext, d, ...args);
+      await cfg.apply(node, layerContext, d, ...args);
       return node;
     };
     // Preserve the kind tag so applyMark dispatches correctly through the

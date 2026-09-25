@@ -16,17 +16,15 @@ annotations.
 
 ```js
 gf.layer([
-  gf
-    .layer([
-      gf.rect({ w: 70, h: 40, fill: gf.color.blue[2] }).name("a"),
-      gf.rect({ w: 70, h: 40, fill: gf.color.red[2] }).name("b"),
-    ])
-    .constrain(({ a, b }) => [
-      gf.Constraint.distribute({ dir: "x", spacing: 120 }, [a, b]),
-      gf.Constraint.align({ y: "middle" }, [a, b]),
-    ]),
-  gf.arrow({ stroke: "#333", strokeWidth: 3 }, [gf.ref("a"), gf.ref("b")]),
-]).render(root, { w: 320, h: 100 });
+  gf.rect({ w: 70, h: 40, fill: gf.color.blue[2] }).name("a"),
+  gf.rect({ w: 70, h: 40, fill: gf.color.red[2] }).name("b"),
+])
+  .relate(({ a, b }) => [
+    gf.Constraint.distribute({ dir: "x", spacing: 120 }, [a, b]),
+    gf.Constraint.align({ y: "middle" }, [a, b]),
+    gf.arrow({ stroke: "#333", strokeWidth: 3 }, [a, b]),
+  ])
+  .render(root, { w: 320, h: 100 });
 ```
 
 :::
@@ -43,10 +41,11 @@ arrow({
 }, [from, to])
 ```
 
-The children are usually two
-[`ref(...)`](/js/api/selection/ref) calls (or datum-level sub-refs) pointing at
-named elements placed by an earlier tier: the arrow runs **from the first child
-to the second**. Fewer than two children renders nothing.
+The children are usually two named elements: operands of a
+[`.relate()`](/js/api/constraints/relate) callback, or
+[`ref(...)`](/js/api/selection/ref) calls (or datum-level sub-refs of a
+`createName` token). The arrow runs **from the first child to the second**.
+Fewer than two children renders nothing.
 
 ## Parameters
 
@@ -65,18 +64,23 @@ to it unchanged.
 
 ```ts
 // Labeled callout: a text label pointing at a named shape (gently bowed default)
-arrow({}, [ref("label"), ref("Mercury")]);
-
-// Pointer edge: straight, with a dot at the source (e.g. a heap/stack reference)
-arrow({ bow: 0, stretch: 0, padStart: 0, stroke: "#1A5683", start: true }, [
-  ref("stackSlot"),
-  ref("heapCell"),
+layer([planets, label]).relate(({ label, Mercury }) => [
+  arrow({}, [label, Mercury]),
 ]);
 
-// Datum-level endpoints: arrow into a specific selected sub-element
+// Pointer edge: straight, with a dot at the source (e.g. a heap/stack reference)
+layer([stack, heap]).relate(({ stackSlot, heapCell }) => [
+  arrow({ bow: 0, stretch: 0, padStart: 0, stroke: "#1A5683", start: true }, [
+    stackSlot,
+    heapCell,
+  ]),
+]);
+
+// Datum-level endpoints: arrow into a specific selected sub-element of a
+// createName token (a token reaches across component boundaries)
 arrow({ bow: 0, padEnd: 25, padStart: 0, stroke: "#1A5683", start: true }, [
-  ref("heap").path(0, 1).val,
-  ref("heap").path(0, 2).elmTuples[0],
+  ref(heap).path(0, 1).val,
+  ref(heap).path(0, 2).elmTuples[0],
 ]);
 ```
 
@@ -84,12 +88,15 @@ arrow({ bow: 0, padEnd: 25, padStart: 0, stroke: "#1A5683", start: true }, [
 
 - The arrow's bbox is the union of the resolved endpoints' boxes — like
   `line`, it does not contribute its own space.
-- `ref(name)` resolves names declared via `.name(...)`. With `createName()`
-  tokens, the name is global; with plain strings, it is layer-scoped.
+- An arrow over string names is a `.relate()` clause: it is laid out after the
+  layer's constraints, so it runs between the final positions of its
+  endpoints. A string `ref("name")` outside a `.relate()` clause is an error.
+  With `createName()` tokens, the name is global and `ref(token)` works
+  anywhere.
 - Use [`line`](/js/api/marks/line) or [`ribbon`](/js/api/marks/ribbon) instead when you want an
   _undirected_ line (or a multi-stop polyline) with explicit bbox-anchor
   control; use `arrow` when you want a _directed_ arrowhead and automatic curved
   routing.
 - Pair the operator with z-order constraints
-  ([`Constraint.zAbove` / `zBelow`](/js/api/constraints/constrain#constraint-zabove-constraint-zbelow))
+  ([`Constraint.zAbove` / `zBelow`](/js/api/constraints/relate#constraint-zabove-constraint-zbelow))
   when an arrow needs to sit between two elements in paint order.

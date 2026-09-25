@@ -145,9 +145,8 @@ node, which catches mistakes early.
 ```ts
 layer([
   chart(data).flow(/* ... */).mark(blank().name("origin")),
-  text({ text: "start" }).name("label"),
   // ref("origin") returns one ref; errors if "origin" matched 0 or >1 nodes
-  line({ source: "middle" }, [ref("label"), ref("origin")]),
+  chart(ref("origin")).mark(text({ text: "start" })),
 ]);
 ```
 

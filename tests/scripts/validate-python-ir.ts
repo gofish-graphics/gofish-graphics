@@ -156,9 +156,9 @@ function wrap(serverIR: any): Frontend.FrontendIRDocument {
       type: "layer",
       charts: serverIR.charts,
       ...(serverIR.options ? { options: serverIR.options } : {}),
-      // Part of the canonical schema (LayerIR.constraints) — pass through so
-      // constrained-layer stories actually exercise the validator.
-      ...(serverIR.constraints ? { constraints: serverIR.constraints } : {}),
+      // Part of the canonical schema (LayerIR.relate) — pass through so
+      // related-layer stories actually exercise the validator.
+      ...(serverIR.relate ? { relate: serverIR.relate } : {}),
     } as Frontend.LayerIR;
   } else if (serverIR && serverIR._kind === "raw-mark") {
     root = {

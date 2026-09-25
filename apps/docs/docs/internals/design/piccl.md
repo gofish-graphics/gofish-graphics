@@ -54,7 +54,7 @@ chart(data["flower_data.csv"])
         .flow(spread("OECD_field", { dir: "theta", mode: "center" }))
         .mark(picture("petal3.png", { h: "OECD_index", color: "OECD_field" }))
         .as("flower"),
-    ]).constrain([
+    ]).relate([
       pointSnap(
         from(
           "flower",
@@ -87,7 +87,7 @@ const plant = layer([
   picture("stem.png", { h: "avg" }).as("stem"),
   picture("leaf.png", { h: 100 }).as("leaf"),
   flower.as("flower"),
-]).constrain([
+]).relate([
   pointSnap(
     from(
       "flower",

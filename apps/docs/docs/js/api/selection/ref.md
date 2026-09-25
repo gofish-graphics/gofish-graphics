@@ -2,8 +2,9 @@
 
 `ref` is the single reference noun in GoFish, and it works in two positions:
 
-- **Inline in a layout** — `arrow(ref("a"), ref("b"))`, `ref(token).row[2]` — it
-  resolves at layout time against the name tree, hygienically scoped (see
+- **Inline in a layout** — `ref("a")` inside a
+  [`.relate()`](/js/api/constraints/relate) clause, `ref(token).row[2]` anywhere
+  — it resolves at layout time against the name tree, hygienically scoped (see
   [scoping](#hygienic-scoping)). This is the [`ref`](/js/api/marks/ref) mark.
 - **As chart data** — `chart(ref("maxBar")).mark(text(...))` — it resolves at
   build time against the named-layer registry and stands in for the one node
@@ -75,9 +76,8 @@ gf.layer([
     .chart(data)
     .flow(/* ... */)
     .mark(gf.rect({ h: "total" }).name("kpi")),
-  gf.text({ text: "peak" }).name("label"),
-  // ref("kpi") as the connector's target: one ref; throws on 0 or >1 nodes
-  gf.line({ source: "middle" }, [gf.ref("label"), gf.ref("kpi")]),
+  // ref("kpi") as chart data: one node; throws on 0 or >1 nodes
+  gf.chart(gf.ref("kpi")).mark(gf.text({ text: "peak" })),
 ]);
 ```
 
@@ -128,8 +128,8 @@ rule.
 
 Within that boundary the two positions differ in reach. As chart data, a name
 selects every node it was given in the chart, so a mark repeated per row can
-carry one name. Inline, a string `ref` (and a `.constrain()` operand) takes the
-nearest match to where it is used; see the [`ref`](/js/api/marks/ref) mark.
+carry one name. Inline, a string `ref` (and a `.relate()` operand) takes the
+nearest match to the layer that relates it; see the [`ref`](/js/api/marks/ref) mark.
 
 ## Inline `selectAll` is not supported yet
 

@@ -7,7 +7,7 @@
 // A grid is the symmetric 2-D layout: cells partitioned into `numCols` columns
 // (a track per column on x) and the implied rows (a track per row on y), every
 // cell pinned to its (column, row) track intersection. It's the elaboration
-// target for `table` — `layer(cells).constrain(grid(...))`.
+// target for `table` — `layer(cells).relate(grid(...))`.
 //
 // **The unified sizing rule.** Per axis, a track's extent is set by
 // ONE rule — the (max, +) fold every other operator already uses:

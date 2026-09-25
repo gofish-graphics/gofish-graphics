@@ -18,11 +18,11 @@ import { clock } from "../ast/coordinateTransforms/clock";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { wavy } from "../ast/coordinateTransforms/wavy";
 import { createName, type Token } from "../ast/createName";
-import { Constraint } from "../ast/constraints";
+import { Constraint, RelateOperand } from "../ast/constraints";
 import { palette, gradient } from "../ast/colorSchemes";
 import { ref } from "../ast/shapes/ref";
 import { GoFishRef } from "../ast/_ref";
-import type { Frontend } from "gofish-ir";
+import { Frontend } from "gofish-ir";
 import {
   COMBINATOR_FACTORIES,
   MARK_MAP,
@@ -46,6 +46,21 @@ export type OperatorSpec = Frontend.OperatorIR;
  *  union) because every reapplication site below works entry-by-entry. */
 export type LabelSpec = Frontend.LabelSpecIR;
 export type ConstraintSpec = Frontend.ConstraintIR;
+type RelateClauseIR = Frontend.RelateClauseIR;
+
+/**
+ * Rebuild one constraint clause of a `.relate()` from its IR. The wire
+ * carries operand NAMES; each becomes a `RelateOperand`, which the layer
+ * resolves at layout like any other, so a name that matches no node inside
+ * the layer is reported there, by name.
+ */
+export function constraintFromIR(c: Frontend.ConstraintIR): unknown {
+  const operands = c.refs.map((name) => new RelateOperand(name));
+  if (c.type === "zAbove" || c.type === "zBelow") {
+    return (Constraint as any)[c.type](...operands);
+  }
+  return (Constraint as any)[c.type](c.options, operands);
+}
 
 // ---------------------------------------------------------------------------
 // Token sentinels (hygienic-name encoding from the Python wrapper)
@@ -153,7 +168,7 @@ export function unwrapValues(value: any): any {
 /**
  * Wrap a Mark so its resolved GoFishNode gets `.scope()` called. Triggered
  * by the `__scope: true` flag the Python `@mark` decorator stamps on a
- * Mark's IR. Forwards `.name` / `.label` / `.render` / `.constrain` so the
+ * Mark's IR. Forwards `.name` / `.label` / `.render` / `.relate` so the
  * scoped mark still behaves as a `NameableMark` for the raw-mark render path.
  */
 export function wrapWithScope(inner: any): any {
@@ -188,7 +203,7 @@ export function wrapWithScope(inner: any): any {
       return node.render(container, options);
     });
   }
-  for (const key of ["name", "label", "constrain"] as const) {
+  for (const key of ["name", "label", "relate"] as const) {
     if (typeof inner[key] === "function") {
       define(key, (...args: any[]) => wrapWithScope(inner[key](...args)));
     }
@@ -398,7 +413,7 @@ export function mapMark(
     // `.name(...)` on the Python `_InputRef` (issue #556) — `GoFishRef.name()`
     // mutates in place and returns `this`, so this renames the SAME live ref
     // the rest of the tree already shares (e.g. the stem/bar this ref also
-    // points at), letting an enclosing `.layer([...]).constrain(...)` target
+    // points at), letting an enclosing `.layer([...]).relate(...)` target
     // it by name.
     if (spec.name != null && typeof (inputRef as any)?.name === "function") {
       (inputRef as any).name(resolveNameField(spec.name, resolveToken));
@@ -462,7 +477,7 @@ export function mapMark(
     const refNode = ref(resolveRefSelection(spec.selection, resolveToken));
     // A named ref stand-in, `ref(token).name("a")`. GoFishRef's
     // `.name()` mutates in place and returns `this`, making the ref a
-    // constraint target of the enclosing layer (RefMarkIR carries `name`;
+    // relate operand of the enclosing layer (RefMarkIR carries `name`;
     // mirrors the __inputRef rename branch above).
     if (spec.name != null) {
       (refNode as any).name(resolveNameField(spec.name, resolveToken));
@@ -536,19 +551,14 @@ export function mapMark(
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
     let mark = factory(opts, childMarks);
-    if (spec.constraints && typeof (mark as any).constrain === "function") {
-      const constraints = spec.constraints as ConstraintSpec[];
-      // The wire carries operand NAMES, and a by-name operand is `{ name }`:
-      // the layer resolves it at layout like any other, so a name that
-      // matches no node inside the layer is reported there, by name.
-      const operand = (name: string) => ({ name });
-      mark = (mark as any).constrain(() =>
-        constraints.map((c: any) => {
-          if (c.type === "zAbove" || c.type === "zBelow") {
-            return (Constraint as any)[c.type](...c.refs.map(operand));
-          }
-          return (Constraint as any)[c.type](c.options, c.refs.map(operand));
-        })
+    if (spec.relate && typeof (mark as any).relate === "function") {
+      const clauses = spec.relate as RelateClauseIR[];
+      mark = (mark as any).relate(() =>
+        clauses.map((c) =>
+          Frontend.isConstraintIR(c)
+            ? constraintFromIR(c)
+            : mapMark(c as MarkSpec, bridge, resolveToken, inputRefs)
+        )
       );
     }
     if (spec.__scope) {

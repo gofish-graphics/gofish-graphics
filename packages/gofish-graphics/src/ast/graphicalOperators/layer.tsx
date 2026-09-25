@@ -43,6 +43,7 @@ import {
   gridCellSizeByName,
   gridTracksFromSizes,
   Constraint,
+  relateScheduleForLayout,
   type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
@@ -117,7 +118,7 @@ function ensureConstraintName(node: GoFishNode): string {
  *
  * A connector whose author already set an explicit `.zOrder(...)` (including
  * `.zOrder(0)` — the unset state is `undefined`, so any explicit call counts
- * as an author decision) or `.constrain(...)` (a non-empty constraints array)
+ * as an author decision) or `.relate(...)` (a non-empty constraints array)
  * is left alone — the explicit choice wins over the default.
  *
  * A connector whose referenced node lies outside `children`'s subtrees (e.g.
@@ -126,8 +127,8 @@ function ensureConstraintName(node: GoFishNode): string {
  *
  * Returns the auto-derived zBelow constraints (merged with any that already
  * existed on `node` — there are none for a freshly built layer, but this
- * stays defensive) to install via `node.constrain(...)`-equivalent direct
- * assignment (this runs before any user `.constrain()` chain, which replaces
+ * stays defensive) to install via `node.relate(...)`-equivalent direct
+ * assignment (this runs before any user `.relate()` chain, which replaces
  * `constraints` wholesale and so always wins over the default, matching the
  * "explicit override" rule).
  */
@@ -568,8 +569,13 @@ export const layer = createNodeOperatorSequential(
             const op = operands.get(name);
             if (op?.direct) constrainedChildren.add(op.child);
           }
+          // Drawing clauses of `.relate()` run in dependency order around the
+          // solve: a clause that reads positions lays out after the solve
+          // that writes them (#878). Plain children lay out before it, as
+          // always.
+          const relateOrder = relateScheduleForLayout(node, operands);
 
-          for (const i of layoutPlan.layoutOrder) {
+          const layoutChild = (i: number) => {
             const child = children[i];
             const childName = childNameKey(node.children[i]);
             const targetDims =
@@ -613,7 +619,12 @@ export const layer = createNodeOperatorSequential(
               childPlaceable.place("y", 0, "baseline");
             }
             childPlaceables[i] = childPlaceable;
+          };
+
+          for (const i of layoutPlan.layoutOrder) {
+            if (!relateOrder.clauses.has(i)) layoutChild(i);
           }
+          for (const i of relateOrder.beforeSolve) layoutChild(i);
 
           if (node.constraints.length > 0) {
             // Constraint-based placement:
@@ -624,7 +635,9 @@ export const layer = createNodeOperatorSequential(
             >();
             for (let i = 0; i < node.children.length; i++) {
               const childName = childNameKey(node.children[i]);
-              if (childName !== undefined) {
+              // A drawing clause laid out after the solve has no placeable
+              // yet, and nothing in the solve can address it.
+              if (childName !== undefined && childPlaceables[i]) {
                 nameToPlaceable.set(childName, childPlaceables[i]);
               }
             }
@@ -720,20 +733,22 @@ export const layer = createNodeOperatorSequential(
 
             // Place any child the constraints left unplaced at the layer's
             // baseline origin — consistent with the phase-1 baseline placement
-            // of unconstrained children. A ref-consuming child (e.g. connect)
-            // that must observe constrained siblings should live in an outer
-            // tier laid out after them (see notes/nested-layer-tiers.md), not
-            // rely on a re-layout pass here.
+            // of unconstrained children. A drawing clause that reads the
+            // constrained positions is laid out after this (see
+            // `relateOrder`), not by a re-layout pass here.
             for (const cp of childPlaceables) {
-              placeUnplacedChild(cp);
+              if (cp) placeUnplacedChild(cp);
             }
           } else {
             // Default layer behavior: place all children at (0, 0)
             for (const cp of childPlaceables) {
+              if (!cp) continue;
               cp.place("x", 0);
               cp.place("y", 0);
             }
           }
+
+          for (const i of relateOrder.afterSolve) layoutChild(i);
 
           // Calculate the bounding box of all children (NaN-safe; see
           // foldFinite for why undefined extents are skipped).

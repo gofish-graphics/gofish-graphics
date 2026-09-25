@@ -115,9 +115,9 @@ type FrontendIRDocument = {
 The root types mirror the fluent builder shapes:
 
 - `ChartIR` — `{ type: "chart", data?, operators?, mark, options?, zOrder? }`
-- `LayerIR` — `{ type: "layer", charts, options? }` (each `charts` tier is a
-  `ChartIR`, or a `RawMarkIR` for a component-level annotation tier from the
-  `chart(...).layer(mark)` builder chain)
+- `LayerIR` — `{ type: "layer", charts, options?, relate? }` (each `charts`
+  tier is a `ChartIR`, or a `RawMarkIR` for a component-level annotation tier
+  from the `chart(...).layer(mark)` builder chain)
 - `RawMarkIR` — `{ type: "raw-mark", mark, options? }`
 
 `data` is either `{type: "inline", rows}`, `{type: "select", layer}`,
@@ -187,7 +187,7 @@ earlier tier) survives. A `.name(...)` call on the Python `_InputRef` (#556)
 rides along as a `name` field on the sentinel and is applied to the resolved
 ref before it's returned, since `GoFishRef.name()` mutates in place — this is
 how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
-`.constrain(...)` against a ref it only received through the bridge. The test
+`.relate(...)` against a ref it only received through the bridge. The test
 harness (`tests/harness/main.ts`) carries an equivalent
 `serializeMarkFnInput`/`__inputRef` implementation, since it renders from raw
 IR over plain HTTP rather than through the shared `fromJSON.ts`/widget path.
@@ -213,7 +213,7 @@ and defaulting the connector to `zBelow`) is entirely JS-side, done at resolve
 time by `LayerBuilder.wireTiers()`: no name is minted or leaked into the JSON,
 and the zBelow default is applied as a paint-order constraint rather than
 serialized as a field, so it composes with any explicit `.zOrder(...)` or
-`.constrain(...)` the reader adds on top.
+`.relate(...)` the reader adds on top.
 
 A chart's **coordinate transform** rides the IR as a small spec the deserializer
 maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
@@ -231,6 +231,22 @@ shorthand path) or one of three explicit tagged objects:
 - `literal(x)` → `{type: "literal", value: x}` — inline constant, not scaled.
 
 These three mirror Vega-Lite's `field` / `datum` / `value` trichotomy.
+
+### `.relate()` clauses
+
+A `layer` combinator mark (and a `LayerIR`) carries its `.relate()` callback as
+`relate: RelateClauseIR[]`, the callback's clauses in order, already
+evaluated on the authoring side. A clause is a `ConstraintIR`
+(`{ type, options?, refs }`, the operands as names) or a `MarkIR` that draws
+(`arrow`, `enclose`, a relational `line`, ...), whose children may include
+`{ type: "ref", selection: "name" }` refs to the layer's names. The two are
+told apart by `refs`: a constraint always carries it and a mark never does
+(`isConstraintIR`, which the validator uses too). Both readers (`fromJSON.ts`
+and the parity harness) rebuild a constraint with the same `constraintFromIR`
+and hand the list back through `.relate(() => clauses)`, so the
+layer schedules the clauses exactly as it would for a JS author. The field was
+called `constraints`, and held constraints only, before the `.constrain()` →
+`.relate()` rename.
 
 ## A worked example
 
@@ -478,7 +494,7 @@ widget/RPC layer — see
 [Design space: generating the Python wrapper](/internals/design/python-wrapper-codegen)
 for the full hand-written-residue accounting and what's still deferred
 (closing the deserializer-registry/parity-harness generification, the
-`.layer()`/constrain-ref-walk follow-ups).
+`.layer()`/relate-ref-walk follow-ups).
 
 Generating this layer fixed real drift along the way: the hand-written
 `rect()` had exposed phantom `rs=`/`ts=` kwargs (see the descriptor-table

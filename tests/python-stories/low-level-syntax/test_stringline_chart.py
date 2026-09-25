@@ -62,6 +62,6 @@ def story_default():
     ]
 
     return (
-        layer([stations_tier, *train_lines]),
+        layer([stations_tier]).relate(lambda: train_lines),
         {"axes": True},
     )

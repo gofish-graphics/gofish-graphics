@@ -290,7 +290,7 @@ rides along. `.name()`
 defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
 follows parent-iteration order, not async-completion order. The same factory
-backs `makeConstrainableMark` (which adds `.constrain()`) and the combinator
+backs `makeRelatableMark` (which adds `.relate()`) and the combinator
 marks — one wiring, not three copies.
 
 `.translate()` is structural: `attachModifiers` maps the base mark to a new mark
@@ -396,7 +396,7 @@ stashes `__relationalOperands` on the node). The `layer` combinator
 `zBelow(self, operand)` paint-order **constraint** — not a hardcoded z-index —
 so the connector paints under whatever it references. Because it's a real
 constraint, it composes with any other constraint in the layer; an explicit
-`.zOrder(...)` or `.constrain(...)` chained on the connector's own mark
+`.zOrder(...)` or `.relate(...)` chained on the connector's own mark
 overrides the default (the tag is only consulted when neither has been set).
 This is what lets `line()`/`ribbon()` sit under the marks they connect with no
 zOrder incantation needed, in every call form including the low-level

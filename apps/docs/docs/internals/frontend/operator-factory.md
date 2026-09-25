@@ -365,8 +365,8 @@ Both use channel annotations to encode opts; both produce mark types
 supporting `.name(...)` and `.label(...)` chaining. That chaining is wired by
 the **modifier factory** that also lives in this file — `ModifierConfig` +
 `attachModifiers` — a single config-driven system shared by `nameableMark`
-(combinator marks), `createMark` (leaf marks), and `makeConstrainableMark`
-(layer / Porter-Duff marks, which add `.constrain()`). `.name(...)` also
+(combinator marks), `createMark` (leaf marks), and `makeRelatableMark`
+(layer / Porter-Duff marks, which add `.relate()`). `.name(...)` also
 stashes the passed name on the returned mark function via `stashLayerName`
 (defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
 [`.layer()`](/js/api/core/layer)'s producer-tier auto-naming can detect a
@@ -389,10 +389,14 @@ chained after it. The `transition` modifier itself (`transitionModifier`, in
 `nameableMark`'s set) records the mark's effects on each produced node, where
 the build-in reads them.
 
+A modifier's `apply` may return a promise, and the wrapped mark awaits it:
+`relateModifier` does, because `.relate()` reifies its drawing clauses (marks
+and operator calls) before it attaches them to the node.
+
 A modifier's `apply(node, layerContext, datum, ...args)` receives the
 **per-instance datum** the mark was called with — the same value the shape
 factory saw — so a modifier can produce a _data-driven_ value rather than a
-constant. `nameModifier` / `labelModifier` / `constrainModifier` ignore it, but
+constant. `nameModifier` / `labelModifier` / `relateModifier` ignore it, but
 `zOrderModifier` uses it: `.zOrder(value)` takes a `ZOrderValue<T> = number |
 ((datum: T) => number)` and, when handed a callback, evaluates it against this
 datum to set each produced node's paint-order hint. That is what lets paint

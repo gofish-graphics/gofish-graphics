@@ -162,7 +162,7 @@ for the API.
         },
         "name": {
           "type": "string",
-          "description": "Chart-level name so a sibling Layer constrain callback can reference this chart."
+          "description": "Chart-level name so a sibling Layer relate callback can reference this chart."
         },
         "origin": {
           "$ref": "#/$defs/Origin"
@@ -196,12 +196,12 @@ for the API.
         "options": {
           "type": "object"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           },
-          "description": "Layer-level constraints (Layer([...]).constrain(...)), resolving refs against the child charts' names."
+          "description": "Layer-level relate clauses (layer([...]).relate(...)), resolving names against the child charts' names."
         },
         "builder": {
           "type": "boolean",
@@ -613,10 +613,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -725,6 +725,17 @@ for the API.
               }
             }
           }
+        }
+      ]
+    },
+    "RelateClauseIR": {
+      "description": "One clause of a .relate() callback: a constraint over names (carries refs), or a mark that draws, whose children may reference the layer's names.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ConstraintIR"
+        },
+        {
+          "$ref": "#/$defs/MarkIR"
         }
       ]
     },
@@ -1551,10 +1562,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -1605,10 +1616,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -1715,10 +1726,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -1816,10 +1827,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -1967,10 +1978,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -2079,10 +2090,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -2154,10 +2165,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -2208,10 +2219,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -2303,10 +2314,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -2390,10 +2401,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {
@@ -2425,10 +2436,10 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "constraints": {
+        "relate": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ConstraintIR"
+            "$ref": "#/$defs/RelateClauseIR"
           }
         },
         "zOrder": {

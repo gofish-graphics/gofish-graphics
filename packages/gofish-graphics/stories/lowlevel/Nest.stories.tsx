@@ -37,12 +37,15 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     layer([
-      rect({ fill: "#dbe6f3", stroke: "#5a7da6", strokeWidth: 1.5, rx: 6 }).name(
-        "outer"
-      ),
+      rect({
+        fill: "#dbe6f3",
+        stroke: "#5a7da6",
+        strokeWidth: 1.5,
+        rx: 6,
+      }).name("outer"),
       rect({ w: 60, h: 40, fill: "#e63946", rx: 4 }).name("inner"),
     ])
-      .constrain(({ outer, inner }) => [
+      .relate(({ outer, inner }) => [
         Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
       ])
       .render(container, { w: args.w, h: args.h });
@@ -58,21 +61,27 @@ export const Chained: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     const mid = layer([
-      rect({ fill: "#cfdcec", stroke: "#5a7da6", strokeWidth: 1.25, rx: 5 }).name(
-        "midOuter"
-      ),
+      rect({
+        fill: "#cfdcec",
+        stroke: "#5a7da6",
+        strokeWidth: 1.25,
+        rx: 5,
+      }).name("midOuter"),
       rect({ w: 40, h: 30, fill: "#2a9d8f", rx: 3 }).name("core"),
-    ]).constrain(({ midOuter, core }) => [
+    ]).relate(({ midOuter, core }) => [
       Constraint.nest({ x: 8, y: 8 }, [midOuter, core]),
     ]);
 
     layer([
-      rect({ fill: "#fafbfd", stroke: "#9bb1c4", strokeWidth: 1.5, rx: 6 }).name(
-        "shell"
-      ),
+      rect({
+        fill: "#fafbfd",
+        stroke: "#9bb1c4",
+        strokeWidth: 1.5,
+        rx: 6,
+      }).name("shell"),
       mid.name("mid"),
     ])
-      .constrain(({ shell, mid }) => [
+      .relate(({ shell, mid }) => [
         Constraint.nest({ x: 12, y: 12 }, [shell, mid]),
       ])
       .render(container, { w: args.w, h: args.h });
@@ -98,11 +107,14 @@ export const AutoFit: StoryObj<Args> = {
       { dir: "x", spacing: 10, alignment: "middle" },
       INNER_WIDTHS.map((v, i) =>
         layer([
-          rect({ fill: "#eef2f7", stroke: "#9bb1c4", strokeWidth: 1, rx: 4 }).name(
-            "outer"
-          ),
+          rect({
+            fill: "#eef2f7",
+            stroke: "#9bb1c4",
+            strokeWidth: 1,
+            rx: 4,
+          }).name("outer"),
           rect({ w: value(v), h: 18, fill: COLORS[i], rx: 3 }).name("inner"),
-        ]).constrain(({ outer, inner }) => [
+        ]).relate(({ outer, inner }) => [
           Constraint.nest({ x: 8, y: 8 }, [outer, inner]),
         ])
       )
@@ -122,12 +134,17 @@ export const OutsideIn: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     layer([
-      rect({ w: 200, h: 140, fill: "#dbe6f3", stroke: "#5a7da6", strokeWidth: 1.5, rx: 6 }).name(
-        "outer"
-      ),
+      rect({
+        w: 200,
+        h: 140,
+        fill: "#dbe6f3",
+        stroke: "#5a7da6",
+        strokeWidth: 1.5,
+        rx: 6,
+      }).name("outer"),
       rect({ fill: "#e63946", rx: 4 }).name("inner"),
     ])
-      .constrain(({ outer, inner }) => [
+      .relate(({ outer, inner }) => [
         Constraint.nest({ x: 16, y: 16 }, [outer, inner]),
       ])
       .render(container, { w: args.w, h: args.h });
@@ -145,12 +162,15 @@ export const FillOuter: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     layer([
-      rect({ fill: "#dbe6f3", stroke: "#5a7da6", strokeWidth: 1.5, rx: 6 }).name(
-        "outer"
-      ),
+      rect({
+        fill: "#dbe6f3",
+        stroke: "#5a7da6",
+        strokeWidth: 1.5,
+        rx: 6,
+      }).name("outer"),
       rect({ fill: "#2a9d8f", rx: 4 }).name("inner"),
     ])
-      .constrain(({ outer, inner }) => [
+      .relate(({ outer, inner }) => [
         Constraint.nest({ x: 20, y: 20 }, [outer, inner]),
       ])
       .render(container, { w: args.w, h: args.h });

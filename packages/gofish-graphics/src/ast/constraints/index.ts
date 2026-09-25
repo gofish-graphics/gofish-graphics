@@ -37,6 +37,7 @@ import {
   type RigidAttachment,
 } from "./placementSolver";
 import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
+import { RelateOperand, directChildIndex, type RelateEnv } from "./relate";
 
 export type {
   Axis,
@@ -74,6 +75,14 @@ export {
 } from "./grid";
 export { getPositioningConstraintRefs } from "./proposalPlan";
 export { BBox } from "./bbox";
+export {
+  RelateOperand,
+  scheduleRelate,
+  relateScheduleForLayout,
+  type RelateEnv,
+  type RelateClause,
+  type RelateFn,
+} from "./relate";
 
 export type ConstraintSpec =
   | AlignConstraint
@@ -119,8 +128,8 @@ export const Constraint = {
 // --- Resolution ---
 
 /**
- * The environment a `.constrain(fn)` callback receives: an ordinary object with
- * one by-name operand (`{ name }`) for every distinct string name inside
+ * The environment a `.relate(fn)` callback receives: an ordinary object with
+ * one operand (a {@link RelateOperand}) for every distinct string name inside
  * `layer` (a token-named node answers to its tag), walking the same bounded
  * tree the name lookup walks (`visibleNodes`: into nested layers, not into a
  * nested `createMark` component). These are exactly the names a constraint of
@@ -133,14 +142,13 @@ export const Constraint = {
  * operand is resolved to its node at layout, by name: elaboration can swap a
  * named child for a wrapper, and the wrapper takes the name.
  */
-export function constraintEnv(
-  layer: GoFishNode
-): Record<string, ConstraintRef> {
-  const env: Record<string, ConstraintRef> = {};
+export function relateEnv(layer: GoFishNode): RelateEnv {
+  const env: RelateEnv = {};
   for (const n of visibleNodes(layer)) {
     if (n === layer) continue;
     const name = childNameKey(n);
-    if (name !== undefined && !(name in env)) env[name] = { name };
+    if (name !== undefined && !(name in env))
+      env[name] = new RelateOperand(name);
   }
   return env;
 }
@@ -148,12 +156,12 @@ export function constraintEnv(
 /**
  * Throw on an operand that is not an operand, typically an `undefined` read
  * from the callback environment because no node inside the layer has that
- * name (#819). Runs when `.constrain()` runs, so the stack points at the
+ * name (#819). Runs when `.relate()` runs, so the stack points at the
  * callback.
  */
 export function validateOperands(
   specs: ConstraintSpec[],
-  env: Record<string, ConstraintRef>
+  env: RelateEnv
 ): void {
   for (const c of specs) {
     c.children.forEach((ref: ConstraintRef | undefined, i: number) => {
@@ -161,7 +169,7 @@ export function validateOperands(
       const names = Object.keys(env);
       throw new Error(
         `Constraint.${c.type}: operand ${i + 1} is ${String(ref)}. A ` +
-          `.constrain() callback receives only the names of nodes inside its ` +
+          `.relate() callback receives only the names of nodes inside its ` +
           `layer; check the spelling, or name the node with .name(...). ` +
           `Names inside this layer: ${
             names.length > 0 ? names.join(", ") : "(none)"
@@ -201,19 +209,20 @@ export function resolveConstraintOperands(
         ref.name,
         `Constraint.${c.type} operand`
       );
-      // Walk up to the layer's direct child that contains `node`.
-      let cur: GoFishAST | undefined = node;
-      while (cur && cur.parent !== layer) cur = cur.parent;
-      const child = cur ? layer.children.indexOf(cur) : -1;
+      const child = directChildIndex(layer, node);
       if (child < 0) {
         throw new Error(
           `Constraint.${c.type}: operand "${ref.name}" is not inside the ` +
-            `layer this .constrain() is attached to. A layer can only place ` +
+            `layer this .relate() is attached to. A layer can only place ` +
             `nodes it contains; attach the constraint to a layer that ` +
             `contains every operand.`
         );
       }
-      out.set(ref.name, { node, child, direct: cur === node });
+      out.set(ref.name, {
+        node,
+        child,
+        direct: layer.children[child] === node,
+      });
     }
   }
   return out;

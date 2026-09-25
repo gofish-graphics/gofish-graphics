@@ -121,7 +121,7 @@ const labeledNode = (d: any) =>
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fill: "#1d3557",
     }).name("label"),
-  ]).constrain(({ box, label }: any) => [
+  ]).relate(({ box, label }: any) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ]);
 
@@ -218,7 +218,7 @@ const labeledHeader = (d: any) =>
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fill: "#1d3557",
     }).name("label"),
-  ]).constrain(({ box, label }: any) => [
+  ]).relate(({ box, label }: any) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ]);
 

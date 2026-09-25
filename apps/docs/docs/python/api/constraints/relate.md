@@ -1,18 +1,21 @@
-# constrain
+# relate
 
-`.constrain()` positions named nodes inside a `layer` relative to each other
-using declarative rules. It is the low-level alternative to `spread` when you
-need precise control over how individual elements relate — for example, aligning
-a label to the edge of a background, or placing tick marks at their data values.
+`.relate()` relates named nodes inside a `layer`. Its callback returns a list
+of clauses. A clause is a **constraint**, which places nodes relative to each
+other with declarative rules, or a **drawing clause**, an operator or mark such
+as `arrow` or `enclose` drawn over the named nodes. It is the low-level
+alternative to `spread` when you need precise control over how individual
+elements relate — for example, aligning a label to the edge of a background,
+or drawing an arrow from a label to the node it describes.
 
-This is the Python mirror of the JS [constrain](/js/api/constraints/constrain)
-page; the constraint surface is identical, with Python conventions (options as
+This is the Python mirror of the JS [relate](/js/api/constraints/relate)
+page; the surface is identical, with Python conventions (options as
 keyword arguments, `z_above` / `z_below` snake-cased).
 
 ## Usage
 
-Name each node you want to position with `.name("key")`, then chain
-`.constrain()` on the `layer`. The callback receives one ref per parameter it
+Name each node you want to relate with `.name("key")`, then chain
+`.relate()` on the `layer`. The callback receives one ref per parameter it
 declares without a default, named after the parameter. A parameter with a
 default keeps its default and gets no ref, so the loop idiom
 `lambda a, b, gap=gap: [...]` binds the loop value as usual. A `**rest`
@@ -25,7 +28,7 @@ from gofish import layer, rect, text, Constraint
 layer([
     rect(w=200, h=150, fill="#e2ebf6").name("bg"),
     text(text="Title", fontSize=18).name("label"),
-]).constrain(
+]).relate(
     lambda bg, label: [
         Constraint.align([label, bg], x="middle", y="end"),
     ]
@@ -34,7 +37,7 @@ layer([
 
 ## Names
 
-A parameter name resolves the same way as [`ref("name")`](/python/api/marks/ref#string-nearest-match), starting at the constrained layer: the closest node with that name inside the layer wins, and the search never crosses a `@mark` boundary. So an operand can be nested anywhere inside the layer, not only a direct child, and a direct child beats a node with the same name nested deeper.
+A parameter name resolves the same way as [`ref("name")`](/python/api/marks/ref#string-nearest-match), starting at the related layer: the closest node with that name inside the layer wins, and the search never crosses a `@mark` boundary. So an operand can be nested anywhere inside the layer, not only a direct child, and a direct child beats a node with the same name nested deeper.
 
 - **Direct child.** The constraint places it.
 - **Nested node.** It is fixed to the direct child that contains it. If that child is also named in a constraint, the two move together. If not, the child stays where it was laid out and the nested node is a fixed point the other operands move to.
@@ -59,13 +62,53 @@ layer([
         stroke="none",
     ).name("row"),
     rect(w=40, h=12, fill="#e94560").name("label"),
-]).constrain(
+]).relate(
     lambda mercury, row, label: [
         Constraint.align([mercury, label], x="middle"),
         Constraint.distribute([row, label], dir="y", spacing=10),
     ]
 )
 ```
+
+## Drawing clauses
+
+A clause that is not a constraint is an operator or mark, and it becomes a
+child of the layer. A parameter in its children stands for the named node,
+like [`ref("name")`](/python/api/marks/ref). A drawing clause can also hold
+fresh marks next to the parameters, as in
+`spread([bar, text(text="...")], dir="y")`.
+
+```python
+from gofish import Constraint, arrow, layer, rect
+
+layer([
+    rect(w=70, h=40).name("a"),
+    rect(w=70, h=40).name("b"),
+]).relate(
+    lambda a, b: [
+        Constraint.distribute([a, b], dir="x", spacing=60),
+        arrow([a, b], bow=0, stretch=0),
+    ]
+)
+```
+
+- **Order.** The layer lays out its plain children, runs its constraints,
+  then lays out each drawing clause after the clauses that place the nodes it
+  reads. So the arrow above runs between the final positions of `a` and `b`,
+  whatever the order of the clauses in the list.
+- **Cycles.** A clause cannot read its own result. A drawing clause that
+  refers to itself, two drawing clauses that refer to each other, or a
+  constraint that moves a drawing clause which reads the nodes that
+  constraint places, raises when the chart renders, and the message names
+  the clauses.
+- **Paint order.** Drawing clauses paint after the plain children, in clause
+  order.
+- **Scope.** A string `ref("name")` is legal only inside a `.relate()` clause,
+  where it resolves from the related layer; anywhere else it raises and says
+  to move it into `.relate()`. A `createName` token `ref` reaches across
+  scopes and works anywhere.
+- **Flattening.** Nested lists flatten, and `None` or `False` entries are
+  skipped.
 
 ## Constraint.align
 
@@ -118,7 +161,7 @@ As with the point-anchor form, the source is the first already-placed ref;
 every other listed ref is a target.
 
 ```python
-layer([group, rect(fill="none", stroke="#333").name("border")]).constrain(
+layer([group, rect(fill="none", stroke="#333").name("border")]).relate(
     lambda group, border: [
         Constraint.align([group, border], x="span"),  # border adopts group's left AND right
         Constraint.align([group, border], y="span"),  # together: border exactly bounds the group
@@ -175,7 +218,7 @@ layer([
     rect(w=80, h=40).name("a"),
     rect(w=80, h=60).name("b"),
     rect(w=80, h=30).name("c"),
-]).constrain(
+]).relate(
     lambda a, b, c: [
         Constraint.align([a, b, c], x="start"),
         Constraint.distribute([a, b, c], dir="y", spacing=8),
@@ -202,7 +245,7 @@ layer([
     rect(w=60, h=datum(30), fill="#e63946").name("a"),
     rect(w=60, h=datum(50), fill="#457b9d").name("b"),
     rect(w=60, h=datum(20), fill="#2a9d8f").name("c"),
-]).constrain(
+]).relate(
     lambda a, b, c: [
         Constraint.align([a, b, c], x="start"),
         Constraint.distribute([a, b, c], dir="y", glue=True),
@@ -258,7 +301,7 @@ tick_values = [0, 50, 100, 150, 200, 250, 300]
 layer(
     [rect(w=1, h=300, fill="#999").name("axis")]
     + [_tick(v).name(f"t{i}") for i, v in enumerate(tick_values)]
-).constrain(
+).relate(
     lambda **g: [
         Constraint.align([g["axis"]], y="start"),
         *[
@@ -306,7 +349,7 @@ from gofish import layer, rect, Constraint
 layer([
     rect(fill="#dbe6f3").name("outer"),
     rect(w=60, h=40, fill="#e63946").name("inner"),
-]).constrain(
+]).relate(
     lambda outer, inner: [
         Constraint.nest([outer, inner], x=10, y=10),
     ]
@@ -336,7 +379,7 @@ layer([
     rect(w=80, h=40, fill="lightgray").name("bg"),
     rect(w=60, h=60, fill="steelblue").name("box"),
     text(text="label", fontSize=14).name("label"),
-]).constrain(
+]).relate(
     lambda bg, box, label: [
         # box paints over bg; label paints over both.
         Constraint.z_above(box, bg),
@@ -397,7 +440,7 @@ layer([
     rect(w=80, h=40, y=20).name("a"),  # y set manually
     rect(w=120, h=40).name("b"),
     rect(w=60, h=40).name("c"),
-]).constrain(
+]).relate(
     lambda a, b, c: [
         # Only constrain x — each element keeps its own y
         Constraint.align([a, b, c], x="end"),
@@ -416,7 +459,7 @@ layer([
     rect(w=80, h=50).name("b"),
     rect(w=120, h=50).name("c"),
     rect(w=60, h=50).name("d"),
-]).constrain(
+]).relate(
     lambda a, b, c, d: [
         Constraint.align([a, b, c, d], x="end"),
         Constraint.distribute([a, b], dir="y", spacing=5),   # tight grouping

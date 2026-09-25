@@ -61,7 +61,7 @@ const labeledNode = (d) =>
   layer({ w: 96, h: 22 }, [
     rect({ w: 96, h: 22, rx: 4, fill: "#e3edf7" }).name("box"),
     text({ text: d.data.name, fontSize: 11 }).name("label"),
-  ]).constrain(({ box, label }) => [
+  ]).relate(({ box, label }) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ]);
 
