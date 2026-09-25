@@ -6,10 +6,10 @@ handwritten: true
 
 When you build composable components — a `stackSlot` that itself contains a `box` and a `value` text; a `heapObject` that contains many `elmTuple`s — the names you give to inner nodes have to _not_ collide across instances. gofish has two complementary mechanisms for this:
 
-1. **Strings** are **layer-local**. Use them for constraint callbacks.
+1. **Strings** are **component-local**. Use them for constraint callbacks.
 2. **`createName(tag)`** tokens are **externally addressable**. Use them for cross-component references.
 
-## Strings: layer-local names
+## Strings: component-local names
 
 `.name("x")` on a child of a `layer` makes `x` available inside that layer's `.constrain()` callback, and to a local `ref("x")` lookup. Strings never cross component boundaries, never register globally, and never show up as path segments.
 
@@ -75,7 +75,7 @@ export const stackSlot = createMark(({ variable, value }: StackSlotProps) => {
 
 - The mark's output (the `spread` here) is the scope root.
 - `valueTag` and `boxTag` are Tokens: they register in `stackSlot`'s scope under tags `"value"` and `"box"`.
-- `"variable"` (the left-side text) is a plain string: layer-local only, not path-addressable from outside.
+- `"variable"` (the left-side text) is a plain string: component-local only, not path-addressable from outside.
 
 ## Paths
 

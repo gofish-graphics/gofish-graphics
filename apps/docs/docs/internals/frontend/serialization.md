@@ -196,12 +196,10 @@ The plain leaf-form `ref` node carries names the same way: `RefMarkIR`
 declares an optional `name`, emitted by Python's `_RefProxy.to_dict()` when
 the ref was renamed and re-applied by the deserializer (both `fromJSON.ts`
 and the harness's `mapMark`) via the same mutate-in-place `GoFishRef.name()`.
-This is what makes the `pull(name)` cross-tier proxy pattern —
-`ref(name).name(name)` re-exposed as a direct child so an outer layer's
-`.constrain(...)` can resolve the name (see `BakingRecipes.stories.tsx`) —
-work identically from Python: without the wire `name`, the reconstructed ref
-is invisible to the constraint solver's direct-children map and the
-constraints silently no-op.
+This is what lets a named ref stand-in, such as `ref(token).name("a")`,
+serve as a constraint operand from Python exactly as from JS: without the wire
+`name`, the reconstructed ref would not answer to `"a"` and the constraint
+would fail to resolve.
 
 There is no `connect` field on the wire. `.layer(...)` — the one way to
 overlay a connector — always serializes as an ordinary `LayerIR` tier: an

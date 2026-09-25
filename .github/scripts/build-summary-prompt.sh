@@ -10,7 +10,9 @@ set -e
 # Writes:
 # - prompt.md: the full prompt for Claude
 # - contributors.tsv: one line per contributor (author, first PR number, URL,
-#   title), which check-summary.sh uses to guarantee contributor coverage
+#   title), which check-summary.sh uses to guarantee contributor coverage.
+#   Only PRs with an Author line count; the workflow omits that line for the
+#   maintainer and for bots, so only outside contributors get a shout-out.
 
 # Check if required file exists
 if [ ! -f prs.txt ]; then
@@ -65,11 +67,8 @@ CONTRIBUTOR_CALLOUTS=$(
 )
 
 if [ -z "$CONTRIBUTOR_CALLOUTS" ]; then
-  CONTRIBUTOR_CALLOUTS="(No named contributors detected.)"
+  CONTRIBUTOR_CALLOUTS="(None this week.)"
 fi
-
-# Count merged PRs to include in Highlights.
-PR_COUNT=$(grep -c '^### PR #' prs.txt || true)
 
 # Build the prompt template
 read -r -d '' PROMPT_TEMPLATE <<'ENDPROMPT' || true
@@ -78,10 +77,7 @@ You are summarizing a week of development on GoFish, a charting library for data
 ## Merged PRs from the last 7 days:
 PRS_PLACEHOLDER
 
-## Weekly PR count:
-PR_COUNT_PLACEHOLDER
-
-## Contributor coverage requirements (MUST follow):
+## Contributors to credit (MUST follow):
 CONTRIBUTOR_CALLOUTS_PLACEHOLDER
 
 Write a concise weekly summary in standard Markdown:
@@ -89,14 +85,14 @@ Write a concise weekly summary in standard Markdown:
 - Use **double asterisks** for bold and _underscores_ for italics if needed
 - Use `- ` for bullet points
 - When mentioning any PR in the summary, format it as a Markdown link using the URL from the data above: [PR #NUMBER](PR_URL) (e.g. [PR #123](https://github.com/gofish-graphics/gofish-graphics/pull/123))
-- Contributor coverage is REQUIRED: every contributor listed above must be called out by name with at least one specific contribution.
-- In the Highlights section, explicitly mention the number of PRs that landed this week using the PR count above.
+- Credit only the contributors listed above: each must be called out by name with at least one specific contribution. Do not name or credit anyone else.
+- Do not state how many PRs landed this week.
 - Do not add a title line above the first section; one is added when the summary is posted.
 
-Structure your response as three sections, in this order:
+Structure your response as these sections, in this order:
 1. `## Highlights` - 2-3 sentence overview of the main thrust of work this week
 2. `## What changed` - Group related changes by theme (e.g., "API improvements", "Bug fixes", "Documentation"). Use bullet points, keep each brief.
-3. `## Contributor shout-outs` - One bullet per contributor, each explicitly naming the person and one concrete contribution (preferably linked PR).
+3. `## Contributor shout-outs` - One bullet per contributor listed above, each explicitly naming the person and one concrete contribution (preferably linked PR). Omit this section entirely if no contributors are listed.
 
 Keep the tone casual and informative. Use emoji sparingly. Total length should be readable in ~30 seconds.
 
@@ -108,9 +104,8 @@ ENDPROMPT
 PRS_DATA=$(cat prs.txt)
 
 PROMPT="${PROMPT_TEMPLATE//PRS_PLACEHOLDER/$PRS_DATA}"
-PROMPT="${PROMPT//PR_COUNT_PLACEHOLDER/$PR_COUNT}"
 PROMPT="${PROMPT//CONTRIBUTOR_CALLOUTS_PLACEHOLDER/$CONTRIBUTOR_CALLOUTS}"
 
 printf '%s\n' "$PROMPT" > prompt.md
 
-echo "Prompt written to prompt.md ($PR_COUNT PRs)."
+echo "Prompt written to prompt.md."

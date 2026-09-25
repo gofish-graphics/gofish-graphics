@@ -554,14 +554,12 @@ function buildCreatedMark(
       // Expand path: stamp each slice with its own datum.
       for (let i = 0; i < result.length; i++) {
         const node = result[i];
-        node.name(key?.toString() ?? "");
         node.datum = data[i] ?? d;
         if (liveChannels) node.__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;
     }
     const node = result as GoFishNode;
-    node.name(key?.toString() ?? "");
     node.datum = d;
     if (liveChannels) node.__gfLive = liveChannels;
     node.scope();

@@ -25,13 +25,17 @@ import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, TrackLayout } from "./grid";
+import { resolveScopedName, visibleNodes } from "../_ref";
 import {
   childNameKey,
   isPlacedOn,
   type ConstraintPosScales,
   type ConstraintRef,
 } from "./shared";
-import { solvePlacementConstraints } from "./placementSolver";
+import {
+  solvePlacementConstraints,
+  type RigidAttachment,
+} from "./placementSolver";
 import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
 
 export type {
@@ -115,35 +119,104 @@ export const Constraint = {
 // --- Resolution ---
 
 /**
- * Build a name->ConstraintRef map from the named children of a node. Descends
- * into non-component plain `layer` children so a layer's `.constrain()` can
- * name elements in nested tiers (mirrors `_ref.tsx`'s `findInComponent`).
- *
- * Direct children win on name collision (collected before descent).
+ * The environment a `.constrain(fn)` callback receives: an ordinary object with
+ * one by-name operand (`{ name }`) for every distinct string name inside
+ * `layer` (a token-named node answers to its tag), walking the same bounded
+ * tree the name lookup walks (`visibleNodes`: into nested layers, not into a
+ * nested `createMark` component). These are exactly the names a constraint of
+ * this layer can use: the lookup from the layer (`resolveScopedName`) stops at
+ * the layer's own level for any of them, so each resolves to a node inside it,
+ * while a name found only outside the layer could never be an operand. A
+ * missing name reads as `undefined`, so JS destructuring defaults
+ * (`({ a, pad = 8 })`) and optional checks (`note ? ... : ...`) work, and
+ * `validateOperands` turns an `undefined` operand into a loud error. An
+ * operand is resolved to its node at layout, by name: elaboration can swap a
+ * named child for a wrapper, and the wrapper takes the name.
  */
-export function collectConstraintRefs(
-  children: GoFishAST[]
+export function constraintEnv(
+  layer: GoFishNode
 ): Record<string, ConstraintRef> {
-  const refs: Record<string, ConstraintRef> = {};
-  collect(children);
-  return refs;
+  const env: Record<string, ConstraintRef> = {};
+  for (const n of visibleNodes(layer)) {
+    if (n === layer) continue;
+    const name = childNameKey(n);
+    if (name !== undefined && !(name in env)) env[name] = { name };
+  }
+  return env;
+}
 
-  function collect(cs: GoFishAST[]): void {
-    // Phase 1: collect direct children (so they win on collision). Both
-    // GoFishNode and GoFishRef carry `_name`, so a named ref (used as a
-    // cross-tier stand-in) is a valid constraint target too.
-    for (const child of cs) {
-      const name = childNameKey(child);
-      if (name && !(name in refs)) refs[name] = { name };
-    }
-    // Phase 2: recurse into non-component plain layers (refs have no children).
-    for (const child of cs) {
-      if (!(child instanceof GoFishNode)) continue;
-      if (child._isComponent) continue;
-      if (child.type !== "layer") continue;
-      collect(child.children);
+/**
+ * Throw on an operand that is not an operand, typically an `undefined` read
+ * from the callback environment because no node inside the layer has that
+ * name (#819). Runs when `.constrain()` runs, so the stack points at the
+ * callback.
+ */
+export function validateOperands(
+  specs: ConstraintSpec[],
+  env: Record<string, ConstraintRef>
+): void {
+  for (const c of specs) {
+    c.children.forEach((ref: ConstraintRef | undefined, i: number) => {
+      if (ref && typeof ref.name === "string") return;
+      const names = Object.keys(env);
+      throw new Error(
+        `Constraint.${c.type}: operand ${i + 1} is ${String(ref)}. A ` +
+          `.constrain() callback receives only the names of nodes inside its ` +
+          `layer; check the spelling, or name the node with .name(...). ` +
+          `Names inside this layer: ${
+            names.length > 0 ? names.join(", ") : "(none)"
+          }.`
+      );
+    });
+  }
+}
+
+/** A layer constraint operand resolved to a node inside the layer: `child` is
+ *  the index of the layer's direct child that is (`direct`) or contains
+ *  `node`. */
+export type ResolvedOperand = {
+  node: GoFishAST;
+  child: number;
+  direct: boolean;
+};
+
+/**
+ * Resolve every placement operand of `layer`'s constraints to a node inside
+ * the layer, once per distinct name, with the same lookup `ref("name")` uses
+ * (`resolveScopedName`: missing or ambiguous names throw). Every operand must
+ * lie inside the layer (a layer can only place what it contains). z-order
+ * constraints are excluded: they relate SETS of nodes at paint time
+ * (`paintOrder.ts`), not single placeables.
+ */
+export function resolveConstraintOperands(
+  layer: GoFishNode
+): Map<string, ResolvedOperand> {
+  const out = new Map<string, ResolvedOperand>();
+  for (const c of layer.constraints) {
+    if (isZOrderConstraint(c)) continue;
+    for (const ref of c.children) {
+      if (out.has(ref.name)) continue;
+      const node = resolveScopedName(
+        layer,
+        ref.name,
+        `Constraint.${c.type} operand`
+      );
+      // Walk up to the layer's direct child that contains `node`.
+      let cur: GoFishAST | undefined = node;
+      while (cur && cur.parent !== layer) cur = cur.parent;
+      const child = cur ? layer.children.indexOf(cur) : -1;
+      if (child < 0) {
+        throw new Error(
+          `Constraint.${c.type}: operand "${ref.name}" is not inside the ` +
+            `layer this .constrain() is attached to. A layer can only place ` +
+            `nodes it contains; attach the constraint to a layer that ` +
+            `contains every operand.`
+        );
+      }
+      out.set(ref.name, { node, child, direct: cur === node });
     }
   }
+  return out;
 }
 
 /**
@@ -238,6 +311,8 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
  * @param nameToPlaceable - Map from child name to its Placeable
  * @param sizes - The layer's box size `[w, h]`, used by grid placement
  * @param posScales - Per-axis data→pixel scales for `position` constraints
+ * @param rigid - Nested operands (operand name → container name + gap), tied
+ *   rigidly to the layer child that contains them
  * @param dataPositioned - Per-axis sets of child names anchored to a data scale
  *   (baseline fixed at `posScale(0)`); `align` leaves these where their own scale
  *   puts them. The space/scope fact that replaced the `placementOn` guard read.
@@ -248,7 +323,8 @@ export function applyConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales,
   gridTracks?: [TrackLayout, TrackLayout],
-  dataPositioned?: [Set<string>, Set<string>]
+  dataPositioned?: [Set<string>, Set<string>],
+  rigid?: Map<string, RigidAttachment>
 ): void {
   const placement = constraints.filter(
     (
@@ -282,7 +358,8 @@ export function applyConstraints(
     sizes,
     posScales,
     gridTracks,
-    dataPositioned
+    dataPositioned,
+    rigid
   );
 
   if (prePlaced) {

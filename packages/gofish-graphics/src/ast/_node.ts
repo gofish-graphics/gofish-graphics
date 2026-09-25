@@ -68,7 +68,7 @@ import type { TokenContext } from "./tokenContext";
 import type { FlipScope } from "./_displayObject";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
-import { collectConstraintRefs } from "./constraints";
+import { constraintEnv, validateOperands } from "./constraints";
 import {
   BBox,
   type BBoxKey,
@@ -341,11 +341,12 @@ export class GoFishNode {
   public _name?: string | Token;
   public _isScope: boolean = false;
   /**
-   * String-name search boundary. Set ONLY by createMark — manual `.scope()`
-   * (which flips `_isScope`) does not flip this. resolveLocalString in
-   * GoFishRef stops walking up at the nearest `_isComponent` ancestor and
-   * does not descend into nested ones, so `ref("name")` lookups don't leak
-   * across component boundaries even if a future operator silently scopes.
+   * String-name scope boundary. Set ONLY by createMark — manual `.scope()`
+   * (which flips `_isScope`) does not flip this. String-name lookup
+   * (`resolveScopedName` in _ref.tsx, shared by `ref("name")` and
+   * `.constrain()` operands) stops walking up at the nearest `_isComponent`
+   * ancestor and does not descend into nested ones, so names don't leak
+   * across component boundaries in either direction.
    */
   public _isComponent: boolean = false;
   public _scopeMap?: Map<string, GoFishNode>;
@@ -684,9 +685,9 @@ export class GoFishNode {
         ancestor = ancestor.parent;
       }
     }
-    // String _name intentionally does not register anywhere global — it is
-    // only consulted by layer.tsx for constraint-callback destructuring and
-    // by ref(string) for a layer-local lookup.
+    // A string _name registers nowhere: `ref(string)` and `.constrain()`
+    // operands find it by walking the component scope (`resolveScopedName`
+    // in _ref.tsx), bounded by the nearest createMark.
     this.children.forEach((child) => {
       child.resolveNames();
     });
@@ -1720,8 +1721,10 @@ export class GoFishNode {
   public constrain(
     fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
   ): this {
-    const refs = collectConstraintRefs(this.children);
-    this.constraints = fn(refs);
+    const env = constraintEnv(this);
+    const specs = fn(env);
+    validateOperands(specs, env);
+    this.constraints = specs;
     return this;
   }
 

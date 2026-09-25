@@ -149,8 +149,11 @@ Walking `withGoFish.ts:431-477`:
    lowercase operators as a chart, and there is no separate node-level
    spelling to reach for. An expand mark's array of slice nodes passes through
    unchanged.
-5. **Tag the node** with `name = key` and `datum = d` so downstream
-   coordinators (`ref` / `selectAll`, label placement) can find it back.
+5. **Tag the node** with `datum = d` so downstream coordinators (label
+   placement, `selectAll` projections) can find its row. The factory does not
+   name the node after its data key: the key is data, and a name made from it
+   could clash with a name the user wrote (see
+   [Name Resolution & Scoping](/internals/core/names-and-scoping)).
 
 ### `live()` channels
 

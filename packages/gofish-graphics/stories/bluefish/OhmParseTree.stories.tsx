@@ -61,13 +61,13 @@ import type { MarkChild } from "../../src/lib";
 //   task brief suggested — read the comment at `marker`'s definition).
 // - `Constraint.align`/`distribute` targets below are built directly as
 //   `{ name: token.__tag }` `ConstraintRef` handles (`src/ast/constraints
-//   /shared.ts`: `ConstraintRef = { readonly name: string }`) rather than
+//   /shared.ts`) rather than
 //   through the destructured `.constrain(({a,b,c}) => ...)` callback
 //   param — the trace generates ~30 dynamically-named nodes, not a fixed
 //   set of statically-known names a literal destructure could spell out.
 //   This is exactly the `Record<string, ConstraintRef>` the callback would
-//   have handed back anyway (`collectConstraintRefs` keys it the same way,
-//   off each named child's token `__tag`), just built directly from the
+//   have handed back anyway (it keys operands the same way, off each named
+//   node's token `__tag`), just built directly from the
 //   `Token`s this file already holds instead of round-tripping through the
 //   callback's object.
 // - `LabelText`'s optional case-name note (e.g. "AddExp - plus") is a

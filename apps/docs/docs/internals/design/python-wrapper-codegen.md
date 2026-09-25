@@ -34,9 +34,10 @@ could be generated mechanically, from what source, and what the options are.
   - `_wire_layer_tier` re-derives the `.layer()` auto-naming + `selectAll`
     rewiring in Python, even though the `builder: true` IR tag exists
     precisely so JS's `LayerBuilder` can own that logic.
-  - `ConstrainableMark.constrain` re-implements the JS
-    `collectConstraintRefs` tree-walk (documented as a mirror of
-    `ast/constraints/index.ts`) so callbacks get refs synchronously.
+  - `ConstrainableMark.constrain` re-implemented the JS
+    `collectConstraintRefs` tree-walk so callbacks got refs synchronously.
+    (Since removed: the callback now gets one ref per declared parameter
+    without a default, and JS resolves the names at layout.)
   - The empty-placeholder Arrow table construction is copy-pasted ~4×.
   - Four wire-name tables (Porter-Duff-style compositing renames, constraint
     type strings, mark type strings, operator type strings) are hand-copied
@@ -366,10 +367,10 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
 **Deliberately deferred**, not follow-up bugs:
 
 - **The constrain ref-walk** (`ConstrainableMark.constrain`'s Python-side
-  mirror of `collectConstraintRefs`) — evaluated and kept hand-written.
-  Dropping it needs a loud unknown/duplicate-ref guard added JS-side
-  first; without one, authoring errors that are cheap to catch in Python
-  today would surface as cryptic solver failures instead.
+  mirror of `collectConstraintRefs`) — kept hand-written at the time, pending
+  a loud unknown/duplicate-ref guard JS-side. That guard now exists
+  (`resolveScopedName`, #819), and the walk is gone: Python passes one ref
+  per callback parameter without a default and JS resolves and checks the names at layout.
 - **Generifying the deserializer registry and the parity-harness
   switch** off the descriptor table (option 5 in § Option A above) —
   both remain hand-maintained; see the CLAUDE.md checklist's step 2 note.

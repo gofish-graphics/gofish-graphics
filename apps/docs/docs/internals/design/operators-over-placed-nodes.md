@@ -221,10 +221,10 @@ whatever `emphasize` decides should bind here too.
 
 The reporting rule and the operand-kind table both fall out of one reading, borrowed from
 programming languages: **`.name()` is a binder, and a ref is a variable occurrence.** The
-`.constrain()` callback is literally a binding form today — `collectConstraintRefs` builds
-an environment from the layer's named children and passes it to the callback, a `where`
-clause scoped over siblings (and GoFish's hygienic, bounded name scoping is, in this
-reading, the choice of lexical over dynamic scope). The spec with refs is then a DAG whose
+`.constrain()` callback is literally a binding form today — `constraintEnv` hands the
+callback an environment holding the names inside the layer, each resolved lexically (closest
+match first), a `where` clause scoped over the layer's contents (and GoFish's hygienic, bounded name scoping is, in
+this reading, the choice of lexical over dynamic scope). The spec with refs is then a DAG whose
 spanning tree is the ownership tree; refs are the non-tree edges — the standard
 terms-with-sharing picture.
 

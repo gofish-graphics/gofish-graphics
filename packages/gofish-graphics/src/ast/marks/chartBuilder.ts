@@ -132,9 +132,10 @@ export type ChartOptions = {
  * Layer names follow the same component-boundary hygiene as ref/selectAll:
  * names registered *inside* a `createMark` component (a child with
  * `_isComponent === true`) are internal to that component and not selectable
- * from outside. Both this registry and `findInComponent` ride the single
- * bounded walk `visibleNodes` in _ref.tsx, so a name is registerable here
- * exactly when it's findable by ref — the walk does not descend into a
+ * from outside. Both this registry and string-name lookup
+ * (`resolveScopedName`) ride the single bounded walk `visibleNodes` in
+ * _ref.tsx, so the component boundary means the same thing for both — the
+ * walk does not descend into a
  * component child's subtree, but the component child's OWN
  * `__layerRegistration` is still registered (a leaf component, e.g. a `rect`
  * produced by createMark, can itself carry a name).
@@ -159,7 +160,7 @@ function collectLayerRegistrations(
   layerContext: LayerContext
 ): void {
   for (const n of visibleNodes(node)) {
-    registerLayerNode(n, layerContext);
+    if (n instanceof GoFishNode) registerLayerNode(n, layerContext);
   }
 }
 
@@ -785,8 +786,8 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
   /**
    * Name this chart's resolved node so it can be referenced — both by a
-   * `.constrain(...)` callback on an enclosing `layer([...])` (which looks up
-   * children by `_name` via `collectConstraintRefs`) and by a cross-chart
+   * `.constrain(...)` callback on an enclosing `layer([...])` (which resolves
+   * names with the same lookup as `ref`) and by a cross-chart
    * `selectAll(name)` / `ref(name)`. Mirrors the `.name(...)` wrapper on marks.
    */
   name(layerName: string): ChartBuilder<TInput, TOutput> {

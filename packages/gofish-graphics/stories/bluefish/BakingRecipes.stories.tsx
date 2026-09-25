@@ -39,7 +39,7 @@ import { Constraint, layer, enclose, ref, rect, text } from "../../src/lib";
 // group-of-refs union can only be built from cells that are ALREADY
 // placed, and a union sibling that reads still-being-placed cells via
 // `ref()` from the SAME layer that is placing them races the constraint
-// solver (see the FRICTION note below) — so each "place some cells, then
+// solver — so each "place some cells, then
 // union them" step becomes its own nested `Layer`, wrapping the previous
 // tier as its first child (mirroring the Wire/ArrayEntry cross-tier
 // pattern from QuantumCircuit/InsertionSort, chained 8 times instead of
@@ -75,22 +75,10 @@ const union = (names: string[], name: string) =>
 const border = (name: string) =>
   rect({ fill: "transparent", stroke: GREEN, strokeWidth: 1 }).name(name);
 
-// FRICTION: `.constrain()` only resolves *direct* children by name —
-// `layer.tsx`'s solver builds its name->placeable map from `node.children`
-// alone (not recursively), even though `collectConstraintRefs` (which
-// back the callback's destructured object) DOES recurse into nested plain
-// `Layer`s, so referencing a name from an outer tier's `.constrain()`
-// type-checks and silently no-ops instead of erroring (first symptom: the
-// whole step-cell column collapsed onto the title, at local (0,0)).
-// `Constraint.zAbove`/`zBelow` documents cross-tier nested-layer reach —
-// align/distribute do not have it. Workaround: re-expose a name at each
-// tier boundary as an explicit direct-child proxy, `ref(name).name(name)`
-// — this "pull" is itself a normal ref lookup (scoped to the nearest
-// enclosing Layer, recursive through nested plain Layers, per `_ref.tsx`),
-// so it resolves the real node regardless of how deep it actually lives;
-// it just needs to be listed as a literal child of THIS layer for the
-// solver's direct-children map to see it.
-const pull = (name: string) => ref(name).name(name);
+// Each tier's `.constrain()` names cells that live in earlier, nested tiers
+// (`col0`, `row0_1`, ...) directly: a constraint operand resolves anywhere
+// inside the constraining layer, and a nested operand is a fixed reference
+// the tier's own new cells are placed against.
 
 export const BakingRecipes: StoryObj = {
   tags: ["gallery"],
@@ -145,10 +133,6 @@ export const BakingRecipes: StoryObj = {
     // aligned to A1, not B) centered on rows 3-4.
     const tier2 = layer([
       tier1,
-      pull("col0"),
-      pull("row0_1"),
-      pull("row0_2"),
-      pull("row3_4"),
       Pad("melt in double boiler").name("A1"),
       Pad("stir in").name("B"),
       Pad("lightly beat").name("A2"),
@@ -168,8 +152,6 @@ export const BakingRecipes: StoryObj = {
     // ── Tier 4: "stir in" (C), right of col1_2, centered on rows 0-4 ──
     const tier4 = layer([
       tier3,
-      pull("col1_2"),
-      pull("row0_4"),
       Pad("stir in").name("C"),
     ]).constrain(({ col1_2, row0_4, C }) => [
       Constraint.distribute({ dir: "x", spacing: 0 }, [col1_2, C]),
@@ -183,8 +165,6 @@ export const BakingRecipes: StoryObj = {
     // both centered on rows 0-5.
     const tier6 = layer([
       tier5,
-      pull("C"),
-      pull("row0_5"),
       Pad("stir in").name("D"),
       Pad("bake 325°F (160°C) for 35 min.").name("E"),
     ]).constrain(({ C, row0_5, D, E }) => [
@@ -203,24 +183,6 @@ export const BakingRecipes: StoryObj = {
     // translation of Bluefish's `CellBorder`'s two `LayoutFunction` calls.
     const tier8 = layer([
       tier7,
-      pull("col0"),
-      pull("r0"),
-      pull("r1"),
-      pull("r2"),
-      pull("r3"),
-      pull("r4"),
-      pull("r5"),
-      pull("A1"),
-      pull("row0_1"),
-      pull("col1_2"),
-      pull("row0_2"),
-      pull("row3_4"),
-      pull("col1_3"),
-      pull("row0_4"),
-      pull("E"),
-      pull("row0_5"),
-      pull("col0_5"),
-      pull("title"),
       border("bR0"),
       border("bR1"),
       border("bR2"),
@@ -336,38 +298,13 @@ export const BakingRecipes: StoryObj = {
 
 // ── Friction log ─────────────────────────────────────────────────────────
 //
-// 1. `.constrain()`'s cross-tier name reach is narrower than documented for
-//    z-order. The first draft destructured names like `col0`/`row0_1`
-//    straight out of a NESTED tier's `.constrain()` callback (mirroring
-//    the `zAbove`/`zBelow` "Cross-tier references" doc, which explicitly
-//    supports reaching into a nested plain `Layer`). It type-checked and
-//    rendered with no error, but every step cell (A1..E) collapsed onto
-//    the title cell at local (0, 0) — the whole right side of the table
-//    vanished into one overlapping stack of text. Root cause, found by
-//    reading `layer.tsx`/`constraints/index.ts`: `collectConstraintRefs`
-//    (which backs the callback's destructured object) DOES recurse into
-//    nested plain `Layer`s, so the name resolves to a harmless placeholder
-//    `{name}` and the callback never throws — but the actual SOLVER
-//    (`applyConstraints`, fed by a `nameToPlaceable` map built from
-//    `node.children[i]` only) does not recurse at all. A name from an
-//    outer layer's constraint list that isn't a *direct* child silently
-//    has no placeable and gets skipped. This narrower behavior appears to
-//    be genuinely undocumented for align/distribute/position (only
-//    zAbove/zBelow's own flatten-and-topo-sort pass descends nested
-//    layers). Workaround: the `pull(name)` helper — an explicit
-//    `ref(name).name(name)` proxy added as a literal direct child of
-//    whichever layer's `.constrain()` needs that name. `ref()` itself
-//    (used as enclose/line/pull children, not as a constrain target) DOES
-//    do a real recursive, scope-bounded lookup (`_ref.tsx`: "layer-local
-//    lookup from the nearest enclosing Layer", searched recursively), so
-//    the proxy resolves the real node regardless of how deep it actually
-//    lives — it just needs to physically be a child of the constraining
-//    layer for the solver's direct-children map to see it. This cost a
-//    full render/inspect cycle to diagnose (the failure mode is silent,
-//    not a thrown error) and is worth fixing or documenting upstream: either
-//    make `applyConstraints`' name resolution match `collectConstraintRefs`'
-//    recursion (so the two agree), or have the solver throw on an
-//    unresolvable name instead of silently dropping the constraint.
+// 1. (Resolved.) The first draft named cells from nested tiers straight
+//    out of an outer tier's `.constrain()` callback, and it silently did
+//    nothing: the solver only saw direct children. The port worked around
+//    it with a `pull(name) = ref(name).name(name)` proxy child per name.
+//    Constraint operands now resolve anywhere inside the constraining
+//    layer (a nested operand is a fixed reference into its tier), and an
+//    unresolvable name is a loud error, so the proxies are gone.
 //
 // 2. The "union of refs" building block worked exactly as advertised.
 //    `enclose({fill:"none", stroke:"none"}, [ref(a), ref(b), ...])` — used
@@ -392,7 +329,5 @@ export const BakingRecipes: StoryObj = {
 //    no border at all is also a faithful reproduction of the original,
 //    not a gap in this port.
 //
-// Net: no library changes were needed and no cell/border is missing or
-// mis-spanned — the only real gap this port surfaced is the
-// align/distribute cross-tier documentation vs. implementation mismatch
-// in friction #1.
+// Net: no cell/border is missing or mis-spanned. The one real gap this
+// port surfaced (friction #1) has since been fixed in the library.
