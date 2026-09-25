@@ -13,7 +13,9 @@
  *      by one walk (`clipOf`): an operator with an arrangement is a time
  *      frame over its children, a mark with effects is a leaf, and anything
  *      else is `parallel` over what is under it.
- *   2. SOLVE IT (`schedule.ts`): a start and a duration for every leaf.
+ *   2. TIME its leaves (`timeLeaves`: a duration and a warp for each effect,
+ *      as the marks it animates resolve them) and SOLVE it (`schedule.ts`): a
+ *      start for every leaf.
  *   3. PLAY IT on one clock for the whole chart, a `timer` over [0, total] ms
  *      that plays once. Each animated mark gets a paint-time rule
  *      (`paint.ts`), so the chart is laid out once and the clock patches the
@@ -32,11 +34,22 @@
 import { GoFishNode } from "../ast/_node";
 import type { GoFishAST } from "../ast/_ast";
 import { timer, type Timer } from "../interaction/inputs";
-import { fadeIn, type Effect } from "./effects";
+import {
+  DEFAULT_DURATION,
+  fadeIn,
+  resolveEase,
+  type Effect,
+  type TimedEffect,
+} from "./effects";
 import { groupEntries, rowsOf } from "./grouping";
 import { projectPath } from "../ast/datumProjection";
 import { makeRule } from "./paint";
-import { solveSchedule, type Clip, type Schedule } from "./schedule";
+import {
+  solveSchedule,
+  type Arrangement,
+  type Clip,
+  type Schedule,
+} from "./schedule";
 import { nodeTransition, playsDataTime } from "./transition";
 
 /** How to play the build clock: the render options `playing` and `at`,
@@ -45,7 +58,18 @@ import { nodeTransition, playsDataTime } from "./transition";
  *  wants. */
 export type BuildClockOptions = { playing?: boolean; at?: number };
 
-type Leaf = { effects: Effect[]; targets: GoFishNode[] };
+/** A leaf as the walk reads it off a node: the effects its marks enter with,
+ *  as written, and the marks. */
+type Found = { effects: Effect[]; targets: GoFishNode[] };
+
+/** The timeline as the walk reads it: a `Clip` whose leaves are not timed
+ *  yet. */
+type Draft =
+  | { kind: "leaf"; found: Found }
+  | { kind: "group"; arrangement: Arrangement; groups: Draft[][] };
+
+/** A leaf of the build: its effects, timed for its marks, and the marks. */
+type Leaf = { effects: TimedEffect[]; targets: GoFishNode[] };
 
 export type BuildIn = {
   schedule: Schedule<Leaf>;
@@ -58,10 +82,9 @@ export function installBuildIn(
   root: GoFishNode,
   options: BuildClockOptions = {}
 ): BuildIn | undefined {
-  const clip = clipOf(root, false);
-  if (clip === undefined) return undefined;
-  resolveFieldDurations(clip);
-  const schedule = solveSchedule(clip);
+  const draft = clipOf(root, false);
+  if (draft === undefined) return undefined;
+  const schedule = solveSchedule(timeLeaves(draft));
   const { total } = schedule;
   const clock = timer<number>({
     domain: [0, total],
@@ -76,7 +99,7 @@ export function installBuildIn(
     const rule = makeRule(playhead, start, payload.effects);
     for (const target of payload.targets) {
       for (const leaf of leavesOf(target)) {
-        for (const e of payload.effects) e.fits(leaf.type);
+        for (const { effect } of payload.effects) effect.fits(leaf.type);
         if (leaf.__gfAnimate !== undefined) {
           throw new Error(
             `[gofish] build-in: a "${leaf.type}" mark is animated twice, ` +
@@ -96,50 +119,65 @@ export function installBuildIn(
 const FIELD_DURATION_MAX_MS = 1000;
 
 /**
- * Give every leaf whose effects take a FIELD-valued duration its own
- * duration: its marks' value of the field, on a linear scale whose largest
- * value (over every mark the effect animates) is 1000 ms. Each leaf gets its
- * own copy of such an effect, so the paint rule reads the resolved number.
+ * Time every leaf of `draft`: each effect gets its duration in ms and its
+ * warp, and the leaf lasts as long as its longest effect. A FIELD-valued
+ * duration is the marks' value of the field, on a linear scale whose largest
+ * value (over every mark the effect animates) is 1000 ms.
  */
-function resolveFieldDurations(clip: Clip<Leaf>): void {
-  const leaves: Extract<Clip<Leaf>, { kind: "leaf" }>[] = [];
-  const collect = (c: Clip<Leaf>): void => {
-    if (c.kind === "leaf") leaves.push(c);
-    else c.groups.forEach((g) => g.forEach(collect));
-  };
-  collect(clip);
-  const valueOf = (leaf: Leaf, field: string): number => {
-    const value = Number(projectPath(leaf.targets.flatMap(rowsOf), field));
-    if (!Number.isFinite(value) || value < 0) {
-      throw new Error(
-        `[gofish] animation({ duration: "${field}" }): a mark's duration ` +
-          `comes from its own value of "${field}", and this mark has no ` +
-          `single number there (0 or more).`
-      );
-    }
-    return value;
-  };
-  const max = new Map<Effect, number>();
-  for (const { payload } of leaves) {
-    for (const e of payload.effects) {
-      if (e.durationField === undefined) continue;
-      const v = valueOf(payload, e.durationField);
-      max.set(e, Math.max(max.get(e) ?? 0, v));
-    }
-  }
-  if (max.size === 0) return;
-  for (const leaf of leaves) {
-    leaf.payload.effects = leaf.payload.effects.map((e) => {
-      if (e.durationField === undefined) return e;
-      const top = max.get(e)!;
-      const v = valueOf(leaf.payload, e.durationField);
-      return {
-        ...e,
-        duration: top > 0 ? (FIELD_DURATION_MAX_MS * v) / top : 0,
-      };
+function timeLeaves(draft: Draft): Clip<Leaf> {
+  // Each leaf's values of the field-valued durations it plays (in effect
+  // order), and each such effect's largest value over its leaves.
+  const values = new Map<Found, number[]>();
+  const largest = new Map<Effect, number>();
+  const measure = (d: Draft): void => {
+    if (d.kind === "group") return d.groups.forEach((g) => g.forEach(measure));
+    const { effects, targets } = d.found;
+    const vs = effects.map((e) =>
+      typeof e.duration === "string" ? fieldValue(targets, e.duration) : 0
+    );
+    effects.forEach((e, i) => {
+      if (typeof e.duration !== "string") return;
+      largest.set(e, Math.max(largest.get(e) ?? 0, vs[i]));
     });
-    leaf.duration = Math.max(0, ...leaf.payload.effects.map((e) => e.duration));
+    values.set(d.found, vs);
+  };
+  measure(draft);
+
+  const time = (d: Draft): Clip<Leaf> => {
+    if (d.kind === "group") {
+      return { ...d, groups: d.groups.map((g) => g.map(time)) };
+    }
+    const vs = values.get(d.found)!;
+    const effects = d.found.effects.map((effect, i): TimedEffect => {
+      const top = largest.get(effect) ?? 0;
+      const duration =
+        typeof effect.duration !== "string"
+          ? (effect.duration ?? DEFAULT_DURATION)
+          : top > 0
+            ? (FIELD_DURATION_MAX_MS * vs[i]) / top
+            : 0;
+      return { effect, duration, ease: resolveEase(effect.ease) };
+    });
+    return {
+      kind: "leaf",
+      duration: Math.max(0, ...effects.map((e) => e.duration)),
+      payload: { effects, targets: d.found.targets },
+    };
+  };
+  return time(draft);
+}
+
+/** The marks' one value of `field`, for a field-valued duration. */
+function fieldValue(targets: GoFishNode[], field: string): number {
+  const value = Number(projectPath(targets.flatMap(rowsOf), field));
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(
+      `[gofish] animation({ duration: "${field}" }): a mark's duration ` +
+        `comes from its own value of "${field}", and this mark has no ` +
+        `single number there (0 or more).`
+    );
   }
+  return value;
 }
 
 /** The marks that draw: a mark with no children draws itself; a composite
@@ -157,10 +195,7 @@ function leavesOf(node: GoFishNode): GoFishNode[] {
  * enter arrangement: a mark under one with no effect of its own enters with
  * `animation.fadeIn()`, the default #892 gives an entering mark.
  */
-function clipOf(
-  node: GoFishAST,
-  underArrangement: boolean
-): Clip<Leaf> | undefined {
+function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
   if (!(node instanceof GoFishNode) || playsDataTime(node)) return undefined;
   const record = nodeTransition(node);
   const phases = [
@@ -180,8 +215,7 @@ function clipOf(
   if (record?.enter !== undefined) {
     return {
       kind: "leaf",
-      duration: Math.max(0, ...record.enter.map((e) => e.duration)),
-      payload: { effects: record.enter, targets: record.targets ?? [node] },
+      found: { effects: record.enter, targets: record.targets ?? [node] },
     };
   }
   const kids = node.children.filter(
@@ -191,7 +225,7 @@ function clipOf(
     const { by, ...arrangement } = record.arrangement;
     const children = kids
       .map((kid) => ({ kid, clip: clipOf(kid, true) }))
-      .filter((c): c is { kid: GoFishNode; clip: Clip<Leaf> } => !!c.clip);
+      .filter((c): c is { kid: GoFishNode; clip: Draft } => !!c.clip);
     const groups = [
       ...groupEntries(children, (c) => rowsOf(c.kid), by).values(),
     ];
@@ -203,16 +237,11 @@ function clipOf(
   }
   if (kids.length === 0) {
     if (!underArrangement) return undefined;
-    const effects = [fadeIn()];
-    return {
-      kind: "leaf",
-      duration: effects[0].duration,
-      payload: { effects, targets: [node] },
-    };
+    return { kind: "leaf", found: { effects: [fadeIn()], targets: [node] } };
   }
   const clips = kids
     .map((kid) => clipOf(kid, underArrangement))
-    .filter((c): c is Clip<Leaf> => c !== undefined);
+    .filter((c): c is Draft => c !== undefined);
   if (clips.length === 0) return undefined;
   if (clips.length === 1) return clips[0];
   return {

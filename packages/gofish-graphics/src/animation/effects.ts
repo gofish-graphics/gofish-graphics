@@ -100,23 +100,24 @@ type Look = {
   fits(nodeType: string): void;
 };
 
-/** One effect, resolved: what it does, how long it takes, and its warp. */
-export type Effect = Look & {
-  readonly __effect: true;
-  /** Its name, for messages. */
-  kind: EffectKind;
+/** One effect: what it does, and its timing options as written (validated
+ *  here). The build resolves the timing per mark (`TimedEffect`), which is
+ *  where a field-valued duration gets its number. */
+export type Effect = Look &
+  EffectOptions & {
+    readonly __effect: true;
+    /** Its name, for messages. */
+    kind: EffectKind;
+    /** Where the effect is at local time `t` (ms since the mark's start),
+     *  given its duration and warp: 0 before the start, 1 from the end on. */
+    progress(t: number, duration: number, ease: (u: number) => number): number;
+  };
+
+/** An effect timed for one mark: its duration in ms and its warp. */
+export type TimedEffect = {
+  effect: Effect;
   duration: number;
-  /** A field-valued duration (see `EffectOptions.duration`), resolved per
-   *  mark when the build is installed; `duration` is NaN until then. */
-  durationField?: string;
   ease: (u: number) => number;
-  /** Where the effect is at local time `t` (ms since the mark's start), given
-   *  its duration and warp: 0 before the start, 1 from the end on. */
-  progress(t: number, duration: number, ease: (u: number) => number): number;
-  /** The options as written, so a context that fixes the timing itself (a
-   *  sequence's fade over a whole stretch) can refuse a duration it would
-   *  otherwise ignore. */
-  written: EffectOptions;
 };
 
 /** `animation.tween(...)`: how a mark MOVES between two keyframes of a
@@ -127,10 +128,7 @@ export type Effect = Look & {
  *  (`animation/index.ts`), so the chart builder can use it without importing
  *  `time` (which would cycle). */
 export type TweenEffect = {
-  readonly __effect: true;
-  kind: "tween";
-  curve?: "auto" | "step" | "linear" | "catmullRom";
-  ease?: (u: number) => number;
+  readonly __tween: true;
   layer: () => unknown;
 };
 
@@ -155,27 +153,19 @@ function effect(
   look: Look,
   progress: Effect["progress"] = ramp
 ): Effect {
-  const field = typeof opts.duration === "string" ? opts.duration : undefined;
-  const duration =
-    typeof opts.duration === "string"
-      ? NaN
-      : (opts.duration ?? DEFAULT_DURATION);
-  if (field === undefined && !(Number.isFinite(duration) && duration >= 0)) {
-    throw new Error(
-      `[gofish] animation.${kind}({ duration: ${String(opts.duration)} }): a ` +
-        `duration is a number of milliseconds, 0 or more, or a field name.`
-    );
+  const { duration, ease } = opts;
+  if (typeof duration !== "string") {
+    const ms = duration ?? DEFAULT_DURATION;
+    if (!(Number.isFinite(ms) && ms >= 0)) {
+      throw new Error(
+        `[gofish] animation.${kind}({ duration: ${String(duration)} }): a ` +
+          `duration is a number of milliseconds, 0 or more, or a field name.`
+      );
+    }
   }
-  return {
-    __effect: true,
-    kind,
-    duration,
-    ...(field !== undefined ? { durationField: field } : {}),
-    ease: resolveEase(opts.ease),
-    written: { duration: opts.duration, ease: opts.ease },
-    progress,
-    ...look,
-  };
+  // An unknown ease name fails here, where it was written.
+  resolveEase(ease);
+  return { __effect: true, kind, duration, ease, progress, ...look };
 }
 
 /** `look` played backward: at progress `p` it shows what `look` shows at
@@ -274,8 +264,11 @@ export const wipe = (opts: WipeOptions = {}): Effect =>
     )
   );
 
-export const isEffect = (v: unknown): v is Effect | TweenEffect =>
+const isEffect = (v: unknown): v is Effect =>
   typeof v === "object" && v !== null && (v as Effect).__effect === true;
+
+export const isTween = (v: unknown): v is TweenEffect =>
+  typeof v === "object" && v !== null && (v as TweenEffect).__tween === true;
 
 /** An `enter` / `exit` value, which may be one effect or several played
  *  together, as a list. */
@@ -286,11 +279,11 @@ export function effectList(
   if (value === undefined) return undefined;
   const list: unknown[] = Array.isArray(value) ? value : [value];
   for (const e of list) {
-    if (!isEffect(e) || e.kind === "tween") {
+    if (!isEffect(e)) {
       throw new Error(
         `[gofish] ${where}: expected animation effects (animation.grow(), ` +
           `animation.fadeIn(), …)` +
-          (isEffect(e) ? `; animation.tween() is for \`update\`.` : `.`)
+          (isTween(e) ? `; animation.tween() is for \`update\`.` : `.`)
       );
     }
   }
@@ -408,10 +401,9 @@ const withOpacity = (
         style: { ...item.style, opacity: (item.style?.opacity ?? 1) * factor },
       };
 
-/** Where an effect is at local time `t` (ms since the mark's start). */
-export function progressOf(e: Effect, t: number): number {
-  return e.progress(t, e.duration, e.ease);
-}
+/** Where a timed effect is at local time `t` (ms since the mark's start). */
+const progressOf = ({ effect, duration, ease }: TimedEffect, t: number) =>
+  effect.progress(t, duration, ease);
 
 /**
  * One of the mark's own items at local time `t`. Effects compose in order:
@@ -419,12 +411,12 @@ export function progressOf(e: Effect, t: number): number {
  */
 export function paintHost(
   item: DisplayList.DisplayItem,
-  effects: Effect[],
+  effects: TimedEffect[],
   t: number,
   frame: EffectFrame
 ): DisplayList.DisplayItem {
   let out = item;
-  for (const e of effects) out = e.host(out, progressOf(e, t), frame);
+  for (const e of effects) out = e.effect.host(out, progressOf(e, t), frame);
   return out;
 }
 
@@ -435,11 +427,11 @@ export function paintHost(
  */
 export function paintRider(
   item: DisplayList.DisplayItem,
-  effects: Effect[],
+  effects: TimedEffect[],
   t: number
 ): DisplayList.DisplayItem {
   let factor = 1;
-  for (const e of effects) factor *= e.rider(progressOf(e, t));
+  for (const e of effects) factor *= e.effect.rider(progressOf(e, t));
   return withOpacity(item, factor);
 }
 
@@ -447,12 +439,12 @@ export function paintRider(
  *  paint tier has to patch. A rider only ever changes its opacity. */
 export function channelsOf(
   item: DisplayList.DisplayItem,
-  effects: Effect[],
+  effects: TimedEffect[],
   role: "host" | "rider"
 ): string[] {
   const out = new Set<string>();
-  for (const e of effects) {
-    for (const c of role === "host" ? e.channels(item) : ["opacity"])
+  for (const { effect } of effects) {
+    for (const c of role === "host" ? effect.channels(item) : ["opacity"])
       out.add(c);
   }
   return [...out];

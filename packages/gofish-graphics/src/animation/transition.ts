@@ -25,7 +25,7 @@
  */
 import type { SplitBy } from "../ast/datumProjection";
 import type { GoFishNode } from "../ast/_node";
-import { effectList, isEffect, type Effect, type TweenEffect } from "./effects";
+import { effectList, isTween, type Effect, type TweenEffect } from "./effects";
 import type { Arrangement } from "./schedule";
 
 /** An arrangement as written: `time.stagger(...)` / `time.parallel()`, with
@@ -87,10 +87,7 @@ export function recordMarkTransition(
   spec: MarkTransition
 ): void {
   const where = "mark.transition()";
-  if (
-    spec.update !== undefined &&
-    !(isEffect(spec.update) && spec.update.kind === "tween")
-  ) {
+  if (spec.update !== undefined && !isTween(spec.update)) {
     throw new Error(
       `[gofish] ${where}: \`update\` takes animation.tween({ curve, ease }).`
     );
@@ -170,8 +167,7 @@ export function checkSequencePhases(
   const check = (phase: "enter" | "exit", kind: "fadeIn" | "fadeOut") => {
     const list = effectList(spec[phase], `${where} ${phase}`) ?? [];
     for (const e of list) {
-      const { duration, ease } = e.written;
-      if (e.kind !== kind || duration !== undefined || ease !== undefined) {
+      if (e.kind !== kind || e.duration !== undefined || e.ease !== undefined) {
         throw new Error(
           `[gofish] ${where}: \`${phase}\` can only be animation.${kind}() ` +
             `(no duration or ease) in this prototype. A mark that ${phase}s during ` +

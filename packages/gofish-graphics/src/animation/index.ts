@@ -35,10 +35,7 @@ export type TweenOptions = {
 const tween = (opts: TweenOptions = {}): TweenEffect => {
   const ease = opts.ease === undefined ? undefined : resolveEase(opts.ease);
   return {
-    __effect: true,
-    kind: "tween",
-    curve: opts.curve,
-    ease,
+    __tween: true,
     layer: () => time.transition({ curve: opts.curve, ease }),
   };
 };

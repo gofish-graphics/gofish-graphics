@@ -28,7 +28,7 @@ import {
   channelsOf,
   paintHost,
   paintRider,
-  type Effect,
+  type TimedEffect,
   type EffectFrame,
 } from "./effects";
 
@@ -49,7 +49,7 @@ export type AnimationRule = {
   ): void;
   /** When the effects start, in build-clock ms. */
   readonly start: number;
-  readonly effects: Effect[];
+  readonly effects: TimedEffect[];
 };
 
 /** Which of a node's axes carry a data SIZE: the ones a grow collapses. Read
@@ -88,7 +88,7 @@ function assignPaint(
 export function makeRule(
   playhead: () => number,
   start: number,
-  effects: Effect[]
+  effects: TimedEffect[]
 ): AnimationRule {
   return {
     start,
