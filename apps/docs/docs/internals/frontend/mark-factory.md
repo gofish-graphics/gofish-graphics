@@ -416,7 +416,9 @@ plus a connector tier —
 The anchor tier is invisible in the strong sense: a `blank` node lowers to no
 display items at all (see [Render Pass 4](/internals/layout/passes)), so the one
 anchor per row costs layout and a `selectAll` target but no DOM element and no
-hit-test entry.
+hit-test entry. Since nothing can make it paint, `blank()` takes no paint-only
+options (no stroke or corner radius); its `fill` stays only to seed the color
+scale.
 
 `anchor(opts)` is exactly `opts`'s `{w, h, emX, emY}` subset (`pickAnchorOpts`
 in chart.ts) — the rest (fill, stroke, curve, `along`, …) stays on the

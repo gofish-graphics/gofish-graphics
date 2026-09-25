@@ -2195,25 +2195,9 @@ for the API.
           "description": "Height.",
           "default": 0
         },
-        "rx": {
-          "type": "number",
-          "description": "Corner radius, x."
-        },
-        "ry": {
-          "type": "number",
-          "description": "Corner radius, y."
-        },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Fill color. A blank draws nothing unless given one."
-        },
-        "stroke": {
-          "type": "string",
-          "description": "Stroke color."
-        },
-        "strokeWidth": {
-          "type": "number",
-          "description": "Stroke width in pixels."
+          "description": "Fill color. A blank never paints; `fill` only seeds the shared color scale."
         },
         "debug": {
           "type": "boolean"

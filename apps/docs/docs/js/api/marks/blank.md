@@ -33,7 +33,7 @@ gf.layer([
 ## Signature
 
 ```ts
-blank({ w?, h?, fill?, stroke?, strokeWidth?, rx?, ry?, debug? })
+blank({ w?, h?, fill?, debug? })
 ```
 
 ## Parameters

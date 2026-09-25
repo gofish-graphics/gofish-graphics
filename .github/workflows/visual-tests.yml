@@ -112,9 +112,7 @@ jobs:
             || { echo "FAIL: Verdana resolved to: $(fc-match 'Verdana')"; exit 1; }
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -219,9 +217,7 @@ jobs:
           fi
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -429,9 +425,7 @@ jobs:
             || { echo "FAIL: Verdana resolved to: $(fc-match 'Verdana')"; exit 1; }
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
