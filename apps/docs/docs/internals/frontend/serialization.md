@@ -241,8 +241,9 @@ evaluated on the authoring side. A clause is a `ConstraintIR`
 (`arrow`, `enclose`, a relational `line`, ...), whose children may include
 `{ type: "ref", selection: "name" }` refs to the layer's names. The two are
 told apart by `refs`: a constraint always carries it and a mark never does
-(`isConstraintIR`). Both readers (`fromJSON.ts` and the parity harness)
-rebuild the list and hand it back through `.relate(() => clauses)`, so the
+(`isConstraintIR`, which the validator uses too). Both readers (`fromJSON.ts`
+and the parity harness) rebuild a constraint with the same `constraintFromIR`
+and hand the list back through `.relate(() => clauses)`, so the
 layer schedules the clauses exactly as it would for a JS author. The field was
 called `constraints`, and held constraints only, before the `.constrain()` →
 `.relate()` rename.
