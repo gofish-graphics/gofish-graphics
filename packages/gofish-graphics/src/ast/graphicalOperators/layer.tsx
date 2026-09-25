@@ -29,6 +29,7 @@ import { axisScale } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
+import { paintUnitsOf } from "../paintOrder";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import {
@@ -170,11 +171,17 @@ function applyRelationalZBelowDefaults(
         connector,
         `__gofish_z_${synthIdx++}`
       );
-      const targetName = ensureConstraintName(
-        target,
-        `__gofish_z_${synthIdx++}`
-      );
-      pairs.push([connectorName, targetName]);
+      // An operand that is itself a plain layer (a `layer([...])` mark, a
+      // `time.history`) is hoisted away too, so the connector goes under
+      // the marks it paints instead (`paintUnitsOf`).
+      for (const unit of paintUnitsOf(target)) {
+        if (!(unit instanceof GoFishNode)) continue;
+        const targetName = ensureConstraintName(
+          unit,
+          `__gofish_z_${synthIdx++}`
+        );
+        pairs.push([connectorName, targetName]);
+      }
       claimedAny = true;
     }
     // Consumed (fully or partially) at this level — don't let an outer layer

@@ -87,7 +87,11 @@ differ between the two flatteners.
 ### How the topological order is computed
 
 `topoSortByZOrder` is Kahn's algorithm. Each `zAbove` / `zBelow` constraint becomes an
-edge between two paint units, and the sort repeatedly emits the smallest unit that has
+edge between two paint units. A plain layer the flatten hoists through is not a unit
+of its own, so a constraint meant for one has to name the units it paints:
+`paintUnitsOf` lists them, and the relational-mark default (`zBelow(connector,
+operand)` in `layer.tsx`) uses it when an operand is itself a plain layer, e.g. a
+`layer([...])` mark or a `time.history`. The sort repeatedly emits the smallest unit that has
 no unsatisfied edge left pointing at it, where "smallest" means lowest `(zOrder,
 index)`. Ordering the unconstrained majority by `(zOrder, index)` is what makes the
 result identical to the plain sort when there are no constraints at all.

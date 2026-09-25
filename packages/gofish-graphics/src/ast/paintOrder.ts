@@ -37,6 +37,22 @@ type PaintItem<P = undefined> = {
   payload: P;
 };
 
+/** Whether the z-order flatten hoists through `node`: a plain (non-component)
+ *  layer is transparent, and its children are the paint units. */
+const hoistsForZOrder = (node: GoFishNode): boolean =>
+  !node._isComponent && node.type === "layer";
+
+/**
+ * The paint units `node` is drawn as when a z-order constraint orders it: the
+ * node itself, or, for a plain layer the flatten hoists through, the units of
+ * its children. A constraint names units, so a constraint meant for `node`
+ * names these.
+ */
+export function paintUnitsOf(node: GoFishAST): GoFishAST[] {
+  if (!(node instanceof GoFishNode) || !hoistsForZOrder(node)) return [node];
+  return node.children.flatMap(paintUnitsOf);
+}
+
 /**
  * Flatten a layer's children into a paint list at COMPONENT granularity: plain
  * (non-component) nested `layer`s are transparent and hoist their children into
@@ -88,7 +104,7 @@ function flattenForZOrder<P = undefined>(
       }
       // Plain (non-component) nested layers are transparent for paint ordering —
       // their children are hoisted into this paint context.
-      if (!child._isComponent && child.type === "layer") {
+      if (hoistsForZOrder(child)) {
         // Read the LEDGER projection, not raw `transform.translate` (#39 stage
         // 3): a placed nested layer has its written translate cleared on solved
         // axes, so `displayTranslate` would hoist children at [0,0].
