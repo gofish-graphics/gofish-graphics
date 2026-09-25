@@ -204,7 +204,7 @@ export function buildChildScalePlan(
   // anchored POSITION domain iff the dim's demand is true — nicing is a
   // presentation adjustment whose demand comes from axis views, so axis-less
   // content stays at the honest raw scale.
-  axisDemand: Size<boolean>,
+  axisDemand: (axis: 0 | 1) => boolean,
   // The ONE σ-solve site. Every scale this plan roots is derived
   // through the registry (so `GOFISH_DUMP_SCOPES` sees it and the numbers have a
   // single source); `rootKey` labels the owning layer node in the dump.
@@ -234,8 +234,12 @@ export function buildChildScalePlan(
   // identity on a baseline magnitude (SIZE is never niced). The shared step
   // below reads the stash again, so transform a local copy.
   const nicedSelfScaled: Size<UnderlyingSpace | undefined> = [
-    axisDemand[0] ? niceContinuous(selfScaledSpaces[0]) : selfScaledSpaces[0],
-    axisDemand[1] ? niceContinuous(selfScaledSpaces[1]) : selfScaledSpaces[1],
+    selfScaledSpaces[0] !== undefined && axisDemand(0)
+      ? niceContinuous(selfScaledSpaces[0])
+      : selfScaledSpaces[0],
+    selfScaledSpaces[1] !== undefined && axisDemand(1)
+      ? niceContinuous(selfScaledSpaces[1])
+      : selfScaledSpaces[1],
   ];
 
   for (const axis of [0, 1] as const) {
@@ -297,7 +301,7 @@ export function buildChildScalePlan(
     // (identity on a baseline magnitude or without axis demand).
     const sp =
       nicedSelfScaled[axis] ??
-      (axisDemand[axis]
+      (axisDemand(axis)
         ? niceContinuous(layerSpace?.[axis])
         : layerSpace?.[axis]);
     if (sp === undefined) continue;
@@ -391,13 +395,13 @@ export function buildPositionScalePlan(
   // Demand-driven nicing (issue #659): nice the local domain only when the
   // scope renders an axis on that dim, so datum positions land on the same
   // rounded scale as the ticks — and stay at the honest raw scale otherwise.
-  axisDemand: Size<boolean>
+  axisDemand: (axis: 0 | 1) => boolean
 ): PositionScalePlan {
   const ownsPositionAxis = ownsAxis[0] || ownsAxis[1];
   // A layer that owns a datum-position axis roots a local POSITION scope for
   // it; the domain is niced at this solve iff the dim has axis demand.
   const localSpace = (axis: 0 | 1): UnderlyingSpace | undefined =>
-    axisDemand[axis] ? niceContinuous(layerSpace?.[axis]) : layerSpace?.[axis];
+    axisDemand(axis) ? niceContinuous(layerSpace?.[axis]) : layerSpace?.[axis];
   return {
     ownsAxis,
     effectivePosScales: ownsPositionAxis

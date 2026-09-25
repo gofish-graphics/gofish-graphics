@@ -462,11 +462,17 @@ export const layer = createNodeOperatorSequential(
           // Demand-driven nicing (issue #659): any scope this layer roots
           // (self-scaled stash, shared-scale, datum-position) nices its
           // POSITION domain only if some node in the scope renders an axis on
-          // that dim — read off the persistent axis-demand stamps.
-          const axisDemand: Size<boolean> = [
-            node.scopeRendersAxis(0),
-            node.scopeRendersAxis(1),
+          // that dim — read off the persistent axis-demand stamps. Read only
+          // when this layer roots such a scope: finding the demand scans the
+          // scope's whole region, and a layer that roots none (most of them)
+          // would otherwise scan it once each, which is quadratic in a large
+          // chart.
+          const demand: [boolean | undefined, boolean | undefined] = [
+            undefined,
+            undefined,
           ];
+          const axisDemand = (axis: 0 | 1): boolean =>
+            (demand[axis] ??= node.scopeRendersAxis(axis));
           const childScalePlan = buildChildScalePlan(
             selfScaledSpaces,
             node._underlyingSpace,
