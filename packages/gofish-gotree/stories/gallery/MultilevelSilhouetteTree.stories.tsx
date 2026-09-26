@@ -245,7 +245,7 @@ const pt = (theta: number, r: number) =>
 const linkMark = (l: Link) =>
   line(
     {
-      curve: "straight",
+      curve: "linear",
       fill: "none",
       stroke: LINK_STROKE,
       strokeWidth: 2,

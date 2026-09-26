@@ -25,9 +25,11 @@ import { initializeContainer } from "../helper";
 import {
   frame,
   gofish,
+  animation,
   chart,
   circle,
   filter,
+  layer,
   line,
   live,
   scatter,
@@ -40,6 +42,7 @@ import {
   time,
   timer,
 } from "../../src/lib";
+import { catmullRomJet } from "../../src/catmullRom";
 import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
 
@@ -257,14 +260,15 @@ const curvePanel = (rows: any[], clock: any, curve: Reading) => {
     : keyframes.layer(time.transition({ curve }));
 };
 
-/** The whole comparison, on a clock the caller hands in — so the playing and
- *  the paused stories are one picture read at two playheads. */
-const curvesRow = (
+/** A row of panels, one per reading, each under its caption, on a clock the
+ *  caller hands in — so the playing and the paused stories are one picture
+ *  read at two playheads. `panel` draws a reading's panel. */
+const curvesRow = <C,>(
   container: HTMLElement,
   args: Args,
-  rows: any[],
   clock: any,
-  readings: { caption: string; curve: Reading }[] = CURVES,
+  readings: { caption: string; curve: C }[],
+  panel: (curve: C) => any,
   below: any[] = []
 ) =>
   gofish(
@@ -282,7 +286,7 @@ const curvesRow = (
           readings.map(({ caption, curve }) =>
             spreadY({ spacing: 8, alignment: "middle" }, [
               text({ text: caption, fontSize: 12, fill: "#555" }),
-              frame({ w: PANEL_W, h: 280 }, [curvePanel(rows, clock, curve)]),
+              frame({ w: PANEL_W, h: 280 }, [panel(curve)]),
             ])
           )
         ),
@@ -312,7 +316,9 @@ export const Curves: StoryObj<Args> = {
     // Ten seconds rather than five: the four readings differ most between
     // keyframes, and a slower clock spends longer there.
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    curvesRow(container, args, gapminder, year);
+    curvesRow(container, args, year, CURVES, (curve) =>
+      curvePanel(gapminder, year, curve)
+    );
 
     return container;
   },
@@ -330,7 +336,9 @@ export const CurvesThree: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    curvesRow(container, args, gapminder, year, CURVES_THREE);
+    curvesRow(container, args, year, CURVES_THREE, (curve) =>
+      curvePanel(gapminder, year, curve)
+    );
 
     return container;
   },
@@ -380,74 +388,6 @@ type Quantity = (typeof QUANTITIES)[number];
 
 type Sample = { t: number; method: string; value: number };
 
-/** A value and its first two derivatives with respect to time, carried
- *  together so one pass down the interpolation computes all three. */
-type Jet = [value: number, velocity: number, acceleration: number];
-
-/** The constant jet of a keyframe's value: it does not depend on time. */
-const jetOf = (v: number): Jet => [v, 0, 0];
-
-/**
- * The Barry-Goldman lerp, differentiated twice.
- *
- * `interpolateCatmullRom` builds its value out of nested lerps of the form
- * `((tb - t)·A + (t - ta)·B) / (tb - ta)`, where `A` and `B` are themselves
- * lerps and therefore themselves functions of `t`. Each level is linear in
- * `t`, so differentiating is the product rule and nothing more:
- *
- *   L   = ((tb - t)·A  +  (t - ta)·B) / (tb - ta)
- *   L'  = (-A + (tb - t)·A'  +  B + (t - ta)·B') / (tb - ta)
- *   L'' = (-2A' + (tb - t)·A''  +  2B' + (t - ta)·B'') / (tb - ta)
- *
- * Running the pyramid over jets instead of numbers therefore hands back the
- * spline's exact velocity and acceleration, not an approximation of them.
- * A degenerate span collapses onto its later endpoint, the same rule the
- * library's own lerp uses.
- */
-const lerpJet = (A: Jet, B: Jet, ta: number, tb: number, t: number): Jet => {
-  if (tb === ta) return B;
-  const w = tb - ta;
-  return [
-    ((tb - t) * A[0] + (t - ta) * B[0]) / w,
-    (-A[0] + (tb - t) * A[1] + B[0] + (t - ta) * B[1]) / w,
-    (-2 * A[1] + (tb - t) * A[2] + 2 * B[1] + (t - ta) * B[2]) / w,
-  ];
-};
-
-/**
- * The spline, its velocity and its acceleration at `t`, read INSIDE the
- * interval `[knots[i], knots[i+1]]`.
- *
- * The interval is named rather than looked up because the acceleration is
- * only piecewise continuous: at a knot it has two values, one from the
- * interval on each side, and which one is wanted is the caller's question.
- * This is `interpolateCatmullRom` with jets in place of numbers — the same
- * phantom-neighbor reflection at the ends, the same pyramid.
- */
-const catmullRomJet = (
-  knots: number[],
-  values: number[],
-  i: number,
-  t: number
-): Jet => {
-  const n = knots.length;
-  const t1 = knots[i];
-  const t2 = knots[i + 1];
-  const p1 = jetOf(values[i]);
-  const p2 = jetOf(values[i + 1]);
-  const t0 = i > 0 ? knots[i - 1] : t1 - (t2 - t1);
-  const p0 = i > 0 ? jetOf(values[i - 1]) : p1;
-  const t3 = i + 2 < n ? knots[i + 2] : t2 + (t2 - t1);
-  const p3 = i + 2 < n ? jetOf(values[i + 2]) : p2;
-
-  const a1 = lerpJet(p0, p1, t0, t1, t);
-  const a2 = lerpJet(p1, p2, t1, t2, t);
-  const a3 = lerpJet(p2, p3, t2, t3, t);
-  const b1 = lerpJet(a1, a2, t0, t2, t);
-  const b2 = lerpJet(a2, a3, t1, t3, t);
-  return lerpJet(b1, b2, t1, t2, t);
-};
-
 /**
  * One country's run under each reading, with its velocity and acceleration.
  *
@@ -473,9 +413,9 @@ const catmullRomJet = (
  * DISCONTINUOUS at the knots — a Catmull-Rom is only C¹ — so each interval is
  * sampled just inside its own ends and the intervals are joined by risers,
  * which is what makes the jumps read as jumps rather than as a steep ramp.
- * All three come from `catmullRomJet`, the library's own pyramid run over
- * jets, so the velocity and acceleration are exact derivatives of the very
- * curve the transition above is following.
+ * All three come from `catmullRomJet`, the library's own spline read with its
+ * derivatives, so the velocity and acceleration are exact derivatives of the
+ * very curve the transition above is following.
  */
 const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
   const run = rows
@@ -527,7 +467,7 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
       // Position and velocity are continuous across a knot, so the shared
       // endpoint is emitted once, by the interval on its left.
       if (i === 0 || s > 0) {
-        const [position, velocity] = catmullRomJet(knots, values, i, t);
+        const [position, velocity] = catmullRomJet(knots, values, i, u);
         at("position", "catmullRom", t, position);
         at("velocity", "catmullRom", t, velocity);
       }
@@ -540,7 +480,7 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
         "acceleration",
         "catmullRom",
         tA,
-        catmullRomJet(knots, values, i, tA)[2]
+        catmullRomJet(knots, values, i, (tA - knots[i]) / span)[2]
       );
     }
   }
@@ -599,15 +539,16 @@ const sparkRow = (samples: Sample[], clock: any) =>
   frame({ w: SPARK_W, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
     frame({ w: SPARK_W, h: SPARK_H_PX }, [
       sparkSamples(samples)
-        // `curve: "straight"` is not a default worth leaning on here, it is
+        // `curve: "linear"` is not a default worth leaning on here, it is
         // the whole point: an omitted curve is `auto`, and `auto` over a
         // continuous axis smooths with a Catmull-Rom — which would round the
         // corners off the staircase and turn the impulses into bumps, drawing
         // the smooth reading of a picture whose subject is that the two
-        // readings differ. ("straight" is the screen-space path shape; it is
-        // the same idea as `curve: "linear"` on a transition, which names an
-        // interpolation in time rather than a path in space.)
-        .layer(line({ stroke: "#999", strokeWidth: 1, curve: "straight" })),
+        // readings differ. (Here "linear" is the screen-space path shape; it
+        // is the same name and the same idea as `curve: "linear"` on a
+        // transition, which names an interpolation in time rather than a path
+        // in space.)
+        .layer(line({ stroke: "#999", strokeWidth: 1, curve: "linear" })),
     ]),
     frame({ w: SPARK_W, h: SPARK_H_PX }, [
       sparkSamples(samples).layer(
@@ -682,9 +623,9 @@ export const CurvesThreeKinematics: StoryObj<Args> = {
     curvesRow(
       container,
       args,
-      gapminder,
       year,
       CURVES_THREE,
+      (curve) => curvePanel(gapminder, year, curve),
       kinematicsBlock(gapminder, year)
     );
 
@@ -709,9 +650,9 @@ export const CurvesThreeKinematicsPaused: StoryObj<Args> = {
     curvesRow(
       container,
       args,
-      gapminder,
       year,
       CURVES_THREE,
+      (curve) => curvePanel(gapminder, year, curve),
       kinematicsBlock(gapminder, year)
     );
 
@@ -734,7 +675,9 @@ export const CurvesPaused: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = pausedClock(yearRange(gapminder), 10000, 1957.5);
-    curvesRow(container, args, gapminder, year);
+    curvesRow(container, args, year, CURVES, (curve) =>
+      curvePanel(gapminder, year, curve)
+    );
 
     return container;
   },
@@ -755,6 +698,156 @@ export const Frame1955: StoryObj<Args> = {
       )
       .mark(circle({ r: 4, fill: "country" }))
       .render(container, { w: args.w, h: args.h, axes: true } as any);
+
+    return container;
+  },
+};
+
+/** The countries the trail stories follow: few enough that every trail can be
+ *  read, and each with a turn in it (China's famine around 1960, Rwanda's
+ *  genocide in the 1990s, South Africa's life expectancy falling after 1990). */
+const TRAIL_COUNTRIES = [
+  "China",
+  "India",
+  "United States",
+  "Rwanda",
+  "South Africa",
+];
+
+/**
+ * Gapminder with trails. Each country is a dot moving through the years, and
+ * it leaves its past years behind it: a faint dot for each year it has passed
+ * and a line threaded through them.
+ *
+ * Each year's mark is two layers. The faint dot is kept once reached
+ * (`time.history`), which is the trail. The solid dot is the head: on its own
+ * it is that year's dot, shown during its year, and with
+ * `.transition({ update })` it glides from year to year instead. The line is
+ * layered over the year marks, and is drawn over the window of the marks it
+ * connects, the longer of their two layers', so it runs up to the playhead.
+ * The head is always at the tip of its line, because the line and the head's
+ * tween use the same curve, with the years as its knots.
+ */
+const trails = (
+  rows: any[],
+  clock: any,
+  curve: "linear" | "catmullRom",
+  options: Record<string, unknown> = {}
+) =>
+  chart(
+    rows.filter((d) => TRAIL_COUNTRIES.includes(d.country)),
+    options
+  )
+    .flow(
+      time.sequence({ by: "year", on: clock }),
+      scatter({ by: "country", x: "fertility", y: "life_expect" })
+    )
+    .mark(
+      layer([
+        time.history([circle({ r: 4, fill: "country", opacity: 0.3 })]),
+        circle({ r: 4, fill: "country" }).transition({
+          update: animation.tween({ curve }),
+        }),
+      ])
+    )
+    .layer(
+      line({
+        along: "year",
+        stroke: "country",
+        strokeWidth: 1.5,
+        opacity: 0.6,
+        curve,
+      })
+    );
+
+export const Trails: StoryObj<Args> = {
+  args: { w: 500, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Gapminder Trails",
+      description:
+        "Five countries' fertility rate and life expectancy from 1955 to 2005, each a dot moving through the years that leaves a trail of its past years behind it.",
+    },
+  },
+  loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const gapminder = context.loaded.gapminder as any[];
+
+    const year = timer({ domain: yearRange(gapminder), duration: 10000 });
+    trails(gapminder, year, "catmullRom")
+      .layer(yearReadout(year))
+      .render(container, { w: args.w, h: args.h, axes: true } as any);
+
+    return container;
+  },
+};
+
+/** The trails held still at 1997.5, halfway between 1995 and 2000: every year
+ *  up to 1995 is behind each moving dot, and Rwanda's dot is on its way back
+ *  up from its fall in the early 1990s. */
+export const TrailsPaused: StoryObj<Args> = {
+  args: { w: 500, h: 400 },
+  loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const gapminder = context.loaded.gapminder as any[];
+
+    const year = pausedClock(yearRange(gapminder), 10000, 1997.5);
+    trails(gapminder, year, "catmullRom")
+      .layer(yearReadout(year))
+      .render(container, { w: args.w, h: args.h, axes: true } as any);
+
+    return container;
+  },
+};
+
+/** The two gliding curves side by side on one clock: straight segments on
+ *  the left, the smooth curve on the right. Each moving dot stays on the tip
+ *  of its own line either way, because the line and the transition in a panel
+ *  use the same curve. */
+const TRAIL_CURVES = (["linear", "catmullRom"] as const).map((curve) => ({
+  caption: curve,
+  curve,
+}));
+
+const trailCurvesRow = (
+  container: HTMLElement,
+  args: Args,
+  rows: any[],
+  clock: any
+) =>
+  curvesRow(container, args, clock, TRAIL_CURVES, (curve) =>
+    trails(rows, clock, curve, { legend: false, padding: 0 })
+  );
+
+export const TrailsCurves: StoryObj<Args> = {
+  args: { w: 600, h: 400 },
+  loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const gapminder = context.loaded.gapminder as any[];
+
+    const year = timer({ domain: yearRange(gapminder), duration: 10000 });
+    trailCurvesRow(container, args, gapminder, year);
+
+    return container;
+  },
+};
+
+/** The two curves held still at 1967.5, after China's trail has turned
+ *  through its 1960 famine: the straight segments meet at a corner at 1960,
+ *  and the smooth curve swings round it. */
+export const TrailsCurvesPaused: StoryObj<Args> = {
+  args: { w: 600, h: 400 },
+  loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const gapminder = context.loaded.gapminder as any[];
+
+    const year = pausedClock(yearRange(gapminder), 10000, 1967.5);
+    trailCurvesRow(container, args, gapminder, year);
 
     return container;
   },

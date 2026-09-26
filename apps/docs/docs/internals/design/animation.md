@@ -148,6 +148,18 @@ The trichotomy matters because the three kinds have different semantics
 costs and prerequisites (Appendix A). A complete animation grammar should
 express all three without forcing one kind through another kind's defaults.
 
+A line drawn in over time can come from a scene animation or from a reveal,
+and the two mean different things even when they look alike. In a scene
+animation, `time.history({ last })` under a `time.sequence({ by })` keeps
+every keyframe from `T - last` to the playhead `T`, and a `line` threaded
+through those keyframes is cut at the edges of that window by data time. Each point of the
+line sits at its keyframe's time, and time moves linearly along each segment,
+so the tip of the line is where a `time.transition()` dot would be at the same
+moment. A reveal with `stroke-dashoffset` paces the drawing by length along
+the path instead. The reveal is the right tool for presentation, where the
+author picks the order and the pace. It is a separate construct, and the cut
+by data time is not a reveal.
+
 ## 4. Where interpolation lives: upstream or downstream of layout
 
 The deepest semantic distinction in this design is _which side of the layout
@@ -230,17 +242,20 @@ that render individually.** The two-layer ggplot idiom (`geom_point() +
 geom_smooth()`) is the spatial shadow of Gemini²'s keyframe insertion: both
 densify with true points so the geometric connector between them can be dumb.
 
-One sharp technical note that falls out of taking the analogy seriously: our
-default spatial curve is _centripetal_ Catmull-Rom, whose chord-length
-parameterization depends on a **metric** — distances between points. Pixel
-space has a canonical metric; data space across axes with different units
-does not (what is the distance between (2 years, 3 dollars) and (5 years,
-1 dollar)?). So centripetal interpolation is well-defined downstream and
-ill-defined upstream without an explicit normalization — a principled reason
-the appearance-smoothing default lives in screen space, and why a data-space
-interpolation family (an `interpolate({ method: "catmullRom" })` sibling of
-`smooth` in #635's family, emitting dense rows) should default to _uniform_
-parameterization, which is affine-invariant and metric-free. The temporal
+One sharp technical note that falls out of taking the analogy seriously:
+_centripetal_ Catmull-Rom, whose chord-length parameterization depends on a
+**metric** — distances between points — is well-defined on screen, where
+pixels give a canonical metric, and ill-defined in data space across axes
+with different units (what is the distance between (2 years, 3 dollars) and
+(5 years, 1 dollar)?). That is why the default smooth curve (#635) does not
+measure distances at all when the data gives the run a parameter of its own.
+A smooth `line` or `ribbon` takes its knots from the run's own parameter: the
+times of the keyframes a line threads, else the values of the field it runs
+along, else its points' positions on a continuous connection axis. Only a
+run with none of these falls back to centripetal knots on screen. The same
+reasoning is why a data-space interpolation family (an
+`interpolate({ method: "catmullRom" })` sibling of `smooth` in #635's family,
+emitting dense rows) should never default to centripetal parameterization. The temporal
 reading: **easing is parameterization** — a time-reparameterization of the
 interpolant, independent of which space the interpolation happens in. After
 Effects' "roving keyframes" (keyframes repositioned in time for smooth
@@ -617,17 +632,17 @@ One slice of §5's table exists: the `time` namespace
   plays at an even speed. On a fixed-domain scatter the σ-affine commutativity
   of §4.1 holds exactly, and the rendered dot matches the data-space
   interpolation mapped through the scales to floating-point precision.
-- The keyframe marks are **paint-hidden** in §2.1's sense. Which rule does it
-  depends on who is hiding them, and the two differ in exactly the way §2.1
-  wants: a transition takes its keyframes over for good, so it uses the
-  structural rule (`INTERNAL_emitNothing`, the same one `blank()` uses) and they
-  emit no display items and no hit-test targets; a sequence hides the bands it
-  is not holding only for as long as it is not holding them, so it uses the
-  paint-tier rule (`INTERNAL_visibleWhile`) and they keep their items, at
-  opacity 0, hit-test targets included. The paint-tier rule is set once per
-  keyframe group and covers the group's whole subtree, including marks a
-  later elaboration pass adds to it, such as `.label()` text. So a labeled
-  keyframe shows its labels only while it is held.
+- The keyframe marks are **paint-hidden** in §2.1's sense, by the paint-tier
+  rule (`INTERNAL_visibleWhile`), so they keep their items, at opacity 0,
+  hit-test targets included. A sequence sets the rule once per keyframe group,
+  and it covers the group's whole subtree, including marks a later elaboration
+  pass adds to it, such as `.label()` text. So a labeled keyframe shows its
+  labels only while it is held. The marks a transition moves use the
+  structural rule instead (`INTERNAL_emitNothing`, the same one `blank()`
+  uses): they emit no display items and no hit-test targets, because the
+  moving mark is their drawing. A trail behind the moving mark is a separate
+  layer of the same mark, a `time.history` of the keyframe marks (#903), so
+  head and tail are layered rather than coupled.
 - A transition moves **every leaf of a keyframe mark**, not just its top shape.
   The leaves are the mark's own subtree leaves plus what is attached to it from
   outside (its label `Text`s, recorded as `_attachments` by the label pass),

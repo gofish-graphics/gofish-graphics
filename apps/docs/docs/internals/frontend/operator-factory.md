@@ -368,7 +368,7 @@ the **modifier factory** that also lives in this file — `ModifierConfig` +
 (combinator marks), `createMark` (leaf marks), and `makeRelatableMark`
 (layer / Porter-Duff marks, which add `.relate()`). `.name(...)` also
 stashes the passed name on the returned mark function via `stashLayerName`
-(defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
+(defined in `markResult.ts`, called by the `name` modifier's `tag` hook), so
 [`.layer()`](/js/api/core/layer)'s producer-tier auto-naming can detect a
 user-chained name without parsing the `__serialize` tag. (An earlier
 `ChartBuilder.connect()` method used this same stashed name; it was deleted
@@ -382,12 +382,17 @@ by-split-form relational marks (see
 [The Mark Factory](/internals/frontend/mark-factory#blank-fusion-mark-r-opts-sugar)).
 Without this, `ribbon(opts).name("area")` would lose the tag the moment
 `.name(...)` wraps it in a new function, and `.mark(ribbon(opts).name("area"))`
-would silently stop fusing.
-It propagates a chained `.transition(...)` spec (`__transition`) the same way,
-for the same reason: the chart builder reads it off the final mark whatever was
-chained after it. The `transition` modifier itself (`transitionModifier`, in
-`nameableMark`'s set) records the mark's effects on each produced node, where
-the build-in reads them.
+would silently stop fusing. It carries the stashed `.name(...)` forward the same
+way, so `.name("dots").transition(...)` or `.name("bars").label(...)` still
+reads as named; without it, a tier that names its mark when the mark has no
+name (`ensureNamedMark`, for a later `.layer()` tier or a `time.sequence`'s
+transitions) would rename the mark and break `selectAll("dots")`.
+The `transition` modifier (`transitionModifier`, in `nameableMark`'s set)
+tags nothing on the mark. It records the mark's effects on each produced node,
+and every reader finds them there: the build-in, and under a `time.sequence`
+the chart builder (`chainedUpdates`). So a spec chained on a mark inside
+`time.history({ last }, [...])`, `spread({...}, [...])` or a `createMark`
+component reaches them with no combinator having to pass it up.
 
 A modifier's `apply` may return a promise, and the wrapped mark awaits it:
 `relateModifier` does, because `.relate()` reifies its drawing clauses (marks

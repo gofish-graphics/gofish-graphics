@@ -34,10 +34,13 @@ export type TweenOptions = {
  *  })` is `.layer(time.transition({ curve: "linear" }))`. */
 const tween = (opts: TweenOptions = {}): TweenEffect => {
   const ease = opts.ease === undefined ? undefined : resolveEase(opts.ease);
-  return {
+  const effect: TweenEffect = {
     __tween: true,
-    layer: () => time.transition({ curve: opts.curve, ease }),
+    curve: opts.curve,
+    ease,
+    layer: () => time.transition({ curve: opts.curve, ease, moves: effect }),
   };
+  return effect;
 };
 
 export const animation = {

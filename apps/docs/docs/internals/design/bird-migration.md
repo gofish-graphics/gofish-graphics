@@ -34,20 +34,20 @@ implemented and uncommitted. Each step below says so.
 
 ## What the paper's constructs are, in GoFish terms
 
-| Animated Vega-Lite                                                          | GoFish reading                                                                                      | status                      |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------- |
-| `projection: {type: "equalEarth"}` + `longitude`/`latitude` channels        | a `geo(...)` coordinate transform, `scatter({ x: "lon", y: "lat" })` under it                       | new                         |
-| `geoshape` basemap layer                                                    | `polygon({ points: <field> })` rows under the same transform                                        | half new                    |
-| `time` encoding channel (keyframes, band time scale)                        | `timer({ domain, duration, step })` — a scale from the field's domain onto wall time, read backward | implemented (uncommitted)   |
-| default timer selection + filter transform                                  | `timer()` plus the `filter` flow operator; no elaboration, the two are written out                  | implemented (uncommitted)   |
-| `anim_value`                                                                | the timer's own read, e.g. `day()`                                                                  | implemented (uncommitted)   |
-| timer selection with a window `predicate`                                   | `filter((d) => between((day() - d.day + 365) % 365, 0, 20, { closed: "left" }))`                    | implemented (uncommitted)   |
-| conditional encoding on `current_frame`                                     | a channel callback reading `day()`                                                                  | exists (read-location rule) |
-| `select: {type: "point", on: "mouseover", fields: ["species"]}` + condition | `pointer().datum()` read in `live()` channels                                                       | exists                      |
-| `tooltip`                                                                   | `chart(pointer())` text layer (issue #830 step 1) or a `live()` readout                             | half new                    |
-| `bind: {input: "range"}` + auto play/pause checkbox                         | `slider({ value, onInput, … })` and `button({ label, onClick })`, ordinary marks                    | implemented (uncommitted)   |
-| `highlight` on `click` with shift multi-select                              | `click()` input rows (#830); the input shipped, multi-select did not                                | half new                    |
-| `key` tweening                                                              | must reconcile with #831; no spelling yet                                                           | deferred                    |
+| Animated Vega-Lite                                                          | GoFish reading                                                                                      | status                    |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------- |
+| `projection: {type: "equalEarth"}` + `longitude`/`latitude` channels        | a `geo(...)` coordinate transform, `scatter({ x: "lon", y: "lat" })` under it                       | new                       |
+| `geoshape` basemap layer                                                    | `polygon({ points: <field> })` rows under the same transform                                        | half new                  |
+| `time` encoding channel (keyframes, band time scale)                        | `timer({ domain, duration, step })` — a scale from the field's domain onto wall time, read backward | implemented (uncommitted) |
+| default timer selection + filter transform                                  | `timer()` plus the `filter` flow operator; no elaboration, the two are written out                  | implemented (uncommitted) |
+| `anim_value`                                                                | the timer's own read, e.g. `day()`                                                                  | implemented (uncommitted) |
+| timer selection with a window `predicate`                                   | `time.sequence({ by: "day", on: day, cyclic: true })` + `time.history({ last: 20 }, [...])`         | implemented               |
+| conditional encoding on `current_frame`                                     | a second layer of the mark, outside the `time.history`, shown only during its own day               | implemented               |
+| `select: {type: "point", on: "mouseover", fields: ["species"]}` + condition | `pointer().datum()` read in `live()` channels                                                       | exists                    |
+| `tooltip`                                                                   | `chart(pointer())` text layer (issue #830 step 1) or a `live()` readout                             | half new                  |
+| `bind: {input: "range"}` + auto play/pause checkbox                         | `slider({ value, onInput, … })` and `button({ label, onClick })`, ordinary marks                    | implemented (uncommitted) |
+| `highlight` on `click` with shift multi-select                              | `click()` input rows (#830); the input shipped, multi-select did not                                | half new                  |
+| `key` tweening                                                              | must reconcile with #831; no spelling yet                                                           | deferred                  |
 
 ## Precedent survey for the new spellings
 
@@ -192,6 +192,12 @@ The table above has been updated to the spellings that shipped; the precedent
 survey's "keyframes" bullet still describes the first draft, which no longer
 exists.
 
+Superseded for panel D (2026-09-25): the trail is no longer a filter. Once
+`time.sequence` and `time.history` existed for the connected scatterplot, the
+trail became the same thing it is there, marks kept on screen after their
+keyframe, and `cyclic` on the sequence took over the wrap at the new year. Step
+4 below describes both, the filter first and then `time.history`.
+
 A precedent survey (d3-timer, @solid-primitives, VueUse, Motion `useTime`,
 Svelte motion, GSAP Timeline, the Web Animations API, Observable's Scrubber,
 mafs `useStopwatch`, Manim `ValueTracker`) produced two findings that changed
@@ -286,11 +292,12 @@ domains to that day's extent, so the chart rescales every frame. That is the
 paper's `rescale: true`; its default is `rescale: false`, and GoFish has no
 spelling for it yet. Open question, not redesigned here.
 
-### Step 4: panel D, trails as a filter
+### Step 4: panel D, trails
 
-**Status: implemented (uncommitted).**
+**Status: implemented.** The first version was a filter, described first. Panel
+D now uses `time.history`, described after it.
 
-No animation primitive. The trail is a value window anchored at the playhead,
+The first version had no animation primitive. The trail is a value window anchored at the playhead,
 half-open on the left exactly as the paper writes it, and the spelling is polars'
 `is_between`:
 
@@ -346,6 +353,47 @@ basemap()
   .render(container, { w: 600, h: 600 });
 ```
 
+**Panel D now: `time.history`.** The connected scatterplot work added
+`time.sequence`, one keyframe per value of a field, and `time.history({ last })`,
+which keeps marks on screen for `last` after their keyframe. A trail is exactly
+that, so panel D spells it the same way. Each day is a keyframe, and each day's
+mark is two layers: a faint circle under `time.history`, which is the trail, and
+a solid circle shown only during its own day. `cyclic: true` says the day of the
+year is a cycle, so `time.history` measures back across the new year and on day
+5 the trail reaches into December. The modulo in the filter is gone, and so is
+the opacity callback that picked out the current day.
+
+```ts
+basemap()
+  .layer(
+    chart(birds)
+      .flow(
+        time.sequence({ by: "day", on: day, cyclic: true }),
+        scatter({ x: "lon", y: "lat" })
+      )
+      .mark(
+        layer([
+          time.history({ last: 20 }, [
+            circle({ r: 3, fill: "species", opacity: 0.1 }),
+          ]),
+          circle({ r: 3, fill: "species" }),
+        ])
+      )
+  )
+  .render(container, { w: 600, h: 600 });
+```
+
+The two spellings differ by one day. The filter's window is half-open, 20 days
+counting the current one. `time.history({ last: 20 })` keeps a day while its band
+overlaps `[T - 20, T]`, which is 21 days counting the current one. Both are
+fine for this picture.
+
+The filter was kept at first because of speed. Played, each of the 52,560
+circles (365 days x 72 species x 2 layers) reads the clock on every tick to
+decide whether it shows. In the Node DOM test harness that measured about 460 ms
+a tick. In a real browser it plays smoothly, so panels D and E now use
+`time.history`. The per-frame cost is tracked in #848.
+
 ### Step 5: panel E, controls at the low-level tier
 
 **Status: implemented (uncommitted).** The spellings below are the ones that
@@ -372,17 +420,16 @@ const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
 const map = basemap({ padding: 0 }).layer(
   chart(birds)
     .flow(
-      filter((d) =>
-        between((day() - d.day + 365) % 365, 0, 20, { closed: "left" })
-      ),
+      time.sequence({ by: "day", on: day, cyclic: true }),
       scatter({ x: "lon", y: "lat" })
     )
     .mark(
-      circle({
-        r: 3,
-        fill: "species",
-        opacity: (d) => (d.day === day() ? 1 : 0.1),
-      })
+      layer([
+        time.history({ last: 20 }, [
+          circle({ r: 3, fill: "species", opacity: 0.1 }),
+        ]),
+        circle({ r: 3, fill: "species" }),
+      ])
     )
 );
 
@@ -395,7 +442,7 @@ const timeSlider = slider({
   domain: day.domain,
   step: day.step,
   w: 300,
-  wrap: true, // day-of-year is a cycle, like the trail filter above
+  wrap: true, // day-of-year is a cycle, like the time axis above
   format: (d) => `day ${d}`,
 });
 const playButton = button({
@@ -466,7 +513,7 @@ Three shape decisions worth recording:
   domain (`hi` and `lo` are one point, as for an angle) and `span + step` for a
   quantized one (365 distinct days, so day 365 is followed by day 1 instead of
   being identified with it). Panel E sets it, since day-of-year is as cyclic for
-  the scrub as it already is for the trail filter. Precedent: Qt's `wrapping`
+  the scrub as it already is for the time axis. Precedent: Qt's `wrapping`
   property (`QAbstractSpinBox`, `QDial`).
 
 The readout beside the track (`format`, default `String`) is a `text` node with

@@ -16,11 +16,15 @@
  * layout is affine in the interpolated quantities, which a fixed-domain
  * scatter is (see the animation design note, §4.1).
  *
- * The operands are made invisible here, by the same structural rule `blank()`
- * uses (`INTERNAL_emitNothing`): once a transition is reading a run of
- * keyframes, the keyframes themselves are scaffolding. They keep their boxes,
- * their data and their anchoring role, and they contribute no display items
- * and no hit-test targets.
+ * WHAT MOVES. In each operand, the marks a `.transition({ update })` was
+ * chained on, or the operand itself when nothing in it chained one (the
+ * selection form, `time.transition()` over a bag of marks). A chained
+ * transition moves the marks that chained its own tween, however many of
+ * them a keyframe holds; marks that chained a different tween are another
+ * transition's. The marks that
+ * move draw nothing of their own: the moving mark is their drawing. A trail
+ * behind it is not the transition's business. It is a `time.history` of
+ * another mark, layered with the moving one.
  *
  * WHEN THE MARK IS THERE. A line draws nothing past its endpoints, and a
  * tween, read on time, draws nothing outside its run. Each stretch between two
@@ -77,14 +81,16 @@ import { createNodeOperator } from "../withGoFish";
 import { readLive } from "../../interaction/live";
 import { GEOMETRY_CHANNELS, setLiveItems } from "../../interaction/liveSlots";
 import {
-  interpolateAt,
-  knotOrder,
+  channelReader,
   locate,
   sourceIndex,
   type InterpolationMethod,
+  type KnotLocation,
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
 import { targetOf } from "./layer";
+import { chainedMarks } from "../../animation/transition";
+import type { TweenEffect } from "../../animation/effects";
 import {
   updateSlotOf,
   updateWarp,
@@ -98,8 +104,11 @@ export type TweenOptions = {
    *  frame in paint position. A plain number is a chart held still, and lowers to exactly the
    *  static item it would have lowered before. */
   at: (() => number) | number;
-  /** Each operand's time value, in operand order. */
-  knots: number[];
+  /** The run the mark travels (`unrollOrder`): `knots[j]` is the time of its
+   *  `j`-th point, in time order, and `operand[j]` the operand that stands
+   *  there. On a cyclic axis the run is unrolled over the cycle before and
+   *  after, so an operand stands at several points; it is laid out once. */
+  run: { knots: number[]; operand: number[] };
   /** Every keyframe of the sequence the knots are drawn from, in time order.
    *  The mark enters, moves and exits by which keyframes here have a row for
    *  it (see the header). Omitted, the run's own knots are the keyframes, so
@@ -115,6 +124,11 @@ export type TweenOptions = {
    *  whose `.transition({ update: time.stagger(...) })` staggers the moves
    *  (`src/animation/updateStagger.ts`): its lag is in ms. */
   msPerUnit?: () => number;
+  /** The tween a `.transition({ update })` chained on the marks this
+   *  transition moves (the chart builder draws one transition per tween,
+   *  `ChartBuilder.resolve`). Omitted (the selection form), it moves the
+   *  marks that chained any, or each operand itself when none did. */
+  moves?: TweenEffect;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -146,47 +160,61 @@ function markLeaves(node: GoFishNode): GoFishNode[] {
 }
 
 /**
+ * The marks a transition moves in one keyframe operand: the marks in it that
+ * chained the transition's tween (`moves`), or, when the transition was not
+ * chained (the selection form), the marks in it that chained any, or the
+ * operand itself when none did.
+ */
+function movedIn(
+  operand: GoFishNode | undefined,
+  moves: TweenEffect | undefined
+): GoFishNode[] {
+  if (!(operand instanceof GoFishNode)) return [];
+  const chained = chainedMarks(operand, moves);
+  return chained.length > 0 || moves !== undefined ? chained : [operand];
+}
+
+/** One channel of a track: its value where the run is located. */
+type Channel = (at: KnotLocation) => number;
+
+/**
  * One leaf's run through the keyframes, in time order: everything about it
  * that layout decided. Reading it at a playhead is pure arithmetic over these
- * numbers, which is what lets the paint tier do it per frame.
+ * numbers, which is what lets the paint tier do it per frame. Every track
+ * keeps the leaf at each keyframe, which lends its own drawing to the moving
+ * mark (`INTERNAL_lendDrawing`), and the leaf's local origin there (the point
+ * its anchor sits on), where that drawing is placed.
  */
-type Track =
+type Track = {
+  leaves: GoFishNode[];
+  origins: [number, number][];
+} & (
   | {
       kind: "box";
       /** The shape every keyframe of the leaf is: the shape the moving leaf
        *  is. */
       shape: string;
-      /** Each keyframe's placed box, per channel: center and extent on each
-       *  axis, the four quantities a box leaf interpolates. */
-      cx: number[];
-      cy: number[];
-      w: number[];
-      h: number[];
-      /** Each keyframe's own color channel, for the paint the leaf
-       *  inherits. */
-      colors: (MaybeValue<string> | undefined)[];
+      /** The four quantities a box leaf interpolates: its center and its
+       *  extent on each axis, each read from every keyframe's placed box. */
+      x: Channel;
+      y: Channel;
+      w: Channel;
+      h: Channel;
     }
   | {
       kind: "rigid";
       /** Each keyframe's box center, the point the leaf's drawing moves
-       *  with. */
+       *  with, and the channels that read it. */
       cx: number[];
       cy: number[];
-      /** Each keyframe's local origin (the point its anchor sits on), and
-       *  its own drawing, taken over from the keyframe. */
-      origins: [number, number][];
-      draws: ((
-        transform: Transform,
-        toPixel: ToPixel
-      ) => DisplayList.DisplayItem[])[];
-    };
+      x: Channel;
+      y: Channel;
+    }
+);
 
-/** One track, lowered: the items its leaf draws when the run is read by `at`
- *  and its unblended attributes come from keyframe `source`. */
-type Painter = (
-  at: (values: number[]) => number,
-  source: number
-) => DisplayList.DisplayItem[];
+/** One track, lowered: the items its leaf draws when the run is read `at` a
+ *  location and its unblended attributes come from keyframe `source`. */
+type Painter = (at: KnotLocation, source: number) => DisplayList.DisplayItem[];
 
 /**
  * Where a run with these knots is read at `t`, and how opaque it is there —
@@ -250,8 +278,8 @@ type Run = {
 };
 
 /**
- * Locate `t` in a run: a reader for any per-keyframe channel at `t`, and the
- * keyframe the attributes that are NOT blended come from.
+ * Locate `t` in a run: where every per-keyframe channel is read at `t`, and
+ * the keyframe the attributes that are NOT blended come from.
  *
  * Easing warps the parameter INSIDE the interval `t` falls in, then maps back
  * to time, so an eased run still passes through every keyframe at its own time
@@ -269,33 +297,29 @@ function sampleRun(
   t: number,
   method: InterpolationMethod,
   ease: ((u: number) => number) | undefined
-): { at: (values: number[]) => number; source: number } {
+): { at: KnotLocation; source: number } {
   const source = sourceIndex(knots, t, method);
-  // Fewer than two keyframes leaves no segment to locate in; the channel
-  // rule is `interpolateRun`'s (a lone keyframe holds, an empty run is NaN).
-  if (knots.length < 2) {
-    return {
-      at: (values) => (knots.length === 0 ? NaN : values[0]),
-      source,
-    };
-  }
+  // Fewer than two keyframes leaves no segment to locate in; a channel of
+  // such a run holds its one value wherever it is read (`channelReader`).
+  if (knots.length < 2) return { at: { i: 0, u: 0 }, source };
   let loc = locate(knots, t);
   if (ease !== undefined && loc.u > 0 && loc.u < 1) {
     const { i, u } = loc;
     loc = locate(knots, knots[i] + ease(u) * (knots[i + 1] - knots[i]));
   }
-  return { at: (values) => interpolateAt(knots, values, loc, method), source };
+  return { at: loc, source };
 }
 
 export const tween = createNodeOperator(
   (
     {
       at: playhead,
-      knots,
+      run: { knots, operand },
       sequence,
       method,
       ease,
       msPerUnit,
+      moves,
       fill,
       stroke,
       strokeWidth,
@@ -306,8 +330,8 @@ export const tween = createNodeOperator(
     /** The playhead as a function, whether or not it was written as one, and
      *  whether it can change after layout. A plain number cannot, so the node
      *  lowers to a static item and nothing reactive is wired up. */
-    const moves = typeof playhead === "function";
-    const readPlayhead = moves ? playhead : () => playhead;
+    const live = typeof playhead === "function";
+    const readPlayhead = live ? playhead : () => playhead;
 
     // The playhead, read ONCE, HERE: the value the node lowers to, and the
     // read that registers the clock with the chart's interaction runtime.
@@ -341,30 +365,28 @@ export const tween = createNodeOperator(
               axisScale(scales?.[1]?.sigma, undefined),
             ])
           );
-          const order = knotOrder(knots);
-          const keyframes = order.map((i) => targetOf(children[i]));
+          const operands = operand.map((i) => targetOf(children[i]));
+          /** The marks that move in each keyframe, in time order. */
+          const moved = operands.map((operand) => movedIn(operand, moves));
 
           /** A leaf's placed box and local origin in this node's frame. The
-           *  keyframe mark itself is its operand, already placed; any other
-           *  leaf is read through a `ref` of the same kind, which is how an
-           *  operand is read. */
+           *  operand itself is already placed; any other leaf is read through
+           *  a `ref` of the same kind, which is how an operand is read. */
           const placeLeaf = (leaf: GoFishNode, k: number): Placeable => {
-            if (leaf === keyframes[k]) return placed[order[k]];
+            if (leaf === operands[k]) return placed[operand[k]];
             const stand = new GoFishRef({ node: leaf });
             stand.parent = self;
             stand.resolveNames();
             return stand.layout(size);
           };
 
-          // Match the keyed mark's leaves across the keyframes by structural
+          // Match the moving marks' leaves across the keyframes by structural
           // position. When every keyframe has the same leaves, each leaf gets
           // a run of its own. When they differ (a label present in one year
-          // only), the leaves cannot be paired, and the mark falls back to one
-          // run of the keyframe mark itself, its attachments left to the
-          // keyframes (they hold and snap with them).
-          const leafSets = keyframes.map((n) =>
-            n instanceof GoFishNode ? markLeaves(n) : []
-          );
+          // only), the leaves cannot be paired, and each moving mark falls
+          // back to one run of itself, its attachments left to the keyframes
+          // (they hold and snap with them).
+          const leafSets = moved.map((marks) => marks.flatMap(markLeaves));
           const shapesOf = (leaves: GoFishNode[]) =>
             leaves.map((l) => l.type).join("/");
           const matched =
@@ -377,18 +399,26 @@ export const tween = createNodeOperator(
                   (l) => BOX_SHAPES.has(l.type) || RIGID_SHAPES.has(l.type)
                 )
             );
+          if (
+            !matched &&
+            moved.some((marks) => marks.length !== moved[0].length)
+          ) {
+            throw new Error(
+              `[gofish] time.transition(): the keyframes hold different ` +
+                `numbers of marks to move (` +
+                `${[...new Set(moved.map((marks) => marks.length))].join(" / ")}` +
+                `), and a transition pairs them across the keyframes by ` +
+                `position. Give every keyframe of a run the same marks.`
+            );
+          }
           const rows: GoFishNode[][] = matched
             ? leafSets[0].map((_, j) => leafSets.map((leaves) => leaves[j]))
-            : [
-                keyframes.filter(
-                  (n): n is GoFishNode => n instanceof GoFishNode
-                ),
-              ];
+            : (moved[0] ?? []).map((_, j) => moved.map((marks) => marks[j]));
 
           // Every leaf of a row is one mark moving, so the row is checked as
           // one: a shape the transition can move, the same for every
-          // keyframe. Matched rows may be text, which moves rigidly; the
-          // fallback row is the keyframe mark itself, so it must be a box.
+          // keyframe. Matched rows may be text, which moves rigidly; a
+          // fallback row is a moving mark itself, so it must be a box.
           for (const row of rows) {
             const shapes = new Set(row.map((n) => n.type));
             for (const shape of shapes) {
@@ -422,6 +452,9 @@ export const tween = createNodeOperator(
             }
           }
 
+          /** A channel of this run, from each keyframe's value of it. */
+          const channel = (values: number[]): Channel =>
+            channelReader(knots, values, method);
           const allBoxes: ReturnType<typeof bbox>[] = [];
           const tracks: Track[] = rows.map((leaves) => {
             const stands = leaves.map((leaf, k) => placeLeaf(leaf, k));
@@ -433,34 +466,39 @@ export const tween = createNodeOperator(
             const shape = leaves[0].type;
             const cx = boxes.map((b) => (b.minX + b.maxX) / 2);
             const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
-            // The keyframes are scaffolding once a transition reads them:
-            // every leaf it moves stops drawing, and a rigid leaf hands its
-            // drawing over to be placed where the playhead is.
+            // Every leaf the transition moves draws nothing of its own: the
+            // moving mark is its drawing. Each lends that drawing to the
+            // moving mark at lowering: a rigid leaf's is placed where the
+            // playhead is, and a box leaf's gives the moving mark its paint.
+            leaves.forEach((leaf) => leaf.INTERNAL_emitNothing());
+            const origins = stands.map((s) => displayTranslate(s.transform));
             if (RIGID_SHAPES.has(shape)) {
               return {
                 kind: "rigid",
+                leaves,
+                origins,
                 cx,
                 cy,
-                origins: stands.map((s) => displayTranslate(s.transform)),
-                draws: leaves.map((leaf) => leaf.INTERNAL_takeOverLowering()),
+                x: channel(cx),
+                y: channel(cy),
               };
             }
-            for (const leaf of leaves) leaf.INTERNAL_emitNothing();
             return {
               kind: "box",
+              leaves,
+              origins,
               shape,
-              cx,
-              cy,
-              w: boxes.map(width),
-              h: boxes.map(height),
-              colors: leaves.map((leaf) => leaf.color),
+              x: channel(cx),
+              y: channel(cy),
+              w: channel(boxes.map(width)),
+              h: channel(boxes.map(height)),
             };
           });
           const run: Run = {
-            knots: order.map((i) => knots[i]),
+            knots,
             tracks,
-            slots: keyframes.map((k) =>
-              k instanceof GoFishNode ? updateSlotOf(k) : undefined
+            slots: moved.map((marks) =>
+              marks[0] === undefined ? undefined : updateSlotOf(marks[0])
             ),
           };
 
@@ -501,26 +539,52 @@ export const tween = createNodeOperator(
 
           /** A box leaf, lowered: its style resolved once per keyframe, so
            *  reading it at a playhead is an array index rather than a color
-           *  computation. */
+           *  computation. Each keyframe's style is the one its own drawing
+           *  has, with what the transition's options say over it. */
+          const declaredFill =
+            fill === undefined
+              ? undefined
+              : resolveColorChannel(fill as MaybeValue<string>, unitScale);
+          // A declared fill outlines the mark in the same paint unless a
+          // stroke is declared too, as a mark's own fill does.
+          const declared = lowerStyle({
+            fill: declaredFill,
+            stroke: declaredStroke ?? declaredFill,
+            strokeWidth,
+            opacity,
+          });
+          /** The drawing the leaf at keyframe `k` of a track lends, lowered
+           *  once per leaf, under this node's scope, at the leaf's own origin.
+           *  A leaf stands at several points of an unrolled run, and it is
+           *  the same drawing at each. */
+          const drawings = new Map<GoFishNode, DisplayList.DisplayItem[]>();
+          const drawingAt = (track: Track, k: number) => {
+            const leaf = track.leaves[k];
+            let drawn = drawings.get(leaf);
+            if (drawn === undefined) {
+              const [ox, oy] = track.origins[k];
+              drawn = leaf.INTERNAL_lendDrawing()(
+                { translate: [tx + ox, ty + oy] },
+                toPixel
+              );
+              drawings.set(leaf, drawn);
+            }
+            return drawn;
+          };
+
           const boxPainter = (
             track: Extract<Track, { kind: "box" }>
           ): Painter => {
-            const { shape, cx, cy, w, h } = track;
-            const styles = track.colors.map((keyframeColor) => {
-              const resolvedFill =
-                resolveColorChannel(
-                  (fill ?? keyframeColor) as MaybeValue<string>,
-                  unitScale
-                ) ?? "black";
-              return lowerStyle({
-                fill: resolvedFill,
-                stroke: declaredStroke ?? resolvedFill,
-                strokeWidth: strokeWidth ?? 0,
-                opacity: opacity ?? 1,
-              });
-            });
+            const { shape } = track;
+            const styles = track.leaves.map((_, k) => ({
+              ...drawingAt(track, k)[0]?.style,
+              ...declared,
+            }));
             return (at, source) => {
-              const [x, y, bw, bh] = [cx, cy, w, h].map(at);
+              const x = track.x(at);
+              const y = track.y(at);
+              const bw = track.w(at);
+              const bh = track.h(at);
               const style = styles[source];
               if (shape === "ellipse") {
                 const [px, py] = toLocalPixel([x, y]);
@@ -554,24 +618,21 @@ export const tween = createNodeOperator(
             };
           };
 
-          /** A rigid leaf, lowered: each keyframe's own drawing lowered ONCE,
-           *  here, under this node's scope, with the pixel its box center
-           *  sits on. At a playhead the source keyframe's items are moved by
-           *  as much as the center moved, so the anchor keeps its place in
-           *  the box; that is plain arithmetic the paint tier can do per
-           *  frame. The painter keeps the items, not the keyframes' drawings. */
+          /** A rigid leaf, lowered: each keyframe's own drawing
+           *  (`drawingAt`), with the pixel its box center sits on. At a
+           *  playhead the source keyframe's items are moved by as much as the
+           *  center moved, so the anchor keeps its place in the box; that is
+           *  plain arithmetic the paint tier can do per frame. The painter
+           *  keeps the items, not the keyframes' drawings. */
           const rigidPainter = (
             track: Extract<Track, { kind: "rigid" }>
           ): Painter => {
             const { cx, cy } = track;
-            const drawn = track.draws.map((draw, k) => {
-              const [ox, oy] = track.origins[k];
-              return draw({ translate: [tx + ox, ty + oy] }, toPixel);
-            });
+            const drawn = track.leaves.map((_, k) => drawingAt(track, k));
             const centers = cx.map((x, k) => toLocalPixel([x, cy[k]]));
             return (at, source) => {
               const [fromX, fromY] = centers[source];
-              const [toX, toY] = toLocalPixel([at(cx), at(cy)]);
+              const [toX, toY] = toLocalPixel([track.x(at), track.y(at)]);
               return drawn[source].map((item) =>
                 moveItem(item, toX - fromX, toY - fromY)
               );
@@ -602,7 +663,7 @@ export const tween = createNodeOperator(
           };
 
           const items = build(t);
-          if (moves) {
+          if (live) {
             // The paint tier's half of the split: one thunk per attribute of
             // each moving item, each re-reading the playhead in JSX attribute
             // position so Solid patches that attribute and nothing else. The

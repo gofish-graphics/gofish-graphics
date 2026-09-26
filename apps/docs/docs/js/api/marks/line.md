@@ -39,15 +39,36 @@ line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve = "auto", alo
 ::: gofish-ref line
 :::
 
-When `curve` is omitted (`"auto"`), `line` inspects the connected points: if they
-share a continuous connection axis it smooths them with a centripetal Catmull-Rom
-spline, otherwise it draws a straight polyline.
+When `curve` is omitted (`"auto"`), `line` inspects the connected points. If they
+share a continuous connection axis, it smooths them with a Catmull-Rom spline.
+Otherwise it draws a straight polyline.
 
-`curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
-`straight()`, `bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`,
-or `perfectArrows({ bow })`. The `orthogonal` elbow bends at the midpoint of the
-connector's `dir` axis; pass `orthogonal({ bend: "auto" })` to infer the bend axis
-from the endpoint geometry instead (for layouts with no single growth axis).
+A smooth line takes the knots of its spline from the data when the data has a
+value that orders the line. `line` uses the first of these that it finds:
+
+- The values of the field the line runs along, when they are numbers that only
+  go up or only go down along the line. This is the field `along` names, or the
+  field of the tier the line was inferred to run along, e.g., the years of a
+  connected scatterplot. A line through the keyframes of a
+  [`time.sequence`](/js/animation) uses the keyframes' time values.
+- The points' positions on the connection axis, when that axis is continuous
+  and the points are in order along it, e.g., a line chart over x.
+- The distances between the points on the screen, when neither of the above
+  applies. These are centripetal knots.
+
+Because the knots come from the data, a line and a
+[`time.transition()`](/js/animation) through the same points follow the same
+curve. A curve with data knots can rise above a sharp peak or dip below a sharp
+valley between two points. Use `curve: "linear"` when the line has to stay
+between its points.
+
+`curve` accepts the strings `"linear"` or `"bezier"`, or a `CurveSpec` factory:
+`bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`, or
+`perfectArrows({ bow })`. `"linear"` has no factory, because
+[`linear()`](/js/api/coords/linear) is the coordinate transform. The `orthogonal`
+elbow bends at the midpoint of the connector's `dir` axis; pass
+`orthogonal({ bend: "auto" })` to infer the bend axis from the endpoint geometry
+instead (for layouts with no single growth axis).
 
 ## Two forms
 

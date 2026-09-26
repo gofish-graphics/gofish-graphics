@@ -742,7 +742,7 @@ rewrite](/internals/frontend/mark-factory) synthesizes one anchor `blank` per ro
 26,000-row line chart used to emit 26,000 zero-size `<rect>` elements (and 26,000
 entries in the interaction hit-test map) that nobody could see or click.
 
-Its sibling is **`INTERNAL_visibleWhile(visible)`**, and the pair is worth reading
+Its sibling is **`INTERNAL_visibleWhile(owner, visible)`**, and the pair is worth reading
 together because the difference is which tier decides. `INTERNAL_emitNothing` is
 for a node that must never draw, and it answers at resolve. `INTERNAL_visibleWhile`
 is for a node whose drawing comes and goes with a signal — a `time.sequence`'s
@@ -755,23 +755,31 @@ every tick, for a change that alters nothing above the marks themselves.
 Emitting nothing wins over being visible: a node with no items has nothing to
 patch, so the two compose with no coordination.
 
-A visibility rule covers the node's whole subtree. `INTERNAL_lower` paints a node
-only while its own rule and every ancestor's hold, so a sequence sets the rule once
-on each keyframe group, and marks that a later elaboration pass adds under the group
-hide with it. The label pass is the case that needs this: it wraps a keyframe group
+A visibility rule is set under an owner (a sequence, for its keyframes) and covers
+the node's whole subtree. `INTERNAL_lower` paints a node only while every owner's
+rule holds, each owner's being the one set nearest the node, so a sequence sets the
+rule once on each keyframe group, and marks that a later elaboration pass adds under
+the group hide with it. Setting a rule again from the same owner replaces it, so a
+second layout does not pile rules up. The label pass is the case that needs this: it wraps a keyframe group
 in a new layer that holds the group beside its label `Text`s, after the sequence has
 set its rule. `wrapPreservingIdentity` (`src/ast/elaborationUtils.ts`) moves the rule
 onto the wrapper along with the group's name and key, so the labels are inside the
-rule's subtree and show only with the year they label.
+rule's subtree, show only with the year they label, and belong to that year's
+keyframe (`keyframeOf` in `src/timeWindow.ts` reads the key of the node under the
+sequence's Frame).
 
-A transition takes a keyframe over for good, labels included: it silences every
-leaf it moves. A box leaf gets `INTERNAL_emitNothing`; a text leaf gets
-`INTERNAL_takeOverLowering`, which silences it the same way and hands its own
-drawing to the transition, so the transition can draw that text where the
-playhead has taken it. The handed-over drawing lowers through the same body as
-`INTERNAL_lower`, so its items keep their ids and live channels, but it skips
-the visibility rule: once the transition owns the text, the transition decides
-when it shows.
+A `time.history({ last })` inside a keyframe gets a rule of its own from the
+sequence, set under the same owner, so for the marks under it it stands in for the
+keyframe group's rule: they show while the group's band overlaps `[T − last, T]`
+(`lifetimeRule` in `src/timeWindow.ts`). A transition hides the marks it moves,
+labels included, with `INTERNAL_emitNothing`: the moving mark is their drawing, and a
+trail behind it is a `time.history` of another mark in the same keyframe. Each leaf
+it moves also lends the transition its drawing,
+`INTERNAL_lendDrawing`: the transition draws a text where the playhead has taken
+it, and paints a box as the mark it moves is painted. A node keeps the lowering it was built with, so it lends its real drawing
+even after it has been silenced. The lent drawing lowers through the same body as
+`INTERNAL_lower`, so its items keep their ids and live channels, but it skips the
+visibility rule: the transition decides when the moving copy shows.
 
 A build-in (`src/animation/`) uses a third hook, `INTERNAL_animate(rule)`, which
 also answers at paint. The node lowers at rest. The rule then rewrites the items

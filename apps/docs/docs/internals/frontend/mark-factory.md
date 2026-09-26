@@ -7,6 +7,7 @@ covers:
   - packages/gofish-graphics/src/ast/withGoFish.ts
   - packages/gofish-graphics/src/ast/channels.ts
   - packages/gofish-graphics/src/ast/marks/chart.ts
+  - packages/gofish-graphics/src/ast/marks/markResult.ts
 ---
 
 # `createMark`: turning a shape into a frontend mark
@@ -183,8 +184,8 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 `spreadX`, `Frame`, …) is built from. They flatten the children array, await its
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
 shared by both loops: a thunk is called, and whatever comes out — like every other
-child — goes to `resolveMarkResult` (`marks/chartBuilder.ts`), the single place
-that knows all the shapes. Four get in:
+child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
+that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
 - a **mark** (a function) — invoked with `undefined` data, which is how a bare
@@ -194,11 +195,20 @@ that knows all the shapes. Four get in:
 - a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
   — resolved through its own `resolve()`. A `LayerBuilder` must go through its
   own, not the root tier's: that is where a root `coord` is hoisted around every
-  tier, so resolving the tiers by hand would drop the shared projection.
+  tier, so resolving the tiers by hand would drop the shared projection;
+- a **`.relate()` operand** (a `RelateOperand`, a child of a drawing clause such
+  as `arrow(opts, [a, b])`) — becomes a string `ref` of the name it carries,
+  which resolves from the relating layer (see
+  [Name Resolution & Scoping](/internals/core/names-and-scoping)).
 
-The dependency runs one way — `withGoFish` and `createOperator` import from
-`chartBuilder`, never the reverse — which is why `resolveMarkResult` lives there
-rather than being duplicated as a local builder-child dispatch on this side.
+`markResult.ts` imports neither `chartBuilder` nor `createOperator`, so
+`withGoFish`, `createOperator` and `chartBuilder` all use the one
+`resolveMarkResult` rather than each keeping a local builder-child dispatch,
+and the dependency between the two builder modules runs one way:
+`chartBuilder` imports `createOperator` (for `nameableMark`), never the
+reverse. `resolveMarkResult` knows a builder by the method it calls,
+`withLayerContext`, not by its class, which is what lets it sit below
+`chartBuilder`.
 
 The builder case is the reverse direction of `.layer(node)`, which has always
 accepted low-level nodes: a chart composes inside an operator (`spreadY([map,
@@ -211,8 +221,8 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 `spreadX`, `Frame`, …) is built from. They flatten the children array, await its
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
 shared by both loops: a thunk is called, and whatever comes out — like every other
-child — goes to `resolveMarkResult` (`marks/chartBuilder.ts`), the single place
-that knows all the shapes. Four get in:
+child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
+that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
 - a **mark** (a function) — invoked with `undefined` data, which is how a bare
@@ -221,11 +231,20 @@ that knows all the shapes. Four get in:
 - a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
   — resolved through its own `resolve()`. A `LayerBuilder` must go through its
   own, not the root tier's: that is where a root `coord` is hoisted around every
-  tier, so resolving the tiers by hand would drop the shared projection.
+  tier, so resolving the tiers by hand would drop the shared projection;
+- a **`.relate()` operand** (a `RelateOperand`, a child of a drawing clause such
+  as `arrow(opts, [a, b])`) — becomes a string `ref` of the name it carries,
+  which resolves from the relating layer (see
+  [Name Resolution & Scoping](/internals/core/names-and-scoping)).
 
-The dependency runs one way — `withGoFish` and `createOperator` import from
-`chartBuilder`, never the reverse — which is why `resolveMarkResult` lives there
-rather than being duplicated as a local builder-child dispatch on this side.
+`markResult.ts` imports neither `chartBuilder` nor `createOperator`, so
+`withGoFish`, `createOperator` and `chartBuilder` all use the one
+`resolveMarkResult` rather than each keeping a local builder-child dispatch,
+and the dependency between the two builder modules runs one way:
+`chartBuilder` imports `createOperator` (for `nameableMark`), never the
+reverse. `resolveMarkResult` knows a builder by the method it calls,
+`withLayerContext`, not by its class, which is what lets it sit below
+`chartBuilder`.
 
 The builder case is the reverse direction of `.layer(node)`, which has always
 accepted low-level nodes: a chart composes inside an operator (`spreadY([map,
@@ -240,9 +259,13 @@ methods:
   layer context so `selectAll("layerName")` can pull the array of refs (or
   `ref("layerName")` the single node, when the layer holds exactly one). It also
   stashes the passed name on the returned mark function via `stashLayerName`
-  (defined in `chartBuilder.ts`, called by every `.name()` implementation), so
-  `.layer()`'s producer-tier auto-naming can detect a user-chained name
-  without parsing the `__serialize` tag. (An earlier `ChartBuilder.connect()`
+  (defined in `markResult.ts`, called by every `.name()` implementation, and
+  carried forward by every modifier chained after it), so `.layer()`'s
+  producer-tier auto-naming and a sequenced tier's naming can detect a
+  user-chained name without parsing the `__serialize` tag. A `createName`
+  token is filed in the layer context under its own symbol (`layerKey`), so
+  those tiers find a token-named mark's nodes too, while no string
+  `selectAll` or `ref` can reach them. (An earlier `ChartBuilder.connect()`
   method used this same stashed name; it was deleted in favor of
   [`.layer()`](/js/api/core/layer), which generalizes the pattern to every
   tier — see below.) `LayerBuilder.wireTiers()` looks for the stashed name on
@@ -261,9 +284,16 @@ methods:
   each phase of an animation (`animation.grow()`, `animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the
   build-in reads the `enter` effects back off the resolved tree
-  (`src/animation/install.ts`). Under a sequence, the chart builder turns the
-  spec into a `time.transition()` tier instead. This is the build-in
-  prototype (draft PR #901) and is JavaScript-only.
+  (`src/animation/install.ts`). Under a sequence, the chart builder reads the
+  records off the tier's resolved marks (`chainedUpdates`) and draws one
+  `time.transition()` for each way of moving it finds (the same curve and
+  ease, `sameTween`), inside the tier's own frame, so the next `.layer(...)`
+  still takes the tier's marks as its scope. Each transition moves only the
+  marks that chained its tween, however many of them a keyframe holds. The
+  chained mark may sit anywhere inside the tier's mark
+  (`layer([trail, head.transition(...)])`, a `createMark` component), because
+  the records are on the nodes. This is the build-in prototype (draft PR
+  #901) and is JavaScript-only.
 - `mark.translate({ x?, y? })` — wraps the produced node in a structural
   translation node. This is deliberately not equivalent to merging `x`/`y` into
   the mark's own options: a mark or operator may already give `x`/`y`
@@ -520,6 +550,20 @@ literal per-item coordinates — a value channel exactly like `h`/`w` — so the
 travel axis there is the axis it does _not_ position. Both resolutions are
 validated against the design note's worked examples (its own "Intended?"
 column), not just its prose.
+
+The path tier's own `by` is also written into the cell, as `inferred.along`.
+It is the connection variable: the field the connector threads its operands
+along, whether `along` named the tier or the rule above inferred it. `line`
+and `ribbon` receive the cell as `produce`'s third argument and pass the key
+on to `Connect`. Only a smooth connector reads it: it projects each operand's
+value of the key through its underlying rows (`projectBy` in
+`datumProjection.ts`, which applies a key function to each row rather than to
+the ref) and uses the values as the knots of its Catmull-Rom spline when they
+are numbers in order along the run (issue #635). So a connected scatterplot
+threaded along `year` bends by years rather than by the distances between its
+points on screen (`runKnots` in `connect.tsx`). A line that threads a
+sequence's keyframes uses the keyframes' own times first, which are what its
+cut is made by.
 
 ### A temporal connector: `time.transition()`
 

@@ -146,7 +146,7 @@ console.log("# catmullRom: knots are data values, not uniform steps");
 console.log("# degenerate runs");
 {
   ok(
-    "two keyframes fall back to linear",
+    "two keyframes read as a straight line",
     near(interpolateCatmullRom([0, 10], [0, 100], 2.5), 25)
   );
   // Two keyframes at the same time value (duplicate rows for one year) must

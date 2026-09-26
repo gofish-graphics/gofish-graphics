@@ -1,20 +1,21 @@
 /**
  * Interpolation over a run of keyframes, with knots at DATA parameter values.
  *
- * This is the temporal reading of what `adaptive-resampling.ts` does in space:
- * `convertPointsToBezierCurves` threads a run of points with a *centripetal*
- * (chord-length) Catmull-Rom, because pixel space has a canonical metric and a
- * path only has to look right. A transition instead evaluates the run at one
- * parameter value — the clock's — and the parameter is the data's own time
- * field (`year`), not an accumulated distance. So the knots here are the data
- * values, and nothing is reparameterized: two keyframes ten years apart take
- * ten years' worth of the clock, whatever the distance between them on screen.
+ * `line` threads a run of placed points with the same Catmull-Rom spline
+ * (`catmullRom.ts`), but with centripetal knots, because a run of points on
+ * screen carries no parameter of its own. A transition instead evaluates the
+ * run at one parameter value — the clock's — and the parameter is the data's
+ * own time field (`year`), not an accumulated distance. So the knots here are
+ * the data values, and nothing is reparameterized: two keyframes ten years
+ * apart take ten years' worth of the clock, whatever the distance between
+ * them on screen.
  *
  * Both methods are pure functions of `(knots, values, t)`. `knots` must be
  * sorted ascending and the same length as `values`; the caller sorts once and
  * reuses the ordering for every channel it interpolates (x, y, width, height).
  */
 
+import { catmullRomAt, catmullRomCubics, cubicAt } from "./catmullRom";
 import { lerp } from "./util";
 
 /** How a run is read between its knots. */
@@ -71,16 +72,16 @@ export function interpolateStep(
 }
 
 /**
- * Non-uniform Catmull-Rom evaluation, by the Barry-Goldman pyramid: the value
- * follows a C¹ spline that passes through every keyframe, with each segment
- * parameterized by the knots themselves rather than by a uniform 0..1. That is
- * what makes an uneven run of years (1952, 1957, 1962, …, 2007 with a gap)
- * play at an even speed instead of racing through the short intervals.
+ * Non-uniform Catmull-Rom evaluation: the value follows a smooth spline that
+ * passes through every keyframe, with each segment parameterized by the knots
+ * themselves rather than by a uniform 0..1. That is what makes an uneven run
+ * of years (1952, 1957, 1962, …, 2007 with a gap) play at an even speed
+ * instead of racing through the short intervals.
  *
- * The two end segments have no outside neighbor, so a phantom knot is
- * reflected outward (`t₀ = t₁ - (t₂ - t₁)`) with the endpoint's own value. A
- * duplicated knot VALUE with a duplicated knot PARAMETER would divide by zero,
- * so the parameter is offset while the value repeats.
+ * The spline is `catmullRom.ts`'s, the same one `line` draws. At the two ends
+ * it keeps the end interval's own slope, so a run that changes at a constant
+ * rate is read at that rate all the way through, and a run of two keyframes
+ * is a straight line.
  */
 export function interpolateCatmullRom(
   knots: number[],
@@ -88,39 +89,6 @@ export function interpolateCatmullRom(
   t: number
 ): number {
   return interpolateRun(knots, values, t, "catmullRom");
-}
-
-/** The Barry-Goldman pyramid for segment `i` at local fraction `u`, on a run
- *  of at least three knots. */
-function catmullRomAt(
-  knots: number[],
-  values: number[],
-  i: number,
-  u: number
-): number {
-  const n = knots.length;
-  const t1 = knots[i];
-  const t2 = knots[i + 1];
-  const p1 = values[i];
-  const p2 = values[i + 1];
-  // Reflected phantom neighbors at the ends.
-  const t0 = i > 0 ? knots[i - 1] : t1 - (t2 - t1);
-  const p0 = i > 0 ? values[i - 1] : p1;
-  const t3 = i + 2 < n ? knots[i + 2] : t2 + (t2 - t1);
-  const p3 = i + 2 < n ? values[i + 2] : p2;
-
-  const tt = t1 + u * (t2 - t1);
-  // Guard every denominator: a degenerate span collapses that blend onto its
-  // later endpoint, the same rule `locate` uses.
-  const blend = (a: number, b: number, ta: number, tb: number): number =>
-    tb === ta ? b : ((tb - tt) * a + (tt - ta) * b) / (tb - ta);
-
-  const a1 = blend(p0, p1, t0, t1);
-  const a2 = blend(p1, p2, t1, t2);
-  const a3 = blend(p2, p3, t2, t3);
-  const b1 = blend(a1, a2, t0, t2);
-  const b2 = blend(a2, a3, t1, t3);
-  return blend(b1, b2, t1, t2);
 }
 
 /** Evaluate one channel of a keyframe run at `t`. */
@@ -152,10 +120,31 @@ export function interpolateAt(
     // value holds.
     return u >= 1 ? values[i + 1] : values[i];
   }
-  if (method === "linear" || knots.length === 2) {
-    return lerp(values[i], values[i + 1], u);
-  }
+  if (method === "linear") return lerp(values[i], values[i + 1], u);
   return catmullRomAt(knots, values, i, u);
+}
+
+/**
+ * One channel of a keyframe run, prepared once for reading at many located
+ * parameters: the reader `interpolateAt` is, with a smooth run's cubics worked
+ * out here rather than on every read. A transition reads every channel of its
+ * run on every frame, so it builds these at layout. A run of fewer than two
+ * knots holds its one value (or is NaN when empty), as `interpolateRun` does.
+ */
+export function channelReader(
+  knots: number[],
+  values: number[],
+  method: InterpolationMethod
+): (at: KnotLocation) => number {
+  if (knots.length < 2) {
+    const held = knots.length === 0 ? NaN : values[0];
+    return () => held;
+  }
+  if (method !== "catmullRom") {
+    return (at) => interpolateAt(knots, values, at, method);
+  }
+  const cubics = catmullRomCubics(knots, values);
+  return ({ i, u }) => cubicAt(cubics, i, u);
 }
 
 /**

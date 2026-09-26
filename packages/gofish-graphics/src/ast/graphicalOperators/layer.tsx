@@ -174,9 +174,13 @@ function applyRelationalZBelowDefaults(
         (c) => c !== connector && path.includes(c as GoFishAST)
       );
       if (!withinScope) continue;
-      const connectorName = ensureConstraintName(connector);
-      const targetName = ensureConstraintName(target);
-      pairs.push([connectorName, targetName]);
+      // An operand that is itself a plain layer (a `layer([...])` mark, a
+      // `time.history`) is hoisted away too, and its name goes with what it
+      // paints (`flattenForZOrder`), so the connector goes under those.
+      pairs.push([
+        ensureConstraintName(connector),
+        ensureConstraintName(target),
+      ]);
       claimedAny = true;
     }
     // Consumed (fully or partially) at this level — don't let an outer layer
@@ -464,11 +468,12 @@ export const layer = createNodeOperatorSequential(
           // Demand-driven nicing (issue #659): any scope this layer roots
           // (self-scaled stash, shared-scale, datum-position) nices its
           // POSITION domain only if some node in the scope renders an axis on
-          // that dim — read off the persistent axis-demand stamps.
-          const axisDemand: Size<boolean> = [
-            node.scopeRendersAxis(0),
-            node.scopeRendersAxis(1),
-          ];
+          // that dim — read off the persistent axis-demand stamps. Read only
+          // when this layer roots such a scope, and kept per region
+          // (`scopeRendersAxis`), so a region is scanned once however many
+          // layers in it ask.
+          const axisDemand = (axis: 0 | 1): boolean =>
+            node.scopeRendersAxis(axis);
           const childScalePlan = buildChildScalePlan(
             selfScaledSpaces,
             node._underlyingSpace,

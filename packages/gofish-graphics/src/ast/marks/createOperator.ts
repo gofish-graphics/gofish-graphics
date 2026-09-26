@@ -34,10 +34,11 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { Mark, MarkChild, Operator } from "../types";
 import {
-  LayerContext,
+  layerKey,
   resolveMarkResult,
   stashLayerName,
-} from "./chartBuilder";
+  type LayerContext,
+} from "./markResult";
 import { CHANNEL_INFER, resolveMeasure } from "../channels";
 import type {
   ChannelAnnotations as MarkChannelAnnotations,
@@ -68,8 +69,8 @@ import {
   type OperatorTransition,
 } from "../../animation/transition";
 
-export type { LayerContext } from "./chartBuilder";
-export { resolveMarkResult } from "./chartBuilder";
+export type { LayerContext } from "./markResult";
+export { resolveMarkResult } from "./markResult";
 
 // NameableMark is the same type used by createMark — see withGoFish.ts.
 export type { NameableMark } from "../withGoFish";
@@ -248,10 +249,11 @@ function modifierMethod(
     if ((base as any).__relationalFusable) {
       (wrapped as any).__relationalFusable = (base as any).__relationalFusable;
     }
-    // Same for a chained `.transition(...)`: the chart builder reads it off
-    // the final mark (see `transitionModifier`), whatever was chained after.
-    if ((base as any).__transition) {
-      (wrapped as any).__transition = (base as any).__transition;
+    // Carry the stashed `.name(...)` forward the same way, so a mark named and
+    // then chained (`.name("dots").transition(...)`, `.name("bars").label(...)`)
+    // still reads as named. A `.name` further down the chain restashes it.
+    if ((base as any).__layerName !== undefined) {
+      stashLayerName(wrapped, (base as any).__layerName);
     }
     cfg.tag?.(wrapped, base, ...args);
     return redecorate(wrapped);
@@ -318,15 +320,17 @@ export function attachModifiers<T>(
  * `ref(...)`/`selectAll(...)` can find it back. Registration is deferred (a
  * `__layerRegistration` tag) rather than an inline `layerContext` push so
  * registry order follows parent-iteration order, not async-completion order.
- * Tokens are hygienic handles and don't join the string-keyed registry.
+ * Tokens are hygienic handles: they are filed under their own symbol
+ * (`layerKey`), so no string name reaches them.
  */
 export const nameModifier = {
   name: "name",
   apply: (node, layerContext, _datum, layerName) => {
     node.name(layerName as any);
-    if (layerContext && typeof layerName === "string" && layerName) {
-      (node as { __layerRegistration?: string }).__layerRegistration =
-        layerName;
+    const key = layerKey(layerName);
+    if (layerContext && key !== undefined) {
+      (node as { __layerRegistration?: string | symbol }).__layerRegistration =
+        key;
     }
   },
   tag: (wrapped, base, layerName) => {
@@ -438,19 +442,18 @@ export const zOrderModifier = {
 /**
  * `.transition({ enter, update, exit })` — how the mark looks in each phase
  * of an animation (`animation.grow()`, `animation.fadeIn()`, …). It records
- * the effects on each produced node, where the build-in reads them
- * (`src/animation/install.ts`), and tags the mark with the spec, which the
- * chart builder reads when the flow has a `time.sequence` (then the phases
- * are `time.transition()`'s). Animation is JS-only, so nothing reaches the IR.
+ * the effects on each produced node. The build-in reads them there
+ * (`src/animation/install.ts`), and so does the chart builder when the flow
+ * has a `time.sequence` (then the phases are `time.transition()`'s,
+ * `chainedUpdates`). Animation is JS-only, so nothing reaches the IR.
  */
 export const transitionModifier = {
   name: "transition",
   apply: (node, _layerContext, _datum, spec) => {
     recordMarkTransition(node, spec);
   },
-  tag: (wrapped, base, spec) => {
+  tag: (wrapped, base) => {
     propagateSerialize(base, wrapped, () => {});
-    (wrapped as any).__transition = spec;
   },
 } satisfies ModifierConfig<[spec: MarkTransition]>;
 

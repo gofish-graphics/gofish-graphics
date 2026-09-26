@@ -258,8 +258,14 @@ when you want the axis a set of siblings is arranged on rather than each
 sibling's own size. Its first consumer is the connector's `curve: "auto"`: a
 `line` / `ribbon` reads the underlying space its endpoints resolved to and, when
 that space is a _positioning_ one whose measure is continuous, smooths the path
-(centripetal Catmull–Rom) instead of drawing straight segments — so a line over
+(a Catmull–Rom spline) instead of drawing straight segments — so a line over
 a continuous x auto-curves while one over discrete categories stays polylinear.
+The same test picks the spline's knots when the run has no parameter of its
+own (the times of the keyframes a line threads, or the path tier's key,
+`inferred.along`, read through `projectBy`). On a continuous connection
+axis, the points' positions along it are the knots when the points are in order
+along it. A run with neither falls back to centripetal knots, which are
+computed from distances on screen (`runKnots` in `connect.tsx`).
 
 The guide a space supports keys on **`dataDomain`** (data-space), never on
 placement:
@@ -972,7 +978,13 @@ stashes and coords. The region is exactly the neighborhood whose axes all view
 the same underlying domain (an inner shared scope under an axis-drawing root
 inherits the root's demand, because its space is what bubbled up into the
 domain that axis draws; a stashed panel does not, because its space never
-reached the ancestor's axis). Tick elaboration nices node-locally with the same
+reached the ancestor's axis). The walk scans the whole region, so the answer is
+kept on the render session, per dim, keyed by the region's root: every scope in
+a region shares it, and the region is scanned once per render however many
+scopes ask. A layer asks only when it roots a scope the answer changes (most
+layers, e.g. one per keyframe mark under a `time.sequence`, root none), so the
+solve takes the demand as a per-axis read, `axisDemand(dim)`.
+Tick elaboration nices node-locally with the same
 `d3.nice`, applied to the axis-owning node's domain — the same union domain
 that bubbled to the scope root — so elaboration and the solve cannot disagree.
 
@@ -1332,7 +1344,8 @@ error rather than silently doing the wrong thing:
   frame, so the space they occupy is the space of the whole dataset, which is
   what keeps a playing chart's axes still; the `TimeTier` it hands a
   `time.transition()` is declared in the same module and carries the clock,
-  the keyframes, and the clock's milliseconds per unit of the field). A
+  the keyframes, the cycle of the time axis when the sequence is `cyclic`, and
+  the clock's milliseconds per unit of the field). A
   build-in stagger's `by` reuses `splitEntries` for the order of its groups
   (`src/animation/grouping.ts`). `dropNulls` filters out
   rows whose value at the field is `null`/`undefined` FIRST (so it composes

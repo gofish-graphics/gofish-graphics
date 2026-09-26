@@ -7,7 +7,7 @@
  * (statistical smoothing: loess/regression) is a separate `derive` operator
  * (see issue #635), not a curve.
  *
- * Built-ins below are the *routing* curves (straight / bezier / orthogonal /
+ * Built-ins below are the *routing* curves (linear / bezier / orthogonal /
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
  * pairwise. Sequence curves that thread the whole point run (catmullRom /
  * monotone / step) are added in a later stage.
@@ -47,14 +47,14 @@ export type Router = (
 ) => Path;
 
 /**
- * A serializable curve value, produced by a curve factory (`straight()`,
- * `bezier()`, `orthogonal()`, `arc({ direction: "down" })`, …) — the same
- * builder-object idiom GoFish uses for coordinate spaces, axes, and labels.
- * `type` names a registered router; `options` are forwarded to it. A bare
- * string is accepted as shorthand for an option-less curve (`"straight"`).
+ * A serializable curve value, produced by a curve factory (`bezier()`,
+ * `orthogonal()`, `arc({ direction: "down" })`, …) — the same builder-object
+ * idiom GoFish uses for coordinate spaces, axes, and labels. `type` names a
+ * registered router; `options` are forwarded to it. A bare string is accepted
+ * as shorthand for an option-less curve (`"linear"`).
  *
  * `curve` is the single screen-space path-shaping key on `line`/`ribbon` — it
- * holds both interpolating curves that thread the point sequence (straight,
+ * holds both interpolating curves that thread the point sequence (linear,
  * bezier, catmullRom, …) and routing curves that shape the stroke between two
  * anchors (orthogonal, arc, perfectArrows). A curve resolves to a `Router`.
  */
@@ -133,7 +133,7 @@ const byAxis = (dir: 0 | 1, mainVal: number, crossVal: number): Point => {
 // --- built-in routers -------------------------------------------------------
 
 /** Straight center-to-center line (≡ the old `linear` center mode). */
-const straightRouter: Router = (b0, b1) => [
+const linearRouter: Router = (b0, b1) => [
   segment(centerPoint(b0), centerPoint(b1)),
 ];
 
@@ -248,7 +248,7 @@ const perfectArrowsRouter: Router = (b0, b1, { opts }) => {
   return [curve(p0, control1, control2, p1)];
 };
 
-registerRoute("straight", straightRouter, { ribbon: false });
+registerRoute("linear", linearRouter, { ribbon: false });
 registerRoute("bezier", bezierRouter, { ribbon: false });
 registerRoute("orthogonal", orthogonalRouter, { ribbon: false });
 registerRoute("arc", arcRouter, { ribbon: false });
@@ -258,9 +258,8 @@ registerRoute("perfectArrows", perfectArrowsRouter, { ribbon: false });
 // Builder-object idiom (like `polar({…})` / axis / label specs): each returns a
 // serializable `CurveSpec` carrying its own options, so call sites read
 // `line({ curve: orthogonal() })`, `line({ curve: arc({ direction: "down" }) })`.
-
-/** Straight center-to-center line. */
-export const straight = (): CurveSpec => ({ type: "straight" });
+// The option-less `"linear"` and `"catmullRom"` have no factory; pass the bare
+// name. (`linear()` is already the Cartesian coordinate transform.)
 
 /** Cubic bezier (d3.linkVertical/horizontal convention). */
 export const bezier = (): CurveSpec => ({ type: "bezier" });

@@ -1,6 +1,7 @@
 import { Path, transformPath } from "../../path";
-import { convertPointsToBezierCurves } from "../../adaptive-resampling";
+import { catmullRomPath, centripetalKnots } from "../../catmullRom";
 import { GoFishAST } from "../_ast";
+import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
@@ -33,6 +34,19 @@ import {
   isSequenceCurve,
   type Curve,
 } from "./routers";
+import { targetOf } from "./layer";
+import { readLive } from "../../interaction/live";
+import { setLiveSlots } from "../../interaction/liveSlots";
+import {
+  historyOf,
+  keyframeOf,
+  lifetimeOf,
+  lifetimeRule,
+  unrollOrder,
+  windowPath,
+  type Keyframe,
+  type SequenceWindow,
+} from "../../timeWindow";
 
 // Per-axis bbox anchor. A literal number is the raw fraction in [0, 1]; the
 // keywords map to {start: 0, middle: 0.5, end: 1}. GoFish is y-up, so
@@ -66,6 +80,83 @@ const resolveAnchor = (a: AnchorSpec): [number, number] => {
   ];
 };
 
+/**
+ * The keyframes a connector's operands are part of, when every operand is
+ * part of a keyframe of ONE `time.sequence` (the record the sequence leaves on
+ * its keyframe groups, see `src/timeWindow.ts`). Undefined otherwise, and the
+ * connector is drawn whole, as any connector is.
+ */
+function sequenceKeyframes(children: GoFishAST[]): Keyframe[] | undefined {
+  // The first operand decides whether there is anything to find, so a chart
+  // with no sequence walks up from one operand, not from every one.
+  const first =
+    children.length === 0 ? undefined : keyframeOf(targetOf(children[0]));
+  if (first === undefined) return undefined;
+  const found: Keyframe[] = [first];
+  for (let i = 1; i < children.length; i++) {
+    const keyframe = keyframeOf(targetOf(children[i]));
+    if (keyframe?.sequence !== first.sequence) return undefined;
+    found.push(keyframe);
+  }
+  return found;
+}
+
+/** Whether `node` sits under a `time.history`. */
+function underHistory(node: GoFishNode): boolean {
+  for (let n = node.parent; n !== undefined; n = n.parent) {
+    if (historyOf(n) !== undefined) return true;
+  }
+  return false;
+}
+
+/** A line threaded through a sequence's keyframes: each knot's time, in time
+ *  order, the step of the path from each knot to the next, drawn forward in
+ *  time, the sequence whose window it is drawn over, and the lifetime of the
+ *  marks it connects, which picks the window. */
+type TimeRun = {
+  knots: number[];
+  pieces: Path[];
+  sequence: SequenceWindow;
+  last: number;
+};
+
+/** Where `values` first stops moving the way its first step goes: the index
+ *  of the first value that does not go on up (or down) from the one before
+ *  it, or -1 when every value does. The one check that a run moves one way. */
+function firstStepBack(values: readonly number[]): number {
+  const sign = Math.sign(values[1] - values[0]);
+  for (let i = 1; i < values.length; i++) {
+    if (!(sign * values[i] > sign * values[i - 1])) return i;
+  }
+  return -1;
+}
+
+/** Whether two points are the same, allowing for rounding. */
+const samePoint = (p: [number, number], q: [number, number]): boolean =>
+  Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9;
+
+/**
+ * A candidate parameter of a run, as the knots of its curve: one value per
+ * operand in path order, which is a parameter of the run when every value is a
+ * finite number and the values move one way along it. A run that moves
+ * backward in its parameter is the same curve with the parameter negated, as
+ * a Catmull-Rom is unchanged by an affine change of its knots. Undefined when
+ * the values are not a parameter of the run.
+ */
+function runKnots(
+  values: readonly unknown[] | undefined
+): number[] | undefined {
+  if (values === undefined || values.length < 2) return undefined;
+  const numbers: number[] = [];
+  for (const v of values) {
+    if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+    numbers.push(v);
+  }
+  if (firstStepBack(numbers) >= 0) return undefined;
+  const sign = Math.sign(numbers[1] - numbers[0]);
+  return numbers.map((v) => sign * v);
+}
+
 export const connect = createNodeOperator(
   (
     {
@@ -80,16 +171,17 @@ export const connect = createNodeOperator(
       mixBlendMode,
       source,
       target,
+      along,
     }: {
       // Optional in anchor mode (source/target), where it is ignored.
       direction?: FancyDirection;
       fill?: MaybeValue<string>;
       // The single screen-space path-shaping key. A curve value from a factory
-      // (`straight()`, `bezier()`, `orthogonal()`, `arc({ direction })`,
-      // `perfectArrows({ bow })`, …) or a bare name (`"straight"` | `"bezier"`).
+      // (`bezier()`, `orthogonal()`, `arc({ direction })`,
+      // `perfectArrows({ bow })`, …) or a bare name (`"linear"` | `"bezier"`).
       // Center ("line") mode resolves it through the curve registry; edge
-      // ("ribbon") mode only honors `straight` (linear band) vs `bezier`
-      // (S-curve band). Defaults to `"straight"` when omitted.
+      // ("ribbon") mode only honors `linear` (linear band) vs `bezier`
+      // (S-curve band). Omitted means `"auto"` (resolved below).
       curve?: Curve;
       stroke?: MaybeValue<string>;
       strokeWidth?: number;
@@ -111,6 +203,10 @@ export const connect = createNodeOperator(
       // that box on one axis.
       source?: AnchorSpec;
       target?: AnchorSpec;
+      // The connection variable: the key of the flow tier the connector
+      // threads (`along: "year"` names years). A smooth run reads each
+      // operand's value of it as its knots (see `runKnots`), and only then.
+      along?: SplitBy;
     },
     children: GoFishAST[]
   ) => {
@@ -140,13 +236,63 @@ export const connect = createNodeOperator(
         ) => {
           return [UNDEFINED, UNDEFINED];
         },
-        layout: (shared, size, scales, children) => {
+        layout: (shared, size, scales, children, node) => {
           const defaultColor = children[0]?.color ?? "black";
 
           const paths: Path[] = [];
 
           const hasAnchors =
             resolvedSource !== undefined || resolvedTarget !== undefined;
+
+          // A connector over a `time.sequence`'s keyframes is read in time as
+          // well as in space, by the lifetime of the marks it connects (see
+          // `src/timeWindow.ts`). Operands all inside ONE keyframe: the
+          // connector is part of that keyframe's picture, so it shows while
+          // its operands do, and is not cut. Operands in DIFFERENT keyframes:
+          // it threads the time tier, so it draws only the stretch of its run
+          // inside its operands' window, cut by data time at paint (see
+          // `lower`). With no `time.history` over the operands that window is
+          // the playhead alone, and the line draws nothing. Which case it is
+          // comes from the keyframes themselves, not from the field names in
+          // the spec.
+          const keyframes = sequenceKeyframes(children);
+          const threadsTime =
+            keyframes !== undefined &&
+            keyframes.some((k) => k.t !== keyframes[0].t);
+          // The lifetime the connector is read by is the union of its
+          // operands' (`lifetimeOf`), as a mark's is the union of its parts'.
+          const last =
+            keyframes === undefined
+              ? undefined
+              : Math.max(...children.map((c) => lifetimeOf(c as any)));
+          if (keyframes !== undefined && !threadsTime) {
+            node.INTERNAL_visibleWhile(
+              keyframes[0].sequence,
+              lifetimeRule(keyframes[0], last!)
+            );
+          }
+          if (threadsTime && underHistory(node)) {
+            throw new Error(
+              `[gofish] time.history([line(...)]): a line threaded through ` +
+                `the keyframes of a time.sequence is drawn over the window of ` +
+                `the marks it connects, so a time.history around the line ` +
+                `itself has nothing to set. Put the time.history around the ` +
+                `keyframe marks (or in the flow) instead.`
+            );
+          }
+          if (threadsTime && (mode !== "center" || hasAnchors)) {
+            throw new Error(
+              `[gofish] ${mode === "center" ? "line" : "ribbon"}(): this ` +
+                `connector threads the keyframes of a time.sequence, so it ` +
+                `is drawn only over the stretch of time the sequence shows, ` +
+                `cut at the exact point in data time. That cut is built for ` +
+                `a line through the keyframes' centers; ` +
+                (mode === "center"
+                  ? "a line pinned to `source`/`target` anchors"
+                  : "a ribbon's band") +
+                ` is not built yet.`
+            );
+          }
 
           if (mode === "edge" && !hasAnchors) {
             for (const child of children) {
@@ -155,77 +301,107 @@ export const connect = createNodeOperator(
             }
           }
 
+          // A line threading a sequence's keyframes is cut by data time, so
+          // it has to move through the keyframes one way in time. Forward or
+          // backward are both fine: backward is the same path, and it is
+          // built forward, from the keyframe earliest in time. It is built on
+          // its run laid out along the time axis (`unrollOrder`): the run
+          // itself, or on a cyclic axis the run repeated a cycle before and
+          // after, which joins the last keyframe to the first across the
+          // seam. The same mark stands at each of its copies: `points[j]` is
+          // the operand the path's `j`-th point is.
+          let points = children.map((_, i) => i);
+          let timeKnots: number[] | undefined;
+          if (threadsTime) {
+            const times = keyframes!.map((k) => k.t);
+            const back = firstStepBack(times);
+            if (back >= 0) {
+              throw new Error(
+                `[gofish] line(): this line threads the keyframes of a ` +
+                  `time.sequence, so each of its points is a moment in time, ` +
+                  `and it goes from ${times[back - 1]} to ${times[back]}: ` +
+                  `back and forth in time, or twice through one keyframe. A ` +
+                  `line drawn in over time has to move through the keyframes ` +
+                  `one way. If each keyframe holds several marks, split the ` +
+                  `line so each run has one mark per keyframe (for example, ` +
+                  `add \`by\` to the operator that places the marks).`
+              );
+            }
+            const run = unrollOrder(times, keyframes![0].sequence.cycle());
+            points = run.operand;
+            timeKnots = run.knots;
+          }
+
           // Forward σ (size slope) but not the anchored map: connect places
-          // endpoints by their own bboxes, not by data position.
-          const childPlaceables = children.map((child) =>
+          // endpoints by their own bboxes, not by data position. Each operand
+          // is laid out once, however many points of the run it stands at.
+          const placed = children.map((child) =>
             child.layout(size, [
               axisScale(scales?.[0]?.sigma, undefined),
               axisScale(scales?.[1]?.sigma, undefined),
             ])
           );
+          const childPlaceables = points.map((i) => placed[i]);
           const bboxPairs = pairs(childPlaceables.map((child) => child.dims));
 
-          // Resolve the curve. An omitted/`"auto"` curve detects whether the
-          // connected points share a homogeneous *continuous* space on the
-          // connection axis (i.e. they are samples of a continuous variable):
-          // if so we smooth with a centripetal Catmull-Rom spline; otherwise we
-          // fall back to the always-drawable discrete connector (line→straight,
-          // ribbon→bezier). Connecting two arbitrary points is therefore always
-          // valid — it just isn't smoothed. Explicit curves always win.
+          // Whether the connected points share a homogeneous *continuous*
+          // space on the connection axis, i.e. they are samples of one
+          // continuous variable. Both the `"auto"` curve and a smooth run's
+          // knots ask it.
+          //
+          // The connection-axis *positioning* space lives on whatever placed
+          // the connected marks: the mark itself (a data-bound
+          // `ellipse({ x: value(…) })` reports POSITION) or an ancestor (a
+          // `circle`/`blank` placed by `scatter` — the scatter reports
+          // POSITION). So walk up from each mark to the nearest ancestor whose
+          // connection-axis space is a *positioning* kind (POSITION = data
+          // axis, ORDINAL = category axis), skipping the mark's own SIZE
+          // (its extent, e.g. a circle's radius) and UNDEFINED.
           //
           // The children carry the space because `resolveNames` runs before the
           // underlying-space pass, so a `ref` already proxies its target's space
           // (falling back to ORDINAL ⇒ discrete when unresolved).
-          const isAuto = curve === undefined || curveNameOf(curve) === "auto";
-          let resolvedCurve: Curve;
-          if (!isAuto) {
-            resolvedCurve = curve as Curve;
-          } else {
-            const axis = dir as 0 | 1;
-            // The connection-axis *positioning* space lives on whatever placed
-            // the connected marks: the mark itself (a data-bound
-            // `ellipse({ x: value(…) })` reports POSITION) or an ancestor (a
-            // `circle`/`blank` placed by `scatter` — the scatter reports
-            // POSITION). So walk up from each mark to the nearest ancestor whose
-            // connection-axis space is a *positioning* kind (POSITION = data
-            // axis, ORDINAL = category axis), skipping the mark's own SIZE
-            // (its extent, e.g. a circle's radius) and UNDEFINED.
-            const connectionSpaceOf = (
-              c: GoFishAST
-            ): UnderlyingSpace | undefined => {
-              let node: any = (c as any).targetNode ?? c;
-              while (node) {
-                const s = node.resolveUnderlyingSpace?.()?.[axis];
-                // Stop at the nearest *positioning* space — an ORDINAL ancestor
-                // must win over a continuous grandparent (a grouped layout is
-                // discrete even inside a continuous frame), so we can't skip it.
-                if (s !== undefined && isPositioningSpace(s)) return s;
-                node = node.parent;
-              }
-              return undefined;
-            };
-            const homogeneousContinuous =
+          const connectionSpaceOf = (
+            c: GoFishAST
+          ): UnderlyingSpace | undefined => {
+            let n: any = targetOf(c);
+            while (n) {
+              const s = n.resolveUnderlyingSpace?.()?.[dir];
+              // Stop at the nearest *positioning* space — an ORDINAL ancestor
+              // must win over a continuous grandparent (a grouped layout is
+              // discrete even inside a continuous frame), so we can't skip it.
+              if (s !== undefined && isPositioningSpace(s)) return s;
+              n = n.parent;
+            }
+            return undefined;
+          };
+          let continuous: boolean | undefined;
+          const continuousConnectionAxis = (): boolean =>
+            (continuous ??=
               children.length >= 2 &&
               children.every((c) => {
                 const s = connectionSpaceOf(c);
                 return s !== undefined && isPOSITION(s);
-              });
-            // A *homogeneous continuous* connection axis (the points are samples
-            // of one continuous variable — a line chart, or a stacked area /
-            // streamgraph over a continuous x) smooths with centripetal
-            // Catmull-Rom, for BOTH lines and ribbons: a stacked area should
-            // curve like its line-chart sibling. Otherwise we draw the mode's
-            // "linear" connector: a *line* (center) is a straight polyline
-            // between the points; a *ribbon* (edge) is a bezier band between
-            // discrete regions (bezier is to a band what a straight segment is
-            // to a line — the honest discrete-region connector). Explicit curves
-            // always win over this default.
-            resolvedCurve = homogeneousContinuous
+              }));
+
+          // Resolve the curve. An omitted/`"auto"` curve smooths with a
+          // Catmull-Rom spline over a continuous connection axis, for BOTH
+          // lines and ribbons: a stacked area should curve like its
+          // line-chart sibling. Otherwise it falls back to the mode's
+          // always-drawable discrete connector: a *line* (center) is a
+          // straight polyline between the points; a *ribbon* (edge) is a
+          // bezier band between discrete regions (bezier is to a band what a
+          // straight segment is to a line — the honest discrete-region
+          // connector). Connecting two arbitrary points is therefore always
+          // valid — it just isn't smoothed. Explicit curves always win.
+          const isAuto = curve === undefined || curveNameOf(curve) === "auto";
+          const resolvedCurve: Curve = !isAuto
+            ? (curve as Curve)
+            : continuousConnectionAxis()
               ? "catmullRom"
               : mode === "center"
-                ? "straight"
+                ? "linear"
                 : "bezier";
-          }
           const resolvedCurveName = curveNameOf(resolvedCurve);
           // Edge ("ribbon") mode: bezier = S-curve band (discrete regions),
           // catmullRom = smoothed band over a continuous axis, else linear band.
@@ -303,6 +479,9 @@ export const connect = createNodeOperator(
               renderData: { paths, defaultColor },
             };
           }
+          /** A line's path, one piece per step from a point to the next. */
+          let steps: Path[] = [];
+
           // If in center mode, adjust bounding boxes to have zero width/height
           // with min and max equal to the center point
 
@@ -331,11 +510,11 @@ export const connect = createNodeOperator(
           }
 
           // `catmullRom` is a *sequence* curve — it threads the whole run of
-          // points as one centripetal spline (d3's `.curve(curveCatmullRom)`),
-          // bypassing the pairwise router loop. A line (center) threads its
-          // centers; a ribbon (edge) threads BOTH facing boundaries of the band
-          // — forward along the near edge, a cap across, back along the far edge
-          // — so a continuous stacked area curves like its line-chart sibling.
+          // points as one Catmull-Rom spline, bypassing the pairwise router
+          // loop. A line (center) threads its centers; a ribbon (edge) threads
+          // BOTH facing boundaries of the band — forward along the near edge, a
+          // cap across, back along the far edge — so a continuous stacked area
+          // curves like its line-chart sibling.
           const mainAxis = dir as 0 | 1;
           const edgePoint = (main: number, cross: number): [number, number] => {
             const p: [number, number] = [0, 0];
@@ -344,23 +523,63 @@ export const connect = createNodeOperator(
             return p;
           };
           if (isSequenceCurve(resolvedCurveName)) {
+            const mains = childPlaceables.map(
+              (c) => centerPoint(c.dims)[mainAxis]
+            );
+            // The knots are the run's own parameter when it has one (#635),
+            // so the curve follows the data rather than the distances between
+            // its points on screen. A line through a sequence's keyframes
+            // uses their times, which are what it is cut by, so the cut and
+            // the curve agree. Otherwise the connection variable's values
+            // (the flow tier the run threads, e.g. `along: "year"`), read
+            // only here; else the operands' positions on the connection axis
+            // when that axis is continuous (a line chart over x). A run with
+            // none of these is threaded with centripetal knots.
+            //
+            // The spline is evaluated here, in layout space, before any
+            // coordinate transform. That equals evaluating it in data space
+            // and placing the result because every position scale is affine,
+            // and a Catmull-Rom with fixed knots commutes with an affine map
+            // of its points. A non-affine position scale (log, pow) would
+            // need the spline evaluated upstream of the scale instead.
+            const knots =
+              runKnots(timeKnots) ??
+              (along === undefined
+                ? undefined
+                : runKnots(children.map((c) => projectBy(c, along)))) ??
+              (continuousConnectionAxis() ? runKnots(mains) : undefined);
+            // `knots` is in operand order; a path drawn back along the run
+            // (a ribbon's far edge) reads them backward and negated.
+            const thread = (
+              points: [number, number][],
+              backward = false
+            ): Path =>
+              catmullRomPath(
+                points,
+                knots === undefined
+                  ? centripetalKnots(points)
+                  : backward
+                    ? knots.map((k) => -k).reverse()
+                    : knots
+              );
             if (mode === "center") {
               const centers = childPlaceables.map((c) => centerPoint(c.dims));
-              paths.push(convertPointsToBezierCurves(centers));
+              const threaded = thread(centers);
+              paths.push(threaded);
+              steps = threaded.map((seg) => [seg]);
             } else {
               const near: [number, number][] = [];
               const far: [number, number][] = [];
-              for (const c of childPlaceables) {
+              childPlaceables.forEach((c, i) => {
                 const b = c.dims;
-                const main = (b[mainAxis].min! + b[mainAxis].max!) / 2;
-                near.push(edgePoint(main, b[1 - mainAxis].min!));
-                far.push(edgePoint(main, b[1 - mainAxis].max!));
-              }
+                near.push(edgePoint(mains[i], b[1 - mainAxis].min!));
+                far.push(edgePoint(mains[i], b[1 - mainAxis].max!));
+              });
               const farRev = far.slice().reverse();
               paths.push([
-                ...convertPointsToBezierCurves(near),
+                ...thread(near),
                 { type: "line", points: [near[near.length - 1], farRev[0]] },
-                ...convertPointsToBezierCurves(farRev),
+                ...thread(farRev, true),
                 { type: "line", points: [farRev[farRev.length - 1], near[0]] },
               ]);
             }
@@ -371,6 +590,7 @@ export const connect = createNodeOperator(
                 router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
               );
             }
+            steps = paths;
           } else if (dir === 0) {
             // Edge ("ribbon") mode: a filled quad between the facing edges.
             if (!edgeBezier) {
@@ -553,6 +773,43 @@ export const connect = createNodeOperator(
             ];
           };
 
+          // A threaded line is cut inside one step of its path by data time
+          // (`windowPath`), which needs each step from one keyframe to the
+          // next to be ONE straight or cubic segment from the one keyframe's
+          // center to the next's.
+          let timeRun: TimeRun | undefined;
+          if (timeKnots !== undefined) {
+            const centers = childPlaceables.map((c) => centerPoint(c.dims));
+            const ends = (seg: Path[number]): [number, number][] =>
+              seg.type === "line" ? seg.points : [seg.start, seg.end];
+            const threads = steps.every((piece, i) => {
+              if (piece.length !== 1) return false;
+              const [start, end] = ends(piece[0]);
+              return (
+                samePoint(start, centers[i]) && samePoint(end, centers[i + 1])
+              );
+            });
+            if (!threads) {
+              throw new Error(
+                `[gofish] line({ curve: "${resolvedCurveName}" }): this line ` +
+                  `threads the keyframes of a time.sequence, so it is drawn ` +
+                  `only over the stretch of time the sequence shows, cut at ` +
+                  `the exact point in data time. That cut needs each step ` +
+                  `from one keyframe to the next to be ONE straight or cubic ` +
+                  `segment between the keyframes' centers, which "linear", ` +
+                  `"bezier" and "catmullRom" (the default) draw and ` +
+                  `"${resolvedCurveName}" does not. Use one of those, or ` +
+                  `open an issue for "${resolvedCurveName}".`
+              );
+            }
+            timeRun = {
+              knots: timeKnots,
+              pieces: steps,
+              sequence: keyframes![0].sequence,
+              last: last!,
+            };
+          }
+
           const mergedPaths: Path[] = [];
           let run: Path[] = [];
           for (let i = 0; i < paths.length; i++) {
@@ -579,7 +836,10 @@ export const connect = createNodeOperator(
               },
             ],
             transform: { translate: [0, 0] },
-            renderData: { paths: mergedPaths, defaultColor },
+            // The box above is the WHOLE run's, cut or not: the room a line
+            // uses over its run, the way a transition claims its whole
+            // trajectory, so the window moving changes nothing above it.
+            renderData: { paths: mergedPaths, defaultColor, timeRun },
           };
         },
         // IR lowering — mirror of `render`. Each connector path is offset by the
@@ -629,18 +889,39 @@ export const connect = createNodeOperator(
             mixBlendMode: mixBlendMode ?? "normal",
           });
 
-          return (renderData.paths as Path[]).map((path) => {
-            const transformedPath = coordinateTransform
-              ? transformPath(path, coordinateTransform, { resample: true })
-              : path;
-            return {
-              kind: "path",
-              d: pathToPixelSVG(transformedPath, offsetToPixel),
-              role: roleFor(node.datum),
-              datum: node.datum,
-              style,
-            };
+          /** A path's pixel-space path data. */
+          const pathData = (path: Path): string =>
+            pathToPixelSVG(
+              coordinateTransform
+                ? transformPath(path, coordinateTransform, { resample: true })
+                : path,
+              offsetToPixel
+            );
+          const toItem = (d: string): DisplayList.DisplayItem => ({
+            kind: "path",
+            d,
+            role: roleFor(node.datum),
+            datum: node.datum,
+            style,
           });
+
+          const timeRun = renderData.timeRun as TimeRun | undefined;
+          if (timeRun === undefined) {
+            return (renderData.paths as Path[]).map((path) =>
+              toItem(pathData(path))
+            );
+          }
+          // A line threading a sequence's keyframes: its steps, cut to
+          // the window the sequence is showing. The window is read once here
+          // for the value to lower, and then per frame in paint position by
+          // the `d` slot, which patches the path data and nothing else — the
+          // same split `tween` makes for its playhead.
+          const { knots, pieces, sequence, last } = timeRun;
+          const drawnOver = (): string =>
+            pathData(windowPath(pieces, knots, sequence.showing(last).window));
+          const item = toItem(readLive(drawnOver));
+          setLiveSlots(item, { d: drawnOver });
+          return [item];
         },
       },
       children

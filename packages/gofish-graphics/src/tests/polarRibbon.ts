@@ -90,7 +90,7 @@ export const testPolarRibbon = (size: { width: number; height: number }) =>
               // fill: "black",
               // fill: "none",
               // stroke: i == 3 ? "black" : "none",
-              curve: "straight",
+              curve: "linear",
               opacity: 0.7,
               mixBlendMode: "multiply",
             },

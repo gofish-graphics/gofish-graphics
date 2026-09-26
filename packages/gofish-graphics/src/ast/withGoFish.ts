@@ -10,9 +10,9 @@ import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
 import { ChartBuilder, LayerBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
-// Direct from chartBuilder (not the `chart` barrel): the one-way dependency
-// rule is createOperator/withGoFish → chartBuilder, never the reverse.
-import { resolveMarkResult } from "./marks/chartBuilder";
+// From markResult, which imports neither chartBuilder nor createOperator, so
+// the dependency between those modules keeps running one way.
+import { resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
   ChannelAnnotations,

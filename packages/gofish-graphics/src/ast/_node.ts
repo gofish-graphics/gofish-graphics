@@ -113,6 +113,10 @@ export type RenderSession = {
    *  shared by every scope root in this render. Created on first use
    *  (`getScopeRegistry`). */
   scopes?: ScopeRegistry;
+  /** Each space-flow region's axis demand, per dim, keyed by the region's
+   *  root (`scopeRendersAxis`): every scope in a region shares the answer, so
+   *  the region is scanned once per render. Created on first use. */
+  axisDemand?: WeakMap<GoFishNode, [boolean?, boolean?]>;
 };
 
 export type Placeable = {
@@ -380,9 +384,9 @@ export class GoFishNode {
    *  mark builders at resolve. Baked into the `liveSlots` side table at lower
    *  time; undefined on the static path. */
   public __gfLive?: Record<string, LiveValue>;
-  /** Paint-time visibility (see {@link INTERNAL_visibleWhile}); undefined on
-   *  the static path. */
-  public __gfVisible?: () => boolean;
+  /** Paint-time visibility rules, one per owner (see
+   *  {@link INTERNAL_visibleWhile}); undefined on the static path. */
+  public __gfVisible?: Map<object, () => boolean>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   private _layout: Layout;
@@ -390,6 +394,10 @@ export class GoFishNode {
    *  description. Absent on operators that never lower themselves (their
    *  children are lowered directly); lowering such a node throws. */
   private _lower?: Lower;
+  /** The lowering the node was built with, kept when
+   *  {@link INTERNAL_emitNothing} silences it, so what it lends
+   *  ({@link INTERNAL_lendDrawing}) is always its real drawing. */
+  private readonly _ownLower?: Lower;
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
@@ -576,6 +584,7 @@ export class GoFishNode {
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
     this._layout = layout;
     this._lower = lower;
+    this._ownLower = lower;
     this.children = children;
     children.forEach((child) => {
       child.parent = this;
@@ -1087,7 +1096,9 @@ export class GoFishNode {
    * root's demand — its space is what bubbled up into the domain that axis
    * draws), then scan that region root's subtree for stamps, stopping at
    * deeper stashes/coords. Reads the persistent `axisDemand` stamps, which
-   * survive axis elaboration (the `axis` work flags do not).
+   * survive axis elaboration (the `axis` work flags do not). The answer
+   * belongs to the region, so it is kept on the render session by region
+   * root, and many scopes in one region scan it once.
    */
   public scopeRendersAxis(dim: 0 | 1): boolean {
     let region: GoFishNode = this;
@@ -1098,7 +1109,12 @@ export class GoFishNode {
     ) {
       region = region.parent;
     }
-    return region.walkAxisDemand(dim, true);
+    const session = this.tryGetRenderSession();
+    if (session === undefined) return region.walkAxisDemand(dim, true);
+    const demands = (session.axisDemand ??= new WeakMap());
+    let demand = demands.get(region);
+    if (demand === undefined) demands.set(region, (demand = []));
+    return (demand[dim] ??= region.walkAxisDemand(dim, true));
   }
 
   private walkAxisDemand(dim: 0 | 1, isScopeRoot: boolean): boolean {
@@ -1446,24 +1462,24 @@ export class GoFishNode {
   }
 
   /**
-   * Silence this node as {@link INTERNAL_emitNothing} does, and hand its own
-   * drawing to the caller that takes it over: the returned function lowers the
-   * node exactly as it would have drawn itself, placed at `transform` (an
-   * absolute transform, like `INTERNAL_lower`'s override) and mapped by
-   * `toPixel`. Call it while lowering, like any `_lower`: it reads the
-   * session's active flip scope. A `time.transition()` moves a keyframe's
-   * text this way: the keyframe stops drawing, and the transition draws it
-   * where the playhead has taken it.
+   * Lend this node's own drawing to another node to paint: the returned
+   * function lowers the node exactly as it was built to draw itself, placed
+   * at `transform` (an absolute transform, like `INTERNAL_lower`'s override)
+   * and mapped by `toPixel`. Call it while lowering, like any `_lower`: it
+   * reads the session's active flip scope. It lends the node's own lowering
+   * even when the node has been silenced (`INTERNAL_emitNothing`), so a node
+   * can be silenced and lend in either order, any number of times. A
+   * `time.transition()` moves a keyframe's text this way: it draws the copy
+   * where the playhead has taken the text.
    */
-  public INTERNAL_takeOverLowering(): (
+  public INTERNAL_lendDrawing(): (
     transform: Transform,
     toPixel: ToPixel
   ) => DisplayList.DisplayItem[] {
-    const own = this._lower;
-    this._lower = () => [];
+    const own = this._ownLower;
     // Lowered as `INTERNAL_lower` lowers, ids and live channels included,
-    // but without the visibility rule: the caller that took the drawing over
-    // owns when it shows.
+    // but without the visibility rule: the node painting the copy owns when
+    // it shows.
     return (transform, toPixel) =>
       own ? this.lowerWith(own, transform, toPixel, undefined, false) : [];
   }
@@ -1475,18 +1491,25 @@ export class GoFishNode {
    *
    * This is the other half of the pair with {@link INTERNAL_emitNothing}, and
    * the difference is which tier decides. A node that must not draw AT ALL
-   * (`blank()`, a `ref`, a keyframe a transition has taken over) is hidden by
-   * construction, at resolve. A node whose drawing comes and goes with a signal
-   * — a `time.sequence`'s keyframe groups, where the clock picks which band is
-   * showing — cannot be, because a resolve-time answer would make the signal a
-   * pipeline dependency and put the whole chart through layout on every tick.
-   * The layout is the same either way (every keyframe is placed, which is what
-   * holds the axes still), so only the painting changes, and only the painting
-   * is patched.
+   * (`blank()`, a `ref`, a keyframe a transition moves when its sequence
+   * keeps no history) is hidden by construction, at resolve. A node whose
+   * drawing comes and goes with a signal — a `time.sequence`'s keyframe
+   * groups, where the clock picks which band is showing, or the keyframe marks
+   * a `time.transition()` leaves behind as its trail — cannot be, because a
+   * resolve-time answer would make the signal a pipeline dependency and put
+   * the whole chart through layout on every tick. The layout is the same
+   * either way (every keyframe is placed, which is what holds the axes still),
+   * so only the painting changes, and only the painting is patched.
    *
-   * The rule covers the node's whole subtree: a node paints only while its own
-   * rule and every ancestor's hold (see `effectiveVisibility`), so marks that
-   * an elaboration pass adds under it later are hidden with it.
+   * A rule is set under an `owner`, the thing that decides it (a
+   * `time.sequence` for its keyframes). The rule covers the node's whole
+   * subtree: a node paints only while every owner's rule holds, and each
+   * owner's rule is the one set nearest the node (see `effectiveVisibility`).
+   * So marks that an elaboration pass adds under the node later are hidden
+   * with it, a descendant can refine what the same owner decides for its own
+   * subtree (a transition's trail, over the sequence's keyframe groups), and
+   * setting a rule again from the same owner, e.g. on a second layout,
+   * replaces the first rather than piling up.
    *
    * Emitting nothing WINS over this: a node whose `_lower` returns no items has
    * nothing to patch, so the two compose with no coordination.
@@ -1495,8 +1518,8 @@ export class GoFishNode {
    * hit-testing is the one lowered at resolve, so a hidden node still answers
    * to a pointer. See /internals/frontend/reactivity.
    */
-  public INTERNAL_visibleWhile(visible: () => boolean): void {
-    this.__gfVisible = visible;
+  public INTERNAL_visibleWhile(owner: object, visible: () => boolean): void {
+    (this.__gfVisible ??= new Map()).set(owner, visible);
   }
 
   /**
@@ -1524,19 +1547,29 @@ export class GoFishNode {
     this.__gfAnimate = rule;
   }
 
-  /** The visibility this node paints under: its own rule AND every
-   *  ancestor's. A rule set on a node covers its whole subtree, including
-   *  nodes a later elaboration pass adds under it (a label's `Text`, an
-   *  axis's ticks), so nothing has to be stamped node by node. Undefined when
-   *  no rule is set anywhere up the chain, which is the static path. */
+  /** The visibility this node paints under: for each owner, the rule set
+   *  nearest the node, on it or an ancestor, and all of them must hold. A rule
+   *  set on a node covers its whole subtree, including nodes a later
+   *  elaboration pass adds under it (a label's `Text`, an axis's ticks), so
+   *  nothing has to be stamped node by node. Undefined when no rule is set
+   *  anywhere up the chain, which is the static path. */
   private effectiveVisibility(): (() => boolean) | undefined {
+    const owners = new Set<object>();
     const rules: (() => boolean)[] = [];
     for (let n: GoFishNode | undefined = this; n; n = n.parent) {
-      if (n.__gfVisible) rules.push(n.__gfVisible);
+      if (n.__gfVisible === undefined) continue;
+      for (const [owner, rule] of n.__gfVisible) {
+        if (owners.has(owner)) continue;
+        owners.add(owner);
+        rules.push(rule);
+      }
     }
     if (rules.length === 0) return undefined;
     if (rules.length === 1) return rules[0];
-    return () => rules.every((rule) => rule());
+    return () => {
+      for (const rule of rules) if (!rule()) return false;
+      return true;
+    };
   }
 
   /**
@@ -1576,10 +1609,12 @@ export class GoFishNode {
 
   /**
    * The body of {@link INTERNAL_lower}, shared with the drawing
-   * {@link INTERNAL_takeOverLowering} hands out: call `lower` for this node,
-   * stamp the items' ids, wire its live channels, and, when `withVisibility`
-   * is set, apply the paint-time visibility rule. A taken-over drawing skips
-   * that rule because its new owner decides when it shows.
+   * {@link INTERNAL_lendDrawing} lends: call `lower` for this node, stamp the
+   * items' ids, wire its live channels, and, when `withVisibility` is set,
+   * apply the paint-time visibility rule. A lent drawing skips that rule
+   * because the node painting it decides when it shows, and it passes the
+   * lowering it was lent, which the node itself may since have been silenced
+   * out of.
    */
   private lowerWith(
     lower: Lower,

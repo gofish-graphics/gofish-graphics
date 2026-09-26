@@ -97,7 +97,10 @@ async function main() {
     ];
     const doc = await renderDisplayList(
       chart(data, { w: 200, h: 200 })
-        .flow(spread({ by: "month", dir: "y", spacing: 50 }), scatter({ x: "x" }))
+        .flow(
+          spread({ by: "month", dir: "y", spacing: 50 }),
+          scatter({ x: "x" })
+        )
         .mark(ribbon({ h: "y" })),
       { w: 200, h: 200 }
     );
@@ -377,7 +380,10 @@ async function main() {
     const conn = ribbon({ h: "y" });
     const doc = await renderDisplayList(
       chart(data, { w: 200, h: 200 })
-        .flow(spread({ by: "month", dir: "y", spacing: 50 }), scatter({ x: "x" }))
+        .flow(
+          spread({ by: "month", dir: "y", spacing: 50 }),
+          scatter({ x: "x" })
+        )
         .mark(conn),
       { w: 200, h: 200 }
     );
@@ -461,7 +467,10 @@ async function main() {
       { w: 200, h: 200 }
     );
     const paths = doc.items.filter((it: any) => it.kind === "path");
-    check("homogeneous field-valued fill produced a connector", paths.length === 1);
+    check(
+      "homogeneous field-valued fill produced a connector",
+      paths.length === 1
+    );
     const fillValue = paths[0]?.style?.fill;
     check(
       "resolved fill is not the literal field name",
@@ -488,6 +497,39 @@ async function main() {
       paths[0]?.style?.fill === "steelblue",
       String(paths[0]?.style?.fill)
     );
+  }
+
+  // -- 10. A path tier keyed by a FUNCTION: a smooth line reads each point's
+  //    key off its rows, not off the ref standing in for them. -------------
+  {
+    const years = [2000, 2001, 2003, 2007];
+    const rows = years.map((y, i) => ({
+      date: { y },
+      year: y,
+      v: [3, 7, 2, 6][i],
+    }));
+    const smooth = (by: unknown) =>
+      renderDisplayList(
+        chart(rows, { w: 200, h: 200 })
+          .flow(spread({ by, dir: "x", spacing: 40 }), scatter({ y: "v" }))
+          .mark(circle({ r: 3 }))
+          .layer(line({ curve: "catmullRom" })),
+        { w: 200, h: 200 }
+      );
+    const error = await expectThrows(() => smooth((d: any) => d.date.y));
+    check(
+      "a function-form path tier does not throw",
+      error === undefined,
+      String((error as Error | undefined)?.message)
+    );
+    if (error === undefined) {
+      const d = (doc: any) =>
+        doc.items.find((it: any) => it.kind === "path")?.d as string;
+      check(
+        "and its keys are the knots, as the same field's are",
+        d(await smooth((row: any) => row.date.y)) === d(await smooth("year"))
+      );
+    }
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

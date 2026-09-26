@@ -18,6 +18,11 @@ export const lerp = (a: number, b: number, t: number): number => {
 export const clamp = (v: number, lo: number, hi: number): number =>
   Math.min(hi, Math.max(lo, v));
 
+/** Euclidean modulo: `a % n` with the sign of `n`, so a negative `a` wraps
+ *  around to the top of the range. */
+export const mod = (a: number, n: number): number =>
+  n === 0 ? 0 : ((a % n) + n) % n;
+
 // assumes function is monotonically increasing
 // lowerBound must be less than the target
 export const findTargetMonotonic = (
