@@ -150,7 +150,7 @@ layer([
 
 Names a whole chart's resolved node — the builder-level counterpart to a mark's
 [`.name()`](/js/api/core/mark). A named nested chart can be a target of a
-[`.constrain()`](/js/api/constraints/constrain) callback on its enclosing
+[`.relate()`](/js/api/constraints/relate) callback on its enclosing
 [`layer`](/js/api/operators/layer), and is resolvable through
 [`ref` / `selectAll`](/js/api/selection/ref).
 
@@ -170,7 +170,7 @@ layer([
     .flow(stack({ by: "species", dir: "x" }))
     .mark(petal({ w: "count", fill: "species" }))
     .name("flower"),
-]).constrain(({ stem, flower }) => [
+]).relate(({ stem, flower }) => [
   Constraint.align({ x: "middle" }, [stem, flower]),
   Constraint.align({ y: ["end", "middle"] }, [stem, flower]),
 ]);

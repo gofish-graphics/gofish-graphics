@@ -76,7 +76,7 @@ export const internalName = (kind: string): string =>
 /**
  * Give every child a constraint name that is unique among the children and
  * return the names in order, so an operator that elaborates to
- * `layer(children).constrain(...)` (spread, scatter, table) can refer to each
+ * `layer(children).relate(...)` (spread, scatter, table) can refer to each
  * child. A child the user named keeps its name; an unnamed child, or a second
  * child with the same user name (cut returns N slices that all carry the
  * source mark's name), gets an `internalName`. The data key is never used as a

@@ -34,7 +34,7 @@ could be generated mechanically, from what source, and what the options are.
   - `_wire_layer_tier` re-derives the `.layer()` auto-naming + `selectAll`
     rewiring in Python, even though the `builder: true` IR tag exists
     precisely so JS's `LayerBuilder` can own that logic.
-  - `ConstrainableMark.constrain` re-implemented the JS
+  - `RelatableMark.relate` re-implemented the JS
     `collectConstraintRefs` tree-walk so callbacks got refs synchronously.
     (Since removed: the callback now gets one ref per declared parameter
     without a default, and JS resolves the names at layout.)
@@ -299,7 +299,7 @@ missing — i.e., the generator's first diff already fixes real drift.
 
 1. **Shallow-port refactor (no codegen yet).** Move `_wire_layer_tier`'s
    auto-naming/`selectAll` wiring JS-side behind the existing
-   `builder: true` tag; evaluate doing the same for the constrain ref-walk;
+   `builder: true` tag; evaluate doing the same for the relate ref-walk;
    dedupe the placeholder-Arrow helper. Shrinks and regularizes the residue
    so the generated/hand-written boundary is clean.
 2. **Descriptor table + Python generator** for operators, constraints,
@@ -366,7 +366,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
 
 **Deliberately deferred**, not follow-up bugs:
 
-- **The constrain ref-walk** (`ConstrainableMark.constrain`'s Python-side
+- **The relate ref-walk** (`RelatableMark.relate`'s Python-side
   mirror of `collectConstraintRefs`) — kept hand-written at the time, pending
   a loud unknown/duplicate-ref guard JS-side. That guard now exists
   (`resolveScopedName`, #819), and the walk is gone: Python passes one ref

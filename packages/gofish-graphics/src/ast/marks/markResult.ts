@@ -12,6 +12,8 @@
  */
 
 import { GoFishNode } from "../_node";
+import { GoFishRef } from "../_ref";
+import { RelateOperand } from "../constraints/relate";
 import { isToken } from "../createName";
 import type { Mark, MarkChild } from "../types";
 
@@ -76,6 +78,10 @@ export async function resolveMarkResult(
   if (raw && typeof (raw as any).then === "function") {
     raw = await (raw as unknown as Promise<ReturnType<Mark<any>>>);
   }
+  // A `.relate()` operand in term position (a child of a drawing clause) is
+  // a string ref to the node it names, resolved from the relating layer.
+  if (raw instanceof RelateOperand)
+    return new GoFishRef({ selection: raw.name }) as unknown as GoFishNode;
   // A chart pipeline resolves to its own node. A `.mark(<relational mark>)`
   // chart elaborates to `.mark(anchor).layer(R)`, i.e. a LayerBuilder — so a
   // chart pipeline handed anywhere a mark is taken (a `.layer(...)` tier, a

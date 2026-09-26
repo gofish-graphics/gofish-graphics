@@ -185,7 +185,7 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
 shared by both loops: a thunk is called, and whatever comes out — like every other
 child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
-that knows all the shapes. Four get in:
+that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
 - a **mark** (a function) — invoked with `undefined` data, which is how a bare
@@ -195,7 +195,11 @@ that knows all the shapes. Four get in:
 - a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
   — resolved through its own `resolve()`. A `LayerBuilder` must go through its
   own, not the root tier's: that is where a root `coord` is hoisted around every
-  tier, so resolving the tiers by hand would drop the shared projection.
+  tier, so resolving the tiers by hand would drop the shared projection;
+- a **`.relate()` operand** (a `RelateOperand`, a child of a drawing clause such
+  as `arrow(opts, [a, b])`) — becomes a string `ref` of the name it carries,
+  which resolves from the relating layer (see
+  [Name Resolution & Scoping](/internals/core/names-and-scoping)).
 
 `markResult.ts` imports neither `chartBuilder` nor `createOperator`, so
 `withGoFish`, `createOperator` and `chartBuilder` all use the one
@@ -218,7 +222,7 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
 shared by both loops: a thunk is called, and whatever comes out — like every other
 child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
-that knows all the shapes. Four get in:
+that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
 - a **mark** (a function) — invoked with `undefined` data, which is how a bare
@@ -227,7 +231,11 @@ that knows all the shapes. Four get in:
 - a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
   — resolved through its own `resolve()`. A `LayerBuilder` must go through its
   own, not the root tier's: that is where a root `coord` is hoisted around every
-  tier, so resolving the tiers by hand would drop the shared projection.
+  tier, so resolving the tiers by hand would drop the shared projection;
+- a **`.relate()` operand** (a `RelateOperand`, a child of a drawing clause such
+  as `arrow(opts, [a, b])`) — becomes a string `ref` of the name it carries,
+  which resolves from the relating layer (see
+  [Name Resolution & Scoping](/internals/core/names-and-scoping)).
 
 `markResult.ts` imports neither `chartBuilder` nor `createOperator`, so
 `withGoFish`, `createOperator` and `chartBuilder` all use the one
@@ -312,7 +320,7 @@ rides along. `.name()`
 defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
 follows parent-iteration order, not async-completion order. The same factory
-backs `makeConstrainableMark` (which adds `.constrain()`) and the combinator
+backs `makeRelatableMark` (which adds `.relate()`) and the combinator
 marks — one wiring, not three copies.
 
 `.translate()` is structural: `attachModifiers` maps the base mark to a new mark
@@ -418,7 +426,7 @@ stashes `__relationalOperands` on the node). The `layer` combinator
 `zBelow(self, operand)` paint-order **constraint** — not a hardcoded z-index —
 so the connector paints under whatever it references. Because it's a real
 constraint, it composes with any other constraint in the layer; an explicit
-`.zOrder(...)` or `.constrain(...)` chained on the connector's own mark
+`.zOrder(...)` or `.relate(...)` chained on the connector's own mark
 overrides the default (the tag is only consulted when neither has been set).
 This is what lets `line()`/`ribbon()` sit under the marks they connect with no
 zOrder incantation needed, in every call form including the low-level

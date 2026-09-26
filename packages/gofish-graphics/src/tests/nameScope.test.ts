@@ -1,5 +1,5 @@
 /**
- * String-name resolution: `ref("x")` and `.constrain()` operands share one
+ * String-name resolution: `ref("x")` and `.relate()` operands share one
  * lookup (nearest level, then closest match) bounded by `createMark` (`resolveScopedName` in
  * `_ref.tsx`; essay: /internals/core/names-and-scoping).
  *
@@ -47,9 +47,9 @@ async function rejects(
 const close = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 
 async function main() {
-  console.log("\n# Name scope — ref and .constrain() share one lookup");
+  console.log("\n# Name scope — ref and .relate() share one lookup");
 
-  // 1. Nested operand: an outer layer's .constrain() names a node inside
+  // 1. Nested operand: an outer layer's .relate() names a node inside
   //    enclose › spread (the Diagrams tutorial's planets figure).
   {
     const data = [
@@ -71,7 +71,7 @@ async function main() {
           // A rect stands in for the label text so its box is exact.
           gf.rect({ w: 30, h: 10, fill: "#e94560" }).name("label"),
         ])
-        .constrain(({ mercury, planets, label }: any) => [
+        .relate(({ mercury, planets, label }: any) => [
           gf.Constraint.align({ x: "middle" }, [mercury, label]),
           gf.Constraint.distribute({ dir: "y", spacing: 20 }, [planets, label]),
         ])
@@ -109,7 +109,7 @@ async function main() {
               gf.rect({ w: 40, h: "v", fill: "#9cf" }).name("bar"),
               gf.rect({ w: 10, h: 4, fill: "#000" }).name("tick"),
             ])
-            .constrain(({ bar, tick }: any) => [
+            .relate(({ bar, tick }: any) => [
               gf.Constraint.align({ x: "end", y: "end" }, [bar, tick]),
             ])
         )
@@ -134,17 +134,18 @@ async function main() {
           gf.rect({ w: 10, h: 10 }).name("a"),
           gf.rect({ w: 5, h: 5 }).name("b"),
         ])
-        .constrain(({ a, b }: any) => [gf.Constraint.align({ x: "middle" }, [a, b])]),
+        .relate(({ a, b }: any) => [gf.Constraint.align({ x: "middle" }, [a, b])]),
     /the name "a" is ambiguous — 2 nodes/
   );
   await rejects(
     "same-level duplicate is an error for ref() too",
     () =>
-      gf.layer([
-        gf.rect({ w: 10, h: 10 }).name("a"),
-        gf.rect({ w: 10, h: 10 }).name("a"),
-        gf.arrow({}, [gf.ref("a"), gf.ref("a")]),
-      ]),
+      gf
+        .layer([
+          gf.rect({ w: 10, h: 10 }).name("a"),
+          gf.rect({ w: 10, h: 10 }).name("a"),
+        ])
+        .relate(() => [gf.arrow({}, [gf.ref("a"), gf.ref("a")])]),
     /ref\("a"\): the name "a" is ambiguous/
   );
 
@@ -162,7 +163,7 @@ async function main() {
               gf.rect({ w: 20, h: 20, fill: "#222" }).name("a"),
               gf.rect({ w: 6, h: 6, fill: "#333" }).name("b"),
             ])
-            .constrain(({ a, b }: any) => [
+            .relate(({ a, b }: any) => [
               gf.Constraint.align({ x: "end", y: "end" }, [a, b]),
             ]),
         ])
@@ -178,10 +179,11 @@ async function main() {
     check("an inner match hides an outer one", ok, detail);
   }
 
-  // 3c. The old stand-in workaround, `ref("x").name("x")`, is its own nearest
-  //     match. It errors and says what to do instead.
+  // 3c. The old stand-in workaround, `ref("x").name("x")` as a plain child, is
+  //     a string ref outside a relate clause. It errors and says what to do
+  //     instead.
   await rejects(
-    "a ref named after its own target is a self-reference error",
+    "the old ref(\"x\").name(\"x\") stand-in is an error",
     () =>
       gf.layer([
         gf.rect({ w: 10, h: 10 }).name("x"),
@@ -190,11 +192,11 @@ async function main() {
             gf.ref("x").name("x"),
             gf.rect({ w: 5, h: 5 }).name("label"),
           ])
-          .constrain(({ x, label }: any) => [
+          .relate(({ x, label }: any) => [
             gf.Constraint.align({ x: "middle" }, [x, label]),
           ]),
       ]),
-    /ref\("x"\) refers to itself.*Constrain the named node directly/
+    /ref\("x"\) is a string ref outside a \.relate\(\) clause/
   );
 
   // 4. A name that matches nothing.
@@ -203,7 +205,7 @@ async function main() {
     () =>
       gf
         .layer([gf.rect({ w: 10, h: 10 }).name("a")])
-        .constrain(({ a, typo }: any) => [gf.Constraint.align({ x: "middle" }, [a, typo])]),
+        .relate(({ a, typo }: any) => [gf.Constraint.align({ x: "middle" }, [a, typo])]),
     /Constraint\.align: operand 2 is undefined.*Names inside this layer: a\./
   );
 
@@ -216,14 +218,13 @@ async function main() {
     () =>
       gf
         .layer([Inside({}), gf.rect({ w: 5, h: 5 }).name("b")])
-        .constrain(({ inner, b }: any) => [gf.Constraint.align({ x: "middle" }, [inner, b])]),
+        .relate(({ inner, b }: any) => [gf.Constraint.align({ x: "middle" }, [inner, b])]),
     /operand 1 is undefined.*Names inside this layer: b\./
   );
   const ReachesOut = gf.createMark(() =>
-    gf.layer([
-      gf.rect({ w: 10, h: 10 }).name("x"),
-      gf.arrow({}, [gf.ref("x"), gf.ref("outer")]),
-    ])
+    gf
+      .layer([gf.rect({ w: 10, h: 10 }).name("x")])
+      .relate(() => [gf.arrow({}, [gf.ref("x"), gf.ref("outer")])])
   );
   await rejects(
     "an outer string name is invisible inside a createMark",
@@ -241,11 +242,9 @@ async function main() {
     let detail = "";
     try {
       await items(
-        gf.layer([
-          Exposed({}).name(handle),
-          gf.rect({ w: 5, h: 5 }).name("b"),
-          gf.arrow({}, [gf.ref(handle).inner, gf.ref("b")]),
-        ])
+        gf
+          .layer([Exposed({}).name(handle), gf.rect({ w: 5, h: 5 }).name("b")])
+          .relate(({ b }: any) => [gf.arrow({}, [gf.ref(handle).inner, b])])
       );
     } catch (e: any) {
       ok = false;
@@ -255,7 +254,7 @@ async function main() {
   }
 
   // 6. Closest match wins within the stopping level: a direct child beats a
-  //    same-name node nested deeper, for `.constrain()` and for `ref()`.
+  //    same-name node nested deeper, for `.relate()` and for `ref()`.
   {
     let ok = true;
     let detail = "";
@@ -267,7 +266,7 @@ async function main() {
             gf.rect({ w: 20, h: 20, fill: "#222" }).name("a"),
             gf.rect({ w: 6, h: 6, fill: "#333" }).name("b"),
           ])
-          .constrain(({ a, b }: any) => [
+          .relate(({ a, b }: any) => [
             gf.Constraint.distribute({ dir: "x", spacing: 5 }, [a, b]),
           ])
       );
@@ -286,11 +285,12 @@ async function main() {
     let detail = "";
     try {
       await items(
-        gf.layer([
-          gf.layer([gf.rect({ w: 40, h: 40 }).name("a")]),
-          gf.rect({ w: 20, h: 20 }).name("a"),
-          gf.arrow({}, [gf.ref("a"), gf.ref("a")]),
-        ])
+        gf
+          .layer([
+            gf.layer([gf.rect({ w: 40, h: 40 }).name("a")]),
+            gf.rect({ w: 20, h: 20 }).name("a"),
+          ])
+          .relate(() => [gf.arrow({}, [gf.ref("a"), gf.ref("a")])])
       );
     } catch (e: any) {
       ok = false;
@@ -312,7 +312,7 @@ async function main() {
             ]),
             gf.rect({ w: 6, h: 6, fill: "#555" }).name("b"),
           ])
-          .constrain(({ deep, b }: any) => [
+          .relate(({ deep, b }: any) => [
             gf.Constraint.align({ x: "end" }, [deep, b]),
           ])
       );
@@ -338,7 +338,7 @@ async function main() {
           gf.layer([gf.rect({ w: 10, h: 10 }).name("a")]),
           gf.rect({ w: 5, h: 5 }).name("b"),
         ])
-        .constrain(({ a, b }: any) => [gf.Constraint.align({ x: "middle" }, [a, b])]),
+        .relate(({ a, b }: any) => [gf.Constraint.align({ x: "middle" }, [a, b])]),
     /the name "a" is ambiguous — 2 nodes/
   );
 
@@ -362,7 +362,7 @@ async function main() {
               .name("bars"),
             gf.rect({ w: 12, h: 12, fill: "#777" }).name("a"),
           ])
-          .constrain(({ a, bars }: any) => [
+          .relate(({ a, bars }: any) => [
             gf.Constraint.distribute({ dir: "x", spacing: 10 }, [bars, a]),
           ])
       );
@@ -388,7 +388,7 @@ async function main() {
             .mark(gf.rect({ h: "v" })),
           gf.rect({ w: 5, h: 5 }).name("b"),
         ])
-        .constrain(({ a, b }: any) => [gf.Constraint.align({ x: "middle" }, [a, b])]),
+        .relate(({ a, b }: any) => [gf.Constraint.align({ x: "middle" }, [a, b])]),
     /operand 1 is undefined/
   );
 
@@ -405,7 +405,7 @@ async function main() {
             gf.rect({ w: 10, h: 10, fill: "#888" }).name("a"),
             gf.rect({ w: 10, h: 10, fill: "#999" }).name("b"),
           ])
-          .constrain(({ a, b, note, pad = 8 }: any) => {
+          .relate(({ a, b, note, pad = 8 }: any) => {
             seenNote = note;
             return [
               gf.Constraint.distribute({ dir: "x", spacing: pad }, [a, b]),
@@ -424,17 +424,20 @@ async function main() {
     check("a missing name is undefined: defaults and optional checks work", ok, detail);
   }
 
-  // 11. A ref laid out again lands in the same place (#928). The ref's
-  //     translate is recomputed on every layout, so the walk from the ref
-  //     up to the common ancestor must not include the ref's own translate
-  //     from the previous layout.
+  // A ref laid out again lands in the same place (#928). The ref's
+  // translate is recomputed on every layout, so the walk from the ref up to
+  // the common ancestor must not include the ref's own translate from the
+  // previous layout. (Token refs: a string ref is legal only in .relate(),
+  // whose callback builds a fresh arrow on every render.)
   {
+    const a = gf.createName("a");
+    const b = gf.createName("b");
     const node = gf.layer([
       gf.spread({ dir: "x", spacing: 60 }, [
-        gf.rect({ w: 20, h: 20 }).name("a"),
-        gf.rect({ w: 20, h: 20 }).name("b"),
+        gf.rect({ w: 20, h: 20 }).name(a),
+        gf.rect({ w: 20, h: 20 }).name(b),
       ]),
-      gf.arrow({}, [gf.ref("a"), gf.ref("b")]),
+      gf.arrow({}, [gf.ref(a), gf.ref(b)]),
     ]);
     const paths: string[] = [];
     for (let i = 0; i < 3; i++) {
@@ -450,7 +453,241 @@ async function main() {
     );
   }
 
-  // 12. A sequenced tier names its mark so its transitions can read the marks
+  console.log("\n# relate() — drawing clauses and dependency order");
+
+  // 11. #878: two named rects placed by a distribute, and an arrow between
+  //     them in the same relate(). The arrow reads the FINAL positions: it
+  //     runs horizontally from a's right edge to b's left edge.
+  {
+    let ok = true;
+    let detail = "";
+    try {
+      const out = await items(
+        gf
+          .layer([
+            gf.rect({ w: 70, h: 40, fill: "#e2ebf6" }).name("a"),
+            gf.rect({ w: 70, h: 40, fill: "#e2ebf6" }).name("b"),
+          ])
+          .relate(({ a, b }: any) => [
+            gf.Constraint.distribute({ dir: "x", spacing: 60 }, [a, b]),
+            gf.arrow({ bow: 0, stretch: 0, stroke: "#1a5683" }, [a, b]),
+          ])
+      );
+      const rects = out
+        .filter((i) => i.kind === "rect")
+        .sort((p, q) => p.x - q.x);
+      const body = out.find((i) => i.kind === "path" && i.style?.fill === "none");
+      const nums = String(body?.d).match(/-?\d+(\.\d+)?/g)!.map(Number);
+      const [sx, sy] = nums;
+      const [ex, ey] = nums.slice(-2);
+      const [ra, rb] = rects;
+      const midY = ra.y + ra.h / 2;
+      ok =
+        rects.length === 2 &&
+        close(rb.x, ra.x + ra.w + 60) &&
+        sx > ra.x + ra.w - 1e-6 &&
+        ex < rb.x + 1e-6 &&
+        ex > sx &&
+        close(sy, midY) &&
+        close(ey, midY);
+      detail = JSON.stringify({ rects, d: body?.d });
+    } catch (e: any) {
+      ok = false;
+      detail = String(e?.message);
+    }
+    check("#878: an arrow in relate() runs between the final positions", ok, detail);
+  }
+
+  // 12. The Diagrams tutorial's final step: the label is centered under
+  //     Mercury 20px below the background, and the arrow runs from the
+  //     label's top up to Mercury.
+  {
+    const data = [
+      { name: "mercury", r: 8 },
+      { name: "venus", r: 14 },
+      { name: "earth", r: 15 },
+    ];
+    let ok = true;
+    let detail = "";
+    try {
+      const out = await items(
+        gf
+          .layer([
+            gf
+              .background({ padding: 20, fill: "#252150", rx: 16 }, [
+                gf.spread(
+                  { dir: "x", spacing: 50, alignment: "middle" },
+                  data.map((d) => gf.circle({ r: d.r, fill: "#ccc" }).name(d.name))
+                ),
+              ])
+              .name("planets"),
+            gf.rect({ w: 30, h: 10, fill: "#e94560" }).name("label"),
+          ])
+          .relate(({ mercury, planets, label }: any) => [
+            gf.Constraint.align({ x: "middle" }, [mercury, label]),
+            gf.Constraint.distribute({ dir: "y", spacing: 20 }, [planets, label]),
+            gf.arrow({ stroke: "#E94560" }, [label, mercury]),
+          ])
+      );
+      const bg = out.find((i) => i.kind === "rect" && i.style?.fill === "#252150");
+      const mercury = out.find((i) => i.kind === "ellipse" && i.rx === 8);
+      const label = out.find((i) => i.kind === "rect" && i.w === 30);
+      const body = out.find(
+        (i) => i.kind === "path" && i.style?.stroke === "#E94560"
+      );
+      const nums = String(body?.d).match(/-?\d+(\.\d+)?/g)!.map(Number);
+      const [sx, sy] = nums;
+      const [ex, ey] = nums.slice(-2);
+      // Pixel space is y-down: the label is below the background, so its top
+      // edge is `label.y`, and the arrow goes up (ey < sy) toward Mercury.
+      ok =
+        close(label.x + label.w / 2, mercury.cx) &&
+        close(label.y - (bg.y + bg.h), 20) &&
+        sy <= label.y + 1e-6 &&
+        sy > label.y - 10 &&
+        close(sx, label.x + label.w / 2) &&
+        ey < sy &&
+        ey > mercury.cy + mercury.ry - 1e-6 &&
+        Math.abs(ex - mercury.cx) < 1;
+      detail = JSON.stringify({ bg, mercury, label, d: body?.d });
+    } catch (e: any) {
+      ok = false;
+      detail = String(e?.message);
+    }
+    check("planets: label under the background, arrow from label to Mercury", ok, detail);
+  }
+
+  // 13. A drawing clause over refs to other clauses runs after them; a cycle
+  //     is a loud error that names the clauses.
+  await rejects(
+    "a cycle between relate clauses is an error naming them",
+    () =>
+      gf
+        .layer([
+          gf.rect({ w: 10, h: 10 }).name("a"),
+          gf.rect({ w: 10, h: 10 }).name("b"),
+        ])
+        .relate(({ a, b }: any) => [
+          gf.Constraint.distribute({ dir: "x", spacing: 10 }, [a, b]),
+          gf.enclose({}, [a, gf.ref("q")]).name("p"),
+          gf.enclose({}, [b, gf.ref("p")]).name("q"),
+        ]),
+    /form a cycle.*clause 2 \(enclose named "p"\), clause 3 \(enclose named "q"\)/
+  );
+  await rejects(
+    "a clause that reads its own result is a cycle",
+    () =>
+      gf
+        .layer([gf.rect({ w: 10, h: 10 }).name("a")])
+        .relate(({ a }: any) => [
+          gf.arrow({}, [a, gf.ref("self")]).name("self"),
+        ]),
+    /form a cycle.*clause 1 \(arrow named "self"\)/
+  );
+  await rejects(
+    "a constraint that moves a clause which reads its operands is a cycle",
+    () =>
+      gf
+        .layer([
+          gf.rect({ w: 10, h: 10 }).name("a"),
+          gf.rect({ w: 10, h: 10 }).name("b"),
+        ])
+        .relate(({ a, b }: any) => [
+          gf.Constraint.align({ x: "middle" }, [a, { name: "box" }]),
+          gf.enclose({ padding: 4 }, [b]).name("box"),
+        ]),
+    /form a cycle.*the layer's constraints \(Constraint\.align\), clause 2 \(enclose named "box"\)/
+  );
+  // A clause over another clause (no cycle) lays out after it.
+  {
+    let ok = true;
+    let detail = "";
+    try {
+      const out = await items(
+        gf
+          .layer([
+            gf.rect({ w: 10, h: 10, fill: "#111" }).name("a"),
+            gf.rect({ w: 10, h: 10, fill: "#222" }).name("b"),
+          ])
+          .relate(({ a, b }: any) => [
+            gf.enclose({ padding: 5, stroke: "#0a0" }, [gf.ref("inner")]),
+            gf.Constraint.distribute({ dir: "x", spacing: 30 }, [a, b]),
+            gf.enclose({ padding: 5, stroke: "#00a" }, [a, b]).name("inner"),
+          ])
+      );
+      const inner = out.find((i) => i.style?.stroke === "#00a");
+      const outer = out.find((i) => i.style?.stroke === "#0a0");
+      ok =
+        close(inner.w, 10 + 30 + 10 + 10) &&
+        close(outer.w, inner.w + 10) &&
+        close(outer.x, inner.x - 5);
+      detail = JSON.stringify({ inner, outer });
+    } catch (e: any) {
+      ok = false;
+      detail = String(e?.message);
+    }
+    check("a clause over another clause lays out after it", ok, detail);
+  }
+
+  // 14. A string ref outside a relate() clause is an error that says to move
+  //     it into .relate().
+  await rejects(
+    "a string ref outside relate() is an error",
+    () =>
+      gf.layer([
+        gf.rect({ w: 10, h: 10 }).name("a"),
+        gf.rect({ w: 10, h: 10 }).name("b"),
+        gf.arrow({}, [gf.ref("a"), gf.ref("b")]),
+      ]),
+    /ref\("a"\) is a string ref outside a \.relate\(\) clause.*move this ref into the enclosing layer's \.relate\(\) callback/
+  );
+  // A relate clause relates nodes inside its own layer only.
+  await rejects(
+    "a string ref in a clause cannot name a node outside the layer",
+    () =>
+      gf.layer([
+        gf.rect({ w: 10, h: 10 }).name("outside"),
+        gf
+          .layer([gf.rect({ w: 10, h: 10 }).name("a")])
+          .relate(({ a }: any) => [gf.arrow({}, [a, gf.ref("outside")])]),
+      ]),
+    /names a node outside the relating layer/
+  );
+  // Open terms: a clause may mix an operand with a fresh mark. The spread
+  // places the fresh label under the (already placed) bar.
+  {
+    let ok = true;
+    let detail = "";
+    try {
+      const out = await items(
+        gf
+          .layer([
+            gf.rect({ w: 40, h: 10, fill: "#abc" }).name("a"),
+            gf.rect({ w: 40, h: 10, fill: "#cba" }).name("b"),
+          ])
+          .relate(({ a, b }: any) => [
+            gf.Constraint.distribute({ dir: "x", spacing: 20 }, [a, b]),
+            gf.spread({ dir: "y", spacing: 5, alignment: "middle" }, [
+              b,
+              gf.rect({ w: 10, h: 4, fill: "#f00" }),
+            ]),
+          ])
+      );
+      const b = out.find((i) => i.style?.fill === "#cba");
+      const tag = out.find((i) => i.style?.fill === "#f00");
+      ok =
+        out.filter((i) => i.style?.fill === "#cba").length === 1 &&
+        close(tag.x + tag.w / 2, b.x + b.w / 2) &&
+        close(Math.abs(tag.y - b.y) - (tag.y > b.y ? b.h : tag.h), 5);
+      detail = JSON.stringify({ b, tag });
+    } catch (e: any) {
+      ok = false;
+      detail = String(e?.message);
+    }
+    check("open term: a clause mixes an operand with a fresh mark", ok, detail);
+  }
+
+  // 15. A sequenced tier names its mark so its transitions can read the marks
   //     back. A name the mark already has, a string before other modifiers or
   //     a createName token, is the one it keeps: selectAll, ref, and the
   //     transitions all find the mark by it.
@@ -493,15 +730,13 @@ async function main() {
     }
 
     /** Whether `ref(target)` reaches the tier's one mark: a line from it to
-     *  a sibling rect is drawn. */
+     *  a sibling rect, drawn by a relate clause, is drawn. */
     async function reached(mark: any, target: any): Promise<string> {
       try {
         const out = await items(
-          gf.layer([
-            tier([rows[0]], mark),
-            gf.rect({ w: 5, h: 5 }).name("b"),
-            gf.line({}, [gf.ref(target), gf.ref("b")]),
-          ])
+          gf
+            .layer([tier([rows[0]], mark), gf.rect({ w: 5, h: 5 }).name("b")])
+            .relate(() => [gf.line({}, [gf.ref(target), gf.ref("b")])])
         );
         return out.some((i) => i.kind === "path") ? "" : "no line drawn";
       } catch (e: any) {

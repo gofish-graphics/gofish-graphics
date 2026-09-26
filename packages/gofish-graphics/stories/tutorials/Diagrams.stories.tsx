@@ -6,7 +6,6 @@ import {
   background,
   circle,
   layer,
-  ref,
   spread,
   text,
 } from "../../src/lib";
@@ -17,7 +16,8 @@ import {
 // centered on Mercury but spaced off the whole background, and an arrow runs
 // from the label to the planet. The label's two constraints point at two
 // different nodes (Mercury and the background), which a single `spread`
-// cannot express. The styling follows the planets diagram in the maintainer's
+// cannot express, and the arrow is a third `.relate()` clause, drawn from the
+// label's final position. The styling follows the planets diagram in the maintainer's
 // thesis defense deck.
 //
 // Not gallery-tagged on purpose: it is a teaching figure, not a gallery piece.
@@ -40,8 +40,9 @@ export const Diagrams: StoryObj = {
     const container = initializeContainer();
 
     layer([
-      layer([
-        background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+      background(
+        { padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 },
+        [
           spread(
             { dir: "x", spacing: 50, alignment: "middle" },
             data.map((d) =>
@@ -53,14 +54,16 @@ export const Diagrams: StoryObj = {
               }).name(d.name)
             )
           ),
-        ]).name("planets"),
-        text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
-      ]).constrain(({ mercury, planets, label }) => [
+        ]
+      ).name("planets"),
+      text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
+    ])
+      .relate(({ mercury, planets, label }) => [
         Constraint.align({ x: "middle" }, [mercury, label]),
         Constraint.distribute({ dir: "y", spacing: 20 }, [planets, label]),
-      ]),
-      arrow({ stroke: "#E94560" }, [ref("label"), ref("mercury")]),
-    ]).render(container);
+        arrow({ stroke: "#E94560" }, [label, mercury]),
+      ])
+      .render(container);
 
     return container;
   },

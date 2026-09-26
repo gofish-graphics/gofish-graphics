@@ -17,6 +17,8 @@ import {
   type ChannelValue,
   type CombinatorMarkIR,
   type ConstraintIR,
+  type RelateClauseIR,
+  isConstraintIR,
   type CutMarkIR,
   type DataIR,
   type FrontendIRDocument,
@@ -191,14 +193,14 @@ function walkLayer(
     walkArray(v, p, ctx, walkLayerChild)
   );
   optionalField(node, "options", path, ctx, expectObject);
-  optionalField(node, "constraints", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkConstraint)
+  optionalField(node, "relate", path, ctx, (v, p) =>
+    walkArray(v, p, ctx, walkRelateClause)
   );
   optionalField(node, "builder", path, ctx, expectBoolean);
   if (ctx.strict) {
     rejectUnknown(
       node,
-      ["type", "charts", "options", "constraints", "builder", "origin", "meta"],
+      ["type", "charts", "options", "relate", "builder", "origin", "meta"],
       path,
       ctx
     );
@@ -480,6 +482,9 @@ function walkRefType(
       return;
     case "ConstraintIR":
       walkConstraint(value, path, ctx);
+      return;
+    case "RelateClauseIR":
+      walkRelateClause(value, path, ctx);
       return;
     case "FieldAccessor":
       if (!isObject(value)) {
@@ -996,8 +1001,8 @@ function walkCombinatorMark(
   );
   optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "label", path, ctx, walkLabel);
-  optionalField(node, "constraints", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkConstraint)
+  optionalField(node, "relate", path, ctx, (v, p) =>
+    walkArray(v, p, ctx, walkRelateClause)
   );
   optionalField(node, "zOrder", path, ctx, expectNumber);
   optionalField(node, "translate", path, ctx, walkTranslate);
@@ -1011,7 +1016,7 @@ function walkCombinatorMark(
         "children",
         "name",
         "label",
-        "constraints",
+        "relate",
         "zOrder",
         "translate",
         "origin",
@@ -1031,8 +1036,8 @@ function walkLeafMark(
   walkBaseFields(node, path, ctx);
   optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "label", path, ctx, walkLabel);
-  optionalField(node, "constraints", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkConstraint)
+  optionalField(node, "relate", path, ctx, (v, p) =>
+    walkArray(v, p, ctx, walkRelateClause)
   );
   optionalField(node, "zOrder", path, ctx, expectNumber);
   optionalField(node, "translate", path, ctx, walkTranslate);
@@ -1068,7 +1073,7 @@ function walkLeafMark(
         "type",
         "name",
         "label",
-        "constraints",
+        "relate",
         "zOrder",
         "translate",
         "origin",
@@ -1146,6 +1151,13 @@ function walkLabel(node: unknown, path: string, ctx: Context): void {
   if (typeof node === "boolean") return;
   // Otherwise: an array of label specs, one per `.label(...)` call.
   walkArray(node, path, ctx, walkLabelSpec);
+}
+
+/** A relate clause is a constraint when it carries `refs`, else a mark. */
+function walkRelateClause(node: unknown, path: string, ctx: Context): void {
+  if (isObject(node) && isConstraintIR(node as RelateClauseIR))
+    walkConstraint(node, path, ctx);
+  else walkMark(node, path, ctx);
 }
 
 function walkConstraint(node: unknown, path: string, ctx: Context): void {
@@ -1385,6 +1397,7 @@ export type {
   ChannelValue,
   CombinatorMarkIR,
   ConstraintIR,
+  RelateClauseIR,
   CutMarkIR,
   DataIR,
   FrontendIRDocument,

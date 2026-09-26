@@ -441,7 +441,7 @@ interpolation does not remove the need for identity.
 ### 9.3 Timing constraints (Gemini as constraints)
 
 ```ts
-.constrain((c) => [
+.relate((c) => [
   c.syncStart([selectAll("bars"), ref("title")]),
   c.stagger(selectAll("bars"), { by: "month", delay: 30 }),
 ])

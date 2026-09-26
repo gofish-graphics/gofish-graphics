@@ -82,7 +82,7 @@ console.log("# coord paint order: zAbove/zBelow constraints are honored inside c
   // flattened order must be [B, A].
   const A = rect().name("a");
   const B = rect().name("b");
-  const layerNode = Layer([A, B]).constrain((c: any) => [
+  const layerNode = Layer([A, B]).relate((c: any) => [
     Constraint.zAbove(c.a, c.b),
   ]);
   const order = await paintOrder(layerNode);
@@ -100,7 +100,7 @@ console.log("# a constraint that names a plain layer orders what it paints");
   const A = rect().name("a");
   const P1 = rect();
   const P2 = rect();
-  const layerNode = Layer([A, Layer([P1, P2]).name("pair")]).constrain(
+  const layerNode = Layer([A, Layer([P1, P2]).name("pair")]).relate(
     (c: any) => [Constraint.zAbove(c.a, c.pair)]
   );
   const order = await paintOrder(layerNode);

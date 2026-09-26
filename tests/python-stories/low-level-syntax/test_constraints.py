@@ -28,7 +28,7 @@ def story_align_only():
             rect(w=80, h=40, fill="#e63946").name("a"),
             rect(w=120, h=60, fill="#457b9d").name("b"),
             rect(w=60, h=30, fill="#2a9d8f").name("c"),
-        ]).constrain(lambda a, b, c: [
+        ]).relate(lambda a, b, c: [
             Constraint.align([a, b, c], x="end"),
         ]),
         {"w": 300, "h": 300},
@@ -41,7 +41,7 @@ def story_align_only_manual_y():
             rect(w=80, h=40, y=20, fill="#e63946").name("a"),
             rect(w=120, h=60, y=100, fill="#457b9d").name("b"),
             rect(w=60, h=30, y=200, fill="#2a9d8f").name("c"),
-        ]).constrain(lambda a, b, c: [
+        ]).relate(lambda a, b, c: [
             Constraint.align([a, b, c], x="end"),
         ]),
         {"w": 300, "h": 300},
@@ -54,7 +54,7 @@ def story_distribute_only():
             rect(w=80, h=40, fill="#e63946").name("a"),
             rect(w=120, h=40, fill="#457b9d").name("b"),
             rect(w=60, h=40, fill="#2a9d8f").name("c"),
-        ]).constrain(lambda a, b, c: [
+        ]).relate(lambda a, b, c: [
             Constraint.distribute([a, b, c], dir="y", spacing=10),
         ]),
         {"w": 300, "h": 300},
@@ -71,7 +71,7 @@ def story_subset_selection():
             rect(w=80, h=50, fill="#457b9d").name("b"),
             rect(w=120, h=50, fill="#2a9d8f").name("c"),
             rect(w=60, h=50, fill="#f4a261").name("d"),
-        ]).constrain(lambda a, b, c, d: [
+        ]).relate(lambda a, b, c, d: [
             Constraint.align([a, b, c, d], x="end"),
             Constraint.distribute([a, b], dir="y", spacing=5),
             Constraint.distribute([c, d], dir="y", spacing=30),
@@ -87,7 +87,7 @@ def story_background_not_distributed():
             rect(w=100, h=40, fill="#e63946").name("a"),
             rect(w=80, h=40, fill="#457b9d").name("b"),
             rect(w=120, h=40, fill="#2a9d8f").name("c"),
-        ]).constrain(lambda bg, a, b, c: [
+        ]).relate(lambda bg, a, b, c: [
             Constraint.align([bg, a, b, c], x="start"),
             Constraint.distribute([a, b, c], dir="y", spacing=10),
         ]),
@@ -121,7 +121,7 @@ def story_align_center_distribute_y():
             rect(w=120, h=60, fill="#457b9d").name("b"),
             rect(w=40, h=30, fill="#2a9d8f").name("c"),
             rect(w=100, h=50, fill="#f4a261").name("d"),
-        ]).constrain(lambda a, b, c, d: [
+        ]).relate(lambda a, b, c, d: [
             Constraint.align([a, b, c, d], x="middle"),
             Constraint.distribute([a, b, c, d], dir="y", spacing=8),
         ]),
@@ -145,7 +145,7 @@ def story_spread_x_center_to_center():
             rect(w=30, h=80, fill="#e63946").name("a"),
             rect(w=50, h=80, fill="#457b9d").name("b"),
             rect(w=20, h=80, fill="#2a9d8f").name("c"),
-        ]).constrain(lambda a, b, c: [
+        ]).relate(lambda a, b, c: [
             Constraint.align([a, b, c], y="start"),
             Constraint.distribute([a, b, c], dir="x", spacing=60, anchor="middle"),
         ]),
@@ -167,7 +167,7 @@ def story_align_span():
             x=40,
             y=50,
         )
-        .constrain(lambda a, b, c: [
+        .relate(lambda a, b, c: [
             Constraint.align([a, b, c], y="start"),
             Constraint.distribute([a, b, c], dir="x", spacing=10),
         ])
@@ -178,7 +178,7 @@ def story_align_span():
         layer([
             group,
             rect(fill="none", stroke="#333", strokeWidth=2).name("border"),
-        ]).constrain(lambda group, border, **_: [
+        ]).relate(lambda group, border, **_: [
             Constraint.align([group, border], x="span"),
             Constraint.align([group, border], y="span"),
         ]),
@@ -196,7 +196,7 @@ def story_align_size():
             x=0,
             y=20,
         )
-        .constrain(lambda s1, s2: [
+        .relate(lambda s1, s2: [
             Constraint.align([s1, s2], x="start"),
             Constraint.distribute([s1, s2], dir="y", spacing=4),
         ])
@@ -207,7 +207,7 @@ def story_align_size():
         layer([
             stack,
             rect(y=110, h=10, fill="#2a9d8f").name("divider"),
-        ]).constrain(lambda stack, divider, **_: [
+        ]).relate(lambda stack, divider, **_: [
             Constraint.align([stack, divider], x="size"),
         ]),
         {"w": 320, "h": 180},

@@ -207,6 +207,6 @@ def story_default():
     ]
 
     return (
-        layer([*year_columns, *color_lines]),
+        layer(year_columns).relate(lambda: color_lines),
         {},
     )

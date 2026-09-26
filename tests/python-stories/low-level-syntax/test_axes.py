@@ -1,6 +1,6 @@
 """Equivalent of lowlevel/Axes.stories.tsx — Low Level Syntax/Axes.
 
-Hand-drawn axes built from `layer` + `spread` + `constrain` + `ref`, with
+Hand-drawn axes built from `layer` + `spread` + `relate` + `ref`, with
 cross-tier links via `createName` tokens (the Pulley pattern). Three stories:
 
 - OrdinalXAxis: 3 bars with species labels and a chart-axis title beneath.
@@ -134,7 +134,7 @@ def story_continuous_yaxis():
 
     ticks = [_tick(v, i) for i, v in enumerate(_TICK_VALUES)]
 
-    def _constrain(**g):
+    def _relate(**g):
         tick_refs = [g[f"t{i}"] for i in range(_N)]
         return [
             # ── X chain: title (x=0) → ticks → axis → bars ──
@@ -176,7 +176,7 @@ def story_continuous_yaxis():
                 *ticks,
                 text(text="count", fontSize=13, fill="#333").name("title"),
             ]
-        ).constrain(_constrain),
+        ).relate(_relate),
         {"w": 400, "h": 300},
     )
 
@@ -201,7 +201,7 @@ def story_non_uniform_yaxis():
 
     ticks = [_tick(v, i) for i, v in enumerate(_NU_TICK_VALUES)]
 
-    def _constrain(**g):
+    def _relate(**g):
         tick_refs = [g[f"t{i}"] for i in range(_NU_N)]
         return [
             # ── X chain: title (x=0) → ticks → axis ──
@@ -230,6 +230,6 @@ def story_non_uniform_yaxis():
                 *ticks,
                 text(text="score", fontSize=13, fill="#333").name("title"),
             ]
-        ).constrain(_constrain),
+        ).relate(_relate),
         {"w": 400, "h": 300},
     )

@@ -239,7 +239,7 @@ class Token:
     (`packages/gofish-graphics/src/ast/createName.ts`). Each Token carries
     an opaque UUID `id` so two `createName("box")` calls in different
     components don't collide, plus a `tag` string used as the scope-map
-    path segment for both `.constrain(lambda box: ...)` callbacks and
+    path segment for both `.relate(lambda box: ...)` callbacks and
     outer `ref(t).box` navigation.
     """
 
@@ -381,7 +381,7 @@ class Mark:
 
         For *relational* paint order ("this above that"), use
         `Constraint.z_above(a, b)` / `Constraint.z_below(a, b)` inside the
-        enclosing layer's `.constrain(...)` instead.
+        enclosing layer's `.relate(...)` instead.
 
         Returns:
             New Mark (same subclass as self) with the z-order set.
@@ -518,11 +518,11 @@ class Mark:
             )
         if self._labels:
             d["label"] = self._labels
-        # Only ConstrainableMark carries _constraints, but reading via getattr
-        # keeps the base class oblivious to the subclass extension.
-        constraints = getattr(self, "_constraints", None)
-        if constraints is not None:
-            d["constraints"] = [c.to_dict() for c in constraints]
+        # Only RelatableMark carries _relate, but reading via getattr keeps
+        # the base class oblivious to the subclass extension.
+        relate = getattr(self, "_relate", None)
+        if relate is not None:
+            d["relate"] = [c.to_dict() for c in relate]
         # `@mark`-decorated components flag their output Mark as a
         # scope boundary so the harness wraps the resolved node in
         # `node.scope()` — matches JS createMark's behavior.
@@ -621,7 +621,7 @@ class _InputRef(Mark):
     `spread({...}, [d[0], text(...)])`).
 
     `.name(...)` (issue #556 — a named ref surviving a mark-fn round trip, so
-    an enclosing `.layer([...]).constrain(...)` can target it by name, e.g.
+    an enclosing `.layer([...]).relate(...)` can target it by name, e.g.
     `Cut.stories.tsx::ImageCutWithLabels`'s `d.name("slice")`) is overridden
     rather than inherited from `Mark`: JS `GoFishRef.name()` MUTATES the ref
     in place and returns `this` (not a fresh copy — the ref's identity, not
@@ -690,21 +690,29 @@ from ._generated import (  # noqa: E402
 
 # Low-level constraint surface — mirrors JS `Constraint.align` / `Constraint.distribute`
 # from packages/gofish-graphics/src/ast/constraints/index.ts. Used only by the
-# low-level `layer([marks]).constrain(...)` combinator. The Python user authors
+# low-level `layer([marks]).relate(...)` combinator. The Python user authors
 # constraints by name; the IR carries the names; the harness/widget rebuilds
 # the JS-side ref objects from those names.
 
 
-class RefSentinel:
-    """Opaque handle for a named layer child, passed to a constrain callback.
+class RefSentinel(Mark):
+    """Opaque handle for a named node inside a layer, passed to a `.relate()`
+    callback.
 
-    `layer([rect(...).name("a")]).constrain(lambda a, b: [...])` receives one
-    of these per callback parameter, carrying the parameter's name; JS
-    resolves the name at layout.
+    `layer([rect(...).name("a")]).relate(lambda a, b: [...])` receives one of
+    these per callback parameter, carrying the parameter's name. As a
+    constraint operand it serializes as the name; as a child of a drawing
+    clause (`arrow([a, b])`) it serializes as `ref("a")`. JS resolves the
+    name at layout, from the relating layer.
     """
 
     def __init__(self, ref_name: str):
-        self.ref_name = ref_name
+        super().__init__("ref", selection=ref_name)
+
+    @property
+    def ref_name(self) -> str:
+        """The name this operand stands for."""
+        return self.kwargs["selection"]
 
 
 def _subtree_names(children: Optional[List[Any]]) -> List[str]:
@@ -724,13 +732,13 @@ def _subtree_names(children: Optional[List[Any]]) -> List[str]:
 def _callback_refs(
     callback: Callable[..., Any], children: Optional[List[Any]]
 ) -> Dict[str, RefSentinel]:
-    """The keyword arguments a `.constrain()` callback receives: one
+    """The keyword arguments a `.relate()` callback receives: one
     `RefSentinel` per parameter it declares without a default, named after
     the parameter. A parameter with a default keeps it and gets no
     `RefSentinel`: that is the loop idiom `lambda a, b, gap=gap: [...]`,
     which binds a loop variable, not a node. A callback with a `**rest`
     catch-all also receives every other name inside the layer
-    (`_subtree_names`), the same set the JS `constraintEnv` holds, so it can
+    (`_subtree_names`), the same set the JS `relateEnv` holds, so it can
     look names up dynamically (`rest[key]`). JS resolves every name at
     layout, and a name that matches no node inside the layer is an error
     there."""
@@ -864,7 +872,7 @@ class Constraint:
 
         Args:
             refs: List of RefSentinels (typically the kwargs given to the
-                constrain callback).
+                relate callback).
             x: Optional `"start" | "middle" | "end" | "baseline"` — alignment
                 on the x-axis. Also accepts the interval-statistic values
                 `"span"` (the target adopts the source's position AND size)
@@ -1018,12 +1026,45 @@ class Constraint:
         return ZOrderConstraint("zBelow", [a, b])
 
 
-class ConstrainableMark(Mark):
+def _relate_clauses(result: Any) -> List[Any]:
+    """Flatten a `.relate()` callback's result into its clauses, dropping
+    `None` / `False` entries (so `cond and clause` works), as the JS side
+    does. A clause is a constraint (`Constraint.align(...)`, ...) or a mark
+    that draws (`arrow([a, b])`, `enclose([a, b])`, ...)."""
+    if not isinstance(result, (list, tuple)):
+        raise TypeError(
+            ".relate(): the callback must return a list of clauses, got "
+            f"{type(result).__name__}"
+        )
+    out: List[Any] = []
+
+    def visit(c: Any) -> None:
+        if isinstance(c, (list, tuple)):
+            for x in c:
+                visit(x)
+        elif c is None or c is False:
+            return
+        elif isinstance(c, RefSentinel):
+            raise TypeError(
+                f'.relate(): a clause is a bare reference ("{c.ref_name}"). '
+                "A reference draws nothing and places nothing on its own; use "
+                "it as an operand of a constraint or as a child of a drawing "
+                "clause, e.g. arrow([a, b])."
+            )
+        else:
+            out.append(c)
+
+    visit(result)
+    return out
+
+
+class RelatableMark(Mark):
     """A combinator-form Mark returned by `layer(...)`.
 
-    Adds a `.constrain(callback)` method that the spread combinator lacks.
+    Adds a `.relate(callback)` method that the spread combinator lacks.
     The callback receives one `RefSentinel` per named child as a kwarg and
-    returns a list of constraint specs (`Constraint.align(...)` / `.distribute(...)`).
+    returns a list of clauses: constraints (`Constraint.align(...)` /
+    `.distribute(...)`) and marks that draw (`arrow([a, b])`).
     """
 
     def __init__(
@@ -1033,29 +1074,33 @@ class ConstrainableMark(Mark):
         **kwargs,
     ):
         super().__init__(mark_type, _children=_children, **kwargs)
-        self._constraints: Optional[List[Any]] = None
+        self._relate: Optional[List[Any]] = None
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         super()._copy_meta(target)
-        if isinstance(target, ConstrainableMark):
-            target._constraints = self._constraints
+        if isinstance(target, RelatableMark):
+            target._relate = self._relate
         return target
 
-    def constrain(self, callback: Callable[..., List[Any]]) -> "ConstrainableMark":
-        """Apply constraints relating named nodes inside this layer.
+    def relate(self, callback: Callable[..., List[Any]]) -> "RelatableMark":
+        """Relate named nodes inside this layer.
 
         The callback receives one `RefSentinel` per parameter it declares
         without a default, named after the parameter (a parameter with a
         default, such as `gap=gap` in a loop, keeps its default; a `**rest`
         catch-all also receives every other name inside the layer), and must
-        return a list of constraint specs:
+        return a list of clauses. A clause is a constraint, which places its
+        operands, or a mark that draws over them:
 
-            layer([rect(...).name("a"), rect(...).name("b")]).constrain(
+            layer([rect(...).name("a"), rect(...).name("b")]).relate(
                 lambda a, b: [
-                    Constraint.align([a, b], x="end"),
-                    Constraint.distribute([a, b], dir="y", spacing=10),
+                    Constraint.distribute([a, b], dir="x", spacing=60),
+                    arrow([a, b], stroke="#1a5683"),
                 ]
             )
+
+        A drawing clause is laid out after the constraints that place the
+        nodes it reads, so the arrow above runs between the final positions.
 
         Names are resolved on the JS side, at layout, by the same lookup
         `ref("name")` uses: start at this layer, and take the closest node
@@ -1063,21 +1108,23 @@ class ConstrainableMark(Mark):
         name a node nested anywhere inside the layer, and a direct child
         beats a deeper node with the same name. A name that matches no node
         inside the layer, or two nodes at the same smallest distance, is an
-        error at render time. Mirrors the JS `constraintEnv` in
-        `packages/gofish-graphics/src/ast/constraints/index.ts`.
+        error at render time. Mirrors `GoFishNode.relate` and the JS
+        `relateEnv` in `packages/gofish-graphics/src/ast/constraints/index.ts`.
         """
         if self._children is None:
             raise ValueError(
-                ".constrain() requires combinator children — use "
-                "`layer([...]).constrain(...)`"
+                ".relate() requires combinator children — use "
+                "`layer([...]).relate(...)`"
             )
 
-        constraints = callback(**_callback_refs(callback, self._children))
+        clauses = _relate_clauses(
+            callback(**_callback_refs(callback, self._children))
+        )
         new_mark = type(self)(
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        new_mark._constraints = list(constraints)
+        new_mark._relate = clauses
         return new_mark
 
 
@@ -1206,7 +1253,7 @@ class ChartBuilder:
         return nb
 
     def name(self, name_or_token: Union[str, "Token"]) -> "ChartBuilder":
-        """Tag this chart with a name so a `layer([...]).constrain(...)` callback
+        """Tag this chart with a name so a `layer([...]).relate(...)` callback
         can reference it (mirrors JS `chart.resolve().name(...)`).
 
         Args:
@@ -1472,7 +1519,7 @@ def spread(
 def layer(
     children: List[Any],
     **options: Any,
-) -> Union["LayerBuilder", "ConstrainableMark"]:
+) -> Union["LayerBuilder", "RelatableMark"]:
     """Layer marks or charts — a single dual-form `layer` (like spread/stack).
 
     Two element kinds, dispatched by child type:
@@ -1481,13 +1528,13 @@ def layer(
       emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``).
       Options are keyword arguments: ``layer([chart1, chart2], coord=clock())``.
     - **Marks** — ``layer([rect(...).name("a"), ...])`` wraps child marks in a
-      layer node (returns a ``ConstrainableMark`` that renders directly), with
-      ``.constrain(...)`` for cross-mark constraints::
+      layer node (returns a ``RelatableMark`` that renders directly), with
+      ``.relate(...)`` for clauses that relate the marks::
 
           layer([
               rect(w=80, h=40).name("a"),
               rect(w=120, h=60).name("b"),
-          ]).constrain(lambda a, b: [Constraint.align([a, b], x="end")])
+          ]).relate(lambda a, b: [Constraint.align([a, b], x="end")])
 
     Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
     charts and marks.
@@ -1495,7 +1542,7 @@ def layer(
     # Chart tiers → LayerBuilder; marks → combinator mark.
     if children and all(isinstance(c, ChartBuilder) for c in children):
         return LayerBuilder(list(children), options or None)
-    return ConstrainableMark("layer", _children=list(children), **options)
+    return RelatableMark("layer", _children=list(children), **options)
 
 
 # `enclose` is generated (packages/gofish-python/gofish/_generated.py) —
@@ -1512,7 +1559,7 @@ background = enclose
 _REF_PROXY_RESERVED = frozenset({
     "mark_type", "kwargs", "_name", "_labels", "_children", "_is_scope",
     "name", "label", "to_dict", "to_ir", "render", "_copy_meta",
-    "_repr_mimebundle_", "constrain", "multiplicity",
+    "_repr_mimebundle_", "relate", "multiplicity",
 })
 
 
@@ -2923,7 +2970,7 @@ class LayerBuilder:
     ):
         self.children = children
         self.options = options or {}
-        self._constraints: Optional[List[Any]] = None
+        self._relate: Optional[List[Any]] = None
         # True only for the fluent ``chart(...).layer(...)`` chain (fluent builder
         # semantics — JS reconstructs it through its own LayerBuilder, inferred
         # axis titles and all). The array form ``layer([chart1, chart2])`` is
@@ -2941,24 +2988,27 @@ class LayerBuilder:
             builder_chain=True,
         )
 
-    def constrain(self, callback: Callable[..., List[Any]]) -> "LayerBuilder":
-        """Apply constraints relating named nodes inside this layer.
+    def relate(self, callback: Callable[..., List[Any]]) -> "LayerBuilder":
+        """Relate named nodes inside this layer.
 
         Mirrors the JS storybook spelling
-        ``layer([sc.name("a"), other.name("b")]).constrain(({a, b}) => [...])``.
+        ``layer([sc.name("a"), other.name("b")]).relate(({a, b}) => [...])``.
         The callback receives one ``RefSentinel`` per parameter it declares
-        without a default and returns a list of constraint specs (``Constraint.align(...)`` /
-        ``Constraint.position(...)`` / ...). Names resolve on the JS side, as
-        for ``ConstrainableMark.constrain``.
+        without a default and returns a list of clauses: constraints
+        (``Constraint.align(...)`` / ``Constraint.position(...)`` / ...) and
+        marks that draw over the names (``arrow([a, b])``). Names resolve on
+        the JS side, as for ``RelatableMark.relate``.
 
         Returns:
-            A new LayerBuilder carrying the resolved constraints.
+            A new LayerBuilder carrying the clauses.
         """
-        constraints = callback(**_callback_refs(callback, self.children))
+        clauses = _relate_clauses(
+            callback(**_callback_refs(callback, self.children))
+        )
         new_layer = LayerBuilder(
             self.children, self.options, builder_chain=self._builder_chain
         )
-        new_layer._constraints = list(constraints)
+        new_layer._relate = clauses
         return new_layer
 
     def to_ir(self) -> dict:
@@ -2979,8 +3029,8 @@ class LayerBuilder:
         }
         if self._builder_chain:
             result["builder"] = True
-        if self._constraints is not None:
-            result["constraints"] = [c.to_dict() for c in self._constraints]
+        if self._relate is not None:
+            result["relate"] = [c.to_dict() for c in self._relate]
         return result
 
     def render(

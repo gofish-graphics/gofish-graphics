@@ -107,7 +107,7 @@ export const SpreadY_AlignStart: StoryObj<Args> = {
       },
       (container, storyArgs) => {
         layer(makeYRects())
-          .constrain(({ a, b, c }) => [
+          .relate(({ a, b, c }) => [
             Constraint.align({ x: "start" }, [a, b, c]),
             Constraint.distribute({ dir: "y" }, [a, b, c]),
           ])
@@ -128,17 +128,14 @@ export const SpreadY_AlignEnd: StoryObj<Args> = {
     renderEquivalentStory(
       args,
       (container, storyArgs) => {
-        spread({ dir: "y", alignment: "end" }, makeYRects()).render(
-          container,
-          {
-            w: storyArgs.w,
-            h: storyArgs.h,
-          }
-        );
+        spread({ dir: "y", alignment: "end" }, makeYRects()).render(container, {
+          w: storyArgs.w,
+          h: storyArgs.h,
+        });
       },
       (container, storyArgs) => {
         layer(makeYRects())
-          .constrain(({ a, b, c }) => [
+          .relate(({ a, b, c }) => [
             Constraint.align({ x: "end" }, [a, b, c]),
             Constraint.distribute({ dir: "y" }, [a, b, c]),
           ])
@@ -174,7 +171,7 @@ export const SpreadY_AlignMiddle: StoryObj<Args> = {
       },
       (container, storyArgs) => {
         layer(makeYRects())
-          .constrain(({ a, b, c }) => [
+          .relate(({ a, b, c }) => [
             Constraint.align({ x: "middle" }, [a, b, c]),
             Constraint.distribute({ dir: "y" }, [a, b, c]),
           ])
@@ -229,7 +226,7 @@ export const SpreadX_AlignStart: StoryObj<Args> = {
       },
       (container, storyArgs) => {
         layer(makeXRects())
-          .constrain(({ a, b, c }) => [
+          .relate(({ a, b, c }) => [
             Constraint.align({ y: "start" }, [a, b, c]),
             Constraint.distribute({ dir: "x" }, [a, b, c]),
           ])
@@ -252,7 +249,8 @@ export const SpreadY_Spacing: StoryObj<Args> = {
     renderEquivalentStory(
       args,
       (container, storyArgs) => {
-        spread({ dir: "y", alignment: "start", spacing: 20 },
+        spread(
+          { dir: "y", alignment: "start", spacing: 20 },
           makeYRects()
         ).render(container, {
           w: storyArgs.w,
@@ -261,7 +259,7 @@ export const SpreadY_Spacing: StoryObj<Args> = {
       },
       (container, storyArgs) => {
         layer(makeYRects())
-          .constrain(({ a, b, c }) => [
+          .relate(({ a, b, c }) => [
             Constraint.align({ x: "start" }, [a, b, c]),
             Constraint.distribute({ dir: "y", spacing: 20 }, [a, b, c]),
           ])
@@ -280,7 +278,8 @@ export const SpreadX_Spacing_AlignEnd: StoryObj<Args> = {
     renderEquivalentStory(
       args,
       (container, storyArgs) => {
-        spread({ dir: "x", alignment: "end", spacing: 15 },
+        spread(
+          { dir: "x", alignment: "end", spacing: 15 },
           makeXRects()
         ).render(container, {
           w: storyArgs.w,
@@ -289,7 +288,7 @@ export const SpreadX_Spacing_AlignEnd: StoryObj<Args> = {
       },
       (container, storyArgs) => {
         layer(makeXRects())
-          .constrain(({ a, b, c }) => [
+          .relate(({ a, b, c }) => [
             Constraint.align({ y: "end" }, [a, b, c]),
             Constraint.distribute({ dir: "x", spacing: 15 }, [a, b, c]),
           ])
@@ -312,22 +311,20 @@ export const SpreadX_CenterToCenter: StoryObj<Args> = {
     renderEquivalentStory(
       args,
       (container, storyArgs) => {
-        spread({ dir: "x",
-            alignment: "start",
-            spacing: 60,
-            anchor: "middle",
-          },
+        spread(
+          { dir: "x", alignment: "start", spacing: 60, anchor: "middle" },
           makeCenterToCenterRects()
         ).render(container, { w: storyArgs.w, h: storyArgs.h });
       },
       (container, storyArgs) => {
         layer(makeCenterToCenterRects())
-          .constrain(({ a, b, c }) => [
+          .relate(({ a, b, c }) => [
             Constraint.align({ y: "start" }, [a, b, c]),
-            Constraint.distribute(
-              { dir: "x", spacing: 60, anchor: "middle" },
-              [a, b, c]
-            ),
+            Constraint.distribute({ dir: "x", spacing: 60, anchor: "middle" }, [
+              a,
+              b,
+              c,
+            ]),
           ])
           .render(container, { w: storyArgs.w, h: storyArgs.h });
       }
@@ -350,7 +347,8 @@ export const SpreadY_Reversed: StoryObj<Args> = {
     renderEquivalentStory(
       args,
       (container, storyArgs) => {
-        spread({ dir: "y", alignment: "start", reverse: true },
+        spread(
+          { dir: "y", alignment: "start", reverse: true },
           makeYRects()
         ).render(container, {
           w: storyArgs.w,
@@ -359,7 +357,7 @@ export const SpreadY_Reversed: StoryObj<Args> = {
       },
       (container, storyArgs) => {
         layer(makeYRects())
-          .constrain(({ a, b, c }) => [
+          .relate(({ a, b, c }) => [
             Constraint.align({ x: "start" }, [a, b, c]),
             Constraint.distribute({ dir: "y", order: "reverse" }, [a, b, c]),
           ])
@@ -385,9 +383,7 @@ export const AlignOnly: StoryObj<Args> = {
       rect({ w: 120, h: 60, fill: "#457b9d" }).name("b"),
       rect({ w: 60, h: 30, fill: "#2a9d8f" }).name("c"),
     ])
-      .constrain(({ a, b, c }) => [
-        Constraint.align({ x: "end" }, [a, b, c]),
-      ])
+      .relate(({ a, b, c }) => [Constraint.align({ x: "end" }, [a, b, c])])
       .render(container, { w: args.w, h: args.h });
     return container;
   },
@@ -406,9 +402,7 @@ export const AlignOnlyManualY: StoryObj<Args> = {
       rect({ w: 120, h: 60, y: 100, fill: "#457b9d" }).name("b"),
       rect({ w: 60, h: 30, y: 200, fill: "#2a9d8f" }).name("c"),
     ])
-      .constrain(({ a, b, c }) => [
-        Constraint.align({ x: "end" }, [a, b, c]),
-      ])
+      .relate(({ a, b, c }) => [Constraint.align({ x: "end" }, [a, b, c])])
       .render(container, { w: args.w, h: args.h });
     return container;
   },
@@ -427,7 +421,7 @@ export const DistributeOnly: StoryObj<Args> = {
       rect({ w: 120, h: 40, fill: "#457b9d" }).name("b"),
       rect({ w: 60, h: 40, fill: "#2a9d8f" }).name("c"),
     ])
-      .constrain(({ a, b, c }) => [
+      .relate(({ a, b, c }) => [
         Constraint.distribute({ dir: "y", spacing: 10 }, [a, b, c]),
       ])
       .render(container, { w: args.w, h: args.h });
@@ -457,7 +451,7 @@ export const SubsetSelection: StoryObj<Args> = {
       rect({ w: 120, h: 50, fill: "#2a9d8f" }).name("c"),
       rect({ w: 60, h: 50, fill: "#f4a261" }).name("d"),
     ])
-      .constrain(({ a, b, c, d }) => [
+      .relate(({ a, b, c, d }) => [
         Constraint.align({ x: "end" }, [a, b, c, d]),
         Constraint.distribute({ dir: "y", spacing: 5 }, [a, b]),
         Constraint.distribute({ dir: "y", spacing: 30 }, [c, d]),
@@ -481,7 +475,7 @@ export const BackgroundNotDistributed: StoryObj<Args> = {
       rect({ w: 80, h: 40, fill: "#457b9d" }).name("b"),
       rect({ w: 120, h: 40, fill: "#2a9d8f" }).name("c"),
     ])
-      .constrain(({ bg, a, b, c }) => [
+      .relate(({ bg, a, b, c }) => [
         Constraint.align({ x: "start" }, [bg, a, b, c]),
         Constraint.distribute({ dir: "y", spacing: 10 }, [a, b, c]),
       ])
@@ -508,7 +502,7 @@ export const AlignCenterDistributeY: StoryObj<Args> = {
       rect({ w: 40, h: 30, fill: "#2a9d8f" }).name("c"),
       rect({ w: 100, h: 50, fill: "#f4a261" }).name("d"),
     ])
-      .constrain(({ a, b, c, d }) => [
+      .relate(({ a, b, c, d }) => [
         Constraint.align({ x: "middle" }, [a, b, c, d]),
         Constraint.distribute({ dir: "y", spacing: 8 }, [a, b, c, d]),
       ])
@@ -539,7 +533,7 @@ export const AlignSpan: StoryObj<Args> = {
       rect({ w: 60, h: 60, fill: "#457b9d" }).name("b"),
       rect({ w: 60, h: 60, fill: "#2a9d8f" }).name("c"),
     ])
-      .constrain(({ a, b, c }) => [
+      .relate(({ a, b, c }) => [
         Constraint.align({ y: "start" }, [a, b, c]),
         Constraint.distribute({ dir: "x", spacing: 10 }, [a, b, c]),
       ])
@@ -549,7 +543,7 @@ export const AlignSpan: StoryObj<Args> = {
       group,
       rect({ fill: "none", stroke: "#333", strokeWidth: 2 }).name("border"),
     ])
-      .constrain(({ group, border }) => [
+      .relate(({ group, border }) => [
         Constraint.align({ x: "span" }, [group, border]),
         Constraint.align({ y: "span" }, [group, border]),
       ])
@@ -573,14 +567,14 @@ export const AlignSize: StoryObj<Args> = {
       rect({ w: 220, h: 30, fill: "#e63946" }).name("s1"),
       rect({ w: 220, h: 30, fill: "#457b9d" }).name("s2"),
     ])
-      .constrain(({ s1, s2 }) => [
+      .relate(({ s1, s2 }) => [
         Constraint.align({ x: "start" }, [s1, s2]),
         Constraint.distribute({ dir: "y", spacing: 4 }, [s1, s2]),
       ])
       .name("stack");
 
     layer([stack, rect({ y: 110, h: 10, fill: "#2a9d8f" }).name("divider")])
-      .constrain(({ stack, divider }) => [
+      .relate(({ stack, divider }) => [
         Constraint.align({ x: "size" }, [stack, divider]),
       ])
       .render(container, { w: args.w, h: args.h });

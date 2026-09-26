@@ -150,15 +150,15 @@ scoping, and connector use — see [`ref` / `selectAll`](/python/api/selection/r
 ## Naming a chart: `.name()`
 
 A **chart-level** `.name()` — distinct from naming a mark — tags the whole
-chart so a sibling `layer([...]).constrain(...)` callback can reference it by
-that name (mirrors JS `chart.resolve().name(...)`). The constrain lambda's
+chart so a sibling `layer([...]).relate(...)` callback can reference it by
+that name (mirrors JS `chart.resolve().name(...)`). The relate lambda's
 parameter names match the charts' `.name()` strings:
 
 ```python
 sc = chart(data).flow(scatter(x="x", y="y")).mark(circle(r=3)).name("scatter")
 top = chart(data, h=80).flow(...).mark(rect(h="count")).name("topHist")
 
-layer([sc, top]).constrain(lambda scatter, topHist: [
+layer([sc, top]).relate(lambda scatter, topHist: [
     Constraint.align([scatter], x="baseline", y="baseline"),
     Constraint.position([topHist], y=410, anchor="start"),
 ])

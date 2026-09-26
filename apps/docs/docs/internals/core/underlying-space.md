@@ -658,6 +658,14 @@ directed chain source is a deterministic sequence origin, so negative spacing
 remains authored overlap instead of being erased by min-normalization. If a
 graphic needs a floating component to appear at a particular absolute
 coordinate, that placement must be explicit.
+A layer's `.relate()` can also hold drawing clauses (an `arrow`, a
+`background` over refs), which are children of the layer that read positions
+instead of writing them. The layer lays out its plain children and runs the
+solve first, then lays out each drawing clause, in the order
+`scheduleRelate` (`constraints/relate.ts`) computes from what each clause
+reads; a clause is placed at the layer's baseline origin like any unconstrained
+child. See [Name Resolution & Scoping](/internals/core/names-and-scoping).
+
 The legacy per-constraint apply helpers have been retired from the constraint
 path; spread, scatter, table, axes, and hand-written constraints all lower to
 the same solver entrypoint. An incompatible same-solve interval + point
