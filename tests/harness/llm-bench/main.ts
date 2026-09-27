@@ -11,8 +11,17 @@
  *                  `Chart({ data })`.
  *   renderSvg    — matplotlib: the SVG file the script saved, shown at the
  *                  figure's size in px at 100 dpi (see renderSvg).
+ *
+ * For gofish the runner calls `trackCreation()` before the render and
+ * `provenance("gofish")` after it; for recharts, `provenance("recharts")`.
+ * These are the arm contract (tests/scripts/llm-bench/contract.ts).
  */
 
+import {
+  gofishProvenance,
+  rechartsProvenance,
+  trackCreation,
+} from "../../scripts/llm-bench/contract";
 import { extractRecord } from "../../scripts/llm-bench/extract";
 import { prewarm } from "./prewarm";
 
@@ -128,6 +137,12 @@ function problem(): string | null {
   return null;
 }
 
+/** Why the picture breaks the arm contract, or null. Runs before
+ *  `extract()`, which rewrites <use> elements. */
+function provenance(lib: "gofish" | "recharts"): string | null {
+  return lib === "gofish" ? gofishProvenance(root) : rechartsProvenance(root);
+}
+
 /** Snapshot of the largest <svg> in the container, as a standalone file. */
 function svgMarkup(): string {
   const svgs = Array.from(root.querySelectorAll("svg")).filter(
@@ -156,6 +171,8 @@ const api = {
   renderReact,
   renderSvg,
   problem,
+  trackCreation,
+  provenance,
   svgMarkup,
   extract: () => extractRecord(root),
   describe,

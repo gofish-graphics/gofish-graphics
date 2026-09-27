@@ -17,6 +17,9 @@ export interface TurnResult {
   rendered: boolean;
   renderMs?: number;
   error?: string;
+  /** Set with `error` when a program ran: "contract" when the picture was
+   *  not produced by the arm's library (contract.ts), else "render". */
+  errorKind?: "render" | "contract";
   checks?: ChecksOutcome;
   preserved?: ChecksOutcome;
 }
@@ -50,7 +53,14 @@ export interface JobResult {
   usage: Usage;
   usd: number;
   latencyMs: number;
+  /** Rescore mode only: why this job's rescored outcome rests on less than
+   *  a real run would have seen (see rescore in llm-bench.ts). */
+  rescoreNote?: string;
 }
+
+/** Turns of `r` that broke the arm contract. */
+const contractTurns = (r: JobResult) =>
+  r.turns.filter((t) => t.errorKind === "contract").map((t) => t.turn);
 
 const INFRA_STOPS = new Set<JobResult["stopped"]>(["budget", "api-error"]);
 
@@ -195,6 +205,8 @@ export function buildReport(
     mode: string;
     runDir: string;
     maxTurns: number;
+    /** Rescore mode: the run that was rescored. */
+    rescoredFrom?: string;
     realSpendUsd: number;
     ledgerTotalUsd: number;
     budgetUsd: number;
@@ -208,6 +220,11 @@ export function buildReport(
   const out: string[] = [];
   out.push(`# LLM authoring benchmark: ${meta.mode} run`);
   out.push("");
+  if (meta.rescoredFrom)
+    out.push(
+      `Rescored from \`${meta.rescoredFrom}\`: every saved turn's program was rendered again through the current harness, checks and arm contract. No model was called; tokens and costs are the original run's.`,
+      ""
+    );
   out.push(
     `Run directory: \`${meta.runDir}\`. Max turns: ${meta.maxTurns}. Effort: ${meta.effort}. ` +
       `Jobs: ${results.length}, of which ${ran.length} scored and ${unscored.length} not scored (infrastructure; excluded from every rate and comparison below).`
@@ -304,6 +321,59 @@ export function buildReport(
 
   const firstLine = (s: string | undefined) => (s ?? "").split("\n")[0];
 
+  const violators = ran.filter((r) => contractTurns(r).length > 0);
+  out.push(
+    "",
+    "## Contract violations",
+    "",
+    "A turn violates the arm contract when its picture was not produced by the arm's library (for example, SVG written by hand). It counts as a render error and goes back to the model.",
+    ""
+  );
+  out.push(
+    table(
+      [
+        "arm",
+        "jobs with a violation",
+        "violating turns",
+        "of those jobs, passed later",
+      ],
+      arms.map((arm) => {
+        const rs = violators.filter((r) => r.arm === arm);
+        return [
+          arm,
+          String(rs.length),
+          String(rs.reduce((n, r) => n + contractTurns(r).length, 0)),
+          String(rs.filter((r) => r.pass).length),
+        ];
+      })
+    )
+  );
+  if (violators.length > 0) out.push("");
+  for (const r of violators) {
+    const t = contractTurns(r);
+    const detail = r.turns
+      .find((x) => x.turn === t[0])!
+      .error!.split("\n")
+      .slice(1)
+      .join(" ");
+    out.push(
+      `- ${r.task} / ${r.arm} / sample ${r.sample}: turn${t.length > 1 ? "s" : ""} ${t.join(", ")}; job ${r.pass ? "passed" : "failed"}${detail ? ` (${detail})` : ""}`
+    );
+  }
+
+  const noted = results.filter((r) => r.rescoreNote);
+  if (noted.length > 0) {
+    out.push(
+      "",
+      "## Rescore caveats",
+      "",
+      "Jobs whose rescored outcome differs in which turn ended them. A real run would have continued (or stopped) differently, so these are scored on the saved turns only.",
+      ""
+    );
+    for (const r of noted)
+      out.push(`- ${r.task} / ${r.arm} / sample ${r.sample}: ${r.rescoreNote}`);
+  }
+
   if (unscored.length > 0) {
     out.push(
       "",
@@ -356,7 +426,7 @@ export function buildReport(
         r.stopped === "refusal"
           ? r.stopped
           : !r.rendered
-            ? `${cutShort(r) ? `[then ${r.stopped}] ` : ""}render error: ${firstLine(last?.error)}`
+            ? `${cutShort(r) ? `[then ${r.stopped}] ` : ""}${last?.errorKind === "contract" ? `contract violation: ${(last.error ?? "").replace(/\n/g, " ")}` : `render error: ${firstLine(last?.error)}`}`
             : [
                 ...(last?.checks?.results ?? []),
                 ...(last?.preserved?.results ?? []),

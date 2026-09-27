@@ -21,6 +21,7 @@ pnpm llm-bench mock                    # the full model loop with a mock model (
 pnpm llm-bench mock --mock-break-first # turn 1 is a syntax error, so the repair turn runs
 pnpm llm-bench run                     # prints the cost estimate and stops
 pnpm llm-bench run --yes               # calls the API
+pnpm llm-bench rescore <runDir>        # score a saved run again under the current rules (no API)
 ```
 
 Options: `--arms gofish,recharts,d3,matplotlib`, `--tasks <substring of task id>`,
@@ -35,6 +36,19 @@ Options: `--arms gofish,recharts,d3,matplotlib`, `--tasks <substring of task id>
   not added to the ledger.
 - `run` reads `ANTHROPIC_API_KEY` from the environment, or from
   `tests/llm-bench/.env` (see `.env.example`; the file is gitignored).
+- `rescore` takes a run directory (or a run id under
+  `tests/tmp/llm-bench/runs/`). It renders every saved turn's program again
+  through the current harness, checks and arm contract, and writes a new
+  `results.jsonl` and `report.md` (plus the renders) into `<runDir>-rescored/`.
+  The original run is left as it was. No model is called: tokens and costs are
+  the saved ones, and render times are measured again. As in a real run, a job
+  ends at its first turn that renders and is scored on that turn. When that is
+  not the turn the original run ended on, the job is scored on the saved turns
+  only and listed under "Rescore caveats". The usual case is a turn that
+  rendered before (so the model stopped) and now breaks the arm contract: a
+  real run would have sent the error back and given the model another turn,
+  but there is no such turn to score, so the job fails. The report ends with
+  every job whose outcome changed. `--concurrency` applies.
 
 Every invocation writes a run directory under `tests/tmp/llm-bench/runs/`. For
 each job and turn it holds the reply (`turnN.reply.md`), the program
@@ -93,12 +107,53 @@ Details that keep the arms comparable:
   and transitions finish before the picture is read.
 - A render fails when: the program does not parse, a module cannot be loaded,
   the render throws or rejects, a timer throws afterwards, anything is logged
-  with `console.error`, it takes more than 20 s, the output has a `<canvas>`, or
-  there is no non-empty `<svg>`. The model sees the error message with stack
-  frames pointing at its own file.
+  with `console.error`, it takes more than 20 s, the output has a `<canvas>`,
+  there is no non-empty `<svg>`, or the picture breaks the arm contract (below).
+  The model sees the error message with stack frames pointing at its own file.
 - Render time is the wall time of the render itself: module load plus render
   call for the JS arms (the library is loaded beforehand), and the whole Python
   process, including interpreter start-up, for matplotlib.
+
+## The arm contract
+
+The picture in the container must have been produced by the arm's library. A
+program that writes the chart's SVG by hand is not a use of the library, so
+its picture is not scored as one. The rule is the same for every arm, and each
+arm checks it in the way its library allows. The code is in
+`tests/scripts/llm-bench/contract.ts`, a declared per-library layer like the
+extractor; the checks stay library-neutral.
+
+- Every arm, before rendering: the program imports the arm's library
+  (`gofish-graphics`, `recharts`, `d3` or a `d3-*` module, `matplotlib`).
+  This is a cheap first filter on the source text.
+- gofish: every painted SVG element in the container was created by
+  gofish-graphics. Before the program loads, the harness wraps
+  `createElementNS`, `cloneNode` and `importNode` and records the call stack
+  of every SVG element made in the page. The program and the harness share the
+  one `gofish-graphics` module, served from `packages/gofish-graphics/src`, so
+  an element counts as drawn by GoFish when that path is on its stack.
+  Elements inside `<defs>` and paint servers (gradients, patterns, markers,
+  clip paths, masks, filters) are not checked, so a program may supply them.
+  Appending even one hand-made shape to GoFish's SVG breaks the rule.
+- recharts: every outermost `<svg>` in the container is a Recharts surface
+  (`svg.recharts-surface`). Custom shapes passed to Recharts components (a
+  `shape` prop, `<Customized>`) are inside the surface and count. A separate
+  SVG laid over the chart does not.
+- matplotlib: the saved SVG carries matplotlib's creator metadata
+  (`Matplotlib v...`) or its figure group (`<g id="figure_1">`).
+- d3: the program must also use something it imports from d3. There is no
+  runtime check. d3 is a DOM toolkit, so appending elements through d3
+  selections is how d3 draws, and telling that apart from hand-written SVG
+  would take more machinery than the case is worth. A module that imports d3
+  and never uses it fails; one that uses d3 for a scale and writes the SVG
+  itself passes.
+
+A violation is a failed render, recorded with `errorKind: "contract"` on the
+turn, and its message goes back to the model like any render error, for
+example: "The chart must be drawn with GoFish (gofish-graphics); this output
+was not produced by it." followed by a line saying why. The report's
+"Contract violations" section counts the jobs and turns per arm and lists the
+jobs.
 
 ## The record
 
@@ -283,6 +338,11 @@ area path per channel through both edges of every bar, and a matplotlib
 - `ribbons` needs a gap of at least 12 px between neighboring bars. A band
   drawn as one path with several separate pieces is read as one outline, which
   can join the pieces with a false edge.
+- The gofish provenance check only sees elements created by
+  `createElementNS`, `cloneNode` or `importNode`. Markup parsed from a string
+  counts as the program's own, so `container.innerHTML = await
+chart(...).toSVG()` breaks the contract, although appending
+  `toSVGElement()`'s result does not.
 - `bars` checks lengths and order, not widths or positions along the category
   axis. A histogram whose first and last bins are drawn narrower than the
   others (for example, clipped to the data's range) still passes if the

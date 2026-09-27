@@ -6,6 +6,10 @@
  * between programs. JS arms load the program as an ES module through Vite;
  * the matplotlib arm runs the script with uv and loads the SVG it saved into
  * the same page, so every arm goes through the same extractor.
+ *
+ * Every render also enforces the arm contract (contract.ts): the program
+ * must import its arm's library, and the picture must have been produced by
+ * it. A violation is a failed render with `errorKind: "contract"`.
  */
 
 import { chromium, type Browser, type ConsoleMessage } from "playwright";
@@ -15,6 +19,7 @@ import { basename, dirname, join } from "path";
 import { homedir } from "os";
 import { transform } from "esbuild";
 import { startViteServer } from "../capture-core";
+import { matplotlibViolation, staticViolation } from "./contract";
 import type { RenderRecord } from "./record";
 import type { Arm, Size } from "./tasks";
 
@@ -53,6 +58,10 @@ export interface RenderOutcome {
   /** Why the program did not produce a usable picture. Sent back to the
    *  model on a repair turn. */
   error?: string;
+  /** What kind of failure `error` is: "contract" when the program ran but
+   *  the picture was not produced by the arm's library (contract.ts),
+   *  "render" for everything else. */
+  errorKind?: "render" | "contract";
   /** Wall time of the render itself: the program's module load + render call
    *  in the page for JS arms, the python process for matplotlib. */
   renderMs: number;
@@ -203,6 +212,14 @@ export class Renderer {
     let svgText: string | null = null;
     let renderMs = 0;
     const code = readFileSync(codePath, "utf8");
+    const unimported = staticViolation(arm, code);
+    if (unimported)
+      return {
+        ok: false,
+        error: unimported,
+        errorKind: "contract",
+        renderMs: 0,
+      };
     if (arm === "matplotlib") {
       const outSvg = `${base}.mpl.svg`;
       rmSync(outSvg, { force: true });
@@ -239,6 +256,9 @@ export class Renderer {
           renderMs,
         };
       svgText = readFileSync(outSvg, "utf8");
+      const foreign = matplotlibViolation(svgText);
+      if (foreign)
+        return { ok: false, error: foreign, errorKind: "contract", renderMs };
     } else {
       // Syntax errors surface here with a precise location; through Vite
       // they would only say "failed to fetch module".
@@ -276,7 +296,11 @@ export class Renderer {
       });
     const first = await show();
     const out = first.harnessError ? await show() : first;
-    if (out.error) out.error = cleanError(out.error, codePath);
+    if (out.error) {
+      out.errorKind ??= "render";
+      if (out.errorKind === "render")
+        out.error = cleanError(out.error, codePath);
+    }
     return out;
   }
 
@@ -318,6 +342,8 @@ export class Renderer {
           arm === "gofish" ? "gofish" : arm === "d3" ? "d3" : "recharts";
         await page.evaluate((l) => (window as any).llmBench.prewarm(l), lib);
       }
+      if (arm === "gofish")
+        await page.evaluate(() => (window as any).llmBench.trackCreation());
       const t0 = performance.now();
       const call =
         arm === "matplotlib"
@@ -389,6 +415,23 @@ export class Renderer {
         svgPath,
         await page.evaluate(() => (window as any).llmBench.svgMarkup())
       );
+      // The arm contract, checked on the picture as shown (the PNG and SVG
+      // are kept for inspection) and before extract() rewrites <use>s.
+      if (arm === "gofish" || arm === "recharts") {
+        const foreign: string | null = await page.evaluate(
+          (l) => (window as any).llmBench.provenance(l),
+          arm
+        );
+        if (foreign)
+          return {
+            ok: false,
+            error: foreign,
+            errorKind: "contract",
+            renderMs,
+            svgPath,
+            pngPath,
+          };
+      }
       const record = await page.evaluate(() =>
         (window as any).llmBench.extract()
       );

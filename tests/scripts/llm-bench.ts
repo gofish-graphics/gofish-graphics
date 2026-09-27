@@ -10,14 +10,27 @@
  *     mock         run the full model loop with a mock model that replays the
  *                  references (--mock-break-first: turn 1 is a syntax error)
  *     run          call the real API (claude-opus-5); needs --yes
+ *     rescore <runDir>
+ *                  render every saved turn of an earlier run again through the
+ *                  current harness, checks and arm contract (no API); writes
+ *                  <runDir>-rescored/
  *   Options:
  *     --arms gofish,recharts,d3,matplotlib   --tasks <substring>
  *     --samples N (1)   --max-turns N (3)   --budget-usd X (10)
  *     --effort low|medium|high|xhigh|max (medium)   --concurrency N (3)
  */
 
-import { copyFileSync, mkdirSync, writeFileSync, appendFileSync } from "fs";
-import { join, relative } from "path";
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
+import { dirname, join, relative, resolve } from "path";
 import {
   preserved as preservedCheck,
   runChecks,
@@ -74,7 +87,7 @@ const LEDGER_PATH = join(OUT_ROOT, "ledger.json");
 // CLI
 // ---------------------------------------------------------------------------
 
-type Mode = "references" | "mock" | "run";
+type Mode = "references" | "mock" | "run" | "rescore";
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 interface Options {
@@ -88,13 +101,18 @@ interface Options {
   concurrency: number;
   mockBreakFirst: boolean;
   yes: boolean;
+  /** rescore: the run directory to rescore. */
+  runDir?: string;
 }
 
 function parseArgs(argv: string[]): Options {
   const mode = argv[0] as Mode;
-  if (!["references", "mock", "run"].includes(mode)) {
+  if (
+    !["references", "mock", "run", "rescore"].includes(mode) ||
+    (mode === "rescore" && !argv[1])
+  ) {
     console.error(
-      "usage: llm-bench <references|mock|run> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--effort E] [--concurrency N] [--mock-break-first] [--yes]"
+      "usage: llm-bench <references|mock|run|rescore <runDir>> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--effort E] [--concurrency N] [--mock-break-first] [--yes]"
     );
     process.exit(2);
   }
@@ -109,7 +127,19 @@ function parseArgs(argv: string[]): Options {
     mockBreakFirst: false,
     yes: false,
   };
-  for (let i = 1; i < argv.length; i++) {
+  let i0 = 1;
+  if (mode === "rescore") {
+    // pnpm runs this from tests/; resolve the path from where it was typed,
+    // and accept a bare run id too.
+    const arg = argv[i0++];
+    const found = [process.env.INIT_CWD, process.cwd(), join(OUT_ROOT, "runs")]
+      .filter((d): d is string => !!d)
+      .map((d) => resolve(d, arg))
+      .find((d) => existsSync(join(d, "results.jsonl")));
+    if (!found) throw new Error(`no results.jsonl in run directory ${arg}`);
+    opts.runDir = found.replace(/\/+$/, "");
+  }
+  for (let i = i0; i < argv.length; i++) {
     const flag = argv[i];
     const value = () => {
       const v = argv[++i];
@@ -258,6 +288,7 @@ async function runReferences(
       rendered: r.ok,
       renderMs: r.renderMs,
       error: r.error,
+      errorKind: r.errorKind,
     };
     if (r.record) Object.assign(turn, await judge(task, arm, r.record, bases));
     writeFileSync(join(dir, "result.json"), JSON.stringify(turn, null, 1));
@@ -408,6 +439,7 @@ async function runJob(
       turn.renderMs = r.renderMs;
       turn.rendered = r.ok;
       turn.error = r.error;
+      turn.errorKind = r.errorKind;
       if (r.record) {
         Object.assign(turn, await judge(task, arm, r.record, ctx.bases));
         break; // Rendered: the job ends here. Check results are never sent back.
@@ -470,11 +502,211 @@ async function runJob(
 }
 
 // ---------------------------------------------------------------------------
+// Rescore mode
+// ---------------------------------------------------------------------------
+
+/** Saved per-job files copied into the rescored run (the rendered outputs
+ *  are produced again). */
+const SAVED_FILE =
+  /^(turn\d+\.(reply\.md|js|jsx|py)|reference\.(js|jsx|py)|transcript\.md)$/;
+
+/**
+ * Render every saved turn of `job` again from `outDir` (a copy of the
+ * original run) and recompute its outcome the way runJob would: the job ends
+ * at its first turn that renders, and is scored on that turn. When that is
+ * not the turn the original run ended on, a real run would have gone
+ * differently (the model would have had another turn, or would have stopped
+ * sooner), so the job is scored on the saved turns only and flagged.
+ */
+async function rescoreJob(
+  job: JobResult,
+  task: Task,
+  srcDir: string,
+  outDir: string,
+  renderer: Renderer,
+  bases: BaseRecords
+): Promise<JobResult> {
+  const jobRel =
+    job.turns.find((t) => t.code)?.code?.replace(/\/[^/]+$/, "") ??
+    join(slug(task.id), job.arm, ...(job.sample ? [`s${job.sample}`] : []));
+  const src = join(srcDir, jobRel);
+  const dir = join(outDir, jobRel);
+  mkdirSync(dir, { recursive: true });
+  if (existsSync(src))
+    for (const f of readdirSync(src))
+      if (SAVED_FILE.test(f)) copyFileSync(join(src, f), join(dir, f));
+
+  const data = loadData(task);
+  const turns: TurnResult[] = [];
+  for (const old of job.turns) {
+    if (!old.code) {
+      turns.push(old); // no program (no code block, refusal): nothing to render
+      continue;
+    }
+    const codePath = join(outDir, old.code);
+    const r = await renderer.render(
+      job.arm,
+      codePath,
+      data,
+      dataPath(task),
+      task.size
+    );
+    const turn: TurnResult = {
+      ...old,
+      rendered: r.ok,
+      renderMs: r.renderMs,
+      error: r.error,
+      errorKind: r.errorKind,
+      checks: undefined,
+      preserved: undefined,
+    };
+    if (r.record)
+      Object.assign(turn, await judge(task, job.arm, r.record, bases));
+    turns.push(turn);
+  }
+
+  const end = turns.find((t) => t.rendered);
+  const origLast = job.turns[job.turns.length - 1];
+  let rescoreNote: string | undefined;
+  if (!end && job.rendered)
+    rescoreNote = `turn ${origLast.turn} rendered in the original run, so the model stopped there; it now fails (${turns[turns.length - 1].errorKind ?? "render"} error), and a real run would have given the model another turn`;
+  else if (end && end.turn !== origLast.turn)
+    rescoreNote = `turn ${end.turn} now renders, so a real run would have stopped there; the original run went on to turn ${origLast.turn}`;
+  const applied = !!end?.checks?.pass;
+  const preserved = task.kind === "edit" ? !!end?.preserved?.pass : null;
+  const pass = applied && preserved !== false;
+  const result: JobResult = {
+    ...job,
+    turns,
+    rendered: !!end,
+    applied,
+    preserved,
+    pass,
+    passFirst: pass && end!.turn === 1,
+    rescoreNote,
+  };
+  writeFileSync(join(dir, "result.json"), JSON.stringify(result, null, 1));
+  const changed = (
+    ["pass", "passFirst", "applied", "preserved", "rendered"] as const
+  ).filter((k) => job[k] !== result[k]);
+  console.log(
+    `${pass ? "PASS" : "FAIL"}  ${task.id.padEnd(28)} ${job.arm.padEnd(10)} s${job.sample}${changed.length ? `  CHANGED (${changed.map((k) => `${k} ${job[k]}->${result[k]}`).join(", ")})` : ""}`
+  );
+  return result;
+}
+
+/** The report section listing jobs whose outcome changed under rescoring. */
+function changedSection(before: JobResult[], after: JobResult[]): string {
+  const key = (r: JobResult) => `${r.task}|${r.arm}|${r.sample}`;
+  const orig = new Map(before.map((r) => [key(r), r]));
+  const fields = [
+    "pass",
+    "passFirst",
+    "applied",
+    "preserved",
+    "rendered",
+  ] as const;
+  const lines = after.flatMap((r) => {
+    const o = orig.get(key(r))!;
+    const diff = fields.filter((k) => o[k] !== r[k]);
+    return diff.length
+      ? [
+          `- ${r.task} / ${r.arm} / sample ${r.sample}: ${diff.map((k) => `${k} ${o[k]} -> ${r[k]}`).join(", ")}`,
+        ]
+      : [];
+  });
+  return [
+    "",
+    "## Changed from the original run",
+    "",
+    ...(lines.length ? lines : ["No job changed outcome."]),
+    "",
+  ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
+async function rescore(opts: Options): Promise<void> {
+  const srcDir = opts.runDir!;
+  const outDir = `${srcDir}-rescored`;
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
+  const original: JobResult[] = readFileSync(
+    join(srcDir, "results.jsonl"),
+    "utf8"
+  )
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l));
+  const all = await loadTasks();
+  const byId = new Map(all.map((t) => [t.id, t]));
+  const missing = [...new Set(original.map((r) => r.task))].filter(
+    (t) => !byId.has(t)
+  );
+  if (missing.length)
+    throw new Error(`tasks no longer exist: ${missing.join(", ")}`);
+  // The original report holds the settings results.jsonl does not.
+  const origReport = existsSync(join(srcDir, "report.md"))
+    ? readFileSync(join(srcDir, "report.md"), "utf8")
+    : "";
+  const maxTurns = Number(/Max turns: (\d+)/.exec(origReport)?.[1] ?? 3);
+  const effort = /Effort: ([\w-]+)/.exec(origReport)?.[1] ?? "-";
+
+  const renderer = await Renderer.start({
+    python: original.some((r) => r.arm === "matplotlib"),
+  });
+  const bases = new BaseRecords(renderer, outDir, byId);
+  const results: JobResult[] = [];
+  try {
+    await pool(original, opts.concurrency, async (job) => {
+      results.push(
+        await rescoreJob(
+          job,
+          byId.get(job.task)!,
+          srcDir,
+          outDir,
+          renderer,
+          bases
+        )
+      );
+    });
+  } finally {
+    await renderer.close();
+  }
+  const pos = new Map(original.map((r, i) => [r, i]));
+  const origOf = (r: JobResult) =>
+    original.find(
+      (o) => o.task === r.task && o.arm === r.arm && o.sample === r.sample
+    )!;
+  results.sort((a, b) => pos.get(origOf(a))! - pos.get(origOf(b))!);
+  writeFileSync(
+    join(outDir, "results.jsonl"),
+    results.map((r) => JSON.stringify(r)).join("\n") + "\n"
+  );
+  const testsDir = join(import.meta.dirname, "..");
+  const report =
+    buildReport(results, {
+      mode: "rescore",
+      runDir: relative(testsDir, outDir),
+      rescoredFrom: relative(testsDir, srcDir),
+      maxTurns,
+      realSpendUsd: original.some((r) => r.mode === "run")
+        ? results.reduce((s, r) => s + r.usd, 0)
+        : 0,
+      ledgerTotalUsd: new Ledger(LEDGER_PATH, opts.budgetUsd).totalUsd,
+      budgetUsd: opts.budgetUsd,
+      effort,
+    }) + changedSection(original, results);
+  writeFileSync(join(outDir, "report.md"), report);
+  console.log(`\n${report}`);
+  console.log(`Report: ${join(outDir, "report.md")}`);
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.mode === "rescore") return rescore(opts);
   const all = await loadTasks();
   const tasks = opts.tasks
     ? all.filter((t) => t.id.includes(opts.tasks!))
