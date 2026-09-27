@@ -1,0 +1,17 @@
+[
+  { "question": "Ease of use", "answer": "Agree", "count": 62 },
+  { "question": "Ease of use", "answer": "Neutral", "count": 21 },
+  { "question": "Ease of use", "answer": "Disagree", "count": 9 },
+  { "question": "Speed", "answer": "Agree", "count": 48 },
+  { "question": "Speed", "answer": "Neutral", "count": 30 },
+  { "question": "Speed", "answer": "Disagree", "count": 17 },
+  { "question": "Design", "answer": "Agree", "count": 55 },
+  { "question": "Design", "answer": "Neutral", "count": 18 },
+  { "question": "Design", "answer": "Disagree", "count": 24 },
+  { "question": "Support", "answer": "Agree", "count": 33 },
+  { "question": "Support", "answer": "Neutral", "count": 27 },
+  { "question": "Support", "answer": "Disagree", "count": 38 },
+  { "question": "Price", "answer": "Agree", "count": 29 },
+  { "question": "Price", "answer": "Neutral", "count": 35 },
+  { "question": "Price", "answer": "Disagree", "count": 41 }
+]
