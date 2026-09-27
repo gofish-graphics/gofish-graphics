@@ -152,6 +152,10 @@ export interface JobResult {
    *  from before they were recorded (API runs of claude-opus-5). */
   model?: string;
   backend?: "mock" | Backend;
+  /** The GoFish docs pack the run sent to the gofish arm (the same for
+   *  every job of a run). Missing in references results and in results
+   *  from before it was recorded. */
+  docsPack?: { file: string; sha256: string };
   task: string;
   kind: "create" | "edit" | "chain";
   /** The task's report group (see `Group` in tasks.ts). */
@@ -395,6 +399,9 @@ export function buildReport(
       subscriptionCapUsd: number;
     };
     effort: string;
+    /** The docs pack sent to the gofish arm; missing for references and
+     *  for runs from before it was recorded. */
+    docsPack?: { file: string; sha256: string };
   }
 ): string {
   const ran = results.filter(isScored);
@@ -418,7 +425,7 @@ export function buildReport(
       "claude-code (headless Claude Code, billed to the Claude subscription)",
   };
   out.push(
-    `Model: ${meta.model}. Backend: ${backendNote[meta.backend] ?? meta.backend}. Effort: ${meta.effort}. Max turns: ${meta.maxTurns}. Run directory: \`${meta.runDir}\`. ` +
+    `Model: ${meta.model}. Backend: ${backendNote[meta.backend] ?? meta.backend}. Effort: ${meta.effort}. Docs pack: ${meta.docsPack ? `${meta.docsPack.file} (sha256 ${meta.docsPack.sha256})` : meta.backend === "-" ? "-" : "not recorded"}. Max turns: ${meta.maxTurns}. Run directory: \`${meta.runDir}\`. ` +
       `Jobs: ${results.length}, of which ${ran.length} scored and ${unscored.length} not scored (infrastructure; excluded from every rate and comparison below).`
   );
   const spend =

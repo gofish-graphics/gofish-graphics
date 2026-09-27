@@ -3,8 +3,9 @@
  * repair message, and how its reply is turned back into a program.
  */
 
+import { createHash } from "crypto";
 import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
 import { ARM_LANG, BENCH_DIR, type Arm, type SingleTask } from "./tasks";
 
 export interface SystemBlock {
@@ -13,35 +14,39 @@ export interface SystemBlock {
   cache_control?: { type: "ephemeral" };
 }
 
-let warnedMissingDocs = false;
+/** The default GoFish docs pack (`--docs-pack` picks another). */
+export const DEFAULT_DOCS_PACK = join(BENCH_DIR, "context/gofish.md");
 
-/** The GoFish docs pack appended to the gofish arm's system prompt. Written
- *  separately; an empty string (with a warning) until it exists. */
-function gofishDocs(): string {
-  const p = join(BENCH_DIR, "context/gofish.md");
-  if (existsSync(p)) return readFileSync(p, "utf8");
-  if (!warnedMissingDocs) {
-    console.warn(
-      `warning: ${p} not found; the gofish arm runs without a docs pack`
-    );
-    warnedMissingDocs = true;
-  }
-  return "";
+/** The GoFish docs pack appended to the gofish arm's system prompt, read
+ *  once per run so every call sends the text that `sha256` names. */
+export interface DocsPack {
+  /** The file's base name, e.g. "gofish-v2.md". */
+  file: string;
+  /** The first 12 hex characters of the sha256 of the file's contents. */
+  sha256: string;
+  text: string;
+}
+
+export function loadDocsPack(path: string): DocsPack {
+  if (!existsSync(path)) throw new Error(`docs pack ${path} not found`);
+  const text = readFileSync(path, "utf8");
+  return {
+    file: basename(path),
+    sha256: createHash("sha256").update(text).digest("hex").slice(0, 12),
+    text,
+  };
 }
 
 /** Stable per arm, so it is cached: the last block carries `cache_control`,
  *  which caches every system block up to and including it. */
-export function systemBlocks(arm: Arm): SystemBlock[] {
+export function systemBlocks(arm: Arm, docs: DocsPack): SystemBlock[] {
   const blocks: SystemBlock[] = [
     {
       type: "text",
       text: readFileSync(join(BENCH_DIR, "prompts", `${arm}.md`), "utf8"),
     },
   ];
-  if (arm === "gofish") {
-    const docs = gofishDocs();
-    if (docs) blocks.push({ type: "text", text: docs });
-  }
+  if (arm === "gofish") blocks.push({ type: "text", text: docs.text });
   blocks[blocks.length - 1].cache_control = { type: "ephemeral" };
   return blocks;
 }

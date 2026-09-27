@@ -25,6 +25,8 @@
  *     --subscription-cap-usd X (40, claude-code at list price)
  *     --model ID (claude-opus-5-5)   --backend api|claude-code (api)
  *     --effort low|medium|high|xhigh|max (medium)   --concurrency N (3)
+ *     --docs-pack <path> (tests/llm-bench/context/gofish.md): the docs pack
+ *                  sent to the gofish arm (mock and run)
  */
 
 import {
@@ -67,11 +69,14 @@ import {
   type Turn,
 } from "./llm-bench/model";
 import {
+  DEFAULT_DOCS_PACK,
   extractCode,
+  loadDocsPack,
   NO_CODE_ERROR,
   repairMessage,
   systemBlocks,
   taskMessage,
+  type DocsPack,
 } from "./llm-bench/prompt";
 import type { RenderRecord } from "./llm-bench/record";
 import { Renderer } from "./llm-bench/render";
@@ -143,6 +148,8 @@ interface Options {
   backend: Backend;
   effort: (typeof EFFORTS)[number];
   concurrency: number;
+  /** The GoFish docs pack file for the gofish arm's system prompt. */
+  docsPack: string;
   mockBreakFirst: boolean;
   yes: boolean;
   /** rescore: the run directory to rescore. */
@@ -156,7 +163,7 @@ function parseArgs(argv: string[]): Options {
     (mode === "rescore" && !argv[1])
   ) {
     console.error(
-      "usage: llm-bench <references|mock|run|rescore <runDir>> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--subscription-cap-usd X] [--model ID] [--backend api|claude-code] [--effort E] [--concurrency N] [--mock-break-first] [--yes]"
+      "usage: llm-bench <references|mock|run|rescore <runDir>> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--subscription-cap-usd X] [--model ID] [--backend api|claude-code] [--effort E] [--concurrency N] [--docs-pack path] [--mock-break-first] [--yes]"
     );
     process.exit(2);
   }
@@ -171,13 +178,15 @@ function parseArgs(argv: string[]): Options {
     backend: "api",
     effort: "medium",
     concurrency: 3,
+    docsPack: DEFAULT_DOCS_PACK,
     mockBreakFirst: false,
     yes: false,
   };
+  // pnpm runs this from tests/; resolve paths from where they were typed.
+  const typedFrom = process.env.INIT_CWD ?? process.cwd();
   let i0 = 1;
   if (mode === "rescore") {
-    // pnpm runs this from tests/; resolve the path from where it was typed,
-    // and accept a bare run id too.
+    // Accept a bare run id too.
     const arg = argv[i0++];
     const found = [process.env.INIT_CWD, process.cwd(), join(OUT_ROOT, "runs")]
       .filter((d): d is string => !!d)
@@ -205,6 +214,8 @@ function parseArgs(argv: string[]): Options {
       opts.subscriptionCapUsd = Number(value());
     else if (flag === "--concurrency") opts.concurrency = Number(value());
     else if (flag === "--model") opts.model = value();
+    else if (flag === "--docs-pack")
+      opts.docsPack = resolve(typedFrom, value());
     else if (flag === "--backend") {
       const b = value() as Backend;
       if (!(b in COST_BASIS))
@@ -467,6 +478,7 @@ interface JobContext {
   byId: Map<string, Task>;
   runDir: string;
   runId: string;
+  docs: DocsPack;
   /** Set once the budget refuses a call: no new calls start after that. */
   halted: { budget: boolean; fatal: string | null };
 }
@@ -502,7 +514,7 @@ async function converse(
   const { opts, model, ledger, renderer, runDir } = ctx;
   mkdirSync(dir, { recursive: true });
   const data = loadData(task);
-  const system = systemBlocks(arm);
+  const system = systemBlocks(arm, ctx.docs);
   const messages: Turn[] = [
     { role: "user", content: taskMessage(task, arm, data, edit?.startCode) },
   ];
@@ -638,6 +650,7 @@ function finishJob(
     mode: ctx.opts.mode,
     model: ctx.model.id,
     backend: ctx.model.backend,
+    docsPack: { file: ctx.docs.file, sha256: ctx.docs.sha256 },
     task: task.id,
     kind: task.kind,
     group: taskGroup(task),
@@ -1018,6 +1031,7 @@ async function rescore(opts: Options): Promise<void> {
     original.find((r) => r.backend)?.backend ??
     /Backend: ([\w-]+)/.exec(origReport)?.[1] ??
     (original.some((r) => r.mode === "run") ? "api" : ran ? "mock" : "-");
+  const docsPack = original.find((r) => r.docsPack)?.docsPack;
 
   const renderer = await Renderer.start({
     python: original.some((r) => r.arm === "matplotlib"),
@@ -1065,6 +1079,7 @@ async function rescore(opts: Options): Promise<void> {
         : 0,
       ledger: ledgerMeta(new Ledger(LEDGER_PATH, ledgerCaps(opts))),
       effort,
+      docsPack,
     }) + changedSection(original, results);
   writeFileSync(join(outDir, "report.md"), report);
   console.log(`\n${report}`);
@@ -1081,6 +1096,9 @@ async function main() {
   if (tasks.length === 0) throw new Error(`no tasks match "${opts.tasks}"`);
   const byId = new Map<string, Task>(all.map((t) => [t.id, t]));
   const ledger = new Ledger(LEDGER_PATH, ledgerCaps(opts));
+  // References send no prompt, so they need no docs pack.
+  const docs =
+    opts.mode === "references" ? undefined : loadDocsPack(opts.docsPack);
 
   let model: Model | null = null;
   if (opts.mode === "run") {
@@ -1100,7 +1118,10 @@ async function main() {
     );
     for (const task of conversations)
       for (const arm of opts.arms) {
-        const sys = systemBlocks(arm).reduce((n, b) => n + b.text.length, 0);
+        const sys = systemBlocks(arm, docs!).reduce(
+          (n, b) => n + b.text.length,
+          0
+        );
         const user = taskMessage(
           task,
           arm,
@@ -1121,7 +1142,7 @@ async function main() {
       `~${k(typical.input + typical.cacheRead)} input tokens (~${k(typical.cacheRead)} of them from the cache` +
       `${extra ? `, including ~${extra} per call that Claude Code adds` : ""}) and ~${k(typical.output)} output tokens`;
     console.log(
-      `Model ${opts.model}, effort ${opts.effort}, backend ${b}. ${firstTurns} jobs (${tasks.length} tasks x ${opts.arms.length} arms x ${opts.samples} samples), up to ${opts.maxTurns} turns each.\n` +
+      `Model ${opts.model}, effort ${opts.effort}, backend ${b}, docs pack ${docs!.file} (sha256 ${docs!.sha256}). ${firstTurns} jobs (${tasks.length} tasks x ${opts.arms.length} arms x ${opts.samples} samples), up to ${opts.maxTurns} turns each.\n` +
         (b === "api"
           ? `Estimate: ~$${typicalUsd.toFixed(2)} if every job passes on turn 1 (${tokens}); worst case ~$${worst.toFixed(2)}.\n` +
             `API ledger so far: $${ledger.total(b).toFixed(4)}; budget cap $${ledger.cap(b).toFixed(2)} (calls stop before the cap).`
@@ -1165,6 +1186,7 @@ async function main() {
         byId,
         runDir,
         runId,
+        docs: docs!,
         halted,
       };
       const jobs = tasks.flatMap((task) =>
@@ -1207,6 +1229,7 @@ async function main() {
     spendUsd: spend,
     ledger: ledgerMeta(ledger),
     effort: opts.mode === "references" ? "-" : opts.effort,
+    docsPack: docs && { file: docs.file, sha256: docs.sha256 },
   });
   writeFileSync(join(runDir, "report.md"), report);
   copyFileSync(join(runDir, "report.md"), join(OUT_ROOT, "report.md"));

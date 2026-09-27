@@ -31,7 +31,15 @@ Options: `--arms gofish,recharts,d3,matplotlib`, `--tasks <substring of task id>
 `--samples N` (1), `--max-turns N` (3), `--budget-usd X` (10, API),
 `--subscription-cap-usd X` (40, claude-code at list price),
 `--model ID` (`claude-opus-5-5`), `--backend api|claude-code` (api),
-`--effort low|medium|high|xhigh|max` (medium), `--concurrency N` (3).
+`--effort low|medium|high|xhigh|max` (medium), `--concurrency N` (3),
+`--docs-pack <path>` (`tests/llm-bench/context/gofish.md`).
+
+- `--docs-pack` picks the GoFish docs pack sent to the gofish arm in `mock`
+  and `run`. The pack is read once at the start of the run. Every job result
+  records its file name and the first 12 hex characters of its sha256
+  (`docsPack`), and the report header shows them, so runs on different packs
+  can be told apart. `rescore` carries them over from the original results.
+  A run from before this was recorded shows "not recorded".
 
 - `references` must pass for every arm on every task before any paid run. It is
   the test that the checks are fair to every library. It exits non-zero on any
@@ -359,7 +367,9 @@ A task may set `group`, which the report uses to split its tables:
 `"common"` (the default) for charts every arm has a built-in chart type for,
 and `"beyond-defaults"` for charts no arm has built in (mosaic, three-level
 mosaic, waffle, ribbon chart, scatter plot of pie glyphs, ridgeline, bottle
-fill chart), which a program has to compose from lower-level pieces. The
+fill chart, circle packing), which a program has to compose from lower-level
+pieces. d3 has circle packing built in (`d3.pack`); the other arms compute the
+packing themselves. The
 common group also holds annotated charts that every arm can draw but that take
 more than one call: bars with value labels, a dashed mean line, a marked and
 labeled peak, and a bubble chart sized by area. The
@@ -471,6 +481,7 @@ the chart's opacity may stay) and every other mark shares one other color.
 | `pieGlyphs`      | `by`, `x`, `y`, `category`, `value`, `tol` (0.01), `placeTol` (0.01)                                                 | there is one complete pie per `by` category (slices around one center whose sweeps add up to 360 degrees within 3, with no hole), centered at a linear image of its `(x, y)` with y up, as `points` places circles. Each pie's slice shares match the shares of `value` by `category` (any order, within `tol`). Each `category` has one color across pies, and the colors differ.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `ridgeline`      | `category`, `x`, `y`, `overlap` ([1.5, 2.5]), `tol` (0.02)                                                           | each `category` has a filled shape whose top edge, measured up from the shape's own baseline (its lowest edge), passes through the category's `(x, y)` points within `tol` of the tallest peak (at least 2 px). All shapes span the same x range and share one height scale (within 5%). The baselines run top to bottom in category order and are evenly spaced (within 5%, at least 2 px), and the tallest peak is `overlap` times the spacing.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `bottleFill`     | `category`, `value`, `max` (100), `tol` (0.02)                                                                       | there is one bottle outline per category, left to right in order: a stroked, unfilled, closed shape that is not a rectangle, all of the same height (within 5%). Inside each, the pixels painted by filled marks (after clip paths and masks) are the liquid. It starts at the outline's bottom, rises to `value / max` of the outline's height (within `tol` plus 1.5 px), keeps at least 99% of its pixels inside the outline (within 1.5 px), and a quarter of the way up it spans at least 85% of the outline's width.                                                                                                                                                                                                                                                                                                                                                                              |
+| `circlePack`     | `parent`, `leaf`, `value`, `tol` (0.03)                                                                              | there is one circle per leaf (its `value` summed by `parent` and `leaf`) whose area is proportional to the value (radius squared is k times the value, for one k, within 0.5 px plus `tol` of the largest radius). A leaf circle has no circle inside it, and the smallest circle around it is its parent circle. The leaves inside each parent circle are exactly one `parent`'s leaves (matched by their radii), no two leaf circles overlap and no two parent circles overlap (by more than 1 px plus 2% of the smaller radius), and each `parent`'s leaves share one color, distinct from the other parents'. Any packing passes, since positions are not checked. Extra circles (a root circle, legend swatches) are allowed.                                                                                                                                                                      |
 | `lineSeries`     | `x`, `y`, `groupBy?`, `tol` (0.015)                                                                                  | every group (or all rows) has its own stroked line, and under one linear map with y up every row lies on its line, within `tol` of the plot size (at least 2 px), and each line runs in one x direction (it never steps back by more than that tolerance, so points joined out of x order fail). Smoothed curves pass. With `groupBy`, the lines' colors differ.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `wedges`         | values, `hole?`, `tol` (0.01)                                                                                        | slices around one center have angular shares matching the values' shares (any order) within `tol`, and every slice has its own color. Works for pies and donuts. `hole: true` also requires a donut (every slice's inner radius is at least 20% of its outer radius), and `hole: false` a pie (at most 5%).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `textIncludes`   | `strings`                                                                                                            | each string appears, ignoring case, inside some text (SVG or HTML).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -529,6 +540,14 @@ above the line. `annotation` fails a marker on the last point, no marker, the
 text in the plot's corner, and the value without its comma. `highlight` fails
 the other bars recolored with a palette, the wrong lake, red instead of
 orange, `mpg > 30` instead of `>= 30`, and the other cars in two colors.
+`circlePack` fails radius proportional to the value (d3 and matplotlib),
+leaves drawn 25% too big, leaves packed with negative padding inside parents
+drawn big enough to hold them (the leaves overlap by 6 px), parents drawn 20%
+too big (they overlap), one leaf moved out of its parent, one color (d3 and
+GoFish), a flat bubble pack with no genre circles, the same pack inside one
+root circle, Recharts leaves with the genre circles left unpainted, and
+GoFish's two nested treemaps with circle marks (circles inscribed in treemap
+cells, with no parent circles).
 
 ## Known limitations
 

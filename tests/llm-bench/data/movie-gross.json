@@ -1,0 +1,62 @@
+[
+  { "genre": "Action", "title": "Avatar", "gross": 2768 },
+  { "genre": "Action", "title": "The Dark Knight", "gross": 1022 },
+  { "genre": "Action", "title": "Jurassic Park", "gross": 923 },
+  {
+    "genre": "Action",
+    "title": "Transformers: Revenge of the Fallen",
+    "gross": 836
+  },
+  { "genre": "Action", "title": "The Lost World: Jurassic Park", "gross": 787 },
+  { "genre": "Action", "title": "2012", "gross": 767 },
+  {
+    "genre": "Adventure",
+    "title": "The Lord of the Rings: The Return of the King",
+    "gross": 1133
+  },
+  {
+    "genre": "Adventure",
+    "title": "Pirates of the Caribbean: Dead Man's Chest",
+    "gross": 1066
+  },
+  { "genre": "Adventure", "title": "Toy Story 3", "gross": 1046 },
+  { "genre": "Adventure", "title": "Alice in Wonderland", "gross": 1023 },
+  {
+    "genre": "Adventure",
+    "title": "Harry Potter and the Sorcerer's Stone",
+    "gross": 976
+  },
+  {
+    "genre": "Adventure",
+    "title": "Pirates of the Caribbean: At World's End",
+    "gross": 961
+  },
+  { "genre": "Comedy", "title": "Ratatouille", "gross": 620 },
+  { "genre": "Comedy", "title": "Madagascar: Escape 2 Africa", "gross": 600 },
+  { "genre": "Comedy", "title": "Night at the Museum", "gross": 574 },
+  { "genre": "Comedy", "title": "WALL-E", "gross": 533 },
+  { "genre": "Comedy", "title": "The Simpsons Movie", "gross": 527 },
+  { "genre": "Comedy", "title": "Meet the Fockers", "gross": 517 },
+  { "genre": "Drama", "title": "ET: The Extra-Terrestrial", "gross": 793 },
+  { "genre": "Drama", "title": "The Twilight Saga: New Moon", "gross": 703 },
+  { "genre": "Drama", "title": "The Twilight Saga: Eclipse", "gross": 688 },
+  { "genre": "Drama", "title": "Forrest Gump", "gross": 679 },
+  { "genre": "Drama", "title": "The Passion of the Christ", "gross": 612 },
+  { "genre": "Drama", "title": "Ghost", "gross": 518 },
+  { "genre": "Horror", "title": "I am Legend", "gross": 585 },
+  { "genre": "Horror", "title": "Jaws", "gross": 471 },
+  { "genre": "Horror", "title": "The Exorcist", "gross": 403 },
+  { "genre": "Horror", "title": "Hannibal", "gross": 350 },
+  { "genre": "Horror", "title": "The Ring", "gross": 249 },
+  { "genre": "Horror", "title": "The Blair Witch Project", "gross": 248 },
+  { "genre": "Musical", "title": "Beauty and the Beast", "gross": 403 },
+  { "genre": "Musical", "title": "Chicago", "gross": 308 },
+  { "genre": "Musical", "title": "The Sound of Music", "gross": 286 },
+  {
+    "genre": "Musical",
+    "title": "High School Musical 3: Senior Year",
+    "gross": 251
+  },
+  { "genre": "Musical", "title": "Grease", "gross": 206 },
+  { "genre": "Musical", "title": "Hairspray", "gross": 203 }
+]

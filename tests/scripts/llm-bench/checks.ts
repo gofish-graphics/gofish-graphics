@@ -271,6 +271,46 @@ export type Check =
       max?: number;
       tol?: number;
     }
+  /** Circle packing, two levels: one circle per `leaf` (its `value` summed
+   *  by `parent` and `leaf`) with area proportional to the value (radius^2
+   *  = k * value for one k, within 0.5px + `tol` (0.03) of the largest
+   *  radius). A leaf circle contains no other circle, and the smallest
+   *  circle containing it is its parent circle. The leaves under each
+   *  parent circle are exactly one `parent`'s leaves (matched by their
+   *  radii), leaf circles do not overlap each other, and parent circles do
+   *  not overlap each other (both within 1px + 2% of the smaller radius).
+   *  Each `parent`'s leaves share one color, distinct from the other
+   *  parents'. Positions are free: any valid packing passes. */
+  | {
+      check: "circlePack";
+      parent: string;
+      leaf: string;
+      value: string;
+      tol?: number;
+    }
+  /** Two-level rectangular treemap with a circle in every leaf cell. Leaf
+   *  cells are rects (filled or outline only), each the smallest rect
+   *  around one circle; circles whose smallest enclosing rect is the
+   *  background (or that have none) are ignored. There is one cell per
+   *  `leaf` (its `value` summed by `parent` and `leaf`), and each holds
+   *  exactly one circle, centered in it (within 1.5px) with diameter
+   *  min(cell w, cell h) - `padding` (default 0; within 1.5px). Cells do
+   *  not overlap (1.5px) and fill their bounding box (areas sum to it
+   *  within 3%). Cell areas are proportional to the values (area = k *
+   *  value for one k, within `tol` (0.05) plus half the cell's perimeter
+   *  in px^2, for rounding). Circles take one color per `parent`, distinct
+   *  across parents; each color's cells are exactly one `parent`'s leaves
+   *  (matched by area) and fill their own bounding box (within 3%), so each
+   *  parent is one contiguous rectangle with area k * its total. Any
+   *  tiling passes. */
+  | {
+      check: "treemapCircles";
+      parent: string;
+      leaf: string;
+      value: string;
+      padding?: number;
+      tol?: number;
+    }
   /** Each string appears (case-insensitive substring) in some text. */
   | { check: "textIncludes"; strings: string[] }
   /** Data marks use at least `k` distinct colors. */
@@ -1592,6 +1632,435 @@ function checkPieGlyphs(
   };
 }
 
+interface Disc {
+  cx: number;
+  cy: number;
+  r: number;
+  mark: Mark;
+}
+
+/** Two-level leaves: `value` summed by (`parent`, `leaf`), positive sums
+ *  only, each with the index of its parent in `parents` (first-seen order). */
+function twoLevelLeaves(
+  data: Row[],
+  parent: string,
+  leaf: string,
+  value: string
+): { parents: string[]; leaves: { parent: number; value: number }[] } {
+  const parents = uniqueInOrder(data, parent);
+  const sums = new Map<string, { parent: number; value: number }>();
+  for (const r of data) {
+    const p = String(r[parent]);
+    const key = JSON.stringify([p, String(r[leaf])]);
+    const cur = sums.get(key) ?? { parent: parents.indexOf(p), value: 0 };
+    cur.value += num(r[value]);
+    sums.set(key, cur);
+  }
+  return { parents, leaves: [...sums.values()].filter((l) => l.value > 0) };
+}
+
+/** Painted with something other than (near-)pure white or transparency. */
+const visiblePaint = (m: Mark) =>
+  [m.fill, m.stroke].some(
+    (p) => p && p[3] >= 0.05 && !(p[0] >= 250 && p[1] >= 250 && p[2] >= 250)
+  );
+
+/** Every visible circle, with near-duplicates (a fill and an outline drawn
+ *  as two elements) merged, keeping the one that has an ink. */
+function visibleDiscs(rec: RenderRecord): Disc[] {
+  const discs: Disc[] = [];
+  for (const m of rec.marks) {
+    if (m.kind !== "circle" || !visiblePaint(m)) continue;
+    const d = {
+      cx: m.x + m.w / 2,
+      cy: m.y + m.h / 2,
+      r: (m.w + m.h) / 4,
+      mark: m,
+    };
+    const twin = discs.findIndex(
+      (e) =>
+        Math.hypot(e.cx - d.cx, e.cy - d.cy) <= 0.5 &&
+        Math.abs(e.r - d.r) <= 0.5
+    );
+    if (twin < 0) discs.push(d);
+    else if (!ink(discs[twin].mark) && ink(m)) discs[twin] = d;
+  }
+  return discs;
+}
+
+function checkCirclePack(
+  c: Extract<Check, { check: "circlePack" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const tol = c.tol ?? 0.03;
+  const { parents, leaves } = twoLevelLeaves(
+    ctx.data,
+    c.parent,
+    c.leaf,
+    c.value
+  );
+  const n = leaves.length;
+  const discs = visibleDiscs(rec);
+  // `outer` contains `inner` (a small tolerance for rounding and padding).
+  const contains = (outer: Disc, inner: Disc) =>
+    outer !== inner &&
+    outer.r > inner.r &&
+    Math.hypot(outer.cx - inner.cx, outer.cy - inner.cy) + inner.r <=
+      outer.r + 1.5 + 0.01 * outer.r;
+  const innermost = discs.filter((d) => !discs.some((e) => contains(d, e)));
+  const parentOf = (d: Disc): Disc | undefined =>
+    discs.filter((e) => contains(e, d)).sort((a, b) => a.r - b.r)[0];
+  const nested = innermost.filter((d) => parentOf(d));
+  if (nested.length < n)
+    return {
+      pass: false,
+      detail: `expected ${n} ${c.leaf} circles nested inside a larger circle, found ${nested.length} (${innermost.length - nested.length} innermost circles are not inside any other circle)`,
+    };
+
+  // Sizes: fit radius^2 = k * value. Seed k from the largest value on the
+  // largest candidate, match each value to the nearest unused radius, then
+  // refit k as the median.
+  const order = leaves
+    .map((_, i) => i)
+    .sort((a, b) => leaves[b].value - leaves[a].value);
+  const cands = [...nested].sort((a, b) => b.r - a.r);
+  const k0 = (cands[0].r * cands[0].r) / leaves[order[0]].value;
+  const used = new Set<number>();
+  const circleOf: Disc[] = new Array(n);
+  for (const i of order) {
+    const want = Math.sqrt(k0 * leaves[i].value);
+    let best = -1;
+    for (let j = 0; j < cands.length; j++)
+      if (
+        !used.has(j) &&
+        (best < 0 ||
+          Math.abs(cands[j].r - want) < Math.abs(cands[best].r - want))
+      )
+        best = j;
+    used.add(best);
+    circleOf[i] = cands[best];
+  }
+  const ks = leaves
+    .map((l, i) => (circleOf[i].r * circleOf[i].r) / l.value)
+    .sort((a, b) => a - b);
+  const k = ks[Math.floor(ks.length / 2)];
+  const rmax = Math.max(...circleOf.map((d) => d.r));
+  const slack = 0.5 + tol * rmax;
+  const expR = (i: number) => Math.sqrt(k * leaves[i].value);
+  const off = order.filter((i) => Math.abs(circleOf[i].r - expR(i)) > slack);
+  if (off.length > 0)
+    return {
+      pass: false,
+      detail: `${off.length} of ${n} ${c.leaf} circles have radii not proportional to the square root of ${c.value} (value:radius ${order
+        .slice(0, 8)
+        .map((i) => `${leaves[i].value}:${circleOf[i].r.toFixed(1)}`)
+        .join(", ")}${n > 8 ? ", ..." : ""})`,
+    };
+
+  // Nesting: group the leaf circles by the smallest circle containing each,
+  // and match the groups to parents by their leaves' radii.
+  const groups = new Map<Disc, Disc[]>();
+  for (const d of circleOf) {
+    const p = parentOf(d)!;
+    groups.set(p, [...(groups.get(p) ?? []), d]);
+  }
+  if (groups.size !== parents.length)
+    return {
+      pass: false,
+      detail: `the ${n} ${c.leaf} circles sit in ${groups.size} enclosing circles, expected one per ${c.parent} (${parents.length})`,
+    };
+  const pDiscs = [...groups.keys()];
+  const radiiOf = (ds: Disc[]) => ds.map((d) => d.r).sort((a, b) => b - a);
+  const wanted = parents.map((_, pi) =>
+    leaves
+      .map((l, i) => (l.parent === pi ? expR(i) : -1))
+      .filter((r) => r >= 0)
+      .sort((a, b) => b - a)
+  );
+  const fits = pDiscs.map((pd) => {
+    const got = radiiOf(groups.get(pd)!);
+    return wanted.map(
+      (w) =>
+        w.length === got.length &&
+        w.every((r, i) => Math.abs(r - got[i]) <= slack)
+    );
+  });
+  const parentAt: number[] = new Array(pDiscs.length).fill(-1);
+  const taken = new Set<number>();
+  const solve = (g: number): boolean => {
+    if (g === pDiscs.length) return true;
+    for (let pi = 0; pi < parents.length; pi++) {
+      if (taken.has(pi) || !fits[g][pi]) continue;
+      taken.add(pi);
+      parentAt[g] = pi;
+      if (solve(g + 1)) return true;
+      taken.delete(pi);
+    }
+    return false;
+  };
+  if (!solve(0))
+    return {
+      pass: false,
+      detail: `${n} ${c.leaf} circles sized by ${c.value}, but the circles inside each enclosing circle are not one ${c.parent}'s ${c.leaf}s (group sizes ${pDiscs
+        .map((pd) => groups.get(pd)!.length)
+        .join(", ")})`,
+    };
+
+  // No overlaps among leaves, nor among parents.
+  const overlap = (ds: Disc[]) => {
+    for (let i = 0; i < ds.length; i++)
+      for (let j = i + 1; j < ds.length; j++) {
+        const [a, b] = [ds[i], ds[j]];
+        const gap = Math.hypot(a.cx - b.cx, a.cy - b.cy) - (a.r + b.r);
+        if (gap < -(1 + 0.02 * Math.min(a.r, b.r))) return -gap;
+      }
+    return 0;
+  };
+  const leafOverlap = overlap(circleOf);
+  if (leafOverlap > 0)
+    return {
+      pass: false,
+      detail: `${n} ${c.leaf} circles nested by ${c.parent}, but two of them overlap by ${leafOverlap.toFixed(1)}px`,
+    };
+  const parentOverlap = overlap(pDiscs);
+  if (parentOverlap > 0)
+    return {
+      pass: false,
+      detail: `${n} ${c.leaf} circles nested by ${c.parent}, but two ${c.parent} circles overlap by ${parentOverlap.toFixed(1)}px`,
+    };
+
+  // Colors: one per parent, distinct across parents.
+  if (circleOf.some((d) => !ink(d.mark)))
+    return {
+      pass: false,
+      detail: `some ${c.leaf} circles have no visible color`,
+    };
+  const byParent = parents.map((_, pi) =>
+    pDiscs
+      .filter((_, g) => parentAt[g] === pi)
+      .flatMap((pd) => groups.get(pd)!)
+      .map((d) => d.mark)
+  );
+  const colors = seriesColorsConsistent(byParent, parents);
+  if (!colors.pass)
+    return {
+      pass: false,
+      detail: `${n} ${c.leaf} circles nested by ${c.parent} without overlaps, but ${colors.detail}`,
+    };
+  return {
+    pass: true,
+    detail: `${n} ${c.leaf} circles with areas proportional to ${c.value}, packed without overlap inside ${parents.length} non-overlapping ${c.parent} circles, one color per ${c.parent}`,
+  };
+}
+
+function checkTreemapCircles(
+  c: Extract<Check, { check: "treemapCircles" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const tol = c.tol ?? 0.05;
+  const pad = c.padding ?? 0;
+  const { parents, leaves } = twoLevelLeaves(
+    ctx.data,
+    c.parent,
+    c.leaf,
+    c.value
+  );
+  const n = leaves.length;
+  const area = (b: Box) => b.w * b.h;
+  const bboxOf = (bs: Box[]): Box => {
+    const x = Math.min(...bs.map((b) => b.x));
+    const y = Math.min(...bs.map((b) => b.y));
+    return {
+      x,
+      y,
+      w: Math.max(...bs.map((b) => b.x + b.w)) - x,
+      h: Math.max(...bs.map((b) => b.y + b.h)) - y,
+    };
+  };
+
+  // Rects, filled or outline only, with twins (a fill and an outline drawn
+  // as two elements over one box) merged.
+  const rects: Mark[] = [];
+  for (const m of rec.marks) {
+    if (m.kind !== "rect" || !visiblePaint(m) || Math.min(m.w, m.h) < 1)
+      continue;
+    const twin = rects.some(
+      (e) =>
+        Math.abs(e.x - m.x) <= 0.75 &&
+        Math.abs(e.y - m.y) <= 0.75 &&
+        Math.abs(e.w - m.w) <= 0.75 &&
+        Math.abs(e.h - m.h) <= 0.75
+    );
+    if (!twin) rects.push(m);
+  }
+  // Each circle's cell is the smallest rect around it. Circles in no rect,
+  // or only in a background panel, are not in the treemap (a legend, say).
+  const holds = (r: Box, d: Disc) =>
+    d.cx - d.r >= r.x - 1.5 &&
+    d.cx + d.r <= r.x + r.w + 1.5 &&
+    d.cy - d.r >= r.y - 1.5 &&
+    d.cy + d.r <= r.y + r.h + 1.5;
+  const dots: Disc[] = [];
+  const cells: Mark[] = [];
+  for (const d of visibleDiscs(rec)) {
+    const around = rects
+      .filter((r) => holds(r, d))
+      .sort((a, b) => area(a) - area(b))[0];
+    if (!around || area(around) >= 0.4 * chartArea(rec)) continue;
+    dots.push(d);
+    cells.push(around);
+  }
+  if (dots.length !== n)
+    return {
+      pass: false,
+      detail: `expected ${n} circles, each inside a ${c.leaf} cell drawn as a rect, found ${dots.length}`,
+    };
+  if (new Set(cells).size < n)
+    return {
+      pass: false,
+      detail: `${n} circles inside rects, but some rect holds more than one circle (${new Set(cells).size} distinct cells)`,
+    };
+
+  // Each circle is centered in its cell and spans its shorter side, less
+  // the padding.
+  const offCenter = dots.filter(
+    (d, i) =>
+      Math.hypot(
+        d.cx - (cells[i].x + cells[i].w / 2),
+        d.cy - (cells[i].y + cells[i].h / 2)
+      ) > 1.5
+  ).length;
+  if (offCenter > 0)
+    return {
+      pass: false,
+      detail: `${offCenter} of ${n} circles are not centered in their cells`,
+    };
+  const wantD = (b: Box) => Math.min(b.w, b.h) - pad;
+  const badSize = dots
+    .map((d, i) => ({ got: 2 * d.r, want: wantD(cells[i]) }))
+    .filter((s) => Math.abs(s.got - s.want) > 1.5);
+  if (badSize.length > 0)
+    return {
+      pass: false,
+      detail: `${badSize.length} of ${n} circles do not have diameter = shorter cell side - ${pad}px (diameter:expected ${badSize
+        .slice(0, 6)
+        .map((s) => `${s.got.toFixed(1)}:${s.want.toFixed(1)}`)
+        .join(", ")}${badSize.length > 6 ? ", ..." : ""})`,
+    };
+
+  // The cells tile their bounding box: no overlaps, no gaps.
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++) {
+      const [a, b] = [cells[i], cells[j]];
+      const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      if (ix > 1.5 && iy > 1.5)
+        return {
+          pass: false,
+          detail: `${n} cells with inscribed circles, but two cells overlap by ${ix.toFixed(1)}x${iy.toFixed(1)}px`,
+        };
+    }
+  const cover = (bs: Box[]) =>
+    bs.reduce((s, b) => s + area(b), 0) / area(bboxOf(bs));
+  const all = cover(cells);
+  if (Math.abs(all - 1) > 0.03)
+    return {
+      pass: false,
+      detail: `${n} cells with inscribed circles, but they cover ${(100 * all).toFixed(1)}% of their bounding box, not all of it`,
+    };
+
+  // Areas: area = k * value. Sorted pairing is the only candidate match
+  // when the areas are proportional; k is the median ratio.
+  const slack = (b: Box, want: number) => tol * want + (b.w + b.h) / 2;
+  const byArea = [...cells].sort((a, b) => area(b) - area(a));
+  const byValue = leaves.map((l) => l.value).sort((a, b) => b - a);
+  const ks = byArea.map((b, i) => area(b) / byValue[i]).sort((a, b) => a - b);
+  const k = ks[Math.floor(n / 2)];
+  const offArea = byArea.filter(
+    (b, i) => Math.abs(area(b) - k * byValue[i]) > slack(b, k * byValue[i])
+  );
+  if (offArea.length > 0)
+    return {
+      pass: false,
+      detail: `${offArea.length} of ${n} cell areas are not proportional to ${c.value} (value:area ${byValue
+        .slice(0, 6)
+        .map((v, i) => `${v}:${Math.round(area(byArea[i]))}`)
+        .join(", ")}, ...)`,
+    };
+
+  // Parents: circles take one color per parent, and each color's cells are
+  // one parent's leaves forming one rectangle.
+  const inks = dots.map((d) => ink(d.mark));
+  if (inks.some((x) => !x))
+    return { pass: false, detail: `some circles have no visible color` };
+  const reps = colorClusters(inks as RGBA[]);
+  if (reps.length !== parents.length)
+    return {
+      pass: false,
+      detail: `the circles use ${reps.length} colors, expected one per ${c.parent} (${parents.length})`,
+    };
+  const groupOf = inks.map((x) => {
+    const ds = reps.map((r) => colorDist(r, x!));
+    return ds.indexOf(Math.min(...ds));
+  });
+  const groups = reps.map((_, g) => cells.filter((_, i) => groupOf[i] === g));
+  for (const g of groups) {
+    const f = cover(g);
+    if (f < 0.97)
+      return {
+        pass: false,
+        detail: `${n} cells sized by ${c.value}, but the cells of one ${c.parent} color are not one contiguous rectangle (they cover ${(100 * f).toFixed(1)}% of their bounding box)`,
+      };
+  }
+  const wanted = parents.map((_, pi) =>
+    leaves
+      .filter((l) => l.parent === pi)
+      .map((l) => k * l.value)
+      .sort((a, b) => b - a)
+  );
+  const fits = groups.map((g) => {
+    const got = [...g].sort((a, b) => area(b) - area(a));
+    return wanted.map(
+      (w) =>
+        w.length === got.length &&
+        w.every((a, i) => Math.abs(area(got[i]) - a) <= slack(got[i], a))
+    );
+  });
+  const parentAt: number[] = new Array(groups.length).fill(-1);
+  const taken = new Set<number>();
+  const solve = (g: number): boolean => {
+    if (g === groups.length) return true;
+    for (let pi = 0; pi < parents.length; pi++) {
+      if (taken.has(pi) || !fits[g][pi]) continue;
+      taken.add(pi);
+      parentAt[g] = pi;
+      if (solve(g + 1)) return true;
+      taken.delete(pi);
+    }
+    return false;
+  };
+  if (!solve(0))
+    return {
+      pass: false,
+      detail: `${n} cells sized by ${c.value}, but the cells of each circle color are not one ${c.parent}'s ${c.leaf}s (group sizes ${groups
+        .map((g) => g.length)
+        .join(", ")})`,
+    };
+  const colors = seriesColorsConsistent(
+    parents.map((_, pi) =>
+      dots.filter((_, i) => parentAt[groupOf[i]] === pi).map((d) => d.mark)
+    ),
+    parents
+  );
+  if (!colors.pass) return colors;
+  return {
+    pass: true,
+    detail: `${n} ${c.leaf} cells tiling a rectangle with areas proportional to ${c.value}, grouped into ${parents.length} contiguous ${c.parent} rectangles, each with a centered circle of diameter shorter side - ${pad}px, one color per ${c.parent}`,
+  };
+}
+
 function checkTextIncludes(
   c: Extract<Check, { check: "textIncludes" }>,
   rec: RenderRecord
@@ -2487,6 +2956,10 @@ export function runCheck(
       return checkRidgeline(c, rec, ctx);
     case "bottleFill":
       return checkBottleFill(c, rec, ctx);
+    case "circlePack":
+      return checkCirclePack(c, rec, ctx);
+    case "treemapCircles":
+      return checkTreemapCircles(c, rec, ctx);
     case "textIncludes":
       return checkTextIncludes(c, rec);
     case "distinctColors":
