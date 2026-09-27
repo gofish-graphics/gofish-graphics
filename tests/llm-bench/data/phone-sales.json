@@ -1,0 +1,14 @@
+[
+  { "region": "North America", "brand": "Apex", "units": 60 },
+  { "region": "North America", "brand": "Nova", "units": 40 },
+  { "region": "North America", "brand": "Orbit", "units": 20 },
+  { "region": "Europe", "brand": "Apex", "units": 30 },
+  { "region": "Europe", "brand": "Nova", "units": 36 },
+  { "region": "Europe", "brand": "Orbit", "units": 24 },
+  { "region": "Asia", "brand": "Apex", "units": 75 },
+  { "region": "Asia", "brand": "Nova", "units": 90 },
+  { "region": "Asia", "brand": "Orbit", "units": 135 },
+  { "region": "Latin America", "brand": "Apex", "units": 12 },
+  { "region": "Latin America", "brand": "Nova", "units": 18 },
+  { "region": "Latin America", "brand": "Orbit", "units": 30 }
+]

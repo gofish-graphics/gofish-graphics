@@ -4,7 +4,7 @@
 
 import type { ChecksOutcome } from "./checks";
 import type { Usage } from "./cost";
-import { ARMS, type Arm } from "./tasks";
+import { ARMS, GROUPS, type Arm, type Group } from "./tasks";
 
 export interface TurnResult {
   turn: number;
@@ -25,6 +25,8 @@ export interface JobResult {
   mode: string;
   task: string;
   kind: "create" | "edit";
+  /** The task's report group (see `Group` in tasks.ts). */
+  group: Group;
   arm: Arm;
   sample: number;
   turns: TurnResult[];
@@ -115,6 +117,78 @@ function table(header: string[], rows: string[][]): string {
   ].join("\n");
 }
 
+function perArmTable(ran: JobResult[], arms: Arm[]): string {
+  return table(
+    [
+      "arm",
+      "jobs",
+      "first-turn pass",
+      "pass within max turns",
+      "rendered",
+      "mean turns",
+      "mean input tok",
+      "mean output tok",
+      "mean cost $",
+      "mean latency s",
+      "mean render ms (successful renders)",
+    ],
+    arms.map((arm) => {
+      const rs = ran.filter((r) => r.arm === arm);
+      const renders = rs.flatMap((r) =>
+        r.turns.filter((t) => t.rendered).map((t) => t.renderMs!)
+      );
+      return [
+        arm,
+        String(rs.length),
+        pct(rs.filter((r) => r.passFirst).length, rs.length),
+        pct(rs.filter((r) => r.pass).length, rs.length),
+        pct(rs.filter((r) => r.rendered).length, rs.length),
+        fmt(mean(rs.map((r) => r.turns.length)), 2),
+        fmt(
+          mean(
+            rs.map(
+              (r) => r.usage.input + r.usage.cacheWrite + r.usage.cacheRead
+            )
+          )
+        ),
+        fmt(mean(rs.map((r) => r.usage.output))),
+        fmt(mean(rs.map((r) => r.usd)), 4),
+        fmt(mean(rs.map((r) => r.latencyMs / 1000)), 1),
+        fmt(mean(renders)),
+      ];
+    })
+  );
+}
+
+/** gofish minus each other arm, per task, over `ran`'s tasks. */
+function pairedTable(ran: JobResult[], arms: Arm[]): string {
+  const tasks = [...new Set(ran.map((r) => r.task))];
+  const rate = (t: string, arm: Arm) => {
+    const rs = ran.filter((r) => r.task === t && r.arm === arm);
+    return rs.length ? rs.filter((r) => r.pass).length / rs.length : null;
+  };
+  return table(
+    ["other arm", "tasks", "mean difference", "95% CI"],
+    arms
+      .filter((a) => a !== "gofish")
+      .map((arm) => {
+        const diffs = tasks
+          .map((t) => [rate(t, "gofish"), rate(t, arm)])
+          .filter((p): p is [number, number] => p[0] !== null && p[1] !== null)
+          .map(([g, o]) => g - o);
+        const d = pairedDiff(diffs);
+        return [
+          arm,
+          String(diffs.length),
+          `${d.mean >= 0 ? "+" : ""}${fmt(100 * d.mean, 1)} pts`,
+          Number.isFinite(d.lo)
+            ? `[${fmt(100 * d.lo, 1)}, ${fmt(100 * d.hi, 1)}]`
+            : "-",
+        ];
+      })
+  );
+}
+
 export function buildReport(
   results: JobResult[],
   meta: {
@@ -146,49 +220,26 @@ export function buildReport(
     `Real spend this run: $${meta.realSpendUsd.toFixed(4)}. Ledger total (all runs): $${meta.ledgerTotalUsd.toFixed(4)} of $${meta.budgetUsd.toFixed(2)} budget.${simulated}`
   );
 
+  // Groups present in this run; the per-arm table and the paired comparison
+  // are shown for all tasks and then for each group, when there is more than
+  // one.
+  const groups = GROUPS.filter((g) => ran.some((r) => r.group === g));
+  const sections: { title: string; rs: JobResult[] }[] = [
+    { title: "all tasks", rs: ran },
+    ...(groups.length > 1
+      ? groups.map((g) => ({
+          title: `group "${g}"`,
+          rs: ran.filter((r) => r.group === g),
+        }))
+      : []),
+  ];
+
   out.push("", "## Per arm", "");
-  out.push(
-    table(
-      [
-        "arm",
-        "jobs",
-        "first-turn pass",
-        "pass within max turns",
-        "rendered",
-        "mean turns",
-        "mean input tok",
-        "mean output tok",
-        "mean cost $",
-        "mean latency s",
-        "mean render ms (successful renders)",
-      ],
-      arms.map((arm) => {
-        const rs = ran.filter((r) => r.arm === arm);
-        const renders = rs.flatMap((r) =>
-          r.turns.filter((t) => t.rendered).map((t) => t.renderMs!)
-        );
-        return [
-          arm,
-          String(rs.length),
-          pct(rs.filter((r) => r.passFirst).length, rs.length),
-          pct(rs.filter((r) => r.pass).length, rs.length),
-          pct(rs.filter((r) => r.rendered).length, rs.length),
-          fmt(mean(rs.map((r) => r.turns.length)), 2),
-          fmt(
-            mean(
-              rs.map(
-                (r) => r.usage.input + r.usage.cacheWrite + r.usage.cacheRead
-              )
-            )
-          ),
-          fmt(mean(rs.map((r) => r.usage.output))),
-          fmt(mean(rs.map((r) => r.usd)), 4),
-          fmt(mean(rs.map((r) => r.latencyMs / 1000)), 1),
-          fmt(mean(renders)),
-        ];
-      })
-    )
-  );
+  for (const { title, rs } of sections) {
+    if (sections.length > 1) out.push(`### ${title}`, "");
+    out.push(perArmTable(rs, arms), "");
+  }
+  out.pop();
 
   const edits = ran.filter((r) => r.kind === "edit");
   if (edits.length > 0) {
@@ -219,9 +270,10 @@ export function buildReport(
   );
   out.push(
     table(
-      ["task", ...arms],
+      ["task", ...(groups.length > 1 ? ["group"] : []), ...arms],
       tasks.map((t) => [
         t,
+        ...(groups.length > 1 ? [ran.find((r) => r.task === t)!.group] : []),
         ...arms.map((arm) => {
           const rs = ran.filter((r) => r.task === t && r.arm === arm);
           const lost = unscored.filter(
@@ -243,34 +295,11 @@ export function buildReport(
       "Per task, the difference in pass rate (within max turns) between gofish and the other arm, averaged over the tasks where both arms have a scored job; 95% bootstrap interval over tasks.",
       ""
     );
-    const rate = (t: string, arm: Arm) => {
-      const rs = ran.filter((r) => r.task === t && r.arm === arm);
-      return rs.length ? rs.filter((r) => r.pass).length / rs.length : null;
-    };
-    out.push(
-      table(
-        ["other arm", "tasks", "mean difference", "95% CI"],
-        arms
-          .filter((a) => a !== "gofish")
-          .map((arm) => {
-            const diffs = tasks
-              .map((t) => [rate(t, "gofish"), rate(t, arm)])
-              .filter(
-                (p): p is [number, number] => p[0] !== null && p[1] !== null
-              )
-              .map(([g, o]) => g - o);
-            const d = pairedDiff(diffs);
-            return [
-              arm,
-              String(diffs.length),
-              `${d.mean >= 0 ? "+" : ""}${fmt(100 * d.mean, 1)} pts`,
-              Number.isFinite(d.lo)
-                ? `[${fmt(100 * d.lo, 1)}, ${fmt(100 * d.hi, 1)}]`
-                : "-",
-            ];
-          })
-      )
-    );
+    for (const { title, rs } of sections) {
+      if (sections.length > 1) out.push(`### ${title}`, "");
+      out.push(pairedTable(rs, arms), "");
+    }
+    out.pop();
   }
 
   const firstLine = (s: string | undefined) => (s ?? "").split("\n")[0];

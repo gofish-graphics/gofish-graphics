@@ -126,6 +126,10 @@ Shapes are classified by their sampled geometry, not by their tag:
   every 2 px, and then only the points needed to stay within 0.5 px of the
   outline are kept (at most 400), so corners survive.
 
+A `rect` drawn by anything other than a `<rect>` element also keeps its
+outline, since a shape that fills 95% of its box may still not be a rectangle
+(a nearly flat ribbon between two bars, for example).
+
 The text of a `<text>` joins its `<tspan>`s. A tspan with its own `x`, `y` or
 `dy` starts a new line or run, so it is joined with a space: a tick label
 wrapped onto two lines reads "University Farm", not "UniversityFarm".
@@ -160,6 +164,13 @@ const task: Task = {
 };
 export default task;
 ```
+
+A task may set `group`, which the report uses to split its tables:
+`"common"` (the default) for charts every arm has a built-in chart type for,
+and `"beyond-defaults"` for charts no arm has built in (mosaic, waffle,
+ribbon chart), which a program has to compose from lower-level pieces. The
+per-arm table and the paired comparison are shown for all tasks and then for
+each group.
 
 An edit task adds `kind: "edit"`, `base: "<id of a create task>"` and
 `mayChange: Aspect[]`. The starting program in each arm is that arm's reference
@@ -202,24 +213,28 @@ missing, near-white or transparent. A **background** mark has no ink or covers
 at least 40% of the chart. Two colors are the **same** when their RGBA distance
 (alpha scaled to 0-255) is at most 24.
 
-Values for `bars` and `wedges` are either literal (`values: [3, 1, 2]`) or
-summed from the task data by category (`category: "lake", value: "count"`,
-categories in order of first appearance). Values for `stackedBars` and
-`groupedBars` are summed by `category` and `series`, both in order of first
-appearance. Field-based values are preferred, since they cannot drift from the
+Values for `bars`, `wedges` and `waffle` are either literal
+(`values: [3, 1, 2]`) or summed from the task data by category
+(`category: "lake", value: "count"`, categories in order of first
+appearance). Values for `stackedBars`, `groupedBars` and `ribbons` are summed
+by `category` and `series`, and for `mosaic` by `column` and `segment`, both
+in order of first appearance. Field-based values are preferred, since they cannot drift from the
 data.
 
-| Check            | Options                                                                          | Passes when                                                                                                                                                                                                                                                                                                                                                                                             |
-| ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bars`           | `orientation`, values, `ordered` (true), `direction` (`"forward"`), `tol` (0.03) | there is one filled rect per value on a shared baseline, with lengths proportional to the values from zero (negative values extend the other way), within `tol` of the largest value plus 1 px. With `ordered`, the bars follow the values' order along the category axis. `"forward"` is left to right, or top to bottom for horizontal bars. Use `"either"` when the task does not fix the direction. |
-| `stackedBars`    | `orientation`, `category`, `series`, `value`, `direction`, `tol`                 | there is one stack per category, in order. A stack is a column of rects that touch end to end, and its segment lengths match that category's nonzero values in any stack order. Each series has one color across stacks, and the series' colors differ. Positive values only.                                                                                                                           |
-| `groupedBars`    | `orientation`, `category`, `series`, `value`, `direction`, `tol`                 | the bars share a baseline and run in category order, with series order within each category, and their lengths are proportional. Each series has one color, and the series' colors differ.                                                                                                                                                                                                              |
-| `points`         | `x`, `y`, `colorBy?`, `tol` (0.01)                                               | every row has its own circle, centered at a linear image of `(x, y)` with x to the right and y up, within `tol` of the plotted extent (at least 1.5 px). Extra circles, such as legend swatches, are allowed. With `colorBy`, rows with the same value share a color and different values get different colors.                                                                                         |
-| `lineSeries`     | `x`, `y`, `groupBy?`, `tol` (0.015)                                              | every group (or all rows) has its own stroked line, and under one linear map with y up every row lies on its line, within `tol` of the plot size (at least 2 px), and each line runs in one x direction (it never steps back by more than that tolerance, so points joined out of x order fail). Smoothed curves pass. With `groupBy`, the lines' colors differ.                                        |
-| `wedges`         | values, `hole?`, `tol` (0.01)                                                    | slices around one center have angular shares matching the values' shares (any order) within `tol`, and every slice has its own color. Works for pies and donuts. `hole: true` also requires a donut (every slice's inner radius is at least 20% of its outer radius), and `hole: false` a pie (at most 5%).                                                                                             |
-| `textIncludes`   | `strings`                                                                        | each string appears, ignoring case, inside some text (SVG or HTML).                                                                                                                                                                                                                                                                                                                                     |
-| `distinctColors` | `k`                                                                              | data marks use at least `k` different colors.                                                                                                                                                                                                                                                                                                                                                           |
-| `sizeAbout`      | `w?`, `h?` (the task size), `tol` (0.25)                                         | the largest `<svg>` is within `tol` of the size. This is a loose sanity bound, since GoFish sizes the plot area and the svg grows with axes and legend.                                                                                                                                                                                                                                                 |
+| Check            | Options                                                                          | Passes when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bars`           | `orientation`, values, `ordered` (true), `direction` (`"forward"`), `tol` (0.03) | there is one filled rect per value on a shared baseline, with lengths proportional to the values from zero (negative values extend the other way), within `tol` of the largest value plus 1 px. With `ordered`, the bars follow the values' order along the category axis. `"forward"` is left to right, or top to bottom for horizontal bars. Use `"either"` when the task does not fix the direction.                                                                                                                                                                                                                   |
+| `stackedBars`    | `orientation`, `category`, `series`, `value`, `direction`, `tol`                 | there is one stack per category, in order. A stack is a column of rects that touch end to end, and its segment lengths match that category's nonzero values in any stack order. Each series has one color across stacks, and the series' colors differ. Positive values only.                                                                                                                                                                                                                                                                                                                                             |
+| `groupedBars`    | `orientation`, `category`, `series`, `value`, `direction`, `tol`                 | the bars share a baseline and run in category order, with series order within each category, and their lengths are proportional. Each series has one color, and the series' colors differ.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `points`         | `x`, `y`, `colorBy?`, `tol` (0.01)                                               | every row has its own circle, centered at a linear image of `(x, y)` with x to the right and y up, within `tol` of the plotted extent (at least 1.5 px). Extra circles, such as legend swatches, are allowed. With `colorBy`, rows with the same value share a color and different values get different colors.                                                                                                                                                                                                                                                                                                           |
+| `lineSeries`     | `x`, `y`, `groupBy?`, `tol` (0.015)                                              | every group (or all rows) has its own stroked line, and under one linear map with y up every row lies on its line, within `tol` of the plot size (at least 2 px), and each line runs in one x direction (it never steps back by more than that tolerance, so points joined out of x order fail). Smoothed curves pass. With `groupBy`, the lines' colors differ.                                                                                                                                                                                                                                                          |
+| `wedges`         | values, `hole?`, `tol` (0.01)                                                    | slices around one center have angular shares matching the values' shares (any order) within `tol`, and every slice has its own color. Works for pies and donuts. `hole: true` also requires a donut (every slice's inner radius is at least 20% of its outer radius), and `hole: false` a pie (at most 5%).                                                                                                                                                                                                                                                                                                               |
+| `textIncludes`   | `strings`                                                                        | each string appears, ignoring case, inside some text (SVG or HTML).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `distinctColors` | `k`                                                                              | data marks use at least `k` different colors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `sizeAbout`      | `w?`, `h?` (the task size), `tol` (0.25)                                         | the largest `<svg>` is within `tol` of the size. This is a loose sanity bound, since GoFish sizes the plot area and the svg grows with axes and legend.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `mosaic`         | `column`, `segment`, `value`, `tol` (0.03)                                       | there is one column of abutting rects per `column` category, left to right in order. Column widths are proportional to the column totals (within `tol` of the largest total plus 1 px), and every column has the same height (within `tol` plus 1 px). Within a column, segment heights are proportional to each `segment` category's share of the column, in any stack order. Each segment category has one color across columns, and the colors differ.                                                                                                                                                                 |
+| `waffle`         | `rows`, `cols`, values, `order` (`"any"`), `tol` (0 squares)                     | there is a `rows` x `cols` regular grid of equal squares, with no square of the same size on the grid's lattice just outside it (so a bigger grid fails). Each category has its own color on as many squares as its value. With `order: "rows"`, reading the grid row by row from the top-left gives one run of squares per category, in the values' order.                                                                                                                                                                                                                                                               |
+| `ribbons`        | `orientation`, `category`, `series`, `value`, `direction`, `tol`                 | `stackedBars` passes, and for every series and every pair of neighboring stacks there is a filled shape whose cross-section at the first stack's far edge spans the series' segment there, and at the next stack's near edge spans its segment there, within max(2 px, `tol` of the segment). The cross-section is read 3 px and 6 px into the gap and extrapolated to the edge, so the gap must be at least 12 px. The band has the series' color, or its hue is nearer that series' hue than any other's (after compositing over white), so lighter or semi-transparent bands count. One shape may carry several bands. |
 
 The checks were tried against throwaway programs in all four arms before any
 task used them: stacked and grouped bars, three smoothed and straight line
@@ -231,6 +246,18 @@ with right-closed or automatic bins, a pie with a hole, a donut with a tiny
 hole, a line that joins its points in value order instead of year order,
 square markers where circles were asked for, and edits that were not made or
 that also changed colors or text.
+
+The beyond-defaults checks were tried the same way. `mosaic` fails a
+normalized stacked bar (equal-width columns, in GoFish and matplotlib), raw
+heights instead of shares, color by column instead of by segment, and the two
+fields swapped. `waffle` fails a pie, a column-by-column fill, a fill from the
+bottom-left (in GoFish and matplotlib), one square moved between categories,
+and a 5 x 20 grid. `ribbons` fails plain stacked bars (in GoFish and d3),
+bands connecting each segment to the next channel's segment, a stacked area
+through the bar centers (curved and straight), gray bands, unfilled band
+outlines, and bands filled down to zero. It passes other correct builds: one
+area path per channel through both edges of every bar, and a matplotlib
+`stackplot` behind the bars.
 
 ## Known limitations
 
@@ -246,6 +273,16 @@ that also changed colors or text.
 - Colors are compared as rendered. A task that expects particular colors must
   say so in its instruction.
 - Preservation is coarse: it compares sets and counts, not geometry.
+- `stackedBars`, `mosaic` and `ribbons` accept any stack order within a bar,
+  even when the instruction states one. A ribbon chart that re-sorts each bar
+  (the Power BI default) still passes `ribbons` if its bands connect the right
+  segments.
+- `mosaic` is vertical only (columns side by side). It does not check that
+  the columns touch.
+- `waffle` needs square rects. A grid of circles or rounded dots fails.
+- `ribbons` needs a gap of at least 12 px between neighboring bars. A band
+  drawn as one path with several separate pieces is read as one outline, which
+  can join the pieces with a false edge.
 - `bars` checks lengths and order, not widths or positions along the category
   axis. A histogram whose first and last bins are drawn narrower than the
   others (for example, clipped to the data's range) still passes if the

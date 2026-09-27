@@ -368,9 +368,16 @@ export class Renderer {
           renderMs,
         };
       }
-      const problem = await page.evaluate(() =>
-        (window as any).llmBench.problem()
-      );
+      // Some libraries (React) finish committing on real browser tasks that
+      // the fake clock does not drive, so give a missing picture a few real
+      // moments to appear before calling it a failure. Same for every arm.
+      let problem: string | null = null;
+      for (let i = 0; i < 10; i++) {
+        problem = await page.evaluate(() => (window as any).llmBench.problem());
+        if (!problem || problem.startsWith("The output contains")) break;
+        await new Promise((r) => setTimeout(r, 100));
+        await page.clock.runFor(100).catch(() => {});
+      }
       if (errors.length > 0)
         return { ok: false, error: errors.slice(0, 5).join("\n"), renderMs };
       if (problem) return { ok: false, error: problem, renderMs };

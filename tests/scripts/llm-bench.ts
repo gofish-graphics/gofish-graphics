@@ -62,6 +62,7 @@ import {
   loadData,
   loadReference,
   loadTasks,
+  taskGroup,
   type Arm,
   type Task,
 } from "./llm-bench/tasks";
@@ -267,6 +268,7 @@ async function runReferences(
       mode: "references",
       task: task.id,
       kind: task.kind,
+      group: taskGroup(task),
       arm,
       sample: 0,
       turns: [turn],
@@ -422,6 +424,7 @@ async function runJob(
     mode: opts.mode,
     task: task.id,
     kind: task.kind,
+    group: taskGroup(task),
     arm,
     sample,
     turns,

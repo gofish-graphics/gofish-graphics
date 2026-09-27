@@ -51,9 +51,20 @@ export interface Size {
 export type Aspect = "colors" | "text" | "marks" | "size";
 export const ASPECTS: Aspect[] = ["colors", "text", "marks", "size"];
 
+/**
+ * Which set a task belongs to, reported separately. "common": charts every
+ * library draws with a built-in chart type. "beyond-defaults": charts no arm
+ * has a built-in for (mosaic, waffle, ribbon chart), so a program has to
+ * compose them from lower-level pieces.
+ */
+export const GROUPS = ["common", "beyond-defaults"] as const;
+export type Group = (typeof GROUPS)[number];
+
 interface TaskBase {
   /** "create/<name>" or "edit/<name>"; also the references/ subpath. */
   id: string;
+  /** Report group (default "common"). */
+  group?: Group;
   /** Basename of a JSON file in tests/llm-bench/data/ (an array of rows). */
   data: string;
   size: Size;
@@ -100,6 +111,10 @@ export async function loadTasks(filter?: string): Promise<Task[]> {
     a.kind === b.kind ? a.id.localeCompare(b.id) : a.kind === "create" ? -1 : 1
   );
   return filter ? tasks.filter((t) => t.id.includes(filter)) : tasks;
+}
+
+export function taskGroup(task: Task): Group {
+  return task.group ?? "common";
 }
 
 export function dataPath(task: Task): string {

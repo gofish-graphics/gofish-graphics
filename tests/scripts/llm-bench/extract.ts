@@ -545,7 +545,13 @@ function classify(
     const pts = open.slice(0, -1);
     if (box.w < 0.5 || box.h < 0.5) return { kind: "line" };
     const ratio = shoelace(pts) / (box.w * box.h);
-    if (ratio >= 0.95) return { kind: "rect" };
+    // A <rect> is exactly its box. Any other shape that nearly fills its box
+    // (a flat band between two bars, say) keeps its outline, since it may
+    // not be exactly rectangular.
+    if (ratio >= 0.95)
+      return tag === "rect"
+        ? { kind: "rect" }
+        : { kind: "rect", points: thin(simplify(pts, 0.5), 400) };
     const cx = box.x + box.w / 2;
     const cy = box.y + box.h / 2;
     if (Math.abs(box.w - box.h) <= 0.1 * Math.max(box.w, box.h)) {

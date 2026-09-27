@@ -203,6 +203,7 @@ assert.equal(backoffMs(1, 7000), 7000);
     mode: "run",
     task,
     kind: "create",
+    group: "common",
     arm,
     sample: 1,
     turns: [
