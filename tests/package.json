@@ -24,6 +24,7 @@
     "validate-python-ir": "tsx scripts/validate-python-ir.ts",
     "bench": "tsx scripts/bench.ts",
     "llm-bench": "tsx scripts/llm-bench.ts",
+    "llm-bench:contexts": "tsx scripts/llm-bench/make-cheatsheet.ts && tsx scripts/llm-bench/make-gallery.ts",
     "bench:quick": "tsx scripts/bench.ts all --quick",
     "bench:synthetic": "tsx scripts/bench.ts synthetic",
     "bench:examples-js": "tsx scripts/bench.ts examples-js",

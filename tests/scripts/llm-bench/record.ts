@@ -73,4 +73,9 @@ export interface RenderRecord {
   /** Bounding boxes of the <svg> elements in the container (largest first). */
   svgs: Box[];
   marks: Mark[];
+  /** Absolute path of the PNG screenshot of the container, at 1 CSS px per
+   *  pixel, in the same coordinates as the marks. Set by render.ts after
+   *  the picture is read; checks that judge rendered pixels (compositing,
+   *  blending, images) read it. */
+  screenshot?: string;
 }

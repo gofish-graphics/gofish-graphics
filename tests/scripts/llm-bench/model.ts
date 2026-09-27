@@ -8,10 +8,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { spawn } from "child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "fs";
@@ -47,6 +49,9 @@ export interface ModelRequest {
   arm: Arm;
   /** 1-based turn number. */
   turn: number;
+  /** The skill context (claude-code only): this folder is copied into the
+   *  call's working directory and the model may read it with tools. */
+  skillDir?: string;
 }
 
 export interface ModelReply {
@@ -63,6 +68,10 @@ export interface ModelReply {
   costUsd?: number;
   stopReason: string;
   latencyMs: number;
+  /** Skill context: the tool calls the model made in this turn (see
+   *  parseClaudeCodeOutput), and the text the tools returned to it. */
+  toolUses?: string[];
+  toolResults?: string[];
 }
 
 export interface Model {
@@ -228,6 +237,9 @@ export class AnthropicModel implements Model {
  */
 export const CLAUDE_CODE_OVERHEAD_TOKENS = 450;
 
+/** The tools the skill context allows (read-only). */
+export const SKILL_TOOLS = ["Read", "Glob", "Grep"];
+
 /** Kill a claude process that runs longer than this. */
 const CLAUDE_CODE_TIMEOUT_MS = 15 * 60_000;
 
@@ -375,6 +387,59 @@ export function claudeCodeReply(
   };
 }
 
+/** What `claude -p` printed: the result object, and for
+ *  `--output-format stream-json`, the tool calls in the assistant messages
+ *  and the text of the tool results sent back. Plain `json` output is one
+ *  line holding only the result. */
+export function parseClaudeCodeOutput(
+  stdout: string,
+  cwd?: string
+): {
+  result?: ClaudeCodeResult;
+  /** Each tool call as "<tool> <file or pattern>", e.g. "Read SKILL.md". */
+  toolUses: string[];
+  toolResults: string[];
+} {
+  let result: ClaudeCodeResult | undefined;
+  const toolUses: string[] = [];
+  const roots = cwd ? [cwd] : [];
+  if (cwd && existsSync(cwd)) roots.unshift(realpathSync(cwd));
+  const toolResults: string[] = [];
+  for (const line of stdout.split("\n")) {
+    if (!line.trim()) continue;
+    let ev: any;
+    try {
+      ev = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!ev || typeof ev !== "object") continue;
+    if (ev.type === "result") result = ev;
+    const content = ev.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const b of content) {
+      if (ev.type === "assistant" && b?.type === "tool_use") {
+        const i = b.input ?? {};
+        // Paths relative to the working directory (the model may give
+        // them absolute, under /private or not on macOS).
+        let what: string = i.file_path ?? i.pattern ?? i.path ?? "";
+        for (const root of roots) what = what.split(`${root}/`).join("");
+        what = what.replace(/^\.\//, "");
+        toolUses.push(`${b.name}${what ? ` ${what}` : ""}`);
+      }
+      if (ev.type === "user" && b?.type === "tool_result")
+        toolResults.push(
+          typeof b.content === "string"
+            ? b.content
+            : Array.isArray(b.content)
+              ? b.content.map((c: any) => c?.text ?? "").join("\n")
+              : ""
+        );
+    }
+  }
+  return { result, toolUses, toolResults };
+}
+
 /**
  * Each call runs `claude -p` with the arm's system prompt from a file, no
  * tools, no session saved, and `--safe-mode` (no CLAUDE.md, skills,
@@ -383,6 +448,13 @@ export function claudeCodeReply(
  * calls do not share one). ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are
  * removed from its environment, so it uses the subscription login, not an
  * API key. The message goes in on stdin.
+ *
+ * With a skill (`req.skillDir`), the folder is copied into the working
+ * directory and the model gets the Read, Glob and Grep tools, allowed
+ * without prompting (`--allowedTools`; `--permission-prompts none` denies
+ * anything else rather than waiting). The output is `stream-json`, so the
+ * tool calls and what they returned can be counted; `num_turns` counts the
+ * model's API round trips, one more than the rounds of tool use.
  */
 export class ClaudeCodeModel implements Model {
   backend = "claude-code" as const;
@@ -397,6 +469,7 @@ export class ClaudeCodeModel implements Model {
     const dir = mkdtempSync(join(tmpdir(), "llm-bench-cc-"));
     const cwd = join(dir, "cwd");
     mkdirSync(cwd);
+    if (req.skillDir) cpSync(req.skillDir, cwd, { recursive: true });
     const systemPath = join(dir, "system.md");
     // The API backend sends the blocks separately; here they are one text.
     writeFileSync(systemPath, req.system.map((b) => b.text).join("\n\n"));
@@ -405,16 +478,21 @@ export class ClaudeCodeModel implements Model {
     delete env.ANTHROPIC_AUTH_TOKEN;
     // The same output cap as the API backend.
     env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(MAX_TOKENS);
+    const tools = req.skillDir ? SKILL_TOOLS.join(",") : "";
     const args = [
       "-p",
-      "--output-format",
-      "json",
+      ...(req.skillDir
+        ? ["--output-format", "stream-json", "--verbose"]
+        : ["--output-format", "json"]),
       "--model",
       this.id,
       "--effort",
       this.effort,
       "--tools",
-      "",
+      tools,
+      ...(req.skillDir
+        ? ["--allowedTools", tools, "--permission-prompts", "none"]
+        : []),
       "--system-prompt-file",
       systemPath,
       "--no-session-persistence",
@@ -430,14 +508,17 @@ export class ClaudeCodeModel implements Model {
         conversationPrompt(req.messages)
       );
       const wallMs = performance.now() - t0;
-      let parsed: ClaudeCodeResult | undefined;
-      try {
-        parsed = JSON.parse(stdout.trim());
-      } catch {
-        parsed = undefined;
+      const out = parseClaudeCodeOutput(stdout, cwd);
+      if (out.result) {
+        const reply = claudeCodeReply(out.result, wallMs);
+        return req.skillDir
+          ? {
+              ...reply,
+              toolUses: out.toolUses,
+              toolResults: out.toolResults,
+            }
+          : reply;
       }
-      if (parsed && typeof parsed === "object" && parsed.type === "result")
-        return claudeCodeReply(parsed, wallMs);
       const text = `${stderr.trim()}\n${stdout.trim()}`.trim();
       if (timedOut)
         throw new ClaudeCodeError(

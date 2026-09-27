@@ -16,6 +16,9 @@
  *   same color     RGBA distance <= SAME_COLOR (alpha scaled to 0-255).
  */
 
+import { readFileSync } from "fs";
+import { join } from "path";
+import { PNG } from "pngjs";
 import type { Box, Mark, RenderRecord, RGBA } from "./record";
 import type { Aspect, Size } from "./tasks";
 
@@ -228,6 +231,28 @@ export type Check =
       order?: "rows" | "any";
       tol?: number;
     } & BarValues)
+  /** Unit blocks, a waffle with ragged edges: one block of equal unit
+   *  squares per `category` (in order of first appearance), holding its
+   *  summed `value` / `per` (default 1) squares. The blocks sit left to
+   *  right in category order, separated by gaps at least one square wide,
+   *  with their start edges (bottoms for a bottom `start`, tops for a top
+   *  one) on one line. All squares lie on one regular lattice. Each block is
+   *  `width` columns wide and fills rows from its `start` corner: row by row
+   *  away from that corner, each row from that corner's side, so every row
+   *  is full except the last, whose squares sit at that side. Each block is
+   *  one color, distinct from the others. Square marks of another size, and
+   *  groups of lattice-adjacent squares that are not a block, are ignored.
+   *  `labels`: a text containing each category's name is centered under its
+   *  block (within half the block's width) and at most 40px below it. */
+  | {
+      check: "unitBlocks";
+      category: string;
+      value: string;
+      per?: number;
+      width: number;
+      start: "bottom-left" | "bottom-right" | "top-left" | "top-right";
+      labels?: boolean;
+    }
   /** A ribbon chart: `stackedBars`, plus, for every series and every pair of
    *  neighboring stacks, a filled band whose cross-section at the first
    *  stack's far edge spans the series' segment there and at the next
@@ -270,6 +295,32 @@ export type Check =
       value: string;
       max?: number;
       tol?: number;
+    }
+  /** Image fill, judged on the rendered pixels (the PNG screenshot), since
+   *  compositing and blending only exist there. `image` is a file in
+   *  tests/llm-bench/assets/, drawn `height` px tall at its own aspect
+   *  ratio, once per `category` (left to right in order, bottoms on one
+   *  line within 3px). Each copy is found by its silhouette: 90% of its
+   *  opaque pixels are painted and 90% of its transparent ones do not look
+   *  like gray glass. Then, in each copy, among the opaque pixels of middle
+   *  brightness: below the level (`value / max` of `height` up from the
+   *  bottom, within `levelTol` px, default 3) 85% have the hue of `color`
+   *  (within 25 degrees, chroma at least 40) and above it 85% are gray
+   *  (chroma at most 30). The rendered brightness follows the image's gray
+   *  brightness (correlation at least 0.6) on each side of the level. No
+   *  transparent pixel of the image, nor any pixel within 12px left or
+   *  right of it, has the tint (at most 1%, and at least 4 pixels, of
+   *  them). A gray line or thin rect (from the record) lies at the level
+   *  and spans the image's width. */
+  | {
+      check: "imageFill";
+      image: string;
+      height: number;
+      color: string;
+      category: string;
+      value: string;
+      max?: number;
+      levelTol?: number;
     }
   /** Circle packing, two levels: one circle per `leaf` (its `value` summed
    *  by `parent` and `leaf`) with area proportional to the value (radius^2
@@ -2456,14 +2507,10 @@ function findGrid(
   return null;
 }
 
-function checkWaffle(
-  c: Extract<Check, { check: "waffle" }>,
-  rec: RenderRecord,
-  ctx: CheckContext
-): CheckResult {
-  const { labels, values: counts } = barValues(c, ctx.data);
-  const slack = c.tol ?? 0;
-  const squares = rec.marks.filter(
+/** Rect marks with ink, not background, at least 2px, and square (sides
+ *  within 1px or 5%): the cells of a waffle. */
+function squareMarks(rec: RenderRecord): Mark[] {
+  return rec.marks.filter(
     (m) =>
       m.kind === "rect" &&
       ink(m) &&
@@ -2471,6 +2518,16 @@ function checkWaffle(
       Math.min(m.w, m.h) >= 2 &&
       Math.abs(m.w - m.h) <= Math.max(1, 0.05 * Math.max(m.w, m.h))
   );
+}
+
+function checkWaffle(
+  c: Extract<Check, { check: "waffle" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const { labels, values: counts } = barValues(c, ctx.data);
+  const slack = c.tol ?? 0;
+  const squares = squareMarks(rec);
   const grid = findGrid(squares, c.rows, c.cols);
   if (!grid)
     return {
@@ -2519,6 +2576,180 @@ function checkWaffle(
         pass: false,
         detail: `${c.rows} x ${c.cols} grid found, but its color counts are [${got.join(", ")}]; expected [${exp.join(", ")}]`,
       };
+}
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+function checkUnitBlocks(
+  c: Extract<Check, { check: "unitBlocks" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const { labels: names, values } = barValues(
+    { category: c.category, value: c.value },
+    ctx.data
+  );
+  const counts = values.map((v) => Math.round(v / (c.per ?? 1)));
+  const want = names.map((n, i) => `${n} ${counts[i]}`).join(", ");
+  const fail = (why: string): CheckResult => ({
+    pass: false,
+    detail: `expected unit blocks ${want}; ${why}`,
+  });
+  const squares = squareMarks(rec);
+  // The unit square: the most common square size (within 1px).
+  let size = 0;
+  let most = 0;
+  for (const s of squares) {
+    const n = squares.filter((m) => Math.abs(m.w - s.w) <= 1).length;
+    if (n > most) [most, size] = [n, s.w];
+  }
+  const unit = squares.filter(
+    (m) => Math.abs(m.w - size) <= 1 && Math.abs(m.h - size) <= 1
+  );
+  const cs = unit.map(center);
+  // Lattice pitch: the median distance to the nearest square to the right
+  // in the same row, and below in the same column.
+  const nearest = (i: number, axis: 0 | 1) => {
+    let best = Infinity;
+    cs.forEach((q, j) => {
+      const d = q[axis] - cs[i][axis];
+      if (
+        j !== i &&
+        Math.abs(q[1 - axis] - cs[i][1 - axis]) <= 1 &&
+        d > size - 1
+      )
+        best = Math.min(best, d);
+    });
+    return best;
+  };
+  const rights = cs.map((_, i) => nearest(i, 0)).filter(Number.isFinite);
+  const downs = cs.map((_, i) => nearest(i, 1)).filter(Number.isFinite);
+  if (rights.length === 0 || downs.length === 0)
+    return fail(
+      `${unit.length} squares of ${size.toFixed(1)}px form no rows and columns`
+    );
+  const px = median(rights);
+  const py = median(downs);
+  const tol = Math.max(1.5, 0.15 * Math.min(px, py));
+  // Blocks: squares joined through lattice neighbors (one pitch apart along
+  // a row or a column), left to right.
+  const parent = unit.map((_, i) => i);
+  const find = (i: number): number =>
+    parent[i] === i ? i : (parent[i] = find(parent[i]));
+  for (let i = 0; i < cs.length; i++)
+    for (let j = i + 1; j < cs.length; j++) {
+      const dx = Math.abs(cs[i][0] - cs[j][0]);
+      const dy = Math.abs(cs[i][1] - cs[j][1]);
+      if (
+        (Math.abs(dx - px) <= tol && dy <= tol) ||
+        (dx <= tol && Math.abs(dy - py) <= tol)
+      )
+        parent[find(i)] = find(j);
+    }
+  const groups = new Map<number, Mark[]>();
+  unit.forEach((m, i) => {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r)!.push(m);
+  });
+  const left = (g: Mark[]) => Math.min(...g.map((m) => m.x));
+  const right = (g: Mark[]) => Math.max(...g.map((m) => m.x + m.w));
+  const comps = [...groups.values()].sort((a, b) => left(a) - left(b));
+  const blocks: Mark[][] = [];
+  for (const g of comps)
+    if (blocks.length < counts.length && g.length === counts[blocks.length])
+      blocks.push(g);
+  if (blocks.length !== counts.length)
+    return fail(
+      `the blocks of ${size.toFixed(1)}px squares hold [${comps.map((g) => g.length).join(", ")}] squares, left to right`
+    );
+  for (let i = 1; i < blocks.length; i++) {
+    const gap = left(blocks[i]) - right(blocks[i - 1]);
+    if (gap < size - 1)
+      return fail(
+        `the gap between the blocks of ${names[i - 1]} and ${names[i]} is ${gap.toFixed(1)}px, less than one square (${size.toFixed(1)}px)`
+      );
+  }
+  const bottom = c.start.startsWith("bottom");
+  const fromLeft = c.start.endsWith("left");
+  const rowSide = bottom ? "bottom" : "top";
+  const colSide = fromLeft ? "left" : "right";
+  let edge0 = 0;
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    const n = counts[i];
+    const xs = b.map((m) => center(m)[0]);
+    const ys = b.map((m) => center(m)[1]);
+    const ox = fromLeft ? Math.min(...xs) : Math.max(...xs);
+    const oy = bottom ? Math.max(...ys) : Math.min(...ys);
+    if (i === 0) edge0 = oy;
+    else if (Math.abs(oy - edge0) > tol)
+      return fail(
+        `the ${rowSide} rows of ${names[0]} and ${names[i]} are ${Math.abs(oy - edge0).toFixed(1)}px apart, not on one line`
+      );
+    // Lattice cell of each square, counted from the start corner.
+    const got = new Set<string>();
+    const rowLen = new Map<number, number>();
+    for (const [x, y] of b.map(center)) {
+      const col = (fromLeft ? x - ox : ox - x) / px;
+      const row = (bottom ? oy - y : y - oy) / py;
+      const ci = Math.round(col);
+      const ri = Math.round(row);
+      if (Math.abs(col - ci) * px > tol || Math.abs(row - ri) * py > tol)
+        return fail(`a square of ${names[i]} is off the block's lattice`);
+      got.add(`${ri},${ci}`);
+      rowLen.set(ri, (rowLen.get(ri) ?? 0) + 1);
+    }
+    // Square k of the fill order sits at row k / width, column k % width.
+    const expected = Array.from(
+      { length: n },
+      (_, k) => `${Math.floor(k / c.width)},${k % c.width}`
+    );
+    if (got.size === n && expected.every((e) => got.has(e))) continue;
+    const lens = [...rowLen.keys()]
+      .sort((a, b) => a - b)
+      .map((r) => rowLen.get(r));
+    const expLens = Array.from({ length: Math.ceil(n / c.width) }, (_, r) =>
+      Math.min(c.width, n - r * c.width)
+    );
+    const sameLens = lens.join() === expLens.join();
+    return fail(
+      `${names[i]}'s rows from the ${rowSide} hold [${lens.join(", ")}] squares, ${
+        sameLens
+          ? `but the last row's squares do not start at the ${colSide}`
+          : `expected [${expLens.join(", ")}] (${c.width} wide, only the last row partial, at the ${colSide})`
+      }`
+    );
+  }
+  const colors = seriesColorsConsistent(blocks, names);
+  if (!colors.pass) return colors;
+  let detail = `${blocks.length} blocks, left to right, ${want}, ${c.width} wide, filled from the ${c.start}, one color each`;
+  if (c.labels) {
+    const texts = rec.marks.filter((m) => m.kind === "text");
+    const missing = names.filter((name, i) => {
+      const b = blocks[i];
+      const x0 = left(b);
+      const x1 = right(b);
+      const y1 = Math.max(...b.map((m) => m.y + m.h));
+      return !texts.some(
+        (t) =>
+          t.text!.toLowerCase().includes(name.toLowerCase()) &&
+          Math.abs(t.x + t.w / 2 - (x0 + x1) / 2) <= (x1 - x0) / 2 &&
+          t.y >= y1 - 2 &&
+          t.y <= y1 + 40
+      );
+    });
+    if (missing.length > 0)
+      return {
+        pass: false,
+        detail: `${detail}, but no label centered under the block of ${missing.join(", ")}`,
+      };
+    detail += ", each labeled underneath";
+  }
+  return { pass: true, detail };
 }
 
 /** The extent [lo, hi] across the category axis where the outline of `m`
@@ -2928,6 +3159,398 @@ function checkBottleFill(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Pixel checks: judged on the PNG screenshot (RenderRecord.screenshot)
+// ---------------------------------------------------------------------------
+
+const ASSET_DIR = join(import.meta.dirname, "../../llm-bench/assets");
+
+type RGB = [number, number, number];
+
+interface Raster {
+  w: number;
+  h: number;
+  data: Uint8Array;
+}
+
+function readRaster(path: string): Raster {
+  const png = PNG.sync.read(readFileSync(path));
+  return { w: png.width, h: png.height, data: png.data };
+}
+
+/** The screenshot's pixel at (x, y), composited over white (white outside
+ *  the picture). */
+function pixelAt(r: Raster, x: number, y: number): RGB {
+  if (x < 0 || y < 0 || x >= r.w || y >= r.h) return [255, 255, 255];
+  const i = 4 * (y * r.w + x);
+  const a = r.data[i + 3] / 255;
+  return [0, 1, 2].map((k) => r.data[i + k] * a + 255 * (1 - a)) as RGB;
+}
+
+/** Hue in degrees and chroma (max - min, 0-255) of an RGB color. */
+function hueChroma(c: RGB | RGBA): [number, number] {
+  const [r, g, b] = c;
+  const mx = Math.max(r, g, b);
+  const chroma = mx - Math.min(r, g, b);
+  if (chroma === 0) return [0, 0];
+  const h =
+    mx === r
+      ? ((g - b) / chroma + 6) % 6
+      : mx === g
+        ? (b - r) / chroma + 2
+        : (r - g) / chroma + 4;
+  return [h * 60, chroma];
+}
+
+/** Brightness (luma with the Rec. 601 weights that blend modes use), 0-1. */
+function luma(c: RGB): number {
+  return (0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]) / 255;
+}
+
+function correlation(xs: number[], ys: number[]): number {
+  const n = xs.length;
+  if (n < 2) return 0;
+  const mx = xs.reduce((s, v) => s + v, 0) / n;
+  const my = ys.reduce((s, v) => s + v, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (xs[i] - mx) * (ys[i] - my);
+    sxx += (xs[i] - mx) ** 2;
+    syy += (ys[i] - my) ** 2;
+  }
+  return sxx === 0 || syy === 0 ? 0 : sxy / Math.sqrt(sxx * syy);
+}
+
+/** An image resampled to `height` px at its own aspect ratio: per display
+ *  pixel, the gray brightness (Rec. 709, as grayscale filters compute it)
+ *  of its source pixels, plus two eroded masks: `opaque` (the pixel and its
+ *  8 neighbors are opaque) and `clear` (every pixel within 2 is
+ *  transparent), so a placement off by a pixel, or antialiased edges, do
+ *  not blur the verdict. */
+interface Silhouette {
+  w: number;
+  h: number;
+  gray: Float32Array;
+  opaque: Uint8Array;
+  clear: Uint8Array;
+}
+
+function silhouette(img: Raster, height: number): Silhouette {
+  const k = img.h / height; // source px per display px
+  const w = Math.round(img.w / k);
+  const h = Math.round(height);
+  const alpha = new Float32Array(w * h);
+  const gray = new Float32Array(w * h);
+  for (let v = 0; v < h; v++)
+    for (let u = 0; u < w; u++) {
+      let sa = 0;
+      let sg = 0;
+      let n = 0;
+      const x1 = Math.min(img.w, Math.ceil((u + 1) * k));
+      const y1 = Math.min(img.h, Math.ceil((v + 1) * k));
+      for (let y = Math.floor(v * k); y < y1; y++)
+        for (let x = Math.floor(u * k); x < x1; x++) {
+          const i = 4 * (y * img.w + x);
+          const a = img.data[i + 3] / 255;
+          sa += a;
+          sg +=
+            (a *
+              (0.2126 * img.data[i] +
+                0.7152 * img.data[i + 1] +
+                0.0722 * img.data[i + 2])) /
+            255;
+          n++;
+        }
+      alpha[v * w + u] = n ? sa / n : 0;
+      gray[v * w + u] = sa ? sg / sa : 1;
+    }
+  const at = (u: number, v: number) =>
+    u < 0 || v < 0 || u >= w || v >= h ? 0 : alpha[v * w + u];
+  const opaque = new Uint8Array(w * h);
+  const clear = new Uint8Array(w * h);
+  for (let v = 0; v < h; v++)
+    for (let u = 0; u < w; u++) {
+      let lo = 1;
+      let hi = 0;
+      for (let dv = -2; dv <= 2; dv++)
+        for (let du = -2; du <= 2; du++) {
+          const a = at(u + du, v + dv);
+          hi = Math.max(hi, a);
+          if (Math.abs(du) <= 1 && Math.abs(dv) <= 1) lo = Math.min(lo, a);
+        }
+      opaque[v * w + u] = lo >= 0.98 ? 1 : 0;
+      clear[v * w + u] = hi <= 0.02 ? 1 : 0;
+    }
+  return { w, h, gray, opaque, clear };
+}
+
+/** Visibly painted: some channel more than 25 below white. */
+const paintedPx = (c: RGB) => Math.max(255 - c[0], 255 - c[1], 255 - c[2]) > 25;
+/** Looks like gray glass: no hue, and not white. */
+const grayGlass = (c: RGB) => hueChroma(c)[1] <= 30 && luma(c) < 0.9;
+
+/** Where `s` sits best in `r` with its left edge in [xa, xb]: the placement
+ *  that paints the most of its opaque pixels and leaves the most of its
+ *  transparent ones free of gray glass (as shares). Coarse search on a
+ *  sample of the pixels, then refined. */
+function placeSilhouette(
+  r: Raster,
+  s: Silhouette,
+  xa: number,
+  xb: number
+): { x: number; y: number; opaque: number; clear: number } {
+  const sample = (step: number) => {
+    const o: [number, number][] = [];
+    const c: [number, number][] = [];
+    for (let v = 0; v < s.h; v += step)
+      for (let u = 0; u < s.w; u += step) {
+        if (s.opaque[v * s.w + u]) o.push([u, v]);
+        else if (s.clear[v * s.w + u]) c.push([u, v]);
+      }
+    return { o, c };
+  };
+  const score = (pts: ReturnType<typeof sample>, x: number, y: number) => {
+    let o = 0;
+    let c = 0;
+    for (const [u, v] of pts.o) if (paintedPx(pixelAt(r, x + u, y + v))) o++;
+    for (const [u, v] of pts.c) if (!grayGlass(pixelAt(r, x + u, y + v))) c++;
+    return { o: o / pts.o.length, c: c / pts.c.length };
+  };
+  const coarse = sample(3);
+  let best = { x: xa, y: 0, s: -1 };
+  for (let x = xa; x <= xb; x += 2)
+    for (let y = 0; y + s.h <= r.h; y += 2) {
+      const f = score(coarse, x, y);
+      if (f.o + f.c > best.s) best = { x, y, s: f.o + f.c };
+    }
+  // The silhouette score is flat within a few px (the glass is painted
+  // edge to edge), so the final position is where the rendered brightness
+  // best follows the image's shading (correlation, which allows any
+  // brightness scale, as a multiplied tint has).
+  const shade = sample(2).o;
+  const src = shade.map(([u, v]) => s.gray[v * s.w + u]);
+  let at = { x: best.x, y: best.y };
+  let top = -Infinity;
+  for (let x = best.x - 6; x <= best.x + 6; x++)
+    for (let y = Math.max(0, best.y - 6); y <= best.y + 6; y++) {
+      const r2 = correlation(
+        shade.map(([u, v]) => luma(pixelAt(r, x + u, y + v))),
+        src
+      );
+      if (r2 > top) [top, at] = [r2, { x, y }];
+    }
+  const f = score(sample(1), at.x, at.y);
+  return { ...at, opaque: f.o, clear: f.c };
+}
+
+interface FillPixel {
+  /** Row center, in container px. */
+  y: number;
+  /** Middle brightness in the image (0.2-0.85), where a tint shows. */
+  mid: boolean;
+  tinted: boolean;
+  gray: boolean;
+  /** Rendered brightness, and the image's own gray brightness. */
+  l: number;
+  src: number;
+  hue: number;
+  chroma: number;
+}
+
+function circularMeanHue(hues: number[]): number {
+  const rad = hues.map((h) => (h * Math.PI) / 180);
+  const a = Math.atan2(
+    rad.reduce((s, h) => s + Math.sin(h), 0),
+    rad.reduce((s, h) => s + Math.cos(h), 0)
+  );
+  return ((a * 180) / Math.PI + 360) % 360;
+}
+
+function checkImageFill(
+  c: Extract<Check, { check: "imageFill" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  if (!rec.screenshot)
+    return { pass: false, detail: "no screenshot of the render to read" };
+  const { labels, values } = barValues(
+    { category: c.category, value: c.value },
+    ctx.data
+  );
+  const max = c.max ?? 100;
+  const levelTol = c.levelTol ?? 3;
+  const shot = readRaster(rec.screenshot);
+  const sil = silhouette(readRaster(join(ASSET_DIR, c.image)), c.height);
+  const [tintHue] = hueChroma(hexColor(c.color));
+  const isTinted = (q: RGB) => {
+    const [h, chroma] = hueChroma(q);
+    return chroma >= 40 && hueDist(h, tintHue) <= 12;
+  };
+
+  // Candidate columns: runs of columns painted over at least 35% of the
+  // image's height (text and thin lines are much shorter).
+  const runs: [number, number][] = [];
+  for (let x = 0; x < shot.w; x++) {
+    let n = 0;
+    for (let y = 0; y < shot.h; y++) if (paintedPx(pixelAt(shot, x, y))) n++;
+    if (n < 0.35 * sil.h) continue;
+    const last = runs[runs.length - 1];
+    if (last && last[1] >= x - 2) last[1] = x;
+    else runs.push([x, x]);
+  }
+  const wide = runs.filter(([a, b]) => b - a + 1 >= 0.5 * sil.w);
+  if (wide.length !== labels.length)
+    return {
+      pass: false,
+      detail: `expected ${labels.length} images ${sil.w}x${sil.h} px side by side, found ${wide.length} runs of tall painted columns`,
+    };
+  const places = wide.map(([a, b]) =>
+    placeSilhouette(shot, sil, a - 6, Math.max(a - 6, b - sil.w + 7))
+  );
+  const problems: string[] = [];
+  const bottoms = places.map((p) => p.y + sil.h);
+  if (Math.max(...bottoms) - Math.min(...bottoms) > 3)
+    problems.push(
+      `the images' bottoms are not on one line (y = ${bottoms.join(", ")})`
+    );
+  places.forEach((p, i) => {
+    const name = labels[i];
+    if (p.opaque < 0.9 || p.clear < 0.9) {
+      problems.push(
+        `${name}: no ${sil.w}x${sil.h} px copy of the image here (the best fit paints ${(100 * p.opaque).toFixed(0)}% of its opaque pixels and keeps ${(100 * p.clear).toFixed(0)}% of its transparent ones clear)`
+      );
+      return;
+    }
+    const want = values[i] / max;
+    const levelY = p.y + sil.h * (1 - want);
+    const pct = (y: number) => ((100 * (p.y + sil.h - y)) / sil.h).toFixed(1);
+    const px: FillPixel[] = [];
+    for (let v = 0; v < sil.h; v++)
+      for (let u = 0; u < sil.w; u++) {
+        const k = v * sil.w + u;
+        if (!sil.opaque[k]) continue;
+        const q = pixelAt(shot, p.x + u, p.y + v);
+        const [hue, chroma] = hueChroma(q);
+        px.push({
+          y: p.y + v + 0.5,
+          mid: sil.gray[k] >= 0.2 && sil.gray[k] <= 0.85,
+          tinted: isTinted(q),
+          gray: chroma <= 30,
+          l: luma(q),
+          src: sil.gray[k],
+          hue,
+          chroma,
+        });
+      }
+    // The measured level: the line that best separates tinted pixels
+    // (below it) from the rest (above it), among pixels of middle
+    // brightness.
+    const mid = px.filter((q) => q.mid);
+    let bestErr = Infinity;
+    let lo = p.y;
+    let hi = p.y;
+    for (let y = p.y; y <= p.y + sil.h; y++) {
+      const e = mid.filter((q) => q.y > y !== q.tinted).length;
+      if (e < bestErr) [bestErr, lo, hi] = [e, y, y];
+      else if (e === bestErr) hi = y;
+    }
+    const measured = (lo + hi) / 2;
+    const band = 2;
+    const below = mid.filter((q) => q.y > levelY + band);
+    const above = mid.filter((q) => q.y < levelY - band);
+    const share = (xs: FillPixel[], f: (q: FillPixel) => boolean) =>
+      xs.length ? xs.filter(f).length / xs.length : 1;
+    const tintedShare = share(below, (q) => q.tinted);
+    if (tintedShare < 0.85) {
+      const colored = below.filter((q) => q.chroma >= 40);
+      if (below.length > 0 && colored.length >= 0.85 * below.length)
+        problems.push(
+          `${name}: below the level the bottle has hue ${circularMeanHue(colored.map((q) => q.hue)).toFixed(0)}, not the hue of ${c.color} (${tintHue.toFixed(0)})`
+        );
+      else
+        problems.push(
+          `${name}: only ${(100 * tintedShare).toFixed(0)}% of the bottle's pixels below the level have ${c.color} (colored up to about ${pct(measured)}% of the image's height, expected ${pct(levelY)}%)`
+        );
+      return;
+    }
+    if (Math.abs(measured - levelY) > levelTol) {
+      problems.push(
+        `${name}: colored up to ${pct(measured)}% of the image's height, expected ${pct(levelY)}%`
+      );
+      return;
+    }
+    const grayShare = share(above, (q) => q.gray);
+    if (above.length >= 20 && grayShare < 0.85) {
+      problems.push(
+        `${name}: above the level only ${(100 * grayShare).toFixed(0)}% of the bottle's pixels are gray`
+      );
+      return;
+    }
+    for (const [side, xs] of [
+      ["below", px.filter((q) => q.y > levelY + band)],
+      ["above", px.filter((q) => q.y < levelY - band)],
+    ] as const) {
+      if (xs.length < 50) continue;
+      const r = correlation(
+        xs.map((q) => q.l),
+        xs.map((q) => q.src)
+      );
+      if (r < 0.6) {
+        problems.push(
+          `${name}: ${side} the level the brightness does not follow the image's shading (correlation ${r.toFixed(2)})`
+        );
+        return;
+      }
+    }
+    // Nothing outside the bottle's shape takes the tint: not the image's
+    // transparent pixels, nor a 10px strip beside it on either side.
+    let outside = 0;
+    let spill = 0;
+    for (let v = 0; v < sil.h; v++)
+      for (let u = -12; u < sil.w + 12; u++) {
+        const inImage = u >= 0 && u < sil.w;
+        if (inImage ? !sil.clear[v * sil.w + u] : u >= -2 && u < sil.w + 2)
+          continue;
+        outside++;
+        if (isTinted(pixelAt(shot, p.x + u, p.y + v))) spill++;
+      }
+    if (spill > Math.max(4, 0.01 * outside)) {
+      problems.push(
+        `${name}: ${spill} pixels outside the bottle's shape (transparent in the image, or beside it) have the color`
+      );
+      return;
+    }
+    // The line at the level: a vector mark, read from the record.
+    const line = rec.marks.some((m) => {
+      const k = ink(m);
+      return (
+        !!k &&
+        m.kind !== "text" &&
+        m.h <= 3 &&
+        hueChroma(k)[1] <= 40 &&
+        Math.abs(m.y + m.h / 2 - levelY) <= levelTol + 1.5 &&
+        m.x <= p.x + 3 &&
+        m.x + m.w >= p.x + sil.w - 3
+      );
+    });
+    if (!line)
+      problems.push(
+        `${name}: no gray line across the image at the level (y = ${levelY.toFixed(1)})`
+      );
+  });
+  if (problems.length > 0)
+    return {
+      pass: false,
+      detail: `${places.length} images found, but ${problems.slice(0, 3).join("; ")}${problems.length > 3 ? "; ..." : ""}`,
+    };
+  return {
+    pass: true,
+    detail: `${labels.length} images at x = [${places.map((p) => p.x).join(", ")}], colored ${c.color} up to [${values.map((v) => `${v}%`).join(", ")}] of their height within their shape, gray above, with a line at each level`,
+  };
+}
+
 export function runCheck(
   c: Check,
   rec: RenderRecord,
@@ -2956,6 +3579,8 @@ export function runCheck(
       return checkRidgeline(c, rec, ctx);
     case "bottleFill":
       return checkBottleFill(c, rec, ctx);
+    case "imageFill":
+      return checkImageFill(c, rec, ctx);
     case "circlePack":
       return checkCirclePack(c, rec, ctx);
     case "treemapCircles":
@@ -2970,6 +3595,8 @@ export function runCheck(
       return checkMosaic(c, rec, ctx);
     case "waffle":
       return checkWaffle(c, rec, ctx);
+    case "unitBlocks":
+      return checkUnitBlocks(c, rec, ctx);
     case "ribbons":
       return checkRibbons(c, rec, ctx);
   }

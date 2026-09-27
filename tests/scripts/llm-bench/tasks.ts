@@ -14,6 +14,13 @@ import type { Check } from "./checks";
 
 export const BENCH_DIR = join(import.meta.dirname, "../../llm-bench");
 
+/** Model token counts of programs and context files, by model and sha256
+ *  (see ModelTokenCounter in codestats.ts). */
+export const TOKEN_CACHE = join(
+  import.meta.dirname,
+  "../../tmp/llm-bench/token-cache.json"
+);
+
 export const ARMS = ["gofish", "recharts", "d3", "matplotlib"] as const;
 export type Arm = (typeof ARMS)[number];
 

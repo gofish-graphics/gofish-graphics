@@ -3,9 +3,13 @@
  * repair message, and how its reply is turned back into a program.
  */
 
-import { createHash } from "crypto";
-import { existsSync, readFileSync } from "fs";
-import { basename, join } from "path";
+import { readFileSync } from "fs";
+import { join } from "path";
+import {
+  examplesMessage,
+  type GalleryEntry,
+  type GofishContext,
+} from "./context";
 import { ARM_LANG, BENCH_DIR, type Arm, type SingleTask } from "./tasks";
 
 export interface SystemBlock {
@@ -14,41 +18,33 @@ export interface SystemBlock {
   cache_control?: { type: "ephemeral" };
 }
 
-/** The default GoFish docs pack (`--docs-pack` picks another). */
-export const DEFAULT_DOCS_PACK = join(BENCH_DIR, "context/gofish.md");
-
-/** The GoFish docs pack appended to the gofish arm's system prompt, read
- *  once per run so every call sends the text that `sha256` names. */
-export interface DocsPack {
-  /** The file's base name, e.g. "gofish-v2.md". */
-  file: string;
-  /** The first 12 hex characters of the sha256 of the file's contents. */
-  sha256: string;
-  text: string;
-}
-
-export function loadDocsPack(path: string): DocsPack {
-  if (!existsSync(path)) throw new Error(`docs pack ${path} not found`);
-  const text = readFileSync(path, "utf8");
-  return {
-    file: basename(path),
-    sha256: createHash("sha256").update(text).digest("hex").slice(0, 12),
-    text,
-  };
-}
-
-/** Stable per arm, so it is cached: the last block carries `cache_control`,
- *  which caches every system block up to and including it. */
-export function systemBlocks(arm: Arm, docs: DocsPack): SystemBlock[] {
-  const blocks: SystemBlock[] = [
-    {
-      type: "text",
-      text: readFileSync(join(BENCH_DIR, "prompts", `${arm}.md`), "utf8"),
-    },
-  ];
-  if (arm === "gofish") blocks.push({ type: "text", text: docs.text });
+/**
+ * The arm's system prompt, stable per arm and context, so it is cached: the
+ * last block carries `cache_control`, which caches every system block up to
+ * and including it. The gofish arm's prompt is followed by the context's
+ * system text. Its last line ("GoFish documentation follows.") introduces a
+ * document, so for the skill context, which sends a pointer to a folder
+ * instead, that line is left out.
+ */
+export function systemBlocks(arm: Arm, context: GofishContext): SystemBlock[] {
+  let prompt = readFileSync(join(BENCH_DIR, "prompts", `${arm}.md`), "utf8");
+  if (arm === "gofish" && context.skillDir)
+    prompt = prompt.replace(/\n*GoFish documentation follows\.\s*$/, "\n");
+  const blocks: SystemBlock[] = [{ type: "text", text: prompt }];
+  if (arm === "gofish") blocks.push({ type: "text", text: context.systemText });
   blocks[blocks.length - 1].cache_control = { type: "ephemeral" };
   return blocks;
+}
+
+/** The first user message: the task, after the retrieved examples when the
+ *  context retrieves (gofish arm only). */
+export function firstMessage(
+  taskText: string,
+  examples: GalleryEntry[] | undefined
+): string {
+  return examples?.length
+    ? `${examplesMessage(examples)}\n\n${taskText}`
+    : taskText;
 }
 
 function typeOf(v: unknown): string {

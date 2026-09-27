@@ -1,6 +1,44 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import solidPlugin from "vite-plugin-solid";
-import { resolve } from "path";
+import { extname, resolve, sep } from "path";
+import { readFile } from "fs/promises";
+
+/** Task assets (tests/llm-bench/assets/), served at `/assets/<file>` so a
+ *  JS program can load them by URL. The matplotlib arm gets the same folder
+ *  as the `ASSET_DIR` environment variable (render.ts). */
+const ASSET_DIR = resolve(__dirname, "../../llm-bench/assets");
+const ASSET_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".svg": "image/svg+xml",
+  ".json": "application/json",
+};
+
+function serveAssets(): Plugin {
+  return {
+    name: "llm-bench-assets",
+    configureServer(server) {
+      server.middlewares.use("/assets", async (req, res, next) => {
+        const name = decodeURIComponent((req.url ?? "").split("?")[0]);
+        const file = resolve(ASSET_DIR, "." + name);
+        if (!file.startsWith(ASSET_DIR + sep)) return next();
+        try {
+          const body = await readFile(file);
+          res.setHeader(
+            "Content-Type",
+            ASSET_TYPES[extname(file).toLowerCase()] ??
+              "application/octet-stream"
+          );
+          res.end(body);
+        } catch {
+          res.statusCode = 404;
+          res.end();
+        }
+      });
+    },
+  };
+}
 
 // Vite root for the LLM authoring benchmark (tests/scripts/llm-bench.ts).
 //
@@ -10,7 +48,7 @@ import { resolve } from "path";
 // are compiled to plain JS (React's automatic JSX runtime) by the runner
 // before the page loads them, so the Solid plugin never sees React JSX.
 export default defineConfig({
-  plugins: [solidPlugin()],
+  plugins: [solidPlugin(), serveAssets()],
   root: resolve(__dirname),
   // Its own dependency cache: sharing tests/node_modules/.vite with the main
   // harness (a different config) makes each server re-optimize, and a

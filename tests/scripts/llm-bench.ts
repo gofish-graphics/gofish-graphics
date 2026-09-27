@@ -19,14 +19,20 @@
  *                  render every saved turn of an earlier run again through the
  *                  current harness, checks and arm contract (no API); writes
  *                  <runDir>-rescored/
+ *     compare <runDir>[=label] ...
+ *                  one table comparing the gofish arm across runs (for
+ *                  example, one run per --context)
  *   Options:
  *     --arms gofish,recharts,d3,matplotlib   --tasks <substring>
  *     --samples N (1)   --max-turns N (3)   --budget-usd X (10, API)
  *     --subscription-cap-usd X (40, claude-code at list price)
  *     --model ID (claude-opus-5-5)   --backend api|claude-code (api)
  *     --effort low|medium|high|xhigh|max (medium)   --concurrency N (3)
- *     --docs-pack <path> (tests/llm-bench/context/gofish.md): the docs pack
- *                  sent to the gofish arm (mock and run)
+ *     --context pack:<path>|cheatsheet|retrieval|skill
+ *                  (pack:context/gofish.md): how GoFish is presented to the
+ *                  gofish arm (mock records it but ignores it); skill needs
+ *                  --backend claude-code. --docs-pack <path> is
+ *                  --context pack:<path>.
  */
 
 import {
@@ -69,14 +75,26 @@ import {
   type Turn,
 } from "./llm-bench/model";
 import {
-  DEFAULT_DOCS_PACK,
+  codeStats,
+  lexicalStats,
+  ModelTokenCounter,
+  type CodeStats,
+} from "./llm-bench/codestats";
+import { compareRuns } from "./llm-bench/compare";
+import {
+  contextOf,
+  DEFAULT_CONTEXT,
+  examplesMessage,
+  loadContext,
+  type GofishContext,
+} from "./llm-bench/context";
+import {
   extractCode,
-  loadDocsPack,
+  firstMessage,
   NO_CODE_ERROR,
   repairMessage,
   systemBlocks,
   taskMessage,
-  type DocsPack,
 } from "./llm-bench/prompt";
 import type { RenderRecord } from "./llm-bench/record";
 import { Renderer } from "./llm-bench/render";
@@ -102,6 +120,7 @@ import {
   loadTasks,
   referencePath,
   taskGroup,
+  TOKEN_CACHE,
   type Arm,
   type ChainTask,
   type SingleTask,
@@ -127,11 +146,15 @@ const ledgerMeta = (ledger: Ledger) => ({
 const overheadTokens = (backend: Backend) =>
   backend === "claude-code" ? CLAUDE_CODE_OVERHEAD_TOKENS : 0;
 
+/** A skill call is several API round trips (one per round of tool use), so
+ *  the budget guard reserves this many worst-case calls for it. */
+const SKILL_RESERVE_FACTOR = 4;
+
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
-type Mode = "references" | "mock" | "run" | "rescore";
+type Mode = "references" | "mock" | "run" | "rescore" | "compare";
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 interface Options {
@@ -148,22 +171,35 @@ interface Options {
   backend: Backend;
   effort: (typeof EFFORTS)[number];
   concurrency: number;
-  /** The GoFish docs pack file for the gofish arm's system prompt. */
-  docsPack: string;
+  /** How GoFish is presented to the gofish arm (see context.ts). */
+  context: string;
   mockBreakFirst: boolean;
   yes: boolean;
   /** rescore: the run directory to rescore. */
   runDir?: string;
+  /** compare: the run directories, each with an optional label. */
+  compare?: { dir: string; label?: string }[];
+}
+
+/** A run directory named by path (from where the command was typed) or by
+ *  run id under tests/tmp/llm-bench/runs/. */
+function findRunDir(arg: string): string {
+  const found = [process.env.INIT_CWD, process.cwd(), join(OUT_ROOT, "runs")]
+    .filter((d): d is string => !!d)
+    .map((d) => resolve(d, arg))
+    .find((d) => existsSync(join(d, "results.jsonl")));
+  if (!found) throw new Error(`no results.jsonl in run directory ${arg}`);
+  return found.replace(/\/+$/, "");
 }
 
 function parseArgs(argv: string[]): Options {
   const mode = argv[0] as Mode;
   if (
-    !["references", "mock", "run", "rescore"].includes(mode) ||
-    (mode === "rescore" && !argv[1])
+    !["references", "mock", "run", "rescore", "compare"].includes(mode) ||
+    ((mode === "rescore" || mode === "compare") && !argv[1])
   ) {
     console.error(
-      "usage: llm-bench <references|mock|run|rescore <runDir>> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--subscription-cap-usd X] [--model ID] [--backend api|claude-code] [--effort E] [--concurrency N] [--docs-pack path] [--mock-break-first] [--yes]"
+      "usage: llm-bench <references|mock|run|rescore <runDir>|compare <runDir>[=label] ...> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--subscription-cap-usd X] [--model ID] [--backend api|claude-code] [--effort E] [--concurrency N] [--context pack:<path>|cheatsheet|retrieval|skill] [--docs-pack path] [--mock-break-first] [--yes]"
     );
     process.exit(2);
   }
@@ -178,22 +214,20 @@ function parseArgs(argv: string[]): Options {
     backend: "api",
     effort: "medium",
     concurrency: 3,
-    docsPack: DEFAULT_DOCS_PACK,
+    context: DEFAULT_CONTEXT,
     mockBreakFirst: false,
     yes: false,
   };
   // pnpm runs this from tests/; resolve paths from where they were typed.
   const typedFrom = process.env.INIT_CWD ?? process.cwd();
   let i0 = 1;
-  if (mode === "rescore") {
-    // Accept a bare run id too.
-    const arg = argv[i0++];
-    const found = [process.env.INIT_CWD, process.cwd(), join(OUT_ROOT, "runs")]
-      .filter((d): d is string => !!d)
-      .map((d) => resolve(d, arg))
-      .find((d) => existsSync(join(d, "results.jsonl")));
-    if (!found) throw new Error(`no results.jsonl in run directory ${arg}`);
-    opts.runDir = found.replace(/\/+$/, "");
+  if (mode === "rescore") opts.runDir = findRunDir(argv[i0++]);
+  if (mode === "compare") {
+    opts.compare = [];
+    while (i0 < argv.length && !argv[i0].startsWith("--")) {
+      const [dir, label] = argv[i0++].split("=");
+      opts.compare.push({ dir: findRunDir(dir), label });
+    }
   }
   for (let i = i0; i < argv.length; i++) {
     const flag = argv[i];
@@ -215,7 +249,8 @@ function parseArgs(argv: string[]): Options {
     else if (flag === "--concurrency") opts.concurrency = Number(value());
     else if (flag === "--model") opts.model = value();
     else if (flag === "--docs-pack")
-      opts.docsPack = resolve(typedFrom, value());
+      opts.context = `pack:${resolve(typedFrom, value())}`;
+    else if (flag === "--context") opts.context = value();
     else if (flag === "--backend") {
       const b = value() as Backend;
       if (!(b in COST_BASIS))
@@ -231,6 +266,14 @@ function parseArgs(argv: string[]): Options {
     else throw new Error(`unknown option ${flag}`);
   }
   prices(opts.model); // fail now on a model with no prices
+  if (
+    opts.context === "skill" &&
+    opts.mode === "run" &&
+    opts.backend !== "claude-code"
+  )
+    throw new Error(
+      "--context skill needs --backend claude-code (the model reads the skill folder with Claude Code's tools)"
+    );
   return opts;
 }
 
@@ -478,7 +521,9 @@ interface JobContext {
   byId: Map<string, Task>;
   runDir: string;
   runId: string;
-  docs: DocsPack;
+  context: GofishContext;
+  /** Counts programs and context text in the model's tokens. */
+  counter: ModelTokenCounter;
   /** Set once the budget refuses a call: no new calls start after that. */
   halted: { budget: boolean; fatal: string | null };
 }
@@ -492,6 +537,8 @@ interface Conversation {
   /** The passing turn's program and picture, if a turn passed (a chain
    *  goes on from them). */
   final?: { code: string; record: RenderRecord };
+  /** Retrieval context: the gallery examples sent with the task. */
+  retrieved?: string[];
 }
 
 /**
@@ -514,11 +561,36 @@ async function converse(
   const { opts, model, ledger, renderer, runDir } = ctx;
   mkdirSync(dir, { recursive: true });
   const data = loadData(task);
-  const system = systemBlocks(arm, ctx.docs);
+  const system = systemBlocks(arm, ctx.context);
+  const gofish = arm === "gofish";
+  // Retrieval sees the instruction only: not the task id, checks or
+  // references.
+  const examples = gofish
+    ? ctx.context.retrieve?.(task.instruction)
+    : undefined;
   const messages: Turn[] = [
-    { role: "user", content: taskMessage(task, arm, data, edit?.startCode) },
+    {
+      role: "user",
+      content: firstMessage(
+        taskMessage(task, arm, data, edit?.startCode),
+        examples
+      ),
+    },
   ];
-  const conv: Conversation = { turns: [], failedUsd: 0 };
+  const skillDir = gofish ? ctx.context.skillDir : undefined;
+  const conv: Conversation = {
+    turns: [],
+    failedUsd: 0,
+    ...(examples ? { retrieved: examples.map((e) => e.id) } : {}),
+  };
+  // The context's tokens that every turn sends again (the system text, and
+  // the examples in the first message), in the model's tokens.
+  const count = async (text: string) =>
+    (await ctx.counter.count(text, model.id)).tokens;
+  const resent = gofish
+    ? (await count(ctx.context.systemText)) +
+      (examples ? await count(examplesMessage(examples)) : 0)
+    : 0;
 
   for (let t = 1; t <= opts.maxTurns; t++) {
     if (ctx.halted.fatal) {
@@ -535,12 +607,13 @@ async function converse(
       JSON.stringify(messages).length;
     const outcome = await callWithRetry({
       model,
-      req: { system, messages, task, arm, turn: t },
+      req: { system, messages, task, arm, turn: t, skillDir },
       ledger,
       reserveUsd:
         model.backend === "mock"
           ? 0
-          : worstCaseUsd(inputChars, model.id, overheadTokens(model.backend)),
+          : worstCaseUsd(inputChars, model.id, overheadTokens(model.backend)) *
+            (skillDir ? SKILL_RESERVE_FACTOR : 1),
       run: ctx.runId,
       stop: () => ctx.halted.fatal !== null,
     });
@@ -576,6 +649,16 @@ async function converse(
       stopReason: reply.stopReason,
       reply: relative(runDir, replyPath),
       ...splitOutput(reply.text, reply.usage.output, reply.thinkingTokens),
+      ...(gofish
+        ? {
+            contextTokens:
+              resent +
+              (reply.toolResults?.length
+                ? await count(reply.toolResults.join("\n"))
+                : 0),
+          }
+        : {}),
+      ...(reply.toolUses ? { toolUses: reply.toolUses } : {}),
       rendered: false,
     };
     conv.turns.push(turn);
@@ -595,6 +678,7 @@ async function converse(
       const codePath = join(dir, `turn${t}.${ARM_EXT[arm]}`);
       writeFileSync(codePath, code);
       turn.code = relative(runDir, codePath);
+      turn.codeStats = await codeStats(code, arm, model.id, ctx.counter);
       const r = await renderer.render(
         arm,
         codePath,
@@ -644,13 +728,15 @@ function finishJob(
   sample: number,
   dir: string,
   turns: TurnResult[],
-  conv: Omit<Conversation, "turns" | "final">
+  conv: Omit<Conversation, "turns" | "final" | "retrieved">,
+  retrieved: JobResult["retrieved"]
 ): JobResult {
   const result: JobResult = {
     mode: ctx.opts.mode,
     model: ctx.model.id,
     backend: ctx.model.backend,
-    docsPack: { file: ctx.docs.file, sha256: ctx.docs.sha256 },
+    context: { name: ctx.context.name, sha256: ctx.context.sha256 },
+    ...(retrieved?.length ? { retrieved } : {}),
     task: task.id,
     kind: task.kind,
     group: taskGroup(task),
@@ -705,7 +791,16 @@ async function runJob(
     `${task.id}/${arm}/s${sample}`,
     edit
   );
-  return finishJob(ctx, task, arm, sample, dir, conv.turns, conv);
+  return finishJob(
+    ctx,
+    task,
+    arm,
+    sample,
+    dir,
+    conv.turns,
+    conv,
+    conv.retrieved && [{ ids: conv.retrieved }]
+  );
 }
 
 /**
@@ -726,7 +821,10 @@ async function runChain(
     base: await ctx.bases.get(chain.base, arm),
   };
   const turns: TurnResult[] = [];
-  const conv: Omit<Conversation, "turns" | "final"> = { failedUsd: 0 };
+  const conv: Omit<Conversation, "turns" | "final" | "retrieved"> = {
+    failedUsd: 0,
+  };
+  const retrieved: NonNullable<JobResult["retrieved"]> = [];
   for (const [i, step] of steps.entries()) {
     const c = await converse(
       ctx,
@@ -738,18 +836,37 @@ async function runChain(
       i + 1
     );
     turns.push(...c.turns);
+    if (c.retrieved) retrieved.push({ step: i + 1, ids: c.retrieved });
     conv.failedUsd += c.failedUsd;
     conv.stopped = c.stopped;
     conv.apiError = c.apiError;
     if (!c.final) break;
     edit = { startCode: c.final.code, base: c.final.record };
   }
-  return finishJob(ctx, chain, arm, sample, dir, turns, conv);
+  return finishJob(ctx, chain, arm, sample, dir, turns, conv, retrieved);
+}
+
+/** The statistics of each reference program that `results` has a single
+ *  task and arm for (the report's per-task tables show them). */
+function referenceStats(
+  results: JobResult[]
+): Record<string, ReturnType<typeof lexicalStats>> {
+  const out: Record<string, ReturnType<typeof lexicalStats>> = {};
+  for (const r of results) {
+    const key = `${r.task}|${r.arm}`;
+    if (r.kind === "chain" || key in out) continue;
+    if (!existsSync(referencePath(r.task, r.arm))) continue;
+    out[key] = lexicalStats(loadReference(r.task, r.arm), r.arm);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
 // Rescore mode
 // ---------------------------------------------------------------------------
+
+/** Measures a program (see codestats.ts). */
+type Sizer = (code: string, arm: Arm) => Promise<CodeStats>;
 
 /** Saved per-job files copied into the rescored run (the rendered outputs
  *  are produced again). */
@@ -786,7 +903,8 @@ async function rescoreTurns(
   outDir: string,
   renderer: Renderer,
   base: RenderRecord | null | undefined,
-  replyPath: (t: TurnResult) => string
+  replyPath: (t: TurnResult) => string,
+  size: Sizer
 ): Promise<{
   turns: TurnResult[];
   scored: TurnResult[];
@@ -815,6 +933,7 @@ async function rescoreTurns(
     const turn: TurnResult = {
       ...o,
       ...split,
+      codeStats: await size(readFileSync(join(outDir, o.code), "utf8"), arm),
       rendered: r.ok,
       renderMs: r.renderMs,
       error: r.error,
@@ -864,7 +983,8 @@ async function rescoreJob(
   srcDir: string,
   outDir: string,
   renderer: Renderer,
-  bases: BaseRecords
+  bases: BaseRecords,
+  size: Sizer
 ): Promise<JobResult> {
   const jobRel = join(
     slug(task.id),
@@ -896,7 +1016,8 @@ async function rescoreJob(
       outDir,
       renderer,
       base,
-      replyPath
+      replyPath,
+      size
     );
     result = {
       ...job,
@@ -921,7 +1042,8 @@ async function rescoreJob(
         outDir,
         renderer,
         base,
-        replyPath
+        replyPath,
+        size
       );
       turns.push(...r.turns);
       scored.push(...r.scored);
@@ -1031,7 +1153,10 @@ async function rescore(opts: Options): Promise<void> {
     original.find((r) => r.backend)?.backend ??
     /Backend: ([\w-]+)/.exec(origReport)?.[1] ??
     (original.some((r) => r.mode === "run") ? "api" : ran ? "mock" : "-");
-  const docsPack = original.find((r) => r.docsPack)?.docsPack;
+  const context = original.map(contextOf).find(Boolean);
+  const counter = new ModelTokenCounter(TOKEN_CACHE, apiKey());
+  const size: Sizer = (code, arm) =>
+    codeStats(code, arm, model === "-" ? DEFAULT_MODEL : model, counter);
 
   const renderer = await Renderer.start({
     python: original.some((r) => r.arm === "matplotlib"),
@@ -1048,7 +1173,8 @@ async function rescore(opts: Options): Promise<void> {
           srcDir,
           outDir,
           renderer,
-          bases
+          bases,
+          size
         )
       );
     });
@@ -1079,7 +1205,8 @@ async function rescore(opts: Options): Promise<void> {
         : 0,
       ledger: ledgerMeta(new Ledger(LEDGER_PATH, ledgerCaps(opts))),
       effort,
-      docsPack,
+      context,
+      referenceStats: referenceStats(results),
     }) + changedSection(original, results);
   writeFileSync(join(outDir, "report.md"), report);
   console.log(`\n${report}`);
@@ -1089,6 +1216,10 @@ async function rescore(opts: Options): Promise<void> {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.mode === "rescore") return rescore(opts);
+  if (opts.mode === "compare") {
+    console.log(compareRuns(opts.compare!));
+    return;
+  }
   const all = await loadTasks();
   const tasks = opts.tasks
     ? all.filter((t) => t.id.includes(opts.tasks!))
@@ -1096,9 +1227,11 @@ async function main() {
   if (tasks.length === 0) throw new Error(`no tasks match "${opts.tasks}"`);
   const byId = new Map<string, Task>(all.map((t) => [t.id, t]));
   const ledger = new Ledger(LEDGER_PATH, ledgerCaps(opts));
-  // References send no prompt, so they need no docs pack.
-  const docs =
-    opts.mode === "references" ? undefined : loadDocsPack(opts.docsPack);
+  // References send no prompt, so they need no context.
+  const context =
+    opts.mode === "references"
+      ? undefined
+      : loadContext(opts.context, process.env.INIT_CWD ?? process.cwd());
 
   let model: Model | null = null;
   if (opts.mode === "run") {
@@ -1118,15 +1251,18 @@ async function main() {
     );
     for (const task of conversations)
       for (const arm of opts.arms) {
-        const sys = systemBlocks(arm, docs!).reduce(
+        const sys = systemBlocks(arm, context!).reduce(
           (n, b) => n + b.text.length,
           0
         );
-        const user = taskMessage(
-          task,
-          arm,
-          loadData(task),
-          task.kind === "edit" ? loadReference(task.base, arm) : undefined
+        const user = firstMessage(
+          taskMessage(
+            task,
+            arm,
+            loadData(task),
+            task.kind === "edit" ? loadReference(task.base, arm) : undefined
+          ),
+          arm === "gofish" ? context!.retrieve?.(task.instruction) : undefined
         ).length;
         for (let i = 0; i < opts.samples; i++)
           typical = addUsage(typical, typicalUsage(sys, user, extra));
@@ -1142,7 +1278,7 @@ async function main() {
       `~${k(typical.input + typical.cacheRead)} input tokens (~${k(typical.cacheRead)} of them from the cache` +
       `${extra ? `, including ~${extra} per call that Claude Code adds` : ""}) and ~${k(typical.output)} output tokens`;
     console.log(
-      `Model ${opts.model}, effort ${opts.effort}, backend ${b}, docs pack ${docs!.file} (sha256 ${docs!.sha256}). ${firstTurns} jobs (${tasks.length} tasks x ${opts.arms.length} arms x ${opts.samples} samples), up to ${opts.maxTurns} turns each.\n` +
+      `Model ${opts.model}, effort ${opts.effort}, backend ${b}, context ${context!.name} (sha256 ${context!.sha256})${context!.skillDir ? " (skill calls also read files, which this estimate leaves out)" : ""}. ${firstTurns} jobs (${tasks.length} tasks x ${opts.arms.length} arms x ${opts.samples} samples), up to ${opts.maxTurns} turns each.\n` +
         (b === "api"
           ? `Estimate: ~$${typicalUsd.toFixed(2)} if every job passes on turn 1 (${tokens}); worst case ~$${worst.toFixed(2)}.\n` +
             `API ledger so far: $${ledger.total(b).toFixed(4)}; budget cap $${ledger.cap(b).toFixed(2)} (calls stop before the cap).`
@@ -1186,7 +1322,8 @@ async function main() {
         byId,
         runDir,
         runId,
-        docs: docs!,
+        context: context!,
+        counter: new ModelTokenCounter(TOKEN_CACHE, apiKey()),
         halted,
       };
       const jobs = tasks.flatMap((task) =>
@@ -1229,7 +1366,8 @@ async function main() {
     spendUsd: spend,
     ledger: ledgerMeta(ledger),
     effort: opts.mode === "references" ? "-" : opts.effort,
-    docsPack: docs && { file: docs.file, sha256: docs.sha256 },
+    context: context && { name: context.name, sha256: context.sha256 },
+    referenceStats: referenceStats(results),
   });
   writeFileSync(join(runDir, "report.md"), report);
   copyFileSync(join(runDir, "report.md"), join(OUT_ROOT, "report.md"));

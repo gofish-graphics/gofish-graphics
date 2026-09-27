@@ -23,7 +23,7 @@ import { transform } from "esbuild";
 import { startViteServer } from "../capture-core";
 import { matplotlibViolation, staticViolation } from "./contract";
 import type { RenderRecord } from "./record";
-import type { Arm, Size } from "./tasks";
+import { BENCH_DIR, type Arm, type Size } from "./tasks";
 
 const HARNESS_DIR = join(import.meta.dirname, "../../harness/llm-bench");
 const REPO_ROOT = join(import.meta.dirname, "../../..");
@@ -240,6 +240,9 @@ export class Renderer {
           // Keep text as <text> (not glyph outlines) so labels are readable
           // by the extractor, and make ids deterministic.
           MATPLOTLIBRC: join(HARNESS_DIR, "matplotlibrc"),
+          // Task assets (images). JS programs load the same files from the
+          // URL /assets/<file> (the harness's Vite config serves them).
+          ASSET_DIR: join(BENCH_DIR, "assets"),
         },
         timeoutMs: PYTHON_TIMEOUT_MS,
       });
@@ -411,9 +414,29 @@ export class Renderer {
         await new Promise((r) => setTimeout(r, 100));
         await page.clock.runFor(100).catch(() => {});
       }
+      // Images load over the network, which the fake clock does not drive:
+      // wait for them (bounded), then let a frame paint them.
+      // Before the error check, so a failed load (a 404) is reported.
+      let imageTimer: NodeJS.Timeout | undefined;
+      await Promise.race([
+        page.evaluate(() => (window as any).llmBench.imagesReady()),
+        new Promise((r) => (imageTimer = setTimeout(r, 5000))),
+      ]);
+      clearTimeout(imageTimer);
+      await page.clock.runFor(100).catch(() => {});
       if (errors.length > 0)
         return { ok: false, error: errors.slice(0, 5).join("\n"), renderMs };
-      if (problem) return { ok: false, error: problem, renderMs };
+      // An empty container is occasionally a harness timing flake (seen with
+      // React), so it is retried like other harness errors. A program that
+      // really draws nothing fails the same way on every retry, and the error
+      // then reaches the model unchanged.
+      if (problem)
+        return {
+          ok: false,
+          error: problem,
+          renderMs,
+          harnessError: !problem.startsWith("The output contains"),
+        };
 
       if (loads > 1)
         throw new Error("the harness page reloaded during the render");
@@ -431,9 +454,10 @@ export class Renderer {
               arm
             )
           : null;
-      const record = await page.evaluate(() =>
+      const record: RenderRecord = await page.evaluate(() =>
         (window as any).llmBench.extract()
       );
+      record.screenshot = pngPath;
       writeFileSync(recordPath, JSON.stringify(record, null, 1));
       const done = { renderMs, record, svgPath, pngPath, recordPath };
       return foreign

@@ -6,6 +6,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { createHash } from "crypto";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync } from "fs";
 import { tmpdir } from "os";
@@ -17,13 +18,30 @@ import {
   claudeCodeReply,
   classifyClaudeCodeFailure,
   conversationPrompt,
+  parseClaudeCodeOutput,
   type ClaudeCodeResult,
   type Model,
   type ModelReply,
   type ModelRequest,
 } from "./model";
 import {
+  explicitCalculation,
+  linesOfCode,
+  ModelTokenCounter,
+  syntaxTokens,
+  type CodeStats,
+} from "./codestats";
+import {
+  CONTEXT_DIR,
+  contextOf,
+  loadContext,
+  Retriever,
+  terms,
+} from "./context";
+import { firstMessage, systemBlocks } from "./prompt";
+import {
   buildReport,
+  finalCodeStats,
   isScored,
   scoreChain,
   scoreTurns,
@@ -778,6 +796,320 @@ const CC_OK: ClaudeCodeResult = {
     /Ledger \(all runs\): API \$0\.0000 of \$10\.00 budget; claude-code \$0\.1235 at list price \(subscription\) of \$40\.00 cap\./
   );
   console.log("ok  subscription spend is booked apart from the API budget");
+}
+
+// --- contexts: recording and the report header --------------------------------
+{
+  const from = process.cwd();
+  const v2 = loadContext("pack:context/gofish-v2.md", from);
+  assert.equal(v2.name, "pack:gofish-v2.md");
+  // A pack's hash is its file's, as the old `docsPack` recorded it.
+  assert.equal(
+    v2.sha256,
+    createHash("sha256")
+      .update(readFileSync(join(CONTEXT_DIR, "gofish-v2.md"), "utf8"))
+      .digest("hex")
+      .slice(0, 12)
+  );
+  const sheet = loadContext("cheatsheet", from);
+  const retrieval = loadContext("retrieval", from);
+  const skill = loadContext("skill", from);
+  assert.equal(sheet.systemText, retrieval.systemText);
+  assert.notEqual(sheet.sha256, retrieval.sha256); // retrieval hashes the index too
+  assert.ok(retrieval.retrieve && !sheet.retrieve);
+  assert.ok(skill.skillDir && existsSync(join(skill.skillDir, "SKILL.md")));
+  // The same files give the same hash.
+  assert.equal(loadContext("skill", from).sha256, skill.sha256);
+  assert.throws(() => loadContext("nonsense", from), /unknown context/);
+  // Old results kept the pack in docsPack.
+  assert.deepEqual(
+    contextOf({ docsPack: { file: "gofish.md", sha256: "35632c59aa22" } }),
+    { name: "pack:gofish.md", sha256: "35632c59aa22" }
+  );
+  assert.equal(contextOf({}), undefined);
+  // The skill context drops the arm prompt's "documentation follows" line;
+  // the others keep it. Other arms get no context.
+  const text = (blocks: { text: string }[]) =>
+    blocks.map((b) => b.text).join("\n");
+  assert.match(text(systemBlocks("gofish", sheet)), /documentation follows/);
+  assert.doesNotMatch(
+    text(systemBlocks("gofish", skill)),
+    /documentation follows/
+  );
+  assert.match(text(systemBlocks("gofish", skill)), /read SKILL\.md first/);
+  assert.equal(systemBlocks("d3", retrieval).length, 1);
+  // Retrieved examples go before the task in the user message.
+  const msg = firstMessage("THE TASK", retrieval.retrieve!("a pie chart"));
+  assert.ok(msg.endsWith("The task:\n\nTHE TASK"));
+  assert.equal(firstMessage("THE TASK", undefined), "THE TASK");
+
+  const job = (over: Partial<JobResult>): JobResult => ({
+    mode: "run",
+    context: { name: "retrieval", sha256: retrieval.sha256 },
+    task: "create/x",
+    kind: "create",
+    group: "common",
+    arm: "gofish",
+    sample: 1,
+    turns: [
+      {
+        turn: 1,
+        usage: USAGE,
+        usd: 0.01,
+        latencyMs: 1000,
+        stopReason: "end_turn",
+        rendered: true,
+        contextTokens: 3000,
+        toolUses: ["Read SKILL.md", "Read examples/pie-chart.js"],
+        codeStats: {
+          syntax: 80,
+          model: 100,
+          loc: 7,
+          arithOps: 3,
+          magicNumbers: 2,
+        },
+        checks: { pass: true, results: [] },
+      },
+    ],
+    ...scoreTurns(
+      [
+        {
+          turn: 1,
+          usage: USAGE,
+          usd: 0.01,
+          latencyMs: 1000,
+          stopReason: "end_turn",
+          rendered: true,
+          codeStats: {
+            syntax: 80,
+            model: 100,
+            loc: 7,
+            arithOps: 3,
+            magicNumbers: 2,
+          },
+          checks: { pass: true, results: [] },
+        },
+      ],
+      false
+    ),
+    usage: USAGE,
+    usd: 0.01,
+    latencyMs: 1000,
+    retrieved: [{ ids: ["pie-chart", "donut-chart", "bar-chart"] }],
+    ...over,
+  });
+  const md = buildReport([job({})], {
+    mode: "run",
+    runDir: "x",
+    maxTurns: 3,
+    model: "claude-opus-5-5",
+    backend: "claude-code",
+    spendUsd: 0.01,
+    ledger: LEDGER_META,
+    effort: "medium",
+    context: { name: "retrieval", sha256: retrieval.sha256 },
+    referenceStats: {
+      "create/x|gofish": { syntax: 70, loc: 6, arithOps: 1, magicNumbers: 4 },
+    },
+  });
+  assert.match(
+    md,
+    new RegExp(`GoFish context: retrieval \\(sha256 ${retrieval.sha256}\\)`)
+  );
+  assert.match(md, /## GoFish context: retrieval/);
+  // jobs, pass, partial, fail, first-turn pass, turns, input, context,
+  // output, thinking, latency, cost, tool calls, syntax, LOC
+  assert.match(
+    md,
+    /\| all tasks \| 1 \| 100% \| 0% \| 0% \| 100% \| 1\.00 \| 1000 \| 3000 \| 1000 \| - \| 1\.0 \| 0\.0100 \| 2\.0 \| 80 \| 7 \| 3\.0 \(3\.0\) \| 2\.0 \(2\.0\) \|/
+  );
+  assert.match(md, /- create\/x: pie-chart, donut-chart, bar-chart/);
+  assert.match(md, /\| create\/x \| 80 \(ref 70\) \|/);
+  assert.match(md, /\| create\/x \| 3\.0 \/ 2\.0 \(ref 1\.0 \/ 4\.0\) \|/);
+  // The per-arm table has the three code-size columns.
+  assert.match(
+    md,
+    /mean code syntax tok \| mean code model tok \| mean code LOC \| arith ops mean \(median\) \| magic numbers mean \(median\)/
+  );
+  console.log("ok  contexts are recorded and reported");
+}
+
+// --- retrieval is deterministic and sees only the instruction ---------------
+{
+  const entries = [
+    { id: "b-pie", title: "Pie Chart", description: "A pie.", code: "" },
+    { id: "a-pie", title: "Pie Chart", description: "A pie.", code: "" },
+    {
+      id: "mosaic",
+      title: "Mosaic Chart",
+      description: "A mosaic plot of counts.",
+      code: 'import { chart, stack, field } from "gofish-graphics";',
+    },
+    {
+      id: "bars",
+      title: "Bar Chart",
+      description: "Vertical bars.",
+      code: 'import { spread, rect } from "gofish-graphics";',
+    },
+  ];
+  const r = new Retriever(entries);
+  // Equal scores tie-break on the id.
+  assert.deepEqual(
+    r.top("Make a pie chart", 2).map((e) => e.id),
+    ["a-pie", "b-pie"]
+  );
+  assert.equal(r.top("a mosaic plot", 1)[0].id, "mosaic");
+  // Imported GoFish names count; plurals are stemmed.
+  assert.equal(r.top("use stack", 1)[0].id, "mosaic");
+  assert.equal(r.top("one bar per lake", 1)[0].id, "bars");
+  // The real index: the same instruction always gives the same examples.
+  const ctx = loadContext("retrieval", process.cwd());
+  const q =
+    "Make a mosaic chart: columns by class, width proportional to passengers";
+  assert.deepEqual(
+    ctx.retrieve!(q).map((e) => e.id),
+    ctx.retrieve!(q).map((e) => e.id)
+  );
+  assert.equal(ctx.retrieve!(q).length, 3);
+  assert.deepEqual(terms("stackedBars Categories"), [
+    "stacked",
+    "bar",
+    "category",
+  ]);
+  console.log("ok  retrieval is deterministic");
+}
+
+// --- code size ---------------------------------------------------------------
+{
+  const js = [
+    "// a comment",
+    'import { chart } from "gofish-graphics"; // trailing',
+    "/* block",
+    "   comment */",
+    "",
+    'const url = "http://x"; // the // in the string is not a comment',
+    "export default () => chart(data).render(c, { w: 1.5e2 });",
+  ].join("\n");
+  assert.equal(linesOfCode(js, "gofish"), 3);
+  // import { chart } from "..." ;  = 7; const url = "..." ; = 5;
+  // export default ( ) => chart ( data ) . render ( c , { w : 1.5e2 } ) ) ; = 21
+  assert.equal(syntaxTokens(js, "gofish"), 33);
+  const py = [
+    "# comment",
+    "import matplotlib.pyplot as plt",
+    'x = f"{a} # not a comment"  # comment',
+    '"""doc',
+    'string"""',
+    "",
+    "plt.savefig(OUT_PATH, format='svg')",
+  ].join("\n");
+  assert.equal(linesOfCode(py, "matplotlib"), 5);
+  // import matplotlib . pyplot as plt = 6; x = f"..." = 3; """...""" = 1;
+  // plt . savefig ( OUT_PATH , format = 'svg' ) = 10
+  assert.equal(syntaxTokens(py, "matplotlib"), 20);
+  // Explicit calculation: operators (compound too) and Math/np calls;
+  // literals other than 0 and 1.
+  assert.deepEqual(
+    explicitCalculation(
+      "const x = Math.max(a * 2, b - 1) / 0.5; y **= 3; z = .25 + 0 + 1; s = '4 * 5';",
+      "d3"
+    ),
+    { arithOps: 7, magicNumbers: 4 }
+  );
+  assert.deepEqual(
+    explicitCalculation(
+      "h = np.sqrt(v) // 2\nw = math.pi * 1.0  # 7 * 7",
+      "matplotlib"
+    ),
+    { arithOps: 4, magicNumbers: 1 }
+  );
+  // The final program is the last turn that had one.
+  const t = (codeStats?: CodeStats): TurnResult => ({
+    turn: 1,
+    usage: USAGE,
+    usd: 0,
+    latencyMs: 0,
+    stopReason: "end_turn",
+    rendered: false,
+    ...(codeStats ? { codeStats } : {}),
+  });
+  const a = { syntax: 1, model: 1, loc: 1 };
+  const b = { syntax: 2, model: 2, loc: 2 };
+  assert.deepEqual(finalCodeStats([t(a), t(b), t()]), b);
+  assert.equal(finalCodeStats([t()]), undefined);
+  // Offline, model tokens are estimated at 4 characters per token.
+  const dir = mkdtempSync(join(tmpdir(), "llm-bench-"));
+  const counter = new ModelTokenCounter(join(dir, "cache.json"));
+  assert.deepEqual(await counter.count("x".repeat(40), "claude-opus-5-5"), {
+    tokens: 10,
+    est: true,
+  });
+  console.log("ok  code size");
+}
+
+// --- claude-code stream-json output ------------------------------------------
+{
+  const lines = [
+    { type: "system", subtype: "init" },
+    {
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "Reading." },
+          { type: "tool_use", name: "Read", input: { file_path: "SKILL.md" } },
+          { type: "tool_use", name: "Glob", input: { pattern: "*.js" } },
+        ],
+      },
+    },
+    {
+      type: "user",
+      message: {
+        content: [
+          { type: "tool_result", content: "# GoFish cheatsheet" },
+          { type: "tool_result", content: [{ type: "text", text: "a.js" }] },
+        ],
+      },
+    },
+    {
+      type: "result",
+      subtype: "success",
+      result: "```js\nx\n```",
+      num_turns: 2,
+    },
+  ];
+  const out = parseClaudeCodeOutput(
+    lines.map((l) => JSON.stringify(l)).join("\n")
+  );
+  assert.deepEqual(out.toolUses, ["Read SKILL.md", "Glob *.js"]);
+  assert.deepEqual(out.toolResults, ["# GoFish cheatsheet", "a.js"]);
+  assert.equal(out.result?.num_turns, 2);
+  // Paths are made relative to the working directory.
+  const abs = parseClaudeCodeOutput(
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            name: "Read",
+            input: { file_path: "/tmp/x/cwd/examples/a.js" },
+          },
+          {
+            type: "tool_use",
+            name: "Read",
+            input: { file_path: "./SKILL.md" },
+          },
+        ],
+      },
+    }),
+    "/tmp/x/cwd"
+  );
+  assert.deepEqual(abs.toolUses, ["Read examples/a.js", "Read SKILL.md"]);
+  // Plain json output is one line: the result, no tools.
+  const plain = parseClaudeCodeOutput(JSON.stringify(lines[3]));
+  assert.deepEqual(plain.toolUses, []);
+  assert.equal(plain.result?.result, "```js\nx\n```");
+  console.log("ok  claude-code stream-json output");
 }
 
 console.log("all llm-bench call tests passed");

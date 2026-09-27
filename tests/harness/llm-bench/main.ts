@@ -143,6 +143,27 @@ function provenance(lib: "gofish" | "recharts"): string | null {
   return lib === "gofish" ? gofishProvenance(root) : rechartsProvenance(root);
 }
 
+/** Resolves once every image in the container (SVG `<image>`, HTML `<img>`)
+ *  has loaded and decoded, or failed to, so the screenshot shows them.
+ *  Image loads are network work that the fake clock does not drive. */
+async function imagesReady(): Promise<void> {
+  const hrefs = new Set<string>();
+  for (const el of Array.from(root.querySelectorAll("image, img"))) {
+    const href =
+      el instanceof HTMLImageElement
+        ? el.currentSrc || el.src
+        : (el.getAttribute("href") ?? el.getAttribute("xlink:href"));
+    if (href) hrefs.add(new URL(href, document.baseURI).href);
+  }
+  await Promise.all(
+    Array.from(hrefs).map((href) => {
+      const img = new Image();
+      img.src = href;
+      return img.decode().catch(() => {});
+    })
+  );
+}
+
 /** Snapshot of the largest <svg> in the container, as a standalone file. */
 function svgMarkup(): string {
   const svgs = Array.from(root.querySelectorAll("svg")).filter(
@@ -174,6 +195,7 @@ const api = {
   trackCreation,
   provenance,
   svgMarkup,
+  imagesReady,
   extract: () => extractRecord(root),
   describe,
 };

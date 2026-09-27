@@ -3,6 +3,8 @@
  */
 
 import type { ChecksOutcome } from "./checks";
+import type { CodeStats } from "./codestats";
+import type { ContextInfo } from "./context";
 import { COST_BASIS, type Backend, type CostBasis, type Usage } from "./cost";
 import { ARMS, GROUPS, type Arm, type Group } from "./tasks";
 
@@ -28,6 +30,16 @@ export interface TurnResult {
   tokenSplit?: "api" | "estimate";
   /** The program for this turn, relative to the run directory. */
   code?: string;
+  /** The program's size (see codestats.ts). */
+  codeStats?: CodeStats;
+  /** gofish arm: the input tokens of this turn that were context (the
+   *  context's system text, the retrieved examples, and for a skill, what
+   *  the tools returned), in the model's tokens. The rest of the input is
+   *  the task, the conversation and the backend's own text. */
+  contextTokens?: number;
+  /** Skill context: the tool calls the model made in this turn, each as
+   *  "<tool> <file or pattern>" (for example "Read SKILL.md"). */
+  toolUses?: string[];
   /** The program ran and its picture was drawn by the arm's library. */
   rendered: boolean;
   renderMs?: number;
@@ -69,7 +81,13 @@ export function scoreTurns(
   edit: boolean
 ): Pick<
   JobResult,
-  "outcome" | "rendered" | "applied" | "preserved" | "pass" | "passFirst"
+  | "outcome"
+  | "rendered"
+  | "applied"
+  | "preserved"
+  | "pass"
+  | "passFirst"
+  | "codeStats"
 > {
   let best: TurnResult | undefined;
   let outcome: Outcome = "fail";
@@ -87,7 +105,16 @@ export function scoreTurns(
     preserved: edit ? !!best?.preserved?.pass : null,
     pass: outcome === "pass",
     passFirst: turns.length > 0 && turnOutcome(turns[0]) === "pass",
+    codeStats: finalCodeStats(turns),
   };
+}
+
+/** The size of the last program among `turns` (the final program of a job
+ *  or chain step). */
+export function finalCodeStats(turns: TurnResult[]): CodeStats | undefined {
+  for (let i = turns.length - 1; i >= 0; i--)
+    if (turns[i].codeStats) return turns[i].codeStats;
+  return undefined;
 }
 
 /** One step of a chain job. */
@@ -97,6 +124,8 @@ export interface StepResult {
   applied: boolean;
   preserved: boolean;
   turns: number;
+  /** The step's final program's size. */
+  codeStats?: CodeStats;
 }
 
 /**
@@ -126,6 +155,7 @@ export function scoreChain(
       preserved: !!s.preserved,
       turns: ts.length,
       first: s.passFirst,
+      ...(s.codeStats ? { codeStats: s.codeStats } : {}),
     };
   });
   let stepsPassed = 0;
@@ -140,6 +170,8 @@ export function scoreChain(
     preserved: last ? last.preserved : null,
     pass,
     passFirst: pass && steps.every((s) => s.first),
+    // The chain's final program: the last attempted step's.
+    codeStats: last?.codeStats,
     steps: steps.map(({ first: _, ...s }) => s),
     stepsPassed,
     nSteps,
@@ -152,10 +184,16 @@ export interface JobResult {
    *  from before they were recorded (API runs of claude-opus-5). */
   model?: string;
   backend?: "mock" | Backend;
-  /** The GoFish docs pack the run sent to the gofish arm (the same for
-   *  every job of a run). Missing in references results and in results
+  /** How GoFish was presented to the gofish arm (see context.ts; the same
+   *  for every job of a run). Missing in references results and in results
    *  from before it was recorded. */
+  context?: ContextInfo;
+  /** Results from before `context` recorded the docs pack here (read by
+   *  `contextOf` in context.ts). */
   docsPack?: { file: string; sha256: string };
+  /** Retrieval context: the gallery examples sent with each conversation
+   *  (one entry, or one per chain step). */
+  retrieved?: { step?: number; ids: string[] }[];
   task: string;
   kind: "create" | "edit" | "chain";
   /** The task's report group (see `Group` in tasks.ts). */
@@ -179,6 +217,10 @@ export interface JobResult {
   pass: boolean;
   /** Passed on the first turn, with no repair. */
   passFirst: boolean;
+  /** The size of the final program (the last turn with a program; for a
+   *  chain, the last attempted step's). Missing when no turn had one, and
+   *  in results from before it was recorded (rescore fills it in). */
+  codeStats?: CodeStats;
   /** Chains only: each attempted step, the steps passed before the first
    *  one that did not pass, and the chain's length. */
   steps?: StepResult[];
@@ -309,6 +351,7 @@ function perArmTable(ran: JobResult[], arms: Arm[]): string {
       "mean cost $",
       "mean latency s",
       "mean render ms (successful renders)",
+      ...CODE_STATS_HEADER(ran),
     ],
     arms.map((arm) => {
       const rs = ran.filter((r) => r.arm === arm);
@@ -337,8 +380,166 @@ function perArmTable(ran: JobResult[], arms: Arm[]): string {
         fmt(mean(rs.map((r) => r.usd)), 4),
         fmt(mean(rs.map((r) => r.latencyMs / 1000)), 1),
         fmt(mean(renders)),
+        ...codeStatsCells(rs),
       ];
     })
+  );
+}
+
+const defined = (xs: (number | undefined)[]) =>
+  xs.filter((x): x is number => x !== undefined && !Number.isNaN(x));
+
+/** Mean of `f` over the jobs where it is defined. */
+const meanOf = (rs: JobResult[], f: (r: JobResult) => number | undefined) =>
+  mean(defined(rs.map(f)));
+
+const median = (xs: number[]) => {
+  if (xs.length === 0) return NaN;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+/** "mean (median)" of `f` over the jobs where it is defined. */
+const meanMedian = (
+  rs: JobResult[],
+  f: (r: JobResult) => number | undefined
+) => {
+  const xs = defined(rs.map(f));
+  return xs.length ? `${fmt(mean(xs), 1)} (${fmt(median(xs), 1)})` : "-";
+};
+
+/** The code columns of each job's final program: size in syntax tokens
+ *  (the headline), model tokens and lines, then explicit calculation
+ *  (arithmetic operators and magic numbers, as mean and median). */
+const CODE_STATS_HEADER = (rs: JobResult[]) => [
+  "mean code syntax tok",
+  rs.some((r) => r.codeStats?.modelEst)
+    ? "mean code model tok (est.)"
+    : "mean code model tok",
+  "mean code LOC",
+  "arith ops mean (median)",
+  "magic numbers mean (median)",
+];
+const codeStatsCells = (rs: JobResult[]) => [
+  fmt(meanOf(rs, (r) => r.codeStats?.syntax)),
+  fmt(meanOf(rs, (r) => r.codeStats?.model)),
+  fmt(meanOf(rs, (r) => r.codeStats?.loc)),
+  meanMedian(rs, (r) => r.codeStats?.arithOps),
+  meanMedian(rs, (r) => r.codeStats?.magicNumbers),
+];
+
+const sumTurns = (r: JobResult, f: (t: TurnResult) => number | undefined) =>
+  r.turns.some((t) => f(t) !== undefined)
+    ? r.turns.reduce((s, t) => s + (f(t) ?? 0), 0)
+    : undefined;
+
+/** The columns of the gofish summary (the context section and `compare`):
+ *  outcomes, then the cost of getting there. */
+export const GOFISH_SUMMARY_HEADER = [
+  "jobs",
+  "pass",
+  "partial",
+  "fail",
+  "first-turn pass",
+  "mean turns",
+  "mean input tok",
+  "mean context tok",
+  "mean output tok",
+  "mean thinking tok",
+  "mean latency s",
+  "mean cost $",
+  "mean tool calls",
+  "mean code syntax tok",
+  "mean code LOC",
+  "arith ops mean (median)",
+  "magic numbers mean (median)",
+];
+
+/** One row of the gofish summary over `rs` (scored single jobs). Input
+ *  tokens include cache reads and writes; context tokens are the part of
+ *  them that was the context (see TurnResult.contextTokens); thinking
+ *  tokens are the reasoning part of the output. Sums are per job, over its
+ *  turns. */
+export function gofishSummaryRow(rs: JobResult[]): string[] {
+  const count = (o: Outcome) =>
+    pct(rs.filter((r) => r.outcome === o).length, rs.length);
+  return [
+    String(rs.length),
+    count("pass"),
+    count("partial"),
+    count("fail"),
+    pct(rs.filter((r) => r.passFirst).length, rs.length),
+    fmt(mean(rs.map((r) => r.turns.length)), 2),
+    fmt(
+      mean(
+        rs.map((r) => r.usage.input + r.usage.cacheWrite + r.usage.cacheRead)
+      )
+    ),
+    fmt(meanOf(rs, (r) => sumTurns(r, (t) => t.contextTokens))),
+    fmt(mean(rs.map((r) => r.usage.output))),
+    fmt(meanReasoning(rs)),
+    fmt(mean(rs.map((r) => r.latencyMs / 1000)), 1),
+    fmt(mean(rs.map((r) => r.usd)), 4),
+    fmt(
+      meanOf(rs, (r) => sumTurns(r, (t) => t.toolUses?.length)),
+      1
+    ),
+    fmt(meanOf(rs, (r) => r.codeStats?.syntax)),
+    fmt(meanOf(rs, (r) => r.codeStats?.loc)),
+    meanMedian(rs, (r) => r.codeStats?.arithOps),
+    meanMedian(rs, (r) => r.codeStats?.magicNumbers),
+  ];
+}
+
+/** Statistics of a reference program (see lexicalStats in codestats.ts). */
+export type ReferenceStats = Omit<CodeStats, "model" | "modelEst">;
+
+/** Per task and arm: the mean of some statistics of the final programs,
+ *  with the reference solution's in parentheses, and a last row over all
+ *  jobs (the reference's mean over the tasks). `keys` are the CodeStats
+ *  fields shown in a cell, joined by " / ". */
+function codeStatsTable(
+  single: JobResult[],
+  arms: Arm[],
+  tasks: string[],
+  refs: Record<string, ReferenceStats>,
+  keys: ("syntax" | "arithOps" | "magicNumbers")[]
+): string {
+  const digits = keys.length > 1 ? 1 : 0;
+  const cell = (rs: JobResult[], refList: ReferenceStats[]) => {
+    const got = keys
+      .map((k) =>
+        fmt(
+          meanOf(rs, (r) => r.codeStats?.[k]),
+          digits
+        )
+      )
+      .join(" / ");
+    const ref = refList.length
+      ? ` (ref ${keys.map((k) => fmt(mean(defined(refList.map((x) => x[k]))), digits)).join(" / ")})`
+      : "";
+    return `${got}${ref}`;
+  };
+  const refsOf = (ts: string[], arm: Arm) =>
+    ts.map((t) => refs[`${t}|${arm}`]).filter((x): x is ReferenceStats => !!x);
+  const rows = tasks.map((t) => [
+    t,
+    ...arms.map((arm) =>
+      cell(
+        single.filter((r) => r.task === t && r.arm === arm),
+        refsOf([t], arm)
+      )
+    ),
+  ]);
+  const all = (arm: Arm) =>
+    `**${cell(
+      single.filter((r) => r.arm === arm),
+      refsOf(tasks, arm)
+    )}**`;
+  return table(
+    ["task", ...arms],
+    [...rows, ["**mean over jobs**", ...arms.map(all)]]
   );
 }
 
@@ -399,9 +600,12 @@ export function buildReport(
       subscriptionCapUsd: number;
     };
     effort: string;
-    /** The docs pack sent to the gofish arm; missing for references and
-     *  for runs from before it was recorded. */
-    docsPack?: { file: string; sha256: string };
+    /** How GoFish was presented to the gofish arm; missing for references
+     *  and for runs from before it was recorded. */
+    context?: ContextInfo;
+    /** Statistics of each reference program (lexicalStats), by
+     *  `${task}|${arm}`, for the code-size table. */
+    referenceStats?: Record<string, ReferenceStats>;
   }
 ): string {
   const ran = results.filter(isScored);
@@ -425,7 +629,7 @@ export function buildReport(
       "claude-code (headless Claude Code, billed to the Claude subscription)",
   };
   out.push(
-    `Model: ${meta.model}. Backend: ${backendNote[meta.backend] ?? meta.backend}. Effort: ${meta.effort}. Docs pack: ${meta.docsPack ? `${meta.docsPack.file} (sha256 ${meta.docsPack.sha256})` : meta.backend === "-" ? "-" : "not recorded"}. Max turns: ${meta.maxTurns}. Run directory: \`${meta.runDir}\`. ` +
+    `Model: ${meta.model}. Backend: ${backendNote[meta.backend] ?? meta.backend}. Effort: ${meta.effort}. GoFish context: ${meta.context ? `${meta.context.name} (sha256 ${meta.context.sha256})` : meta.backend === "-" ? "-" : "not recorded"}. Max turns: ${meta.maxTurns}. Run directory: \`${meta.runDir}\`. ` +
       `Jobs: ${results.length}, of which ${ran.length} scored and ${unscored.length} not scored (infrastructure; excluded from every rate and comparison below).`
   );
   const spend =
@@ -466,6 +670,51 @@ export function buildReport(
       out.push(perArmTable(rs, arms), "");
     }
     out.pop();
+  }
+
+  const gofish = single.filter((r) => r.arm === "gofish");
+  if (meta.context && gofish.length > 0) {
+    out.push(
+      "",
+      `## GoFish context: ${meta.context.name}`,
+      "",
+      "The gofish arm under this run's context. Input tokens include cache reads and writes; context tokens are the part of them that was the context (its system text, retrieved examples, and for a skill, what the tools returned), summed over a job's turns. Turns count repair rounds; tool calls are the skill's file reads and searches. Compare contexts across runs with `pnpm llm-bench compare`.",
+      ""
+    );
+    out.push(
+      table(
+        ["tasks", ...GOFISH_SUMMARY_HEADER],
+        sections.map(({ title, rs }) => [
+          title,
+          ...gofishSummaryRow(rs.filter((r) => r.arm === "gofish")),
+        ])
+      )
+    );
+    const retrieved = gofish.filter((r) => r.retrieved?.length);
+    if (retrieved.length > 0) {
+      out.push("", "Retrieved examples per task:", "");
+      const seen = new Set<string>();
+      for (const r of retrieved) {
+        const ids = r.retrieved!.map((x) => x.ids.join(", ")).join("; ");
+        if (seen.has(`${r.task}|${ids}`)) continue;
+        seen.add(`${r.task}|${ids}`);
+        out.push(`- ${r.task}: ${ids}`);
+      }
+    }
+    const uses = new Map<string, number>();
+    for (const r of gofish)
+      for (const t of r.turns)
+        for (const u of t.toolUses ?? []) uses.set(u, (uses.get(u) ?? 0) + 1);
+    if (uses.size > 0)
+      out.push(
+        "",
+        "Tool calls (skill), most frequent first:",
+        "",
+        [...uses]
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .map(([u, n]) => `\`${u}\` x${n}`)
+          .join(", ")
+      );
   }
 
   const edits = single.filter((r) => r.kind === "edit");
@@ -523,6 +772,25 @@ export function buildReport(
           }),
         ])
       )
+    );
+    out.push(
+      "",
+      "## Code size per task",
+      "",
+      "Cells: mean syntax tokens of the final program (lexical tokens: identifiers, keywords, literals, operators and punctuation; whitespace and comments are not counted, so line breaking does not change it), over scored jobs; the reference solution's in parentheses.",
+      "",
+      codeStatsTable(single, arms, tasks, meta.referenceStats ?? {}, [
+        "syntax",
+      ]),
+      "",
+      "## Explicit calculation per task",
+      "",
+      "Cells: arithmetic operators / magic numbers in the final program, mean over scored jobs; the reference solution's in parentheses. Arithmetic operators are + - * / % ** (and // in Python) with their compound assignments, plus every call into Math, math, np or numpy. Magic numbers are numeric literals other than 0 and 1. A declarative library should leave little to compute by hand.",
+      "",
+      codeStatsTable(single, arms, tasks, meta.referenceStats ?? {}, [
+        "arithOps",
+        "magicNumbers",
+      ])
     );
   }
 
@@ -713,6 +981,7 @@ function chainSection(
         "mean turns",
         reasoningHeader(chains),
         "mean cost $",
+        "mean step code syntax tok",
       ],
       arms.map((arm) => {
         const rs = chains.filter((r) => r.arm === arm);
@@ -726,6 +995,16 @@ function chainSection(
           fmt(mean(rs.map((r) => r.turns.length)), 2),
           fmt(meanReasoning(rs)),
           fmt(mean(rs.map((r) => r.usd)), 4),
+          // Each attempted step's final program.
+          fmt(
+            mean(
+              rs.flatMap((r) =>
+                (r.steps ?? [])
+                  .map((s) => s.codeStats?.syntax)
+                  .filter((x): x is number => x !== undefined)
+              )
+            )
+          ),
         ];
       })
     ),
