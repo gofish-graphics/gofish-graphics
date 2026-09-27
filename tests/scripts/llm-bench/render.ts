@@ -9,7 +9,9 @@
  *
  * Every render also enforces the arm contract (contract.ts): the program
  * must import its arm's library, and the picture must have been produced by
- * it. A violation is a failed render with `errorKind: "contract"`.
+ * it. A violation is a failed render with `errorKind: "contract"`, but the
+ * picture is still read back (`record`), so a correct picture drawn some
+ * other way can be told apart from a wrong one.
  */
 
 import { chromium, type Browser, type ConsoleMessage } from "playwright";
@@ -65,6 +67,8 @@ export interface RenderOutcome {
   /** Wall time of the render itself: the program's module load + render call
    *  in the page for JS arms, the python process for matplotlib. */
   renderMs: number;
+  /** The picture, read back. Present when `ok`, and also on a contract
+   *  failure: the program drew a picture, just not with the library. */
   record?: RenderRecord;
   svgPath?: string;
   pngPath?: string;
@@ -212,14 +216,17 @@ export class Renderer {
     let svgText: string | null = null;
     let renderMs = 0;
     const code = readFileSync(codePath, "utf8");
-    const unimported = staticViolation(arm, code);
-    if (unimported)
-      return {
-        ok: false,
-        error: unimported,
-        errorKind: "contract",
-        renderMs: 0,
-      };
+    // A contract violation does not stop the render: the picture is still
+    // read, so it can be scored as a correct picture not drawn with the
+    // library (a "partial" outcome, see report.ts).
+    let violation = staticViolation(arm, code);
+    /** A failure before the page (no picture). A static violation is added
+     *  so the model hears about both. */
+    const failed = (error: string, ms: number): RenderOutcome => ({
+      ok: false,
+      error: violation ? `${error}\n\n${violation}` : error,
+      renderMs: ms,
+    });
     if (arm === "matplotlib") {
       const outSvg = `${base}.mpl.svg`;
       rmSync(outSvg, { force: true });
@@ -238,27 +245,22 @@ export class Renderer {
       });
       renderMs = performance.now() - t0;
       if (r.timedOut)
-        return {
-          ok: false,
-          error: `The script did not finish within ${PYTHON_TIMEOUT_MS / 1000}s.`,
-          renderMs,
-        };
+        return failed(
+          `The script did not finish within ${PYTHON_TIMEOUT_MS / 1000}s.`,
+          renderMs
+        );
       if (r.code !== 0)
-        return {
-          ok: false,
-          error: `The script exited with code ${r.code}:\n${tail(r.stderr)}`,
-          renderMs,
-        };
+        return failed(
+          `The script exited with code ${r.code}:\n${tail(r.stderr)}`,
+          renderMs
+        );
       if (!existsSync(outSvg))
-        return {
-          ok: false,
-          error: "The script finished but did not save an SVG to OUT_PATH.",
-          renderMs,
-        };
+        return failed(
+          "The script finished but did not save an SVG to OUT_PATH.",
+          renderMs
+        );
       svgText = readFileSync(outSvg, "utf8");
-      const foreign = matplotlibViolation(svgText);
-      if (foreign)
-        return { ok: false, error: foreign, errorKind: "contract", renderMs };
+      violation ??= matplotlibViolation(svgText);
     } else {
       // Syntax errors surface here with a precise location; through Vite
       // they would only say "failed to fetch module".
@@ -277,29 +279,34 @@ export class Renderer {
         }
         moduleUrl = `/@fs${servedPath}?t=${Date.now()}`;
       } catch (e) {
-        return {
-          ok: false,
-          error: `Syntax error:\n${(e as Error).message}`,
-          renderMs: 0,
-        };
+        return failed(`Syntax error:\n${(e as Error).message}`, 0);
       }
     }
 
     // 2. Show it in the page. A failure of the harness itself (the page
     // reloading under a Vite re-optimization, a crashed context) is not the
-    // program's fault, so it gets one retry.
+    // program's fault, so it gets up to three retries.
     const show = () =>
       this.show(arm, { moduleUrl, svgText, renderMs }, data, size, {
         svgPath,
         pngPath,
         recordPath,
       });
-    const first = await show();
-    const out = first.harnessError ? await show() : first;
-    if (out.error) {
-      out.errorKind ??= "render";
-      if (out.errorKind === "render")
-        out.error = cleanError(out.error, codePath);
+    let out = await show();
+    for (let i = 0; i < 3 && out.harnessError; i++) out = await show();
+    if (out.error && out.errorKind !== "contract") {
+      // No picture: the render error is what the model needs to fix first.
+      const clean = failed(cleanError(out.error, codePath), out.renderMs);
+      return { ...out, ...clean, errorKind: "render" };
+    }
+    if (violation) {
+      // The static rule's message wins over the provenance one: it is the
+      // more basic problem.
+      Object.assign(out, {
+        ok: false,
+        error: violation,
+        errorKind: "contract",
+      });
     }
     return out;
   }
@@ -415,28 +422,23 @@ export class Renderer {
         svgPath,
         await page.evaluate(() => (window as any).llmBench.svgMarkup())
       );
-      // The arm contract, checked on the picture as shown (the PNG and SVG
-      // are kept for inspection) and before extract() rewrites <use>s.
-      if (arm === "gofish" || arm === "recharts") {
-        const foreign: string | null = await page.evaluate(
-          (l) => (window as any).llmBench.provenance(l),
-          arm
-        );
-        if (foreign)
-          return {
-            ok: false,
-            error: foreign,
-            errorKind: "contract",
-            renderMs,
-            svgPath,
-            pngPath,
-          };
-      }
+      // The arm contract, checked on the picture as shown and before
+      // extract() rewrites <use>s. The picture is read either way.
+      const foreign: string | null =
+        arm === "gofish" || arm === "recharts"
+          ? await page.evaluate(
+              (l) => (window as any).llmBench.provenance(l),
+              arm
+            )
+          : null;
       const record = await page.evaluate(() =>
         (window as any).llmBench.extract()
       );
       writeFileSync(recordPath, JSON.stringify(record, null, 1));
-      return { ok: true, renderMs, record, svgPath, pngPath, recordPath };
+      const done = { renderMs, record, svgPath, pngPath, recordPath };
+      return foreign
+        ? { ok: false, error: foreign, errorKind: "contract", ...done }
+        : { ok: true, ...done };
     } catch (e) {
       return {
         ok: false,

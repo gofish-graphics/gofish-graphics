@@ -6,17 +6,24 @@
  * Usage:
  *   tsx scripts/llm-bench.ts <mode> [options]
  *     references   render every reference solution and run its checks (no API);
- *                  must be all green before a paid run
+ *                  must be all green before a paid run (a chain's every
+ *                  step is checked, each against the previous step's
+ *                  reference render)
  *     mock         run the full model loop with a mock model that replays the
  *                  references (--mock-break-first: turn 1 is a syntax error)
- *     run          call the real API (claude-opus-5); needs --yes
+ *     run          call the real model (--model, default claude-opus-5-5) on
+ *                  --backend api (the Anthropic API) or claude-code
+ *                  (headless Claude Code on the Claude subscription); prints
+ *                  the estimate, and needs --yes to start
  *     rescore <runDir>
  *                  render every saved turn of an earlier run again through the
  *                  current harness, checks and arm contract (no API); writes
  *                  <runDir>-rescored/
  *   Options:
  *     --arms gofish,recharts,d3,matplotlib   --tasks <substring>
- *     --samples N (1)   --max-turns N (3)   --budget-usd X (10)
+ *     --samples N (1)   --max-turns N (3)   --budget-usd X (10, API)
+ *     --subscription-cap-usd X (40, claude-code at list price)
+ *     --model ID (claude-opus-5-5)   --backend api|claude-code (api)
  *     --effort low|medium|high|xhigh|max (medium)   --concurrency N (3)
  */
 
@@ -39,16 +46,22 @@ import {
 import { callWithRetry } from "./llm-bench/call";
 import {
   addUsage,
+  COST_BASIS,
   costUsd,
+  DEFAULT_MODEL,
   Ledger,
-  typicalUsd,
+  prices,
+  splitOutput,
+  typicalUsage,
   worstCaseUsd,
   ZERO_USAGE,
-  MODEL,
+  type Backend,
 } from "./llm-bench/cost";
 import {
   AnthropicModel,
   apiKey,
+  CLAUDE_CODE_OVERHEAD_TOKENS,
+  ClaudeCodeModel,
   MockModel,
   type Model,
   type Turn,
@@ -65,23 +78,49 @@ import { Renderer } from "./llm-bench/render";
 import {
   buildReport,
   isScored,
+  scoreChain,
+  scoreTurns,
+  turnOutcome,
   type JobResult,
+  type Outcome,
   type TurnResult,
 } from "./llm-bench/report";
 import {
   ARM_EXT,
   ARMS,
+  BENCH_DIR,
+  chainBase,
+  chainSteps,
   dataPath,
   loadData,
   loadReference,
   loadTasks,
+  referencePath,
   taskGroup,
   type Arm,
+  type ChainTask,
+  type SingleTask,
   type Task,
 } from "./llm-bench/tasks";
 
 const OUT_ROOT = join(import.meta.dirname, "../tmp/llm-bench");
 const LEDGER_PATH = join(OUT_ROOT, "ledger.json");
+
+const ledgerCaps = (opts: Options) => ({
+  apiUsd: opts.budgetUsd,
+  subscriptionUsd: opts.subscriptionCapUsd,
+});
+
+const ledgerMeta = (ledger: Ledger) => ({
+  apiUsd: ledger.total("api"),
+  budgetUsd: ledger.cap("api"),
+  subscriptionUsd: ledger.total("claude-code"),
+  subscriptionCapUsd: ledger.cap("claude-code"),
+});
+
+/** Input tokens the backend adds to each call on top of our prompt. */
+const overheadTokens = (backend: Backend) =>
+  backend === "claude-code" ? CLAUDE_CODE_OVERHEAD_TOKENS : 0;
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -97,6 +136,11 @@ interface Options {
   samples: number;
   maxTurns: number;
   budgetUsd: number;
+  /** claude-code: the cap on list-price spend (all runs), so a runaway loop
+   *  stops. It does not bill anything. */
+  subscriptionCapUsd: number;
+  model: string;
+  backend: Backend;
   effort: (typeof EFFORTS)[number];
   concurrency: number;
   mockBreakFirst: boolean;
@@ -112,7 +156,7 @@ function parseArgs(argv: string[]): Options {
     (mode === "rescore" && !argv[1])
   ) {
     console.error(
-      "usage: llm-bench <references|mock|run|rescore <runDir>> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--effort E] [--concurrency N] [--mock-break-first] [--yes]"
+      "usage: llm-bench <references|mock|run|rescore <runDir>> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--subscription-cap-usd X] [--model ID] [--backend api|claude-code] [--effort E] [--concurrency N] [--mock-break-first] [--yes]"
     );
     process.exit(2);
   }
@@ -122,6 +166,9 @@ function parseArgs(argv: string[]): Options {
     samples: 1,
     maxTurns: 3,
     budgetUsd: 10,
+    subscriptionCapUsd: 40,
+    model: DEFAULT_MODEL,
+    backend: "api",
     effort: "medium",
     concurrency: 3,
     mockBreakFirst: false,
@@ -154,8 +201,16 @@ function parseArgs(argv: string[]): Options {
     else if (flag === "--samples") opts.samples = Number(value());
     else if (flag === "--max-turns") opts.maxTurns = Number(value());
     else if (flag === "--budget-usd") opts.budgetUsd = Number(value());
+    else if (flag === "--subscription-cap-usd")
+      opts.subscriptionCapUsd = Number(value());
     else if (flag === "--concurrency") opts.concurrency = Number(value());
-    else if (flag === "--effort") {
+    else if (flag === "--model") opts.model = value();
+    else if (flag === "--backend") {
+      const b = value() as Backend;
+      if (!(b in COST_BASIS))
+        throw new Error("--backend must be api or claude-code");
+      opts.backend = b;
+    } else if (flag === "--effort") {
       const e = value() as Options["effort"];
       if (!EFFORTS.includes(e))
         throw new Error(`--effort must be one of ${EFFORTS.join(", ")}`);
@@ -164,6 +219,7 @@ function parseArgs(argv: string[]): Options {
     else if (flag === "--yes") opts.yes = true;
     else throw new Error(`unknown option ${flag}`);
   }
+  prices(opts.model); // fail now on a model with no prices
   return opts;
 }
 
@@ -202,7 +258,7 @@ class BaseRecords {
       this.cache.set(
         key,
         (async () => {
-          const base = this.tasks.get(baseId)!;
+          const base = this.tasks.get(baseId) as SingleTask;
           const dir = join(this.runDir, "_base", slug(baseId), arm);
           mkdirSync(dir, { recursive: true });
           const codePath = join(dir, `reference.${ARM_EXT[arm]}`);
@@ -218,7 +274,7 @@ class BaseRecords {
             console.error(
               `base reference ${baseId}/${arm} failed to render: ${r.error}`
             );
-          return r.record ?? null;
+          return r.ok ? r.record! : null;
         })()
       );
     }
@@ -226,18 +282,18 @@ class BaseRecords {
   }
 }
 
-async function judge(
-  task: Task,
-  arm: Arm,
+/** Run the checks on a picture, and for an edit (or chain step) compare it
+ *  with `base`, the picture it started from. */
+function judge(
+  task: SingleTask,
   record: RenderRecord,
-  bases: BaseRecords
-): Promise<{ checks: ChecksOutcome; preserved?: ChecksOutcome }> {
+  base: RenderRecord | null | undefined
+): { checks: ChecksOutcome; preserved?: ChecksOutcome } {
   const checks = runChecks(task.checks, record, {
     data: loadData(task),
     size: task.size,
   });
   if (task.kind !== "edit") return { checks };
-  const base = await bases.get(task.base, arm);
   const preserved: ChecksOutcome = base
     ? preservedCheck(base, record, task.mayChange)
     : {
@@ -246,82 +302,154 @@ async function judge(
           {
             check: "base render",
             pass: false,
-            detail: "the base reference did not render",
+            detail: "the picture this edit started from did not render",
           },
         ],
       };
   return { checks, preserved };
 }
 
+const TAG: Record<Outcome, string> = {
+  pass: "PASS",
+  partial: "PART",
+  fail: "FAIL",
+};
+
 // ---------------------------------------------------------------------------
 // References mode
 // ---------------------------------------------------------------------------
 
+/** Render the reference for `task` in `dir` and judge it against `base`. */
+async function referenceTurn(
+  renderer: Renderer,
+  runDir: string,
+  task: SingleTask,
+  arm: Arm,
+  dir: string,
+  base: RenderRecord | null | undefined,
+  step?: number
+): Promise<{ turn: TurnResult; record: RenderRecord | null }> {
+  mkdirSync(dir, { recursive: true });
+  const refPath = referencePath(task.id, arm);
+  if (!existsSync(refPath)) {
+    // A missing reference fails this job, not the whole run.
+    console.log(
+      `FAIL  ${task.id.padEnd(28)} ${arm.padEnd(10)}  missing reference ${relative(BENCH_DIR, refPath)}`
+    );
+    const turn: TurnResult = {
+      ...(step ? { step } : {}),
+      turn: 1,
+      usage: ZERO_USAGE,
+      usd: 0,
+      latencyMs: 0,
+      stopReason: "reference",
+      rendered: false,
+      error: `missing reference ${refPath}`,
+    };
+    return { turn, record: null };
+  }
+  const codePath = join(dir, `reference.${ARM_EXT[arm]}`);
+  writeFileSync(codePath, readFileSync(refPath, "utf8"));
+  const r = await renderer.render(
+    arm,
+    codePath,
+    loadData(task),
+    dataPath(task),
+    task.size
+  );
+  const turn: TurnResult = {
+    ...(step ? { step } : {}),
+    turn: 1,
+    usage: ZERO_USAGE,
+    usd: 0,
+    latencyMs: 0,
+    stopReason: "reference",
+    code: relative(runDir, codePath),
+    rendered: r.ok,
+    renderMs: r.renderMs,
+    error: r.error,
+    errorKind: r.errorKind,
+  };
+  if (r.record) Object.assign(turn, judge(task, r.record, base));
+  writeFileSync(join(dir, "result.json"), JSON.stringify(turn, null, 1));
+  const outcome = turnOutcome(turn);
+  const failed = [
+    ...(turn.checks?.results ?? []),
+    ...(turn.preserved?.results ?? []),
+  ].filter((c) => !c.pass);
+  const why = [
+    ...(r.error ? [`${r.errorKind} error: ${r.error}`] : []),
+    ...failed.map((c) => `${c.check}: ${c.detail}`),
+  ].join("; ");
+  console.log(
+    `${TAG[outcome]}  ${task.id.padEnd(28)} ${arm.padEnd(10)} ${Math.round(r.renderMs).toString().padStart(5)}ms${outcome === "pass" ? "" : `  ${why}`}`
+  );
+  return { turn, record: r.record ?? null };
+}
+
+/**
+ * Every reference, judged like a model's answer. A chain's step k is judged
+ * against step k-1's reference render (the base task's on step 1), and every
+ * step is checked even when an earlier one fails.
+ */
 async function runReferences(
   opts: Options,
   tasks: Task[],
+  byId: Map<string, Task>,
   renderer: Renderer,
   runDir: string,
   bases: BaseRecords
 ): Promise<JobResult[]> {
   const jobs = tasks.flatMap((task) => opts.arms.map((arm) => ({ task, arm })));
   const results: JobResult[] = [];
+  const job = (task: Task, arm: Arm, turns: TurnResult[]): JobResult => ({
+    mode: "references",
+    task: task.id,
+    kind: task.kind,
+    group: taskGroup(task),
+    arm,
+    sample: 0,
+    turns,
+    ...(task.kind === "chain"
+      ? scoreChain(turns, task.steps.length)
+      : scoreTurns(turns, task.kind === "edit")),
+    usage: ZERO_USAGE,
+    usd: 0,
+    latencyMs: 0,
+  });
   await pool(jobs, opts.concurrency, async ({ task, arm }) => {
     const dir = join(runDir, slug(task.id), arm);
-    mkdirSync(dir, { recursive: true });
-    const codePath = join(dir, `reference.${ARM_EXT[arm]}`);
-    writeFileSync(codePath, loadReference(task.id, arm));
-    const r = await renderer.render(
-      arm,
-      codePath,
-      loadData(task),
-      dataPath(task),
-      task.size
-    );
-    const turn: TurnResult = {
-      turn: 1,
-      usage: ZERO_USAGE,
-      usd: 0,
-      latencyMs: 0,
-      stopReason: "reference",
-      code: relative(runDir, codePath),
-      rendered: r.ok,
-      renderMs: r.renderMs,
-      error: r.error,
-      errorKind: r.errorKind,
-    };
-    if (r.record) Object.assign(turn, await judge(task, arm, r.record, bases));
-    writeFileSync(join(dir, "result.json"), JSON.stringify(turn, null, 1));
-    const applied = !!turn.checks?.pass;
-    const preserved = task.kind === "edit" ? !!turn.preserved?.pass : null;
-    const pass = r.ok && applied && preserved !== false;
-    results.push({
-      mode: "references",
-      task: task.id,
-      kind: task.kind,
-      group: taskGroup(task),
-      arm,
-      sample: 0,
-      turns: [turn],
-      rendered: r.ok,
-      applied,
-      preserved,
-      pass,
-      passFirst: pass,
-      usage: ZERO_USAGE,
-      usd: 0,
-      latencyMs: 0,
-    });
-    const failed = [
-      ...(turn.checks?.results ?? []),
-      ...(turn.preserved?.results ?? []),
-    ].filter((c) => !c.pass);
-    const why = !r.ok
-      ? `render error: ${r.error}`
-      : failed.map((c) => `${c.check}: ${c.detail}`).join("; ");
-    console.log(
-      `${pass ? "PASS" : "FAIL"}  ${task.id.padEnd(28)} ${arm.padEnd(10)} ${Math.round(r.renderMs).toString().padStart(5)}ms${pass ? "" : `  ${why}`}`
-    );
+    if (task.kind !== "chain") {
+      const base =
+        task.kind === "edit" ? await bases.get(task.base, arm) : undefined;
+      const { turn } = await referenceTurn(
+        renderer,
+        runDir,
+        task,
+        arm,
+        dir,
+        base
+      );
+      results.push(job(task, arm, [turn]));
+      return;
+    }
+    const turns: TurnResult[] = [];
+    let base = await bases.get(task.base, arm);
+    for (const [i, step] of chainSteps(task, chainBase(task, byId)).entries()) {
+      const { turn, record } = await referenceTurn(
+        renderer,
+        runDir,
+        step,
+        arm,
+        join(dir, `step${i + 1}`),
+        base,
+        i + 1
+      );
+      turns.push(turn);
+      base = record;
+    }
+    // Every step is judged above; the job passes only if all of them do.
+    results.push(job(task, arm, turns));
   });
   return results;
 }
@@ -336,43 +464,58 @@ interface JobContext {
   ledger: Ledger;
   renderer: Renderer;
   bases: BaseRecords;
+  byId: Map<string, Task>;
   runDir: string;
   runId: string;
   /** Set once the budget refuses a call: no new calls start after that. */
   halted: { budget: boolean; fatal: string | null };
 }
 
-async function runJob(
+interface Conversation {
+  turns: TurnResult[];
+  stopped?: JobResult["stopped"];
+  apiError?: string;
+  /** Worst-case bookings for failed attempts that may have been billed. */
+  failedUsd: number;
+  /** The passing turn's program and picture, if a turn passed (a chain
+   *  goes on from them). */
+  final?: { code: string; record: RenderRecord };
+}
+
+/**
+ * One conversation about one task: the task message, then repair turns
+ * until a turn renders (drawn by the library) or `--max-turns` run out.
+ * Render errors and contract violations go back to the model; check results
+ * never do. For an edit, `startCode` is the program shown to the model and
+ * `base` the picture preservation is judged against. Writes every turn's
+ * files and `transcript.md` into `dir`.
+ */
+async function converse(
   ctx: JobContext,
-  task: Task,
+  task: SingleTask,
   arm: Arm,
-  sample: number
-): Promise<JobResult> {
+  dir: string,
+  label: string,
+  edit: { startCode: string; base: RenderRecord | null } | undefined,
+  step?: number
+): Promise<Conversation> {
   const { opts, model, ledger, renderer, runDir } = ctx;
-  const dir = join(runDir, slug(task.id), arm, `s${sample}`);
   mkdirSync(dir, { recursive: true });
   const data = loadData(task);
   const system = systemBlocks(arm);
-  const startCode =
-    task.kind === "edit" ? loadReference(task.base, arm) : undefined;
   const messages: Turn[] = [
-    { role: "user", content: taskMessage(task, arm, data, startCode) },
+    { role: "user", content: taskMessage(task, arm, data, edit?.startCode) },
   ];
-  const turns: TurnResult[] = [];
-  let stopped: JobResult["stopped"];
-  let apiError: string | undefined;
-  let last: TurnResult | undefined;
-  /** Worst-case bookings for failed attempts that may have been billed. */
-  let failedUsd = 0;
+  const conv: Conversation = { turns: [], failedUsd: 0 };
 
   for (let t = 1; t <= opts.maxTurns; t++) {
     if (ctx.halted.fatal) {
-      stopped = "api-error";
-      apiError = `run halted: ${ctx.halted.fatal}`;
+      conv.stopped = "api-error";
+      conv.apiError = `run halted: ${ctx.halted.fatal}`;
       break;
     }
     if (ctx.halted.budget) {
-      stopped = "budget";
+      conv.stopped = "budget";
       break;
     }
     const inputChars =
@@ -382,40 +525,51 @@ async function runJob(
       model,
       req: { system, messages, task, arm, turn: t },
       ledger,
-      reserveUsd: model.real ? worstCaseUsd(inputChars) : 0,
+      reserveUsd:
+        model.backend === "mock"
+          ? 0
+          : worstCaseUsd(inputChars, model.id, overheadTokens(model.backend)),
       run: ctx.runId,
       stop: () => ctx.halted.fatal !== null,
     });
-    failedUsd += outcome.failedUsd;
+    conv.failedUsd += outcome.failedUsd;
     if (outcome.kind === "budget") {
       ctx.halted.budget = true;
+      const b = model.backend as Backend;
       console.log(
-        `budget: refusing ${task.id}/${arm}/s${sample} turn ${t} (ledger $${ledger.totalUsd.toFixed(2)} + worst case $${outcome.reserveUsd.toFixed(2)} > $${ledger.budgetUsd})`
+        `budget: refusing ${label} turn ${t} (${b} ledger $${ledger.total(b).toFixed(2)} + worst case $${outcome.reserveUsd.toFixed(2)} > $${ledger.cap(b)} ${b === "api" ? "budget" : "list-price cap"})`
       );
-      stopped = "budget";
+      conv.stopped = "budget";
       break;
     }
     if (outcome.kind === "error") {
       if (outcome.info.fatal) ctx.halted.fatal = outcome.info.label;
-      stopped = "api-error";
-      apiError = outcome.info.label;
+      conv.stopped = "api-error";
+      conv.apiError = outcome.info.label;
       break;
     }
     const { reply, usd } = outcome;
-    writeFileSync(join(dir, `turn${t}.reply.md`), reply.text);
+    const replyPath = join(dir, `turn${t}.reply.md`);
+    writeFileSync(replyPath, reply.text);
     const turn: TurnResult = {
+      ...(step ? { step } : {}),
       turn: t,
       usage: reply.usage,
-      usd: model.real ? usd : costUsd(reply.usage), // mock: simulated, not in the ledger
+      // Mock: simulated, not in the ledger.
+      usd: model.backend === "mock" ? (reply.costUsd ?? 0) : usd,
+      ...(model.backend === "mock"
+        ? {}
+        : { costBasis: COST_BASIS[model.backend] }),
       latencyMs: reply.latencyMs,
       stopReason: reply.stopReason,
+      reply: relative(runDir, replyPath),
+      ...splitOutput(reply.text, reply.usage.output, reply.thinkingTokens),
       rendered: false,
     };
-    turns.push(turn);
-    last = turn;
+    conv.turns.push(turn);
     if (reply.stopReason === "refusal") {
       turn.error = "The model refused.";
-      stopped = "refusal";
+      conv.stopped = "refusal";
       break;
     }
     messages.push({ role: "assistant", content: reply.content });
@@ -440,38 +594,18 @@ async function runJob(
       turn.rendered = r.ok;
       turn.error = r.error;
       turn.errorKind = r.errorKind;
-      if (r.record) {
-        Object.assign(turn, await judge(task, arm, r.record, ctx.bases));
-        break; // Rendered: the job ends here. Check results are never sent back.
+      // A contract violation still has a picture: judge it, so a right
+      // picture drawn some other way scores as partial.
+      if (r.record) Object.assign(turn, judge(task, r.record, edit?.base));
+      if (r.ok) {
+        if (turnOutcome(turn) === "pass")
+          conv.final = { code, record: r.record! };
+        break; // Rendered: the conversation ends here. Check results are never sent back.
       }
     }
     messages.push({ role: "user", content: repairMessage(turn.error!) });
   }
 
-  const applied = !!last?.rendered && !!last.checks?.pass;
-  const preserved =
-    task.kind === "edit" ? !!last?.rendered && !!last.preserved?.pass : null;
-  const pass = applied && preserved !== false;
-  const result: JobResult = {
-    mode: opts.mode,
-    task: task.id,
-    kind: task.kind,
-    group: taskGroup(task),
-    arm,
-    sample,
-    turns,
-    rendered: !!last?.rendered,
-    applied,
-    preserved,
-    pass,
-    passFirst: pass && turns.length === 1,
-    stopped,
-    apiError,
-    usage: turns.reduce((u, t) => addUsage(u, t.usage), ZERO_USAGE),
-    usd: turns.reduce((s, t) => s + t.usd, 0) + failedUsd,
-    latencyMs: turns.reduce((s, t) => s + t.latencyMs, 0),
-  };
-  writeFileSync(join(dir, "result.json"), JSON.stringify(result, null, 1));
   // What the model saw and said, as text (thinking blocks omitted).
   const transcript = messages
     .map((m) => {
@@ -488,17 +622,116 @@ async function runJob(
     join(dir, "transcript.md"),
     `## system\n\n${system.map((b) => b.text).join("\n\n")}\n\n${transcript}\n`
   );
+  return conv;
+}
+
+function finishJob(
+  ctx: JobContext,
+  task: Task,
+  arm: Arm,
+  sample: number,
+  dir: string,
+  turns: TurnResult[],
+  conv: Omit<Conversation, "turns" | "final">
+): JobResult {
+  const result: JobResult = {
+    mode: ctx.opts.mode,
+    model: ctx.model.id,
+    backend: ctx.model.backend,
+    task: task.id,
+    kind: task.kind,
+    group: taskGroup(task),
+    arm,
+    sample,
+    turns,
+    ...(task.kind === "chain"
+      ? scoreChain(turns, task.steps.length)
+      : scoreTurns(turns, task.kind === "edit")),
+    stopped: conv.stopped,
+    apiError: conv.apiError,
+    usage: turns.reduce((u, t) => addUsage(u, t.usage), ZERO_USAGE),
+    usd: turns.reduce((s, t) => s + t.usd, 0) + conv.failedUsd,
+    latencyMs: turns.reduce((s, t) => s + t.latencyMs, 0),
+  };
+  writeFileSync(join(dir, "result.json"), JSON.stringify(result, null, 1));
   const tag = !isScored(result)
-    ? stopped === "budget"
+    ? conv.stopped === "budget"
       ? "SKIP"
       : "ERR "
-    : pass
-      ? "PASS"
-      : "FAIL";
+    : TAG[result.outcome];
+  const steps =
+    task.kind === "chain"
+      ? `  steps=${result.stepsPassed}/${result.nSteps}`
+      : "";
   console.log(
-    `${tag}  ${task.id.padEnd(28)} ${arm.padEnd(10)} s${sample}  turns=${turns.length}  $${result.usd.toFixed(4)}${stopped && isScored(result) ? `  (then ${stopped})` : ""}`
+    `${tag}  ${task.id.padEnd(28)} ${arm.padEnd(10)} s${sample}${steps}  turns=${turns.length}  $${result.usd.toFixed(4)}${conv.stopped && isScored(result) ? `  (then ${conv.stopped})` : ""}`
   );
   return result;
+}
+
+/** A create or edit task. */
+async function runJob(
+  ctx: JobContext,
+  task: SingleTask,
+  arm: Arm,
+  sample: number
+): Promise<JobResult> {
+  const dir = join(ctx.runDir, slug(task.id), arm, `s${sample}`);
+  const edit =
+    task.kind === "edit"
+      ? {
+          startCode: loadReference(task.base, arm),
+          base: await ctx.bases.get(task.base, arm),
+        }
+      : undefined;
+  const conv = await converse(
+    ctx,
+    task,
+    arm,
+    dir,
+    `${task.id}/${arm}/s${sample}`,
+    edit
+  );
+  return finishJob(ctx, task, arm, sample, dir, conv.turns, conv);
+}
+
+/**
+ * A chain: each step is a conversation that starts from the previous step's
+ * passing program and is judged against its picture (step 1: the base
+ * task's reference). The chain stops at the first step that does not pass.
+ */
+async function runChain(
+  ctx: JobContext,
+  chain: ChainTask,
+  arm: Arm,
+  sample: number
+): Promise<JobResult> {
+  const dir = join(ctx.runDir, slug(chain.id), arm, `s${sample}`);
+  const steps = chainSteps(chain, chainBase(chain, ctx.byId));
+  let edit = {
+    startCode: loadReference(chain.base, arm),
+    base: await ctx.bases.get(chain.base, arm),
+  };
+  const turns: TurnResult[] = [];
+  const conv: Omit<Conversation, "turns" | "final"> = { failedUsd: 0 };
+  for (const [i, step] of steps.entries()) {
+    const c = await converse(
+      ctx,
+      step,
+      arm,
+      join(dir, `step${i + 1}`),
+      `${step.id}/${arm}/s${sample}`,
+      edit,
+      i + 1
+    );
+    turns.push(...c.turns);
+    conv.failedUsd += c.failedUsd;
+    conv.stopped = c.stopped;
+    conv.apiError = c.apiError;
+    if (!c.final) break;
+    edit = { startCode: c.final.code, base: c.final.record };
+  }
+  return finishJob(ctx, chain, arm, sample, dir, turns, conv);
 }
 
 // ---------------------------------------------------------------------------
@@ -510,49 +743,65 @@ async function runJob(
 const SAVED_FILE =
   /^(turn\d+\.(reply\.md|js|jsx|py)|reference\.(js|jsx|py)|transcript\.md)$/;
 
+/** Copy the saved files of a job directory (and its chain step
+ *  directories). */
+function copySaved(src: string, dst: string): void {
+  if (!existsSync(src)) return;
+  mkdirSync(dst, { recursive: true });
+  for (const f of readdirSync(src)) {
+    if (SAVED_FILE.test(f)) copyFileSync(join(src, f), join(dst, f));
+    else if (/^step\d+$/.test(f)) copySaved(join(src, f), join(dst, f));
+  }
+}
+
+/** Results from before outcomes existed: a job either passed or failed. */
+function normalize(r: JobResult): JobResult {
+  return { ...r, outcome: r.outcome ?? (r.pass ? "pass" : "fail") };
+}
+
 /**
- * Render every saved turn of `job` again from `outDir` (a copy of the
- * original run) and recompute its outcome the way runJob would: the job ends
- * at its first turn that renders, and is scored on that turn. When that is
- * not the turn the original run ended on, a real run would have gone
- * differently (the model would have had another turn, or would have stopped
- * sooner), so the job is scored on the saved turns only and flagged.
+ * Render the saved turns of one conversation again from `outDir` (a copy of
+ * the original run) and judge them against `base`. The reasoning split is
+ * filled in from the saved replies. Returns the turns, the turns a real run
+ * would have scored (up to the first that renders), that turn's picture,
+ * and a note when that turn is not where the original conversation ended.
  */
-async function rescoreJob(
-  job: JobResult,
-  task: Task,
-  srcDir: string,
+async function rescoreTurns(
+  old: TurnResult[],
+  task: SingleTask,
+  arm: Arm,
   outDir: string,
   renderer: Renderer,
-  bases: BaseRecords
-): Promise<JobResult> {
-  const jobRel =
-    job.turns.find((t) => t.code)?.code?.replace(/\/[^/]+$/, "") ??
-    join(slug(task.id), job.arm, ...(job.sample ? [`s${job.sample}`] : []));
-  const src = join(srcDir, jobRel);
-  const dir = join(outDir, jobRel);
-  mkdirSync(dir, { recursive: true });
-  if (existsSync(src))
-    for (const f of readdirSync(src))
-      if (SAVED_FILE.test(f)) copyFileSync(join(src, f), join(dir, f));
-
+  base: RenderRecord | null | undefined,
+  replyPath: (t: TurnResult) => string
+): Promise<{
+  turns: TurnResult[];
+  scored: TurnResult[];
+  endRecord?: RenderRecord;
+  note?: string;
+}> {
   const data = loadData(task);
   const turns: TurnResult[] = [];
-  for (const old of job.turns) {
-    if (!old.code) {
-      turns.push(old); // no program (no code block, refusal): nothing to render
+  const records = new Map<TurnResult, RenderRecord>();
+  for (const o of old) {
+    const rp = replyPath(o);
+    const split = existsSync(rp)
+      ? splitOutput(readFileSync(rp, "utf8"), o.usage.output)
+      : {};
+    if (!o.code) {
+      turns.push({ ...o, ...split }); // no program (no code block, refusal)
       continue;
     }
-    const codePath = join(outDir, old.code);
     const r = await renderer.render(
-      job.arm,
-      codePath,
+      arm,
+      join(outDir, o.code),
       data,
       dataPath(task),
       task.size
     );
     const turn: TurnResult = {
-      ...old,
+      ...o,
+      ...split,
       rendered: r.ok,
       renderMs: r.renderMs,
       error: r.error,
@@ -560,55 +809,160 @@ async function rescoreJob(
       checks: undefined,
       preserved: undefined,
     };
-    if (r.record)
-      Object.assign(turn, await judge(task, job.arm, r.record, bases));
+    if (r.record) {
+      Object.assign(turn, judge(task, r.record, base));
+      records.set(turn, r.record);
+    }
     turns.push(turn);
   }
-
-  const end = turns.find((t) => t.rendered);
-  const origLast = job.turns[job.turns.length - 1];
-  let rescoreNote: string | undefined;
-  if (!end && job.rendered)
-    rescoreNote = `turn ${origLast.turn} rendered in the original run, so the model stopped there; it now fails (${turns[turns.length - 1].errorKind ?? "render"} error), and a real run would have given the model another turn`;
-  else if (end && end.turn !== origLast.turn)
-    rescoreNote = `turn ${end.turn} now renders, so a real run would have stopped there; the original run went on to turn ${origLast.turn}`;
-  const applied = !!end?.checks?.pass;
-  const preserved = task.kind === "edit" ? !!end?.preserved?.pass : null;
-  const pass = applied && preserved !== false;
-  const result: JobResult = {
-    ...job,
+  const endIdx = turns.findIndex((t) => t.rendered);
+  const end = endIdx >= 0 ? turns[endIdx] : undefined;
+  const origEnd = old[old.length - 1];
+  const where = (t: TurnResult) =>
+    t.step ? `step ${t.step} turn ${t.turn}` : `turn ${t.turn}`;
+  let note: string | undefined;
+  if (!end && origEnd?.rendered)
+    note = `${where(origEnd)} rendered in the original run, so the model stopped there; it now fails (${turns[turns.length - 1].errorKind ?? "render"} error), and a real run would have given the model another turn`;
+  else if (end && end.turn !== origEnd.turn)
+    note = `${where(end)} now renders, so a real run would have stopped there; the original run went on to turn ${origEnd.turn}`;
+  return {
     turns,
-    rendered: !!end,
-    applied,
-    preserved,
-    pass,
-    passFirst: pass && end!.turn === 1,
-    rescoreNote,
+    scored: end ? turns.slice(0, endIdx + 1) : turns,
+    endRecord: end ? records.get(end) : undefined,
+    note,
   };
-  writeFileSync(join(dir, "result.json"), JSON.stringify(result, null, 1));
-  const changed = (
-    ["pass", "passFirst", "applied", "preserved", "rendered"] as const
-  ).filter((k) => job[k] !== result[k]);
+}
+
+/**
+ * Rescore one saved job the way runJob (or runChain) would have scored it:
+ * a conversation ends at its first turn that renders, and is scored on the
+ * turns up to that one. When that is not the turn the original run ended
+ * on, a real run would have gone differently (the model would have had
+ * another turn, or would have stopped sooner), so the job is scored on the
+ * saved turns only and flagged. A chain step is judged against the rescored
+ * previous step's picture; if a step no longer passes, the saved later
+ * steps are dropped, and if a step that stopped the chain now passes, the
+ * chain ends there (there are no saved later steps to score).
+ */
+async function rescoreJob(
+  job: JobResult,
+  task: Task,
+  byId: Map<string, Task>,
+  srcDir: string,
+  outDir: string,
+  renderer: Renderer,
+  bases: BaseRecords
+): Promise<JobResult> {
+  const jobRel = join(
+    slug(task.id),
+    job.arm,
+    ...(job.sample ? [`s${job.sample}`] : [])
+  );
+  copySaved(join(srcDir, jobRel), join(outDir, jobRel));
+  const replyPath = (t: TurnResult) =>
+    join(
+      srcDir,
+      t.reply ??
+        (t.code
+          ? t.code.replace(/\.[^.]+$/, ".reply.md")
+          : join(
+              jobRel,
+              ...(t.step ? [`step${t.step}`] : []),
+              `turn${t.turn}.reply.md`
+            ))
+    );
+
+  let result: JobResult;
+  if (task.kind !== "chain") {
+    const base =
+      task.kind === "edit" ? await bases.get(task.base, job.arm) : undefined;
+    const r = await rescoreTurns(
+      job.turns,
+      task,
+      job.arm,
+      outDir,
+      renderer,
+      base,
+      replyPath
+    );
+    result = {
+      ...job,
+      turns: r.turns,
+      ...scoreTurns(r.scored, task.kind === "edit"),
+      rescoreNote: r.note,
+    };
+  } else {
+    const steps = chainSteps(task, chainBase(task, byId));
+    let base = await bases.get(task.base, job.arm);
+    const turns: TurnResult[] = [];
+    const scored: TurnResult[] = [];
+    const notes: string[] = [];
+    const saved = [...new Set(job.turns.map((t) => t.step!))].sort(
+      (a, b) => a - b
+    );
+    for (const k of saved) {
+      const r = await rescoreTurns(
+        job.turns.filter((t) => t.step === k),
+        steps[k - 1],
+        job.arm,
+        outDir,
+        renderer,
+        base,
+        replyPath
+      );
+      turns.push(...r.turns);
+      scored.push(...r.scored);
+      if (r.note) notes.push(r.note);
+      const passed = scoreTurns(r.scored, true).pass;
+      const more = k < saved[saved.length - 1];
+      if (!passed) {
+        if (more)
+          notes.push(
+            `step ${k} no longer passes, so the saved steps after it are not scored`
+          );
+        break;
+      }
+      if (!more && k < steps.length && !job.stopped)
+        notes.push(
+          `step ${k} now passes, so a real run would have gone on to step ${k + 1}; the chain is scored as stopping there`
+        );
+      base = r.endRecord ?? null;
+    }
+    result = {
+      ...job,
+      turns,
+      ...scoreChain(scored, steps.length),
+      rescoreNote: notes.length ? notes.join("; ") : undefined,
+    };
+  }
+  writeFileSync(
+    join(outDir, jobRel, "result.json"),
+    JSON.stringify(result, null, 1)
+  );
+  const changed = CHANGED_FIELDS.filter((k) => job[k] !== result[k]);
   console.log(
-    `${pass ? "PASS" : "FAIL"}  ${task.id.padEnd(28)} ${job.arm.padEnd(10)} s${job.sample}${changed.length ? `  CHANGED (${changed.map((k) => `${k} ${job[k]}->${result[k]}`).join(", ")})` : ""}`
+    `${TAG[result.outcome]}  ${task.id.padEnd(28)} ${job.arm.padEnd(10)} s${job.sample}${changed.length ? `  CHANGED (${changed.map((k) => `${k} ${job[k]}->${result[k]}`).join(", ")})` : ""}`
   );
   return result;
 }
+
+const CHANGED_FIELDS = [
+  "outcome",
+  "pass",
+  "passFirst",
+  "applied",
+  "preserved",
+  "rendered",
+  "stepsPassed",
+] as const;
 
 /** The report section listing jobs whose outcome changed under rescoring. */
 function changedSection(before: JobResult[], after: JobResult[]): string {
   const key = (r: JobResult) => `${r.task}|${r.arm}|${r.sample}`;
   const orig = new Map(before.map((r) => [key(r), r]));
-  const fields = [
-    "pass",
-    "passFirst",
-    "applied",
-    "preserved",
-    "rendered",
-  ] as const;
   const lines = after.flatMap((r) => {
     const o = orig.get(key(r))!;
-    const diff = fields.filter((k) => o[k] !== r[k]);
+    const diff = CHANGED_FIELDS.filter((k) => o[k] !== r[k]);
     return diff.length
       ? [
           `- ${r.task} / ${r.arm} / sample ${r.sample}: ${diff.map((k) => `${k} ${o[k]} -> ${r[k]}`).join(", ")}`,
@@ -639,9 +993,9 @@ async function rescore(opts: Options): Promise<void> {
   )
     .split("\n")
     .filter((l) => l.trim())
-    .map((l) => JSON.parse(l));
+    .map((l) => normalize(JSON.parse(l)));
   const all = await loadTasks();
-  const byId = new Map(all.map((t) => [t.id, t]));
+  const byId = new Map<string, Task>(all.map((t) => [t.id, t]));
   const missing = [...new Set(original.map((r) => r.task))].filter(
     (t) => !byId.has(t)
   );
@@ -653,6 +1007,17 @@ async function rescore(opts: Options): Promise<void> {
     : "";
   const maxTurns = Number(/Max turns: (\d+)/.exec(origReport)?.[1] ?? 3);
   const effort = /Effort: ([\w-]+)/.exec(origReport)?.[1] ?? "-";
+  // Results from before the model and backend were recorded are API runs of
+  // claude-opus-5 (or references, which have neither).
+  const ran = original.some((r) => r.mode !== "references");
+  const model =
+    original.find((r) => r.model)?.model ??
+    /Model: ([\w.-]+)/.exec(origReport)?.[1] ??
+    (ran ? "claude-opus-5" : "-");
+  const backend =
+    original.find((r) => r.backend)?.backend ??
+    /Backend: ([\w-]+)/.exec(origReport)?.[1] ??
+    (original.some((r) => r.mode === "run") ? "api" : ran ? "mock" : "-");
 
   const renderer = await Renderer.start({
     python: original.some((r) => r.arm === "matplotlib"),
@@ -665,6 +1030,7 @@ async function rescore(opts: Options): Promise<void> {
         await rescoreJob(
           job,
           byId.get(job.task)!,
+          byId,
           srcDir,
           outDir,
           renderer,
@@ -692,11 +1058,12 @@ async function rescore(opts: Options): Promise<void> {
       runDir: relative(testsDir, outDir),
       rescoredFrom: relative(testsDir, srcDir),
       maxTurns,
-      realSpendUsd: original.some((r) => r.mode === "run")
+      model,
+      backend,
+      spendUsd: original.some((r) => r.mode === "run")
         ? results.reduce((s, r) => s + r.usd, 0)
         : 0,
-      ledgerTotalUsd: new Ledger(LEDGER_PATH, opts.budgetUsd).totalUsd,
-      budgetUsd: opts.budgetUsd,
+      ledger: ledgerMeta(new Ledger(LEDGER_PATH, ledgerCaps(opts))),
       effort,
     }) + changedSection(original, results);
   writeFileSync(join(outDir, "report.md"), report);
@@ -712,20 +1079,26 @@ async function main() {
     ? all.filter((t) => t.id.includes(opts.tasks!))
     : all;
   if (tasks.length === 0) throw new Error(`no tasks match "${opts.tasks}"`);
-  const byId = new Map(all.map((t) => [t.id, t]));
-  const ledger = new Ledger(LEDGER_PATH, opts.budgetUsd);
+  const byId = new Map<string, Task>(all.map((t) => [t.id, t]));
+  const ledger = new Ledger(LEDGER_PATH, ledgerCaps(opts));
 
   let model: Model | null = null;
   if (opts.mode === "run") {
-    const key = apiKey();
-    if (!key)
+    const key = opts.backend === "api" ? apiKey() : undefined;
+    if (opts.backend === "api" && !key)
       throw new Error(
         "ANTHROPIC_API_KEY is not set (environment or tests/llm-bench/.env)"
       );
     const firstTurns = tasks.length * opts.arms.length * opts.samples;
-    let typical = 0;
+    const extra = overheadTokens(opts.backend);
+    let typical = ZERO_USAGE;
     let worst = 0;
-    for (const task of tasks)
+    // A chain costs like its steps, each starting from the previous step's
+    // reference (every step is assumed to run).
+    const conversations = tasks.flatMap((t) =>
+      t.kind === "chain" ? chainSteps(t, chainBase(t, byId)) : [t]
+    );
+    for (const task of conversations)
       for (const arm of opts.arms) {
         const sys = systemBlocks(arm).reduce((n, b) => n + b.text.length, 0);
         const user = taskMessage(
@@ -734,24 +1107,37 @@ async function main() {
           loadData(task),
           task.kind === "edit" ? loadReference(task.base, arm) : undefined
         ).length;
-        typical += opts.samples * typicalUsd(sys, user);
+        for (let i = 0; i < opts.samples; i++)
+          typical = addUsage(typical, typicalUsage(sys, user, extra));
         worst +=
           opts.samples *
           opts.maxTurns *
-          worstCaseUsd(sys + user * opts.maxTurns);
+          worstCaseUsd(sys + user * opts.maxTurns, opts.model, extra);
       }
+    const b = opts.backend;
+    const typicalUsd = costUsd(typical, opts.model);
+    const k = (n: number) => `${Math.round(n / 1000)}k`;
+    const tokens =
+      `~${k(typical.input + typical.cacheRead)} input tokens (~${k(typical.cacheRead)} of them from the cache` +
+      `${extra ? `, including ~${extra} per call that Claude Code adds` : ""}) and ~${k(typical.output)} output tokens`;
     console.log(
-      `Model ${MODEL}, effort ${opts.effort}. ${firstTurns} jobs (${tasks.length} tasks x ${opts.arms.length} arms x ${opts.samples} samples), up to ${opts.maxTurns} turns each.\n` +
-        `Estimate: ~$${typical.toFixed(2)} if every job passes on turn 1; worst case ~$${worst.toFixed(2)}.\n` +
-        `Ledger so far: $${ledger.totalUsd.toFixed(4)}; budget cap $${opts.budgetUsd.toFixed(2)} (calls stop before the cap).`
+      `Model ${opts.model}, effort ${opts.effort}, backend ${b}. ${firstTurns} jobs (${tasks.length} tasks x ${opts.arms.length} arms x ${opts.samples} samples), up to ${opts.maxTurns} turns each.\n` +
+        (b === "api"
+          ? `Estimate: ~$${typicalUsd.toFixed(2)} if every job passes on turn 1 (${tokens}); worst case ~$${worst.toFixed(2)}.\n` +
+            `API ledger so far: $${ledger.total(b).toFixed(4)}; budget cap $${ledger.cap(b).toFixed(2)} (calls stop before the cap).`
+          : `Bills to your Claude subscription, not the API (its usage limits apply). Estimate if every job passes on turn 1: ${tokens}, ~$${typicalUsd.toFixed(2)} at list price; worst case ~$${worst.toFixed(2)} at list price.\n` +
+            `claude-code ledger so far: $${ledger.total(b).toFixed(4)} at list price; cap $${ledger.cap(b).toFixed(2)} (--subscription-cap-usd; calls stop before it). This does not count against the API budget.`)
     );
     if (!opts.yes) {
       console.log("Re-run with --yes to start.");
       return;
     }
-    model = new AnthropicModel(key, opts.effort);
+    model =
+      b === "api"
+        ? new AnthropicModel(key!, opts.model, opts.effort)
+        : new ClaudeCodeModel(opts.model, opts.effort);
   } else if (opts.mode === "mock") {
-    model = new MockModel({ breakFirst: opts.mockBreakFirst });
+    model = new MockModel(opts.model, { breakFirst: opts.mockBreakFirst });
   }
 
   const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${opts.mode}`;
@@ -766,7 +1152,7 @@ async function main() {
   const resultsPath = join(runDir, "results.jsonl");
   try {
     if (opts.mode === "references") {
-      results = await runReferences(opts, tasks, renderer, runDir, bases);
+      results = await runReferences(opts, tasks, byId, renderer, runDir, bases);
       for (const r of results)
         appendFileSync(resultsPath, JSON.stringify(r) + "\n");
     } else {
@@ -776,6 +1162,7 @@ async function main() {
         ledger,
         renderer,
         bases,
+        byId,
         runDir,
         runId,
         halted,
@@ -790,7 +1177,10 @@ async function main() {
         )
       );
       await pool(jobs, opts.concurrency, async ({ task, arm, sample }) => {
-        const r = await runJob(ctx, task, arm, sample);
+        const r =
+          task.kind === "chain"
+            ? await runChain(ctx, task, arm, sample)
+            : await runJob(ctx, task, arm, sample);
         results.push(r);
         appendFileSync(resultsPath, JSON.stringify(r) + "\n");
       });
@@ -804,14 +1194,18 @@ async function main() {
   results.sort((a, b) =>
     order(a).localeCompare(order(b), undefined, { numeric: true })
   );
-  const realSpend = model?.real ? results.reduce((s, r) => s + r.usd, 0) : 0;
+  const spend =
+    model && model.backend !== "mock"
+      ? results.reduce((s, r) => s + r.usd, 0)
+      : 0;
   const report = buildReport(results, {
     mode: opts.mode,
     runDir: relative(join(import.meta.dirname, ".."), runDir),
     maxTurns: opts.mode === "references" ? 1 : opts.maxTurns,
-    realSpendUsd: realSpend,
-    ledgerTotalUsd: ledger.totalUsd,
-    budgetUsd: opts.budgetUsd,
+    model: model?.id ?? "-",
+    backend: model?.backend ?? "-",
+    spendUsd: spend,
+    ledger: ledgerMeta(ledger),
     effort: opts.mode === "references" ? "-" : opts.effort,
   });
   writeFileSync(join(runDir, "report.md"), report);
@@ -819,7 +1213,11 @@ async function main() {
   console.log(`\n${report}`);
   console.log(`Report: ${join(runDir, "report.md")}`);
   if (halted.fatal) {
-    console.error(`Stopped on a fatal API error: ${halted.fatal}`);
+    console.error(
+      halted.fatal.startsWith("usage limit reached")
+        ? `Stopped: the Claude subscription's usage limit was reached. The jobs it cut short are not scored. ${halted.fatal}`
+        : `Stopped on a fatal ${model?.backend === "claude-code" ? "claude-code" : "API"} error: ${halted.fatal}`
+    );
     process.exit(1);
   }
   if (halted.budget)

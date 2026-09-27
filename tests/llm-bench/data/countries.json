@@ -1,0 +1,142 @@
+[
+  {
+    "country": "China",
+    "region": "Asia",
+    "gdp_per_capita": 10.2,
+    "life_expectancy": 76.9,
+    "population": 1398
+  },
+  {
+    "country": "India",
+    "region": "Asia",
+    "gdp_per_capita": 2.1,
+    "life_expectancy": 70.9,
+    "population": 1366
+  },
+  {
+    "country": "Japan",
+    "region": "Asia",
+    "gdp_per_capita": 40.2,
+    "life_expectancy": 84.4,
+    "population": 126
+  },
+  {
+    "country": "Indonesia",
+    "region": "Asia",
+    "gdp_per_capita": 4.1,
+    "life_expectancy": 71.7,
+    "population": 271
+  },
+  {
+    "country": "Vietnam",
+    "region": "Asia",
+    "gdp_per_capita": 3.5,
+    "life_expectancy": 75.4,
+    "population": 96
+  },
+  {
+    "country": "Germany",
+    "region": "Europe",
+    "gdp_per_capita": 46.8,
+    "life_expectancy": 81.3,
+    "population": 83
+  },
+  {
+    "country": "United Kingdom",
+    "region": "Europe",
+    "gdp_per_capita": 42.3,
+    "life_expectancy": 81.4,
+    "population": 67
+  },
+  {
+    "country": "France",
+    "region": "Europe",
+    "gdp_per_capita": 40.5,
+    "life_expectancy": 82.7,
+    "population": 67
+  },
+  {
+    "country": "Italy",
+    "region": "Europe",
+    "gdp_per_capita": 33.6,
+    "life_expectancy": 83.5,
+    "population": 60
+  },
+  {
+    "country": "Poland",
+    "region": "Europe",
+    "gdp_per_capita": 15.7,
+    "life_expectancy": 78.7,
+    "population": 38
+  },
+  {
+    "country": "United States",
+    "region": "Americas",
+    "gdp_per_capita": 65.1,
+    "life_expectancy": 78.8,
+    "population": 328
+  },
+  {
+    "country": "Brazil",
+    "region": "Americas",
+    "gdp_per_capita": 8.9,
+    "life_expectancy": 75.9,
+    "population": 211
+  },
+  {
+    "country": "Mexico",
+    "region": "Americas",
+    "gdp_per_capita": 9.9,
+    "life_expectancy": 75.1,
+    "population": 128
+  },
+  {
+    "country": "Canada",
+    "region": "Americas",
+    "gdp_per_capita": 46.2,
+    "life_expectancy": 82.4,
+    "population": 38
+  },
+  {
+    "country": "Argentina",
+    "region": "Americas",
+    "gdp_per_capita": 10.0,
+    "life_expectancy": 76.7,
+    "population": 45
+  },
+  {
+    "country": "Nigeria",
+    "region": "Africa",
+    "gdp_per_capita": 2.2,
+    "life_expectancy": 54.7,
+    "population": 201
+  },
+  {
+    "country": "Ethiopia",
+    "region": "Africa",
+    "gdp_per_capita": 0.9,
+    "life_expectancy": 66.6,
+    "population": 112
+  },
+  {
+    "country": "Egypt",
+    "region": "Africa",
+    "gdp_per_capita": 3.0,
+    "life_expectancy": 72.0,
+    "population": 100
+  },
+  {
+    "country": "South Africa",
+    "region": "Africa",
+    "gdp_per_capita": 6.0,
+    "life_expectancy": 64.1,
+    "population": 59
+  },
+  {
+    "country": "Kenya",
+    "region": "Africa",
+    "gdp_per_capita": 1.8,
+    "life_expectancy": 66.7,
+    "population": 53
+  }
+]

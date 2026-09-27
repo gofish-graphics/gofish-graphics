@@ -61,7 +61,8 @@ export const GROUPS = ["common", "beyond-defaults"] as const;
 export type Group = (typeof GROUPS)[number];
 
 interface TaskBase {
-  /** "create/<name>" or "edit/<name>"; also the references/ subpath. */
+  /** "create/<name>" or "edit/<name>" ("chain/<name>/step<k>" for a chain
+   *  step); also the references/ subpath. */
   id: string;
   /** Report group (default "common"). */
   group?: Group;
@@ -85,7 +86,68 @@ export interface EditTask extends TaskBase {
   mayChange: Aspect[];
 }
 
-export type Task = CreateTask | EditTask;
+/** One step of a chain: an edit whose starting program is the model's own
+ *  final program of the previous step (the arm's reference for the chain's
+ *  base, on step 1), and whose preservation is judged against the previous
+ *  step's final render. */
+export interface ChainStep {
+  instruction: string;
+  checks: Check[];
+  mayChange: Aspect[];
+}
+
+/**
+ * A chain of edits on one chart. Data and size come from the `base` create
+ * task. Each step runs like an edit task (see `chainSteps`), and the chain
+ * stops at the first step that does not pass.
+ */
+export interface ChainTask {
+  /** "chain/<name>"; step k's references are in
+   *  references/<id>/step<k>/<arm>.<ext>. */
+  id: string;
+  kind: "chain";
+  group?: Group;
+  /** Id of the create task whose reference program (per arm) is where
+   *  step 1 starts. */
+  base: string;
+  steps: ChainStep[];
+}
+
+/** A task that runs as one conversation: a create, an edit, or one step of
+ *  a chain (as an edit, see `chainSteps`). */
+export type SingleTask = CreateTask | EditTask;
+export type Task = SingleTask | ChainTask;
+
+/**
+ * The steps of `chain` as edit tasks. Step k has id `<chain id>/step<k>`
+ * (so its references are at references/<chain id>/step<k>/), `base` is the
+ * previous step's id (the chain's base on step 1), and the data and size are
+ * the base task's. When a model runs the chain, the starting program and the
+ * preservation base are the model's own previous step, not `base`'s
+ * reference; `base` names the reference that stands in for it in
+ * `references` mode, in the cost estimate, and in the mock model.
+ */
+export function chainSteps(chain: ChainTask, base: CreateTask): EditTask[] {
+  return chain.steps.map((s, i) => ({
+    id: `${chain.id}/step${i + 1}`,
+    kind: "edit",
+    group: chain.group ?? base.group,
+    base: i === 0 ? chain.base : `${chain.id}/step${i}`,
+    data: base.data,
+    size: base.size,
+    instruction: s.instruction,
+    checks: s.checks,
+    mayChange: s.mayChange,
+  }));
+}
+
+/** A chain's base task (checked to be a create task by loadTasks). */
+export function chainBase(
+  chain: ChainTask,
+  byId: Map<string, Task>
+): CreateTask {
+  return byId.get(chain.base) as CreateTask;
+}
 
 export async function loadTasks(filter?: string): Promise<Task[]> {
   const dir = join(BENCH_DIR, "tasks");
@@ -102,13 +164,21 @@ export async function loadTasks(filter?: string): Promise<Task[]> {
     if (ids.has(t.id)) throw new Error(`Duplicate task id ${t.id}`);
     ids.add(t.id);
   }
+  const byId = new Map(tasks.map((t) => [t.id, t]));
   for (const t of tasks) {
     if (t.kind === "edit" && !ids.has(t.base))
       throw new Error(`${t.id}: base task ${t.base} does not exist`);
+    if (t.kind === "chain") {
+      if (byId.get(t.base)?.kind !== "create")
+        throw new Error(`${t.id}: base ${t.base} is not a create task`);
+      if (t.steps.length === 0) throw new Error(`${t.id}: no steps`);
+    }
   }
-  // Creates before edits, then by id, so a run's log reads naturally.
+  // Creates, then edits, then chains, each by id, so a run's log reads
+  // naturally.
+  const rank = { create: 0, edit: 1, chain: 2 };
   tasks.sort((a, b) =>
-    a.kind === b.kind ? a.id.localeCompare(b.id) : a.kind === "create" ? -1 : 1
+    a.kind === b.kind ? a.id.localeCompare(b.id) : rank[a.kind] - rank[b.kind]
   );
   return filter ? tasks.filter((t) => t.id.includes(filter)) : tasks;
 }
@@ -117,11 +187,11 @@ export function taskGroup(task: Task): Group {
   return task.group ?? "common";
 }
 
-export function dataPath(task: Task): string {
+export function dataPath(task: SingleTask): string {
   return join(BENCH_DIR, "data", `${task.data}.json`);
 }
 
-export function loadData(task: Task): Record<string, unknown>[] {
+export function loadData(task: SingleTask): Record<string, unknown>[] {
   return JSON.parse(readFileSync(dataPath(task), "utf8"));
 }
 

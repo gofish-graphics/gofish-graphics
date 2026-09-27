@@ -3,46 +3,183 @@
  */
 
 import type { ChecksOutcome } from "./checks";
-import type { Usage } from "./cost";
+import { COST_BASIS, type Backend, type CostBasis, type Usage } from "./cost";
 import { ARMS, GROUPS, type Arm, type Group } from "./tasks";
 
 export interface TurnResult {
+  /** Chains only: the 1-based step this turn belongs to. `turn` counts
+   *  within the step. */
+  step?: number;
   turn: number;
   usage: Usage;
   usd: number;
+  /** How `usd` was arrived at (see CostBasis in cost.ts); missing for mock
+   *  and reference turns and in older results (API). */
+  costBasis?: CostBasis;
   latencyMs: number;
   stopReason: string;
+  /** The reply text for this turn, relative to the run directory. */
+  reply?: string;
+  /** Output tokens that were the visible reply, and the rest (reasoning),
+   *  see `splitOutput` in cost.ts. `tokenSplit` says whether the split came
+   *  from the API or is an estimate (4 characters per visible token). */
+  visibleTokens?: number;
+  reasoningTokens?: number;
+  tokenSplit?: "api" | "estimate";
   /** The program for this turn, relative to the run directory. */
   code?: string;
+  /** The program ran and its picture was drawn by the arm's library. */
   rendered: boolean;
   renderMs?: number;
   error?: string;
   /** Set with `error` when a program ran: "contract" when the picture was
-   *  not produced by the arm's library (contract.ts), else "render". */
+   *  not produced by the arm's library (contract.ts), else "render". A
+   *  contract failure still has `checks` (and `preserved`): the picture was
+   *  read and judged. */
   errorKind?: "render" | "contract";
   checks?: ChecksOutcome;
   preserved?: ChecksOutcome;
 }
 
+/**
+ * How a turn or a job came out.
+ *   - "pass": the picture passes every check (and, for an edit, keeps what
+ *     it must keep), and the arm's library drew it.
+ *   - "partial": the same picture, but it breaks the arm contract (for
+ *     example, hand-written SVG). Worse than a pass, since a user cannot
+ *     keep iterating on it with the library; better than a fail.
+ *   - "fail": anything else.
+ * A job's outcome is its best turn's, in the order pass > partial > fail.
+ */
+export type Outcome = "pass" | "partial" | "fail";
+const RANK: Record<Outcome, number> = { fail: 0, partial: 1, pass: 2 };
+
+export function turnOutcome(t: TurnResult): Outcome {
+  const right = !!t.checks?.pass && t.preserved?.pass !== false;
+  if (!right) return "fail";
+  if (t.rendered) return "pass";
+  return t.errorKind === "contract" ? "partial" : "fail";
+}
+
+/** The outcome fields of a job (or one chain step) from its turns. The
+ *  judged turn is the last turn with the best outcome, so a failed job is
+ *  judged on its last turn. */
+export function scoreTurns(
+  turns: TurnResult[],
+  edit: boolean
+): Pick<
+  JobResult,
+  "outcome" | "rendered" | "applied" | "preserved" | "pass" | "passFirst"
+> {
+  let best: TurnResult | undefined;
+  let outcome: Outcome = "fail";
+  for (const t of turns) {
+    const o = turnOutcome(t);
+    if (!best || RANK[o] >= RANK[outcome]) {
+      best = t;
+      outcome = o;
+    }
+  }
+  return {
+    outcome,
+    rendered: turns.some((t) => t.rendered),
+    applied: !!best?.checks?.pass,
+    preserved: edit ? !!best?.preserved?.pass : null,
+    pass: outcome === "pass",
+    passFirst: turns.length > 0 && turnOutcome(turns[0]) === "pass",
+  };
+}
+
+/** One step of a chain job. */
+export interface StepResult {
+  step: number;
+  outcome: Outcome;
+  applied: boolean;
+  preserved: boolean;
+  turns: number;
+}
+
+/**
+ * The outcome fields of a chain job from its turns (each tagged with its
+ * step). A chain goes on only past a step that passes, so `stepsPassed`
+ * (the steps passed before the first one that did not) is the number of
+ * steps that passed. The job passes when every one of the `nSteps` steps
+ * passed; `passFirst` when each passed on its first turn. `applied` and
+ * `preserved` describe the last step attempted.
+ */
+export function scoreChain(
+  turns: TurnResult[],
+  nSteps: number
+): ReturnType<typeof scoreTurns> & {
+  steps: StepResult[];
+  stepsPassed: number;
+  nSteps: number;
+} {
+  const nums = [...new Set(turns.map((t) => t.step!))].sort((a, b) => a - b);
+  const steps = nums.map((step) => {
+    const ts = turns.filter((t) => t.step === step);
+    const s = scoreTurns(ts, true);
+    return {
+      step,
+      outcome: s.outcome,
+      applied: s.applied,
+      preserved: !!s.preserved,
+      turns: ts.length,
+      first: s.passFirst,
+    };
+  });
+  let stepsPassed = 0;
+  while (stepsPassed < steps.length && steps[stepsPassed].outcome === "pass")
+    stepsPassed++;
+  const pass = stepsPassed === nSteps;
+  const last = steps[steps.length - 1];
+  return {
+    outcome: pass ? "pass" : "fail",
+    rendered: turns.some((t) => t.rendered),
+    applied: !!last?.applied,
+    preserved: last ? last.preserved : null,
+    pass,
+    passFirst: pass && steps.every((s) => s.first),
+    steps: steps.map(({ first: _, ...s }) => s),
+    stepsPassed,
+    nSteps,
+  };
+}
+
 export interface JobResult {
   mode: string;
+  /** The model and where it ran ("mock" for a mock run). Missing in results
+   *  from before they were recorded (API runs of claude-opus-5). */
+  model?: string;
+  backend?: "mock" | Backend;
   task: string;
-  kind: "create" | "edit";
+  kind: "create" | "edit" | "chain";
   /** The task's report group (see `Group` in tasks.ts). */
   group: Group;
   arm: Arm;
   sample: number;
+  /** Every turn; for a chain, every step's turns in order, each tagged with
+   *  its `step`. */
   turns: TurnResult[];
-  /** The last turn produced a usable picture. */
+  /** See `Outcome`. For a chain: "pass" when every step passed, else
+   *  "fail". */
+  outcome: Outcome;
+  /** Some turn's picture was drawn by the arm's library. */
   rendered: boolean;
-  /** All checks passed on the last rendered turn ("applied" for edits). */
+  /** All checks passed on the judged turn (see scoreTurns), whether or not
+   *  the library drew it ("applied" for edits). */
   applied: boolean;
-  /** Edits only: nothing outside `mayChange` changed. */
+  /** Edits only: nothing outside `mayChange` changed, on the judged turn. */
   preserved: boolean | null;
-  /** applied && preserved (when an edit). */
+  /** outcome === "pass". */
   pass: boolean;
   /** Passed on the first turn, with no repair. */
   passFirst: boolean;
+  /** Chains only: each attempted step, the steps passed before the first
+   *  one that did not pass, and the chain's length. */
+  steps?: StepResult[];
+  stepsPassed?: number;
+  nSteps?: number;
   /** Why the job ended early, if it did. "budget": the budget guard refused
    *  a call; "api-error": a call failed after all its retries. Either can
    *  happen on turn 1 (the job is then not scored, see isScored) or on a
@@ -58,9 +195,23 @@ export interface JobResult {
   rescoreNote?: string;
 }
 
+/** A turn's name in the report: "turn 2", or "step 1 turn 2" in a chain. */
+const turnName = (t: TurnResult) =>
+  `${t.step ? `step ${t.step} ` : ""}turn ${t.turn}`;
+
 /** Turns of `r` that broke the arm contract. */
 const contractTurns = (r: JobResult) =>
-  r.turns.filter((t) => t.errorKind === "contract").map((t) => t.turn);
+  r.turns.filter((t) => t.errorKind === "contract");
+
+/** Reasoning tokens over the job's turns, or null when a turn lacks them
+ *  (a turn from before they were recorded). */
+const reasoning = (r: JobResult) =>
+  r.turns.every((t) => t.reasoningTokens !== undefined)
+    ? r.turns.reduce((s, t) => s + t.reasoningTokens!, 0)
+    : null;
+
+const meanReasoning = (rs: JobResult[]) =>
+  mean(rs.map(reasoning).filter((x): x is number => x !== null));
 
 const INFRA_STOPS = new Set<JobResult["stopped"]>(["budget", "api-error"]);
 
@@ -127,17 +278,30 @@ function table(header: string[], rows: string[][]): string {
   ].join("\n");
 }
 
+/** The reasoning column's header: marked as an estimate when any turn's
+ *  split was estimated. */
+const reasoningHeader = (rs: JobResult[]) =>
+  rs.some((r) => r.turns.some((t) => t.tokenSplit === "estimate"))
+    ? "mean reasoning tok (est.)"
+    : "mean reasoning tok";
+
 function perArmTable(ran: JobResult[], arms: Arm[]): string {
+  const count = (rs: JobResult[], o: Outcome) =>
+    pct(rs.filter((r) => r.outcome === o).length, rs.length);
   return table(
     [
       "arm",
       "jobs",
+      "pass",
+      "partial",
+      "fail",
+      "pass or partial",
       "first-turn pass",
-      "pass within max turns",
       "rendered",
       "mean turns",
       "mean input tok",
       "mean output tok",
+      reasoningHeader(ran),
       "mean cost $",
       "mean latency s",
       "mean render ms (successful renders)",
@@ -150,8 +314,11 @@ function perArmTable(ran: JobResult[], arms: Arm[]): string {
       return [
         arm,
         String(rs.length),
+        count(rs, "pass"),
+        count(rs, "partial"),
+        count(rs, "fail"),
+        pct(rs.filter((r) => r.outcome !== "fail").length, rs.length),
         pct(rs.filter((r) => r.passFirst).length, rs.length),
-        pct(rs.filter((r) => r.pass).length, rs.length),
         pct(rs.filter((r) => r.rendered).length, rs.length),
         fmt(mean(rs.map((r) => r.turns.length)), 2),
         fmt(
@@ -162,6 +329,7 @@ function perArmTable(ran: JobResult[], arms: Arm[]): string {
           )
         ),
         fmt(mean(rs.map((r) => r.usage.output))),
+        fmt(meanReasoning(rs)),
         fmt(mean(rs.map((r) => r.usd)), 4),
         fmt(mean(rs.map((r) => r.latencyMs / 1000)), 1),
         fmt(mean(renders)),
@@ -170,12 +338,17 @@ function perArmTable(ran: JobResult[], arms: Arm[]): string {
   );
 }
 
-/** gofish minus each other arm, per task, over `ran`'s tasks. */
-function pairedTable(ran: JobResult[], arms: Arm[]): string {
+/** gofish minus each other arm, per task, over `ran`'s tasks, in the rate
+ *  of jobs that `counts`. */
+function pairedTable(
+  ran: JobResult[],
+  arms: Arm[],
+  counts: (r: JobResult) => boolean
+): string {
   const tasks = [...new Set(ran.map((r) => r.task))];
   const rate = (t: string, arm: Arm) => {
     const rs = ran.filter((r) => r.task === t && r.arm === arm);
-    return rs.length ? rs.filter((r) => r.pass).length / rs.length : null;
+    return rs.length ? rs.filter(counts).length / rs.length : null;
   };
   return table(
     ["other arm", "tasks", "mean difference", "95% CI"],
@@ -207,16 +380,30 @@ export function buildReport(
     maxTurns: number;
     /** Rescore mode: the run that was rescored. */
     rescoredFrom?: string;
-    realSpendUsd: number;
-    ledgerTotalUsd: number;
-    budgetUsd: number;
+    /** "-" when no model ran (references). */
+    model: string;
+    /** "api", "claude-code", "mock", or "-" (references). */
+    backend: string;
+    /** This run's spend on its backend, at that backend's cost basis (0 for
+     *  mock and references). */
+    spendUsd: number;
+    /** Ledger totals over all runs, per backend, and their caps. */
+    ledger: {
+      apiUsd: number;
+      budgetUsd: number;
+      subscriptionUsd: number;
+      subscriptionCapUsd: number;
+    };
     effort: string;
   }
 ): string {
   const ran = results.filter(isScored);
   const unscored = results.filter((r) => !isScored(r));
+  // Chains have their own section; every other table is over single jobs.
+  const single = ran.filter((r) => r.kind !== "chain");
+  const chains = ran.filter((r) => r.kind === "chain");
   const arms = ARMS.filter((a) => ran.some((r) => r.arm === a));
-  const tasks = [...new Set(ran.map((r) => r.task))];
+  const tasks = [...new Set(single.map((r) => r.task))];
   const out: string[] = [];
   out.push(`# LLM authoring benchmark: ${meta.mode} run`);
   out.push("");
@@ -225,45 +412,67 @@ export function buildReport(
       `Rescored from \`${meta.rescoredFrom}\`: every saved turn's program was rendered again through the current harness, checks and arm contract. No model was called; tokens and costs are the original run's.`,
       ""
     );
+  const backendNote: Record<string, string> = {
+    api: "api (the Anthropic API)",
+    "claude-code":
+      "claude-code (headless Claude Code, billed to the Claude subscription)",
+  };
   out.push(
-    `Run directory: \`${meta.runDir}\`. Max turns: ${meta.maxTurns}. Effort: ${meta.effort}. ` +
+    `Model: ${meta.model}. Backend: ${backendNote[meta.backend] ?? meta.backend}. Effort: ${meta.effort}. Max turns: ${meta.maxTurns}. Run directory: \`${meta.runDir}\`. ` +
       `Jobs: ${results.length}, of which ${ran.length} scored and ${unscored.length} not scored (infrastructure; excluded from every rate and comparison below).`
   );
-  const simulated =
-    meta.mode === "mock"
-      ? " Token counts and costs in a mock run are simulated from character counts."
-      : "";
+  const spend =
+    meta.backend === "mock"
+      ? "Spend this run: none (a mock run's token counts and costs are simulated from character counts)."
+      : meta.backend in COST_BASIS
+        ? `Spend this run: $${meta.spendUsd.toFixed(4)} (${COST_BASIS[meta.backend as Backend] === "api" ? "API" : "list price, billed to the Claude subscription, not the API"}).`
+        : "Spend this run: none.";
+  const l = meta.ledger;
   out.push(
-    `Real spend this run: $${meta.realSpendUsd.toFixed(4)}. Ledger total (all runs): $${meta.ledgerTotalUsd.toFixed(4)} of $${meta.budgetUsd.toFixed(2)} budget.${simulated}`
+    `${spend} Ledger (all runs): API $${l.apiUsd.toFixed(4)} of $${l.budgetUsd.toFixed(2)} budget; claude-code $${l.subscriptionUsd.toFixed(4)} at list price (subscription) of $${l.subscriptionCapUsd.toFixed(2)} cap.`
   );
 
   // Groups present in this run; the per-arm table and the paired comparison
   // are shown for all tasks and then for each group, when there is more than
   // one.
-  const groups = GROUPS.filter((g) => ran.some((r) => r.group === g));
+  const groups = GROUPS.filter((g) => single.some((r) => r.group === g));
   const sections: { title: string; rs: JobResult[] }[] = [
-    { title: "all tasks", rs: ran },
+    { title: "all tasks", rs: single },
     ...(groups.length > 1
       ? groups.map((g) => ({
           title: `group "${g}"`,
-          rs: ran.filter((r) => r.group === g),
+          rs: single.filter((r) => r.group === g),
         }))
       : []),
   ];
 
-  out.push("", "## Per arm", "");
-  for (const { title, rs } of sections) {
-    if (sections.length > 1) out.push(`### ${title}`, "");
-    out.push(perArmTable(rs, arms), "");
+  if (single.length > 0) {
+    out.push(
+      "",
+      "## Per arm",
+      "",
+      "Outcomes: **pass** is the right picture drawn by the arm's library; **partial** is the right picture not drawn by it (it broke the arm contract, for example hand-written SVG); **fail** is anything else. A job's outcome is its best turn's. Output tokens include adaptive thinking; reasoning tokens are output tokens minus the visible reply, per job (summed over its turns). When the API does not report the split, the visible reply is estimated at 4 characters per token, and the column says (est.).",
+      ""
+    );
+    for (const { title, rs } of sections) {
+      if (sections.length > 1) out.push(`### ${title}`, "");
+      out.push(perArmTable(rs, arms), "");
+    }
+    out.pop();
   }
-  out.pop();
 
-  const edits = ran.filter((r) => r.kind === "edit");
+  const edits = single.filter((r) => r.kind === "edit");
   if (edits.length > 0) {
-    out.push("", "## Edits: applied and preserved", "");
+    out.push(
+      "",
+      "## Edits: applied and preserved",
+      "",
+      "Applied and preserved are judged on the picture, whether or not the library drew it; pass and partial split the jobs where both hold.",
+      ""
+    );
     out.push(
       table(
-        ["arm", "edit jobs", "applied", "preserved", "both"],
+        ["arm", "edit jobs", "applied", "preserved", "pass", "partial"],
         arms.map((arm) => {
           const rs = edits.filter((r) => r.arm === arm);
           return [
@@ -271,62 +480,80 @@ export function buildReport(
             String(rs.length),
             pct(rs.filter((r) => r.applied).length, rs.length),
             pct(rs.filter((r) => r.preserved).length, rs.length),
-            pct(rs.filter((r) => r.pass).length, rs.length),
+            pct(rs.filter((r) => r.outcome === "pass").length, rs.length),
+            pct(rs.filter((r) => r.outcome === "partial").length, rs.length),
           ];
         })
       )
     );
   }
 
-  out.push(
-    "",
-    "## Per task",
-    "",
-    "Cells: passed / scored samples (first-turn passes in parentheses); `+k not scored` counts samples lost to infrastructure errors.",
-    ""
-  );
-  out.push(
-    table(
-      ["task", ...(groups.length > 1 ? ["group"] : []), ...arms],
-      tasks.map((t) => [
-        t,
-        ...(groups.length > 1 ? [ran.find((r) => r.task === t)!.group] : []),
-        ...arms.map((arm) => {
-          const rs = ran.filter((r) => r.task === t && r.arm === arm);
-          const lost = unscored.filter(
-            (r) => r.task === t && r.arm === arm
-          ).length;
-          const note = lost ? ` +${lost} not scored` : "";
-          if (rs.length === 0) return lost ? `-${note}` : "-";
-          return `${rs.filter((r) => r.pass).length}/${rs.length} (${rs.filter((r) => r.passFirst).length})${note}`;
-        }),
-      ])
-    )
-  );
+  if (single.length > 0) {
+    out.push(
+      "",
+      "## Per task",
+      "",
+      "Cells: passed / scored samples (first-turn passes in parentheses); `k partial` counts partial outcomes; `+k not scored` counts samples lost to infrastructure errors.",
+      ""
+    );
+    out.push(
+      table(
+        ["task", ...(groups.length > 1 ? ["group"] : []), ...arms],
+        tasks.map((t) => [
+          t,
+          ...(groups.length > 1
+            ? [single.find((r) => r.task === t)!.group]
+            : []),
+          ...arms.map((arm) => {
+            const rs = single.filter((r) => r.task === t && r.arm === arm);
+            const lost = unscored.filter(
+              (r) => r.task === t && r.arm === arm
+            ).length;
+            const note = lost ? ` +${lost} not scored` : "";
+            if (rs.length === 0) return lost ? `-${note}` : "-";
+            const partial = rs.filter((r) => r.outcome === "partial").length;
+            return `${rs.filter((r) => r.pass).length}/${rs.length} (${rs.filter((r) => r.passFirst).length})${partial ? `, ${partial} partial` : ""}${note}`;
+          }),
+        ])
+      )
+    );
+  }
 
-  if (arms.includes("gofish") && arms.length > 1) {
+  if (arms.includes("gofish") && arms.length > 1 && single.length > 0) {
     out.push(
       "",
       "## Paired comparison: gofish minus each arm",
       "",
-      "Per task, the difference in pass rate (within max turns) between gofish and the other arm, averaged over the tasks where both arms have a scored job; 95% bootstrap interval over tasks.",
+      "Per task, the difference in rate (within max turns) between gofish and the other arm, averaged over the tasks where both arms have a scored job; 95% bootstrap interval over tasks. The headline is the pass rate; the second table counts partials as passes.",
       ""
     );
-    for (const { title, rs } of sections) {
-      if (sections.length > 1) out.push(`### ${title}`, "");
-      out.push(pairedTable(rs, arms), "");
-    }
+    const variants = [
+      { name: "pass", counts: (r: JobResult) => r.pass },
+      {
+        name: "pass or partial",
+        counts: (r: JobResult) => r.outcome !== "fail",
+      },
+    ];
+    for (const { title, rs } of sections)
+      for (const v of variants) {
+        out.push(
+          `### ${v.name}${sections.length > 1 ? `, ${title}` : ""}`,
+          "",
+          pairedTable(rs, arms, v.counts),
+          ""
+        );
+      }
     out.pop();
   }
 
-  const firstLine = (s: string | undefined) => (s ?? "").split("\n")[0];
+  if (chains.length > 0) out.push("", chainSection(chains, unscored, arms));
 
   const violators = ran.filter((r) => contractTurns(r).length > 0);
   out.push(
     "",
     "## Contract violations",
     "",
-    "A turn violates the arm contract when its picture was not produced by the arm's library (for example, SVG written by hand). It counts as a render error and goes back to the model.",
+    "A turn violates the arm contract when its picture was not produced by the arm's library (for example, SVG written by hand). The error goes back to the model like a render error, so it can still earn a pass on a later turn. A job whose best turn is a violation with the right picture is partial. For a chain, the job's outcome is the chain's.",
     ""
   );
   out.push(
@@ -335,7 +562,9 @@ export function buildReport(
         "arm",
         "jobs with a violation",
         "violating turns",
-        "of those jobs, passed later",
+        "of those jobs: pass",
+        "partial",
+        "fail",
       ],
       arms.map((arm) => {
         const rs = violators.filter((r) => r.arm === arm);
@@ -343,21 +572,23 @@ export function buildReport(
           arm,
           String(rs.length),
           String(rs.reduce((n, r) => n + contractTurns(r).length, 0)),
-          String(rs.filter((r) => r.pass).length),
+          ...(["pass", "partial", "fail"] as const).map((o) =>
+            String(rs.filter((r) => r.outcome === o).length)
+          ),
         ];
       })
     )
   );
   if (violators.length > 0) out.push("");
   for (const r of violators) {
-    const t = contractTurns(r);
-    const detail = r.turns
-      .find((x) => x.turn === t[0])!
-      .error!.split("\n")
-      .slice(1)
-      .join(" ");
+    const ts = contractTurns(r);
+    const detail = ts[0].error!.split("\n").slice(1).join(" ");
+    const turns = ts.map(
+      (t) =>
+        `${turnName(t)} (${turnOutcome(t) === "partial" ? "right" : "wrong"} picture)`
+    );
     out.push(
-      `- ${r.task} / ${r.arm} / sample ${r.sample}: turn${t.length > 1 ? "s" : ""} ${t.join(", ")}; job ${r.pass ? "passed" : "failed"}${detail ? ` (${detail})` : ""}`
+      `- ${r.task} / ${r.arm} / sample ${r.sample}: ${turns.join(", ")}; job ${r.outcome}${detail ? ` (${detail})` : ""}`
     );
   }
 
@@ -398,7 +629,7 @@ export function buildReport(
     out.push("");
     for (const r of unscored)
       out.push(
-        `- ${r.task} / ${r.arm} / sample ${r.sample}: ${r.stopped}${r.apiError ? ` (${firstLine(r.apiError)})` : ""}`
+        `- ${r.task} / ${r.arm} / sample ${r.sample}: ${r.stopped}${r.apiError ? ` (${firstLineOf(r.apiError)})` : ""}`
       );
   }
 
@@ -408,34 +639,132 @@ export function buildReport(
       "",
       "## Scored, then cut short (infrastructure)",
       "",
-      "These jobs produced at least one turn, then a repair turn ended on a budget refusal or an API error. They are scored on what they achieved (a fail, since no turn passed), but may have lost a repair turn.",
+      "These jobs produced at least one turn, then a repair turn (or a later chain step) ended on a budget refusal or an API error. They are scored on what they achieved, but may have lost a turn they would otherwise have had.",
       ""
     );
     for (const r of short)
       out.push(
-        `- ${r.task} / ${r.arm} / sample ${r.sample}: ${r.stopped} after ${r.turns.length} turn(s)${r.apiError ? ` (${firstLine(r.apiError)})` : ""}`
+        `- ${r.task} / ${r.arm} / sample ${r.sample}: ${r.stopped} after ${r.turns.length} turn(s)${r.apiError ? ` (${firstLineOf(r.apiError)})` : ""}`
       );
   }
 
-  const failures = ran.filter((r) => !r.pass);
+  const failures = single.filter((r) => r.outcome === "fail");
   if (failures.length > 0) {
     out.push("", "## Failures", "");
-    for (const r of failures) {
-      const last = r.turns[r.turns.length - 1];
-      const why =
-        r.stopped === "refusal"
-          ? r.stopped
-          : !r.rendered
-            ? `${cutShort(r) ? `[then ${r.stopped}] ` : ""}${last?.errorKind === "contract" ? `contract violation: ${(last.error ?? "").replace(/\n/g, " ")}` : `render error: ${firstLine(last?.error)}`}`
-            : [
-                ...(last?.checks?.results ?? []),
-                ...(last?.preserved?.results ?? []),
-              ]
-                .filter((c) => !c.pass)
-                .map((c) => `${c.check}: ${c.detail}`)
-                .join("; ");
-      out.push(`- ${r.task} / ${r.arm} / sample ${r.sample}: ${why}`);
-    }
+    for (const r of failures)
+      out.push(`- ${r.task} / ${r.arm} / sample ${r.sample}: ${whyFailed(r)}`);
   }
   return out.join("\n") + "\n";
+}
+
+const firstLineOf = (s: string | undefined) => (s ?? "").split("\n")[0];
+
+/** Why a job (or a chain step, given its turns) did not pass, from its last
+ *  turn. */
+function whyFailed(
+  r: Pick<JobResult, "stopped" | "rendered">,
+  turns: TurnResult[] = (r as JobResult).turns
+): string {
+  const last = turns[turns.length - 1];
+  if (r.stopped === "refusal") return "refusal";
+  const infra = cutShort(r as JobResult) ? `[then ${r.stopped}] ` : "";
+  if (!last) return `${infra}no turn`;
+  const contract =
+    last.errorKind === "contract"
+      ? `contract violation: ${(last.error ?? "").replace(/\n/g, " ")}`
+      : "";
+  if (!last.checks)
+    return `${infra}${contract || `render error: ${firstLineOf(last.error)}`}`;
+  // The picture was read (drawn by the library or not): what was wrong with
+  // it.
+  const failed = [...last.checks.results, ...(last.preserved?.results ?? [])]
+    .filter((c) => !c.pass)
+    .map((c) => `${c.check}: ${c.detail}`)
+    .join("; ");
+  return `${infra}${[contract, failed].filter(Boolean).join("; ")}`;
+}
+
+/** The chains section: per arm, per chain, and where each chain stopped. */
+function chainSection(
+  chains: JobResult[],
+  unscored: JobResult[],
+  arms: Arm[]
+): string {
+  const out: string[] = [
+    "## Chains",
+    "",
+    "A chain is a series of edits on one chart. Step 1 starts from the arm's reference program for the chain's base task; each later step starts from the model's own final program of the step before, and preservation is judged against that step's final render. Each step is a fresh conversation with up to max turns. The chain goes on only past a step that passes (a partial step stops it), so steps passed counts the steps passed before the first one that did not pass.",
+    "",
+  ];
+  out.push(
+    table(
+      [
+        "arm",
+        "chain jobs",
+        "mean steps passed",
+        "full-chain pass",
+        "mean turns",
+        reasoningHeader(chains),
+        "mean cost $",
+      ],
+      arms.map((arm) => {
+        const rs = chains.filter((r) => r.arm === arm);
+        const n = rs[0]?.nSteps;
+        const sameLength = rs.every((r) => r.nSteps === n);
+        return [
+          arm,
+          String(rs.length),
+          `${fmt(mean(rs.map((r) => r.stepsPassed!)), 2)}${sameLength && n ? ` of ${n}` : ""}`,
+          pct(rs.filter((r) => r.pass).length, rs.length),
+          fmt(mean(rs.map((r) => r.turns.length)), 2),
+          fmt(meanReasoning(rs)),
+          fmt(mean(rs.map((r) => r.usd)), 4),
+        ];
+      })
+    ),
+    "",
+    "Cells: steps passed per scored sample, out of the chain's steps; `+k not scored` counts samples lost to infrastructure errors.",
+    ""
+  );
+  const ids = [...new Set(chains.map((r) => r.task))];
+  out.push(
+    table(
+      ["chain", ...arms],
+      ids.map((id) => [
+        id,
+        ...arms.map((arm) => {
+          const rs = chains.filter((r) => r.task === id && r.arm === arm);
+          const lost = unscored.filter(
+            (r) => r.task === id && r.arm === arm
+          ).length;
+          const note = lost ? ` +${lost} not scored` : "";
+          if (rs.length === 0) return lost ? `-${note}` : "-";
+          return `${rs.map((r) => `${r.stepsPassed}/${r.nSteps}`).join(", ")}${note}`;
+        }),
+      ])
+    )
+  );
+  const stopped = chains.filter((r) => !r.pass);
+  if (stopped.length > 0) {
+    out.push("", "Where chains stopped:", "");
+    for (const r of stopped) {
+      const s = r.steps![r.steps!.length - 1];
+      const why = s
+        ? `step ${s.step} ${s.outcome}${
+            s.outcome === "fail" || s.outcome === "partial"
+              ? `: ${whyFailed(
+                  r,
+                  r.turns.filter((t) => t.step === s.step)
+                )}`
+              : ""
+          }`
+        : "no step";
+      const unrun =
+        s && s.outcome === "pass"
+          ? `; step ${s.step + 1} not run (${r.stopped})`
+          : "";
+      out.push(`- ${r.task} / ${r.arm} / sample ${r.sample}: ${why}${unrun}`);
+    }
+  }
+  return out.join("\n");
 }

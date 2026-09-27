@@ -5,19 +5,30 @@
  * the ledger: the real usage on success, and on failure either nothing (the
  * request never reached the API, or the API rejected it with a status) or the
  * worst case (it may have been billed, e.g. a stream dropped mid-reply).
- * Transient failures are retried with exponential backoff; only when retries
+ * A claude-code call books the cost Claude Code reported (list price, on the
+ * subscription's side of the ledger), or the worst case when it reported
+ * none. Transient failures are retried with exponential backoff; only when retries
  * run out does the caller see the error.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 import { ZERO_USAGE, type Ledger } from "./cost";
-import type { Model, ModelReply, ModelRequest } from "./model";
+import {
+  ClaudeCodeError,
+  type Model,
+  type ModelReply,
+  type ModelRequest,
+} from "./model";
 
 export interface ErrorClass {
   /** "Class: message", for the ledger and the report. */
   label: string;
-  /** The call may have been billed, so the worst case is booked. */
+  /** The call may have been billed, so the worst case is booked (unless
+   *  `usd` says what it cost). */
   billed: boolean;
+  /** What the failed call cost, when the backend reported it (claude-code);
+   *  booked instead of the worst case. */
+  usd?: number;
   /** Worth another attempt. */
   retryable: boolean;
   /** Retrying anything is pointless (bad key, bad request): stop the run. */
@@ -52,6 +63,18 @@ function retryAfterMs(headers: Headers | undefined): number | undefined {
 export function classifyError(e: unknown): ErrorClass {
   const name = (e as Error)?.constructor?.name ?? "Error";
   const label = `${name}: ${(e as Error)?.message ?? String(e)}`;
+  // A failed claude-code call. Reaching the subscription's usage limit
+  // stops the run like a fatal error (the jobs it cuts short are not
+  // scored).
+  if (e instanceof ClaudeCodeError)
+    return {
+      label:
+        e.failure === "usage-limit" ? `usage limit reached (${label})` : label,
+      billed: e.usd === undefined && e.billed,
+      usd: e.usd,
+      retryable: e.failure === "transient",
+      fatal: e.failure !== "transient",
+    };
   // Timeouts may fire after the server started generating: book the worst
   // case. Checked before APIConnectionError, which it extends.
   if (e instanceof Anthropic.APIConnectionTimeoutError)
@@ -133,40 +156,55 @@ export async function callWithRetry(args: {
     log = console.error,
   } = args;
   const where = `${req.task.id}/${req.arm} turn ${req.turn}`;
-  const entry = { run, task: req.task.id, arm: req.arm, turn: req.turn };
+  const backend = model.backend;
+  const entry = {
+    run,
+    task: req.task.id,
+    arm: req.arm,
+    turn: req.turn,
+    model: model.id,
+  };
   let failedUsd = 0;
   for (let attempt = 1; ; attempt++) {
-    if (model.real && !ledger.reserve(reserveUsd))
+    if (backend !== "mock" && !ledger.reserve(reserveUsd, backend))
       return { kind: "budget", failedUsd, reserveUsd };
     try {
       const reply = await model.call(req);
-      const usd = model.real
-        ? ledger.commit(reserveUsd, { ...entry, usage: reply.usage })
-        : 0;
+      // A claude-code reply carries its (list-price) cost; an API reply's
+      // usage is priced for the model.
+      const usd =
+        backend !== "mock"
+          ? ledger.commit(
+              reserveUsd,
+              { ...entry, backend, usage: reply.usage },
+              reply.costUsd
+            )
+          : 0;
       return { kind: "ok", reply, usd, failedUsd };
     } catch (e) {
       const info = classifyError(e);
-      if (model.real)
+      if (backend !== "mock")
         failedUsd += ledger.commit(
           reserveUsd,
           {
             ...entry,
+            backend,
             usage: ZERO_USAGE,
-            estimated: info.billed,
-            error: `${info.label}${info.billed ? "" : " (not billed)"}`,
+            estimated: info.usd === undefined && info.billed,
+            error: `${info.label}${info.usd === undefined && !info.billed ? " (not billed)" : ""}`,
           },
-          info.billed ? reserveUsd : 0
+          info.usd ?? (info.billed ? reserveUsd : 0)
         );
       const last = !info.retryable || attempt >= maxAttempts || stop();
       if (last) {
         log(
-          `API error on ${where} (attempt ${attempt}/${maxAttempts}, giving up): ${info.label}`
+          `${backend === "claude-code" ? "claude-code" : "API"} error on ${where} (attempt ${attempt}/${maxAttempts}, giving up): ${info.label}`
         );
         return { kind: "error", error: e, info, failedUsd };
       }
       const delay = backoffMs(attempt, info.retryAfterMs);
       log(
-        `API error on ${where} (attempt ${attempt}/${maxAttempts}, retrying in ${(delay / 1000).toFixed(1)}s): ${info.label}`
+        `${backend === "claude-code" ? "claude-code" : "API"} error on ${where} (attempt ${attempt}/${maxAttempts}, retrying in ${(delay / 1000).toFixed(1)}s): ${info.label}`
       );
       await sleep(delay);
     }

@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import { ARM_LANG, BENCH_DIR, type Arm, type Task } from "./tasks";
+import { ARM_LANG, BENCH_DIR, type Arm, type SingleTask } from "./tasks";
 
 export interface SystemBlock {
   type: "text";
@@ -74,7 +74,7 @@ export function dataPreview(data: Record<string, unknown>[], rows = 5): string {
   );
 }
 
-function sizeLine(task: Task, arm: Arm): string {
+function sizeLine(task: SingleTask, arm: Arm): string {
   const { w, h } = task.size;
   const px = `${w} x ${h} px`;
   return arm === "matplotlib"
@@ -83,7 +83,7 @@ function sizeLine(task: Task, arm: Arm): string {
 }
 
 export function taskMessage(
-  task: Task,
+  task: SingleTask,
   arm: Arm,
   data: Record<string, unknown>[],
   startCode?: string

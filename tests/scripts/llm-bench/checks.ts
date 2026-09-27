@@ -39,8 +39,32 @@ type Direction = "forward" | "reverse" | "either";
 /** Values for a bar-like check: either given literally, or summed from the
  *  task data by category (categories in order of first appearance). */
 type BarValues =
-  | { values: number[]; category?: undefined; value?: undefined }
-  | { category: string; value: string; values?: undefined };
+  | {
+      values: number[];
+      category?: undefined;
+      value?: undefined;
+      sort?: undefined;
+    }
+  | {
+      category: string;
+      value: string;
+      /** Order categories by their summed value instead of data order. */
+      sort?: "asc" | "desc";
+      values?: undefined;
+    };
+
+/** Which items a highlight picks: every listed field must match, either
+ *  equal to the value (compared as strings) or within { min, max }. For
+ *  field-based bars the items are the categories, with the category and
+ *  value fields; for points, the rows. */
+type Where = Record<string, string | number | { min?: number; max?: number }>;
+
+/** A highlight: the picked items' marks are drawn in `color` (RGB, alpha
+ *  ignored), and every other item's mark shares one other color. */
+interface Highlight {
+  where: Where;
+  color: string;
+}
 
 /** Values for a stacked/grouped check: summed from the task data by
  *  category x series (both in order of first appearance). */
@@ -50,17 +74,46 @@ interface SeriesValues {
   value: string;
 }
 
+/** One level of a mosaic: split along `dir` by the categories of `by`. */
+export interface MosaicLevel {
+  by: string;
+  dir: "x" | "y";
+  from?: "left" | "right" | "top" | "bottom" | "any";
+}
+
 export type Check =
   /** One rect-like filled mark per value, on a common baseline, lengths
    *  proportional to the values (a zero baseline; negative values extend
    *  the other way). `ordered` (default true) requires the values' order
-   *  along the category axis in `direction` (default "forward"). */
+   *  along the category axis in `direction` (default "forward").
+   *  `valueLabels`: each bar also has a text reading exactly its value
+   *  (en-US, thousands separators, `decimals` places, default 0) just
+   *  beyond its end and centered across it. `highlight`: the picked bars
+   *  have the given color and every other bar shares one other color. */
   | ({
       check: "bars";
       orientation: Orientation;
       ordered?: boolean;
       direction?: Direction;
       tol?: number;
+      valueLabels?: { decimals?: number };
+      highlight?: Highlight;
+    } & BarValues)
+  /** `bars` (ordered, within `tol`), plus a straight line across the value
+   *  axis at `at` (a number, or "mean" of the bar values) on the bars'
+   *  scale (within `lineTol`, default 0.005, of the largest value + 1.5px),
+   *  spanning from the first bar's outer edge to the last bar's; `dashed`
+   *  requires a dash pattern. A text containing `label` lies within 30px of
+   *  the line and alongside it. */
+  | ({
+      check: "referenceLine";
+      orientation: Orientation;
+      direction?: Direction;
+      at: number | "mean";
+      label: string;
+      dashed?: boolean;
+      tol?: number;
+      lineTol?: number;
     } & BarValues)
   /** One stack per category (in category order); within a stack, abutting
    *  segments whose lengths are proportional to the series values (any stack
@@ -83,8 +136,23 @@ export type Check =
     } & SeriesValues)
   /** One circle-like mark per row, centered at an affine image of (x, y)
    *  with y pointing up. `colorBy`: rows sharing the field's value share a
-   *  color; different values get different colors. */
-  | { check: "points"; x: string; y: string; colorBy?: string; tol?: number }
+   *  color; different values get different colors. `size`: each circle's
+   *  area is proportional to the field (radius^2 = k * value for one k),
+   *  within 0.5px + `sizeTol` (0.03) of the largest radius; with
+   *  `maxRadius`, the largest radius is within 25% of it. `highlight`:
+   *  the picked rows' circles have the given color and every other circle
+   *  shares one other color. */
+  | {
+      check: "points";
+      x: string;
+      y: string;
+      colorBy?: string;
+      size?: string;
+      maxRadius?: number;
+      highlight?: Highlight;
+      tol?: number;
+      sizeTol?: number;
+    }
   /** One stroked line per group (or one line), passing through the rows'
    *  (x, y) under one affine map with y up, and running in one x direction
    *  (points joined in x order). With `groupBy`, the lines have distinct
@@ -96,22 +164,54 @@ export type Check =
       groupBy?: string;
       tol?: number;
     }
+  /** A line through the rows as `lineSeries` finds it, and at the row with
+   *  the largest (`at: "max"`) or smallest `y`: a filled circle (radius at
+   *  least 2.5px) centered on that point (within 1.5% of the plot, at least
+   *  2px), and a text containing `text` within `near` px (30) of it. */
+  | {
+      check: "annotation";
+      x: string;
+      y: string;
+      at: "max" | "min";
+      text: string;
+      near?: number;
+      tol?: number;
+    }
   /** Pie/donut slices around one center whose angular shares match the
    *  values' shares (any order); slices have distinct colors. `hole`: true
    *  requires a donut (every slice's inner radius is at least 20% of its
    *  outer radius), false a pie (at most 5%); unset allows either. */
   | ({ check: "wedges"; hole?: boolean; tol?: number } & BarValues)
-  /** A mosaic (Marimekko) chart: one full-height column of abutting
-   *  rect-like segments per `column` category, left to right in order,
-   *  with widths proportional to the column totals and all columns the same
-   *  height; within a column, segment heights proportional to each
-   *  `segment` category's share of the column (any stack order); each
-   *  segment category has one color across columns, distinct from the
-   *  others. */
+  /** Pie glyphs: one complete pie (slices around one center whose sweeps
+   *  add up to 360 degrees, within 3, and whose inner radius is at most 5%
+   *  of the outer) per `by` category, centered at an
+   *  affine image of its (x, y) with y up (as `points`, within `placeTol`
+   *  of the plotted extent); its slices' angular shares match the shares
+   *  of `value` by `category` (any order, within `tol`, default 0.01); each
+   *  `category` has one color across pies, distinct from the others. */
+  | {
+      check: "pieGlyphs";
+      by: string;
+      x: string;
+      y: string;
+      category: string;
+      value: string;
+      tol?: number;
+      placeTol?: number;
+    }
+  /** A mosaic: one rectangle split recursively, one level per entry of
+   *  `levels`. Level i splits every cell of level i-1 along its `dir` into
+   *  one piece per category of its `by` field, each piece as long as that
+   *  category's share of the cell's summed `value` (within `tol` of the
+   *  cell), and spanning the cell's full extent the other way. `from` names
+   *  the side the first category (in order of first appearance) starts at;
+   *  "any" (the default) allows any order. Small gaps between pieces are
+   *  allowed. The categories of the last level each have one color, distinct
+   *  from the others. A Marimekko chart is two levels: columns along x, then
+   *  segments along y. */
   | {
       check: "mosaic";
-      column: string;
-      segment: string;
+      levels: MosaicLevel[];
       value: string;
       tol?: number;
     }
@@ -140,6 +240,37 @@ export type Check =
       direction?: Direction;
       tol?: number;
     } & SeriesValues)
+  /** A ridgeline: per `category` (in order of first appearance), a filled
+   *  shape whose top edge, measured up from its own baseline (its lowest
+   *  edge), passes through the category's (x, y) points (within `tol` of
+   *  the tallest peak, at least 2px), under one horizontal map (the shapes
+   *  span the same x range) and one height scale (within 5%). Baselines run
+   *  top to bottom in category order, evenly spaced (within 5%, at least
+   *  2px), and the tallest peak is `overlap` ([1.5, 2.5]) times the spacing,
+   *  so ridges overlap the row above. */
+  | {
+      check: "ridgeline";
+      category: string;
+      x: string;
+      y: string;
+      overlap?: [number, number];
+      tol?: number;
+    }
+  /** Bottle fills: one bottle outline per `category`, left to right in
+   *  order (stroked, unfilled, closed, not a rectangle, all the same height
+   *  within 5%). Inside each, the painted pixels of the filled marks there
+   *  (after any clip path or mask) form the liquid: it starts at the
+   *  outline's bottom, rises to `value / max` of the outline's height
+   *  (within `tol`, default 0.02, plus 1.5px), stays inside the outline (at
+   *  most 1% of its pixels more than 1.5px outside), and a quarter of the
+   *  way up it spans at least 85% of the outline's width. */
+  | {
+      check: "bottleFill";
+      category: string;
+      value: string;
+      max?: number;
+      tol?: number;
+    }
   /** Each string appears (case-insensitive substring) in some text. */
   | { check: "textIncludes"; strings: string[] }
   /** Data marks use at least `k` distinct colors. */
@@ -221,16 +352,81 @@ function uniqueInOrder(rows: Row[], field: string): string[] {
 function barValues(
   spec: BarValues,
   data: Row[]
-): { labels: string[]; values: number[] } {
+): { labels: string[]; values: number[]; items: Row[] } {
   if (spec.values)
-    return { labels: spec.values.map(String), values: spec.values };
-  const labels = uniqueInOrder(data, spec.category!);
-  const values = labels.map((l) =>
-    data
-      .filter((r) => String(r[spec.category!]) === l)
-      .reduce((s, r) => s + num(r[spec.value!]), 0)
-  );
-  return { labels, values };
+    return {
+      labels: spec.values.map(String),
+      values: spec.values,
+      items: spec.values.map((value) => ({ value })),
+    };
+  const cats = uniqueInOrder(data, spec.category!).map((label) => ({
+    label,
+    value: data
+      .filter((r) => String(r[spec.category!]) === label)
+      .reduce((s, r) => s + num(r[spec.value!]), 0),
+  }));
+  if (spec.sort)
+    cats.sort((a, b) =>
+      spec.sort === "asc" ? a.value - b.value : b.value - a.value
+    );
+  return {
+    labels: cats.map((c) => c.label),
+    values: cats.map((c) => c.value),
+    items: cats.map((c) => ({
+      [spec.category!]: c.label,
+      [spec.value!]: c.value,
+    })),
+  };
+}
+
+function picked(item: Row, where: Where): boolean {
+  return Object.entries(where).every(([field, want]) => {
+    const got = item[field];
+    if (typeof want === "object") {
+      const v = num(got);
+      return (
+        Number.isFinite(v) &&
+        (want.min === undefined || v >= want.min) &&
+        (want.max === undefined || v <= want.max)
+      );
+    }
+    return String(got) === String(want);
+  });
+}
+
+/** Parse "#rrggbb" or "#rgb" into RGBA. */
+function hexColor(hex: string): RGBA {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? [...h].map((c) => c + c).join("") : h;
+  return [0, 2, 4]
+    .map((i) => parseInt(full.slice(i, i + 2), 16))
+    .concat(1) as RGBA;
+}
+
+/** marks[i] draws items[i]. The picked items' marks have the highlight
+ *  color (RGB within SAME_COLOR; alpha ignored, since a fill may keep the
+ *  chart's opacity), and all other marks share one color that is not it. */
+function highlightProblem(
+  h: Highlight,
+  items: Row[],
+  marks: Mark[]
+): string | null {
+  const want = hexColor(h.color);
+  const rgb = (c: RGBA) =>
+    Math.hypot(c[0] - want[0], c[1] - want[1], c[2] - want[2]);
+  const pick = items.map((it) => picked(it, h.where));
+  const n = pick.filter(Boolean).length;
+  if (n === 0) return `no item matches ${JSON.stringify(h.where)}`;
+  const wrong = marks.filter((m, i) => pick[i] && rgb(ink(m)!) > SAME_COLOR);
+  if (wrong.length > 0)
+    return `${wrong.length} of ${n} highlighted marks are not ${h.color} (${rgbaText(ink(wrong[0])!)})`;
+  const rest = marks.filter((_, i) => !pick[i]).map((m) => ink(m)!);
+  const reps = colorClusters(rest);
+  if (reps.length > 1)
+    return `the other marks use ${reps.length} colors (${reps.slice(0, 4).map(rgbaText).join(" ")}), not one shared color`;
+  if (reps.length === 1 && rgb(reps[0]) <= SAME_COLOR)
+    return `the other marks are also ${h.color}`;
+  return null;
 }
 
 function seriesValues(spec: SeriesValues, data: Row[]) {
@@ -355,12 +551,67 @@ function matchBars(
   return { bars: [], best };
 }
 
+/** A number as en-US text with thousands separators and a fixed number of
+ *  decimals, e.g. 1240 -> "1,240". */
+function formatNumber(v: number, decimals: number): string {
+  return v.toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+/** For each bar, a text reading exactly its formatted value, just beyond
+ *  the bar's end (its outer edge at most 16px past the end, and at most 30%
+ *  of the text overlapping the bar) and centered across the bar (within
+ *  max(3px, 10% of its thickness)). Returns the problems, or []. */
+function valueLabelProblems(
+  bars: Bar[],
+  values: number[],
+  orientation: Orientation,
+  decimals: number,
+  rec: RenderRecord
+): string[] {
+  const texts = rec.marks.filter((m) => m.kind === "text");
+  const v = orientation === "vertical";
+  const problems: string[] = [];
+  bars.forEach((bar, i) => {
+    const want = formatNumber(values[i], decimals);
+    const same = texts.filter((t) => t.text!.trim() === want);
+    if (same.length === 0) {
+      problems.push(`no text "${want}"`);
+      return;
+    }
+    const m = bar.mark;
+    const ok = same.some((t) => {
+      const across = v
+        ? Math.abs(t.x + t.w / 2 - (m.x + m.w / 2)) <= Math.max(3, 0.1 * m.w)
+        : Math.abs(t.y + t.h / 2 - (m.y + m.h / 2)) <= Math.max(3, 0.1 * m.h);
+      // Gap from the bar's end to the near side of the text, measured
+      // outward (negative when the text overlaps the bar).
+      const gap = v
+        ? bar.len >= 0
+          ? m.y - (t.y + t.h)
+          : t.y - (m.y + m.h)
+        : bar.len >= 0
+          ? t.x - (m.x + m.w)
+          : m.x - (t.x + t.w);
+      const depth = v ? t.h : t.w;
+      return across && gap >= -0.3 * depth && gap <= 16;
+    });
+    if (!ok)
+      problems.push(
+        `"${want}" is not just beyond its bar's end, centered on it`
+      );
+  });
+  return problems;
+}
+
 function checkBars(
   c: Extract<Check, { check: "bars" }>,
   rec: RenderRecord,
   ctx: CheckContext
 ): CheckResult {
-  const { values } = barValues(c, ctx.data);
+  const { values, items } = barValues(c, ctx.data);
   const cands = barCandidates(rec);
   const { bars, best } = matchBars(
     barsByBaseline(cands, c.orientation),
@@ -371,14 +622,132 @@ function checkBars(
       tol: c.tol ?? 0.03,
     }
   );
-  if (bars.length === values.length)
+  if (bars.length !== values.length)
     return {
-      pass: true,
-      detail: `${values.length} ${c.orientation} bars match [${values.join(", ")}]`,
+      pass: false,
+      detail: `expected ${values.length} ${c.orientation} bars proportional to [${values.join(", ")}]; ${cands.length} filled rects, best baseline matched ${best}`,
+    };
+  let matched = `${values.length} ${c.orientation} bars match [${values.join(", ")}]`;
+  if (c.highlight) {
+    const problem = highlightProblem(
+      c.highlight,
+      items,
+      bars.map((b) => b.mark)
+    );
+    if (problem)
+      return { pass: false, detail: `${matched}, but highlight: ${problem}` };
+    matched += `, highlighted ${JSON.stringify(c.highlight.where)} in ${c.highlight.color}`;
+  }
+  if (c.valueLabels) {
+    const problems = valueLabelProblems(
+      bars,
+      values,
+      c.orientation,
+      c.valueLabels.decimals ?? 0,
+      rec
+    );
+    if (problems.length > 0)
+      return {
+        pass: false,
+        detail: `${matched}, but value labels: ${problems.slice(0, 3).join("; ")}${problems.length > 3 ? "; ..." : ""}`,
+      };
+    return { pass: true, detail: `${matched}, each labeled with its value` };
+  }
+  return { pass: true, detail: matched };
+}
+
+function checkReferenceLine(
+  c: Extract<Check, { check: "referenceLine" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const { values } = barValues(c, ctx.data);
+  const tol = c.tol ?? 0.03;
+  const { bars } = matchBars(
+    barsByBaseline(barCandidates(rec), c.orientation),
+    values,
+    { ordered: true, direction: c.direction ?? "forward", tol }
+  );
+  if (bars.length !== values.length)
+    return {
+      pass: false,
+      detail: `no ${c.orientation} bars proportional to [${values.join(", ")}] to measure the line against`,
+    };
+  const at =
+    c.at === "mean" ? values.reduce((a, b) => a + b, 0) / values.length : c.at;
+  const v = c.orientation === "vertical";
+  // The value axis: screen position = base + k * value, along y (up) for
+  // vertical bars and x (right) for horizontal ones.
+  const ref = bars.find((b, i) => values[i] !== 0)!;
+  const vi = bars.indexOf(ref);
+  const k = ref.len / values[vi];
+  const m0 = ref.mark;
+  const base = v
+    ? ref.len >= 0
+      ? m0.y + m0.h
+      : m0.y
+    : ref.len >= 0
+      ? m0.x
+      : m0.x + m0.w;
+  const target = v ? base - k * at : base + k * at;
+  // The line sits at one exact value, so it gets a tighter tolerance than
+  // the bars: `lineTol` (0.005) of the largest value, plus 1.5px.
+  const slack =
+    (c.lineTol ?? 0.005) * Math.abs(k) * Math.max(...values.map(Math.abs)) +
+    1.5;
+  // The span the line must cover: from the first bar's outer edge to the
+  // last bar's.
+  const lo = Math.min(...bars.map((b) => (v ? b.mark.x : b.mark.y)));
+  const hi = Math.max(
+    ...bars.map((b) => (v ? b.mark.x + b.mark.w : b.mark.y + b.mark.h))
+  );
+  const rules = rec.marks.filter((m) => {
+    if (!ink(m)) return false;
+    const thin = v ? m.h <= 3 : m.w <= 3;
+    return (m.kind === "line" || m.kind === "rect") && thin;
+  });
+  const pos = (m: Mark) => (v ? m.y + m.h / 2 : m.x + m.w / 2);
+  const at1 = rules.filter((m) => Math.abs(pos(m) - target) <= slack);
+  const spanning = at1.filter((m) =>
+    v
+      ? m.x <= lo + 2 && m.x + m.w >= hi - 2
+      : m.y <= lo + 2 && m.y + m.h >= hi - 2
+  );
+  const shown = `${at.toFixed(2)} (expected at ${v ? "y" : "x"} = ${target.toFixed(0)}px)`;
+  if (spanning.length === 0)
+    return {
+      pass: false,
+      detail:
+        at1.length === 0
+          ? `no ${v ? "horizontal" : "vertical"} line at ${shown}`
+          : `a line at ${shown}, but it does not span the bars (${lo.toFixed(0)}-${hi.toFixed(0)}px)`,
+    };
+  const dashed = spanning.filter((m) => (m.dash ?? []).some((d) => d > 0));
+  if (c.dashed && dashed.length === 0)
+    return { pass: false, detail: `a line at ${shown}, but it is not dashed` };
+  const line = (c.dashed ? dashed : spanning)[0];
+  const lineLo = v ? line.x : line.y;
+  const lineHi = v ? line.x + line.w : line.y + line.h;
+  const label = rec.marks.find((t) => {
+    if (
+      t.kind !== "text" ||
+      !t.text!.toLowerCase().includes(c.label.toLowerCase())
+    )
+      return false;
+    // Within 30px of the line across it, and alongside it.
+    const [a0, a1] = v ? [t.y, t.y + t.h] : [t.x, t.x + t.w];
+    const [b0, b1] = v ? [t.x, t.x + t.w] : [t.y, t.y + t.h];
+    const off = Math.max(a0 - target, 0, target - a1);
+    return off <= 30 && b1 >= lineLo - 30 && b0 <= lineHi + 30;
+  });
+  if (!label)
+    return {
+      pass: false,
+      detail: `a ${c.dashed ? "dashed " : ""}line at ${shown}, but no text "${c.label}" next to it`,
     };
   return {
-    pass: false,
-    detail: `expected ${values.length} ${c.orientation} bars proportional to [${values.join(", ")}]; ${cands.length} filled rects, best baseline matched ${best}`,
+    pass: true,
+    detail: `a ${c.dashed ? "dashed " : ""}line at ${shown} spans the bars, labeled "${label.text}"`,
   };
 }
 
@@ -711,27 +1080,17 @@ function extent(xs: number[]): [number, number] {
   return [Math.min(...xs), Math.max(...xs)];
 }
 
-function checkPoints(
-  c: Extract<Check, { check: "points" }>,
-  rec: RenderRecord,
-  ctx: CheckContext
-): CheckResult {
-  const rows = ctx.data.filter(
-    (r) => Number.isFinite(num(r[c.x])) && Number.isFinite(num(r[c.y]))
-  );
-  const xs = rows.map((r) => num(r[c.x]));
-  const ys = rows.map((r) => num(r[c.y]));
-  const circles = rec.marks.filter(
-    (m) => m.kind === "circle" && !isBackground(m, rec)
-  );
-  const cx = circles.map((m) => m.x + m.w / 2);
-  const cy = circles.map((m) => m.y + m.h / 2);
-  if (circles.length < rows.length)
-    return {
-      pass: false,
-      detail: `expected ${rows.length} circles, found ${circles.length}`,
-    };
-  const tolFrac = c.tol ?? 0.01;
+/** Place data points (xs[i], ys[i]) on screen centers under one affine map
+ *  per axis (x right, y up): every point gets its own center within `tolFrac`
+ *  of the plotted extent (at least 1.5px). Returns the center index of each
+ *  point, or null, plus how many maps fit each axis alone (for details). */
+function placePoints(
+  xs: number[],
+  ys: number[],
+  cx: number[],
+  cy: number[],
+  tolFrac: number
+): { match: number[] | null; nx: number; ny: number } {
   const [xlo, xhi] = extent(xs);
   const [ylo, yhi] = extent(ys);
   const tolFor = (h: Affine, lo: number, hi: number) =>
@@ -756,12 +1115,12 @@ function checkPoints(
       const ty = tolFor(Y, ylo, yhi);
       const used = new Set<number>();
       const match: number[] = [];
-      for (let i = 0; i < rows.length; i++) {
+      for (let i = 0; i < xs.length; i++) {
         const px = X.a * xs[i] + X.b;
         const py = Y.a * ys[i] + Y.b;
         let bestJ = -1;
         let bestD = Infinity;
-        for (let j = 0; j < circles.length; j++) {
+        for (let j = 0; j < cx.length; j++) {
           if (used.has(j)) continue;
           const dx = Math.abs(cx[j] - px);
           const dy = Math.abs(cy[j] - py);
@@ -776,27 +1135,102 @@ function checkPoints(
         used.add(bestJ);
         match.push(bestJ);
       }
-      if (match.length !== rows.length) continue;
-      if (c.colorBy) {
-        const groups = uniqueInOrder(rows, c.colorBy);
-        const bySeries = groups.map((g) =>
-          rows
-            .map((r, i) =>
-              String(r[c.colorBy!]) === g ? circles[match[i]] : null
-            )
-            .filter((m): m is Mark => !!m)
-        );
-        const colors = seriesColorsConsistent(bySeries, groups);
-        if (!colors.pass) return colors;
-      }
+      if (match.length === xs.length)
+        return { match, nx: hx.length, ny: hy.length };
+    }
+  return { match: null, nx: hx.length, ny: hy.length };
+}
+
+/** Marks colored by a field: rows sharing its value share a color, and
+ *  different values get different colors. marks[i] draws rows[i]. */
+function colorsBy(field: string, rows: Row[], marks: Mark[]): CheckResult {
+  const groups = uniqueInOrder(rows, field);
+  return seriesColorsConsistent(
+    groups.map((g) => marks.filter((_, i) => String(rows[i][field]) === g)),
+    groups
+  );
+}
+
+function checkPoints(
+  c: Extract<Check, { check: "points" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const rows = ctx.data.filter(
+    (r) => Number.isFinite(num(r[c.x])) && Number.isFinite(num(r[c.y]))
+  );
+  const circles = rec.marks.filter(
+    (m) => m.kind === "circle" && !isBackground(m, rec)
+  );
+  if (circles.length < rows.length)
+    return {
+      pass: false,
+      detail: `expected ${rows.length} circles, found ${circles.length}`,
+    };
+  const { match, nx, ny } = placePoints(
+    rows.map((r) => num(r[c.x])),
+    rows.map((r) => num(r[c.y])),
+    circles.map((m) => m.x + m.w / 2),
+    circles.map((m) => m.y + m.h / 2),
+    c.tol ?? 0.01
+  );
+  if (!match)
+    return {
+      pass: false,
+      detail: `no affine placement of ${rows.length} points onto ${circles.length} circles (${nx} x-fits, ${ny} y-fits)`,
+    };
+  const mine = match.map((j) => circles[j]);
+  const notes: string[] = [];
+  if (c.size) {
+    // Area proportional to the value: r^2 = k * v for one k.
+    const vs = rows.map((r) => num(r[c.size!]));
+    const rs = mine.map((m) => (m.w + m.h) / 4);
+    const ks = vs
+      .map((v, i) => (rs[i] * rs[i]) / v)
+      .filter((k) => Number.isFinite(k) && k > 0)
+      .sort((a, b) => a - b);
+    const k = ks[Math.floor(ks.length / 2)] ?? 0;
+    const slack = 0.5 + (c.sizeTol ?? 0.03) * Math.max(...rs);
+    const off = rs.filter((r, i) => Math.abs(r - Math.sqrt(k * vs[i])) > slack);
+    if (off.length > 0) {
+      const pairs = rows
+        .map((_, i) => `${vs[i]}:${rs[i].toFixed(1)}`)
+        .slice(0, 8)
+        .join(", ");
       return {
-        pass: true,
-        detail: `${rows.length} points match${c.colorBy ? `, colored by ${c.colorBy}` : ""}`,
+        pass: false,
+        detail: `${rows.length} points placed, but ${off.length} radii are not proportional to the square root of ${c.size} (value:radius ${pairs}${rows.length > 8 ? ", ..." : ""})`,
       };
     }
+    if (c.maxRadius !== undefined) {
+      const rmax = Math.max(...rs);
+      if (Math.abs(rmax - c.maxRadius) > 0.25 * c.maxRadius)
+        return {
+          pass: false,
+          detail: `${rows.length} points placed with areas proportional to ${c.size}, but the largest radius is ${rmax.toFixed(1)}px, expected about ${c.maxRadius}px`,
+        };
+    }
+    notes.push(`areas proportional to ${c.size}`);
+  }
+  if (c.colorBy) {
+    const colors = colorsBy(c.colorBy, rows, mine);
+    if (!colors.pass) return colors;
+    notes.push(`colored by ${c.colorBy}`);
+  }
+  if (c.highlight) {
+    const problem = highlightProblem(c.highlight, rows, mine);
+    if (problem)
+      return {
+        pass: false,
+        detail: `${rows.length} points placed, but highlight: ${problem}`,
+      };
+    notes.push(
+      `highlighted ${JSON.stringify(c.highlight.where)} in ${c.highlight.color}`
+    );
+  }
   return {
-    pass: false,
-    detail: `no affine placement of ${rows.length} points onto ${circles.length} circles (${hx.length} x-fits, ${hy.length} y-fits)`,
+    pass: true,
+    detail: `${rows.length} points match${notes.length ? `, ${notes.join(", ")}` : ""}`,
   };
 }
 
@@ -840,12 +1274,23 @@ function monotoneX(pts: [number, number][], tol: number): boolean {
   return runs(1) || runs(-1);
 }
 
-function checkLineSeries(
-  c: Extract<Check, { check: "lineSeries" }>,
+interface LineFit {
+  /** The data-to-screen maps (y up) under which every series has a line. */
+  X: Affine;
+  Y: Affine;
+  /** The line drawn for each series, in series order. */
+  chosen: Mark[];
+  names: string[];
+}
+
+/** Find one stroked line per series (or one line) through the rows' (x, y)
+ *  under one affine map with y up; see the `lineSeries` check. */
+function fitLineSeries(
+  c: { x: string; y: string; groupBy?: string; tol?: number },
   rec: RenderRecord,
-  ctx: CheckContext
-): CheckResult {
-  const rows = ctx.data.filter(
+  data: Row[]
+): LineFit | { fail: string } {
+  const rows = data.filter(
     (r) => Number.isFinite(num(r[c.x])) && Number.isFinite(num(r[c.y]))
   );
   const names = c.groupBy ? uniqueInOrder(rows, c.groupBy) : ["(all)"];
@@ -898,21 +1343,102 @@ function checkLineSeries(
         used.add(hit);
         chosen.push(hit);
       }
-      if (chosen.length !== series.length) continue;
-      if (c.groupBy) {
-        const colors = seriesColorsConsistent(
-          chosen.map((m) => [m]),
-          names
-        );
-        if (!colors.pass) return colors;
-      }
-      return { pass: true, detail: `${series.length} line series match` };
+      if (chosen.length === series.length) return { X, Y, chosen, names };
     }
   }
   return {
-    pass: false,
-    detail: `expected ${series.length} line series; ${lines.length} stroked lines, none fit`,
+    fail: `expected ${series.length} line series; ${lines.length} stroked lines, none fit`,
   };
+}
+
+function checkLineSeries(
+  c: Extract<Check, { check: "lineSeries" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const fit = fitLineSeries(c, rec, ctx.data);
+  if ("fail" in fit) return { pass: false, detail: fit.fail };
+  if (c.groupBy) {
+    const colors = seriesColorsConsistent(
+      fit.chosen.map((m) => [m]),
+      fit.names
+    );
+    if (!colors.pass) return colors;
+  }
+  return { pass: true, detail: `${fit.names.length} line series match` };
+}
+
+/** Distance from a point to a box (0 inside it). */
+function distToBox([x, y]: [number, number], b: Box): number {
+  const dx = Math.max(b.x - x, 0, x - (b.x + b.w));
+  const dy = Math.max(b.y - y, 0, y - (b.y + b.h));
+  return Math.hypot(dx, dy);
+}
+
+function checkAnnotation(
+  c: Extract<Check, { check: "annotation" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const fit = fitLineSeries(c, rec, ctx.data);
+  if ("fail" in fit)
+    return { pass: false, detail: `no line to annotate: ${fit.fail}` };
+  const rows = ctx.data.filter(
+    (r) => Number.isFinite(num(r[c.x])) && Number.isFinite(num(r[c.y]))
+  );
+  const pick = rows.reduce((best, r) =>
+    (
+      c.at === "max"
+        ? num(r[c.y]) > num(best[c.y])
+        : num(r[c.y]) < num(best[c.y])
+    )
+      ? r
+      : best
+  );
+  const p: [number, number] = [
+    fit.X.a * num(pick[c.x]) + fit.X.b,
+    fit.Y.a * num(pick[c.y]) + fit.Y.b,
+  ];
+  const where = `(${c.x} ${pick[c.x]}, ${c.y} ${pick[c.y]}) at (${p[0].toFixed(0)}, ${p[1].toFixed(0)})`;
+  const plot = Math.max(
+    Math.abs(fit.X.a) *
+      (Math.max(...rows.map((r) => num(r[c.x]))) -
+        Math.min(...rows.map((r) => num(r[c.x])))),
+    Math.abs(fit.Y.a) *
+      (Math.max(...rows.map((r) => num(r[c.y]))) -
+        Math.min(...rows.map((r) => num(r[c.y]))))
+  );
+  const reach = Math.max(2, 0.015 * plot);
+  const marker = rec.marks.find(
+    (m) =>
+      m.kind === "circle" &&
+      m.fill &&
+      ink(m) &&
+      m.w / 2 >= 2.5 &&
+      Math.hypot(m.x + m.w / 2 - p[0], m.y + m.h / 2 - p[1]) <= reach
+  );
+  if (!marker)
+    return {
+      pass: false,
+      detail: `no filled circle (radius at least 2.5px) centered on the ${c.at} point ${where}`,
+    };
+  const near = c.near ?? 30;
+  const texts = rec.marks.filter(
+    (m) =>
+      m.kind === "text" && m.text!.toLowerCase().includes(c.text.toLowerCase())
+  );
+  if (texts.length === 0)
+    return { pass: false, detail: `marker found, but no text "${c.text}"` };
+  const d = Math.min(...texts.map((t) => distToBox(p, t)));
+  return d <= near
+    ? {
+        pass: true,
+        detail: `marker and "${c.text}" (${d.toFixed(0)}px away) at the ${c.at} point ${where}`,
+      }
+    : {
+        pass: false,
+        detail: `marker found, but "${c.text}" is ${d.toFixed(0)}px from the ${c.at} point ${where} (at most ${near})`,
+      };
 }
 
 // ---------------------------------------------------------------------------
@@ -926,21 +1452,8 @@ function checkWedges(
 ): CheckResult {
   const { values } = barValues(c, ctx.data);
   const tol = c.tol ?? 0.01;
-  const wedges = rec.marks.filter(
-    (m) => m.kind === "wedge" && m.wedge && !isBackground(m, rec)
-  );
-  const centers: Mark[][] = [];
-  for (const w of wedges) {
-    const g = centers.find(
-      (g) =>
-        Math.hypot(
-          g[0].wedge!.cx - w.wedge!.cx,
-          g[0].wedge!.cy - w.wedge!.cy
-        ) <= Math.max(2, 0.02 * w.wedge!.r)
-    );
-    if (g) g.push(w);
-    else centers.push([w]);
-  }
+  const centers = wedgesByCenter(rec);
+  const wedges = centers.flat();
   const want = values
     .map((v) => v / values.reduce((a, b) => a + b, 0))
     .sort((a, b) => a - b);
@@ -973,6 +1486,109 @@ function checkWedges(
   return {
     pass: false,
     detail: `expected ${values.length} slices; found ${wedges.length} wedges around ${centers.length} centers`,
+  };
+}
+
+/** Wedges grouped by shared center (within max(2px, 2% of the radius)). */
+function wedgesByCenter(rec: RenderRecord): Mark[][] {
+  const wedges = rec.marks.filter(
+    (m) => m.kind === "wedge" && m.wedge && !isBackground(m, rec)
+  );
+  const centers: Mark[][] = [];
+  for (const w of wedges) {
+    const g = centers.find(
+      (g) =>
+        Math.hypot(
+          g[0].wedge!.cx - w.wedge!.cx,
+          g[0].wedge!.cy - w.wedge!.cy
+        ) <= Math.max(2, 0.02 * w.wedge!.r)
+    );
+    if (g) g.push(w);
+    else centers.push([w]);
+  }
+  return centers;
+}
+
+function checkPieGlyphs(
+  c: Extract<Check, { check: "pieGlyphs" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const tol = c.tol ?? 0.01;
+  const cats = uniqueInOrder(ctx.data, c.category);
+  const glyphs = uniqueInOrder(ctx.data, c.by).map((name) => {
+    const rows = ctx.data.filter((r) => String(r[c.by]) === name);
+    const sums = cats.map((cat) =>
+      rows
+        .filter((r) => String(r[c.category]) === cat)
+        .reduce((s, r) => s + num(r[c.value]), 0)
+    );
+    const total = sums.reduce((a, b) => a + b, 0);
+    return {
+      name,
+      x: num(rows[0][c.x]),
+      y: num(rows[0][c.y]),
+      shares: sums.map((s) => s / total),
+    };
+  });
+  // Complete pies only: the slices around a center fill the circle, with
+  // no hole.
+  const pies = wedgesByCenter(rec).filter(
+    (g) =>
+      Math.abs(g.reduce((a, w) => a + w.wedge!.sweep, 0) - 360) <= 3 &&
+      g.every((w) => w.wedge!.r0 <= 0.05 * w.wedge!.r)
+  );
+  if (pies.length < glyphs.length)
+    return {
+      pass: false,
+      detail: `expected ${glyphs.length} complete pies (no hole), found ${pies.length}`,
+    };
+  const { match, nx, ny } = placePoints(
+    glyphs.map((g) => g.x),
+    glyphs.map((g) => g.y),
+    pies.map((g) => g[0].wedge!.cx),
+    pies.map((g) => g[0].wedge!.cy),
+    c.placeTol ?? 0.01
+  );
+  if (!match)
+    return {
+      pass: false,
+      detail: `no affine placement of ${glyphs.length} ${c.by} positions onto ${pies.length} pie centers (${nx} x-fits, ${ny} y-fits)`,
+    };
+  const segs: StackSeg[] = [];
+  for (let gi = 0; gi < glyphs.length; gi++) {
+    const g = glyphs[gi];
+    const pie = pies[match[gi]];
+    const want = g.shares.filter((s) => s > 0).sort((a, b) => a - b);
+    const got = pie.map((w) => w.wedge!.sweep / 360).sort((a, b) => a - b);
+    if (
+      want.length !== got.length ||
+      !want.every((s, i) => Math.abs(s - got[i]) <= tol)
+    )
+      return {
+        pass: false,
+        detail: `the pie at ${g.name} has slice shares [${got.map((s) => s.toFixed(3)).join(", ")}], expected [${want.map((s) => s.toFixed(3)).join(", ")}]`,
+      };
+    for (const w of pie)
+      segs.push({
+        mark: w,
+        stack: gi,
+        fits: new Set(
+          g.shares
+            .map((s, ci) => [s, ci] as const)
+            .filter(([s]) => s > 0 && Math.abs(s - w.wedge!.sweep / 360) <= tol)
+            .map(([, ci]) => ci)
+        ),
+      });
+  }
+  if (!assignSeriesByColor(segs, cats.length))
+    return {
+      pass: false,
+      detail: `${glyphs.length} pies placed with the right shares, but slice colors do not name one ${c.category} each`,
+    };
+  return {
+    pass: true,
+    detail: `${glyphs.length} pies at their ${c.by} positions, slices by ${c.category} share, one color per ${c.category}`,
   };
 }
 
@@ -1023,95 +1639,290 @@ function checkSize(
 // Mosaic, waffle, ribbons
 // ---------------------------------------------------------------------------
 
+/** Groups of marks whose boxes lie within `gap` px of each other (chained),
+ *  largest total area first. */
+function clusters(marks: Mark[], gap: number): Mark[][] {
+  const parent = marks.map((_, i) => i);
+  const find = (i: number): number =>
+    parent[i] === i ? i : (parent[i] = find(parent[i]));
+  const near = (a: Mark, b: Mark) =>
+    a.x <= b.x + b.w + gap &&
+    b.x <= a.x + a.w + gap &&
+    a.y <= b.y + b.h + gap &&
+    b.y <= a.y + a.h + gap;
+  for (let i = 0; i < marks.length; i++)
+    for (let j = i + 1; j < marks.length; j++)
+      if (near(marks[i], marks[j])) parent[find(i)] = find(j);
+  const groups = new Map<number, Mark[]>();
+  marks.forEach((m, i) => {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r)!.push(m);
+  });
+  const area = (g: Mark[]) => g.reduce((a, m) => a + m.w * m.h, 0);
+  return [...groups.values()].sort((a, b) => area(b) - area(a));
+}
+
+/** Every way to cut `n` ordered items into `k` consecutive runs (at most
+ *  `limit` ways), as the start index of each run. */
+function cutsInto(n: number, k: number, limit = 5000): number[][] {
+  const out: number[][] = [];
+  const go = (starts: number[]) => {
+    if (out.length >= limit) return;
+    if (starts.length === k) {
+      out.push(starts);
+      return;
+    }
+    const last = starts[starts.length - 1];
+    const left = k - starts.length;
+    for (let s = last + 1; s <= n - left; s++) go([...starts, s]);
+  };
+  if (k >= 1 && k <= n) go([0]);
+  return out;
+}
+
+/** Orders of `n` categories to try against `n` pieces in axis order: the
+ *  stated order (identity) when `fixed`, else every permutation whose sizes
+ *  fit. order[pi] is the category of piece pi. */
+function* orders(
+  n: number,
+  fixed: boolean,
+  fits: (piece: number, cat: number) => boolean
+): Generator<number[]> {
+  if (fixed) {
+    const id = Array.from({ length: n }, (_, i) => i);
+    if (id.every((ci, pi) => fits(pi, ci))) yield id;
+    return;
+  }
+  const used = new Set<number>();
+  const perm: number[] = [];
+  function* go(pi: number): Generator<number[]> {
+    if (pi === n) {
+      yield [...perm];
+      return;
+    }
+    for (let ci = 0; ci < n; ci++) {
+      if (used.has(ci) || !fits(pi, ci)) continue;
+      used.add(ci);
+      perm.push(ci);
+      yield* go(pi + 1);
+      perm.pop();
+      used.delete(ci);
+    }
+  }
+  yield* go(0);
+}
+
+type MosaicSplit =
+  | { ok: true; leaves: { cat: string; mark: Mark }[] }
+  | { ok: false; why: string; depth: number };
+
+/** Split one mosaic cell (its leaf rects and its data rows) at `level` and
+ *  below; see the `mosaic` check. On failure, reports the deepest level any
+ *  attempt reached, since that is the most informative reason. */
+function splitMosaic(
+  leaves: Mark[],
+  rows: Row[],
+  levels: MosaicLevel[],
+  level: number,
+  value: string,
+  tol: number,
+  path: string
+): MosaicSplit {
+  const where = path || "the chart";
+  const fail = (why: string, depth = level): MosaicSplit => ({
+    ok: false,
+    why: `${where}: ${why}`,
+    depth,
+  });
+  const L = levels[level];
+  const xDir = L.dir === "x";
+  const a = (m: Mark) => (xDir ? m.x : m.y);
+  const b = (m: Mark) => (xDir ? m.x + m.w : m.y + m.h);
+  const pa = (m: Mark) => (xDir ? m.y : m.x);
+  const pb = (m: Mark) => (xDir ? m.y + m.h : m.x + m.w);
+  const cats = uniqueInOrder(rows, L.by)
+    .map((name) => {
+      const mine = rows.filter((r) => String(r[L.by]) === name);
+      return {
+        name,
+        rows: mine,
+        sum: mine.reduce((s, r) => s + num(r[value]), 0),
+      };
+    })
+    .filter((cat) => cat.sum > 0);
+  const total = cats.reduce((s, cat) => s + cat.sum, 0);
+  // The finest split along the axis: runs of leaves that no leaf crosses.
+  const atoms: Mark[][] = [];
+  let reach = -Infinity;
+  for (const m of [...leaves].sort((p, q) => a(p) - a(q))) {
+    if (atoms.length === 0 || a(m) >= reach - 1) atoms.push([m]);
+    else atoms[atoms.length - 1].push(m);
+    reach = Math.max(reach, b(m));
+  }
+  if (atoms.length < cats.length)
+    return fail(
+      `splits into ${atoms.length} pieces along ${L.dir}, expected ${cats.length} (one per ${L.by})`
+    );
+  const ext = (
+    ms: Mark[],
+    lo: (m: Mark) => number,
+    hi: (m: Mark) => number
+  ): [number, number] => [Math.min(...ms.map(lo)), Math.max(...ms.map(hi))];
+  const [p0, p1] = ext(leaves, pa, pb);
+  const [c0, c1] = ext(leaves, a, b);
+  const slack = tol * (c1 - c0) + 1;
+  const pslack = tol * (p1 - p0) + 1;
+  const from = L.from ?? "any";
+  // Screen coordinates grow right and down, so a first category at the
+  // right or bottom means reading the pieces backwards.
+  const backwards = from === "right" || from === "bottom";
+  let deepest: MosaicSplit | null = null;
+  const keep = (r: MosaicSplit) => {
+    if (!r.ok && (!deepest || (!deepest.ok && r.depth > deepest.depth)))
+      deepest = r;
+  };
+  for (const starts of cutsInto(atoms.length, cats.length)) {
+    let pieces = starts.map((s, i) =>
+      atoms.slice(s, starts[i + 1] ?? atoms.length).flat()
+    );
+    if (backwards) pieces = pieces.reverse();
+    const sizes = pieces.map((p) => {
+      const [lo, hi] = ext(p, a, b);
+      return hi - lo;
+    });
+    const sizeSum = sizes.reduce((s, x) => s + x, 0);
+    const full = pieces.every((p) => {
+      const [q0, q1] = ext(p, pa, pb);
+      return Math.abs(q0 - p0) <= pslack && Math.abs(q1 - p1) <= pslack;
+    });
+    if (!full) {
+      keep(
+        fail(
+          `the pieces along ${L.dir} do not all span the cell's full ${xDir ? "height" : "width"}`
+        )
+      );
+      continue;
+    }
+    // Sizes are compared as shares of the pieces' summed length, so gaps
+    // between pieces do not count.
+    const fits = (pi: number, ci: number) =>
+      Math.abs(sizes[pi] - (cats[ci].sum / total) * sizeSum) <= slack;
+    let any = false;
+    for (const order of orders(cats.length, from !== "any", fits)) {
+      any = true;
+      const out: { cat: string; mark: Mark }[] = [];
+      let bad: MosaicSplit | null = null;
+      for (let pi = 0; pi < pieces.length && !bad; pi++) {
+        const cat = cats[order[pi]];
+        const sub = `${path ? `${path} > ` : ""}${cat.name}`;
+        if (level === levels.length - 1) {
+          if (pieces[pi].length === 1)
+            out.push({ cat: cat.name, mark: pieces[pi][0] });
+          else
+            bad = {
+              ok: false,
+              why: `${sub}: ${pieces[pi].length} rects where one was expected`,
+              depth: level + 1,
+            };
+        } else {
+          const r = splitMosaic(
+            pieces[pi],
+            cat.rows,
+            levels,
+            level + 1,
+            value,
+            tol,
+            sub
+          );
+          if (r.ok) out.push(...r.leaves);
+          else bad = r;
+        }
+      }
+      if (!bad) return { ok: true, leaves: out };
+      keep(bad);
+    }
+    if (!any) {
+      const want = cats
+        .map((cat) => `${cat.name} ${((100 * cat.sum) / total).toFixed(1)}%`)
+        .join(", ");
+      const got = sizes
+        .map((s) => `${((100 * s) / sizeSum).toFixed(1)}%`)
+        .join(", ");
+      keep(
+        fail(
+          `pieces along ${L.dir}${from !== "any" ? ` from the ${from}` : ""} are [${got}], expected ${L.by} shares [${want}]`
+        )
+      );
+    }
+  }
+  return deepest ?? fail(`no split along ${L.dir} by ${L.by}`);
+}
+
 function checkMosaic(
   c: Extract<Check, { check: "mosaic" }>,
   rec: RenderRecord,
   ctx: CheckContext
 ): CheckResult {
-  const {
-    categories: columns,
-    series: segments,
-    values,
-  } = seriesValues(
-    { category: c.column, series: c.segment, value: c.value },
-    ctx.data
-  );
   const tol = c.tol ?? 0.03;
-  const totals = values.map((row) => row.reduce((a, b) => a + b, 0));
-  const maxTotal = Math.max(...totals);
-  const shares = values.map((row, ci) => row.map((v) => v / totals[ci]));
-  const stacks = stacksOf(barCandidates(rec), "vertical").sort(
-    (a, b) => a.pos - b.pos
-  );
-  const height = (st: Stack) => st.segs.reduce((a, s) => a + s.len, 0);
-  // Does this stack split into category ci's shares (any order)?
-  const splits = (st: Stack, ci: number) => {
-    const h = height(st);
-    const want = shares[ci]
-      .filter((x) => x > 0)
-      .map((x) => x * h)
-      .sort((a, b) => a - b);
-    const got = st.segs.map((s) => s.len).sort((a, b) => a - b);
-    return (
-      want.length === got.length &&
-      want.every((w, i) => Math.abs(w - got[i]) <= tol * h + 1)
-    );
-  };
-  let best = 0;
-  let why = "";
-  const scales = new Set<number>();
-  for (const st of stacks)
-    for (const t of totals)
-      if (t > 0) scales.add(Math.round((st.width / t) * 1e4) / 1e4);
-  for (const k of scales) {
-    const slack = tol * k * maxTotal + 1;
-    const matched: Stack[] = [];
-    let ci = 0;
-    for (const st of stacks) {
+  const last = c.levels[c.levels.length - 1].by;
+  const spec = c.levels.map((l) => `${l.by} (${l.dir})`).join(" > ");
+  const rects = barCandidates(rec).filter((m) => m.w >= 0.5 && m.h >= 0.5);
+  // The mosaic is one cluster of touching (or nearly touching) rects, and
+  // legend swatches sit apart from it. Rects thinner than 1.5px (axis lines
+  // and ticks drawn as rects, but also a mosaic's thinnest cells) do not
+  // join clusters; they count only when inside a cluster's box. Several gap
+  // sizes are tried, since some layouts leave a gap between pieces.
+  const solid = rects.filter((m) => Math.min(m.w, m.h) >= 1.5);
+  const thin = rects.filter((m) => Math.min(m.w, m.h) < 1.5);
+  const groups: Mark[][] = [];
+  for (const gap of [3, 12, 30])
+    for (const g of clusters(solid, gap).slice(0, 4)) {
+      const [x0, x1] = [
+        Math.min(...g.map((m) => m.x)),
+        Math.max(...g.map((m) => m.x + m.w)),
+      ];
+      const [y0, y1] = [
+        Math.min(...g.map((m) => m.y)),
+        Math.max(...g.map((m) => m.y + m.h)),
+      ];
+      const inside = thin.filter(
+        (m) =>
+          m.x >= x0 - 0.5 &&
+          m.x + m.w <= x1 + 0.5 &&
+          m.y >= y0 - 0.5 &&
+          m.y + m.h <= y1 + 0.5
+      );
+      const group = [...g, ...inside];
       if (
-        ci < columns.length &&
-        Math.abs(st.width - k * totals[ci]) <= slack &&
-        splits(st, ci)
-      ) {
-        matched.push(st);
-        ci++;
-      }
+        !groups.some(
+          (o) => o.length === group.length && o.every((m, i) => m === group[i])
+        )
+      )
+        groups.push(group);
     }
-    best = Math.max(best, matched.length);
-    if (matched.length !== columns.length) continue;
-    const h0 = height(matched[0]);
-    if (matched.some((st) => Math.abs(height(st) - h0) > tol * h0 + 1)) {
-      why = `; columns match but differ in height (${matched.map((st) => height(st).toFixed(0)).join(", ")} px)`;
-      continue;
-    }
-    const segs: StackSeg[] = matched.flatMap((st, ci) =>
-      st.segs.map((s) => ({
-        mark: s.mark,
-        fits: new Set(
-          segments
-            .map((_, si) => si)
-            .filter(
-              (si) =>
-                shares[ci][si] > 0 &&
-                Math.abs(s.len - shares[ci][si] * h0) <= tol * h0 + 1
-            )
+  let best: MosaicSplit | null = null;
+  for (const group of groups) {
+    const res = splitMosaic(group, ctx.data, c.levels, 0, c.value, tol, "");
+    if (res.ok) {
+      const names = uniqueInOrder(ctx.data, last);
+      const colors = seriesColorsConsistent(
+        names.map((n) =>
+          res.leaves.filter((l) => l.cat === n).map((l) => l.mark)
         ),
-        stack: ci,
-      }))
-    );
-    if (!assignSeriesByColor(segs, segments.length)) {
-      why =
-        "; columns match but segment colors do not name one segment category each";
-      continue;
+        names
+      );
+      if (!colors.pass) return colors;
+      return {
+        pass: true,
+        detail: `${res.leaves.length} cells match ${spec}, colored by ${last}`,
+      };
     }
-    return {
-      pass: true,
-      detail: `${columns.length} columns x ${segments.length} segments match`,
-    };
+    if (!best || (!best.ok && res.depth > best.depth)) best = res;
   }
   return {
     pass: false,
-    detail: `expected ${columns.length} full-height columns with widths proportional to [${totals.join(", ")}], split by ${c.segment} share; ${stacks.length} stacks found, best matched ${best}${why}`,
+    detail: `no mosaic of ${spec} among ${rects.length} filled rects${best && !best.ok ? `; ${best.why}` : ""}`,
   };
 }
 
@@ -1403,6 +2214,251 @@ function checkRibbons(
   };
 }
 
+function checkRidgeline(
+  c: Extract<Check, { check: "ridgeline" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const tol = c.tol ?? 0.02;
+  const [omin, omax] = c.overlap ?? [1.5, 2.5];
+  const cats = uniqueInOrder(ctx.data, c.category);
+  const series = cats.map((cat) =>
+    ctx.data
+      .filter((r) => String(r[c.category]) === cat)
+      .map((r) => [num(r[c.x]), num(r[c.y])] as [number, number])
+      .sort((a, b) => a[0] - b[0])
+  );
+  const [x0, x1] = extent(series.flat().map((p) => p[0]));
+  const ymax = Math.max(...series.flat().map((p) => p[1]));
+  const areas = rec.marks.filter(
+    (m) =>
+      m.fill &&
+      ink(m) &&
+      m.points &&
+      m.points.length >= 3 &&
+      !isBackground(m, rec)
+  );
+  // How well area `m` draws series `s` above its own baseline (its lowest
+  // edge): the height scale k by least squares, and the worst miss in px.
+  const fitArea = (m: Mark, s: [number, number][]) => {
+    const xs = m.points!.map((p) => p[0]);
+    const [px0, px1] = extent(xs);
+    if (px1 - px0 < 10) return null;
+    const base = Math.max(...m.points!.map((p) => p[1]));
+    const ax = (px1 - px0) / (x1 - x0);
+    const hs: number[] = [];
+    for (const [x] of s) {
+      const t = Math.min(px1 - 0.5, Math.max(px0 + 0.5, px0 + ax * (x - x0)));
+      const cs = crossSection(m, t, true);
+      if (!cs) return null;
+      hs.push(base - cs[0]);
+    }
+    const syy = s.reduce((a, [, y]) => a + y * y, 0);
+    const k = s.reduce((a, [, y], i) => a + y * hs[i], 0) / syy;
+    const miss = Math.max(...s.map(([, y], i) => Math.abs(hs[i] - k * y)));
+    return { base, k, miss, xs: [px0, px1] as [number, number] };
+  };
+  type Fit = NonNullable<ReturnType<typeof fitArea>> & { mark: Mark };
+  const used = new Set<Mark>();
+  const fits: Fit[] = [];
+  for (let ci = 0; ci < cats.length; ci++) {
+    let best: Fit | null = null;
+    for (const m of areas) {
+      if (used.has(m)) continue;
+      const f = fitArea(m, series[ci]);
+      if (!f || f.k <= 0) continue;
+      const slack = Math.max(2, tol * f.k * ymax);
+      if (f.miss <= slack && (!best || f.miss < best.miss))
+        best = { ...f, mark: m };
+    }
+    if (!best)
+      return {
+        pass: false,
+        detail: `no filled area traces ${cats[ci]}'s ${c.y} above a baseline (${areas.length} filled shapes, ${fits.length} ${c.category} matched before it)`,
+      };
+    used.add(best.mark);
+    fits.push(best);
+  }
+  const ks = fits.map((f) => f.k);
+  const kMid = [...ks].sort((a, b) => a - b)[Math.floor(ks.length / 2)];
+  if (ks.some((k) => Math.abs(k - kMid) > 0.05 * kMid))
+    return {
+      pass: false,
+      detail: `every ${c.category} has an area, but their height scales differ (${ks.map((k) => k.toFixed(2)).join(", ")} px per unit)`,
+    };
+  const [ax0, ax1] = fits[0].xs;
+  if (
+    fits.some((f) => Math.abs(f.xs[0] - ax0) > 2 || Math.abs(f.xs[1] - ax1) > 2)
+  )
+    return {
+      pass: false,
+      detail: `the areas do not share one horizontal scale`,
+    };
+  const bases = fits.map((f) => f.base);
+  const steps = bases.slice(1).map((b, i) => b - bases[i]);
+  const pitch = steps.reduce((a, b) => a + b, 0) / Math.max(1, steps.length);
+  if (
+    pitch <= 0 ||
+    steps.some((s) => Math.abs(s - pitch) > Math.max(2, 0.05 * pitch))
+  )
+    return {
+      pass: false,
+      detail: `baselines are not evenly spaced top to bottom in ${c.category} order (steps ${steps.map((s) => s.toFixed(1)).join(", ")} px)`,
+    };
+  const ratio = (kMid * ymax) / pitch;
+  if (ratio < omin || ratio > omax)
+    return {
+      pass: false,
+      detail: `ridges match, but the tallest peak is ${ratio.toFixed(2)} times the baseline spacing (expected ${omin}-${omax})`,
+    };
+  return {
+    pass: true,
+    detail: `${cats.length} ridges, top to bottom, ${pitch.toFixed(1)}px apart, tallest peak ${ratio.toFixed(2)} times the spacing`,
+  };
+}
+
+/** Even-odd point-in-polygon. */
+function insidePolygon(
+  [x, y]: [number, number],
+  poly: [number, number][]
+): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+}
+
+/** The painted points of a filled mark on a 1px grid (pixel centers),
+ *  within `within`: inside its shape (its outline, or its box for a plain
+ *  rect) and inside every clip region it is drawn through. */
+function paintedPixels(m: Mark, within: Box): [number, number][] {
+  const x0 = Math.max(m.x, within.x);
+  const y0 = Math.max(m.y, within.y);
+  const x1 = Math.min(m.x + m.w, within.x + within.w);
+  const y1 = Math.min(m.y + m.h, within.y + within.h);
+  const out: [number, number][] = [];
+  for (let y = Math.floor(y0) + 0.5; y < y1; y++)
+    for (let x = Math.floor(x0) + 0.5; x < x1; x++) {
+      if (x < x0 || y < y0) continue;
+      const p: [number, number] = [x, y];
+      if (m.points && !insidePolygon(p, m.points)) continue;
+      if (
+        m.clip &&
+        !m.clip.every((polys) => polys.some((q) => insidePolygon(p, q)))
+      )
+        continue;
+      out.push(p);
+    }
+  return out;
+}
+
+function checkBottleFill(
+  c: Extract<Check, { check: "bottleFill" }>,
+  rec: RenderRecord,
+  ctx: CheckContext
+): CheckResult {
+  const { labels, values } = barValues(
+    { category: c.category, value: c.value },
+    ctx.data
+  );
+  const tol = c.tol ?? 0.02;
+  const max = c.max ?? 100;
+  // Bottle outlines: stroked, unfilled, closed non-rectangular shapes, all
+  // as tall as the tallest one.
+  const outlines = rec.marks.filter(
+    (m) =>
+      m.kind === "path" &&
+      m.points &&
+      m.stroke &&
+      ink(m) &&
+      (!m.fill || nearWhite(m.fill)) &&
+      m.h >= 20
+  );
+  const tallest = Math.max(0, ...outlines.map((m) => m.h));
+  const bottles = outlines
+    .filter((m) => Math.abs(m.h - tallest) <= 0.05 * tallest + 1)
+    .sort((a, b) => a.x - b.x);
+  if (bottles.length !== labels.length)
+    return {
+      pass: false,
+      detail: `expected ${labels.length} bottle outlines (stroked, unfilled, not rectangles, the same height), found ${bottles.length}`,
+    };
+  const liquids = rec.marks.filter(
+    (m) =>
+      m.kind !== "text" &&
+      m.kind !== "line" &&
+      m.fill &&
+      !nearWhite(m.fill) &&
+      !isBackground(m, rec)
+  );
+  const problems: string[] = [];
+  bottles.forEach((b, i) => {
+    const name = labels[i];
+    const bottom = b.y + b.h;
+    const area: Box = { x: b.x - 3, y: b.y - 3, w: b.w + 6, h: b.h + 6 };
+    const mine = liquids.filter((m) => {
+      const [cx, cy] = [m.x + m.w / 2, m.y + m.h / 2];
+      return (
+        m !== b && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= bottom
+      );
+    });
+    const px = mine.flatMap((m) => paintedPixels(m, area));
+    if (px.length === 0) {
+      problems.push(`${name}: no liquid inside the bottle`);
+      return;
+    }
+    const top = Math.min(...px.map((p) => p[1])) - 0.5;
+    const low = Math.max(...px.map((p) => p[1])) + 0.5;
+    const level = (bottom - top) / b.h;
+    const want = values[i] / max;
+    const edge = Math.max(2, b.strokeWidth) + 1;
+    if (Math.abs(low - bottom) > edge) {
+      problems.push(
+        `${name}: the liquid does not start at the bottle's bottom`
+      );
+      return;
+    }
+    if (Math.abs(level - want) > tol + 1.5 / b.h) {
+      problems.push(
+        `${name}: filled to ${(100 * level).toFixed(1)}% of the bottle's height, expected ${(100 * want).toFixed(1)}%`
+      );
+      return;
+    }
+    const outside = px.filter(
+      (p) => !insidePolygon(p, b.points!) && distToPolyline(p, b.points!) > 1.5
+    );
+    if (outside.length > 0.01 * px.length) {
+      problems.push(
+        `${name}: ${outside.length} of ${px.length} liquid pixels lie outside the bottle's outline`
+      );
+      return;
+    }
+    // Low in the liquid (inside the body), it spans the bottle's width.
+    const y = Math.floor(low - 0.25 * (low - top)) + 0.5;
+    const row = px.filter((p) => p[1] === y).map((p) => p[0]);
+    const span = crossSection(b, y, false);
+    if (
+      span &&
+      (row.length === 0 ||
+        Math.max(...row) - Math.min(...row) + 1 < 0.85 * (span[1] - span[0]))
+    )
+      problems.push(`${name}: the liquid does not fill the bottle's width`);
+  });
+  if (problems.length > 0)
+    return {
+      pass: false,
+      detail: `${labels.length} bottles found, but ${problems.slice(0, 3).join("; ")}${problems.length > 3 ? "; ..." : ""}`,
+    };
+  return {
+    pass: true,
+    detail: `${labels.length} bottles, left to right, filled to [${values.map((v) => `${v}%`).join(", ")}] of their height, inside their outlines`,
+  };
+}
+
 export function runCheck(
   c: Check,
   rec: RenderRecord,
@@ -1419,8 +2475,18 @@ export function runCheck(
       return checkPoints(c, rec, ctx);
     case "lineSeries":
       return checkLineSeries(c, rec, ctx);
+    case "annotation":
+      return checkAnnotation(c, rec, ctx);
+    case "referenceLine":
+      return checkReferenceLine(c, rec, ctx);
     case "wedges":
       return checkWedges(c, rec, ctx);
+    case "pieGlyphs":
+      return checkPieGlyphs(c, rec, ctx);
+    case "ridgeline":
+      return checkRidgeline(c, rec, ctx);
+    case "bottleFill":
+      return checkBottleFill(c, rec, ctx);
     case "textIncludes":
       return checkTextIncludes(c, rec);
     case "distinctColors":

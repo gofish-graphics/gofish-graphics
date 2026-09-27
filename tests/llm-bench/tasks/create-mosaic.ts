@@ -16,7 +16,14 @@ const task: Task = {
     "every column, and include a legend that names each brand. Label each column with its " +
     "region name.",
   checks: [
-    { check: "mosaic", column: "region", segment: "brand", value: "units" },
+    {
+      check: "mosaic",
+      value: "units",
+      levels: [
+        { by: "region", dir: "x", from: "left" },
+        { by: "brand", dir: "y", from: "bottom" },
+      ],
+    },
     {
       check: "textIncludes",
       strings: [

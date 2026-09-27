@@ -501,7 +501,8 @@ function sliceAround(
 }
 
 /** Sample `el` along its outline in container coordinates: one point per
- *  2px of length, at least 24 and at most `maxN`. */
+ *  2px of length, at least 64 (so a small shape, such as a thin slice of a
+ *  20px pie, still has several samples on each side) and at most `maxN`. */
 function samplePoints(
   el: SVGGeometryElement,
   closed: boolean,
@@ -510,7 +511,7 @@ function samplePoints(
 ): Pt[] {
   const len = el.getTotalLength();
   if (!(len > 0)) return [];
-  const n = Math.max(24, Math.min(maxN, Math.round(len / 2)));
+  const n = Math.max(64, Math.min(maxN, Math.round(len / 2)));
   const m = el.getScreenCTM();
   if (!m) return [];
   const pts: Pt[] = [];
@@ -652,6 +653,115 @@ function textOf(el: Element): string {
   return out;
 }
 
+const CLIP_SHAPES = "rect, circle, ellipse, path, polygon, polyline";
+
+/** The id in a `url(#id)` reference, or null. */
+function urlId(ref: string | null | undefined): string | null {
+  return (ref && /url\(\s*["']?#([^"')\s]+)/.exec(ref)?.[1]) || null;
+}
+
+/**
+ * The clip paths and masks `el` is drawn through (its own and its
+ * ancestors'), as regions in container coordinates: one entry per clip or
+ * mask, each a list of polygons (the outlines of the shapes inside it). The
+ * mark shows only where it is inside some polygon of every entry. A mask is
+ * read as the region its light shapes cover (opaque ones for mask-type
+ * alpha); partial luminance counts as showing, and a mask with no light
+ * shape is an empty region. Clip and
+ * mask content is in the user space of the element that references it
+ * (userSpaceOnUse, the default), so each shape's points go through its own
+ * transforms up to the clip element and then through that element's CTM.
+ */
+function clipRegions(
+  el: Element,
+  container: Element,
+  origin: DOMRect
+): Pt[][][] {
+  const out: Pt[][][] = [];
+  for (let e: Element | null = el; e && e !== container; e = e.parentElement) {
+    if (!(e instanceof SVGGraphicsElement)) continue;
+    const cs = getComputedStyle(e);
+    const ids = [
+      urlId(e.getAttribute("clip-path")) ?? urlId(cs.clipPath),
+      urlId(e.getAttribute("mask")) ?? urlId(cs.maskImage),
+    ].filter((id): id is string => !!id);
+    for (const id of ids) {
+      const target =
+        e.ownerSVGElement?.querySelector(`[id="${CSS.escape(id)}"]`) ??
+        document.getElementById(id);
+      const base = e.getScreenCTM();
+      if (!target || !base) continue;
+      const polys: Pt[][] = [];
+      const isMask = target.localName === "mask";
+      const alphaMask = isMask && getComputedStyle(target).maskType === "alpha";
+      for (const shape of Array.from(
+        target.querySelectorAll<SVGGeometryElement>(CLIP_SHAPES)
+      )) {
+        if (isMask) {
+          // A mask shows content where its shapes are light (luminance
+          // mask, the default) or opaque (mask-type: alpha); a black or
+          // transparent shape hides it.
+          const c = parseColor(getComputedStyle(shape).fill);
+          const weight = !c
+            ? 0
+            : alphaMask
+              ? c[3]
+              : (c[3] * (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2])) / 255;
+          if (weight < 0.05) continue;
+        }
+        let m = new DOMMatrix();
+        for (
+          let a: Element | null = shape;
+          a && a !== target;
+          a = a.parentElement
+        ) {
+          const t = (a as SVGGraphicsElement).transform?.baseVal?.consolidate();
+          if (t) m = DOMMatrix.fromMatrix(t.matrix).multiply(m);
+        }
+        const full = DOMMatrix.fromMatrix(base).multiply(m);
+        const len = shape.getTotalLength();
+        if (!(len > 0)) continue;
+        const n = Math.max(64, Math.min(800, Math.round(len / 2)));
+        const pts: Pt[] = [];
+        for (let i = 0; i < n; i++) {
+          const p = shape.getPointAtLength((i * len) / n);
+          const q = full.transformPoint(new DOMPoint(p.x, p.y));
+          pts.push([q.x - origin.left, q.y - origin.top]);
+        }
+        polys.push(thin(simplify(pts, 0.5), 200));
+      }
+      // A mask with no light shape hides everything: an empty region.
+      if (polys.length || isMask) out.push(polys);
+    }
+  }
+  return out;
+}
+
+/** `box` cut down to the bounding box of each clip region, or null when
+ *  nothing of it is left. A box that is flat to begin with (a horizontal or
+ *  vertical line) stays flat, and is kept when it lies inside the region. */
+function clipBox(box: Box, clips: Pt[][][]): Box | null {
+  let [x0, y0, x1, y1] = [box.x, box.y, box.x + box.w, box.y + box.h];
+  for (const polys of clips) {
+    const pts = polys.flat();
+    x0 = Math.max(x0, Math.min(...pts.map((p) => p[0])));
+    y0 = Math.max(y0, Math.min(...pts.map((p) => p[1])));
+    x1 = Math.min(x1, Math.max(...pts.map((p) => p[0])));
+    y1 = Math.min(y1, Math.max(...pts.map((p) => p[1])));
+  }
+  const gone = (lo: number, hi: number, size: number) =>
+    size > 0.05 ? hi - lo <= 0.05 : hi < lo - 0.05;
+  if (gone(x0, x1, box.w) || gone(y0, y1, box.h)) return null;
+  x1 = Math.max(x0, x1);
+  y1 = Math.max(y0, y1);
+  return {
+    x: round1(x0),
+    y: round1(y0),
+    w: round1(x1 - x0),
+    h: round1(y1 - y0),
+  };
+}
+
 function isShown(el: Element): boolean {
   const cs = getComputedStyle(el);
   return cs.display !== "none" && cs.visibility === "visible";
@@ -709,15 +819,26 @@ export function extractRecord(container: HTMLElement): RenderRecord {
     }
     if (!fill && !stroke) continue;
     if (box.w <= 0.05 && box.h <= 0.05) continue;
+    const clips = clipRegions(el, container, origin);
+    const shown = clips.length ? clipBox(box, clips) : box;
+    if (!shown) continue;
     const c = classify(el as SVGGeometryElement, !!fill, box, origin);
     const mark: Mark = {
       kind: c.kind,
       tag: el.localName,
-      ...box,
+      ...shown,
       fill,
       stroke,
       strokeWidth: round1(strokeWidth),
     };
+    if (clips.length) mark.clip = clips;
+    if (stroke) {
+      const dash = (cs.strokeDasharray || "none")
+        .split(/[\s,]+/)
+        .map(parseFloat)
+        .filter((d) => Number.isFinite(d));
+      if (dash.some((d) => d > 0)) mark.dash = dash.map(round1);
+    }
     if (c.points) mark.points = c.points;
     if (c.kind === "line") {
       const pts = samplePoints(el as SVGGeometryElement, false, origin);

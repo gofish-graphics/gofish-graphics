@@ -1,0 +1,14 @@
+[
+  { "month": "Jan", "rain_mm": 78 },
+  { "month": "Feb", "rain_mm": 62 },
+  { "month": "Mar", "rain_mm": 55 },
+  { "month": "Apr", "rain_mm": 47 },
+  { "month": "May", "rain_mm": 39 },
+  { "month": "Jun", "rain_mm": 31 },
+  { "month": "Jul", "rain_mm": 18 },
+  { "month": "Aug", "rain_mm": 22 },
+  { "month": "Sep", "rain_mm": 36 },
+  { "month": "Oct", "rain_mm": 64 },
+  { "month": "Nov", "rain_mm": 88 },
+  { "month": "Dec", "rain_mm": 85 }
+]

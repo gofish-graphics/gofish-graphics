@@ -43,6 +43,15 @@ export interface Mark extends Box {
   fill: RGBA | null;
   stroke: RGBA | null;
   strokeWidth: number;
+  /** The stroke's dash pattern (`stroke-dasharray`, in the element's own
+   *  units), present only when the mark has a stroke and a pattern. */
+  dash?: number[];
+  /** Clip paths and masks the mark is drawn through (its own and its
+   *  ancestors'): one entry per clip or mask, each a list of polygons in
+   *  container coordinates. The mark shows only where it is inside some
+   *  polygon of every entry. The box above is already cut to these regions'
+   *  bounding boxes; `points` and `wedge` describe the unclipped shape. */
+  clip?: [number, number][][][];
   text?: string;
   /** For `line` and `path`, and for a `rect` drawn by anything but a
    *  <rect> element: points sampled along the geometry, in order. */
