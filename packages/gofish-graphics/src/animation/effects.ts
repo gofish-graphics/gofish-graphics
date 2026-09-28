@@ -126,7 +126,7 @@ export type TimedEffect = {
 export type TweenEffect = {
   readonly __tween: true;
   /** How the run is read between keyframes, as for `time.transition`. */
-  readonly curve?: "auto" | "step" | "linear" | "catmullRom";
+  readonly curve?: "auto" | "step" | "linear" | "monotone";
   /** A time warp inside each keyframe interval, resolved. */
   readonly ease?: (u: number) => number;
   layer: () => unknown;

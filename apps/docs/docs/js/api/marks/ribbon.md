@@ -38,22 +38,31 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x",
 ::: gofish-ref ribbon
 :::
 
-`curve` accepts the strings `"linear"` or `"bezier"`, or a `CurveSpec` factory:
-`bezier()`, `orthogonal()`, `arc({ direction: "up" | "down" })`, or
-`perfectArrows({ bow })`. `"linear"` has no factory, because
-[`linear()`](/js/api/coords/linear) is the coordinate transform. The default
-`"auto"` inspects the connection axis: over a homogeneous **continuous** axis (a
-stacked area / streamgraph sampling a continuous variable) it smooths the band
-edges with a Catmull-Rom spline — matching its
+`curve` accepts the strings `"linear"`, `"bezier"`, `"monotone"` or
+`"catmullRom"`, or a `CurveSpec` factory: `bezier()`, `orthogonal()`,
+`arc({ direction: "up" | "down" })`, or `perfectArrows({ bow })`. `"linear"`
+has no factory, because [`linear()`](/js/api/coords/linear) is the coordinate
+transform. The default `"auto"` inspects the connection axis: over a
+homogeneous **continuous** axis (a stacked area / streamgraph sampling a
+continuous variable) it smooths the band edges with `"monotone"` — matching its
 [`line`](/js/api/marks/line) sibling — and otherwise draws a **bezier** band
 (the band equivalent of a straight line: the honest connector between discrete
 regions, as in a sankey or a categorical ribbon).
 
-A smooth ribbon takes the knots of its spline the same way a smooth
+A monotone ribbon takes the knots of its curve the same way a monotone
 [`line`](/js/api/marks/line) does. It uses the values of the field it runs
 along when they are numbers in order along the band. If they are not, it uses
 the positions on a continuous connection axis, and otherwise the distances
 between the points on the screen. Both edges of the band use the same knots.
+
+`"monotone"` is piecewise monotone. Between two neighboring points, each edge
+only rises or only falls, so it never goes past either point. It does not make
+the whole edge monotone: the band still turns where the data turns, and the
+peak sits exactly on the data point. It is the same curve as d3's
+`curveMonotoneX` and Vega-Lite's `interpolate: "monotone"`. `"catmullRom"` is a
+centripetal Catmull-Rom spline through the edge points on the screen. Its knots
+are always the distances between those points, and it can overshoot between
+two of them.
 
 Like [`line`](/js/api/marks/line), `ribbon` has a **bag form** (over a `GoFishRef[]`,
 shown below) and a **pairwise form** `ribbon({ from, to })` over rows whose

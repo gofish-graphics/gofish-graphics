@@ -42,7 +42,7 @@ import {
   time,
   timer,
 } from "../../src/lib";
-import { catmullRomJet } from "../../src/catmullRom";
+import { monotoneJet } from "../../src/spline";
 import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
 
@@ -224,14 +224,14 @@ const PANEL_GAP = 16;
 
 /** How a panel reads the run. `null` is the sequence with nothing layered over
  *  it, which is what the step curve coincides with. */
-type Reading = "step" | "linear" | "catmullRom" | null;
+type Reading = "step" | "linear" | "monotone" | null;
 
 /** The four readings, left to right. */
 const CURVES: { caption: string; curve: Reading }[] = [
   { caption: "no transition (sequence alone)", curve: null },
   { caption: "step: hold, then jump", curve: "step" },
   { caption: "linear", curve: "linear" },
-  { caption: "catmullRom (default)", curve: "catmullRom" },
+  { caption: "monotone (default)", curve: "monotone" },
 ];
 
 /** The three-panel cut: the step panel is left out because it is the same
@@ -239,7 +239,7 @@ const CURVES: { caption: string; curve: Reading }[] = [
 const CURVES_THREE: { caption: string; curve: Reading }[] = [
   { caption: "no interpolation", curve: null },
   { caption: "linear", curve: "linear" },
-  { caption: "catmullRom", curve: "catmullRom" },
+  { caption: "monotone", curve: "monotone" },
 ];
 
 /** One panel of the comparison: the same animated scatter, read one way, on a
@@ -410,10 +410,10 @@ type Sample = { t: number; method: string; value: number };
  *
  * Under the SMOOTH reading all three are functions. The position is the
  * spline, the velocity is continuous, and the acceleration is finite but
- * DISCONTINUOUS at the knots — a Catmull-Rom is only C¹ — so each interval is
+ * DISCONTINUOUS at the knots — a monotone cubic is only C¹ — so each interval is
  * sampled just inside its own ends and the intervals are joined by risers,
  * which is what makes the jumps read as jumps rather than as a steep ramp.
- * All three come from `catmullRomJet`, the library's own spline read with its
+ * All three come from `monotoneJet`, the library's own spline read with its
  * derivatives, so the velocity and acceleration are exact derivatives of the
  * very curve the transition above is following.
  */
@@ -467,9 +467,9 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
       // Position and velocity are continuous across a knot, so the shared
       // endpoint is emitted once, by the interval on its left.
       if (i === 0 || s > 0) {
-        const [position, velocity] = catmullRomJet(knots, values, i, u);
-        at("position", "catmullRom", t, position);
-        at("velocity", "catmullRom", t, velocity);
+        const [position, velocity] = monotoneJet(knots, values, i, u);
+        at("position", "monotone", t, position);
+        at("velocity", "monotone", t, velocity);
       }
       // Acceleration has two values at a knot. Sample just inside both ends
       // of the interval instead, which takes the one-sided limits and leaves
@@ -478,9 +478,9 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
         t + (s === 0 ? SPARK_EPS : s === SPARK_PER_INTERVAL ? -SPARK_EPS : 0);
       at(
         "acceleration",
-        "catmullRom",
+        "monotone",
         tA,
-        catmullRomJet(knots, values, i, (tA - knots[i]) / span)[2]
+        monotoneJet(knots, values, i, (tA - knots[i]) / span)[2]
       );
     }
   }
@@ -541,7 +541,7 @@ const sparkRow = (samples: Sample[], clock: any) =>
       sparkSamples(samples)
         // `curve: "linear"` is not a default worth leaning on here, it is
         // the whole point: an omitted curve is `auto`, and `auto` over a
-        // continuous axis smooths with a Catmull-Rom — which would round the
+        // continuous axis smooths with a monotone cubic — which would round the
         // corners off the staircase and turn the impulses into bumps, drawing
         // the smooth reading of a picture whose subject is that the two
         // readings differ. (Here "linear" is the screen-space path shape; it
@@ -731,7 +731,7 @@ const TRAIL_COUNTRIES = [
 const trails = (
   rows: any[],
   clock: any,
-  curve: "linear" | "catmullRom",
+  curve: "linear" | "monotone",
   options: Record<string, unknown> = {}
 ) =>
   chart(
@@ -776,7 +776,7 @@ export const Trails: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    trails(gapminder, year, "catmullRom")
+    trails(gapminder, year, "monotone")
       .layer(yearReadout(year))
       .render(container, { w: args.w, h: args.h, axes: true } as any);
 
@@ -795,7 +795,7 @@ export const TrailsPaused: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = pausedClock(yearRange(gapminder), 10000, 1997.5);
-    trails(gapminder, year, "catmullRom")
+    trails(gapminder, year, "monotone")
       .layer(yearReadout(year))
       .render(container, { w: args.w, h: args.h, axes: true } as any);
 
@@ -807,7 +807,7 @@ export const TrailsPaused: StoryObj<Args> = {
  *  the left, the smooth curve on the right. Each moving dot stays on the tip
  *  of its own line either way, because the line and the transition in a panel
  *  use the same curve. */
-const TRAIL_CURVES = (["linear", "catmullRom"] as const).map((curve) => ({
+const TRAIL_CURVES = (["linear", "monotone"] as const).map((curve) => ({
   caption: curve,
   curve,
 }));

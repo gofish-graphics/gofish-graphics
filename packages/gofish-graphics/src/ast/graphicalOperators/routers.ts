@@ -9,8 +9,8 @@
  *
  * Built-ins below are the *routing* curves (linear / bezier / orthogonal /
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
- * pairwise. Sequence curves that thread the whole point run (catmullRom /
- * monotone / step) are added in a later stage.
+ * pairwise. The sequence curves that thread the whole point run (monotone,
+ * catmullRom) are built by `connect` itself (`isSequenceCurve`).
  *
  * Register a new router with `registerRoute(name, fn)`; look one up with
  * `getRoute(name)`.
@@ -55,7 +55,7 @@ export type Router = (
  *
  * `curve` is the single screen-space path-shaping key on `line`/`ribbon` — it
  * holds both interpolating curves that thread the point sequence (linear,
- * bezier, catmullRom, …) and routing curves that shape the stroke between two
+ * bezier, monotone, catmullRom) and routing curves that shape the stroke between two
  * anchors (orthogonal, arc, perfectArrows). A curve resolves to a `Router`.
  */
 export type CurveSpec = { type: string; options?: Record<string, any> };
@@ -94,14 +94,13 @@ export function hasRoute(name: string): boolean {
 }
 
 /**
- * Sequence curves thread the *whole* run of points as one spline (centripetal
- * Catmull-Rom, and later monotone/step), rather than routing each consecutive
- * pair independently. `connect` builds these from the full center sequence
- * instead of the pairwise router loop. Listed here, not hardcoded at the
- * callsite, so adding monotone/step is a one-line change.
+ * Sequence curves thread the *whole* run of points as one spline (the
+ * monotone cubic, or a centripetal Catmull-Rom), rather than routing each
+ * consecutive pair independently. `connect` builds these from the full center
+ * sequence instead of the pairwise router loop.
  */
 export const isSequenceCurve = (name: string | undefined): boolean =>
-  name === "catmullRom";
+  name === "monotone" || name === "catmullRom";
 
 /** Resolve a `Curve` (string or spec) to its router fn + options. */
 export function resolveCurve(curve: Curve): {
@@ -258,8 +257,9 @@ registerRoute("perfectArrows", perfectArrowsRouter, { ribbon: false });
 // Builder-object idiom (like `polar({…})` / axis / label specs): each returns a
 // serializable `CurveSpec` carrying its own options, so call sites read
 // `line({ curve: orthogonal() })`, `line({ curve: arc({ direction: "down" }) })`.
-// The option-less `"linear"` and `"catmullRom"` have no factory; pass the bare
-// name. (`linear()` is already the Cartesian coordinate transform.)
+// The option-less `"linear"`, `"monotone"` and `"catmullRom"` have no factory;
+// pass the bare name. (`linear()` is already the Cartesian coordinate
+// transform.)
 
 /** Cubic bezier (d3.linkVertical/horizontal convention). */
 export const bezier = (): CurveSpec => ({ type: "bezier" });

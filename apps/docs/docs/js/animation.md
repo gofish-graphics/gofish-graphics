@@ -259,10 +259,13 @@ The knots of the interpolation are the data's own time values. Years five apart
 take five years' worth of the clock, and years ten apart take ten, so an uneven
 run plays at an even speed. Every keyframe is passed through exactly.
 
-`curve` says how the run is read between them. The default, `"auto"`, smooths
-the whole run with a Catmull-Rom spline whose knots are the time values. A
-smooth `line` threaded through the same keyframes also uses the time values as
-its knots, so the moving mark travels exactly along that line. `"linear"`
+`curve` says how the run is read between them. The default, `"auto"`, is
+`"monotone"`: it smooths the whole run with a monotone cubic whose knots are the
+time values. Between two keyframes each value only rises or only falls, so the
+mark never goes past either keyframe. It still turns where the data turns, and
+the turn happens exactly at a keyframe. A monotone `line` threaded through the
+same keyframes also uses the time values as its knots, so the moving mark
+travels exactly along that line. `"linear"`
 moves straight from each keyframe to the next. `"step"` does not move at all:
 the mark holds one keyframe's value until the next keyframe's own time arrives,
 and then jumps.
@@ -298,14 +301,14 @@ gofish(container, { w: 1160, h: 400, legend: false, axes: true }, () =>
   spreadX({ spacing: 16 }, [
     frame({ w: 240, h: 280 }, [panel("step")]),
     frame({ w: 240, h: 280 }, [panel("linear")]),
-    frame({ w: 240, h: 280 }, [panel("catmullRom")]),
+    frame({ w: 240, h: 280 }, [panel("monotone")]),
   ])
 );
 ```
 
 Held halfway between the 1955 and 1960 keyframes, a country's dot sits at its
 1955 position under `"step"`, exactly halfway between the two under `"linear"`,
-and a little off that straight line under `"catmullRom"`, where the spline is
+and a little off that straight line under `"monotone"`, where the curve is
 already bending toward 1965.
 
 `"step"` therefore draws the same picture as no transition at all. A sequence
@@ -561,16 +564,16 @@ yet.
 
 ### `time.transition(options?)`
 
-| Option        | Type                                           | Default    | Meaning                                                         |
-| ------------- | ---------------------------------------------- | ---------- | --------------------------------------------------------------- |
-| `along`       | `string`                                       | inferred   | The field the keyframes are keyed by in time.                   |
-| `at`          | `(() => number) \| number`                     | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
-| `curve`       | `"auto" \| "step" \| "linear" \| "catmullRom"` | `"auto"`   | How the run is read between keyframes.                          |
-| `ease`        | `(u: number) => number`                        | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
-| `fill`        | `string`                                       | keyframe's | Paint for the moving mark.                                      |
-| `stroke`      | `string`                                       | keyframe's | Outline color.                                                  |
-| `strokeWidth` | `number`                                       | keyframe's | Outline width.                                                  |
-| `opacity`     | `number`                                       | keyframe's | Opacity of the moving mark.                                     |
+| Option        | Type                                         | Default    | Meaning                                                         |
+| ------------- | -------------------------------------------- | ---------- | --------------------------------------------------------------- |
+| `along`       | `string`                                     | inferred   | The field the keyframes are keyed by in time.                   |
+| `at`          | `(() => number) \| number`                   | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
+| `curve`       | `"auto" \| "step" \| "linear" \| "monotone"` | `"auto"`   | How the run is read between keyframes.                          |
+| `ease`        | `(u: number) => number`                      | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
+| `fill`        | `string`                                     | keyframe's | Paint for the moving mark.                                      |
+| `stroke`      | `string`                                     | keyframe's | Outline color.                                                  |
+| `strokeWidth` | `number`                                     | keyframe's | Outline width.                                                  |
+| `opacity`     | `number`                                     | keyframe's | Opacity of the moving mark.                                     |
 
 ### `interpolate(rows, options)`
 
@@ -579,13 +582,13 @@ numeric fields evaluated at that moment and `along` set to it. Fields that are
 not numbers are copied from the nearest keyframe, for the same reason a
 transition does not blend paint.
 
-| Option   | Type                                 | Default        | Meaning                                                        |
-| -------- | ------------------------------------ | -------------- | -------------------------------------------------------------- |
-| `along`  | `string`                             | none           | The field the rows are keyed by in time.                       |
-| `key`    | `string`                             | none           | The field saying which rows are the same thing at other times. |
-| `at`     | `number`                             | none           | Where to read the run, in `along`'s units.                     |
-| `method` | `"step" \| "linear" \| "catmullRom"` | `"catmullRom"` | How a run is read between its keyframes.                       |
-| `fields` | `string[]`                           | every number   | Which fields to interpolate.                                   |
+| Option   | Type                               | Default      | Meaning                                                        |
+| -------- | ---------------------------------- | ------------ | -------------------------------------------------------------- |
+| `along`  | `string`                           | none         | The field the rows are keyed by in time.                       |
+| `key`    | `string`                           | none         | The field saying which rows are the same thing at other times. |
+| `at`     | `number`                           | none         | Where to read the run, in `along`'s units.                     |
+| `method` | `"step" \| "linear" \| "monotone"` | `"monotone"` | How a run is read between its keyframes.                       |
+| `fields` | `string[]`                         | every number | Which fields to interpolate.                                   |
 
 ## What is not built yet
 
@@ -597,7 +600,7 @@ marks enter and exit. The value axis cannot rescale from one keyframe to the
 next.
 
 A threaded line can be cut only when each step from one keyframe to the next is
-a single straight or curved segment. The curves `"linear"`, `"bezier"` and
+a single straight or curved segment. The curves `"linear"`, `"bezier"`, `"monotone"` and
 `"catmullRom"` work. The routing curves `orthogonal()`, `arc()` and
 `perfectArrows()` throw an error, and so do a threaded `ribbon` and a threaded
 line pinned with `source` or `target`.

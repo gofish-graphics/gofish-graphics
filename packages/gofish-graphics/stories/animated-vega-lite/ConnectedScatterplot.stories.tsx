@@ -134,7 +134,7 @@ export const Paused1979: StoryObj<Args> = {
  * shows once the playhead reaches its year, which is the moment the line's tip
  * arrives at it, and the line is drawn over the same window as the dots it
  * connects. The line's curve is left to its default, which smooths the run
- * with a Catmull-Rom spline, so this is also the cut inside a curve.
+ * with a monotone cubic, so this is also the cut inside a curve.
  */
 const withDots = (clock: Clock) =>
   years(clock)

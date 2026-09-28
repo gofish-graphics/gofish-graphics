@@ -1,5 +1,5 @@
 import { Path, transformPath } from "../../path";
-import { catmullRomPath, centripetalKnots } from "../../catmullRom";
+import { catmullRomPath, centripetalKnots, monotonePath } from "../../spline";
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, type ToPixel } from "../_node";
@@ -138,10 +138,13 @@ const samePoint = (p: [number, number], q: [number, number]): boolean =>
 /**
  * A candidate parameter of a run, as the knots of its curve: one value per
  * operand in path order, which is a parameter of the run when every value is a
- * finite number and the values move one way along it. A run that moves
- * backward in its parameter is the same curve with the parameter negated, as
- * a Catmull-Rom is unchanged by an affine change of its knots. Undefined when
- * the values are not a parameter of the run.
+ * finite number and the values move strictly one way along it. A run that
+ * moves backward in its parameter is the same curve with the parameter
+ * negated, as the monotone cubic is unchanged by an affine change of its
+ * knots: scaling the knots by `a` scales every slope by `1/a`, and the limits
+ * on a slope (a minimum of absolute values, and the signs of its neighbors)
+ * treat a negated slope the same way as the original. Undefined when the
+ * values are not a parameter of the run, including when two of them are equal.
  */
 function runKnots(
   values: readonly unknown[] | undefined
@@ -384,8 +387,8 @@ export const connect = createNodeOperator(
                 return s !== undefined && isPOSITION(s);
               }));
 
-          // Resolve the curve. An omitted/`"auto"` curve smooths with a
-          // Catmull-Rom spline over a continuous connection axis, for BOTH
+          // Resolve the curve. An omitted/`"auto"` curve smooths with the
+          // monotone cubic over a continuous connection axis, for BOTH
           // lines and ribbons: a stacked area should curve like its
           // line-chart sibling. Otherwise it falls back to the mode's
           // always-drawable discrete connector: a *line* (center) is a
@@ -398,13 +401,13 @@ export const connect = createNodeOperator(
           const resolvedCurve: Curve = !isAuto
             ? (curve as Curve)
             : continuousConnectionAxis()
-              ? "catmullRom"
+              ? "monotone"
               : mode === "center"
                 ? "linear"
                 : "bezier";
           const resolvedCurveName = curveNameOf(resolvedCurve);
           // Edge ("ribbon") mode: bezier = S-curve band (discrete regions),
-          // catmullRom = smoothed band over a continuous axis, else linear band.
+          // monotone / catmullRom = smoothed band, else linear band.
           const edgeBezier = resolvedCurveName === "bezier";
 
           // Anchor mode: connect normalized points on each endpoint's bbox.
@@ -509,9 +512,9 @@ export const connect = createNodeOperator(
             }
           }
 
-          // `catmullRom` is a *sequence* curve — it threads the whole run of
-          // points as one Catmull-Rom spline, bypassing the pairwise router
-          // loop. A line (center) threads its centers; a ribbon (edge) threads
+          // `monotone` and `catmullRom` are *sequence* curves — each threads
+          // the whole run of points as one spline, bypassing the pairwise
+          // router loop. A line (center) threads its centers; a ribbon (edge) threads
           // BOTH facing boundaries of the band — forward along the near edge, a
           // cap across, back along the far edge — so a continuous stacked area
           // curves like its line-chart sibling.
@@ -526,42 +529,57 @@ export const connect = createNodeOperator(
             const mains = childPlaceables.map(
               (c) => centerPoint(c.dims)[mainAxis]
             );
-            // The knots are the run's own parameter when it has one (#635),
-            // so the curve follows the data rather than the distances between
-            // its points on screen. A line through a sequence's keyframes
-            // uses their times, which are what it is cut by, so the cut and
-            // the curve agree. Otherwise the connection variable's values
-            // (the flow tier the run threads, e.g. `along: "year"`), read
-            // only here; else the operands' positions on the connection axis
-            // when that axis is continuous (a line chart over x). A run with
-            // none of these is threaded with centripetal knots.
+            // The monotone cubic's knots are the run's own parameter when it
+            // has one (#635), so the curve follows the data rather than the
+            // distances between its points on screen. A line through a
+            // sequence's keyframes uses their times, which are what it is cut
+            // by and what a transition reads it at, so the cut, the moving
+            // mark and the curve agree. Otherwise the connection variable's
+            // values (the flow tier the run threads, e.g. `along: "year"`),
+            // read only here; else the operands' positions on the connection
+            // axis when that axis is continuous (a line chart over x). A run
+            // with none of these has no parameter of its own, so it is
+            // threaded with centripetal knots, and its curve then depends on
+            // where the points sit on screen.
             //
             // The spline is evaluated here, in layout space, before any
             // coordinate transform. That equals evaluating it in data space
             // and placing the result because every position scale is affine,
-            // and a Catmull-Rom with fixed knots commutes with an affine map
-            // of its points. A non-affine position scale (log, pow) would
+            // and the monotone cubic with fixed knots commutes with an affine
+            // map of each channel: scaling a channel scales its slopes, and
+            // negating it negates them, since the limits on a slope are
+            // symmetric in sign. A non-affine position scale (log, pow) would
             // need the spline evaluated upstream of the scale instead.
+            //
+            // `catmullRom` is a screen-space shape: its knots are always
+            // centripetal (`catmullRomPath`), whatever parameter the run has.
+            // Nothing reads it over time. A transition along the same run
+            // reads the monotone cubic, so its moving mark can sit slightly
+            // off a Catmull-Rom line (a known gap, left open on purpose).
             const knots =
-              runKnots(timeKnots) ??
-              (along === undefined
+              resolvedCurveName === "catmullRom"
                 ? undefined
-                : runKnots(children.map((c) => projectBy(c, along)))) ??
-              (continuousConnectionAxis() ? runKnots(mains) : undefined);
+                : (runKnots(timeKnots) ??
+                  (along === undefined
+                    ? undefined
+                    : runKnots(children.map((c) => projectBy(c, along)))) ??
+                  (continuousConnectionAxis() ? runKnots(mains) : undefined));
             // `knots` is in operand order; a path drawn back along the run
             // (a ribbon's far edge) reads them backward and negated.
             const thread = (
               points: [number, number][],
               backward = false
             ): Path =>
-              catmullRomPath(
-                points,
-                knots === undefined
-                  ? centripetalKnots(points)
-                  : backward
-                    ? knots.map((k) => -k).reverse()
-                    : knots
-              );
+              resolvedCurveName === "catmullRom"
+                ? catmullRomPath(points)
+                : monotonePath(
+                    points,
+                    knots === undefined
+                      ? centripetalKnots(points)
+                      : backward
+                        ? knots.map((k) => -k).reverse()
+                        : knots
+                  );
             if (mode === "center") {
               const centers = childPlaceables.map((c) => centerPoint(c.dims));
               const threaded = thread(centers);
@@ -797,7 +815,8 @@ export const connect = createNodeOperator(
                   `the exact point in data time. That cut needs each step ` +
                   `from one keyframe to the next to be ONE straight or cubic ` +
                   `segment between the keyframes' centers, which "linear", ` +
-                  `"bezier" and "catmullRom" (the default) draw and ` +
+                  `"bezier", "monotone" (the default) and "catmullRom" ` +
+                  `draw and ` +
                   `"${resolvedCurveName}" does not. Use one of those, or ` +
                   `open an issue for "${resolvedCurveName}".`
               );

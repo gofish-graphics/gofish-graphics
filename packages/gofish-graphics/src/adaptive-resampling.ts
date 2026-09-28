@@ -11,7 +11,7 @@
  */
 
 import { CoordinateTransform } from "./ast/coordinateTransforms/coord";
-import { catmullRomPath, centripetalKnots } from "./catmullRom";
+import { catmullRomPath } from "./spline";
 import {
   Path,
   PathSegment,
@@ -240,9 +240,7 @@ export function adaptiveResamplePath(
     // Thread this segment's points with a centripetal Catmull-Rom (within
     // this segment only). This preserves boundaries - no smoothing across
     // segments
-    outputSegments.push(
-      ...catmullRomPath(segmentPoints, centripetalKnots(segmentPoints))
-    );
+    outputSegments.push(...catmullRomPath(segmentPoints));
   }
 
   return outputSegments;

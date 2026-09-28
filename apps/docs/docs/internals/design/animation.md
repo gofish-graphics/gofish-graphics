@@ -626,8 +626,8 @@ One slice of §5's table exists: the `time` namespace
   Nothing coordinates the two — a transition emits nothing at all for the
   keyframes it takes over, and a node with no items has nothing to patch.
 - Interpolation (`src/interpolate.ts`) runs over the operands' resolved
-  geometry with **knots at the data's own time values**, linear or non-uniform
-  Catmull-Rom (Barry-Goldman). That is the §4.2 note taken literally: the
+  geometry with **knots at the data's own time values**: step, linear, or the
+  monotone cubic (Steffen). That is the §4.2 note taken literally: the
   parameterization is the data's, not chord length, so an uneven run of years
   plays at an even speed. On a fixed-domain scatter the σ-affine commutativity
   of §4.1 holds exactly, and the rendered dot matches the data-space

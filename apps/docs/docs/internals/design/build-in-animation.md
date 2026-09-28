@@ -694,7 +694,8 @@ Level 3 should run on current main. By our reading of the code (not yet run),
 it draws an exact staggered grow at constant speed, stacks included, because
 every keyframe is a true layout and each ramp is a straight line between
 keyframes. It needs `curve: "linear"`, because the default Catmull-Rom curve
-overshoots at the corners of each ramp, and it needs `loop: false`. It cannot
+overshoots at the corners of each ramp, and it needs `loop: false`. (Since
+#902 the default is monotone, which does not overshoot.) It cannot
 give each bar its own ease except by adding more rows. That makes it a good
 reference render to check level 0 against.
 

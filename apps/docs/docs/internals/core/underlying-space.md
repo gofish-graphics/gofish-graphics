@@ -258,7 +258,7 @@ when you want the axis a set of siblings is arranged on rather than each
 sibling's own size. Its first consumer is the connector's `curve: "auto"`: a
 `line` / `ribbon` reads the underlying space its endpoints resolved to and, when
 that space is a _positioning_ one whose measure is continuous, smooths the path
-(a Catmull–Rom spline) instead of drawing straight segments — so a line over
+(the monotone cubic) instead of drawing straight segments — so a line over
 a continuous x auto-curves while one over discrete categories stays polylinear.
 The same test picks the spline's knots when the run has no parameter of its
 own (the times of the keyframes a line threads, or the path tier's key,

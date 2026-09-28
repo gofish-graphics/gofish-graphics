@@ -297,7 +297,7 @@ async function main(): Promise<void> {
     /** Each year's mark is a white dot kept once reached (the trail) and a
      *  red dot that glides from year to year (the head), with a line layered
      *  over the year marks. The head is the only red dot. */
-    const trail = (at: number, curve: "linear" | "catmullRom" | "step") =>
+    const trail = (at: number, curve: "linear" | "monotone" | "step") =>
       keyframes(rows, at)
         .mark(
           layer([
@@ -348,8 +348,8 @@ async function main(): Promise<void> {
     }
     for (const at of [1956.5, 1958.7, 1963, 1966, 1970.25, 1983, 2000.9]) {
       ok(
-        `catmullRom at ${at}: one moving dot, on the line's tip`,
-        onTip(await trail(at, "catmullRom"))
+        `monotone at ${at}: one moving dot, on the line's tip`,
+        onTip(await trail(at, "monotone"))
       );
     }
     const stepped = await trail(1979.25, "step");
@@ -702,7 +702,7 @@ async function main(): Promise<void> {
       circle({ r: 4, fill }).transition({ update });
     const alone = async (curve: string) =>
       (await headsAt(head("red", animation.tween({ curve })))).red[0];
-    const [linear, smooth] = [await alone("linear"), await alone("catmullRom")];
+    const [linear, smooth] = [await alone("linear"), await alone("monotone")];
 
     const shared = animation.tween({ curve: "linear" });
     const both = await headsAt(
@@ -719,7 +719,7 @@ async function main(): Promise<void> {
     const two = await headsAt(
       layer([
         head("red", animation.tween({ curve: "linear" })),
-        head("blue", animation.tween({ curve: "catmullRom" })),
+        head("blue", animation.tween({ curve: "monotone" })),
       ])
     );
     ok(
@@ -821,6 +821,31 @@ async function main(): Promise<void> {
       why
     );
   }
+  // Two rows of one run at one year: the moving mark has nowhere to be then,
+  // so the transition says so, and says to aggregate. Upstream, interpolate()
+  // makes the same reading of the same rows and says the same thing.
+  const doubled = [
+    ...drivingShifts.slice(0, 5),
+    { ...drivingShifts[2], miles: drivingShifts[2].miles + 100 },
+  ];
+  why = await throws(
+    () =>
+      keyframes(doubled, 1958.5)
+        .mark(circle({ r: 4 }))
+        .layer(time.transition())
+        .toDisplayList(OPTIONS),
+    /time\.transition\(\): the run has two rows at year = 1958\b.*Aggregate/
+  );
+  ok("a transition over two rows at one year", !why, why);
+  why = await throws(
+    async () =>
+      interpolate(
+        doubled.map((d: any) => ({ ...d, key: "us" })),
+        { along: "year", key: "key", at: 1958.5 }
+      ),
+    /interpolate\(\): the run for "us" has two rows at year = 1958\b.*Aggregate/
+  );
+  ok("interpolate() over two rows at one year", !why, why);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

@@ -761,7 +761,8 @@ export type LineOptions = {
   mixBlendMode?: "normal" | "multiply";
   // Screen-space path shape, as a factory call (`bezier()`, `orthogonal()`,
   // `arc({ direction })`, `perfectArrows({ bow })`, …) or a bare name
-  // (`"linear"` | `"bezier"` | `"catmullRom"`). The single path-shaping key.
+  // (`"linear"` | `"bezier"` | `"monotone"` | `"catmullRom"`). The single
+  // path-shaping key.
   curve?: Curve;
   dir?: "x" | "y";
   // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
@@ -805,7 +806,7 @@ export const line = createRelationalMark<LineOptions>(
         strokeDasharray: o.strokeDasharray,
         opacity: o.opacity,
         mixBlendMode: o.mixBlendMode,
-        // Omitted ⇒ "auto": connect smooths (catmullRom) when the connected
+        // Omitted ⇒ "auto": connect smooths (monotone) when the connected
         // points share a continuous connection axis, else a straight line.
         curve: o.curve,
         source: o.source,
@@ -860,7 +861,7 @@ export const ribbon = createRelationalMark<RibbonOptions>(
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
         opacity: o.opacity,
-        // Omitted ⇒ "auto": a smooth (catmullRom) band over a continuous
+        // Omitted ⇒ "auto": a smooth (monotone) band over a continuous
         // connection axis, else a bezier band.
         curve: o.curve,
         along: inferred.along,

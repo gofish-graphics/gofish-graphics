@@ -38,7 +38,7 @@ import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
-import type { InterpolationMethod } from "../../interpolate";
+import { repeatedKnot, type InterpolationMethod } from "../../interpolate";
 import {
   historiesIn,
   historyOf,
@@ -335,15 +335,17 @@ export type TransitionOptions = {
    *  Read at PAINT time: a moving value patches the mark's attributes rather
    *  than re-resolving the chart. A plain number holds it still. */
   at?: (() => number) | number;
-  /** How the run is read between keyframes. `"auto"` smooths a numeric time
-   *  field with a Catmull-Rom through the whole run — the temporal reading of
-   *  `connect`'s auto rule, with the time values as its knots, which is the
-   *  curve a smooth `line` threaded through the same keyframes draws.
-   *  `"linear"` moves straight from each
-   *  keyframe to the next. `"step"` does not move between them at all: the
-   *  mark holds one keyframe's value until the next keyframe's own time
-   *  arrives, and then jumps — the same picture the keyframes alone draw. */
-  curve?: "auto" | "step" | "linear" | "catmullRom";
+  /** How the run is read between keyframes. `"auto"` is `"monotone"`: a
+   *  numeric time field is smoothed with a monotone cubic through the whole
+   *  run — the temporal reading of `connect`'s auto rule, with the time
+   *  values as its knots, which is the curve a smooth `line` threaded through
+   *  the same keyframes draws. Between two keyframes each channel only rises
+   *  or only falls, so the mark never goes past either of them. `"linear"`
+   *  moves straight from each keyframe to the next. `"step"` does not move
+   *  between them at all: the mark holds one keyframe's value until the next
+   *  keyframe's own time arrives, and then jumps — the same picture the
+   *  keyframes alone draw. */
+  curve?: "auto" | "step" | "linear" | "monotone";
   /** Time warp inside one keyframe interval, `u -> u'` on `[0, 1]`. */
   ease?: (u: number) => number;
   fill?: MaybeValue<string>;
@@ -441,10 +443,18 @@ export const transition = createRelationalMark<TransitionOptions>(
     // from the last keyframe to the first, and a smooth curve has neighbors
     // on both sides of it. Every copy of a keyframe is the same operand.
     const cycle = onSequence ? tier!.cycle() : undefined;
-    const run = unrollOrder(
-      children.map((child) => knotOf(child, by)),
-      cycle
+    const times = children.map((child) => knotOf(child, by));
+    // One mark per moment: two keyframe marks of one run at one time leave
+    // nowhere for the moving mark to be then.
+    repeatedKnot(
+      [...times].sort((a, b) => a - b),
+      "time.transition()",
+      by,
+      typeof inferred.by === "string" && children.length > 0
+        ? projectPath([children[0]], inferred.by)
+        : undefined
     );
+    const run = unrollOrder(times, cycle);
     // The keyframes the run's knots are drawn from, so the tween can tell a
     // gap in the run from a step between neighbors. Only the sequence's own
     // field has them; a transition along some other field, or with no
@@ -482,8 +492,7 @@ export const transition = createRelationalMark<TransitionOptions>(
  *  and the reason a transition traces the curve a smooth threaded line
  *  draws. */
 function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
-  if (curve === "step") return "step";
-  return curve === "linear" ? "linear" : "catmullRom";
+  return curve === undefined || curve === "auto" ? "monotone" : curve;
 }
 
 /**

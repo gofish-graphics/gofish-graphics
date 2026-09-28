@@ -1,25 +1,27 @@
 /**
  * Interpolation over a run of keyframes, with knots at DATA parameter values.
  *
- * `line` threads a run of placed points with the same Catmull-Rom spline
- * (`catmullRom.ts`), but with centripetal knots, because a run of points on
- * screen carries no parameter of its own. A transition instead evaluates the
- * run at one parameter value — the clock's — and the parameter is the data's
- * own time field (`year`), not an accumulated distance. So the knots here are
- * the data values, and nothing is reparameterized: two keyframes ten years
- * apart take ten years' worth of the clock, whatever the distance between
- * them on screen.
+ * A transition evaluates a run at one parameter value — the clock's — and the
+ * parameter is the data's own time field (`year`), not a distance on screen.
+ * So the knots here are the data values, and nothing is reparameterized: two
+ * keyframes ten years apart take ten years' worth of the clock, whatever the
+ * distance between them on screen. A smooth `line` threaded through the same
+ * keyframes draws the same monotone cubic (`spline.ts`) over the same knots.
  *
- * Both methods are pure functions of `(knots, values, t)`. `knots` must be
+ * Every method is a pure function of `(knots, values, t)`. `knots` must be
  * sorted ascending and the same length as `values`; the caller sorts once and
  * reuses the ordering for every channel it interpolates (x, y, width, height).
+ * Two knots at one value are read as d3 reads them (a jump), but a keyed run
+ * of rows never gets that far: `interpolate()` and `time.transition()` reject
+ * it (`repeatedKnot`), since the run has no one value at that moment.
  */
 
-import { catmullRomAt, catmullRomCubics, cubicAt } from "./catmullRom";
+import { cubicAt, monotoneAt, monotoneCubics } from "./spline";
 import { lerp } from "./util";
 
-/** How a run is read between its knots. */
-export type InterpolationMethod = "step" | "linear" | "catmullRom";
+/** How a run is read between its knots. These are readings of values over a
+ *  parameter; the screen-space Catmull-Rom a `line` can draw is not one. */
+export type InterpolationMethod = "step" | "linear" | "monotone";
 
 /** Where `t` falls in a run: the segment index and the local fraction in it. */
 export type KnotLocation = { i: number; u: number };
@@ -41,6 +43,33 @@ export function locate(knots: number[], t: number): KnotLocation {
   // Two keyframes at the SAME time value (duplicate rows for one year) would
   // divide by zero; treat the pair as an instantaneous jump to the later one.
   return { i, u: span === 0 ? 1 : (t - knots[i]) / span };
+}
+
+/**
+ * Check that a run of one key's rows has one row per moment: `knots` sorted
+ * ascending, and none of them repeated. Two rows of one key at one value of
+ * the ordering field leave no answer to "where is it at that moment?", so this
+ * throws, naming the key and the value. `where` names the caller, `field` the
+ * ordering field and `key` the key's value (undefined when the run is the
+ * whole chart's).
+ */
+export function repeatedKnot(
+  knots: number[],
+  where: string,
+  field: string,
+  key: unknown
+): void {
+  for (let i = 1; i < knots.length; i++) {
+    if (knots[i] !== knots[i - 1]) continue;
+    const who =
+      key === undefined ? "the run" : `the run for ${JSON.stringify(key)}`;
+    throw new Error(
+      `[gofish] ${where}: ${who} has two rows at ${field} = ${knots[i]}, so ` +
+        `there is no one place it is at that moment. Aggregate to one row ` +
+        `per ${field} first; for example, scatter({ by, x, y }) places each ` +
+        `group at the mean of its rows.`
+    );
+  }
 }
 
 /** Piecewise-linear evaluation: the value moves at a constant rate between
@@ -72,23 +101,23 @@ export function interpolateStep(
 }
 
 /**
- * Non-uniform Catmull-Rom evaluation: the value follows a smooth spline that
- * passes through every keyframe, with each segment parameterized by the knots
+ * Monotone cubic evaluation: the value follows a smooth curve that passes
+ * through every keyframe, with each segment parameterized by the knots
  * themselves rather than by a uniform 0..1. That is what makes an uneven run
  * of years (1952, 1957, 1962, …, 2007 with a gap) play at an even speed
  * instead of racing through the short intervals.
  *
- * The spline is `catmullRom.ts`'s, the same one `line` draws. At the two ends
- * it keeps the end interval's own slope, so a run that changes at a constant
- * rate is read at that rate all the way through, and a run of two keyframes
- * is a straight line.
+ * The curve is `spline.ts`'s monotone cubic, the one a smooth `line` draws.
+ * Between two keyframes it only rises or only falls, so it never goes past
+ * either of them, and where the run turns it turns on the keyframe. A run of
+ * two keyframes is a straight line.
  */
-export function interpolateCatmullRom(
+export function interpolateMonotone(
   knots: number[],
   values: number[],
   t: number
 ): number {
-  return interpolateRun(knots, values, t, "catmullRom");
+  return interpolateRun(knots, values, t, "monotone");
 }
 
 /** Evaluate one channel of a keyframe run at `t`. */
@@ -121,7 +150,7 @@ export function interpolateAt(
     return u >= 1 ? values[i + 1] : values[i];
   }
   if (method === "linear") return lerp(values[i], values[i + 1], u);
-  return catmullRomAt(knots, values, i, u);
+  return monotoneAt(knots, values, i, u);
 }
 
 /**
@@ -140,10 +169,10 @@ export function channelReader(
     const held = knots.length === 0 ? NaN : values[0];
     return () => held;
   }
-  if (method !== "catmullRom") {
+  if (method !== "monotone") {
     return (at) => interpolateAt(knots, values, at, method);
   }
-  const cubics = catmullRomCubics(knots, values);
+  const cubics = monotoneCubics(knots, values);
   return ({ i, u }) => cubicAt(cubics, i, u);
 }
 
@@ -187,7 +216,7 @@ export type InterpolateOptions = {
   key: string;
   /** Where to read the run, in `along`'s units. */
   at: number;
-  /** How a run is read between its keyframes. Default `"catmullRom"`, the
+  /** How a run is read between its keyframes. Default `"monotone"`, the
    *  same default `time.transition()` takes for the same reason (the field is
    *  numeric, so the run is a sample of something continuous). `"step"` does
    *  not blend at all: each keyframe's values hold until the next one's time
@@ -219,7 +248,7 @@ export type InterpolateOptions = {
  */
 export function interpolate<T extends Record<string, unknown>>(
   rows: readonly T[],
-  { along, key, at, method = "catmullRom", fields }: InterpolateOptions
+  { along, key, at, method = "monotone", fields }: InterpolateOptions
 ): Record<string, unknown>[] {
   // Key order is first appearance, so the output is a deterministic function
   // of the input rather than of a hash's iteration order.
@@ -236,6 +265,7 @@ export function interpolate<T extends Record<string, unknown>>(
           `whose "${along}" is not one.`
       );
     }
+    repeatedKnot(knots, "interpolate()", along, k);
 
     // Which fields get blended. Every field of the run is considered so a
     // column that only some rows carry still comes out.

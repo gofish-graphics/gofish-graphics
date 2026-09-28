@@ -40,10 +40,18 @@ line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve = "auto", alo
 :::
 
 When `curve` is omitted (`"auto"`), `line` inspects the connected points. If they
-share a continuous connection axis, it smooths them with a Catmull-Rom spline.
+share a continuous connection axis, it smooths them with `"monotone"`.
 Otherwise it draws a straight polyline.
 
-A smooth line takes the knots of its spline from the data when the data has a
+`"monotone"` is piecewise monotone. Between two neighboring points, each
+coordinate only rises or only falls, so the curve never goes past either point.
+It does not make the whole line monotone. The line still turns where the data
+turns, and the peak sits exactly on the data point. For a path in x and y, such
+as a connected scatterplot, this holds for x and y separately, over the field
+that orders the line. It is the same curve as d3's `curveMonotoneX` and
+Vega-Lite's `interpolate: "monotone"`.
+
+A monotone line takes the knots of its curve from the data when the data has a
 value that orders the line. `line` uses the first of these that it finds:
 
 - The values of the field the line runs along, when they are numbers that only
@@ -54,15 +62,22 @@ value that orders the line. `line` uses the first of these that it finds:
 - The points' positions on the connection axis, when that axis is continuous
   and the points are in order along it, e.g., a line chart over x.
 - The distances between the points on the screen, when neither of the above
-  applies. These are centripetal knots.
+  applies. These are centripetal knots. Two points at the same spot then make
+  a knot interval of zero length, which is an error.
 
-Because the knots come from the data, a line and a
+Because the knots come from the data, a monotone line and a
 [`time.transition()`](/js/animation) through the same points follow the same
-curve. A curve with data knots can rise above a sharp peak or dip below a sharp
-valley between two points. Use `curve: "linear"` when the line has to stay
-between its points.
+curve.
 
-`curve` accepts the strings `"linear"` or `"bezier"`, or a `CurveSpec` factory:
+`"catmullRom"` draws a centripetal Catmull-Rom spline through the points on the
+screen, as d3's `curveCatmullRom` does. Its knots are always the distances
+between the points on the screen, whatever field orders the line. It can
+overshoot between two points. It is not used when values are read over time: a
+`time.transition()` along the same points follows the monotone curve, so its
+moving mark can sit slightly off a Catmull-Rom line.
+
+`curve` accepts the strings `"linear"`, `"bezier"`, `"monotone"` or
+`"catmullRom"`, or a `CurveSpec` factory:
 `bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`, or
 `perfectArrows({ bow })`. `"linear"` has no factory, because
 [`linear()`](/js/api/coords/linear) is the coordinate transform. The `orthogonal`
