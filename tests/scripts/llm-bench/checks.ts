@@ -4009,6 +4009,38 @@ function straightMarks(
   return out;
 }
 
+/** Legend keys: small marks (at most 30px) with a text label right beside
+ *  them (starting or ending within max(8px, the mark's width) of the mark,
+ *  at the mark's height), when at least two such keys line up in a row or
+ *  a column. A lone labeled mark may be a labeled data point, so it is not
+ *  counted. */
+function legendKeys(rec: RenderRecord): Set<Mark> {
+  const texts = rec.marks.filter((m) => m.kind === "text");
+  const keyed = rec.marks.filter((m) => {
+    if (m.kind === "text" || Math.max(m.w, m.h) > 30) return false;
+    const cy = m.y + m.h / 2;
+    const near = Math.max(8, m.w);
+    return texts.some(
+      (t) =>
+        t.y <= cy &&
+        cy <= t.y + t.h &&
+        ((t.x >= m.x + m.w - 1 && t.x - (m.x + m.w) <= near) ||
+          (t.x + t.w <= m.x + 1 && m.x - (t.x + t.w) <= near))
+    );
+  });
+  const center = (m: Mark): Pt => [m.x + m.w / 2, m.y + m.h / 2];
+  return new Set(
+    keyed.filter((m) =>
+      keyed.some(
+        (o) =>
+          o !== m &&
+          (Math.abs(center(o)[0] - center(m)[0]) <= 1 ||
+            Math.abs(center(o)[1] - center(m)[1]) <= 1)
+      )
+    )
+  );
+}
+
 /** Circles that may be data: not background, with ink. */
 function inkCircles(rec: RenderRecord): Mark[] {
   return rec.marks.filter(
@@ -4448,7 +4480,8 @@ function checkBeeswarm(
   const vals = rows.map((r) => num(r[c.x]));
   const [lo, hi] = extent(vals);
   const norm = vals.map((v) => (v - lo) / (hi - lo || 1));
-  const circles = inkCircles(rec);
+  const keys = legendKeys(rec);
+  const circles = inkCircles(rec).filter((m) => !keys.has(m));
   const xs = circles.map((m) => m.x + m.w / 2);
   const tolFor = (a: number) => Math.max(1.5, (c.tol ?? 0.01) * a);
   const hs = hypotheses(xs, 0, 1, 1).filter((h) =>
@@ -4599,9 +4632,15 @@ function checkStackedArea(
   let best = 0;
   for (const B of shapes)
     for (const T of shapes) {
+      if (Math.abs(T.x - B.x) > 2 || Math.abs(T.x + T.w - (B.x + B.w)) > 2)
+        continue;
       const px0 = B.x;
       const px1 = B.x + B.w;
-      if (Math.abs(T.x - px0) > 2 || Math.abs(T.x + T.w - px1) > 2) continue;
+      // The first and last x are sampled just inside the ends, by more than
+      // the padding a library may add there: ggplot2's geom_area closes
+      // each series with a zero 0.1% of the x range outside its first and
+      // last x, so its box ends on a steep ramp down to the baseline.
+      const inset = 0.5 + 0.002 * (px1 - px0);
       const yBase = B.y + B.h;
       const k = (yBase - T.y) / maxTot;
       if (yBase - T.y < 10 || px1 - px0 < 10) continue;
@@ -4614,8 +4653,8 @@ function checkStackedArea(
           if (used.has(m)) return false;
           return xv.every((x, i) => {
             const t = Math.min(
-              px1 - 0.5,
-              Math.max(px0 + 0.5, px0 + ax * (x - x0))
+              px1 - inset,
+              Math.max(px0 + inset, px0 + ax * (x - x0))
             );
             const cs = crossSection(m, t, true);
             if (!cs) return false;
@@ -4649,9 +4688,124 @@ function checkStackedArea(
   };
 }
 
-/** A wedge's radii and angular extent measured again from its outline
- *  about (cx, cy), since the fitted center of a slice with short radial
- *  edges is less exact. */
+/** The outline vertices of `m` split by distance from `c` at the largest
+ *  gap: the outer arc, and the inner arc (empty when no gap is 2px or
+ *  more). Every vertex of a wedge's simplified outline, corners included,
+ *  lies on one of its two arcs (or at the center), also when the straight
+ *  edges are padded apart and so do not point at the center. */
+function arcsAbout(m: Mark, c: Pt): { outer: Pt[]; inner: Pt[] } {
+  const pts = m.points ?? [];
+  const d = (p: Pt) => Math.hypot(p[0] - c[0], p[1] - c[1]);
+  const ds = pts.map(d).sort((a, b) => a - b);
+  let gap = 2;
+  let cut = -Infinity;
+  for (let i = 1; i < ds.length; i++)
+    if (ds[i] - ds[i - 1] >= gap) {
+      gap = ds[i] - ds[i - 1];
+      cut = (ds[i] + ds[i - 1]) / 2;
+    }
+  return {
+    outer: pts.filter((p) => d(p) > cut),
+    inner: pts.filter((p) => d(p) <= cut),
+  };
+}
+
+/** The least-squares center shared by circles through each point set (one
+ *  radius per set; the algebraic fit), or null when the sets do not pin
+ *  it down. */
+function concentricFit(sets: Pt[][]): Pt | null {
+  let sxx = 0;
+  let sxy = 0;
+  let syy = 0;
+  let sxz = 0;
+  let syz = 0;
+  for (const s of sets) {
+    if (s.length < 2) continue;
+    const z = s.map((p) => p[0] * p[0] + p[1] * p[1]);
+    const mx = s.reduce((a, p) => a + p[0], 0) / s.length;
+    const my = s.reduce((a, p) => a + p[1], 0) / s.length;
+    const mz = z.reduce((a, b) => a + b, 0) / s.length;
+    s.forEach((p, i) => {
+      const dx = p[0] - mx;
+      const dy = p[1] - my;
+      const dz = z[i] - mz;
+      sxx += dx * dx;
+      sxy += dx * dy;
+      syy += dy * dy;
+      sxz += dx * dz;
+      syz += dy * dz;
+    });
+  }
+  const det = sxx * syy - sxy * sxy;
+  if (!(det > 1e-6 * (sxx * syy + 1e-9))) return null;
+  return [(syy * sxz - sxy * syz) / det / 2, (sxx * syz - sxy * sxz) / det / 2];
+}
+
+/**
+ * The center shared by the picture's wedges, and the shapes that are
+ * wedges about it. A wedge's own fitted center is inexact when its radial
+ * edges are short, and wrong when a pad angle offsets its edges sideways
+ * (they then cross away from the center), but its arcs are still
+ * concentric with every other wedge's. So one center is fitted to all the
+ * wedges' arcs at once, starting from the median of their own centers.
+ * Then every outlined filled shape (also one the extractor could not fit
+ * as a wedge by itself) counts when its outline lies on one or two
+ * circles about that center, plus possibly the center itself. Assumes one
+ * radial chart per picture.
+ */
+function sharedCenter(rec: RenderRecord): { center: Pt; marks: Mark[] } | null {
+  const shapes = rec.marks.filter(
+    (m) =>
+      (m.kind === "wedge" || (m.kind === "path" && m.fill)) &&
+      (m.points?.length ?? 0) >= 3 &&
+      !isBackground(m, rec)
+  );
+  const wedges = shapes.filter((m) => m.kind === "wedge" && m.wedge);
+  if (wedges.length === 0) return null;
+  const onCircles = (m: Mark, c: Pt) => {
+    const { outer, inner } = arcsAbout(m, c);
+    if (outer.length < 2) return false;
+    const d = (p: Pt) => Math.hypot(p[0] - c[0], p[1] - c[1]);
+    const spread = (ps: Pt[]) =>
+      ps.length ? Math.max(...ps.map(d)) - Math.min(...ps.map(d)) : 0;
+    const r = Math.max(...outer.map(d));
+    // The outline is sampled every 2px, so a corner's vertex may sit up to
+    // that far along the straight edge, off the arc.
+    const tol = 2 + 0.005 * r;
+    const r0 = inner.length ? Math.max(...inner.map(d)) : 0;
+    return (
+      spread(outer) <= tol &&
+      (spread(inner) <= tol || r0 <= Math.max(3, 0.05 * r))
+    );
+  };
+  let c: Pt = [
+    median(wedges.map((w) => w.wedge!.cx)),
+    median(wedges.map((w) => w.wedge!.cy)),
+  ];
+  let fitTo = wedges;
+  for (let k = 0; k < 30; k++) {
+    const next = concentricFit(
+      fitTo.flatMap((m) => {
+        const { outer, inner } = arcsAbout(m, c);
+        return [outer, inner];
+      })
+    );
+    if (!next) return null;
+    const moved = Math.hypot(next[0] - c[0], next[1] - c[1]);
+    c = next;
+    // Once close, fit only to the shapes that are wedges about the center
+    // (dropping, say, a wedge-like legend symbol).
+    if (k >= 4) {
+      const fits = shapes.filter((m) => onCircles(m, c));
+      if (fits.length >= 2) fitTo = fits;
+    }
+    if (k >= 5 && moved < 0.01) break;
+  }
+  return { center: c, marks: shapes.filter((m) => onCircles(m, c)) };
+}
+
+/** A wedge's radii and angular extent measured from its outline about
+ *  (cx, cy), the center shared with the other wedges. */
 function wedgeAbout(
   m: Mark,
   cx: number,
@@ -4688,66 +4842,58 @@ function checkRadialBars(
   ctx: CheckContext
 ): CheckResult {
   const { values } = barValues(c, ctx.data);
-  // Wedges around roughly one center (within 6px or 5% of the radius); each
-  // is then measured about the group's median center.
-  const groups: Mark[][] = [];
-  for (const w of rec.marks) {
-    if (w.kind !== "wedge" || !w.wedge || isBackground(w, rec)) continue;
-    const g = groups.find(
-      (g) =>
-        Math.hypot(
-          g[0].wedge!.cx - w.wedge!.cx,
-          g[0].wedge!.cy - w.wedge!.cy
-        ) <= Math.max(6, 0.05 * w.wedge!.r)
-    );
-    if (g) g.push(w);
-    else groups.push([w]);
-  }
-  let detail = `expected ${values.length} circular bars; found ${groups.map((g) => g.length).join(", ") || 0} wedges by center`;
-  for (const g of groups) {
-    if (g.length < values.length) continue;
-    const cx = median(g.map((w) => w.wedge!.cx));
-    const cy = median(g.map((w) => w.wedge!.cy));
-    const geo = new Map(g.map((w) => [w, wedgeAbout(w, cx, cy)]));
-    const r0 = median(g.map((w) => geo.get(w)!.r0));
-    const ring = g.filter((w) => Math.abs(geo.get(w)!.r0 - r0) <= 1.5);
-    if (ring.length < values.length) continue;
-    const rmax = Math.max(...ring.map((w) => geo.get(w)!.r));
-    if (r0 < 0.1 * rmax) {
-      detail = `${ring.length} wedges start at radius ${r0.toFixed(1)}px, not at an inner circle (a hole of at least 10% of ${rmax.toFixed(0)}px)`;
-      continue;
-    }
-    const bars: Bar[] = ring.map((w) => {
-      const e = geo.get(w)!;
-      return {
-        pos: (fromTop(e.a0 + e.sweep / 2) + 15) % 360,
-        len: e.r - e.r0,
-        mark: w,
-      };
-    });
-    const ordered = c.ordered ?? true;
-    const { bars: got, best } = matchBars([bars], values, {
-      ordered,
-      direction: "forward",
-      tol: c.tol ?? 0.03,
-    });
-    if (got.length !== values.length) {
-      detail = `${ring.length} wedges on an inner circle of ${r0.toFixed(1)}px, but at most ${best} radial lengths match [${values.join(", ")}]${ordered ? " clockwise from 12 o'clock" : ""}`;
-      continue;
-    }
-    const sw = got.map((b) => geo.get(b.mark)!.sweep);
-    const mid = median(sw);
-    if (sw.some((s) => Math.abs(s - mid) > Math.max(1, 0.05 * mid)))
-      return {
-        pass: false,
-        detail: `${values.length} radial lengths match, but the bars' angular widths differ (${Math.min(...sw).toFixed(1)} to ${Math.max(...sw).toFixed(1)} degrees)`,
-      };
+  const around = sharedCenter(rec);
+  const g = around?.marks ?? [];
+  if (!around || g.length < values.length)
     return {
-      pass: true,
-      detail: `${values.length} circular bars on an inner circle of ${r0.toFixed(1)}px match [${values.join(", ")}]${ordered ? " clockwise from 12 o'clock" : ""}`,
+      pass: false,
+      detail: `expected ${values.length} circular bars; found ${g.length} wedges around one center`,
     };
-  }
-  return { pass: false, detail };
+  const [cx, cy] = around.center;
+  const geo = new Map(g.map((w) => [w, wedgeAbout(w, cx, cy)]));
+  const r0 = median(g.map((w) => geo.get(w)!.r0));
+  const ring = g.filter((w) => Math.abs(geo.get(w)!.r0 - r0) <= 1.5);
+  if (ring.length < values.length)
+    return {
+      pass: false,
+      detail: `expected ${values.length} circular bars; ${g.length} wedges around one center, ${ring.length} of them from one inner circle`,
+    };
+  const rmax = Math.max(...ring.map((w) => geo.get(w)!.r));
+  if (r0 < 0.1 * rmax)
+    return {
+      pass: false,
+      detail: `${ring.length} wedges start at radius ${r0.toFixed(1)}px, not at an inner circle (a hole of at least 10% of ${rmax.toFixed(0)}px)`,
+    };
+  const bars: Bar[] = ring.map((w) => {
+    const e = geo.get(w)!;
+    return {
+      pos: (fromTop(e.a0 + e.sweep / 2) + 15) % 360,
+      len: e.r - e.r0,
+      mark: w,
+    };
+  });
+  const ordered = c.ordered ?? true;
+  const { bars: got, best } = matchBars([bars], values, {
+    ordered,
+    direction: "forward",
+    tol: c.tol ?? 0.03,
+  });
+  if (got.length !== values.length)
+    return {
+      pass: false,
+      detail: `${ring.length} wedges on an inner circle of ${r0.toFixed(1)}px, but at most ${best} radial lengths match [${values.join(", ")}]${ordered ? " clockwise from 12 o'clock" : ""}`,
+    };
+  const sw = got.map((b) => geo.get(b.mark)!.sweep);
+  const mid = median(sw);
+  if (sw.some((s) => Math.abs(s - mid) > Math.max(1, 0.05 * mid)))
+    return {
+      pass: false,
+      detail: `${values.length} radial lengths match, but the bars' angular widths differ (${Math.min(...sw).toFixed(1)} to ${Math.max(...sw).toFixed(1)} degrees)`,
+    };
+  return {
+    pass: true,
+    detail: `${values.length} circular bars on an inner circle of ${r0.toFixed(1)}px match [${values.join(", ")}]${ordered ? " clockwise from 12 o'clock" : ""}`,
+  };
 }
 
 function checkBullet(

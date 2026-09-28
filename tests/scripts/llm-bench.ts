@@ -170,6 +170,7 @@ interface Options {
   mode: Mode;
   arms: Arm[];
   tasks?: string;
+  group?: string;
   samples: number;
   maxTurns: number;
   budgetUsd: number;
@@ -257,6 +258,7 @@ function parseArgs(argv: string[]): Options {
       const bad = opts.arms.filter((a) => !ARMS.includes(a));
       if (bad.length) throw new Error(`unknown arms: ${bad.join(", ")}`);
     } else if (flag === "--tasks") opts.tasks = value();
+    else if (flag === "--group") opts.group = value();
     else if (flag === "--samples") opts.samples = Number(value());
     else if (flag === "--max-turns") opts.maxTurns = Number(value());
     else if (flag === "--budget-usd") opts.budgetUsd = Number(value());
@@ -1266,10 +1268,15 @@ async function main() {
     return;
   }
   const all = await loadTasks();
-  const tasks = opts.tasks
-    ? all.filter((t) => t.id.includes(opts.tasks!))
-    : all;
-  if (tasks.length === 0) throw new Error(`no tasks match "${opts.tasks}"`);
+  const tasks = all.filter(
+    (t) =>
+      (!opts.tasks || t.id.includes(opts.tasks)) &&
+      (!opts.group || t.group === opts.group)
+  );
+  if (tasks.length === 0)
+    throw new Error(
+      `no tasks match "${opts.tasks ?? ""}" in group "${opts.group ?? "any"}"`
+    );
   const byId = new Map<string, Task>(all.map((t) => [t.id, t]));
   const ledger = new Ledger(LEDGER_PATH, ledgerCaps(opts));
   // References send no prompt, so they need no context.
