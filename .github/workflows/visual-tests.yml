@@ -272,12 +272,16 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm --filter @gofish/tests update-baselines
 
+      # diff-list.json is the machine-readable list of the diffs this run
+      # reported; `accept-baselines.sh --all` accepts exactly those.
       - name: Upload diff report
         if: failure() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v5
         with:
           name: visual-diff-report
-          path: tests/tmp/diff-report.html
+          path: |
+            tests/tmp/diff-report.html
+            tests/tmp/diff-list.json
 
       - name: Build review site
         if: failure() && github.event_name == 'pull_request'

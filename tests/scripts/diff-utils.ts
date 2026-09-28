@@ -184,6 +184,15 @@ export function collectRemovedStories(): DiffEntry[] {
   });
 }
 
+/**
+ * Every diff a review lists: `collectDiffs()` followed by the removed
+ * stories. The diff report (with its machine-readable `diff-list.json`), the
+ * review site and the local review server all show this one list.
+ */
+export function collectReviewDiffs(): DiffEntry[] {
+  return [...collectDiffs(), ...collectRemovedStories()];
+}
+
 // ---------------------------------------------------------------------------
 // Collect parity diffs: Python output vs the JS capture
 // ---------------------------------------------------------------------------

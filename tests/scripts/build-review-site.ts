@@ -22,8 +22,7 @@ import {
 } from "fs";
 import { join, dirname } from "path";
 import {
-  collectDiffs,
-  collectRemovedStories,
+  collectReviewDiffs,
   formatDomDiff,
   escapeHtml,
   type DiffEntry,
@@ -69,12 +68,14 @@ console.log("Building review site...");
 // are first-class DiffEntry("removed") too — they fail the job like any
 // other unreviewed change (see compare.ts), and accepting one deletes the
 // baseline instead of writing a new one.
-const removedEntries = collectRemovedStories();
-const diffs: DiffEntry[] = [...collectDiffs(), ...removedEntries];
+// This is the same list the diff report writes to diff-list.json, which
+// accept-baselines.sh --all accepts.
+const diffs: DiffEntry[] = collectReviewDiffs();
+const removedCount = diffs.filter((d) => d.kind === "removed").length;
 console.log(`  ${diffs.length} diff(s) found`);
-if (removedEntries.length > 0) {
+if (removedCount > 0) {
   console.log(
-    `  ${removedEntries.length} removed stor${removedEntries.length === 1 ? "y" : "ies"} found`
+    `  ${removedCount} removed stor${removedCount === 1 ? "y" : "ies"} found`
   );
 }
 
