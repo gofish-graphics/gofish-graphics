@@ -28,6 +28,7 @@ export const ARMS = [
   "matplotlib",
   "ggplot2",
   "altair",
+  "plot",
 ] as const;
 export type Arm = (typeof ARMS)[number];
 
@@ -47,6 +48,7 @@ export const ARM_EXT: Record<Arm, string> = {
   matplotlib: "py",
   ggplot2: "R",
   altair: "py",
+  plot: "js",
 };
 
 /** Fenced-code language tag each arm is asked to use (informational). */
@@ -57,6 +59,7 @@ export const ARM_LANG: Record<Arm, string> = {
   matplotlib: "python",
   ggplot2: "r",
   altair: "python",
+  plot: "js",
 };
 
 export interface Size {

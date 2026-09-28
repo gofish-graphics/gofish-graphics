@@ -14,10 +14,17 @@
  *      - gofish: every painted SVG element in the container was created by
  *        gofish-graphics code. The harness records, for each SVG element
  *        created or cloned in the page, whether gofish-graphics source was
- *        on the call stack (`trackCreation`, `gofishProvenance`). The model's
+ *        on the call stack (`trackCreation`, `stackProvenance`). The model's
  *        module and the harness share the one aliased gofish-graphics
  *        instance, served from packages/gofish-graphics/src, so its frames
  *        are recognizable by URL.
+ *      - plot: the same stack rule, with Observable Plot's code on the
+ *        stack. Plot draws through d3, and the program may import d3 too,
+ *        so the frame that counts is Plot's own (see LIBRARY_FRAME). An
+ *        element made inside a callback Plot calls (a function mark, a
+ *        mark's `render` option) counts, as a custom shape inside a Recharts
+ *        surface does; one made before `Plot.plot` or appended after it
+ *        returns (a hand-written or d3-drawn overlay) does not.
  *      - recharts: every outermost <svg> in the container is a Recharts
  *        surface (`svg.recharts-surface`), so the chart was drawn by a
  *        Recharts chart component. Custom shapes passed to Recharts
@@ -53,6 +60,7 @@ const LIBRARY: Record<Arm, string> = {
   matplotlib: "matplotlib",
   ggplot2: "ggplot2",
   altair: "Altair (altair)",
+  plot: "Observable Plot (@observablehq/plot)",
 };
 
 /** The message the model sees, with an optional detail line. */
@@ -67,11 +75,16 @@ export function contractError(arm: Arm, detail?: string): string {
 // Static rule (Node side)
 // ---------------------------------------------------------------------------
 
-/** JS import specifiers of each JS arm's library. */
-const JS_SPECIFIER: Record<Exclude<Arm, ScriptArm>, RegExp> = {
-  gofish: /^gofish-graphics$/,
-  recharts: /^recharts$/,
-  d3: /^d3(-[a-z-]+)?$/,
+/** Each JS arm's library: its package name, and the import specifiers
+ *  that count as importing it. */
+const JS_LIBRARY: Record<
+  Exclude<Arm, ScriptArm>,
+  { pkg: string; spec: RegExp }
+> = {
+  gofish: { pkg: "gofish-graphics", spec: /^gofish-graphics$/ },
+  recharts: { pkg: "recharts", spec: /^recharts$/ },
+  d3: { pkg: "d3", spec: /^d3(-[a-z-]+)?$/ },
+  plot: { pkg: "@observablehq/plot", spec: /^@observablehq\/plot$/ },
 };
 
 /** Every static import (`import ... from "x"`, `import "x"`) and dynamic
@@ -125,8 +138,8 @@ export function staticViolation(arm: Arm, code: string): string | null {
       ? null
       : contractError(arm, "The script does not call ggplot().");
   }
-  const imports = jsImports(code).filter((i) => JS_SPECIFIER[arm].test(i.spec));
-  const pkg = arm === "gofish" ? "gofish-graphics" : arm;
+  const { pkg, spec } = JS_LIBRARY[arm];
+  const imports = jsImports(code).filter((i) => spec.test(i.spec));
   if (imports.length === 0)
     return contractError(arm, `The module does not import "${pkg}".`);
   if (arm === "d3") {
@@ -187,9 +200,24 @@ export function scriptViolation(
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** gofish-graphics is aliased to its source, which Vite serves from this
- *  path; the model's program lives under tests/tmp. */
-const GOFISH_FRAME = "/packages/gofish-graphics/src/";
+/** The arms whose provenance is read from creation stacks, and how each
+ *  library's code shows up in a stack frame's URL. The model's program lives
+ *  under tests/tmp, so it never matches.
+ *   - gofish-graphics is aliased to its source, which Vite serves from
+ *     packages/gofish-graphics/src.
+ *   - @observablehq/plot is pre-bundled by Vite into its own dependency file
+ *     (`.../deps/@observablehq_plot.js`); served unbundled it would be
+ *     `.../@observablehq/plot/src/...`. d3, which Plot draws through, is in a
+ *     separate chunk, so a program's own d3 calls do not match. */
+export type StackArm = "gofish" | "plot";
+const LIBRARY_FRAME: Record<StackArm, RegExp> = {
+  gofish: /\/packages\/gofish-graphics\/src\//,
+  plot: /\/@observablehq[_/]plot\b/,
+};
+
+/** Whether a creation stack has the arm's library code on it. */
+export const libraryOnStack = (arm: StackArm, stack: string): boolean =>
+  LIBRARY_FRAME[arm].test(stack);
 
 /** Unformatted stack captured when each SVG element was created. V8 formats
  *  `.stack` lazily, so recording costs little until it is read. */
@@ -245,33 +273,36 @@ export function trackCreation(): void {
 const NOT_PAINTED =
   "defs, clipPath, mask, marker, pattern, symbol, linearGradient, radialGradient, filter";
 
-/** Why the SVG in `root` was not (entirely) drawn by gofish-graphics, or
- *  null. Every painted SVG element must have been created with
- *  gofish-graphics code on the stack. */
-export function gofishProvenance(root: Element): string | null {
+/** Why the SVG in `root` was not (entirely) drawn by the arm's library
+ *  (gofish-graphics or Observable Plot), or null. Every painted SVG element
+ *  must have been created with the library's code on the stack. For Plot
+ *  that includes elements a program creates inside a callback Plot calls (a
+ *  function mark, a mark's `render` option), as Recharts counts custom
+ *  shapes inside its surface. */
+export function stackProvenance(arm: StackArm, root: Element): string | null {
   const els = Array.from(root.querySelectorAll("svg, svg *")).filter(
     (el) =>
       el.namespaceURI === SVG_NS &&
       !el.matches(NOT_PAINTED) &&
       !el.parentElement?.closest(NOT_PAINTED)
   );
-  const byGofish = new Map<Error, boolean>();
+  const byLibrary = new Map<Error, boolean>();
   const foreign = els.filter((el) => {
     const e = created.get(el);
     if (!e) return true;
-    if (!byGofish.has(e))
-      byGofish.set(e, (e.stack ?? "").includes(GOFISH_FRAME));
-    return !byGofish.get(e);
+    if (!byLibrary.has(e)) byLibrary.set(e, libraryOnStack(arm, e.stack ?? ""));
+    return !byLibrary.get(e);
   });
   if (foreign.length === 0) return null;
+  const pkg = JS_LIBRARY[arm].pkg;
   const tags = [...new Set(foreign.map((el) => `<${el.localName}>`))]
     .slice(0, 5)
     .join(", ");
   return contractError(
-    "gofish",
+    arm,
     foreign.length === els.length
-      ? "No SVG element in the container was created by gofish-graphics' render."
-      : `${foreign.length} of ${els.length} SVG elements in the container (${tags}) were not created by gofish-graphics' render.`
+      ? `No SVG element in the container was created by ${pkg}.`
+      : `${foreign.length} of ${els.length} SVG elements in the container (${tags}) were not created by ${pkg}.`
   );
 }
 

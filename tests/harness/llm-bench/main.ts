@@ -4,7 +4,7 @@
  * The runner opens this page in a fresh browser context per render and calls
  * one of the `window.llmBench` functions below, then `extract()`.
  *
- *   renderModule — gofish / d3: a JS module whose default export is
+ *   renderModule — gofish / d3 / plot: a JS module whose default export is
  *                  `render(container, data)`; it may return a promise.
  *   renderReact  — recharts: a module (already compiled from JSX to JS by the
  *                  runner) whose default export is a React component
@@ -13,14 +13,14 @@
  *                  the script saved, shown at the size the prompt asked for
  *                  (see renderSvg).
  *
- * For gofish the runner calls `trackCreation()` before the render and
- * `provenance("gofish")` after it; for recharts, `provenance("recharts")`.
+ * For gofish and plot the runner calls `trackCreation()` before the render
+ * and `provenance(arm)` after it; for recharts, `provenance("recharts")`.
  * These are the arm contract (tests/scripts/llm-bench/contract.ts).
  */
 
 import {
-  gofishProvenance,
   rechartsProvenance,
+  stackProvenance,
   trackCreation,
 } from "../../scripts/llm-bench/contract";
 import { extractRecord } from "../../scripts/llm-bench/extract";
@@ -142,8 +142,10 @@ function problem(): string | null {
 
 /** Why the picture breaks the arm contract, or null. Runs before
  *  `extract()`, which rewrites <use> elements. */
-function provenance(lib: "gofish" | "recharts"): string | null {
-  return lib === "gofish" ? gofishProvenance(root) : rechartsProvenance(root);
+function provenance(lib: "gofish" | "plot" | "recharts"): string | null {
+  return lib === "recharts"
+    ? rechartsProvenance(root)
+    : stackProvenance(lib, root);
 }
 
 /** Resolves once every image in the container (SVG `<image>`, HTML `<img>`)

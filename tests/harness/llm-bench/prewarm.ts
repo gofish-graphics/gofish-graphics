@@ -4,11 +4,12 @@
 // `prewarm()` once at startup, so gofish-graphics source is transformed before
 // the first render, and `prewarm(lib)` before each timed render, so the
 // render time covers the program, not loading the library.
-export type Lib = "gofish" | "d3" | "recharts";
+export type Lib = "gofish" | "d3" | "recharts" | "plot";
 
 const loaders: Record<Lib, () => Promise<unknown>> = {
   gofish: () => import("gofish-graphics"),
   d3: () => import("d3"),
+  plot: () => import("@observablehq/plot"),
   recharts: () =>
     Promise.all([
       import("react"),

@@ -38,8 +38,10 @@ import {
   Retriever,
   terms,
 } from "./context";
-import { scriptViolation, staticViolation } from "./contract";
+import { libraryOnStack, scriptViolation, staticViolation } from "./contract";
+import { preserved } from "./checks";
 import { firstMessage, systemBlocks } from "./prompt";
+import type { RenderRecord } from "./record";
 import {
   buildReport,
   finalCodeStats,
@@ -1138,6 +1140,18 @@ const CC_OK: ClaudeCodeResult = {
     ),
     { arithOps: 7, magicNumbers: 4 }
   );
+  // A namespace import's * is not multiplication.
+  assert.equal(
+    explicitCalculation(
+      'import * as Plot from "@observablehq/plot";\nexport * from "d3";\nx = a * b;',
+      "plot"
+    ).arithOps,
+    1
+  );
+  assert.equal(
+    explicitCalculation("from math import *\nx = a * b", "matplotlib").arithOps,
+    1
+  );
   assert.deepEqual(
     explicitCalculation(
       "h = np.sqrt(v) // 2\nw = math.pi * 1.0  # 7 * 7",
@@ -1251,6 +1265,83 @@ const CC_OK: ClaudeCodeResult = {
   // Vega's root class alone is not enough.
   assert.ok(scriptViolation("altair", '<svg class="marks"><rect/></svg>'));
   console.log("ok  grammar arm contract");
+}
+
+// --- arm contract of the plot arm ---------------------------------------------
+{
+  assert.equal(
+    staticViolation("plot", 'import * as Plot from "@observablehq/plot";'),
+    null
+  );
+  assert.equal(
+    staticViolation("plot", 'import { barY, plot } from "@observablehq/plot";'),
+    null
+  );
+  // d3 alone is not Plot.
+  assert.match(
+    staticViolation("plot", 'import * as d3 from "d3";') ?? "",
+    /Observable Plot.*\n.*does not import "@observablehq\/plot"/
+  );
+  // Provenance: Plot's code, pre-bundled by Vite or served as source, is on
+  // the stack; d3's chunk and the program's own file are not Plot.
+  const frame = (url: string) => `Error\n    at f (${url}:1:2)`;
+  const host = "http://localhost:3005";
+  assert.ok(
+    libraryOnStack(
+      "plot",
+      frame(
+        `${host}/node_modules/.vite-llm-bench/deps/@observablehq_plot.js?v=1`
+      )
+    )
+  );
+  assert.ok(
+    libraryOnStack(
+      "plot",
+      frame(`${host}/@fs/x/node_modules/@observablehq/plot/src/marks/dot.js`)
+    )
+  );
+  assert.ok(
+    !libraryOnStack(
+      "plot",
+      frame(`${host}/node_modules/.vite-llm-bench/deps/chunk-ABC.js?v=1`)
+    )
+  );
+  assert.ok(
+    !libraryOnStack(
+      "plot",
+      frame(
+        `${host}/@fs/r/tests/tmp/llm-bench/runs/x/create__pie/plot/turn1.js`
+      )
+    )
+  );
+  assert.ok(
+    libraryOnStack(
+      "gofish",
+      frame(`${host}/@fs/r/packages/gofish-graphics/src/ast/gofish.tsx`)
+    )
+  );
+  // Preservation: an axis title keeps its words when Plot's direction arrow
+  // changes with the axis it sits on.
+  const rec = (...texts: string[]): RenderRecord => ({
+    svgs: [{ x: 0, y: 0, w: 640, h: 400 }],
+    marks: texts.map((text) => ({
+      kind: "text",
+      tag: "text",
+      x: 0,
+      y: 0,
+      w: 10,
+      h: 10,
+      fill: null,
+      stroke: null,
+      strokeWidth: 0,
+      text,
+    })),
+  });
+  const keepText = (a: RenderRecord, b: RenderRecord) =>
+    preserved(a, b, ["colors", "marks", "size"]).pass;
+  assert.ok(keepText(rec("↑ count", "Lake A"), rec("count →", "Lake A")));
+  assert.ok(!keepText(rec("↑ count"), rec("total →")));
+  console.log("ok  plot arm contract");
 }
 
 // --- claude-code stream-json output ------------------------------------------

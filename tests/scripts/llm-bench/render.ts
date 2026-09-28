@@ -483,11 +483,10 @@ export class Renderer {
       await page.goto(`http://localhost:${HARNESS_PORT}/index.html`);
       await page.waitForFunction(() => !!(window as any).llmBench);
       if (!isScriptArm(arm)) {
-        const lib =
-          arm === "gofish" ? "gofish" : arm === "d3" ? "d3" : "recharts";
-        await page.evaluate((l) => (window as any).llmBench.prewarm(l), lib);
+        // A JS arm's id is its library's name in the harness (prewarm.ts).
+        await page.evaluate((l) => (window as any).llmBench.prewarm(l), arm);
       }
-      if (arm === "gofish")
+      if (arm === "gofish" || arm === "plot")
         await page.evaluate(() => (window as any).llmBench.trackCreation());
       const t0 = performance.now();
       const call = isScriptArm(arm)
@@ -582,7 +581,7 @@ export class Renderer {
       // The arm contract, checked on the picture as shown and before
       // extract() rewrites <use>s. The picture is read either way.
       const foreign: string | null =
-        arm === "gofish" || arm === "recharts"
+        arm === "gofish" || arm === "plot" || arm === "recharts"
           ? await page.evaluate(
               (l) => (window as any).llmBench.provenance(l),
               arm

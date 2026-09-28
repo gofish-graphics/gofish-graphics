@@ -3631,11 +3631,16 @@ export function runChecks(
 
 const NUMERIC = /^[-−+]?[$€£]?[\d.,\s]+(%|[kKMB])?$/;
 
+/** A direction arrow at either end of an axis title, which Observable Plot
+ *  adds ("↑ count", "count →"). It points along the title's axis, so it
+ *  changes when a title moves to the other axis; the title's words do not. */
+const AXIS_ARROW = /^[↑↓←→]\s*|\s*[↑↓←→]$/g;
+
 function wordSet(rec: RenderRecord): Set<string> {
   return new Set(
     rec.marks
       .filter((m) => m.kind === "text" && !NUMERIC.test(m.text!))
-      .map((m) => m.text!)
+      .map((m) => m.text!.replace(AXIS_ARROW, ""))
   );
 }
 

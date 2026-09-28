@@ -1,6 +1,6 @@
 /**
  * LLM authoring benchmark runner (v0: static charts; arms gofish, recharts,
- * d3, matplotlib, ggplot2, altair). Design: apps/docs/docs/internals/design/llm-authoring-benchmark.md.
+ * d3, matplotlib, ggplot2, altair, plot). Design: apps/docs/docs/internals/design/llm-authoring-benchmark.md.
  * How to use and extend it: tests/llm-bench/README.md.
  *
  * Usage:
@@ -23,7 +23,7 @@
  *                  one table comparing the gofish arm across runs (for
  *                  example, one run per --context)
  *   Options:
- *     --arms gofish,recharts,d3,matplotlib,ggplot2,altair   --tasks <substring>
+ *     --arms gofish,recharts,d3,matplotlib,ggplot2,altair,plot   --tasks <substring>
  *     --samples N (1)   --max-turns N (3)   --budget-usd X (10, API)
  *     --subscription-cap-usd X (40, claude-code at list price)
  *     --model ID (claude-opus-5-5)   --backend api|claude-code (claude-code)

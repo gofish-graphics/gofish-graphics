@@ -1,14 +1,14 @@
 # LLM authoring benchmark (v0)
 
-This benchmark measures how well a language model writes static charts in six
+This benchmark measures how well a language model writes static charts in seven
 libraries, which we call arms: **gofish** (this repo), **recharts** (React),
-**d3**, **matplotlib** (Python), and two grammars of graphics, **ggplot2** (R)
-and **altair** (Python, on Vega-Lite). The grammar arms compare GoFish with
-declarative libraries, not only with imperative ones. The model is `claude-opus-5-5` by
-default (`--model`), run through the Anthropic API or through headless Claude
-Code (see "Backends"). The design
-and its reasoning are in
-`apps/docs/docs/internals/design/llm-authoring-benchmark.md`.
+**d3**, **matplotlib** (Python), two grammars of graphics, **ggplot2** (R)
+and **altair** (Python, on Vega-Lite), and **plot** (Observable Plot, a
+terse JavaScript grammar of marks and transforms). The grammar arms compare
+GoFish with declarative libraries, not only with imperative ones. The model
+is `claude-opus-5-5` by default (`--model`), run through the Anthropic API or
+through headless Claude Code (see "Backends"). The design and its reasoning
+are in `apps/docs/docs/internals/design/llm-authoring-benchmark.md`.
 
 A job is one task in one arm, sampled once. The model gets a system prompt for
 the arm and a task message. It replies with a program. The harness renders the
@@ -31,7 +31,7 @@ pnpm llm-bench compare <runDir>[=label] ...  # one table comparing the gofish ar
 pnpm llm-bench:contexts                # regenerate the cheatsheet, gallery index and skill folder
 ```
 
-Options: `--arms gofish,recharts,d3,matplotlib,ggplot2,altair`, `--tasks <substring of task id>`,
+Options: `--arms gofish,recharts,d3,matplotlib,ggplot2,altair,plot`, `--tasks <substring of task id>`,
 `--samples N` (1), `--max-turns N` (3), `--budget-usd X` (10, API),
 `--subscription-cap-usd X` (40, claude-code at list price),
 `--model ID` (`claude-opus-5-5`), `--backend api|claude-code` (claude-code),
@@ -222,14 +222,15 @@ context (see "Contexts"; by default the skill in `context/skill/`, chosen from t
 system blocks carry `cache_control`, so repeated calls read them from the
 prompt cache.
 
-| Arm        | The model writes                                                                                             | The harness                                                                                                 | Extension packages (with `--extensions on`)                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| gofish     | an ES module, `export default function render(container, data)`, importing from `"gofish-graphics"`          | aliases `gofish-graphics` to `packages/gofish-graphics/src/lib.ts`, awaits the returned promise             | none                                                         |
-| d3         | the same contract, `import * as d3 from "d3"`                                                                | same                                                                                                        | none (its hierarchy layouts are part of `d3`)                |
-| recharts   | a JSX module, `export default function Chart({ data })` with explicit `width`/`height`                       | compiles the JSX with esbuild (React's automatic runtime) and renders `<Chart data={data} />` with React 19 | none                                                         |
-| matplotlib | a script that reads `DATA_PATH` (JSON rows) and saves SVG to `OUT_PATH`                                      | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify, pywaffle                                 |
-| ggplot2    | an R script that reads `DATA_PATH` and saves SVG to `OUT_PATH` with `ggsave(..., device = svglite::svglite)` | runs it with `Rscript --vanilla` (60 s limit), then loads the SVG into the same page                        | ggmosaic, ggridges, treemapify, packcircles, ggforce, waffle |
-| altair     | a script that reads `DATA_PATH` and saves SVG with `chart.save(OUT_PATH, format="svg")` (vl-convert)         | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify                                           |
+| Arm        | The model writes                                                                                                          | The harness                                                                                                 | Extension packages (with `--extensions on`)                  |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| gofish     | an ES module, `export default function render(container, data)`, importing from `"gofish-graphics"`                       | aliases `gofish-graphics` to `packages/gofish-graphics/src/lib.ts`, awaits the returned promise             | none                                                         |
+| d3         | the same contract, `import * as d3 from "d3"`                                                                             | same                                                                                                        | none (its hierarchy layouts are part of `d3`)                |
+| recharts   | a JSX module, `export default function Chart({ data })` with explicit `width`/`height`                                    | compiles the JSX with esbuild (React's automatic runtime) and renders `<Chart data={data} />` with React 19 | none                                                         |
+| matplotlib | a script that reads `DATA_PATH` (JSON rows) and saves SVG to `OUT_PATH`                                                   | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify, pywaffle                                 |
+| ggplot2    | an R script that reads `DATA_PATH` and saves SVG to `OUT_PATH` with `ggsave(..., device = svglite::svglite)`              | runs it with `Rscript --vanilla` (60 s limit), then loads the SVG into the same page                        | ggmosaic, ggridges, treemapify, packcircles, ggforce, waffle |
+| altair     | a script that reads `DATA_PATH` and saves SVG with `chart.save(OUT_PATH, format="svg")` (vl-convert)                      | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify                                           |
+| plot       | an ES module like d3's, `import * as Plot from "@observablehq/plot"` (and `d3` if it wants), appending `Plot.plot({...})` | same as gofish and d3 (`@observablehq/plot` 0.6.17)                                                         | none                                                         |
 
 Details that keep the arms comparable:
 
@@ -241,6 +242,11 @@ Details that keep the arms comparable:
   `height` in inches at 100 px per inch (640 x 400 px is `width = 6.4,
 height = 4, units = "in"`). svglite, like matplotlib, writes the size in
   points, and the harness shows it the same way.
+- For plot the prompt asks for the task's size as `Plot.plot`'s `width` and
+  `height`, which in Plot are the whole SVG's size, axes included. The
+  program appends what `Plot.plot` returns: an `<svg>`, or a `<figure>`
+  around it when the chart has a legend or a title. The legend is then
+  HTML, which the record reads like Recharts' legend.
 - For altair the prompt says that `.properties(width, height)` sizes the plot
   area, not the whole chart, and asks for a whole chart of about the task's
   size. Vega writes the SVG's size in px, which the harness keeps. As for
@@ -292,10 +298,12 @@ which the prompts, the runtimes and the check below all read.
 | matplotlib | squarify 0.4.5 (treemaps), circlify 0.15.1 (circle packing), pywaffle 1.2.0 (waffle charts)                                                                              |
 | altair     | squarify 0.4.5 (treemaps), circlify 0.15.1 (circle packing)                                                                                                              |
 
-GoFish, Recharts and D3 are not affected by the setting. D3's hierarchy
+GoFish, Recharts, D3 and Plot are not affected by the setting. D3's hierarchy
 layouts (treemap, pack) are part of `d3` itself, so the d3 arm has them
-either way. Packages that every setting allows, such as ggplot2's `png`
-(for reading images), are not extensions.
+either way. Plot has no extension ecosystem: its prompt allows `d3` beside
+it (Plot is built on d3), which gives the plot arm the same layouts.
+Packages that every setting allows, such as ggplot2's `png` (for reading
+images), are not extensions.
 
 - The prompt: each script arm's prompt has an `{{extensions}}` placeholder
   at the end of its "May use" line. With extensions on it becomes ", and
@@ -398,8 +406,8 @@ extractor; the checks stay library-neutral.
 
 - Every arm, before rendering: the program imports the arm's library
   (`gofish-graphics`, `recharts`, `d3` or a `d3-*` module, `matplotlib`,
-  `altair`), or for ggplot2 calls `ggplot()` outside a comment. This is a
-  cheap first filter on the source text.
+  `altair`, `@observablehq/plot`), or for ggplot2 calls `ggplot()` outside a
+  comment. This is a cheap first filter on the source text.
 - gofish: every painted SVG element in the container was created by
   gofish-graphics. Before the program loads, the harness wraps
   `createElementNS`, `cloneNode` and `importNode` and records the call stack
@@ -409,6 +417,20 @@ extractor; the checks stay library-neutral.
   Elements inside `<defs>` and paint servers (gradients, patterns, markers,
   clip paths, masks, filters) are not checked, so a program may supply them.
   Appending even one hand-made shape to GoFish's SVG breaks the rule.
+- plot: every painted SVG element in the container was created with
+  Observable Plot's code on the call stack, by the same recording as for
+  gofish. Vite pre-bundles Plot into its own file
+  (`deps/@observablehq_plot.js`), and d3, which Plot draws through, into a
+  separate chunk, so the program's own d3 calls do not count as Plot's. An
+  element created inside a callback that Plot calls while it renders counts:
+  a function in `marks`, or a mark's `render` option, which is how a Plot
+  user draws a shape Plot has no mark for (the pie references draw
+  `d3.arc` paths this way, with fills from Plot's color scale). That is the
+  counterpart of a custom shape inside a Recharts surface. An element made
+  before `Plot.plot` is called or appended after it returns, such as a
+  hand-written overlay or a second SVG drawn with d3, breaks the rule. Plot
+  marks its root with a class (`plot-d6a7b5`), but a program can rename it
+  with the `className` option, so the class is not the test.
 - recharts: every outermost `<svg>` in the container is a Recharts surface
   (`svg.recharts-surface`). Custom shapes passed to Recharts components (a
   `shape` prop, `<Customized>`) are inside the surface and count. A separate
@@ -521,7 +543,10 @@ with a chart part. A chart part is:
   `p <- ggplot(df)`, or `my_theme <- theme(...)` and then `p + my_theme`).
 
 The other arms have no operator that composes charts (GoFish, Recharts and
-d3 compose with calls, methods and JSX), so every `+` there is arithmetic.
+d3 compose with calls, methods and JSX, and Plot layers marks by listing them
+in the `marks` array), so every `+` there is arithmetic. The `*` of a
+namespace import (`import * as d3`, and Python's `from m import *`) is not
+arithmetic either.
 Arithmetic inside a string is not seen: a Vega expression such as
 `transform_calculate(share="datum.units / datum.total")` counts as one
 string token and no operator. The per-arm table shows the mean of each
@@ -623,8 +648,8 @@ A task may set `group`, which the report uses to split its tables:
 and `"beyond-defaults"` for charts no arm has built in (mosaic, three-level
 mosaic, waffle, ragged waffle, ribbon chart, scatter plot of pie glyphs, ridgeline, bottle
 fill chart, bottle fill chart from an image, circle packing), which a program has to compose from lower-level
-pieces. d3 has circle packing built in (`d3.pack`); the other arms compute the
-packing themselves. The
+pieces. d3 has circle packing built in (`d3.pack`), and so has the plot arm,
+which may import d3; the other arms compute the packing themselves. The
 common group also holds annotated charts that every arm can draw but that take
 more than one call: bars with value labels, a dashed mean line, a marked and
 labeled peak, and a bubble chart sized by area. The
@@ -637,15 +662,21 @@ solution for `base`. An edit is scored twice. **Applied** means its checks
 pass. **Preserved** compares the base reference's render with the new render
 on every aspect not listed in `mayChange`:
 
-| Aspect   | Must stay the same                                                                                          |
-| -------- | ----------------------------------------------------------------------------------------------------------- |
-| `colors` | the set of colors used by data marks                                                                        |
-| `text`   | the set of text strings that are not numbers (tick labels move with any layout change, so they are ignored) |
-| `marks`  | the number of data marks of each kind                                                                       |
-| `size`   | the largest `<svg>`'s size, within 3%                                                                       |
+| Aspect   | Must stay the same                                                                                                                                   |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `colors` | the set of colors used by data marks                                                                                                                 |
+| `text`   | the set of text strings that are not numbers (tick labels move with any layout change, so they are ignored), without a direction arrow at either end |
+| `marks`  | the number of data marks of each kind                                                                                                                |
+| `size`   | the largest `<svg>`'s size, within 3%                                                                                                                |
 
 Data marks are rects, circles, wedges and filled paths that are not background
 and not hairlines (thinner than 2 px).
+
+Plot writes an axis title with an arrow that points along its axis
+(`↑ count` on the vertical axis, `count →` on the horizontal one). When an
+edit moves the title to the other axis, the arrow turns but the title stays
+the same, so `text` compares the strings without an arrow (`↑ ↓ ← →`) at
+either end.
 
 An edit that changes the chart's orientation or swaps its axes lists `size` in
 `mayChange`: `edit/bar-to-horizontal` and step 2 of `chain/bars-evolve` (the
@@ -887,7 +918,13 @@ renders the blend and the alpha mask as a desktop browser does.
 - `ribbons` needs a gap of at least 12 px between neighboring bars. A band
   drawn as one path with several separate pieces is read as one outline, which
   can join the pieces with a false edge.
-- The gofish provenance check only sees elements created by
+- `waffle` and `unitBlocks` read squares from separate rects. Plot's own
+  waffle marks (`Plot.waffleY`, `Plot.waffleX`) draw each series as one
+  shape filled with a pattern of squares, which the record reads as one
+  gray path. `Plot.waffleY(data, { x: "lake", y: "count", fill: "lake",
+multiple: 5 })` draws the ragged waffle the task asks for, and fails
+  `unitBlocks`. The plot references draw one rect per square instead.
+- The gofish and plot provenance checks only see elements created by
   `createElementNS`, `cloneNode` or `importNode`. Markup parsed from a string
   counts as the program's own, so `container.innerHTML = await
 chart(...).toSVG()` breaks the contract, although appending

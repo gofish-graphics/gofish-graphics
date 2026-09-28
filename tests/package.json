@@ -41,6 +41,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
+    "@observablehq/plot": "^0.6.17",
     "@playwright/test": "^1.58.2",
     "@types/diff-match-patch": "^1.0.36",
     "@types/pixelmatch": "^5.2.6",

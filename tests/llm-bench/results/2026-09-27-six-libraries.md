@@ -28,7 +28,7 @@ Findings:
   by hand.
 - GoFish passes the fewest tasks, 76%. But its code has the least explicit
   calculation: a median of 0 arithmetic operators overall and 3 on the
-  beyond-defaults charts, against 17.5 to 25 for the others. (Recharts counts were corrected after a lexer bug read JSX `/>` and `</` as division.) It also has the
+  beyond-defaults charts, against 17.5 to 25 for the others. (Recharts counts were corrected after a lexer bug read JSX `/>` and `</` as division, and D3 counts after `import * as d3` was read as multiplication.) It also has the
   smallest median code size, 140 syntax tokens.
 - The two grammars, ggplot2 and Altair, are close to GoFish on common charts
   (a median of 1.5 arithmetic operators overall). They diverge on
@@ -45,7 +45,7 @@ Findings:
 | -------------- | ---- | ------ | --------------- | ------- | ----------------------- | --------------------------- | -------------------------------- | ------------------------------------ |
 | GoFish (skill) | 76%  | 82%    | 64%             | 0%      | 0 (9.7)                 | 139.5 (296)                 | 3                                | 249.5                                |
 | Recharts       | 98%  | 98%    | 100%            | 0%      | 4.5 (14.7)              | 357.5 (446)                 | 25                               | 657.5                                |
-| D3             | 100% | 100%   | 100%            | 0%      | 15 (17.5)               | 661.5 (652)                 | 22                               | 728                                  |
+| D3             | 100% | 100%   | 100%            | 0%      | 14 (16.6)               | 661.5 (652)                 | 21                               | 728                                  |
 | Matplotlib     | 97%  | 100%   | 91%             | 0%      | 8.5 (14.6)              | 339 (381)                   | 25                               | 505.5                                |
 | ggplot2        | 95%  | 98%    | 91%             | 0%      | 1.5 (12.6)              | 213 (351)                   | 19.5                             | 608                                  |
 | Altair         | 87%  | 95%    | 73%             | 0%      | 1.5 (14.7)              | 282.5 (434)                 | 17.5                             | 618                                  |
@@ -56,7 +56,7 @@ Findings:
 | -------------- | ---- | ------ | --------------- | ------- | ----------------------- | --------------------------- | -------------------------------- | ------------------------------------ |
 | GoFish (skill) | 76%  | 82%    | 64%             | 0%      | 0 (9.7)                 | 139.5 (296)                 | 3                                | 249.5                                |
 | Recharts       | 98%  | 98%    | 100%            | 0%      | 4.5 (14.7)              | 357.5 (446)                 | 25                               | 657.5                                |
-| D3             | 100% | 100%   | 100%            | 0%      | 15 (17.5)               | 661.5 (652)                 | 22                               | 728                                  |
+| D3             | 100% | 100%   | 100%            | 0%      | 14 (16.6)               | 661.5 (652)                 | 21                               | 728                                  |
 | Matplotlib     | 94%  | 100%   | 82%             | 0%      | 7 (10.2)                | 344 (362)                   | 19                               | 545                                  |
 | ggplot2        | 94%  | 98%    | 86%             | 0%      | 2 (10.9)                | 253 (344)                   | 24                               | 580.5                                |
 | Altair         | 85%  | 98%    | 64%             | 0%      | 1 (11.4)                | 279 (408)                   | 14.5                             | 637.5                                |
