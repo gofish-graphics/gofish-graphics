@@ -505,6 +505,20 @@ function sliceAround(
   };
 }
 
+/** The point at `at` along `el` (of total length `len`), except that the
+ *  start is where the outline starts. A leading moveto that draws nothing
+ *  (d3-hexbin's hexagons start at the bin's center, then move to a corner)
+ *  is not on the outline, yet length 0 is that point; any length past it
+ *  is on the outline. */
+function pointAt(el: SVGGeometryElement, at: number, len: number): DOMPoint {
+  if (at > 0) return el.getPointAtLength(at);
+  const start = el.getPointAtLength(0);
+  const after = el.getPointAtLength(Math.min(len, 1e-3));
+  return Math.hypot(after.x - start.x, after.y - start.y) > 0.01
+    ? after
+    : start;
+}
+
 /** Sample `el` along its outline in container coordinates: one point per
  *  2px of length, at least 64 (so a small shape, such as a thin slice of a
  *  20px pie, still has several samples on each side) and at most `maxN`. */
@@ -522,7 +536,7 @@ function samplePoints(
   const pts: Pt[] = [];
   const count = closed ? n : n + 1;
   for (let i = 0; i < count; i++) {
-    const p = el.getPointAtLength((i * len) / n);
+    const p = pointAt(el, (i * len) / n, len);
     pts.push([
       m.a * p.x + m.c * p.y + m.e - origin.left,
       m.b * p.x + m.d * p.y + m.f - origin.top,
@@ -743,7 +757,7 @@ function clipRegions(
         const n = Math.max(64, Math.min(800, Math.round(len / 2)));
         const pts: Pt[] = [];
         for (let i = 0; i < n; i++) {
-          const p = shape.getPointAtLength((i * len) / n);
+          const p = pointAt(shape, (i * len) / n, len);
           const q = full.transformPoint(new DOMPoint(p.x, p.y));
           pts.push([q.x - origin.left, q.y - origin.top]);
         }

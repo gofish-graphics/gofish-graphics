@@ -661,6 +661,9 @@ Shapes are classified by their sampled geometry, not by their tag:
 
 Every outline is classified from at least 64 samples, so a small shape, such
 as a thin slice of a 20 px pie, still has several samples on each side.
+Sampling starts where the outline starts: a leading moveto that draws
+nothing (d3-hexbin's hexagons move from the bin's center to a corner) is not
+a point of the outline, so it is not a corner.
 
 A `rect` drawn by anything other than a `<rect>` element also keeps its
 outline, since a shape that fills 95% of its box may still not be a rectangle
@@ -816,7 +819,13 @@ Terms: the **ink** of a mark is its fill, or its stroke when the fill is
 missing, near-white or transparent. A **background** mark has no ink, or is a
 rect (a `<rect>`, or any shape that nearly fills its bounding box) covering at
 least 40% of the chart. Wedges, circles and other paths are never background
-because of their size, so the biggest slice of a large pie still counts. Two colors are the **same** when their RGBA distance
+because of their size, so the biggest slice of a large pie still counts. A **filled shape** is a mark with a non-white fill that is not background and
+is at least 2 px thick, or the band a thick stroke paints: an open, unfilled
+line or path with a stroke at least 2 px wide counts as the outline of its
+centerline widened by the stroke width, in the stroke's color. So a flow
+drawn as one thick stroke (a sankey link) is the same band as its filled
+outline for the checks that read filled shapes (`alluvial`, `chord`,
+`stackedArea`, `signedArea`). Two colors are the **same** when their RGBA distance
 (alpha scaled to 0-255) is at most 24.
 
 Values for `bars`, `referenceLine`, `wedges` and `waffle` are either literal
@@ -1004,8 +1013,10 @@ fails a sankey (the flows between survival and gender added up per pair and
 colored by survival), ribbons that trade slots inside the survival nodes,
 the second gap colored by survival, 3 px ribbons, equal node heights, nodes in
 reverse order, and flows sent to the wrong target. It passes the ribbons drawn
-as one path each, as one path per gap, and split into two half-thickness
-lodes. `spine` fails both bars to the right, Men on the left, the
+as one path each, as one path per gap, split into two half-thickness
+lodes, and d3-sankey's links drawn as thick strokes (`sankeyLinkHorizontal`
+with `stroke-width`), in the d3 and plot arms. `hexbin` passes d3-hexbin's
+`hexbin.hexagon()` paths, which start at the bin's center. `spine` fails both bars to the right, Men on the left, the
 Women side scaled 1.3 times, and the two bars of a row offset by half a band.
 The `bars` highlight of `create/diverging-bar` fails red on the positive bars.
 

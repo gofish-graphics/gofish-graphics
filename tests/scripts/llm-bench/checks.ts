@@ -3801,16 +3801,77 @@ function paintedShapes(rec: RenderRecord): Mark[] {
   );
 }
 
+/** The area a thick stroke paints along an open, unfilled line or path:
+ *  its sampled centerline offset by half the stroke width on each side
+ *  (butt ends), as a filled shape in the stroke's color. A flow drawn as
+ *  one thick stroke (a sankey link) paints the same band as the filled
+ *  outline of that band. Null for anything else, or a stroke under 2px
+ *  (the thinnest filled shape `filledShapes` keeps). */
+function strokeBand(m: Mark): Mark | null {
+  const pts = m.points;
+  if (
+    (m.kind !== "line" && m.kind !== "path") ||
+    (m.fill && m.fill[3] > 0) ||
+    !m.stroke ||
+    m.strokeWidth < 2 ||
+    !pts ||
+    pts.length < 2 ||
+    Math.hypot(
+      pts[0][0] - pts[pts.length - 1][0],
+      pts[0][1] - pts[pts.length - 1][1]
+    ) <= 1
+  )
+    return null;
+  const h = m.strokeWidth / 2;
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  pts.forEach((p, i) => {
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const [nx, ny] = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
+    left.push([p[0] + nx * h, p[1] + ny * h]);
+    right.push([p[0] - nx * h, p[1] - ny * h]);
+  });
+  const outline = [...left, ...right.reverse()];
+  const xs = outline.map((p) => p[0]);
+  const ys = outline.map((p) => p[1]);
+  const [x, y] = [Math.min(...xs), Math.min(...ys)];
+  const band: Mark = {
+    ...m,
+    kind: "path",
+    fill: m.stroke,
+    stroke: null,
+    strokeWidth: 0,
+    dash: undefined,
+    points: outline,
+    x,
+    y,
+    w: Math.max(...xs) - x,
+    h: Math.max(...ys) - y,
+  };
+  bandSource.set(band, m);
+  return band;
+}
+
+/** The mark a stroke band was made from (`strokeBand`). */
+const bandSource = new WeakMap<Mark, Mark>();
+const sourceOf = (m: Mark): Mark => bandSource.get(m) ?? m;
+
+/** Filled shapes that read as data, and the bands thick strokes paint
+ *  (`strokeBand`). */
 function filledShapes(rec: RenderRecord): Mark[] {
-  return rec.marks.filter(
-    (m) =>
-      m.kind !== "text" &&
-      m.kind !== "line" &&
-      m.fill &&
-      !nearWhite(m.fill) &&
-      Math.min(m.w, m.h) >= 2 &&
-      !isBackground(m, rec)
-  );
+  return rec.marks
+    .map((m) => strokeBand(m) ?? m)
+    .filter(
+      (m) =>
+        m.kind !== "text" &&
+        m.kind !== "line" &&
+        m.fill &&
+        !nearWhite(m.fill) &&
+        Math.min(m.w, m.h) >= 2 &&
+        !isBackground(m, rec)
+    );
 }
 
 /** The mark painted on top at `p` among `marks` (the last in document
@@ -4094,7 +4155,7 @@ function checkSignedArea(
   const rows = ctx.data
     .filter((r) => Number.isFinite(num(r[c.x])) && Number.isFinite(num(r[c.y])))
     .sort((a, b) => num(a[c.x]) - num(b[c.x]));
-  const fills = filledShapes(rec).filter((m) => m !== line);
+  const fills = filledShapes(rec).filter((m) => sourceOf(m) !== line);
   const y0 = Y.b;
   const vmax = Math.max(...rows.map((r) => Math.abs(num(r[c.y]))));
   const reach = Math.max(3, 0.02 * Math.abs(Y.a) * vmax);
