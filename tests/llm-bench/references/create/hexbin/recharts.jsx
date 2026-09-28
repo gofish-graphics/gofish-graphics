@@ -1,20 +1,19 @@
 import {
   ScatterChart,
-  Scatter,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Legend,
   useXAxisScale,
   useYAxisScale,
+  usePlotArea,
 } from "recharts";
 
-// Recharts has no hexbin. The bins are computed here; a scatter chart places
-// one point per nonempty bin and draws it as a hexagon whose corners go
-// through the axis scales, so the hexagons are sized in data units.
+// Recharts has no hexbin. A child component reads the axis scales, bins the
+// films in pixels as d3-hexbin does, and draws one hexagon per nonempty bin,
+// with a legend of swatches beside the plot.
 
-const X_STEP = 100;
-const Y_STEP = 1000;
+const RADIUS = 25; // px, center to corner
+const SX = Math.sqrt(3) * RADIUS; // centers in a row
+const SY = 3 * RADIUS; // rows of the same offset
 const LIGHT = [254, 232, 200];
 const DARK = [127, 0, 0];
 
@@ -23,131 +22,88 @@ function color(t) {
   return `rgb(${c.join(",")})`;
 }
 
-// Corners of a pointy-top hexagon around (x, y), in data units.
-const CORNERS = [
-  [0, Y_STEP / 3],
-  [X_STEP / 2, Y_STEP / 6],
-  [X_STEP / 2, -Y_STEP / 6],
-  [0, -Y_STEP / 3],
-  [-X_STEP / 2, -Y_STEP / 6],
-  [-X_STEP / 2, Y_STEP / 6],
-];
+// The nearer center of the two offset lattices around a pixel.
+function center(px, py) {
+  const a = [Math.round(px / SX) * SX, Math.round(py / SY) * SY];
+  const b = [
+    (Math.floor(px / SX) + 0.5) * SX,
+    (Math.floor(py / SY) + 0.5) * SY,
+  ];
+  const d = ([x, y]) => (px - x) ** 2 + (py - y) ** 2;
+  return d(a) <= d(b) ? a : b;
+}
 
-function Hexagon({ payload }) {
+const CORNERS = [0, 1, 2, 3, 4, 5].map((k) => {
+  const angle = (Math.PI / 3) * k;
+  return [RADIUS * Math.sin(angle), -RADIUS * Math.cos(angle)];
+});
+
+function Hexbins({ data }) {
   const x = useXAxisScale();
   const y = useYAxisScale();
-  if (!x || !y) return null;
-  const pts = CORNERS.map(
-    ([dx, dy]) => `${x(payload.x + dx)},${y(payload.y + dy)}`
-  ).join(" ");
-  return (
-    <polygon
-      points={pts}
-      fill={payload.color}
-      stroke="white"
-      strokeWidth={0.5}
-    />
-  );
-}
-
-// The nearest center on either lattice, by (dx/X_STEP)^2 + 3 (dy/Y_STEP)^2.
-function binOf(bx, by) {
-  const u = bx / X_STEP;
-  const v = by / Y_STEP;
-  const a = [Math.round(u), Math.round(v)];
-  const b = [Math.floor(u) + 0.5, Math.floor(v) + 0.5];
-  const d = ([i, j]) => (u - i) ** 2 + 3 * (v - j) ** 2;
-  const [i, j] = d(a) <= d(b) ? a : b;
-  return { x: i * X_STEP, y: j * Y_STEP };
-}
-
-export default function Chart({ data }) {
+  const area = usePlotArea();
+  if (!x || !y || !area) return null;
   const bins = new Map();
   for (const d of data) {
-    const c = binOf(d.budget, d.box_office);
-    const key = `${c.x},${c.y}`;
-    if (!bins.has(key)) bins.set(key, { ...c, count: 0 });
+    const [cx, cy] = center(x(d.budget), y(d.box_office));
+    const key = `${cx},${cy}`;
+    if (!bins.has(key)) bins.set(key, { cx, cy, count: 0 });
     bins.get(key).count++;
   }
   const max = Math.max(...[...bins.values()].map((b) => b.count));
-  const cells = [...bins.values()].map((b) => ({
-    ...b,
-    color: color(max === 1 ? 1 : (b.count - 1) / (max - 1)),
-  }));
-  // Axis domains that hold every hexagon, on whole steps, ticked every step.
-  const span = (vs, half, step) => [
-    Math.floor((Math.min(...vs) - half) / step) * step,
-    Math.ceil((Math.max(...vs) + half) / step) * step,
-  ];
-  const steps = ([lo, hi], step) =>
-    Array.from({ length: (hi - lo) / step + 1 }, (_, i) => lo + i * step);
-  const xDomain = span(
-    cells.map((c) => c.x),
-    X_STEP / 2,
-    X_STEP
-  );
-  const yDomain = span(
-    cells.map((c) => c.y),
-    Y_STEP / 3,
-    Y_STEP
-  );
+  const fill = (n) => color(n / max);
   const counts = Array.from({ length: max }, (_, i) => i + 1);
+  const lx = area.x + area.width + 16;
+  return (
+    <g>
+      {[...bins.values()].map((b) => (
+        <polygon
+          key={`${b.cx},${b.cy}`}
+          points={CORNERS.map(([dx, dy]) => `${b.cx + dx},${b.cy + dy}`).join(
+            " "
+          )}
+          fill={fill(b.count)}
+          stroke="white"
+          strokeWidth={0.5}
+        />
+      ))}
+      <text x={lx} y={area.y + 10} fontSize={12}>
+        Films
+      </text>
+      {counts.map((n, i) => (
+        <g key={n} transform={`translate(${lx},${area.y + 20 + i * 18})`}>
+          <rect width={12} height={12} fill={fill(n)} />
+          <text x={18} y={10} fontSize={11}>
+            {n}
+          </text>
+        </g>
+      ))}
+    </g>
+  );
+}
 
+export default function Chart({ data }) {
   return (
     <ScatterChart
       width={600}
       height={450}
-      margin={{ top: 20, right: 30, bottom: 20, left: 20 }}
+      margin={{ top: 20, right: 80, bottom: 20, left: 20 }}
     >
-      <CartesianGrid strokeDasharray="3 3" />
       <XAxis
         type="number"
-        dataKey="x"
-        domain={xDomain}
-        ticks={steps(xDomain, X_STEP)}
-        name="budget"
+        dataKey="budget"
+        domain={[-50, 450]}
+        allowDataOverflow
         label={{ value: "Budget ($M)", position: "insideBottom", offset: -10 }}
       />
       <YAxis
         type="number"
-        dataKey="y"
-        domain={yDomain}
-        ticks={steps(yDomain, Y_STEP)}
-        name="box office"
+        dataKey="box_office"
+        domain={[1200, 4000]}
+        allowDataOverflow
         label={{ value: "Box office ($M)", angle: -90, position: "insideLeft" }}
       />
-      <Legend
-        verticalAlign="top"
-        content={() => (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 6,
-              fontSize: 12,
-            }}
-          >
-            <span>Films per bin:</span>
-            {counts.map((n) => (
-              <span
-                key={n}
-                style={{ display: "flex", alignItems: "center", gap: 2 }}
-              >
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: 12,
-                    height: 12,
-                    background: color(max === 1 ? 1 : (n - 1) / (max - 1)),
-                  }}
-                />
-                {n}
-              </span>
-            ))}
-          </div>
-        )}
-      />
-      <Scatter data={cells} shape={<Hexagon />} isAnimationActive={false} />
+      <Hexbins data={data} />
     </ScatterChart>
   );
 }

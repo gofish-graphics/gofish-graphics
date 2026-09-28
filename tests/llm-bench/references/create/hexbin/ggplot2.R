@@ -1,33 +1,32 @@
 library(ggplot2)
-library(dplyr)
 
 data <- jsonlite::fromJSON(Sys.getenv("DATA_PATH"))
-sx <- 100   # budget between neighboring centers in a row
-sy <- 1000  # box office between rows of the same lattice
+radius <- 25 # px, center to corner
 
-# geom_hex anchors its lattice at the data range rounded to the bin width,
-# so it cannot put the centers where the task asks. The bins are computed
-# here: each film goes to the nearest center of the two offset lattices.
-ax <- round(data$budget / sx) * sx
-ay <- round(data$box_office / sy) * sy
-bx <- (round(data$budget / sx - 0.5) + 0.5) * sx
-by <- (round(data$box_office / sy - 0.5) + 0.5) * sy
-dist <- function(cx, cy) ((data$budget - cx) / sx)^2 + 3 * ((data$box_office - cy) / sy)^2
-use_a <- dist(ax, ay) <= dist(bx, by)
-bins <- data.frame(cx = ifelse(use_a, ax, bx), cy = ifelse(use_a, ay, by)) |>
-  count(cx, cy, name = "films") |>
-  mutate(bin = row_number())
+# geom_hex bins in data units, with binwidth c(bx, by): centers bx apart in
+# a row, and hexagons bx wide and 2 by / sqrt(3) tall. A pointy-top hexagon
+# of radius r px is sqrt(3) r wide and 2 r tall, so both are sqrt(3) r in
+# pixels. Fixing the panel size and the axis limits fixes the data units per
+# pixel, so the pixel radius converts exactly.
+px_per_in <- 100 # the 6 x 4.5 in SVG is shown at 600 x 450 px
+panel_w <- 4.2 # in
+panel_h <- 3.6
+xlim <- c(-50, 450) # room for the hexagons around the data
+ylim <- c(1200, 4000)
+per_px_x <- diff(xlim) / (panel_w * px_per_in)
+per_px_y <- diff(ylim) / (panel_h * px_per_in)
+binwidth <- sqrt(3) * radius * c(per_px_x, per_px_y)
 
-# Pointy-top hexagon corners around each center, in data units.
-corner_x <- c(0, sx / 2, sx / 2, 0, -sx / 2, -sx / 2)
-corner_y <- c(sy / 3, sy / 6, -sy / 6, -sy / 3, -sy / 6, sy / 6)
-hexagons <- bins[rep(seq_len(nrow(bins)), each = 6), ] |>
-  mutate(x = cx + rep(corner_x, nrow(bins)), y = cy + rep(corner_y, nrow(bins)))
-
-plot <- ggplot(hexagons, aes(x = x, y = y, group = bin, fill = films)) +
-  geom_polygon(color = "white", linewidth = 0.2) +
+plot <- ggplot(data, aes(x = budget, y = box_office)) +
+  geom_hex(binwidth = binwidth, color = "white", linewidth = 0.2) +
+  scale_x_continuous(limits = xlim, expand = c(0, 0), oob = scales::oob_keep) +
+  scale_y_continuous(limits = ylim, expand = c(0, 0), oob = scales::oob_keep) +
   scale_fill_gradient(low = "#fdd0a2", high = "#7f2704", name = "Films") +
-  labs(x = "Budget (millions)", y = "Box office (millions)")
+  labs(x = "Budget (millions)", y = "Box office (millions)") +
+  theme(
+    panel.widths = unit(panel_w, "in"),
+    panel.heights = unit(panel_h, "in")
+  )
 
 ggsave(Sys.getenv("OUT_PATH"), plot, device = svglite::svglite,
        width = 6, height = 4.5, units = "in")

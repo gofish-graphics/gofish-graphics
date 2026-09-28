@@ -4,60 +4,76 @@ import {
   group,
   polygon,
   rect,
+  blank,
   gradient,
   assignGradientColor,
 } from "gofish-graphics";
 
-const SX = 100; // budget between neighboring centers in a row
-const SY = 1000; // box office between rows of the same lattice
-const ORANGES = gradient(["#fff5eb", "#fd8d3c", "#7f2704"]);
+const W = 440; // plot width, px
+const H = 380; // plot height, px
+const RADIUS = 25; // px, center to corner
+const X = [-50, 450]; // budget domain, pinned below
+const Y = [1000, 4000]; // box office domain, pinned below
+const ORANGES = gradient(["#fdd0a2", "#fd8d3c", "#7f2704"]);
 
 // WORKAROUND: GoFish has no hexbin transform, so the bins and their
-// hexagons are computed here, in data units. Each film goes to the nearest
-// center of the two offset lattices, by the task's scaled distance.
+// hexagons are computed here, in pixels, as d3-hexbin does. That needs the
+// scales in pixels, so the domains are pinned by invisible points at their
+// ends: one budget unit is W / (X[1] - X[0]) px.
+const toPx = (b, v) => [
+  ((b - X[0]) / (X[1] - X[0])) * W,
+  ((Y[1] - v) / (Y[1] - Y[0])) * H,
+];
+const toData = ([px, py]) => [
+  X[0] + (px / W) * (X[1] - X[0]),
+  Y[1] - (py / H) * (Y[1] - Y[0]),
+];
+
 function hexbins(rows) {
+  const sx = Math.sqrt(3) * RADIUS; // centers in a row
+  const sy = 3 * RADIUS; // rows of the same offset
   const bins = new Map();
   for (const d of rows) {
-    const a = [
-      Math.round(d.budget / SX) * SX,
-      Math.round(d.box_office / SY) * SY,
-    ];
+    // The nearer center of the two offset lattices.
+    const [px, py] = toPx(d.budget, d.box_office);
+    const a = [Math.round(px / sx) * sx, Math.round(py / sy) * sy];
     const b = [
-      (Math.round(d.budget / SX - 0.5) + 0.5) * SX,
-      (Math.round(d.box_office / SY - 0.5) + 0.5) * SY,
+      (Math.floor(px / sx) + 0.5) * sx,
+      (Math.floor(py / sy) + 0.5) * sy,
     ];
-    const dist = ([cx, cy]) =>
-      ((d.budget - cx) / SX) ** 2 + 3 * ((d.box_office - cy) / SY) ** 2;
+    const dist = ([x, y]) => (px - x) ** 2 + (py - y) ** 2;
     const [cx, cy] = dist(a) <= dist(b) ? a : b;
     const key = `${cx},${cy}`;
-    if (!bins.has(key)) bins.set(key, { cx, cy, count: 0 });
+    if (!bins.has(key)) bins.set(key, { key, cx, cy, count: 0 });
     bins.get(key).count++;
   }
   const cells = [...bins.values()];
-  const counts = cells.map((c) => c.count);
-  const [lo, hi] = [Math.min(...counts), Math.max(...counts)];
-  return cells.map(({ cx, cy, count }) => ({
-    key: `${cx},${cy}`,
-    cx,
-    cy,
-    count,
-    // WORKAROUND: a polygon's `fill` is not a data channel, so the
-    // sequential color is looked up here.
-    color: assignGradientColor(ORANGES, (count - lo) / (hi - lo)),
-    // pointy-top hexagon around the center, in data units
-    ring: [
-      [cx, cy + SY / 3],
-      [cx + SX / 2, cy + SY / 6],
-      [cx + SX / 2, cy - SY / 6],
-      [cx, cy - SY / 3],
-      [cx - SX / 2, cy - SY / 6],
-      [cx - SX / 2, cy + SY / 6],
-    ],
-  }));
+  const max = Math.max(...cells.map((c) => c.count));
+  return cells.map(({ key, cx, cy, count }) => {
+    const [x, y] = toData([cx, cy]);
+    return {
+      key,
+      x,
+      y,
+      count,
+      // WORKAROUND: a polygon's `fill` is not a data channel, so the
+      // sequential color is looked up here.
+      color: assignGradientColor(ORANGES, count / max),
+      // pointy-top hexagon around the center, in data units
+      ring: [0, 1, 2, 3, 4, 5].map((k) => {
+        const t = (Math.PI / 3) * k;
+        return toData([cx + RADIUS * Math.sin(t), cy - RADIUS * Math.cos(t)]);
+      }),
+    };
+  });
 }
 
 export default function render(container, data) {
   const cells = hexbins(data);
+  const frame = [
+    { x: X[0], y: Y[0] },
+    { x: X[1], y: Y[1] },
+  ];
   return (
     chart(cells, {
       axes: {
@@ -67,8 +83,14 @@ export default function render(container, data) {
       color: ORANGES,
     })
       // a zero-size rect per cell colored by count, for the color bar
-      .flow(scatter({ x: "cx", y: "cy" }))
+      .flow(scatter({ by: "key", x: "x", y: "y" }))
       .mark(rect({ w: 0, h: 0, fill: "count" }))
+      // invisible points at the ends of both domains
+      .layer(
+        chart(frame)
+          .flow(scatter({ by: "x", x: "x", y: "y" }))
+          .mark(blank())
+      )
       // one polygon per cell, its points in data units
       .layer(
         chart(cells)
@@ -82,6 +104,6 @@ export default function render(container, data) {
             })(rows)
           )
       )
-      .render(container, { w: 460, h: 380 })
+      .render(container, { w: W, h: H })
   );
 }

@@ -378,22 +378,14 @@ export type Check =
    *  of first appearance). The fill follows `value` on a sequential scale
    *  from light (low) to dark (high); see `sequentialProblem`. */
   | { check: "heatmap"; x: string; y: string; value: string }
-  /** Hexagonal binning in data units. Bin centers are at (i * xStep,
-   *  j * yStep) and (i * xStep + xStep / 2, j * yStep + yStep / 2); a row
-   *  belongs to the nearest center by ((dx / xStep)^2 + 3 (dy / yStep)^2).
-   *  There is one filled six-cornered shape per nonempty bin and no other,
-   *  centered at an affine image of the bin center with y up (within `tol`
-   *  of the plotted extent), xStep wide and 2/3 yStep tall on that scale
-   *  (within 12% plus 1.5px), colored by the bin's count on a sequential
+  /** Hexagonal binning in pixels, as d3-hexbin does: pointy-top hexagons
+   *  of `radius` px (center to corner, within `tol`, default 0.15) on one
+   *  lattice whose spacing and offset are read from the drawn hexagons (no
+   *  origin is assumed). Some linear x and y scales (y up) put every row
+   *  inside a drawn hexagon, by the nearest lattice center, leave no drawn
+   *  hexagon empty, and give counts that the fills show on a sequential
    *  scale from light (few) to dark (many). */
-  | {
-      check: "hexbin";
-      x: string;
-      y: string;
-      xStep: number;
-      yStep: number;
-      tol?: number;
-    }
+  | { check: "hexbin"; x: string; y: string; radius: number; tol?: number }
   /** Lollipops: one circle per value, each joined by a stem (a line or a
    *  thin rect along the value axis) to one shared baseline. The stems'
    *  lengths, from the baseline to the circle centers, are proportional to
@@ -425,15 +417,15 @@ export type Check =
       sizeTol?: number;
     }
   /** A beeswarm: one circle per row, all the same radius (within 1px or
-   *  5%), centered at a linear image of `x` (within `tol` of the plotted
-   *  extent, default 0.01, at least 1.5px). No two circles overlap (by more
+   *  5%), centered within `slack` px (default 2) of a linear image of `x`,
+   *  so a force layout that settles near the exact positions passes. No two circles overlap (by more
    *  than 1px or 10% of the radius), and every circle off the swarm's base
    *  line (the vertical position most circles share, within 2px) touches
    *  another circle (within 1.5px or 15% of the radius), so the circles
    *  pile up from the base line instead of scattering. `colorBy`: rows
    *  sharing the field's value share a color, and different values differ
    *  (circles at the same x may be matched in any order). */
-  | { check: "beeswarm"; x: string; colorBy?: string; tol?: number }
+  | { check: "beeswarm"; x: string; colorBy?: string; slack?: number }
   /** A stacked area chart: per `series` (bottom to top in order of first
    *  appearance), a filled shape whose cross-section at each `x` spans that
    *  series' stacked interval (from the sum of the series below it to that
@@ -1351,6 +1343,21 @@ function fits1d(mapped: number[], screen: number[], tol: number): boolean {
 
 function extent(xs: number[]): [number, number] {
   return [Math.min(...xs), Math.max(...xs)];
+}
+
+/** The least-squares line ys = a xs + b. */
+function leastSquares(xs: number[], ys: number[]): Affine {
+  const n = xs.length;
+  const mx = xs.reduce((t, v) => t + v, 0) / n;
+  const my = ys.reduce((t, v) => t + v, 0) / n;
+  let sxx = 0;
+  let sxy = 0;
+  for (let i = 0; i < n; i++) {
+    sxx += (xs[i] - mx) ** 2;
+    sxy += (xs[i] - mx) * (ys[i] - my);
+  }
+  const a = sxx > 0 ? sxy / sxx : 0;
+  return { a, b: my - a * mx };
 }
 
 /** Place data points (xs[i], ys[i]) on screen centers under one affine map
@@ -4302,88 +4309,265 @@ function checkHexbin(
   rec: RenderRecord,
   ctx: CheckContext
 ): CheckResult {
-  const { xStep: sx, yStep: sy } = c;
-  // Nearest center of the two offset rectangular lattices, in the scaled
-  // distance that makes the cells regular hexagons.
-  const bins = new Map<string, { cx: number; cy: number; n: number }>();
-  for (const r of ctx.data) {
-    const x = num(r[c.x]);
-    const y = num(r[c.y]);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    const a = [Math.round(x / sx) * sx, Math.round(y / sy) * sy];
-    const b = [
-      (Math.round(x / sx - 0.5) + 0.5) * sx,
-      (Math.round(y / sy - 0.5) + 0.5) * sy,
-    ];
-    const d = (p: number[]) =>
-      ((x - p[0]) / sx) ** 2 + 3 * ((y - p[1]) / sy) ** 2;
-    const [cx, cy] = d(a) <= d(b) ? a : b;
-    const key = `${cx}|${cy}`;
-    const bin = bins.get(key) ?? { cx, cy, n: 0 };
-    bin.n++;
-    bins.set(key, bin);
+  const R = c.radius;
+  const tol = c.tol ?? 0.15;
+  const S3 = Math.sqrt(3);
+  // Hexagons, measured by their corners: a clip may cut the mark's box.
+  const hexes: { mark: Mark; cx: number; cy: number; w: number; h: number }[] =
+    [];
+  for (const m of paintedShapes(rec)) {
+    if (!m.points) continue;
+    const cs = corners(m.points, Math.max(1, 0.04 * Math.max(m.w, m.h)));
+    if (cs.length !== 6) continue;
+    const [x0, x1] = extent(cs.map((p) => p[0]));
+    const [y0, y1] = extent(cs.map((p) => p[1]));
+    hexes.push({
+      mark: m,
+      cx: (x0 + x1) / 2,
+      cy: (y0 + y1) / 2,
+      w: x1 - x0,
+      h: y1 - y0,
+    });
   }
-  const want = [...bins.values()];
-  const hexes = paintedShapes(rec).filter(
-    (m) =>
-      m.points &&
-      corners(m.points, Math.max(1, 0.04 * Math.max(m.w, m.h))).length === 6
+  if (hexes.length === 0)
+    return { pass: false, detail: "no six-cornered filled shapes" };
+  // A pointy-top hexagon of radius r is sqrt(3) r wide and 2 r tall (a
+  // flat-top one is wider than tall).
+  const offSize = hexes.filter(
+    (hx) =>
+      hx.h <= hx.w ||
+      Math.abs(hx.w / S3 - R) > tol * R ||
+      Math.abs(hx.h / 2 - R) > tol * R
   );
-  if (hexes.length !== want.length)
+  if (offSize.length > 0)
     return {
       pass: false,
-      detail: `expected ${want.length} hexagons (one per nonempty bin), found ${hexes.length} six-cornered filled shapes`,
+      detail: `${offSize.length} of ${hexes.length} hexagons are not pointy-top with a radius of ${R}px (one is ${offSize[0].w.toFixed(1)}x${offSize[0].h.toFixed(1)}px, expected ${(S3 * R).toFixed(1)}x${(2 * R).toFixed(1)}px)`,
     };
-  const { match } = placePoints(
-    want.map((b) => b.cx),
-    want.map((b) => b.cy),
-    hexes.map((m) => m.x + m.w / 2),
-    hexes.map((m) => m.y + m.h / 2),
-    c.tol ?? 0.01
-  );
-  if (!match)
-    return {
-      pass: false,
-      detail: `${hexes.length} hexagons, but their centers are not an affine image of the ${want.length} nonempty bin centers`,
-    };
-  const mine = match.map((j) => hexes[j]);
-  // The scale in px per data unit, from the centers' spread.
-  const scale = (vals: number[], px: number[]) => {
-    const [lo, hi] = extent(vals);
-    const [plo, phi] = extent(px);
-    return hi > lo ? (phi - plo) / (hi - lo) : NaN;
+
+  // The lattice: center (i, j) at (ox + i dx / 2, oy + j dy), i + j even.
+  // Hexagons are indexed nearest first, starting from the first one, and the
+  // spacing and offset are refitted after each, so no origin is assumed.
+  let dx = median(hexes.map((hx) => hx.w));
+  let dy = 0.75 * median(hexes.map((hx) => hx.h));
+  let ox = hexes[0].cx;
+  let oy = hexes[0].cy;
+  const ij: ([number, number] | null)[] = hexes.map(() => null);
+  ij[0] = [0, 0];
+  // A least-squares fit, keeping the step while all indices are equal.
+  const fit = (ks: number[], ps: number[], step: number): Affine => {
+    if (ks.every((k) => k === ks[0])) {
+      const pm = ps.reduce((t, v) => t + v, 0) / ps.length;
+      return { a: step, b: pm - step * ks[0] };
+    }
+    return leastSquares(ks, ps);
   };
-  const ax = scale(
-    want.map((b) => b.cx),
-    mine.map((m) => m.x + m.w / 2)
-  );
-  const ay = scale(
-    want.map((b) => b.cy),
-    mine.map((m) => m.y + m.h / 2)
-  );
-  const W = ax * sx;
-  const H = (ay * sy * 2) / 3;
-  const off = mine.filter(
-    (m) =>
-      Math.abs(m.w - W) > 0.12 * W + 1.5 || Math.abs(m.h - H) > 0.12 * H + 1.5
-  );
-  if (off.length > 0)
+  for (let n = 1; n < hexes.length; n++) {
+    let best: [number, number] = [-1, -1];
+    let bestD = Infinity;
+    hexes.forEach((h, k) => {
+      if (ij[k]) return;
+      ij.forEach((g, l) => {
+        if (!g) return;
+        const d = Math.hypot(h.cx - hexes[l].cx, h.cy - hexes[l].cy);
+        if (d < bestD) {
+          bestD = d;
+          best = [k, l];
+        }
+      });
+    });
+    const [k, l] = best;
+    const [gi, gj] = ij[l]!;
+    const j = gj + Math.round((hexes[k].cy - hexes[l].cy) / dy);
+    const t = gi + (hexes[k].cx - hexes[l].cx) / (dx / 2);
+    ij[k] = [j + 2 * Math.round((t - j) / 2), j];
+    const done = hexes.map((_, q) => q).filter((q) => ij[q]);
+    const fx = fit(
+      done.map((q) => ij[q]![0]),
+      done.map((q) => hexes[q].cx),
+      dx / 2
+    );
+    const fy = fit(
+      done.map((q) => ij[q]![1]),
+      done.map((q) => hexes[q].cy),
+      dy
+    );
+    [dx, ox, dy, oy] = [2 * fx.a, fx.b, fy.a, fy.b];
+  }
+  // Lattice positions as one integer key each, i + j * SPAN (|i| < SPAN / 2).
+  const SPAN = 1 << 16;
+  const site = new Map<number, number>();
+  for (let k = 0; k < hexes.length; k++) {
+    const [i, j] = ij[k]!;
+    const off = Math.hypot(
+      hexes[k].cx - (ox + (i * dx) / 2),
+      hexes[k].cy - (oy + j * dy)
+    );
+    if (off > Math.max(1.5, 0.1 * R))
+      return {
+        pass: false,
+        detail: `${hexes.length} hexagons, but they do not lie on one hexagonal lattice (one is ${off.toFixed(1)}px off it)`,
+      };
+    const key = i + j * SPAN;
+    if (site.has(key))
+      return {
+        pass: false,
+        detail: `${hexes.length} hexagons, but two share one lattice position`,
+      };
+    site.set(key, k);
+  }
+  if (
+    hexes.length > 1 &&
+    (Math.abs(dx - S3 * R) > tol * S3 * R ||
+      Math.abs(dy - 1.5 * R) > tol * 1.5 * R)
+  )
     return {
       pass: false,
-      detail: `hexagons are centered on the bins, but ${off.length} are not a bin's size (${off[0].w.toFixed(1)}x${off[0].h.toFixed(1)}px, expected ${W.toFixed(1)}x${H.toFixed(1)}px)`,
+      detail: `the hexagons' centers are ${dx.toFixed(1)}px apart in a row and their rows ${dy.toFixed(1)}px apart; bins of radius ${R}px are ${(S3 * R).toFixed(1)}px and ${(1.5 * R).toFixed(1)}px apart`,
     };
-  const problem = sequentialProblem(
-    want.map((b) => b.n),
-    mine
+
+  // The drawn hexagons whose lattice centers are within `eps` px of the
+  // nearest lattice center to a pixel, nearest first, or null when none is
+  // drawn. Distances are taken on the lattice made regular, so a program
+  // that bins in data units on a stretched lattice is read the same way.
+  const unit = dx / S3; // px per unit of the regular lattice
+  // The four lattice positions around a pixel: two rows, two in each.
+  const keys = [0, 0, 0, 0];
+  const ds = [0, 0, 0, 0];
+  const near = (px: number, py: number, eps: number): number[] | null => {
+    const a = (px - ox) / (dx / 2);
+    const b = (py - oy) / dy;
+    const j0 = Math.floor(b);
+    let best = Infinity;
+    for (let q = 0; q < 4; q++) {
+      const j = j0 + (q >> 1);
+      const i = j + 2 * Math.floor((a - j) / 2) + 2 * (q & 1);
+      keys[q] = i + j * SPAN;
+      ds[q] = Math.hypot(((a - i) * S3) / 2, (b - j) * 1.5);
+      best = Math.min(best, ds[q]);
+    }
+    const lim = best + eps / unit;
+    let out: number[] | null = null;
+    for (let q = 0; q < 4; q++) {
+      if (ds[q] > lim) continue;
+      const k = site.get(keys[q]);
+      if (k !== undefined) (out ??= []).push(k);
+    }
+    return out;
+  };
+
+  const rows = ctx.data.filter(
+    (r) => Number.isFinite(num(r[c.x])) && Number.isFinite(num(r[c.y]))
   );
+  const norm = (f: string) => {
+    const vs = rows.map((r) => num(r[f]));
+    const [lo, hi] = extent(vs);
+    return vs.map((v) => (v - lo) / (hi - lo || 1));
+  };
+  const us = norm(c.x);
+  const vs = norm(c.y);
+  // A scale is searched as the pixel positions of the data's extremes. The
+  // leftmost row lies in a drawn hexagon and the leftmost hexagon holds a
+  // row, so the left end is within half a hexagon of the leftmost center;
+  // likewise for the other three ends (y up).
+  const hw = Math.max(dx, median(hexes.map((hx) => hx.w))) / 2 + 1;
+  const hh = Math.max((4 / 3) * dy, median(hexes.map((hx) => hx.h))) / 2 + 1;
+  const [cxLo, cxHi] = extent(hexes.map((hx) => hx.cx));
+  const [cyLo, cyHi] = extent(hexes.map((hx) => hx.cy));
+  const ranges: [number, number][] = [
+    [cxLo - hw, cxLo + hw],
+    [cxHi - hw, cxHi + hw],
+    [cyHi - hh, cyHi + hh],
+    [cyLo - hh, cyLo + hh],
+  ];
+  // Each row's candidate hexagons under one scale, or null when a row falls
+  // outside the drawn hexagons or some hexagon can hold no row.
+  const cover = (p: number[], eps: number): number[][] | null => {
+    const out: number[][] = [];
+    const hit = new Uint8Array(hexes.length);
+    for (let n = 0; n < rows.length; n++) {
+      const ks = near(
+        p[0] + (p[1] - p[0]) * us[n],
+        p[2] + (p[3] - p[2]) * vs[n],
+        eps
+      );
+      if (!ks) return null;
+      for (const k of ks) hit[k] = 1;
+      out.push(ks);
+    }
+    return hit.every((v) => v) ? out : null;
+  };
+  // A grid point is within step / 2 of the true scale at each end, which
+  // moves a row by up to step / sqrt(2) px, so the row's true hexagon is
+  // within sqrt(2) step of its nearest (plus 0.5 px for rounding). A coarse
+  // grid finds the scales worth refining on a fine one.
+  const COARSE = 2;
+  const FINE = 1;
+  const grid = (lo: number, hi: number, step: number) => {
+    const out: number[] = [];
+    for (let v = lo; v <= hi + 1e-9; v += step) out.push(v);
+    return out;
+  };
+  const axes = ranges.map(([lo, hi]) => grid(lo, hi, COARSE));
+  const coarse: number[][] = [];
+  for (const a of axes[0])
+    for (const b of axes[1])
+      for (const e of axes[2])
+        for (const f of axes[3])
+          if (cover([a, b, e, f], Math.SQRT2 * COARSE + 0.5))
+            coarse.push([a, b, e, f]);
+  const seen = new Set<string>();
+  const tried = new Set<string>();
+  const steps = grid(-COARSE / 2, COARSE / 2, FINE);
+  const marks = hexes.map((hx) => hx.mark);
+  let problem = "";
+  for (const p0 of coarse)
+    for (const s0 of steps)
+      for (const s1 of steps)
+        for (const s2 of steps)
+          for (const s3 of steps) {
+            const p = [p0[0] + s0, p0[1] + s1, p0[2] + s2, p0[3] + s3];
+            const key = p.map((v) => v.toFixed(2)).join();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const cands = cover(p, Math.SQRT2 * FINE + 0.5);
+            if (!cands) continue;
+            const sig = cands.map((ks) => ks.join(" ")).join();
+            if (tried.has(sig)) continue;
+            tried.add(sig);
+            // Rows near a hexagon's edge may go either way: try each choice.
+            const fixed = new Array(hexes.length).fill(0);
+            const open: number[][] = [];
+            for (const ks of cands)
+              if (ks.length === 1) fixed[ks[0]]++;
+              else open.push(ks);
+            if (open.length > 12) continue;
+            const total = open.reduce((t, ks) => t * ks.length, 1);
+            for (let code = 0; code < total; code++) {
+              const counts = [...fixed];
+              let rest = code;
+              for (const ks of open) {
+                counts[ks[rest % ks.length]]++;
+                rest = Math.floor(rest / ks.length);
+              }
+              if (counts.some((n) => n === 0)) continue;
+              const why = sequentialProblem(counts, marks);
+              if (!why)
+                return {
+                  pass: true,
+                  detail: `${hexes.length} pointy-top hexagons of radius ${R}px on one lattice, one per nonempty bin, colored light to dark by count`,
+                };
+              problem ||= why;
+            }
+          }
   if (problem)
     return {
       pass: false,
-      detail: `${want.length} hexagons match the bins, but ${problem}`,
+      detail: `${hexes.length} hexagons of radius ${R}px hold the rows, but ${problem}`,
     };
   return {
-    pass: true,
-    detail: `${want.length} hexagons match the nonempty bins, colored light to dark by count`,
+    pass: false,
+    detail: `${hexes.length} hexagons of radius ${R}px, but no linear scales put every row inside a drawn hexagon and leave none empty`,
   };
 }
 
@@ -4552,26 +4736,42 @@ function checkBeeswarm(
   const keys = legendKeys(rec);
   const circles = inkCircles(rec).filter((m) => !keys.has(m));
   const xs = circles.map((m) => m.x + m.w / 2);
-  const tolFor = (a: number) => Math.max(1.5, (c.tol ?? 0.01) * a);
+  const slack = c.slack ?? 2;
+  // A scale through two circles that are each up to `slack` off is itself
+  // up to 2 `slack` off, so candidates are matched loosely, refitted to all
+  // the circles by least squares, and then held to `slack`.
   const hs = hypotheses(xs, 0, 1, 1).filter((h) =>
     fits1d(
       norm.map((v) => h.a * v + h.b),
       xs,
-      tolFor(h.a)
+      2 * slack
     )
   );
   if (hs.length === 0)
     return {
       pass: false,
-      detail: `no linear x scale places ${rows.length} circles at ${c.x} (${circles.length} circles)`,
+      detail: `no linear x scale places ${rows.length} circles within ${slack}px of their ${c.x} (${circles.length} circles)`,
     };
   const problems: string[] = [];
-  for (const X of hs) {
+  for (const h of hs) {
+    const rough = match1d(
+      norm.map((v) => h.a * v + h.b),
+      xs,
+      2 * slack
+    )!;
+    const X = leastSquares(
+      norm,
+      rough.map((j) => xs[j])
+    );
     const idx = match1d(
       norm.map((v) => X.a * v + X.b),
       xs,
-      tolFor(X.a)
-    )!;
+      slack + 0.05
+    );
+    if (!idx) {
+      problems.push(`some circles are more than ${slack}px from their ${c.x}`);
+      continue;
+    }
     const mine = idx.map((j) => circles[j]);
     const ctr = mine.map((m) => [m.x + m.w / 2, m.y + m.h / 2] as Pt);
     const rs = mine.map((m) => (m.w + m.h) / 4);
