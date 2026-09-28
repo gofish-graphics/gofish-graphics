@@ -6,7 +6,8 @@
  * `Gallery` shows every example as a row: its source on the left (the module
  * in `./build-in/`, imported twice, once to run and once with `?raw` to show,
  * so the code on screen is the code that runs) and the animation on the
- * right, with a Replay button. `Showcase` is the same rows for three of them.
+ * right, with a Replay button. `Showcase` is three of them as bare rows (code
+ * and chart only), and `Ex4aClip` is one bare row sized for recording video.
  *
  * Each example also has a story of its own that draws it as a FILMSTRIP: the
  * same chart held still at several times (the render options
@@ -287,15 +288,33 @@ const play = (
   modules[pathOf(example)].default(box, hold);
 };
 
-/** `source` without its leading imports; a comment above them stays. */
-const withoutImports = (source: string) =>
-  source.replace(/^((?:\/\/.*\n)*)(?:(?:import\b[^;]*;|[ \t]*)\n)*/, "$1");
+/** `source` as the rows show it: without its leading comment lines and
+ *  imports, so it starts at `export default`. */
+const shownSource = (source: string) =>
+  source.replace(/^(?:(?:\/\/.*|import\b[^;]*;|[ \t]*)\n)*/, "");
+
+/** Re-run a row's chart, playing or held at a time. */
+type Replay = (hold?: BuildClockOptions) => void;
+
+type RowOptions = {
+  /** Code and chart only: no title, Replay button or caption. */
+  bare?: boolean;
+  /** How the chart first runs (default: playing from the start). */
+  hold?: BuildClockOptions;
+  /** Called once the code's highlighting is in place. */
+  onHighlighted?: () => void;
+};
 
 /** One example as a row: its code on the left, and on the right its title,
- *  a Replay button, its caption and the running chart. The replay is pushed
- *  onto `replays` so a "Replay all" button can run it. */
-const exampleRow = (example: Example, replays: (() => void)[]): HTMLElement => {
-  const shown = withoutImports(sources[pathOf(example)]);
+ *  a Replay button, its caption and the running chart (with `bare`, only the
+ *  chart). The replay is pushed onto `replays` so a "Replay all" button can
+ *  run it. */
+const exampleRow = (
+  example: Example,
+  replays: Replay[],
+  { bare = false, hold, onHighlighted }: RowOptions = {}
+): HTMLElement => {
+  const shown = shownSource(sources[pathOf(example)]);
   const row = el("div", {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
@@ -327,35 +346,38 @@ const exampleRow = (example: Example, replays: (() => void)[]): HTMLElement => {
     const tmp = el("div");
     tmp.innerHTML = html;
     code.innerHTML = tmp.querySelector("code")!.outerHTML;
+    onHighlighted?.();
   });
   const right = el("div");
-  const head = el("div", {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    marginBottom: "4px",
-  });
-  head.appendChild(el("strong", { fontSize: "14px" }, example.title));
-  const replay = el(
-    "button",
-    { fontSize: "12px", padding: "2px 10px" },
-    "Replay"
-  );
-  head.appendChild(replay);
-  right.appendChild(head);
-  right.appendChild(
-    el(
-      "p",
-      { fontSize: "13px", color: "#555", margin: "0 0 6px" },
-      example.caption
-    )
-  );
   const host = el("div");
+  const again: Replay = (at) => play(host, example, at);
+  if (!bare) {
+    const head = el("div", {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      marginBottom: "4px",
+    });
+    head.appendChild(el("strong", { fontSize: "14px" }, example.title));
+    const replay = el(
+      "button",
+      { fontSize: "12px", padding: "2px 10px" },
+      "Replay"
+    );
+    replay.onclick = () => again();
+    head.appendChild(replay);
+    right.appendChild(head);
+    right.appendChild(
+      el(
+        "p",
+        { fontSize: "13px", color: "#555", margin: "0 0 6px" },
+        example.caption
+      )
+    );
+  }
   right.appendChild(host);
-  const again = () => play(host, example);
-  replay.onclick = again;
   replays.push(again);
-  again();
+  again(hold);
   row.appendChild(code);
   row.appendChild(right);
   return row;
@@ -386,7 +408,7 @@ export const Gallery: StoryObj = {
       )
     );
 
-    const replays: (() => void)[] = [];
+    const replays: Replay[] = [];
     const replayAll = el(
       "button",
       { fontSize: "14px", padding: "6px 14px", marginBottom: "16px" },
@@ -421,7 +443,7 @@ export const Showcase: StoryObj = {
       el("h1", { fontSize: "22px", margin: "0 0 12px" }, "Build-in animations")
     );
 
-    const replays: (() => void)[] = [];
+    const replays: Replay[] = [];
     const replayAll = el(
       "button",
       { fontSize: "14px", padding: "6px 14px", marginBottom: "16px" },
@@ -431,7 +453,82 @@ export const Showcase: StoryObj = {
     page.appendChild(replayAll);
 
     for (const example of [EXAMPLES.ex4a, EXAMPLES.ex4c, EXAMPLES.canis1bSel])
-      page.appendChild(exampleRow(example, replays));
+      page.appendChild(exampleRow(example, replays, { bare: true }));
+    return page;
+  },
+};
+
+declare global {
+  interface Window {
+    /** Ex4aClip: redraw the chart held at `t` ms; resolves once painted. */
+    __seek?: (t: number) => Promise<void>;
+    /** Ex4aClip: resolves once the code is highlighted and the row fitted. */
+    __ready?: Promise<void>;
+  }
+}
+
+/** Two animation frames: what was set before has been painted. */
+const painted = () =>
+  new Promise<void>((done) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => done()))
+  );
+
+/** 4a as a single bare row on a 960×540 page, for recording a clip. The row
+ *  keeps its natural size (so the shown code is the code that runs) and is
+ *  scaled with CSS to fill the page. The chart starts held at t = 0;
+ *  `window.__seek(t)` holds it at another time. */
+export const Ex4aClip: StoryObj = {
+  parameters: { layout: "fullscreen" },
+  render: () => {
+    const W = 960;
+    const H = 540;
+    const MARGIN = 40;
+    const page = el("div", {
+      width: `${W}px`,
+      height: `${H}px`,
+      background: "#fff",
+      overflow: "hidden",
+      position: "relative",
+      fontFamily: FONT,
+    });
+    const replays: Replay[] = [];
+    let highlighted!: () => void;
+    const whenHighlighted = new Promise<void>((r) => (highlighted = r));
+    const row = exampleRow(EXAMPLES.ex4a, replays, {
+      bare: true,
+      hold: { playing: false, at: 0 },
+      onHighlighted: () => highlighted(),
+    });
+    // Size the columns to their content so the row has a natural box.
+    Object.assign(row.style, {
+      gridTemplateColumns: "max-content max-content",
+      alignItems: "center",
+      gap: "32px",
+      margin: "0",
+      position: "absolute",
+      left: "0",
+      top: "0",
+      transformOrigin: "0 0",
+    });
+    // A larger code font so the code holds its own next to the chart.
+    (row.firstElementChild as HTMLElement).style.fontSize = "14px";
+    page.appendChild(row);
+    const fit = () => {
+      const w = row.offsetWidth;
+      const h = row.offsetHeight;
+      const k = Math.min((W - 2 * MARGIN) / w, (H - 2 * MARGIN) / h);
+      const x = (W - w * k) / 2;
+      const y = (H - h * k) / 2;
+      row.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+    };
+    window.__ready = whenHighlighted.then(painted).then(() => {
+      fit();
+      return painted();
+    });
+    window.__seek = (t) => {
+      replays[0]({ playing: false, at: t });
+      return painted();
+    };
     return page;
   },
 };
