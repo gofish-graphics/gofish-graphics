@@ -12,6 +12,10 @@
  *     rectangle drawn as a <path> (matplotlib, Recharts) is still a `rect`.
  *   - Colors are resolved through CSS and normalized to RGBA, with every
  *     opacity on the way to the root folded into the alpha.
+ *   - A fill split into bands of color by a linear gradient with hard stops
+ *     (Recharts' way to color an area above and below zero) is recorded as
+ *     one copy of the shape per band, clipped to its band: the same record
+ *     as the shape drawn twice through two clip paths.
  */
 
 import type { Box, Mark, MarkKind, RGBA, RenderRecord } from "./record";
@@ -83,8 +87,9 @@ function parseColor(css: string): RGBA | null {
   let out: RGBA | null;
   if (css.startsWith("url(")) {
     // Gradient or pattern paint: no single color. Record a neutral gray so
-    // the mark still counts as painted. (Two different gradients therefore
-    // look the same to the checks; no v0 task uses gradients.)
+    // the mark still counts as painted. (Two different smooth gradients
+    // therefore look the same to the checks. A gradient with hard stops is
+    // split into its color bands instead: see gradientBands.)
     out = [128, 128, 128, 1];
   } else {
     colorCtx ??= new OffscreenCanvas(1, 1).getContext("2d", {
@@ -776,6 +781,111 @@ function clipBox(box: Box, clips: Pt[][][]): Box | null {
   };
 }
 
+/**
+ * The color bands of a fill painted by a linear gradient whose color is
+ * constant between hard stops (a split fill, such as one color above a
+ * value and another below it), each with its band as a polygon in container
+ * coordinates; or null when `el`'s fill is not such a gradient (a smooth
+ * gradient has no single color anywhere, so it keeps the gray of
+ * parseColor). A shape painted this way looks the same as copies of it in
+ * each color, each clipped to its band, and is recorded that way.
+ */
+function gradientBands(
+  el: SVGGraphicsElement,
+  paint: string,
+  origin: DOMRect
+): { color: RGBA | null; band: Pt[] }[] | null {
+  const id = urlId(paint);
+  const found = id
+    ? (el.ownerSVGElement?.querySelector(`[id="${CSS.escape(id)}"]`) ??
+      document.getElementById(id))
+    : null;
+  if (!(found instanceof SVGLinearGradientElement)) return null;
+  const grad = found;
+  // Stops may come from a gradient this one references by href.
+  let stopsFrom: Element | null = grad;
+  for (let i = 0; i < 4 && stopsFrom && !stopsFrom.querySelector("stop"); i++) {
+    const href: string | null =
+      stopsFrom.getAttribute("href") ??
+      stopsFrom.getAttributeNS(XLINK_NS, "href");
+    stopsFrom = href?.startsWith("#")
+      ? document.getElementById(href.slice(1))
+      : null;
+  }
+  const stops = Array.from(stopsFrom?.querySelectorAll("stop") ?? []);
+  if (stops.length === 0) return null;
+  let last = 0;
+  const runs: { t: number; color: RGBA | null }[] = stops.map((s) => {
+    const cs = getComputedStyle(s);
+    last = Math.max(last, Math.min(1, Math.max(0, s.offset.baseVal)));
+    return {
+      t: last,
+      color: withAlpha(
+        parseColor(cs.stopColor),
+        parseFloat(cs.stopOpacity || "1")
+      ),
+    };
+  });
+  const same = (a: RGBA | null, b: RGBA | null) =>
+    a === b || (!!a && !!b && a.every((v, k) => Math.abs(v - b[k]) < 1e-3));
+  // Band boundaries: offsets where the color jumps. A color that changes
+  // over a stretch of offsets is a smooth gradient.
+  const cuts: number[] = [];
+  const colors: (RGBA | null)[] = [runs[0].color];
+  for (let i = 0; i + 1 < runs.length; i++) {
+    if (same(runs[i].color, runs[i + 1].color)) continue;
+    if (runs[i + 1].t - runs[i].t > 1e-6) return null;
+    cuts.push(runs[i].t);
+    colors.push(runs[i + 1].color);
+  }
+  // Gradient space: the vector (x1, y1) to (x2, y2), in bounding-box units
+  // (the default) or in the user space of the painted element.
+  const bboxUnits =
+    grad.gradientUnits.baseVal !== SVGUnitTypes.SVG_UNIT_TYPE_USERSPACEONUSE;
+  const coord = (l: SVGAnimatedLength) =>
+    bboxUnits && l.baseVal.unitType === SVGLength.SVG_LENGTHTYPE_PERCENTAGE
+      ? l.baseVal.valueInSpecifiedUnits / 100
+      : l.baseVal.value;
+  const p1: Pt = [coord(grad.x1), coord(grad.y1)];
+  const p2: Pt = [coord(grad.x2), coord(grad.y2)];
+  const d: Pt = [p2[0] - p1[0], p2[1] - p1[1]];
+  if (Math.hypot(d[0], d[1]) < 1e-9) return null;
+  let toUser = new DOMMatrix();
+  if (bboxUnits) {
+    const bb = el.getBBox();
+    if (!(bb.width > 0 && bb.height > 0)) return null;
+    toUser = new DOMMatrix([bb.width, 0, 0, bb.height, bb.x, bb.y]);
+  }
+  const gt = grad.gradientTransform.baseVal.consolidate();
+  if (gt) toUser = toUser.multiply(gt.matrix);
+  const ctm = el.getScreenCTM();
+  if (!ctm) return null;
+  const toScreen = DOMMatrix.fromMatrix(ctm).multiply(toUser);
+  // Far enough to cover the shape in either unit system (pad spread: the
+  // end colors continue past the ends of the vector).
+  const FAR = 1e4;
+  const perp: Pt = [-d[1] * FAR, d[0] * FAR];
+  const at = (t: number, s: number): Pt => {
+    const q = toScreen.transformPoint(
+      new DOMPoint(
+        p1[0] + t * d[0] + s * perp[0],
+        p1[1] + t * d[1] + s * perp[1]
+      )
+    );
+    return [q.x - origin.left, q.y - origin.top];
+  };
+  const edges = [-FAR, ...cuts, FAR];
+  return colors.map((color, i) => ({
+    color,
+    band: [
+      at(edges[i], -1),
+      at(edges[i + 1], -1),
+      at(edges[i + 1], 1),
+      at(edges[i], 1),
+    ],
+  }));
+}
+
 function isShown(el: Element): boolean {
   const cs = getComputedStyle(el);
   return cs.display !== "none" && cs.visibility === "visible";
@@ -840,29 +950,46 @@ export function extractRecord(container: HTMLElement): RenderRecord {
     // A straight segment encloses no area, so its fill (black by default,
     // even on a <line>) paints nothing: only its stroke shows.
     if (c.segment && !stroke) continue;
-    const mark: Mark = {
-      kind: c.kind,
-      tag: el.localName,
-      ...shown,
-      fill: c.segment ? null : fill,
-      stroke,
-      strokeWidth: round1(strokeWidth),
-    };
-    if (clips.length) mark.clip = clips;
-    if (stroke) {
-      const dash = (cs.strokeDasharray || "none")
-        .split(/[\s,]+/)
-        .map(parseFloat)
-        .filter((d) => Number.isFinite(d));
-      if (dash.some((d) => d > 0)) mark.dash = dash.map(round1);
+    // A fill split into color bands by a hard-stop gradient is recorded as
+    // one copy of the shape per band, clipped to it.
+    const bands =
+      fill && !c.segment
+        ? gradientBands(el as SVGGraphicsElement, cs.fill, origin)
+        : null;
+    const fillOpacity = parseFloat(cs.fillOpacity || "1") * opacity;
+    const paints = bands
+      ? bands.map((b) => ({
+          fill: withAlpha(b.color, fillOpacity),
+          clips: [...clips, [b.band]],
+        }))
+      : [{ fill: c.segment ? null : fill, clips }];
+    for (const paint of paints) {
+      const shownHere = paint.clips.length ? clipBox(box, paint.clips) : box;
+      if (!shownHere || !(paint.fill || stroke)) continue;
+      const mark: Mark = {
+        kind: c.kind,
+        tag: el.localName,
+        ...shownHere,
+        fill: paint.fill,
+        stroke,
+        strokeWidth: round1(strokeWidth),
+      };
+      if (paint.clips.length) mark.clip = paint.clips;
+      if (stroke) {
+        const dash = (cs.strokeDasharray || "none")
+          .split(/[\s,]+/)
+          .map(parseFloat)
+          .filter((d) => Number.isFinite(d));
+        if (dash.some((d) => d > 0)) mark.dash = dash.map(round1);
+      }
+      if (c.points) mark.points = c.points;
+      if (c.kind === "line") {
+        const pts = samplePoints(el as SVGGeometryElement, false, origin);
+        mark.points = thin([pts[0], pts[pts.length - 1]], 2);
+      }
+      if (c.wedge) mark.wedge = c.wedge;
+      marks.push(mark);
     }
-    if (c.points) mark.points = c.points;
-    if (c.kind === "line") {
-      const pts = samplePoints(el as SVGGeometryElement, false, origin);
-      mark.points = thin([pts[0], pts[pts.length - 1]], 2);
-    }
-    if (c.wedge) mark.wedge = c.wedge;
-    marks.push(mark);
   }
 
   // HTML text inside the container (e.g. an HTML legend next to the <svg>).

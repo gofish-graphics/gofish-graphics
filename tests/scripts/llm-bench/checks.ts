@@ -4010,23 +4010,25 @@ function straightMarks(
 }
 
 /** Legend keys: small marks (at most 30px) with a text label right beside
- *  them (starting or ending within max(8px, the mark's width) of the mark,
- *  at the mark's height), when at least two such keys line up in a row or
- *  a column. A lone labeled mark may be a labeled data point, so it is not
- *  counted. */
+ *  them (starting or ending within max(8px, the mark's width, 1.5 times the
+ *  label's height) of the mark, at the mark's height; a legend may center a
+ *  small symbol in a wider key box, which leaves a wider gap), when at
+ *  least two such keys line up in a row or a column. A lone labeled mark
+ *  may be a labeled data point, so it is not counted. */
 function legendKeys(rec: RenderRecord): Set<Mark> {
   const texts = rec.marks.filter((m) => m.kind === "text");
   const keyed = rec.marks.filter((m) => {
     if (m.kind === "text" || Math.max(m.w, m.h) > 30) return false;
     const cy = m.y + m.h / 2;
-    const near = Math.max(8, m.w);
-    return texts.some(
-      (t) =>
+    return texts.some((t) => {
+      const near = Math.max(8, m.w, 1.5 * t.h);
+      return (
         t.y <= cy &&
         cy <= t.y + t.h &&
         ((t.x >= m.x + m.w - 1 && t.x - (m.x + m.w) <= near) ||
           (t.x + t.w <= m.x + 1 && m.x - (t.x + t.w) <= near))
-    );
+      );
+    });
   });
   const center = (m: Mark): Pt => [m.x + m.w / 2, m.y + m.h / 2];
   return new Set(
@@ -4125,9 +4127,14 @@ function checkSignedArea(
     const len = y0 - p.y;
     const dir = Math.sign(len) || 1;
     const tall = Math.abs(len) >= 2 * reach + 2;
-    if (tall)
-      for (const t of [0.2, 0.5, 0.8]) {
-        const m = topAt(fills, [p.x, y0 - t * len]);
+    if (tall) {
+      // The area here is a shape covering the whole column from zero to
+      // the line; a point marker drawn on the line covers only the sample
+      // beside it, so it does not count as the fill.
+      const samples: Pt[] = [0.2, 0.5, 0.8].map((t) => [p.x, y0 - t * len]);
+      const spanning = fills.filter((m) => samples.every((s) => covers(m, s)));
+      for (const s of samples) {
+        const m = topAt(spanning, s);
         if (!m) {
           problems.push(
             `${p.name}: the area from zero to the line is not filled`
@@ -4136,6 +4143,7 @@ function checkSignedArea(
         }
         (len > 0 ? above : below).push(ink(m)!);
       }
+    }
     if (topAt(fills, [p.x, p.y - dir * reach]))
       problems.push(`${p.name}: the fill reaches past the line`);
     if (tall && topAt(fills, [p.x, y0 + dir * reach]))
@@ -4688,26 +4696,55 @@ function checkStackedArea(
   };
 }
 
-/** The outline vertices of `m` split by distance from `c` at the largest
- *  gap: the outer arc, and the inner arc (empty when no gap is 2px or
- *  more). Every vertex of a wedge's simplified outline, corners included,
- *  lies on one of its two arcs (or at the center), also when the straight
- *  edges are padded apart and so do not point at the center. */
-function arcsAbout(m: Mark, c: Pt): { outer: Pt[]; inner: Pt[] } {
+/** The outline vertices of `m` grouped by distance from `c`, cut at the
+ *  gaps of at least max(2px, 10% of the range of distances): the outer arc
+ *  (past the last cut), the inner arc (before the first cut; empty when
+ *  there is no cut), and the vertices between them. A wedge's corners lie
+ *  on its two arcs (or at the center), also when the straight edges are
+ *  padded apart and so do not point at the center; a vertex between them
+ *  lies on a straight edge that is drawn as a polyline (as ggplot2's polar
+ *  coordinates draw it). */
+function arcsAbout(
+  m: Mark,
+  c: Pt
+): { outer: Pt[]; inner: Pt[]; between: Pt[] } {
   const pts = m.points ?? [];
   const d = (p: Pt) => Math.hypot(p[0] - c[0], p[1] - c[1]);
   const ds = pts.map(d).sort((a, b) => a - b);
-  let gap = 2;
-  let cut = -Infinity;
+  const gap = Math.max(2, 0.1 * (ds[ds.length - 1] - ds[0]));
+  let lo = -Infinity;
+  let hi = -Infinity;
   for (let i = 1; i < ds.length; i++)
     if (ds[i] - ds[i - 1] >= gap) {
-      gap = ds[i] - ds[i - 1];
-      cut = (ds[i] + ds[i - 1]) / 2;
+      const cut = (ds[i] + ds[i - 1]) / 2;
+      if (lo === -Infinity) lo = cut;
+      hi = cut;
     }
   return {
-    outer: pts.filter((p) => d(p) > cut),
-    inner: pts.filter((p) => d(p) <= cut),
+    outer: pts.filter((p) => d(p) > hi),
+    inner: pts.filter((p) => d(p) <= lo),
+    between: pts.filter((p) => d(p) > lo && d(p) <= hi),
   };
+}
+
+/** Whether every vertex of `m`'s outline in `between` lies within `tol` of
+ *  the straight segment joining the nearest vertices on either side of it
+ *  (in drawing order) that are not in `between`. */
+function onStraightEdges(m: Mark, between: Pt[], tol: number): boolean {
+  if (between.length === 0) return true;
+  const pts = m.points ?? [];
+  const n = pts.length;
+  const mid = pts.map((p) => between.includes(p));
+  if (mid.every(Boolean)) return false;
+  for (let i = 0; i < n; i++) {
+    if (!mid[i]) continue;
+    let a = i;
+    while (mid[a]) a = (a - 1 + n) % n;
+    let b = i;
+    while (mid[b]) b = (b + 1) % n;
+    if (distToPolyline(pts[i], [pts[a], pts[b]]) > tol) return false;
+  }
+  return true;
 }
 
 /** The least-squares center shared by circles through each point set (one
@@ -4763,7 +4800,7 @@ function sharedCenter(rec: RenderRecord): { center: Pt; marks: Mark[] } | null {
   const wedges = shapes.filter((m) => m.kind === "wedge" && m.wedge);
   if (wedges.length === 0) return null;
   const onCircles = (m: Mark, c: Pt) => {
-    const { outer, inner } = arcsAbout(m, c);
+    const { outer, inner, between } = arcsAbout(m, c);
     if (outer.length < 2) return false;
     const d = (p: Pt) => Math.hypot(p[0] - c[0], p[1] - c[1]);
     const spread = (ps: Pt[]) =>
@@ -4775,7 +4812,8 @@ function sharedCenter(rec: RenderRecord): { center: Pt; marks: Mark[] } | null {
     const r0 = inner.length ? Math.max(...inner.map(d)) : 0;
     return (
       spread(outer) <= tol &&
-      (spread(inner) <= tol || r0 <= Math.max(3, 0.05 * r))
+      (spread(inner) <= tol || r0 <= Math.max(3, 0.05 * r)) &&
+      onStraightEdges(m, between, tol)
     );
   };
   let c: Pt = [
@@ -4814,7 +4852,10 @@ function wedgeAbout(
   const pts = m.points ?? [];
   if (pts.length < 3) return m.wedge!;
   const d = pts.map((p) => Math.hypot(p[0] - cx, p[1] - cy));
+  // A pie slice's apex sits on the center, where a point has no direction.
+  const apex = Math.max(3, 0.05 * Math.max(...d));
   const as = pts
+    .filter((_, i) => d[i] > apex)
     .map(
       (p) => ((Math.atan2(p[1] - cy, p[0] - cx) * 180) / Math.PI + 360) % 360
     )
@@ -5042,7 +5083,17 @@ function checkSunburst(
   const total = totals.reduce((a, b) => a + b, 0);
   const nLeaves = leafVals.flat().length;
   let why = "no wedges";
-  for (const g of wedgesByCenter(rec)) {
+  // Every wedge measured about the chart's one center: a thin wedge's own
+  // fitted center drifts when a pad angle offsets its edges.
+  const around = sharedCenter(rec);
+  const centered: Mark[] = around
+    ? around.marks.map((m) => ({
+        ...m,
+        kind: "wedge",
+        wedge: wedgeAbout(m, around.center[0], around.center[1]),
+      }))
+    : [];
+  for (const g of centered.length ? [centered] : []) {
     const ringR0 = clusterValues(
       g.map((w) => w.wedge!.r0),
       3
@@ -5247,8 +5298,11 @@ function checkChord(
         detail: `the node wedges' shares match, but no label in the direction of the wedge for ${unlabeled.join(", ")}`,
       };
     const degPer = full / sum;
-    // Each ribbon's two ends: its outline's points near its largest radius,
-    // split into two runs of angle at the two largest gaps.
+    // Each ribbon's two ends: the two runs of its outline (in drawing order)
+    // that stay near its largest radius. Between them the outline dips
+    // toward the center, however close the two ends sit on the circle, so
+    // the runs are told apart by the outline, not by gaps in angle (which
+    // the outline's sampling can make wider than the gap between ends).
     const ends = (m: Mark): { a0: number; sweep: number }[] | null => {
       const polar = m.points!.map((p) => ({
         d: Math.hypot(p[0] - cx, p[1] - cy),
@@ -5256,23 +5310,28 @@ function checkChord(
       }));
       const rEnd = Math.max(...polar.map((p) => p.d));
       if (rEnd < 0.8 * r0 - 2 || rEnd > r0 + 2) return null;
-      const as = polar
-        .filter((p) => p.d >= rEnd - (1.5 + 0.01 * rEnd))
-        .map((p) => (p.a + 360) % 360)
-        .sort((a, b) => a - b);
-      if (as.length < 2) return null;
-      const gaps = as.map((a, i) => ({
-        i,
-        gap: i + 1 < as.length ? as[i + 1] - a : as[0] + 360 - a,
-      }));
-      const [g1, g2] = [...gaps].sort((a, b) => b.gap - a.gap);
-      const run = (from: number, to: number) => {
-        // From the point after gap `from` to the point before gap `to`.
-        const a0 = as[(from + 1) % as.length];
-        const a1 = as[to];
-        return { a0, sweep: (a1 - a0 + 360) % 360 };
-      };
-      return [run(g1.i, g2.i), run(g2.i, g1.i)];
+      const onRim = polar.map((p) => p.d >= rEnd - (1.5 + 0.01 * rEnd));
+      const n = polar.length;
+      const start = onRim.findIndex((on, i) => !on && onRim[(i + 1) % n]);
+      if (start < 0) return null;
+      const runs: number[][] = [];
+      for (let k = 1; k <= n; k++) {
+        const i = (start + k) % n;
+        if (!onRim[i]) continue;
+        if (!onRim[(i - 1 + n) % n]) runs.push([]);
+        runs[runs.length - 1].push(polar[i].a);
+      }
+      if (runs.length !== 2) return null;
+      return runs.map((as) => {
+        // Unwrap the angles along the run, then take its extent.
+        const un = [as[0]];
+        for (let i = 1; i < as.length; i++)
+          un.push(
+            un[i - 1] + ((((as[i] - as[i - 1] + 180) % 360) + 360) % 360) - 180
+          );
+        const lo = Math.min(...un);
+        return { a0: ((lo % 360) + 360) % 360, sweep: Math.max(...un) - lo };
+      });
     };
     const ribbons = filledShapes(rec).filter(
       (m) => m.kind !== "wedge" && m.points && m.points.length >= 4
@@ -5345,15 +5404,23 @@ function checkDendrogram(
       (t) => t.text!.trim().toLowerCase() === leaf.toLowerCase()
     );
     if (!label) return { pass: false, detail: `no label reading "${leaf}"` };
+    // The stem stands over the label's box: over its middle for a level
+    // label, over its end for one rotated about its end. Of the lines over
+    // the box, the leaf's reaches lowest; among equals, the nearest the
+    // label's middle.
     const lx = label.x + label.w / 2;
+    const bottom = ([p, q]: Pt[]) => Math.max(p[1], q[1]);
     const stem = verticals
       .filter(
         ([p, q]) =>
-          Math.abs(p[0] - lx) <= Math.max(3, 0.25 * label.w) &&
-          Math.max(p[1], q[1]) <= label.y + label.h / 2
+          p[0] >= label.x - 3 &&
+          p[0] <= label.x + label.w + 3 &&
+          bottom([p, q]) <= label.y + label.h / 2
       )
-      .sort(
-        (a, b) => Math.max(b[0][1], b[1][1]) - Math.max(a[0][1], a[1][1])
+      .sort((a, b) =>
+        Math.abs(bottom(b) - bottom(a)) > 1
+          ? bottom(b) - bottom(a)
+          : Math.abs(a[0][0] - lx) - Math.abs(b[0][0] - lx)
       )[0];
     if (!stem)
       return {
