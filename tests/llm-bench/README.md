@@ -32,7 +32,7 @@ pnpm llm-bench:contexts                # regenerate the cheatsheet, gallery inde
 Options: `--arms gofish,recharts,d3,matplotlib`, `--tasks <substring of task id>`,
 `--samples N` (1), `--max-turns N` (3), `--budget-usd X` (10, API),
 `--subscription-cap-usd X` (40, claude-code at list price),
-`--model ID` (`claude-opus-5-5`), `--backend api|claude-code` (api),
+`--model ID` (`claude-opus-5-5`), `--backend api|claude-code` (claude-code),
 `--effort low|medium|high|xhigh|max` (medium), `--concurrency N` (3),
 `--context pack:<path>|cheatsheet|retrieval|skill` (`pack:context/gofish.md`).
 `--docs-pack <path>` is the same as `--context pack:<path>`.
@@ -106,10 +106,10 @@ system prompt and messages, use adaptive thinking, and pass `--effort`
 explicitly. No sampling parameters, forced tool choice or prefill are used.
 Both cap a reply at 16,000 output tokens.
 
-- **api** (the default for now): the Anthropic Messages API. A repair turn
+- **api**: the Anthropic Messages API. A repair turn
   continues the same conversation, so the model sees its own earlier reply
   with its thinking blocks.
-- **claude-code**: each turn runs headless Claude Code on the user's Claude
+- **claude-code** (the default): each turn runs headless Claude Code on the user's Claude
   subscription:
 
   ```bash
@@ -192,7 +192,7 @@ this run's spend and the ledger's total for each backend.
 ## The arms
 
 The system prompts are in `prompts/<arm>.md`. The gofish arm also gets its
-context (see "Contexts"; by default the docs pack in `context/gofish.md`). The
+context (see "Contexts"; by default the skill in `context/skill/`, chosen from the context experiment in `results/2026-09-27-context-experiment.md`). The
 system blocks carry `cache_control`, so repeated calls read them from the
 prompt cache.
 
@@ -243,12 +243,12 @@ aim is to compare ways of teaching the library on accuracy and on cost:
 tokens, time to a finished chart, and repair rounds. The code is in
 `tests/scripts/llm-bench/context.ts`.
 
-| Context       | What the model gets                                                                                                                                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pack:<path>` | a docs pack after the arm's system prompt. `context/gofish.md` (v1, the default) and `context/gofish-v2.md` (v2) are the two packs so far. The path is read from where the command was typed, or from `tests/llm-bench/`. |
-| `cheatsheet`  | `context/cheatsheet.md` after the system prompt: about 1,600 tokens.                                                                                                                                                      |
-| `retrieval`   | the cheatsheet, plus the three gallery examples most like the task, at the start of the first user message.                                                                                                               |
-| `skill`       | a folder of files it reads with tools (claude-code backend only).                                                                                                                                                         |
+| Context       | What the model gets                                                                                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pack:<path>` | a docs pack after the arm's system prompt. `context/gofish.md` (v1) and `context/gofish-v2.md` (v2) are the two packs so far. The path is read from where the command was typed, or from `tests/llm-bench/`. |
+| `cheatsheet`  | `context/cheatsheet.md` after the system prompt: about 1,600 tokens.                                                                                                                                         |
+| `retrieval`   | the cheatsheet, plus the three gallery examples most like the task, at the start of the first user message.                                                                                                  |
+| `skill`       | a folder of files it reads with tools (claude-code backend only).                                                                                                                                            |
 
 - **cheatsheet**: a short handwritten intro (`context/cheatsheet-intro.md`:
   one 6-line bar chart, and how `chart`, `.flow()`, `.mark()`, `.layer()` and

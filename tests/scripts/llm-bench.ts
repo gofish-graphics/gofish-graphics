@@ -26,13 +26,12 @@
  *     --arms gofish,recharts,d3,matplotlib   --tasks <substring>
  *     --samples N (1)   --max-turns N (3)   --budget-usd X (10, API)
  *     --subscription-cap-usd X (40, claude-code at list price)
- *     --model ID (claude-opus-5-5)   --backend api|claude-code (api)
+ *     --model ID (claude-opus-5-5)   --backend api|claude-code (claude-code)
  *     --effort low|medium|high|xhigh|max (medium)   --concurrency N (3)
  *     --context pack:<path>|cheatsheet|retrieval|skill
- *                  (pack:context/gofish.md): how GoFish is presented to the
- *                  gofish arm (mock records it but ignores it); skill needs
- *                  --backend claude-code. --docs-pack <path> is
- *                  --context pack:<path>.
+ *                  (skill): how GoFish is presented to the gofish arm (mock
+ *                  records it but ignores it); skill needs --backend
+ *                  claude-code. --docs-pack <path> is --context pack:<path>.
  */
 
 import {
@@ -83,7 +82,6 @@ import {
 import { compareRuns } from "./llm-bench/compare";
 import {
   contextOf,
-  DEFAULT_CONTEXT,
   examplesMessage,
   loadContext,
   type GofishContext,
@@ -211,10 +209,13 @@ function parseArgs(argv: string[]): Options {
     budgetUsd: 10,
     subscriptionCapUsd: 40,
     model: DEFAULT_MODEL,
-    backend: "api",
+    // The GoFish arm is presented as the skill by default (see the context
+    // experiment in tests/llm-bench/results/), which needs Claude Code's
+    // file tools, hence the claude-code backend.
+    backend: "claude-code",
     effort: "medium",
     concurrency: 3,
-    context: DEFAULT_CONTEXT,
+    context: "skill",
     mockBreakFirst: false,
     yes: false,
   };
@@ -272,7 +273,7 @@ function parseArgs(argv: string[]): Options {
     opts.backend !== "claude-code"
   )
     throw new Error(
-      "--context skill needs --backend claude-code (the model reads the skill folder with Claude Code's tools)"
+      "--context skill (the default) needs --backend claude-code, because the model reads the skill folder with Claude Code's tools. With --backend api, pass --context cheatsheet (or another text context)."
     );
   return opts;
 }
