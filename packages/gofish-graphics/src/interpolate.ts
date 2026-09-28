@@ -11,12 +11,12 @@
  * Every method is a pure function of `(knots, values, t)`. `knots` must be
  * sorted ascending and the same length as `values`; the caller sorts once and
  * reuses the ordering for every channel it interpolates (x, y, width, height).
- * Two knots at one value are read as d3 reads them (a jump), but a keyed run
- * of rows never gets that far: `interpolate()` and `time.transition()` reject
- * it (`repeatedKnot`), since the run has no one value at that moment.
+ * A keyed run of rows has one row per knot: `interpolate()` and
+ * `time.transition()` check it (`assertOneRowPerKnot`), since a run with two
+ * rows at one moment has no one value there.
  */
 
-import { cubicAt, monotoneAt, monotoneCubics } from "./spline";
+import { cubicAt, monotoneCubics } from "./spline";
 import { lerp } from "./util";
 
 /** How a run is read between its knots. These are readings of values over a
@@ -46,25 +46,29 @@ export function locate(knots: number[], t: number): KnotLocation {
 }
 
 /**
- * Check that a run of one key's rows has one row per moment: `knots` sorted
- * ascending, and none of them repeated. Two rows of one key at one value of
- * the ordering field leave no answer to "where is it at that moment?", so this
- * throws, naming the key and the value. `where` names the caller, `field` the
- * ordering field and `key` the key's value (undefined when the run is the
- * whole chart's).
+ * Check that a run of one key's rows has one row per moment: none of its
+ * `knots` repeated, in whatever order they come. Two rows of one key at one
+ * value of the ordering field leave no answer to "where is it at that
+ * moment?", so this throws, naming the key and the value. `where` names the
+ * caller, `field` the ordering field and `key` the key's value (undefined when
+ * the run is the whole chart's).
  */
-export function repeatedKnot(
+export function assertOneRowPerKnot(
   knots: number[],
   where: string,
   field: string,
   key: unknown
 ): void {
-  for (let i = 1; i < knots.length; i++) {
-    if (knots[i] !== knots[i - 1]) continue;
+  const seen = new Set<number>();
+  for (const knot of knots) {
+    if (!seen.has(knot)) {
+      seen.add(knot);
+      continue;
+    }
     const who =
       key === undefined ? "the run" : `the run for ${JSON.stringify(key)}`;
     throw new Error(
-      `[gofish] ${where}: ${who} has two rows at ${field} = ${knots[i]}, so ` +
+      `[gofish] ${where}: ${who} has two rows at ${field} = ${knot}, so ` +
         `there is no one place it is at that moment. Aggregate to one row ` +
         `per ${field} first; for example, scatter({ by, x, y }) places each ` +
         `group at the mean of its rows.`
@@ -120,45 +124,25 @@ export function interpolateMonotone(
   return interpolateRun(knots, values, t, "monotone");
 }
 
-/** Evaluate one channel of a keyframe run at `t`. */
+/** Evaluate one channel of a keyframe run at `t`. A caller reading several
+ *  channels, or one channel at many `t`, prepares each with `channelReader`
+ *  and locates `t` once instead. */
 export function interpolateRun(
   knots: number[],
   values: number[],
   t: number,
   method: InterpolationMethod
 ): number {
-  if (knots.length < 2) return knots.length === 0 ? NaN : values[0];
-  return interpolateAt(knots, values, locate(knots, t), method);
-}
-
-/**
- * Evaluate one channel of a keyframe run at an already-located parameter, so
- * a caller reading several channels of the same run at the same `t` locates
- * it once. `knots` must have at least two entries (a shorter run has no
- * segment to locate in).
- */
-export function interpolateAt(
-  knots: number[],
-  values: number[],
-  { i, u }: KnotLocation,
-  method: InterpolationMethod
-): number {
-  if (method === "step") {
-    // `locate` only reports `u === 1` past the end of the run; inside a
-    // segment the fraction is strictly below 1, so the previous keyframe's
-    // value holds.
-    return u >= 1 ? values[i + 1] : values[i];
-  }
-  if (method === "linear") return lerp(values[i], values[i + 1], u);
-  return monotoneAt(knots, values, i, u);
+  const read = channelReader(knots, values, method);
+  return knots.length < 2 ? read({ i: 0, u: 0 }) : read(locate(knots, t));
 }
 
 /**
  * One channel of a keyframe run, prepared once for reading at many located
- * parameters: the reader `interpolateAt` is, with a smooth run's cubics worked
- * out here rather than on every read. A transition reads every channel of its
- * run on every frame, so it builds these at layout. A run of fewer than two
- * knots holds its one value (or is NaN when empty), as `interpolateRun` does.
+ * parameters, with a smooth run's cubics worked out here rather than on every
+ * read. A transition reads every channel of its run on every frame, so it
+ * builds these at layout. A run of fewer than two knots holds its one value
+ * (or is NaN when empty), wherever it is read.
  */
 export function channelReader(
   knots: number[],
@@ -169,8 +153,14 @@ export function channelReader(
     const held = knots.length === 0 ? NaN : values[0];
     return () => held;
   }
-  if (method !== "monotone") {
-    return (at) => interpolateAt(knots, values, at, method);
+  if (method === "step") {
+    // `locate` only reports `u === 1` past the end of the run; inside a
+    // segment the fraction is strictly below 1, so the previous keyframe's
+    // value holds.
+    return ({ i, u }) => (u >= 1 ? values[i + 1] : values[i]);
+  }
+  if (method === "linear") {
+    return ({ i, u }) => lerp(values[i], values[i + 1], u);
   }
   const cubics = monotoneCubics(knots, values);
   return ({ i, u }) => cubicAt(cubics, i, u);
@@ -265,7 +255,7 @@ export function interpolate<T extends Record<string, unknown>>(
           `whose "${along}" is not one.`
       );
     }
-    repeatedKnot(knots, "interpolate()", along, k);
+    assertOneRowPerKnot(knots, "interpolate()", along, k);
 
     // Which fields get blended. Every field of the run is considered so a
     // column that only some rows carry still comes out.
@@ -291,15 +281,12 @@ export function interpolate<T extends Record<string, unknown>>(
     // copied — comes from the keyframe the step method is holding.
     const source = sourceIndex(knots, at, method);
 
+    const where = knots.length < 2 ? { i: 0, u: 0 } : locate(knots, at);
     const row: Record<string, unknown> = { ...sorted[source] };
     for (const f of names) {
       if (!blended.has(f)) continue;
-      row[f] = interpolateRun(
-        knots,
-        sorted.map((r) => Number(r[f])),
-        at,
-        method
-      );
+      const values = sorted.map((r) => Number(r[f]));
+      row[f] = channelReader(knots, values, method)(where);
     }
     row[along] = at;
     row[key] = k;

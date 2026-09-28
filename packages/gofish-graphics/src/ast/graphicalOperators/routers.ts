@@ -9,8 +9,8 @@
  *
  * Built-ins below are the *routing* curves (linear / bezier / orthogonal /
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
- * pairwise. The sequence curves that thread the whole point run (monotone,
- * catmullRom) are built by `connect` itself (`isSequenceCurve`).
+ * pairwise, and the *sequence* curves (monotone, catmullRom), which thread the
+ * whole point run (`sequenceCurve`).
  *
  * Register a new router with `registerRoute(name, fn)`; look one up with
  * `getRoute(name)`.
@@ -25,6 +25,7 @@ import {
 import type { Dimensions } from "../dims";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { getBoxToBoxArrow } from "perfect-arrows";
+import { catmullRomPath, centripetalKnots, monotonePath } from "../../spline";
 
 /** Context handed to a router for one endpoint pair. */
 export type RouteContext = {
@@ -67,7 +68,27 @@ type RouteEntry = {
   ribbon: boolean;
 };
 
-const registry = new Map<string, RouteEntry>();
+/**
+ * A sequence curve threads the *whole* run of points as one spline, rather
+ * than routing each consecutive pair independently. `connect` builds these
+ * from the full point sequence instead of the pairwise router loop.
+ */
+export type SequenceCurve = {
+  /** Thread the run. `knots` is the run's own parameter, one per point, or
+   *  undefined when it has none; it is only passed when `takesKnots`. */
+  thread: (points: Point[], knots?: number[]) => BezierCurve[];
+  /** Whether the curve is read over the run's parameter (so `connect` works
+   *  one out), or is a shape on screen that ignores it. */
+  takesKnots: boolean;
+};
+
+const registry = new Map<string, RouteEntry | SequenceCurve>();
+
+const isRoute = (entry: RouteEntry | SequenceCurve): entry is RouteEntry =>
+  "fn" in entry;
+
+const namesOf = (sequence: boolean): string[] =>
+  [...registry].filter(([, e]) => isRoute(e) !== sequence).map(([n]) => n);
 
 export function registerRoute(
   name: string,
@@ -79,28 +100,32 @@ export function registerRoute(
 
 export function getRoute(name: string): Router {
   const entry = registry.get(name);
-  if (!entry) {
+  if (!entry || !isRoute(entry)) {
     throw new Error(
-      `connect: unknown route "${name}". Registered routes: ${[
-        ...registry.keys(),
-      ].join(", ")}.`
+      `connect: unknown route "${name}". Registered routes: ${namesOf(
+        false
+      ).join(", ")}.`
     );
   }
   return entry.fn;
 }
 
 export function hasRoute(name: string): boolean {
-  return registry.has(name);
+  const entry = registry.get(name);
+  return entry !== undefined && isRoute(entry);
 }
 
-/**
- * Sequence curves thread the *whole* run of points as one spline (the
- * monotone cubic, or a centripetal Catmull-Rom), rather than routing each
- * consecutive pair independently. `connect` builds these from the full center
- * sequence instead of the pairwise router loop.
- */
-export const isSequenceCurve = (name: string | undefined): boolean =>
-  name === "monotone" || name === "catmullRom";
+/** The sequence curve registered under `name`, or undefined when `name` is a
+ *  pairwise route (or nothing). */
+export function sequenceCurve(
+  name: string | undefined
+): SequenceCurve | undefined {
+  const entry = name === undefined ? undefined : registry.get(name);
+  return entry === undefined || isRoute(entry) ? undefined : entry;
+}
+
+/** The names of the registered sequence curves. */
+export const sequenceCurveNames = (): string[] => namesOf(true);
 
 /** Resolve a `Curve` (string or spec) to its router fn + options. */
 export function resolveCurve(curve: Curve): {
@@ -252,6 +277,19 @@ registerRoute("bezier", bezierRouter, { ribbon: false });
 registerRoute("orthogonal", orthogonalRouter, { ribbon: false });
 registerRoute("arc", arcRouter, { ribbon: false });
 registerRoute("perfectArrows", perfectArrowsRouter, { ribbon: false });
+
+// The monotone cubic is read over the run's parameter, and a run with none is
+// threaded with centripetal knots. The Catmull-Rom is a shape on screen: its
+// knots are always centripetal.
+registry.set("monotone", {
+  thread: (points, knots) =>
+    monotonePath(points, knots ?? centripetalKnots(points)),
+  takesKnots: true,
+});
+registry.set("catmullRom", {
+  thread: (points) => catmullRomPath(points),
+  takesKnots: false,
+});
 
 // --- curve factories --------------------------------------------------------
 // Builder-object idiom (like `polar({…})` / axis / label specs): each returns a

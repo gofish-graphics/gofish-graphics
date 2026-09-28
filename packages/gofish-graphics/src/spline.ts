@@ -14,10 +14,9 @@
  *   falls, so it never goes past either neighbor. The run as a whole still
  *   turns wherever the data turns, and the turn sits exactly on the knot.
  *   `time.transition()` and `interpolate()` read one channel at the clock's
- *   time (`monotoneCubics`, or `monotoneAt` for a single read), with the
- *   data's own time values as the knots; `line` and `ribbon` thread their
- *   points with it (`monotonePath`), with the data's own parameter as the
- *   knots when the run has one.
+ *   time (`monotoneCubics`), with the data's own time values as the knots;
+ *   `line` and `ribbon` thread their points with it (`monotonePath`), with
+ *   the data's own parameter as the knots when the run has one.
  * - The Catmull-Rom (`catmullRomPath`) threads a run of points on screen with
  *   centripetal knots (`centripetalKnots`), as d3's `curveCatmullRom` does. It
  *   is a shape in screen space, not a reading of values over a parameter, so
@@ -54,64 +53,47 @@ const sign = (x: number): number => (x < 0 ? -1 : 1);
  * there, `m_0 = (3 s_0 − m_1) / 2`, and a run of two values is a straight
  * line.
  *
- * The arithmetic is d3's, degenerate intervals included, so the curve is
- * d3's `curveMonotoneX` exactly. A knot and value that repeat the previous
- * pair are one point, as d3 ignores a coincident point: the slopes are
- * worked out without it, it takes the slope of the point it repeats, and its
- * segment is that point. An interval of zero length between two different
- * values is a jump: its slope is infinite, which the minimum above keeps out
- * of the neighboring slopes, and its segment's control values sit on its two
- * ends. The knots are otherwise expected in ascending order.
+ * The arithmetic is d3's, so the curve is d3's `curveMonotoneX` exactly. The
+ * knots must be strictly ascending: this throws on an interval of zero or
+ * negative length. A NaN knot is not checked and makes its slopes NaN. A point
+ * that repeats the one before it is dropped before this is called
+ * (`monotonePath`), as d3 drops it.
+ *
+ * The curve is unchanged by an affine change of the knots (scaling them by `a`
+ * scales every slope by `1/a`) and commutes with an affine map of each channel
+ * on its own, negation included: scaling a channel scales its slopes, and the
+ * limits on a slope (the signs of its neighbors and a minimum of absolute
+ * values) treat a negated slope as they treat the original. It does not
+ * commute with a map that mixes the channels, such as a rotation.
  */
-export function monotoneSlopes(knots: number[], values: number[]): number[] {
-  // The points d3 keeps: each one that does not repeat the last one kept.
-  const kept: number[] = [];
-  const keptAt: number[] = [];
-  for (let i = 0; i < knots.length; i++) {
-    const last = kept[kept.length - 1];
-    if (
-      last !== undefined &&
-      knots[i] === knots[last] &&
-      values[i] === values[last]
-    ) {
-      keptAt.push(kept.length - 1);
-      continue;
-    }
-    keptAt.push(kept.length);
-    kept.push(i);
-  }
-  const m = d3Slopes(
-    kept.map((i) => knots[i]),
-    kept.map((i) => values[i])
-  );
-  return keptAt.map((k) => m[k]);
-}
-
-/** d3's `curveMonotoneX` slopes over points with no coincident neighbors:
- *  `slope3` inside, `slope2` at the ends, and a straight line for two. */
-function d3Slopes(t: number[], v: number[]): number[] {
+export function monotoneSlopes(t: number[], v: number[]): number[] {
   const n = t.length;
+  for (let i = 1; i < n; i++) {
+    if (t[i] - t[i - 1] <= 0) {
+      throw new Error(
+        `[gofish] monotoneSlopes: the knots must be strictly ascending, but ` +
+          `knot ${i} (${t[i]}) does not come after knot ${i - 1} (${t[i - 1]}).`
+      );
+    }
+  }
   if (n < 2) return n === 1 ? [0] : [];
   if (n === 2) {
-    const h = t[1] - t[0];
-    const s = h ? (v[1] - v[0]) / h : 0;
+    const s = (v[1] - v[0]) / (t[1] - t[0]);
     return [s, s];
   }
   const m: number[] = new Array(n);
   for (let i = 1; i + 1 < n; i++) {
     const h0 = t[i] - t[i - 1];
     const h1 = t[i + 1] - t[i];
-    const s0 = (v[i] - v[i - 1]) / (h0 || (h1 < 0 ? -0 : 0));
-    const s1 = (v[i + 1] - v[i]) / (h1 || (h0 < 0 ? -0 : 0));
+    const s0 = (v[i] - v[i - 1]) / h0;
+    const s1 = (v[i + 1] - v[i]) / h1;
     const p = (s0 * h1 + s1 * h0) / (h0 + h1);
     m[i] =
       (sign(s0) + sign(s1)) *
         Math.min(Math.abs(s0), Math.abs(s1), 0.5 * Math.abs(p)) || 0;
   }
-  const slope2 = (i: number, tangent: number) => {
-    const h = t[i + 1] - t[i];
-    return h ? ((3 * (v[i + 1] - v[i])) / h - tangent) / 2 : tangent;
-  };
+  const slope2 = (i: number, tangent: number) =>
+    ((3 * (v[i + 1] - v[i])) / (t[i + 1] - t[i]) - tangent) / 2;
   m[0] = slope2(0, m[1]);
   m[n - 1] = slope2(n - 2, m[n - 2]);
   return m;
@@ -195,7 +177,7 @@ function hermitePath(
 }
 
 /** One channel's monotone cubics, in the flattened Bézier form `cubicAt`
- *  reads. */
+ *  and `monotoneJet` read. */
 export function monotoneCubics(knots: number[], values: number[]): number[] {
   return hermiteCubics(knots, values, monotoneSlopes(knots, values));
 }
@@ -220,32 +202,22 @@ export function cubicAt(cubics: number[], i: number, u: number): number {
   return bernstein(cubics[k], cubics[k + 1], cubics[k + 2], cubics[k + 3], u);
 }
 
-/** One channel's value at local parameter `u` of segment `i`. A reader of
- *  many playheads should build the cubics once instead (`monotoneCubics`). */
-export function monotoneAt(
-  knots: number[],
-  values: number[],
-  i: number,
-  u: number
-): number {
-  return cubicAt(monotoneCubics(knots, values), i, u);
-}
-
-/** One channel at local parameter `u` of segment `i`, with its first and
- *  second derivatives with respect to the knot parameter. The velocity is
- *  continuous across a knot, but the acceleration jumps there, so the
- *  derivatives belong to one segment. They divide by its length, so they are
- *  only meaningful on a segment longer than zero; a zero-length one is a
- *  point or a jump, with no rate. */
+/** One channel at local parameter `u` of segment `i` of cubics from
+ *  `monotoneCubics`, with its first and second derivatives with respect to
+ *  the knot parameter. The velocity is continuous across a knot, but the
+ *  acceleration jumps there, so the derivatives belong to one segment. They
+ *  divide by its length, `knots[i + 1] − knots[i]`. */
 export function monotoneJet(
   knots: number[],
-  values: number[],
+  cubics: number[],
   i: number,
   u: number
 ): [value: number, velocity: number, acceleration: number] {
-  const cubics = monotoneCubics(knots, values);
   const k = 4 * i;
-  const [b0, b1, b2, b3] = cubics.slice(k, k + 4);
+  const b0 = cubics[k];
+  const b1 = cubics[k + 1];
+  const b2 = cubics[k + 2];
+  const b3 = cubics[k + 3];
   const h = knots[i + 1] - knots[i];
   const v = 1 - u;
   return [
@@ -256,9 +228,36 @@ export function monotoneJet(
 }
 
 /** Thread a run of points with the monotone cubic over `knots`: each
- *  coordinate is monotone between neighboring points. */
+ *  coordinate is monotone between neighboring points.
+ *
+ *  A point that repeats the one before it, at the same knot, is one point, as
+ *  d3 drops a coincident point: the slopes are worked out over the distinct
+ *  points, the repeat takes the slope of the point it repeats, and its
+ *  segment, of zero length, is that point. Every input interval keeps its
+ *  segment, so a time window can still cut the path by index. Centripetal
+ *  knots are the only ones that repeat, and they repeat only where two points
+ *  coincide. */
 export function monotonePath(points: Point[], knots: number[]): BezierCurve[] {
-  return hermitePath(points, knots, monotoneSlopes);
+  // The distinct points, and for each input point the distinct one it is.
+  const kept: number[] = [];
+  const keptAt: number[] = [];
+  points.forEach((p, i) => {
+    const last = kept[kept.length - 1];
+    const repeats =
+      last !== undefined &&
+      knots[i] === knots[last] &&
+      p[0] === points[last][0] &&
+      p[1] === points[last][1];
+    if (!repeats) kept.push(i);
+    keptAt.push(kept.length - 1);
+  });
+  return hermitePath(points, knots, (_, values) => {
+    const m = monotoneSlopes(
+      kept.map((i) => knots[i]),
+      kept.map((i) => values[i])
+    );
+    return keptAt.map((k) => m[k]);
+  });
 }
 
 /** Thread a run of points on screen with a centripetal Catmull-Rom. */

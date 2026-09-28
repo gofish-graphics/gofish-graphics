@@ -15,6 +15,7 @@
  */
 import type { DisplayList } from "gofish-ir";
 import { fadeItem } from "../ast/displayList/lowerHelpers";
+import type { InterpolationMethod } from "../interpolate";
 
 /** A time warp `u -> u'` on [0, 1], or the name of a standard one. */
 export type Ease =
@@ -126,7 +127,7 @@ export type TimedEffect = {
 export type TweenEffect = {
   readonly __tween: true;
   /** How the run is read between keyframes, as for `time.transition`. */
-  readonly curve?: "auto" | "step" | "linear" | "monotone";
+  readonly curve?: "auto" | InterpolationMethod;
   /** A time warp inside each keyframe interval, resolved. */
   readonly ease?: (u: number) => number;
   layer: () => unknown;

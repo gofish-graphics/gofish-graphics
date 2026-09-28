@@ -42,7 +42,7 @@ import {
   time,
   timer,
 } from "../../src/lib";
-import { monotoneJet } from "../../src/spline";
+import { monotoneCubics, monotoneJet } from "../../src/spline";
 import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
 
@@ -459,6 +459,7 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
   at("acceleration", "linear", knots[last], 0);
 
   // ── The smooth reading ────────────────────────────────────────────────
+  const cubics = monotoneCubics(knots, values);
   for (let i = 0; i < last; i++) {
     const span = knots[i + 1] - knots[i];
     for (let s = 0; s <= SPARK_PER_INTERVAL; s++) {
@@ -467,7 +468,7 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
       // Position and velocity are continuous across a knot, so the shared
       // endpoint is emitted once, by the interval on its left.
       if (i === 0 || s > 0) {
-        const [position, velocity] = monotoneJet(knots, values, i, u);
+        const [position, velocity] = monotoneJet(knots, cubics, i, u);
         at("position", "monotone", t, position);
         at("velocity", "monotone", t, velocity);
       }
@@ -480,7 +481,7 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
         "acceleration",
         "monotone",
         tA,
-        monotoneJet(knots, values, i, (tA - knots[i]) / span)[2]
+        monotoneJet(knots, cubics, i, (tA - knots[i]) / span)[2]
       );
     }
   }

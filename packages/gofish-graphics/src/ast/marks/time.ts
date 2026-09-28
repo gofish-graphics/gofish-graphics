@@ -38,7 +38,10 @@ import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
-import { repeatedKnot, type InterpolationMethod } from "../../interpolate";
+import {
+  assertOneRowPerKnot,
+  type InterpolationMethod,
+} from "../../interpolate";
 import {
   historiesIn,
   historyOf,
@@ -345,7 +348,7 @@ export type TransitionOptions = {
    *  between them at all: the mark holds one keyframe's value until the next
    *  keyframe's own time arrives, and then jumps — the same picture the
    *  keyframes alone draw. */
-  curve?: "auto" | "step" | "linear" | "monotone";
+  curve?: "auto" | InterpolationMethod;
   /** Time warp inside one keyframe interval, `u -> u'` on `[0, 1]`. */
   ease?: (u: number) => number;
   fill?: MaybeValue<string>;
@@ -446,8 +449,8 @@ export const transition = createRelationalMark<TransitionOptions>(
     const times = children.map((child) => knotOf(child, by));
     // One mark per moment: two keyframe marks of one run at one time leave
     // nowhere for the moving mark to be then.
-    repeatedKnot(
-      [...times].sort((a, b) => a - b),
+    assertOneRowPerKnot(
+      times,
       "time.transition()",
       by,
       typeof inferred.by === "string" && children.length > 0

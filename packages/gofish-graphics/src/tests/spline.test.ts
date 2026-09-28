@@ -7,7 +7,8 @@
  * The monotone contract: it is Steffen's cubic with zero-curvature ends, the
  * same curve as d3's `curveMonotoneX`; between two knots each channel stays
  * within its two end values; a path's cubic at local `u` is the reading at the
- * matching time `t`; and repeated knots are read as d3 reads them. The Catmull-Rom
+ * matching time `t`; a repeated point is dropped as d3 drops it; and the
+ * knots must be strictly ascending. The Catmull-Rom
  * contract: its knots are always centripetal, and it is the Barry-Goldman
  * spline over them.
  */
@@ -15,6 +16,7 @@
 import {
   catmullRomPath,
   centripetalKnots,
+  monotoneCubics,
   monotoneJet,
   monotonePath,
   monotoneSlopes,
@@ -226,7 +228,7 @@ console.log("# monotone: slopes");
   ok("reads 3t + 7 on a grid over the whole run", worst < 1e-9, `${worst}`);
 }
 
-console.log("# monotone: the same curve as d3 on repeated knots");
+console.log("# monotone: the same curve as d3 on a repeated point");
 {
   // Reference segments `[c₁x, c₁y, c₂x, c₂y, x, y]` recorded from d3-shape
   // 3.2.0's `curveMonotoneX` on the same points, as above. d3 skips a point
@@ -234,39 +236,6 @@ console.log("# monotone: the same curve as d3 on repeated knots");
   // monotone path keeps one, a single point, which is dropped here before
   // comparing.
   const cases: { run: Point[]; d3: number[][] }[] = [
-    {
-      // A jump: two values at x = 1.
-      run: [
-        [0, 1],
-        [1, 3],
-        [1, 5],
-        [2, 4],
-        [3, 6],
-      ],
-      d3: [
-        [
-          0.3333333333333333, 1.3333333333333333, 0.6666666666666667,
-          1.6666666666666667, 1, 3,
-        ],
-        [1, 3, 1, 5, 1, 5],
-        [1.3333333333333333, 5, 1.6666666666666667, 4, 2, 4],
-        [2.3333333333333335, 4, 2.6666666666666665, 5, 3, 6],
-      ],
-    },
-    {
-      // A jump at the start.
-      run: [
-        [0, 1],
-        [0, 2],
-        [1, 3],
-        [2, 1],
-      ],
-      d3: [
-        [0, 1, 0, 2, 0, 2],
-        [0.3333333333333333, 2.6666666666666665, 0.6666666666666667, 3, 1, 3],
-        [1.3333333333333333, 3, 1.6666666666666667, 2, 2, 1],
-      ],
-    },
     {
       // A repeated point in the middle.
       run: [
@@ -344,6 +313,28 @@ console.log("# monotone: the same curve as d3 on repeated knots");
   );
 }
 
+console.log("# monotone: the knots must be strictly ascending");
+{
+  const throws = (knots: number[]) => {
+    try {
+      monotoneSlopes(
+        knots,
+        knots.map(() => 1)
+      );
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  ok("monotoneSlopes throws on a zero gap", throws([0, 1, 1, 2]));
+  ok("monotoneSlopes throws on a negative gap", throws([0, 2, 1]));
+  ok(
+    "a NaN knot does not throw, and yields NaN",
+    !throws([0, NaN, 2]) &&
+      monotoneSlopes([0, NaN, 2], [0, 1, 2]).some(Number.isNaN)
+  );
+}
+
 console.log("# a path's cubic at u is the reading at the matching t");
 {
   const rand = random(635);
@@ -417,8 +408,9 @@ console.log("# the jet's derivatives are the value's");
     const span = knots[i + 1] - knots[i];
     const u = 0.1 + 0.8 * rand();
     const h = 1e-4;
-    const value = (du: number) => monotoneJet(knots, values, i, u + du)[0];
-    const [, velocity, acceleration] = monotoneJet(knots, values, i, u);
+    const cubics = monotoneCubics(knots, values);
+    const value = (du: number) => monotoneJet(knots, cubics, i, u + du)[0];
+    const [, velocity, acceleration] = monotoneJet(knots, cubics, i, u);
     // Central differences in u, converted to per unit of the knot parameter.
     const dv = (value(h) - value(-h)) / (2 * h) / span;
     const da = (value(h) - 2 * value(0) + value(-h)) / (h * h) / (span * span);
@@ -429,7 +421,12 @@ console.log("# the jet's derivatives are the value's");
     );
   }
   ok("velocity and acceleration match differences", worst < 1e-3, `${worst}`);
-  const [, velocity] = monotoneJet([0, 1, 2], [0, 5, 1], 0, 1);
+  const [, velocity] = monotoneJet(
+    [0, 1, 2],
+    monotoneCubics([0, 1, 2], [0, 5, 1]),
+    0,
+    1
+  );
   ok("the velocity at a turn is 0", velocity === 0, `${velocity}`);
 }
 
