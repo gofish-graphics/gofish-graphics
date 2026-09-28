@@ -20,6 +20,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { codeToHtml } from "shiki";
 import type { BuildClockOptions } from "../../src/lib";
 import { initializeContainer } from "../helper";
+import { weather } from "./build-in/data";
 
 type Run = (container: HTMLElement, hold?: BuildClockOptions) => unknown;
 
@@ -484,7 +485,9 @@ const painted = () =>
 
 /** 4a on a 540×540 page (1080×1080 at 2x), for recording a clip: the chart
  *  with its code below it. The row keeps its natural size (so the shown code is
- *  the code that runs) and is scaled with CSS to fill the page. The chart starts held at t = 0;
+ *  the code that runs) and is scaled with CSS to fill the page. The code is
+ *  centered on the page and the chart is shifted so its plot area (not its axis
+ *  or legend) sits centered above the code. The chart starts held at t = 0;
  *  `window.__seek(t)` holds it at another time. */
 export const Ex4aClip: StoryObj = {
   parameters: { layout: "fullscreen" },
@@ -520,16 +523,36 @@ export const Ex4aClip: StoryObj = {
       top: "0",
       transformOrigin: "0 0",
     });
+    const chart = row.firstElementChild as HTMLElement;
+    const code = row.lastElementChild as HTMLElement;
     // A larger code font so the code holds its own under the chart.
-    (row.lastElementChild as HTMLElement).style.fontSize = "14px";
+    code.style.fontSize = "14px";
     page.appendChild(row);
+    const months = [...new Set(weather.map((d) => d.month))];
     const fit = () => {
-      const w = row.offsetWidth;
+      row.style.transform = "none";
+      chart.style.left = "0";
+      const origin = row.getBoundingClientRect();
+      const box = (e: Element) => {
+        const r = e.getBoundingClientRect();
+        return { left: r.left - origin.left, right: r.right - origin.left };
+      };
+      const label = (month: string) =>
+        box([...chart.querySelectorAll("svg text")].find((t) => t.textContent === month)!);
+      const mid = (b: { left: number; right: number }) => (b.left + b.right) / 2;
+      // Put the plot's center (between the first and last month labels) above the code's.
+      const codeCenter = mid(box(code));
+      const dx = codeCenter - (mid(label(months[0])) + mid(label(months.at(-1)!))) / 2;
+      Object.assign(chart.style, { position: "relative", left: `${dx}px` });
+      const c = box(chart);
+      const left = Math.min(c.left, box(code).left);
+      const right = Math.max(c.right, box(code).right);
       const h = row.offsetHeight;
-      const k = Math.min((W - 2 * MARGIN) / w, (H - 2 * MARGIN) / h);
-      const x = (W - w * k) / 2;
-      const y = (H - h * k) / 2;
-      row.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+      const k = Math.min(
+        (W / 2 - MARGIN) / Math.max(codeCenter - left, right - codeCenter),
+        (H - 2 * MARGIN) / h
+      );
+      row.style.transform = `translate(${W / 2 - codeCenter * k}px, ${(H - h * k) / 2}px) scale(${k})`;
     };
     window.__ready = whenHighlighted.then(painted).then(() => {
       fit();
