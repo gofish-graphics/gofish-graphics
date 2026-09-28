@@ -53,8 +53,8 @@ export interface Mark extends Box {
    *  bounding boxes; `points` and `wedge` describe the unclipped shape. */
   clip?: [number, number][][][];
   text?: string;
-  /** For `line` and `path`, and for a `rect` drawn by anything but a
-   *  <rect> element: points sampled along the geometry, in order. */
+  /** For `line`, `path` and `wedge`, and for a `rect` drawn by anything
+   *  but a <rect> element: points sampled along the geometry, in order. */
   points?: [number, number][];
   /** For `wedge`: center, outer radius, inner radius (0 for a pie slice),
    *  and the start angle and sweep in degrees (screen angles, clockwise from

@@ -1,0 +1,29 @@
+[
+  {
+    "class": "First",
+    "survival": "Survived",
+    "gender": "Female",
+    "count": 139
+  },
+  { "class": "First", "survival": "Survived", "gender": "Male", "count": 61 },
+  { "class": "First", "survival": "Died", "gender": "Female", "count": 5 },
+  { "class": "First", "survival": "Died", "gender": "Male", "count": 118 },
+  {
+    "class": "Second",
+    "survival": "Survived",
+    "gender": "Female",
+    "count": 94
+  },
+  { "class": "Second", "survival": "Survived", "gender": "Male", "count": 25 },
+  { "class": "Second", "survival": "Died", "gender": "Female", "count": 12 },
+  { "class": "Second", "survival": "Died", "gender": "Male", "count": 146 },
+  {
+    "class": "Third",
+    "survival": "Survived",
+    "gender": "Female",
+    "count": 106
+  },
+  { "class": "Third", "survival": "Survived", "gender": "Male", "count": 75 },
+  { "class": "Third", "survival": "Died", "gender": "Female", "count": 110 },
+  { "class": "Third", "survival": "Died", "gender": "Male", "count": 418 }
+]

@@ -1,0 +1,20 @@
+[
+  { "region": "Africa", "subregion": "Eastern Africa", "population": 340 },
+  { "region": "Africa", "subregion": "Middle Africa", "population": 145 },
+  { "region": "Africa", "subregion": "Northern Africa", "population": 210 },
+  { "region": "Africa", "subregion": "Southern Africa", "population": 60 },
+  { "region": "Africa", "subregion": "Western Africa", "population": 305 },
+  { "region": "Americas", "subregion": "Caribbean", "population": 41 },
+  { "region": "Americas", "subregion": "Central America", "population": 163 },
+  { "region": "Americas", "subregion": "Northern America", "population": 352 },
+  { "region": "Americas", "subregion": "South America", "population": 402 },
+  { "region": "Asia", "subregion": "Central Asia", "population": 66 },
+  { "region": "Asia", "subregion": "Eastern Asia", "population": 1597 },
+  { "region": "Asia", "subregion": "South-Eastern Asia", "population": 550 },
+  { "region": "Asia", "subregion": "Southern Asia", "population": 1724 },
+  { "region": "Asia", "subregion": "Western Asia", "population": 238 },
+  { "region": "Europe", "subregion": "Eastern Europe", "population": 295 },
+  { "region": "Europe", "subregion": "Northern Europe", "population": 96 },
+  { "region": "Europe", "subregion": "Southern Europe", "population": 149 },
+  { "region": "Europe", "subregion": "Western Europe", "population": 192 }
+]

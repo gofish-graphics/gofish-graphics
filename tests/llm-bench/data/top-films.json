@@ -1,0 +1,282 @@
+[
+  {
+    "title": "Gone with the Wind",
+    "year": 1939,
+    "genre": "Drama",
+    "budget": 35.9,
+    "box_office": 3750.0
+  },
+  {
+    "title": "Avatar",
+    "year": 2009,
+    "genre": "Action",
+    "budget": 284.6,
+    "box_office": 3350.0
+  },
+  {
+    "title": "Titanic",
+    "year": 1997,
+    "genre": "Drama",
+    "budget": 296.2,
+    "box_office": 3250.0
+  },
+  {
+    "title": "Star Wars: Episode IV - A New Hope",
+    "year": 1977,
+    "genre": "Action",
+    "budget": 41.8,
+    "box_office": 2950.0
+  },
+  {
+    "title": "Avengers: Endgame",
+    "year": 2019,
+    "genre": "Action",
+    "budget": 369.0,
+    "box_office": 2900.0
+  },
+  {
+    "title": "The Sound of Music",
+    "year": 1965,
+    "genre": "Other",
+    "budget": 70.2,
+    "box_office": 2450.0
+  },
+  {
+    "title": "E.T. the Extra-Terrestrial",
+    "year": 1982,
+    "genre": "Other",
+    "budget": 31.1,
+    "box_office": 2350.0
+  },
+  {
+    "title": "The Ten Commandments",
+    "year": 1956,
+    "genre": "Adventure",
+    "budget": 238.4,
+    "box_office": 2250.0
+  },
+  {
+    "title": "Doctor Zhivago",
+    "year": 1965,
+    "genre": "Drama",
+    "budget": 98.8,
+    "box_office": 2200.0
+  },
+  {
+    "title": "Star Wars: Episode VII - The Force Awakens",
+    "year": 2015,
+    "genre": "Action",
+    "budget": 274.4,
+    "box_office": 2200.0
+  },
+  {
+    "title": "Snow White and the Seven Dwarfs",
+    "year": 1937,
+    "genre": "Animation",
+    "budget": 7.8,
+    "box_office": 2175.0
+  },
+  {
+    "title": "Jurassic Park",
+    "year": 1993,
+    "genre": "Action",
+    "budget": 131.3,
+    "box_office": 2150.0
+  },
+  {
+    "title": "Jaws",
+    "year": 1975,
+    "genre": "Adventure",
+    "budget": 41.1,
+    "box_office": 2150.0
+  },
+  {
+    "title": "Avengers: Infinity War",
+    "year": 2018,
+    "genre": "Action",
+    "budget": 358.3,
+    "box_office": 2050.0
+  },
+  {
+    "title": "The Exorcist",
+    "year": 1973,
+    "genre": "Other",
+    "budget": 53.0,
+    "box_office": 1950.0
+  },
+  {
+    "title": "One Hundred and One Dalmatians",
+    "year": 1961,
+    "genre": "Animation",
+    "budget": 25.1,
+    "box_office": 1900.0
+  },
+  {
+    "title": "The Lion King",
+    "year": 1994,
+    "genre": "Animation",
+    "budget": 89.4,
+    "box_office": 1925.0
+  },
+  {
+    "title": "Jurassic World",
+    "year": 2015,
+    "genre": "Action",
+    "budget": 166.1,
+    "box_office": 1850.0
+  },
+  {
+    "title": "The Jungle Book",
+    "year": 1967,
+    "genre": "Animation",
+    "budget": 19.3,
+    "box_office": 1825.0
+  },
+  {
+    "title": "Star Wars: Episode I - The Phantom Menace",
+    "year": 1999,
+    "genre": "Action",
+    "budget": 204.4,
+    "box_office": 1825.0
+  },
+  {
+    "title": "Ben-Hur",
+    "year": 1959,
+    "genre": "Adventure",
+    "budget": 188.8,
+    "box_office": 1825.0
+  },
+  {
+    "title": "The Avengers",
+    "year": 2012,
+    "genre": "Action",
+    "budget": 253.5,
+    "box_office": 1750.0
+  },
+  {
+    "title": "The Lord of the Rings: The Return of the King",
+    "year": 2003,
+    "genre": "Adventure",
+    "budget": 142.0,
+    "box_office": 1725.0
+  },
+  {
+    "title": "Star Wars: Episode V - The Empire Strikes Back",
+    "year": 1980,
+    "genre": "Action",
+    "budget": 72.4,
+    "box_office": 1725.0
+  },
+  {
+    "title": "Independence Day",
+    "year": 1996,
+    "genre": "Action",
+    "budget": 158.3,
+    "box_office": 1725.0
+  },
+  {
+    "title": "The Lion King",
+    "year": 2019,
+    "genre": "Animation",
+    "budget": 265.5,
+    "box_office": 1725.0
+  },
+  {
+    "title": "Furious 7",
+    "year": 2015,
+    "genre": "Action",
+    "budget": 206.9,
+    "box_office": 1650.0
+  },
+  {
+    "title": "Harry Potter and the Sorcerer's Stone",
+    "year": 2001,
+    "genre": "Adventure",
+    "budget": 207.7,
+    "box_office": 1625.0
+  },
+  {
+    "title": "Cinderella",
+    "year": 1950,
+    "genre": "Animation",
+    "budget": 17.6,
+    "box_office": 1600.0
+  },
+  {
+    "title": "Harry Potter and the Deathly Hallows: Part 2",
+    "year": 2011,
+    "genre": "Adventure",
+    "budget": 205.4,
+    "box_office": 1575.0
+  },
+  {
+    "title": "Thunderball",
+    "year": 1965,
+    "genre": "Action",
+    "budget": 111.5,
+    "box_office": 1575.0
+  },
+  {
+    "title": "Bambi",
+    "year": 1942,
+    "genre": "Animation",
+    "budget": 5.3,
+    "box_office": 1575.0
+  },
+  {
+    "title": "Pirates of the Caribbean: Dead Man's Chest",
+    "year": 2006,
+    "genre": "Action",
+    "budget": 321.8,
+    "box_office": 1525.0
+  },
+  {
+    "title": "Avengers: Age of Ultron",
+    "year": 2015,
+    "genre": "Action",
+    "budget": 396.8,
+    "box_office": 1525.0
+  },
+  {
+    "title": "Goldfinger",
+    "year": 1964,
+    "genre": "Action",
+    "budget": 42.0,
+    "box_office": 1500.0
+  },
+  {
+    "title": "Grease",
+    "year": 1978,
+    "genre": "Other",
+    "budget": 22.7,
+    "box_office": 1500.0
+  },
+  {
+    "title": "Forrest Gump",
+    "year": 1994,
+    "genre": "Drama",
+    "budget": 119.7,
+    "box_office": 1475.0
+  },
+  {
+    "title": "The Lord of the Rings: The Two Towers",
+    "year": 2002,
+    "genre": "Adventure",
+    "budget": 145.8,
+    "box_office": 1475.0
+  },
+  {
+    "title": "The Lord of the Rings: The Fellowship of the Ring",
+    "year": 2001,
+    "genre": "Action",
+    "budget": 151.9,
+    "box_office": 1450.0
+  },
+  {
+    "title": "Frozen",
+    "year": 2013,
+    "genre": "Animation",
+    "budget": 171.0,
+    "box_office": 1460.0
+  }
+]

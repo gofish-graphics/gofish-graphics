@@ -531,7 +531,13 @@ function classify(
   hasFill: boolean,
   box: Box,
   origin: DOMRect
-): { kind: MarkKind; points?: Pt[]; wedge?: Mark["wedge"] } {
+): {
+  kind: MarkKind;
+  points?: Pt[];
+  wedge?: Mark["wedge"];
+  /** A straight open segment, which encloses no area. */
+  segment?: boolean;
+} {
   const tag = el.localName;
   const closedTag = ["rect", "circle", "ellipse", "polygon"].includes(tag);
   const open = samplePoints(el, false, origin);
@@ -541,7 +547,7 @@ function classify(
   const closedPath = closedTag || dist(first, last) <= 1;
   const straight =
     !closedTag && open.every((p) => lineDist(p, first, last) <= 0.75);
-  if (tag === "line" || straight) return { kind: "line" };
+  if (tag === "line" || straight) return { kind: "line", segment: true };
   if (closedPath || hasFill) {
     const pts = open.slice(0, -1);
     if (box.w < 0.5 || box.h < 0.5) return { kind: "line" };
@@ -562,7 +568,15 @@ function classify(
         return { kind: "circle" };
     }
     const wedge = fitWedge(pts, box);
-    if (wedge) return { kind: "wedge", wedge };
+    // A wedge keeps its outline too: a slice whose radial edges are short
+    // (a short bar in a circular bar chart) gets a less exact fitted
+    // center, and a check can measure it again about a shared center.
+    if (wedge)
+      return {
+        kind: "wedge",
+        wedge,
+        points: thin(simplify(samplePoints(el, false, origin, 4000), 0.5), 400),
+      };
   }
   // A path's shape is kept as a polyline. Sampling densely and then dropping
   // points that lie within 0.5px of the simplified line keeps every corner,
@@ -823,11 +837,14 @@ export function extractRecord(container: HTMLElement): RenderRecord {
     const shown = clips.length ? clipBox(box, clips) : box;
     if (!shown) continue;
     const c = classify(el as SVGGeometryElement, !!fill, box, origin);
+    // A straight segment encloses no area, so its fill (black by default,
+    // even on a <line>) paints nothing: only its stroke shows.
+    if (c.segment && !stroke) continue;
     const mark: Mark = {
       kind: c.kind,
       tag: el.localName,
       ...shown,
-      fill,
+      fill: c.segment ? null : fill,
       stroke,
       strokeWidth: round1(strokeWidth),
     };

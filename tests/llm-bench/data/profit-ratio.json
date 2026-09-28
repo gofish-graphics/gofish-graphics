@@ -1,0 +1,19 @@
+[
+  { "sub_category": "Furnishings", "profit_ratio": -26 },
+  { "sub_category": "Appliances", "profit_ratio": -11 },
+  { "sub_category": "Tables", "profit_ratio": -9 },
+  { "sub_category": "Bookcases", "profit_ratio": -8 },
+  { "sub_category": "Supplies", "profit_ratio": -7 },
+  { "sub_category": "Machines", "profit_ratio": -6 },
+  { "sub_category": "Binders", "profit_ratio": -2 },
+  { "sub_category": "Storage", "profit_ratio": 4 },
+  { "sub_category": "Chairs", "profit_ratio": 8 },
+  { "sub_category": "Phones", "profit_ratio": 17 },
+  { "sub_category": "Art", "profit_ratio": 21 },
+  { "sub_category": "Accessories", "profit_ratio": 21 },
+  { "sub_category": "Fasteners", "profit_ratio": 30 },
+  { "sub_category": "Envelopes", "profit_ratio": 38 },
+  { "sub_category": "Paper", "profit_ratio": 40 },
+  { "sub_category": "Copiers", "profit_ratio": 42 },
+  { "sub_category": "Labels", "profit_ratio": 44 }
+]

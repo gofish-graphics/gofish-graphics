@@ -84,9 +84,10 @@ export const ASPECTS: Aspect[] = ["colors", "text", "marks", "size"];
  * Which set a task belongs to, reported separately. "common": charts every
  * library draws with a built-in chart type. "beyond-defaults": charts no arm
  * has a built-in for (mosaic, waffle, ribbon chart), so a program has to
- * compose them from lower-level pieces.
+ * compose them from lower-level pieces. "corpus-pilot": the first tasks
+ * built from the chart-type corpus (tests/llm-bench/corpus/manifest.csv).
  */
-export const GROUPS = ["common", "beyond-defaults"] as const;
+export const GROUPS = ["common", "beyond-defaults", "corpus-pilot"] as const;
 export type Group = (typeof GROUPS)[number];
 
 interface TaskBase {
