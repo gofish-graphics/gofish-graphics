@@ -1389,7 +1389,12 @@ async function main() {
     process.exit(1);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Exit once the report is written: a browser relaunched after a crash or a
+// leftover child process can otherwise keep the event loop alive for hours.
+main().then(
+  () => process.exit(0),
+  (e) => {
+    console.error(e);
+    process.exit(1);
+  }
+);

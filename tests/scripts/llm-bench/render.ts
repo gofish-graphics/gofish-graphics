@@ -189,7 +189,12 @@ export class Renderer {
   }
 
   async close(): Promise<void> {
-    await this.browser.close();
+    // browser.close() can hang (seen after a long run); don't let it keep
+    // the process alive.
+    await Promise.race([
+      this.browser.close().catch(() => {}),
+      new Promise((r) => setTimeout(r, 10_000).unref()),
+    ]);
     this.vite.kill();
   }
 
@@ -328,11 +333,26 @@ export class Renderer {
     const { moduleUrl, svgText } = input;
     const { svgPath, pngPath, recordPath } = out;
     let renderMs = input.renderMs;
-    // Render in a fresh context on a controllable clock.
-    const context = await this.browser.newContext({
-      viewport: { width: size.w + 400, height: size.h + 400 },
-      deviceScaleFactor: 1,
-    });
+    // A program can take the whole browser down (e.g. an unbounded loop that
+    // exhausts memory). Relaunch it and report a harness error, so the render
+    // is retried instead of the run aborting.
+    if (!this.browser.isConnected()) this.browser = await chromium.launch();
+    let context;
+    try {
+      // Render in a fresh context on a controllable clock.
+      context = await this.browser.newContext({
+        viewport: { width: size.w + 400, height: size.h + 400 },
+        deviceScaleFactor: 1,
+      });
+    } catch (e) {
+      this.browser = await chromium.launch();
+      return {
+        ok: false,
+        error: `Harness error: ${(e as Error).message}`,
+        renderMs,
+        harnessError: true,
+      };
+    }
     const page = await context.newPage();
     const errors: string[] = [];
     page.on("pageerror", (e) =>
