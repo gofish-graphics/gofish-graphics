@@ -50,7 +50,7 @@ def pulley_circle(r: float = R):
             ).name("wheel"),
             circle(r=5, fill="#555555").name("hub"),
         ]
-    ).constrain(
+    ).relate(
         lambda wheel, hub: [
             Constraint.align([wheel, hub], x="middle", y="middle"),
         ]
@@ -77,7 +77,7 @@ def weight(width: float, height: float, label: str):
             ).name("body"),
             text(text=label, fontSize=10, fill="white").name("label"),
         ]
-    ).constrain(
+    ).relate(
         lambda body, label: [
             Constraint.align([body, label], x="middle", y="middle"),
         ]
@@ -119,7 +119,7 @@ def story_pulley():
                         text(text="B", fontSize=12).name("Blabel"),
                         text(text="C", fontSize=12).name("Clabel"),
                     ]
-                ).constrain(
+                ).relate(
                     lambda ceiling, A, B, C, w1, w2, Alabel, Blabel, Clabel: [
                         # Horizontal pulley cluster — each adjacent pair
                         # shares an edge: B.start sits on A.middle (overlap
@@ -230,7 +230,7 @@ def story_pulley():
             ],
             x=20,
             y=20,
-        ).constrain(
+        ).relate(
             lambda A,
             B,
             C,
@@ -270,7 +270,7 @@ def story_pulley():
                     ]
                 ],
                 # Granular paint order: relative z-order constraints. Cross-
-                # tier refs (A/B/C) work because `.constrain()` descends into
+                # tier refs (A/B/C) work because `.relate()` descends into
                 # the non-component inner shapes layer. The ropes' default
                 # `.z_order(-1)` keeps the unmentioned ropes (Y/Z/P/Q)
                 # behind their circles; these four carve out the exceptions.

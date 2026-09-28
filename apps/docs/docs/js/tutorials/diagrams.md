@@ -57,14 +57,17 @@ the code refer to the mark.
 
 ## Adding a label
 
-`text()` is a mark that draws a string. `ref("mercury")` is a **reference**:
-it stands for the mark named `"mercury"`, so we can use Mercury in a second
-place without copying it. We put the label and the reference in a column with
-`spread`, and draw the column on top of the row with `layer`:
+`text()` is a mark that draws a string. To put the label next to Mercury, we
+need Mercury in a second place. That's what `.relate()` is for. We put the row
+in a `layer` and call `.relate()` on it. It hands us the marks inside the layer
+by name, and it draws whatever we return on top of the layer. `mercury` is a
+**reference**: it stands for the mark named `"mercury"`, so we can use Mercury
+in a second place without copying it. We put the label and the reference in a
+column with `spread`:
 
 ::: gofish
 
-```js{8,18-22}
+```js{8,19-25}
 const data = [
   { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
   { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
@@ -83,11 +86,14 @@ gf.layer([
       )
     ),
   ]),
-  gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
-    gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }),
-    gf.ref("mercury"),
-  ]),
-]).render(root);
+])
+  .relate(({ mercury }) => [
+    gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
+      gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }),
+      mercury,
+    ]),
+  ])
+  .render(root);
 ```
 
 :::
@@ -106,7 +112,7 @@ fill:
 
 ::: gofish
 
-```js{19-21,26-27}
+```js{21-23,28-29}
 const data = [
   { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
   { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
@@ -125,16 +131,19 @@ gf.layer([
       )
     ),
   ]),
-  gf.background(
-    { padding: 10, stroke: "#E94560", strokeWidth: 3, rx: 12, ry: 12 },
-    [
-      gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
-        gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }),
-        gf.ref("mercury"),
-      ]),
-    ]
-  ),
-]).render(root);
+])
+  .relate(({ mercury }) => [
+    gf.background(
+      { padding: 10, stroke: "#E94560", strokeWidth: 3, rx: 12, ry: 12 },
+      [
+        gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
+          gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }),
+          mercury,
+        ]),
+      ]
+    ),
+  ])
+  .render(root);
 ```
 
 :::
@@ -148,7 +157,7 @@ To move the label below Mercury, we swap the two children of the column:
 
 ::: gofish
 
-```js{23-24}
+```js{25-26}
 const data = [
   { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
   { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
@@ -167,16 +176,19 @@ gf.layer([
       )
     ),
   ]),
-  gf.background(
-    { padding: 10, stroke: "#E94560", strokeWidth: 3, rx: 12, ry: 12 },
-    [
-      gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
-        gf.ref("mercury"),
-        gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }),
-      ]),
-    ]
-  ),
-]).render(root);
+])
+  .relate(({ mercury }) => [
+    gf.background(
+      { padding: 10, stroke: "#E94560", strokeWidth: 3, rx: 12, ry: 12 },
+      [
+        gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
+          mercury,
+          gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }),
+        ]),
+      ]
+    ),
+  ])
+  .render(root);
 ```
 
 :::
@@ -185,11 +197,13 @@ gf.layer([
 
 Right now the red box holds the column, and the column holds Mercury and the
 label. Let's pull the box out so it stands on its own. We name the label, and
-we give `background()` references to Mercury and the label instead of the column:
+we give `background()` references to Mercury and the label instead of the
+column. The label was made inside `.relate()`, so it isn't one of the names
+`.relate()` hands us. `gf.ref("label")` refers to it by name instead:
 
 ::: gofish
 
-```js{19-22,25}
+```js{23,25-28}
 const data = [
   { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
   { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
@@ -208,15 +222,18 @@ gf.layer([
       )
     ),
   ]),
-  gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
-    gf.ref("mercury"),
-    gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
-  ]),
-  gf.background(
-    { padding: 10, stroke: "#E94560", strokeWidth: 3, rx: 12, ry: 12 },
-    [gf.ref("mercury"), gf.ref("label")]
-  ),
-]).render(root);
+])
+  .relate(({ mercury }) => [
+    gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
+      mercury,
+      gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
+    ]),
+    gf.background(
+      { padding: 10, stroke: "#E94560", strokeWidth: 3, rx: 12, ry: 12 },
+      [mercury, gf.ref("label")]
+    ),
+  ])
+  .render(root);
 ```
 
 :::
@@ -232,7 +249,7 @@ two children and draws an arrow from the first to the second:
 
 ::: gofish
 
-```js{23}
+```js{25}
 const data = [
   { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
   { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
@@ -251,12 +268,15 @@ gf.layer([
       )
     ),
   ]),
-  gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
-    gf.ref("mercury"),
-    gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
-  ]),
-  gf.arrow({ stroke: "#E94560" }, [gf.ref("label"), gf.ref("mercury")]),
-]).render(root);
+])
+  .relate(({ mercury }) => [
+    gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
+      mercury,
+      gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
+    ]),
+    gf.arrow({ stroke: "#E94560" }, [gf.ref("label"), mercury]),
+  ])
+  .render(root);
 ```
 
 :::
@@ -279,7 +299,7 @@ together during layout.
 
 ::: gofish
 
-```js{10,22-26}
+```js{19,21-24}
 const data = [
   { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
   { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
@@ -288,38 +308,36 @@ const data = [
 ];
 
 gf.layer([
-  gf
-    .layer([
-      gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
-        gf.spread(
-          { dir: "x", spacing: 50, alignment: "middle" },
-          data.map((d) =>
-            gf
-              .circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
-              .name(d.name)
-          )
-        ),
-      ]),
-      gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
-    ])
-    .constrain(({ mercury, label }) => [
-      gf.Constraint.align({ x: "middle" }, [mercury, label]),
-      gf.Constraint.distribute({ dir: "y", spacing: 20 }, [mercury, label]),
-    ]),
-  gf.arrow({ stroke: "#E94560" }, [gf.ref("label"), gf.ref("mercury")]),
-]).render(root);
+  gf.background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+    gf.spread(
+      { dir: "x", spacing: 50, alignment: "middle" },
+      data.map((d) =>
+        gf
+          .circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
+          .name(d.name)
+      )
+    ),
+  ]),
+  gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
+])
+  .relate(({ mercury, label }) => [
+    gf.Constraint.align({ x: "middle" }, [mercury, label]),
+    gf.Constraint.distribute({ dir: "y", spacing: 20 }, [mercury, label]),
+    gf.arrow({ stroke: "#E94560" }, [label, mercury]),
+  ])
+  .render(root);
 ```
 
 :::
 
-The picture is the same again. `.constrain()` receives the names of marks in
-its layer and returns a list of constraints. `Constraint.align` lines up the
-centers of Mercury and the label from left to right, and
-`Constraint.distribute` puts the label 20 pixels below Mercury.
+The picture is the same again. The label is now a mark of the layer, so
+`.relate()` hands it to us as `label`, next to `mercury`. We return two
+constraints and the arrow. `Constraint.align` lines up the centers of Mercury
+and the label from left to right, and `Constraint.distribute` puts the label 20
+pixels below Mercury.
 
-The constraint's layer holds the background and the label, so it can name
-Mercury even though Mercury sits inside the row. The arrow sits outside that
-layer, so it is drawn after the layer is arranged.
+The layer places the label with the constraints first, and draws the arrow
+after that, so the arrow starts from wherever the label ends up.
 
 ## Spacing the label off the whole background
 
@@ -329,7 +347,7 @@ Mercury:
 
 ::: gofish
 
-```js{22,25,27}
+```js{20,23,25}
 const data = [
   { name: "mercury", r: 15, fill: "#F5E3C8", stroke: "#EFC9A2" },
   { name: "venus", r: 36, fill: "#D2913C", stroke: "#A96F26" },
@@ -339,27 +357,25 @@ const data = [
 
 gf.layer([
   gf
-    .layer([
-      gf
-        .background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
-          gf.spread(
-            { dir: "x", spacing: 50, alignment: "middle" },
-            data.map((d) =>
-              gf
-                .circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
-                .name(d.name)
-            )
-          ),
-        ])
-        .name("planets"),
-      gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
+    .background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+      gf.spread(
+        { dir: "x", spacing: 50, alignment: "middle" },
+        data.map((d) =>
+          gf
+            .circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
+            .name(d.name)
+        )
+      ),
     ])
-    .constrain(({ mercury, planets, label }) => [
-      gf.Constraint.align({ x: "middle" }, [mercury, label]),
-      gf.Constraint.distribute({ dir: "y", spacing: 20 }, [planets, label]),
-    ]),
-  gf.arrow({ stroke: "#E94560" }, [gf.ref("label"), gf.ref("mercury")]),
-]).render(root);
+    .name("planets"),
+  gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
+])
+  .relate(({ mercury, planets, label }) => [
+    gf.Constraint.align({ x: "middle" }, [mercury, label]),
+    gf.Constraint.distribute({ dir: "y", spacing: 20 }, [planets, label]),
+    gf.arrow({ stroke: "#E94560" }, [label, mercury]),
+  ])
+  .render(root);
 ```
 
 :::
@@ -374,7 +390,8 @@ distance from another.
 
 - [**Pictorial Charts**](/js/tutorials/pictorial-charts) uses names and
   constraints inside a chart.
-- [**`constrain`**](/js/api/constraints/constrain) lists every constraint.
+- [**`relate`**](/js/api/constraints/relate) lists every constraint and
+  what else `.relate()` can draw.
 - [**How to name and scope**](/js/api/howto/naming-and-scoping) explains how
   names work once you build reusable marks of your own.
 - The [**Python Tutor memory diagram**](/js/examples/python-tutor-memory-diagram)

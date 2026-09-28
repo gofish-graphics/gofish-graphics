@@ -42,7 +42,7 @@ def node(label: str):
         ],
         w=76,
         h=40,
-    ).constrain(
+    ).relate(
         lambda box, label: [
             Constraint.align([box, label], x="middle", y="middle"),
         ]
@@ -67,7 +67,7 @@ def story_node_link():
                         node(label="C").name(C),
                         node(label="D").name(D),
                     ]
-                ).constrain(
+                ).relate(
                     lambda A, B, C, D: [
                         Constraint.distribute(
                             [A, B, C], dir="x", spacing=60, anchor="edge"
@@ -111,7 +111,7 @@ def story_node_link():
             ],
             x=20,
             y=20,
-        ).constrain(
+        ).relate(
             lambda e1, e2, e3, t1, t2, t3, **_extra: [
                 # Horizontal edges: label centered just above the edge.
                 Constraint.align([e1, t1], x="middle"),

@@ -278,7 +278,7 @@ Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then
   This is a real paint-order constraint, not a hardcoded z-index, so it
   composes with other constraints — a `line(...)` or `ribbon(...)` tier needs
   no `.zOrder(...)` incantation to sit under the marks it connects. An
-  explicit `.zOrder(...)` or `.constrain(...)` on the connector's own chain
+  explicit `.zOrder(...)` or `.relate(...)` on the connector's own chain
   overrides the default.
 - **Field references on refs** — `by` / `resolve` read bare field names off the
   refs (`by="species"`, not `by="datum.species"`); a ref descends into its row

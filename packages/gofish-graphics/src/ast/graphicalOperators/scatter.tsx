@@ -190,14 +190,14 @@ const Scatter = createNodeOperator(
     // `dims` names its axes the way the enclosing coordinate space does
     // (`theta`, `lon`, ...), so the per-axis placement, and the constraints
     // built from it, wait for the resolveAliases pass.
-    node._elaborateInAxisScope = (scope) => {
+    node._elaborateInAxisScope = async (scope) => {
       const placement = scatterAxes(
         { x, y, xMin, xMax, yMin, yMax },
         dims,
         scope,
         childList.length
       );
-      node.constrain((g) => {
+      await node.relate((g) => {
         const refs = names.map((name) => g[name]);
         const cs: ConstraintSpec[] = [];
         childList.forEach((_, i) => {

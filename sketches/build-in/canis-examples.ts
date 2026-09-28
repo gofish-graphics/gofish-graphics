@@ -150,7 +150,7 @@ const LabeledBar2 = createMark(
       rect({ w: amount })
         .name("body")
         .transition({ enter: animation.grow({ duration: 200 }) }),
-    ]).constrain(({ label, body }) => [time.after(label, body)]) // body starts when label ends
+    ]).relate(({ label, body }) => [time.after(label, body)]) // body starts when label ends
 );
 
 chart(budget)

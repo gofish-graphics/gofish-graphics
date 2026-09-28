@@ -156,11 +156,11 @@ export const Spread = createNodeOperator(
     // name the enclosing coordinate space declares (`theta`, `lon`, ...). The
     // spread is built before that space exists, so the constraints, which need
     // the axis, are installed by the resolveAliases pass.
-    node._elaborateInAxisScope = (scope) => {
+    node._elaborateInAxisScope = async (scope) => {
       const stackDir = resolveAxisName(scope, dirName, `spread({ dir })`);
       const alignAxis = axisName((1 - stackDir) as Direction);
       const stackAxis = axisName(stackDir);
-      node.constrain((g) => {
+      await node.relate((g) => {
         const refs = names.map((name) => g[name]);
         // The cross-axis align: it shares the frame (unions the children's
         // domain) and, for free children (bars), commits a baseline. A

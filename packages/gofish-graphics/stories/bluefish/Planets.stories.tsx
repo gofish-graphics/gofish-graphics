@@ -1,6 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { map, stack, spread, ellipse, layer, text, ref, arrow } from "../../src/lib";
+import {
+  map,
+  stack,
+  spread,
+  ellipse,
+  layer,
+  text,
+  ref,
+  arrow,
+} from "../../src/lib";
 
 const meta: Meta = {
   title: "Bluefish/Planets",
@@ -28,7 +37,8 @@ export const PlanetsOnly: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    spread({ dir: "x", spacing: 50, alignment: "middle" },
+    spread(
+      { dir: "x", spacing: 50, alignment: "middle" },
       map(planets, (planet) =>
         ellipse({
           w: planet.radius * 2,
@@ -49,7 +59,8 @@ export const PlanetsWithLabelAbove: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer([
-      spread({ dir: "x", spacing: 50, alignment: "middle" },
+      spread(
+        { dir: "x", spacing: 50, alignment: "middle" },
         map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
@@ -60,13 +71,16 @@ export const PlanetsWithLabelAbove: StoryObj<Args> = {
           }).name(planet.name)
         )
       ),
-      // y-down free space: first child renders on top, so label-first puts the
-      // label ABOVE the planet (issue #143/#16).
-      spread({ dir: "y", spacing: 60, alignment: "middle" }, [
-        text({ text: "Mercury" }),
-        ref("Mercury"),
-      ]),
-    ]).render(container, {});
+    ])
+      .relate(({ Mercury }) => [
+        // y-down free space: first child renders on top, so label-first puts the
+        // label ABOVE the planet (issue #143/#16).
+        spread({ dir: "y", spacing: 60, alignment: "middle" }, [
+          text({ text: "Mercury" }),
+          Mercury,
+        ]),
+      ])
+      .render(container, {});
 
     return container;
   },
@@ -77,7 +91,8 @@ export const PlanetsWithLabelBelow: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer([
-      spread({ dir: "x", spacing: 50, alignment: "middle" },
+      spread(
+        { dir: "x", spacing: 50, alignment: "middle" },
         map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
@@ -88,12 +103,15 @@ export const PlanetsWithLabelBelow: StoryObj<Args> = {
           }).name(planet.name)
         )
       ),
-      // y-down free space: label-second puts the label BELOW the planet.
-      spread({ dir: "y", spacing: 60, alignment: "middle" }, [
-        ref("Mercury"),
-        text({ text: "Mercury" }),
-      ]),
-    ]).render(container, {});
+    ])
+      .relate(({ Mercury }) => [
+        // y-down free space: label-second puts the label BELOW the planet.
+        spread({ dir: "y", spacing: 60, alignment: "middle" }, [
+          Mercury,
+          text({ text: "Mercury" }),
+        ]),
+      ])
+      .render(container, {});
 
     return container;
   },
@@ -104,7 +122,8 @@ export const PlanetsWithLabelAboveNoSpacing: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer([
-      spread({ dir: "x", spacing: 50, alignment: "middle" },
+      spread(
+        { dir: "x", spacing: 50, alignment: "middle" },
         map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
@@ -115,12 +134,15 @@ export const PlanetsWithLabelAboveNoSpacing: StoryObj<Args> = {
           }).name(planet.name)
         )
       ),
-      // y-down: label-first → label ABOVE the planet (issue #143/#16).
-      spread({ dir: "y", spacing: 0, alignment: "middle" }, [
-        text({ text: "Mercury", debugBoundingBox: true }),
-        ref("Mercury"),
-      ]),
-    ]).render(container, {});
+    ])
+      .relate(({ Mercury }) => [
+        // y-down: label-first → label ABOVE the planet (issue #143/#16).
+        spread({ dir: "y", spacing: 0, alignment: "middle" }, [
+          text({ text: "Mercury", debugBoundingBox: true }),
+          Mercury,
+        ]),
+      ])
+      .render(container, {});
 
     return container;
   },
@@ -131,7 +153,8 @@ export const PlanetsWithLabelBelowNoSpacing: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer([
-      spread({ dir: "x", spacing: 50, alignment: "middle" },
+      spread(
+        { dir: "x", spacing: 50, alignment: "middle" },
         map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
@@ -142,12 +165,15 @@ export const PlanetsWithLabelBelowNoSpacing: StoryObj<Args> = {
           }).name(planet.name)
         )
       ),
-      // y-down: label-second → label BELOW the planet.
-      spread({ dir: "y", spacing: 0, alignment: "middle" }, [
-        ref("Mercury"),
-        text({ text: "Mercury", debugBoundingBox: true }),
-      ]),
-    ]).render(container, {});
+    ])
+      .relate(({ Mercury }) => [
+        // y-down: label-second → label BELOW the planet.
+        spread({ dir: "y", spacing: 0, alignment: "middle" }, [
+          Mercury,
+          text({ text: "Mercury", debugBoundingBox: true }),
+        ]),
+      ])
+      .render(container, {});
 
     return container;
   },
@@ -166,7 +192,8 @@ export const PlanetsWithArrow: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer([
-      spread({ dir: "x", spacing: 50, alignment: "middle" },
+      spread(
+        { dir: "x", spacing: 50, alignment: "middle" },
         map(planets, (planet) =>
           ellipse({
             w: planet.radius * 2,
@@ -177,12 +204,15 @@ export const PlanetsWithArrow: StoryObj<Args> = {
           }).name(planet.name)
         )
       ),
-      spread({ dir: "y", spacing: 60, alignment: "middle" }, [
-        text({ text: "Mercury" }).name("label"),
-        ref("Mercury"),
-      ]),
-      arrow({}, [ref("label"), ref("Mercury")]),
-    ]).render(container, {});
+    ])
+      .relate(({ Mercury }) => [
+        spread({ dir: "y", spacing: 60, alignment: "middle" }, [
+          text({ text: "Mercury" }).name("label"),
+          Mercury,
+        ]),
+        arrow({}, [ref("label"), Mercury]),
+      ])
+      .render(container, {});
 
     return container;
   },

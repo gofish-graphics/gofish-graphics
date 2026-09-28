@@ -72,7 +72,7 @@ export const Default: StoryObj<Args> = {
 
       const GAP = 10;
       await layer([sc, topHist, rightHist])
-        .constrain(({ scatter, topHist, rightHist }: any) => [
+        .relate(({ scatter, topHist, rightHist }: any) => [
           Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [scatter]),
           Constraint.align({ x: "baseline" } as any, [scatter, topHist]),
           Constraint.align({ y: "baseline" } as any, [scatter, rightHist]),

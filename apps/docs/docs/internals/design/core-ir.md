@@ -304,7 +304,7 @@ before splitting into scene-nodes / overlays — except produced by GoFish's _re
 solver, in GoFish's process, and serialized. The adapter then collapses to a
 near-trivial map (GoFish primitive → host scene node / overlay), **pixel-equal by
 construction**. The grammar-coverage gap disappears: `table` / `cut` / `mask` and
-free-form `.constrain` are all just geometry by this point.
+free-form `.relate` are all just geometry by this point.
 
 ```ts twoslash
 type DisplayItem = {

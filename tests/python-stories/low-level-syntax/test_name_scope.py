@@ -1,11 +1,11 @@
 """Equivalent of lowlevel/NameScope.stories.tsx — Low Level Syntax/Name Scope.
 
-String-name resolution checks: a `.constrain()` parameter can name a node
+String-name resolution checks: a `.relate()` parameter can name a node
 nested anywhere inside the layer (`mercury` inside enclose › spread), and a
 constrained mark repeated per chart row reuses its local names in every row.
 """
 
-from gofish import Constraint, arrow, chart, circle, enclose, layer, rect, ref, spread, text
+from gofish import Constraint, arrow, chart, circle, enclose, layer, rect, spread, text
 
 PLANETS = [
     {"name": "mercury", "r": 8, "fill": "#b5b5b5", "stroke": "#8a8a8a"},
@@ -42,10 +42,10 @@ def story_nested_operand():
                 ry=16,
             ).name("planets"),
             text(text="Mercury", fill="#E94560", fontSize=14).name("label"),
-            arrow([ref("label"), ref("mercury")], stroke="#E94560"),
-        ]).constrain(lambda mercury, planets, label: [
+        ]).relate(lambda mercury, planets, label: [
             Constraint.align([mercury, label], x="middle"),
             Constraint.distribute([planets, label], dir="y", spacing=20),
+            arrow([label, mercury], stroke="#E94560"),
         ]),
         {"w": 400, "h": 200},
     )
@@ -66,7 +66,7 @@ def story_per_row_names():
             layer([
                 rect(w=40, h="v", fill="#9cc3e6").name("bar"),
                 rect(w=16, h=4, fill="#1a5683").name("tick"),
-            ]).constrain(lambda bar, tick: [
+            ]).relate(lambda bar, tick: [
                 Constraint.align([bar, tick], x="middle", y="end"),
             ])
         ),

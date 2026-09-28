@@ -38,7 +38,7 @@ export const stackSlot = createMark(
           : text({ fontSize: 24, fontFamily, fill: "none", text: "" }).name(
               valueTag
             ),
-      ]).constrain(({ box, boxBorderBottom, boxBorderLeft, value }) => [
+      ]).relate(({ box, boxBorderBottom, boxBorderLeft, value }) => [
         Constraint.align({ x: "middle", y: "middle" }, [box, value]),
         // y-down free space: "end" is the bottom edge — keep the bottom border
         // at the bottom of the box (issue #143/#16).

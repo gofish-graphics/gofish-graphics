@@ -4,20 +4,20 @@ A parse-derivation diagram for "3 + (4 * 5)": a hand-derived parse trace
 (TRACE, a nested rule/terminal tree) is walked recursively (`walk`, mirroring
 the JS `walk`), imperatively pushing marks into a flat `children` list and
 constraint specs into a flat list, exactly like the JS original. Then one
-top-level `layer(children).constrain(...)` ties everything together.
+top-level `layer(children).relate(...)` ties everything together.
 
 Dynamic-name constraint targeting: the trace generates ~30 runtime-only names
 (`marker-{uid}`, `bar-{uid}`, `label-{uid}`, `lit-{uid}`, `underline-{uid}`),
 not a fixed statically-known set a literal `lambda a, b: ...` destructure
 could spell out (JS bypasses its destructured callback param for the same
 reason, building raw `{name: token.__tag}` refs directly). The Python
-`.constrain(callback)` already hands back one `RefSentinel` per named child
+`.relate(callback)` already hands back one `RefSentinel` per named child
 as a **kwarg** keyed by that child's `.name(...)` tag string — a `dict`
 unpacked via `**refs` does not require its keys to be valid identifiers, so
 a catch-all `lambda **refs: [...]` reaches every dynamically-named child by
 indexing `refs["marker-7"]` etc., with no gap versus the JS mechanism.
 Constraint specs are recorded as small closures (capturing tag strings, not
-refs, at walk time) and only resolved against `refs` once `.constrain(...)`
+refs, at walk time) and only resolved against `refs` once `.relate(...)`
 actually runs.
 
 The invisible `{x, w}`-positioned `marker` rects are ported as-is: JS found
@@ -116,7 +116,7 @@ def char_box(ch: str):
             rect(w=CHAR_W, h=CHAR_H, fill="transparent").name("box"),
             text(text=ch, **BIG_FONT).name("glyph"),
         ]
-    ).constrain(
+    ).relate(
         lambda box, glyph: [
             Constraint.align([box, glyph], x="middle", y="middle"),
         ]
@@ -134,7 +134,7 @@ def label_text(main, note=None):
                 text(text=main, **LABEL_FONT).name("main"),
                 text(text=f"- {note}", **NOTE_FONT).name("note"),
             ]
-        ).constrain(
+        ).relate(
             lambda main, note: [
                 Constraint.align([main, note], y="middle"),
                 Constraint.distribute([main, note], dir="x", spacing=4),
@@ -152,7 +152,7 @@ def story_ohm_parse_tree():
     constraint_builders = []
 
     # ── Tier 1: the character row — a self-contained sub-layer with its own
-    # `.constrain()` call, exactly the two-tier pattern house style uses.
+    # `.relate()` call, exactly the two-tier pattern house style uses.
     text_ = "3 + (4 * 5)"
     chars = list(text_)
     char_tokens = [createName(f"char-{i}") for i in range(len(chars))]
@@ -172,7 +172,7 @@ def story_ohm_parse_tree():
             x=0,
             y=0,
         )
-        .constrain(
+        .relate(
             lambda **refs: [
                 Constraint.align(
                     [refs[n] for n in row_ref_names], y="start"
@@ -318,7 +318,7 @@ def story_ohm_parse_tree():
     )
 
     return (
-        layer(children, x=20, y=20).constrain(
+        layer(children, x=20, y=20).relate(
             lambda **refs: [f(refs) for f in constraint_builders]
         ),
         {"w": 820, "h": 480},

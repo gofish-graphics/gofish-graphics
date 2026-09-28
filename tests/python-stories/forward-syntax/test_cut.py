@@ -20,7 +20,7 @@ the ref/datum mark-fn bridge). The mark-fn receives one `_InputRef` per slice
 (reconstructed from the `{__inputRef, datum}` sentinel the JS harness/widget
 sends across the RPC in place of the live ref); `.name("slice")` on it
 survives the round trip (#556) via the `_InputRef.name()` override, so the
-per-slice `layer([...]).constrain(...)` can target it by name exactly like
+per-slice `layer([...]).relate(...)` can target it by name exactly like
 the JS story's `d.name("slice")`.
 """
 
@@ -118,7 +118,7 @@ def story_image_cut_with_labels():
                 text=str(d.datum["amount"]),
             ).name("amount")
 
-            def _constrain(slice, label, amount):
+            def _relate(slice, label, amount):
                 return [
                     Constraint.align([slice, label], y="middle"),
                     Constraint.distribute([slice, label], dir="x", spacing=12),
@@ -126,7 +126,7 @@ def story_image_cut_with_labels():
                     Constraint.align([slice, amount], y="middle"),
                 ]
 
-            slices.append(layer([d, category_label, amount_label]).constrain(_constrain))
+            slices.append(layer([d, category_label, amount_label]).relate(_relate))
         return layer(slices)
 
     return (
@@ -384,7 +384,7 @@ def story_croissant_stack():
                 ],
             ]
         )
-        .constrain(
+        .relate(
             lambda axisLine, lab0, lab1, lab2, lab3, lab4: [
                 # Pin the baseline rect at the sub-layer origin, then place each
                 # label's center at its literal x = frac * W, dropped below the
@@ -408,7 +408,7 @@ def story_croissant_stack():
     )
 
     return (
-        layer([bands, axis]).constrain(
+        layer([bands, axis]).relate(
             lambda bands, axis, **_: [
                 # Axis row centered under the bands (both W wide). y-down free
                 # space: bands-first renders on top, axis below (issue #143/#16).

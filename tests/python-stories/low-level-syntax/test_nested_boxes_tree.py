@@ -82,7 +82,7 @@ def buildSubtree(node, depth):
         ],
         w=96,
         h=22,
-    ).constrain(lambda box, label: [
+    ).relate(lambda box, label: [
         Constraint.align([box, label], x="middle", y="middle"),
     ])
 
@@ -103,7 +103,7 @@ def buildSubtree(node, depth):
             "outer"
         ),
         inner.name("inner"),
-    ]).constrain(lambda outer, inner: [
+    ]).relate(lambda outer, inner: [
         Constraint.nest([outer, inner], x=10, y=10),
     ])
 

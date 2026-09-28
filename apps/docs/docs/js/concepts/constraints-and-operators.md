@@ -82,7 +82,7 @@ gf.chart(fruit, { axes: false })
           .text({ text: (d) => `${d.count}`, fontSize: 12, fill: "#666" })
           .name("label"),
       ])
-      .constrain(({ bar, line, label }) => [
+      .relate(({ bar, line, label }) => [
         gf.Constraint.align({ x: "start" }, [bar, line]),
         gf.Constraint.distribute({ dir: "y", spacing: 0 }, [line, label]),
         gf.Constraint.align({ x: "end" }, [label, line]),
@@ -183,7 +183,7 @@ case long in order to make the rare case uniform has optimized the wrong thing.
 
 - [How to pick a layout operator](/js/api/howto/operators) for `spread`,
   `stack` and `scatter` side by side.
-- [constrain](/js/api/constraints/constrain) for every constraint, including
+- [relate](/js/api/constraints/relate) for every constraint, including
   `position` for data-driven placement and `nest` for padding.
 - [Pictorial Charts](/js/tutorials/pictorial-charts) for the full version of
   the example above.

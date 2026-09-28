@@ -1,9 +1,9 @@
 """Equivalent of bluefish/BakingRecipes.stories.tsx — Bluefish/Baking Recipes.
 
-An 8-nested-tier `layer(...).constrain(...)` chain (`tier0`..`tier8`), each
+An 8-nested-tier `layer(...).relate(...)` chain (`tier0`..`tier8`), each
 tier wrapping the previous one as its first child, mirroring the JS story's
 own order-dependent Bluefish alignment chain node-for-node. Each tier's
-`.constrain()` names cells from earlier, nested tiers directly: an operand
+`.relate()` names cells from earlier, nested tiers directly: an operand
 resolves anywhere inside the constraining layer. See the JS file's
 header/friction-log comments for the full rationale.
 """
@@ -19,7 +19,8 @@ def Pad(t: str):
     return enclose([text(text=t)], padding=5, fill="transparent", stroke="none")
 
 
-# Bluefish's `<Group>`: a pure bbox union of named refs, no paint.
+# Bluefish's `<Group>`: a pure bbox union of named refs, no paint. It is a
+# `.relate()` clause of the tier that holds the cells it unions.
 def union(names: list, name: str):
     return enclose(
         [ref(n) for n in names], padding=0, fill="none", stroke="none"
@@ -47,7 +48,7 @@ def story_baking_recipes():
             Pad("1 tsp. (5 mL) vanilla extract").name("r4"),
             Pad("1 cup (125 g) all-purpose flour").name("r5"),
         ]
-    ).constrain(
+    ).relate(
         lambda title, r0, r1, r2, r3, r4, r5: [
             Constraint.align([title, r0, r1, r2, r3, r4, r5], x="start"),
             Constraint.distribute(
@@ -57,9 +58,8 @@ def story_baking_recipes():
     )
 
     # ── Tier 1: row/column unions over the ingredient column ──
-    tier1 = layer(
-        [
-            tier0,
+    tier1 = layer([tier0]).relate(
+        lambda: [
             union(["r0", "r1", "r2", "r3", "r4", "r5"], "col0"),
             union(["r0", "r1"], "row0_1"),
             union(["r0", "r1", "r2"], "row0_2"),
@@ -80,7 +80,7 @@ def story_baking_recipes():
             Pad("stir in").name("B"),
             Pad("lightly beat").name("A2"),
         ]
-    ).constrain(
+    ).relate(
         lambda col0, row0_1, row0_2, row3_4, A1, B, A2, **_extra: [
             Constraint.distribute([col0, A1], dir="x", spacing=0),
             Constraint.align([row0_1, A1], y="middle"),
@@ -93,7 +93,7 @@ def story_baking_recipes():
 
     # ── Tier 3: col1_2 = union(A1, B, A2) — the column-group C is
     # distributed after.
-    tier3 = layer([tier2, union(["A1", "B", "A2"], "col1_2")])
+    tier3 = layer([tier2]).relate(lambda: [union(["A1", "B", "A2"], "col1_2")])
 
     # ── Tier 4: "stir in" (C), right of col1_2, centered on rows 0-4 ──
     tier4 = layer(
@@ -101,7 +101,7 @@ def story_baking_recipes():
             tier3,
             Pad("stir in").name("C"),
         ]
-    ).constrain(
+    ).relate(
         lambda col1_2, row0_4, C, **_extra: [
             Constraint.distribute([col1_2, C], dir="x", spacing=0),
             Constraint.align([row0_4, C], y="middle"),
@@ -109,7 +109,7 @@ def story_baking_recipes():
     )
 
     # ── Tier 5: col1_3 = union(col1_2, C) ──
-    tier5 = layer([tier4, union(["col1_2", "C"], "col1_3")])
+    tier5 = layer([tier4]).relate(lambda: [union(["col1_2", "C"], "col1_3")])
 
     # ── Tier 6: "stir in" (D), right of C; "bake..." (E), right of D —
     # both centered on rows 0-5.
@@ -119,7 +119,7 @@ def story_baking_recipes():
             Pad("stir in").name("D"),
             Pad("bake 325°F (160°C) for 35 min.").name("E"),
         ]
-    ).constrain(
+    ).relate(
         lambda C, row0_5, D, E, **_extra: [
             Constraint.distribute([C, D], dir="x", spacing=0),
             Constraint.align([row0_5, D], y="middle"),
@@ -130,7 +130,7 @@ def story_baking_recipes():
 
     # ── Tier 7: col0_5 = union(r0, E) — full table width, used to span
     # the title's border underneath it.
-    tier7 = layer([tier6, union(["r0", "E"], "col0_5")])
+    tier7 = layer([tier6]).relate(lambda: [union(["r0", "E"], "col0_5")])
 
     # ── Tier 8: the 12 cell borders, each sized by align's "span" value
     # against the horizontal/vertical group it bounds — the direct
@@ -151,7 +151,7 @@ def story_baking_recipes():
             border("bE"),
             border("bTitle"),
         ]
-    ).constrain(
+    ).relate(
         lambda col0,
         r0,
         r1,
@@ -236,7 +236,7 @@ def story_baking_recipes():
             ),
             table_bg.name("table"),
         ]
-    ).constrain(
+    ).relate(
         lambda recipeName, table: [
             Constraint.align([recipeName, table], x="start"),
             Constraint.distribute([recipeName, table], dir="y", spacing=10),

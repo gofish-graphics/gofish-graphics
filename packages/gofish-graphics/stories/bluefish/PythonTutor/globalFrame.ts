@@ -34,7 +34,7 @@ export const globalFrame = createMark(({ stack }: GlobalFrameProps) => {
         })
       )
     ).name(variablesTag),
-  ]).constrain(({ label, frame, frameBorder, variables }) => [
+  ]).relate(({ label, frame, frameBorder, variables }) => [
     // y-down free space: "start" is the top edge. The "Global Frame" label
     // sits at the top, variables stack below it (label-first), reading
     // top→bottom (issue #143/#16).

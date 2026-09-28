@@ -174,7 +174,8 @@ def story_default():
                     )
                 )
 
+    # The ribbons are `.relate()` clauses over the bars' names.
     return (
-        layer([bars, *ribbons]),
+        layer([bars]).relate(lambda: ribbons),
         {"axes": True},
     )

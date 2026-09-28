@@ -37,7 +37,7 @@ export const Default: StoryObj = {
         ]).name("bottle"),
         rect({h: 1, fill: "#666", w: 175, y: "amount"}).name("line"),
         text({fontSize: 35, fill: "#666", text: (d) => `${d.amount}%`}).name("label")
-      ]).constrain(({line, label, bottle}) => [
+      ]).relate(({line, label, bottle}) => [
         Constraint.align({ x: "start" }, [bottle, line]),
         Constraint.distribute({ dir: "y", spacing: 0 }, [line, label]),
         Constraint.align({ x: "end" }, [label, line]),

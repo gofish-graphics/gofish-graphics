@@ -358,7 +358,7 @@ async function wrapWithLabelTexts(
       ...texts,
     ])) as GoFishNode;
 
-    built.constrain((g) => {
+    await built.relate((g) => {
       const cs: any[] = [
         // Pin the content at its own origin first — constraints apply in
         // order and placement is first-write-wins, so every label constraint

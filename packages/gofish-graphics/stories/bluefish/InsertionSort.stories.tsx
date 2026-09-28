@@ -118,7 +118,7 @@ const ArrayEntry = createMark(
         fontSize: 14,
         fill: highlight ? "orangered" : "black",
       }).name("label"),
-    ]).constrain(({ body, circle, label }) => [
+    ]).relate(({ body, circle, label }) => [
       Constraint.align({ x: "middle", y: "middle" }, [body, circle, label]),
     ])
 );

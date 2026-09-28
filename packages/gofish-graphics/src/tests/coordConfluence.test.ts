@@ -42,7 +42,7 @@ const staticWedge = (radians: number) =>
 // gotree `combine`/`distribute` helpers emit).
 const dist = (cs: any[]) => {
   const named = cs.map((c, i) => Layer([c]).name(`__d-${i}`));
-  return Layer(named).constrain((c: any) => [
+  return Layer(named).relate((c: any) => [
     Constraint.distribute(
       { dir: "x", spacing: 0, anchor: "edge", order: "forward" },
       named.map((_: any, i: number) => c[`__d-${i}`])
@@ -54,7 +54,7 @@ const dist = (cs: any[]) => {
 // extent (intrinsicDims[0].size, in radians of coord space).
 async function leafThetaSizes(child: any): Promise<number[]> {
   const root: any = await coord({ transform: polar() }, [child]);
-  root.resolveAliases();
+  await root.resolveAliases();
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   root.layout([400, 400], [undefined, undefined]);

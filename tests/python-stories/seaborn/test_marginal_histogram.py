@@ -67,7 +67,7 @@ def story_default():
     )
 
     return (
-        layer([sc, top_hist, right_hist]).constrain(
+        layer([sc, top_hist, right_hist]).relate(
             lambda scatter, topHist, rightHist: [
                 Constraint.position([scatter], x=0, y=0, anchor="baseline"),
                 Constraint.align([scatter, topHist], x="baseline"),

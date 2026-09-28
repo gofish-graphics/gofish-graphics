@@ -159,7 +159,7 @@ export async function legendColorbar(
     ...tickLabels,
   ])) as GoFishNode;
 
-  root.constrain((g: Record<string, any>) => {
+  await root.relate((g: Record<string, any>) => {
     const cs: any[] = [];
     // Bands: centered in the bar column (x), pinned by their BOTTOM edge at
     // `i * bandH` (y) and stacked bottom→top to fill BAR_HEIGHT. Pinning the
@@ -239,7 +239,7 @@ export async function elaborateLegend(
     const root = (await (layer as any)([content, legend])) as GoFishNode;
 
     // Constraint order matters: the content pin places the anchor the others read.
-    root.constrain((g) => [
+    await root.relate((g) => [
       // Pin the content at its origin; it never moves.
       Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
         g[CONTENT_NAME],

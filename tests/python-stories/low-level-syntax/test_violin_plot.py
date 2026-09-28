@@ -47,6 +47,9 @@ def story_default():
                     dir="y",
                     alignment="middle",
                 ),
+            ]
+        ).relate(
+            lambda: [
                 ribbon(
                     [ref(name) for name in names],
                     dir="y",

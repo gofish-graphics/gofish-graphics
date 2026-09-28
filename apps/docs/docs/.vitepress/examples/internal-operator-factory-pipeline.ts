@@ -33,7 +33,7 @@ const filledPill = (label, fill, w) =>
         .name("r"),
       gf.text({ text: label, fill: "white", fontSize: 12 }).name("t"),
     ])
-    .constrain(({ r, t }) => [
+    .relate(({ r, t }) => [
       gf.Constraint.align({ x: "middle", y: "middle" }, [r, t]),
     ]);
 
@@ -52,7 +52,7 @@ const outlinePill = (label, color, w) =>
         .name("r"),
       gf.text({ text: label, fill: color, fontSize: 11 }).name("t"),
     ])
-    .constrain(({ r, t }) => [
+    .relate(({ r, t }) => [
       gf.Constraint.align({ x: "middle", y: "middle" }, [r, t]),
     ]);
 

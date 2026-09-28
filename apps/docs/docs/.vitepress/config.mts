@@ -553,9 +553,7 @@ export default defineConfig({
             {
               text: "Constraints",
               collapsed: true,
-              items: [
-                { text: "constrain", link: "/js/api/constraints/constrain" },
-              ],
+              items: [{ text: "relate", link: "/js/api/constraints/relate" }],
             },
             {
               text: "Selection",
@@ -657,8 +655,8 @@ export default defineConfig({
               collapsed: true,
               items: [
                 {
-                  text: "constrain",
-                  link: "/python/api/constraints/constrain",
+                  text: "relate",
+                  link: "/python/api/constraints/relate",
                 },
               ],
             },

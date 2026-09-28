@@ -98,6 +98,9 @@ export { pluck, projectPath as project } from "./ast/datumProjection";
 export { Constraint } from "./ast/constraints";
 export type {
   ConstraintRef,
+  RelateEnv,
+  RelateClause,
+  RelateFn,
   ConstraintSpec,
   AlignConstraint,
   DistributeConstraint,
@@ -189,7 +192,7 @@ export {
   // to this same sentinel without deep-importing internals (mirrors `over`).
   PREVIOUS_LAYER_MARKS,
 } from "./ast/marks/chart";
-export type { ConstrainableMark } from "./ast/marks/chart";
+export type { RelatableMark } from "./ast/marks/chart";
 export { compose } from "./ast/marks/compose";
 // Animation (JS-only, like the rest of the reactive layer: a sequence owns a
 // clock, which is a live signal and does not cross the Python bridge).

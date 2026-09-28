@@ -271,7 +271,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     _registry[mark_fn.lambda_id] = _mark_fn_wrapped
 
                 # A chart layered with `.name(...)` carries its name so a
-                # `Layer([...]).constrain(...)` callback can reference it.
+                # `Layer([...]).relate(...)` callback can reference it.
                 child_name = getattr(child, "_name", None)
                 if isinstance(child_name, Token):
                     child_name = child_name.to_dict()
@@ -324,11 +324,11 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     # combinator, mirroring JS `layer([...])`.
                     "builder": getattr(builder, "_builder_chain", False),
                 }
-                # `.constrain(...)` constraints relating the named children.
-                layer_constraints = getattr(builder, "_constraints", None)
-                if layer_constraints is not None:
-                    layer_payload["constraints"] = [
-                        c.to_dict() for c in layer_constraints
+                # `.relate(...)` clauses relating the named children.
+                layer_relate = getattr(builder, "_relate", None)
+                if layer_relate is not None:
+                    layer_payload["relate"] = [
+                        c.to_dict() for c in layer_relate
                     ]
                 self._json_response(200, layer_payload)
                 return

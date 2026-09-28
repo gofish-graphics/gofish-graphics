@@ -35,7 +35,7 @@ def wire_slot(content):
             rect(w=GATE, h=GATE, fill="transparent").name("slot"),
             content.name("content"),
         ]
-    ).constrain(
+    ).relate(
         lambda slot, content: [
             Constraint.align([slot, content], x="middle", y="middle"),
         ]
@@ -67,7 +67,7 @@ def boxed_symbol(label):
                 fill="black",
             ).name("label"),
         ]
-    ).constrain(
+    ).relate(
         lambda box, label: [
             Constraint.align([box, label], x="middle", y="middle"),
         ]
@@ -85,7 +85,7 @@ def o_plus():
             rect(w=30, h=3, fill="black").name("hbar"),
             rect(w=3, h=30, fill="black").name("vbar"),
         ]
-    ).constrain(
+    ).relate(
         lambda ring, hbar, vbar: [
             Constraint.align([ring, hbar, vbar], x="middle", y="middle"),
         ]
@@ -118,7 +118,7 @@ def wire(slots, span=None):
                 alignment="middle",
             ).name("gates"),
         ]
-    ).constrain(
+    ).relate(
         lambda line, gates: [
             Constraint.align([line, gates], x="start", y="middle"),
         ]

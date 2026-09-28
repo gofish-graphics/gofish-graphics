@@ -46,7 +46,7 @@ const PulleyCircle = createMark(({ r = 25 }: { r?: number }) =>
       "wheel"
     ),
     circle({ r: 5, fill: "#555555" }).name("hub"),
-  ]).constrain(({ wheel, hub }) => [
+  ]).relate(({ wheel, hub }) => [
     Constraint.align({ x: "middle", y: "middle" }, [wheel, hub]),
   ])
 );
@@ -76,7 +76,7 @@ const Weight = createMark(
         stroke: "#545454",
       }).name("body"),
       text({ text: label, fontSize: 10, fill: "white" }).name("label"),
-    ]).constrain(({ body, label }) => [
+    ]).relate(({ body, label }) => [
       Constraint.align({ x: "middle", y: "middle" }, [body, label]),
     ])
 );
@@ -123,7 +123,7 @@ export const Pulley: StoryObj<Args> = {
         text({ text: "A", fontSize: 12 }).name("Alabel"),
         text({ text: "B", fontSize: 12 }).name("Blabel"),
         text({ text: "C", fontSize: 12 }).name("Clabel"),
-      ]).constrain((c) => [
+      ]).relate((c) => [
         // horizontal pulley cluster — each adjacent pair shares an edge:
         // B.start sits on A.middle (overlap by half a wheel), C.start on B.end.
         Constraint.align({ x: ["middle", "start"] }, [c.A, c.B]),
@@ -204,7 +204,7 @@ export const Pulley: StoryObj<Args> = {
       text({ text: "q" }).name("labelQ"),
       text({ text: "s" }).name("labelS"),
     ])
-      .constrain((c) => [
+      .relate((c) => [
         // Each dimension label sits 5px right of its rope on x. On y, the
         // upper trio (x/y/z) shares ropeX's centerY; the lower trio (p/q/s)
         // shares ropeS's — à la Bluefish's `Align centerY [t1,t2,t3]` /

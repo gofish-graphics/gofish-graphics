@@ -79,7 +79,7 @@ function buildSubtree(node: TreeNode, depth: number): any {
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fill: "#1d3557",
     }).name("label"),
-  ]).constrain(({ box, label }) => [
+  ]).relate(({ box, label }) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ]);
 
@@ -100,7 +100,7 @@ function buildSubtree(node: TreeNode, depth: number): any {
       strokeWidth: 1.25,
     }).name("outer"),
     inner.name("inner"),
-  ]).constrain(({ outer, inner }) => [
+  ]).relate(({ outer, inner }) => [
     Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
   ]);
 }

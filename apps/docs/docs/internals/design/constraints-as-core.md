@@ -198,7 +198,7 @@ and the Layer's layout becomes a fixed pipeline: resolve size → solve σ per
 axis from the folded claim → propose per-child sizes (claim at σ, else fill
 policy) → lay out children → apply placement rules → fill unplaced at
 baseline → measure. `spread({dir, spacing, alignment, sharedScale})` compiles
-to `Layer(children).constrain(c => [align({[cross]: alignment}, all),
+to `Layer(children).relate(c => [align({[cross]: alignment}, all),
 distribute({dir, spacing}, all)])` and disappears as machinery, surviving only
 as surface sugar — option 1 of [[operators-vs-constraints]], now with the
 missing two facets identified.
@@ -281,7 +281,7 @@ Two findings sharpen the theory:
 | `enclose`, `arrow`, `connect` | derived marks                                   | already the plan; `connect` is the canonical example (bbox derived from refs, no space claim of its own)                                                                                                                                                                                                                                                                                                         |
 | `frame`                       | `layer` (or `coord`)                            | already sugar                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `group`                       | data combinator                                 | not a layout operator; untouched                                                                                                                                                                                                                                                                                                                                                                                 |
-| `table`                       | `layer` + `grid` constraint (#548, done)        | a grid is the symmetric 2-D layout: cells partitioned into column tracks (x) and row tracks (y), each cell filling its track intersection. Extents are max-plus (track = max over its cells, total = Σ tracks + spacing); v1 is equal flex tracks (box-division), the table being the flex scope root. `table` now elaborates to `layer(cells).constrain(grid(...))` (`constraints/grid.ts`)                     |
+| `table`                       | `layer` + `grid` constraint (#548, done)        | a grid is the symmetric 2-D layout: cells partitioned into column tracks (x) and row tracks (y), each cell filling its track intersection. Extents are max-plus (track = max over its cells, total = Σ tracks + spacing); v1 is equal flex tracks (box-division), the table being the flex scope root. `table` now elaborates to `layer(cells).relate(grid(...))` (`constraints/grid.ts`)                        |
 | `treemap`                     | **does not reduce** to align/distribute         | d3 computes slot rects from data and _scales children into them_ — a global algorithm assigning positions _and sizes_. Either (a) keep as a custom layout node (Bluefish's answer: arbitrary layouts are nodes; constraints are the core, not the whole), or (b) recast as a _derived-constraint_ generator: run the algorithm, emit position constraints + size assignments. (b) needs size-setting constraints |
 | `porterDuff`                  | stays                                           | a compositing/render concept, not layout                                                                                                                                                                                                                                                                                                                                                                         |
 | `coord`                       | stays, orthogonal                               | coordinate transforms warp the space the constraint network solves in; the constraint reduction is what finally lets coord-wrapped constraint pipelines auto-fit (the #475 NestedPietree failure), because the Layer's solve runs regardless of whether content was assembled by operators or constraints                                                                                                        |
@@ -472,7 +472,7 @@ suggest it will not be needed.
    Addresses #475. (`nest` was not revived here — it lives with the
    size-setting design, residual 1.)
 3. ✅ **`spread`/`stack` on the shared machinery** — done as _delegation_
-   rather than literal `Layer.constrain()` compilation: spread keeps its node
+   rather than literal `Layer.relate()` compilation: spread keeps its node
    type (home for sharedScale mutation, scaleContext, axisDir, reverse,
    explicit-dims translate, measure-and-report) but its fold, slicing, align
    walk, and distribute walk are the constraint implementations; the bespoke

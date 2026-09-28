@@ -1,17 +1,17 @@
-# constrain
+# relate
 
-`.constrain()` positions named nodes inside a `layer` relative to each other using declarative alignment and distribution rules. It is the low-level alternative to `spread` when you need precise control over how individual elements relate — for example, aligning a label to the edge of a background, or distributing a set of elements with different spacings on different subsets.
+`.relate()` relates named nodes inside a `layer`. Its callback returns a list of clauses. A clause is a **constraint**, which places nodes relative to each other with declarative alignment and distribution rules, or a **drawing clause**, an operator or mark such as `arrow` or `background` drawn over the named nodes. It is the low-level alternative to `spread` when you need precise control over how individual elements relate — for example, aligning a label to the edge of a background, or drawing an arrow from a label to the node it describes.
 
 ## Usage
 
-Name each node you want to position using `.name("key")`, then chain `.constrain()` on the `layer`. The callback receives an ordinary object with one `ConstraintRef` handle for every name inside the layer. Destructure the names you need.
+Name each node you want to relate using `.name("key")`, then chain `.relate()` on the `layer`. The callback receives an ordinary object with one operand for every name inside the layer. Destructure the names you need.
 
 ```ts
 layer([
   rect({ w: 200, h: 150, fill: "#e2ebf6" }).name("bg"),
   text({ text: "Title", fontSize: 18 }).name("label"),
 ])
-  .constrain(({ bg, label }) => [
+  .relate(({ bg, label }) => [
     Constraint.align({ x: "middle", y: "end" }, [label, bg]),
   ])
   .render(container, { w: 300, h: 200 });
@@ -25,7 +25,7 @@ gf.layer([
   gf.rect({ w: 60, h: 30, fill: gf.color.blue[4] }).name("label"),
   gf.rect({ w: 60, h: 30, fill: gf.color.red[4] }).name("badge"),
 ])
-  .constrain(({ bg, label, badge }) => [
+  .relate(({ bg, label, badge }) => [
     gf.Constraint.align({ x: "end", y: "end" }, [label, bg]),
     gf.Constraint.align({ x: "start", y: "start" }, [badge, bg]),
   ])
@@ -36,12 +36,12 @@ gf.layer([
 
 ## Names
 
-A name in the callback resolves the same way as [`ref("name")`](/js/api/marks/ref#string-nearest-match), starting at the constrained layer: the closest node with that name inside the layer wins, and the search never crosses a `createMark` boundary. So an operand can be nested anywhere inside the layer, not only a direct child, and a direct child beats a node with the same name nested deeper.
+A name in the callback resolves the same way as [`ref("name")`](/js/api/marks/ref#string-nearest-match), starting at the related layer: the closest node with that name inside the layer wins, and the search never crosses a `createMark` boundary. So an operand can be nested anywhere inside the layer, not only a direct child, and a direct child beats a node with the same name nested deeper.
 
 The object holds exactly the names inside the layer. A name that is not there reads as `undefined`, so destructuring defaults and optional checks work as usual:
 
 ```ts
-layer(items).constrain(({ a, b, note, pad = 8 }) => [
+layer(items).relate(({ a, b, note, pad = 8 }) => [
   Constraint.distribute({ dir: "x", spacing: pad }, [a, b]),
   ...(note ? [Constraint.align({ y: "end" }, [a, note])] : []),
 ]);
@@ -49,7 +49,7 @@ layer(items).constrain(({ a, b, note, pad = 8 }) => [
 
 - **Direct child.** The constraint places it.
 - **Nested node.** It is fixed to the direct child that contains it. If that child is also named in a constraint, the two move together. If not, the child stays where it was laid out and the nested node is a fixed point the other operands move to.
-- **Errors.** Using a missing name (an `undefined` handle) as an operand throws as soon as `.constrain()` runs, and the message lists the names inside the layer. Two matches at the same smallest distance throw when the chart renders. A nested node cannot be resized from outside, so the target of `"span"` or `"size"` must be a direct child.
+- **Errors.** Using a missing name (an `undefined` handle) as an operand throws as soon as `.relate()` runs, and the message lists the names inside the layer. Two matches at the same smallest distance throw when the chart renders. A nested node cannot be resized from outside, so the target of `"span"` or `"size"` must be a direct child.
 
 ::: gofish
 
@@ -68,7 +68,7 @@ gf.layer([
     .name("row"),
   gf.rect({ w: 40, h: 12, fill: gf.color.red[4] }).name("label"),
 ])
-  .constrain(({ mercury, row, label }) => [
+  .relate(({ mercury, row, label }) => [
     gf.Constraint.align({ x: "middle" }, [mercury, label]),
     gf.Constraint.distribute({ dir: "y", spacing: 10 }, [row, label]),
   ])
@@ -76,6 +76,42 @@ gf.layer([
 ```
 
 :::
+
+## Drawing clauses
+
+A clause that is not a constraint is an operator or mark, and it becomes a child of the layer. An operand in its children stands for the named node, like [`ref("name")`](/js/api/marks/ref). A drawing clause can also hold fresh marks next to the operands, as in `spread({ dir: "y" }, [bar, text(...)])`.
+
+```ts
+layer([
+  rect({ w: 70, h: 40 }).name("a"),
+  rect({ w: 70, h: 40 }).name("b"),
+]).relate(({ a, b }) => [
+  Constraint.distribute({ dir: "x", spacing: 60 }, [a, b]),
+  arrow({ bow: 0, stretch: 0 }, [a, b]),
+]);
+```
+
+::: gofish
+
+```js
+gf.layer([
+  gf.rect({ w: 70, h: 40, fill: gf.color.blue[1] }).name("a"),
+  gf.rect({ w: 70, h: 40, fill: gf.color.blue[1] }).name("b"),
+])
+  .relate(({ a, b }) => [
+    gf.Constraint.distribute({ dir: "x", spacing: 60 }, [a, b]),
+    gf.arrow({ bow: 0, stretch: 0, stroke: gf.color.blue[4] }, [a, b]),
+  ])
+  .render(root, { w: 240, h: 80 });
+```
+
+:::
+
+- **Order.** The layer lays out its plain children, runs its constraints, then lays out each drawing clause after the clauses that place the nodes it reads. So the arrow above runs between the final positions of `a` and `b`, whatever the order of the clauses in the list. A drawing clause that reads another drawing clause (through `ref("name")` on a name given inside that clause) is laid out after it.
+- **Cycles.** A clause cannot read its own result. A drawing clause that refers to itself, two drawing clauses that refer to each other, or a constraint that moves a drawing clause which reads the nodes that constraint places, throws when the chart renders, and the message names the clauses.
+- **Paint order.** Drawing clauses paint after the plain children, in clause order. Use `.zOrder(n)` on a clause to move it.
+- **Scope.** A drawing clause relates nodes inside its own layer. A string `ref("name")` is legal only inside a `.relate()` clause, where it resolves from the related layer; anywhere else it throws and says to move it into `.relate()`. A [`createName`](/js/api/howto/naming-and-scoping#createname) token `ref` reaches across scopes and works anywhere.
+- **Flattening.** As with an operator's children, the list may nest arrays, hold promises (such as a `For(...)`), and contain `null`, `undefined`, or `false`, which are skipped.
 
 ## Constraint.align
 
@@ -104,7 +140,7 @@ The first already-placed child in the list acts as the anchor on each specified 
 Like the point-anchor form, the source is the first already-placed child; every other listed child is a target.
 
 ```ts
-layer([group, rect({ fill: "none", stroke: "#333" }).name("border")]).constrain(
+layer([group, rect({ fill: "none", stroke: "#333" }).name("border")]).relate(
   ({ group, border }) => [
     Constraint.align({ x: "span" }, [group, border]), // border adopts group's left AND right
     Constraint.align({ y: "span" }, [group, border]), // together: border exactly bounds the group
@@ -137,7 +173,7 @@ gf.layer([
   gf.rect({ w: 120, h: 40, fill: gf.color.red[3] }).name("b"),
   gf.rect({ w: 60, h: 40, fill: gf.color.green[3] }).name("c"),
 ])
-  .constrain(({ a, b, c }) => [
+  .relate(({ a, b, c }) => [
     gf.Constraint.align({ x: "end" }, [a, b, c]),
     gf.Constraint.distribute({ dir: "y" }, [a, b, c]),
   ])
@@ -186,7 +222,7 @@ gf.layer([
   gf.rect({ w: 80, h: 60, fill: gf.color.red[3] }).name("b"),
   gf.rect({ w: 80, h: 30, fill: gf.color.green[3] }).name("c"),
 ])
-  .constrain(({ a, b, c }) => [
+  .relate(({ a, b, c }) => [
     gf.Constraint.align({ x: "start" }, [a, b, c]),
     gf.Constraint.distribute({ dir: "y", spacing: 8 }, [a, b, c]),
   ])
@@ -256,7 +292,7 @@ the same thing is written with plain arithmetic: `datum(0) - 6`.
 layer([
   rect({ w: 1, h: 300 }).name("axis"),
   ...tickValues.map((v, i) => tick(v).name(`t${i}`)),
-]).constrain((g) => [
+]).relate((g) => [
   Constraint.align({ y: "start" }, [g.axis]),
   ...tickValues.map((v, i) =>
     Constraint.position({ y: datum(v) }, [g[`t${i}`]])
@@ -298,7 +334,7 @@ resolved from which side carries the size:
 layer([
   rect({ fill: "#dbe6f3" }).name("outer"),
   rect({ w: 60, h: 40, fill: "#e63946" }).name("inner"),
-]).constrain(({ outer, inner }) => [
+]).relate(({ outer, inner }) => [
   Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
 ]);
 ```
@@ -310,7 +346,7 @@ gf.layer([
   gf.rect({ fill: gf.color.blue[1], stroke: gf.color.blue[3] }).name("outer"),
   gf.rect({ w: 60, h: 40, fill: gf.color.red[4] }).name("inner"),
 ])
-  .constrain(({ outer, inner }) => [
+  .relate(({ outer, inner }) => [
     gf.Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
   ])
   .render(root, { w: 200, h: 160 });
@@ -342,7 +378,7 @@ layer([
   rect({ w: 80, h: 40, fill: "lightgray" }).name("bg"),
   rect({ w: 60, h: 60, fill: "steelblue" }).name("box"),
   text({ text: "label", fontSize: 14 }).name("label"),
-]).constrain(({ bg, box, label }) => [
+]).relate(({ bg, box, label }) => [
   // box paints over bg; label paints over both.
   Constraint.zAbove(box, bg),
   Constraint.zAbove(label, box),
@@ -363,9 +399,9 @@ layer([
   layer([
     PulleyCircle({ r: 25 }).name(A),
     PulleyCircle({ r: 25 }).name(B),
-  ]).constrain(/* … */),
+  ]).relate(/* … */),
   line({ ... }, [ref(A), ref(B)]).name("rope"),
-]).constrain((c) => [
+]).relate((c) => [
   Constraint.zAbove(c.rope, c.A),  // rope paints over A …
   Constraint.zBelow(c.rope, c.B),  // … but is covered by B
 ]);
@@ -412,7 +448,7 @@ layer([
   rect({ w: 80, h: 40, y: 20 }).name("a"), // y manually set
   rect({ w: 120, h: 40 }).name("b"),
   rect({ w: 60, h: 40 }).name("c"),
-]).constrain(({ a, b, c }) => [
+]).relate(({ a, b, c }) => [
   // Only constrain x — each element keeps its own y
   Constraint.align({ x: "end" }, [a, b, c]),
 ]);
@@ -428,7 +464,7 @@ layer([
   rect({ w: 80, h: 50 }).name("b"),
   rect({ w: 120, h: 50 }).name("c"),
   rect({ w: 60, h: 50 }).name("d"),
-]).constrain(({ a, b, c, d }) => [
+]).relate(({ a, b, c, d }) => [
   Constraint.align({ x: "end" }, [a, b, c, d]),
   Constraint.distribute({ dir: "y", spacing: 5 }, [a, b]), // tight grouping
   Constraint.distribute({ dir: "y", spacing: 30 }, [c, d]), // loose grouping

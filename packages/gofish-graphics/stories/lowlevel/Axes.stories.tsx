@@ -14,7 +14,7 @@ import {
 import { nice, ticks } from "d3-array";
 
 /**
- * attempt to hand-draw axes using the gofish spec. a test of completeness of our core constraint API. 
+ * attempt to hand-draw axes using the gofish spec. a test of completeness of our core constraint API.
  */
 
 const meta: Meta = {
@@ -54,11 +54,11 @@ export const OrdinalXAxis: StoryObj<Args> = {
       // barsTok = spread x of 3 bars
       spread({ dir: "x", alignment: "start" }, bars([a, b, c])).name(barsTok),
 
-      // labels: layer of 3 spreadY(referenced bar, label) 
+      // labels: layer of 3 spreadY(referenced bar, label)
       layer([
         spread({ dir: "y", spacing: 8, alignment: "middle" }, [
           text({ text: "salmon", fontSize: 12, fill: "#666" }),
-          ref(a)
+          ref(a),
         ]),
         spread({ dir: "y", spacing: 8, alignment: "middle" }, [
           text({ text: "bass", fontSize: 12, fill: "#666" }),
@@ -107,13 +107,10 @@ export const ContinuousYAxis: StoryObj<Args> = {
 
     // each tick = spreadX(label, tick)
     const tick = (v: number, i: number) =>
-      spread(
-        { dir: "x", spacing: 3, alignment: "middle" },
-        [
-          text({ text: String(v), fontSize: 11, fill: "#666" }),
-          rect({ w: 5, h: 1, fill: "#999" }),
-        ]
-      ).name(`t${i}`);
+      spread({ dir: "x", spacing: 3, alignment: "middle" }, [
+        text({ text: String(v), fontSize: 11, fill: "#666" }),
+        rect({ w: 5, h: 1, fill: "#999" }),
+      ]).name(`t${i}`);
 
     layer([
       // bars wrapped in a spread so the outer constraints address them as one
@@ -123,11 +120,14 @@ export const ContinuousYAxis: StoryObj<Args> = {
       ...tickValues.map(tick),
       text({ text: "count", fontSize: 13, fill: "#333" }).name("title"),
     ])
-      .constrain((g) => {
+      .relate((g) => {
         const ticks = Array.from({ length: N }, (_, i) => g[`t${i}`]);
         return [
           Constraint.align({ x: "start" }, [g.title]),
-          Constraint.distribute({ dir: "x", spacing: 8 }, [g.title, ticks[N - 1]]),
+          Constraint.distribute({ dir: "x", spacing: 8 }, [
+            g.title,
+            ticks[N - 1],
+          ]),
           // right-align the tick column so every mark's right edge sits at
           // the same x (each tick's right edge is its mark's right edge)
           Constraint.align({ x: "end" }, ticks),
@@ -170,13 +170,10 @@ export const NonUniformYAxis: StoryObj<Args> = {
     const N = tickValues.length;
 
     const tick = (v: number, i: number) =>
-      spread(
-        { dir: "x", spacing: 3, alignment: "middle" },
-        [
-          text({ text: String(v), fontSize: 11, fill: "#666" }),
-          rect({ w: 5, h: 1, fill: "#999" }),
-        ]
-      ).name(`t${i}`);
+      spread({ dir: "x", spacing: 3, alignment: "middle" }, [
+        text({ text: String(v), fontSize: 11, fill: "#666" }),
+        rect({ w: 5, h: 1, fill: "#999" }),
+      ]).name(`t${i}`);
 
     layer([
       // axis line spanning the plot height (the [0, 100] domain in pixels)
@@ -184,12 +181,15 @@ export const NonUniformYAxis: StoryObj<Args> = {
       ...tickValues.map(tick),
       text({ text: "score", fontSize: 13, fill: "#333" }).name("title"),
     ])
-      .constrain((g) => {
+      .relate((g) => {
         const ticks = Array.from({ length: N }, (_, i) => g[`t${i}`]);
         return [
           // ── X chain: title (x=0) → ticks → axis ──
           Constraint.align({ x: "start" }, [g.title]),
-          Constraint.distribute({ dir: "x", spacing: 8 }, [g.title, ticks[N - 1]]),
+          Constraint.distribute({ dir: "x", spacing: 8 }, [
+            g.title,
+            ticks[N - 1],
+          ]),
           Constraint.align({ x: "end" }, ticks),
           Constraint.distribute({ dir: "x", spacing: 0 }, [ticks[0], g.axis]),
 

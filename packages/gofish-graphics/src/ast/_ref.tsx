@@ -16,7 +16,7 @@ import {
   translateForAnchor,
 } from "./dims";
 import type { AxisScale } from "./domain";
-import { GoFishNode } from "./_node";
+import { GoFishNode, isRelateClause } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
 import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
@@ -96,7 +96,7 @@ export class GoFishRef {
     return this.directNode ?? this.selectedNode;
   }
 
-  /** Chainable: name this ref so a layer constraint can reference it (mirrors
+  /** Chainable: name this ref so a relate clause can reference it (mirrors
    * GoFishNode.name()). Returns `this` so `ref(token).name("x")` works. */
   public name(name: string | Token): this {
     this._name = name;
@@ -200,19 +200,34 @@ export class GoFishRef {
   }
 
   private resolveLocalString(name: string): GoFishNode {
-    if (!this.parent) {
+    // A string name is a variable of the layer that relates it: legal only
+    // inside a `.relate()` clause, and resolved from that clause's layer.
+    const layer = relatingLayerOf(this);
+    if (!layer) {
       throw new Error(
-        `Can't find local name "${name}" — ref has no ancestors.`
+        `ref("${name}") is a string ref outside a .relate() clause. A string ` +
+          `name is local to the layer that relates it: move this ref into ` +
+          `the enclosing layer's .relate() callback, e.g. ` +
+          `layer([...]).relate(({ ${name} }) => [arrow({}, [${name}, ...])]). ` +
+          `To reach a node in another component, name it with createName() ` +
+          `and ref the token.`
       );
     }
-    const found = resolveScopedName(this.parent, name, `ref("${name}")`);
+    const found = resolveScopedName(layer, name, `ref("${name}")`);
+    if (!isInside(found, layer)) {
+      throw new Error(
+        `ref("${name}") in a .relate() clause names a node outside the ` +
+          `relating layer. A clause relates nodes inside its own layer; ` +
+          `attach the .relate() to a layer that contains "${name}".`
+      );
+    }
     // A named ref stand-in is an alias for the node it points at.
     if (found instanceof GoFishRef) {
       if (found === this) {
         throw new Error(
           `ref("${name}") refers to itself: it is named "${name}" too, and ` +
             `it is the nearest node with that name. A ref named after its own ` +
-            `target is no longer needed. Constrain the named node directly ` +
+            `target is no longer needed. Relate the named node directly ` +
             `(names are visible anywhere inside the layer), or give the ref a ` +
             `different name.`
         );
@@ -358,6 +373,25 @@ export class GoFishRef {
   }
 }
 
+/** The layer whose `.relate()` clause contains `node`: the parent of the
+ *  nearest ancestor flagged `_relateClause`, or `undefined` when `node` is not
+ *  inside a relate clause. */
+export function relatingLayerOf(node: GoFishAST): GoFishNode | undefined {
+  let cur: GoFishAST | undefined = node;
+  while (cur) {
+    if (isRelateClause(cur)) return cur.parent;
+    cur = cur.parent;
+  }
+  return undefined;
+}
+
+function isInside(node: GoFishAST, root: GoFishNode): boolean {
+  for (let cur: GoFishAST | undefined = node; cur; cur = cur.parent) {
+    if (cur === root) return true;
+  }
+  return false;
+}
+
 /**
  * The component-boundary visibility rule, in one place. Yields `root` and every
  * descendant visible from inside it, in DFS parent-iteration (pre-order): it
@@ -367,9 +401,9 @@ export class GoFishRef {
  * `ref` stand-ins are visited too (a named ref is a scope member).
  *
  * This is the single home for the bounded walk shared by string-name lookup
- * (`resolveScopedName`, used by `ref(string)` and by `.constrain()` operands)
+ * (`resolveScopedName`, used by `ref(string)` and by `.relate()` operands)
  * and `collectLayerRegistrations` (chartBuilder.ts layer registry), so the
- * component boundary means the same thing for `ref`, `.constrain()` and
+ * component boundary means the same thing for `ref`, `.relate()` and
  * `selectAll`.
  */
 export function* visibleNodes(root: GoFishAST): Generator<GoFishAST> {
@@ -429,8 +463,9 @@ function closestAtLevel(
 }
 
 /**
- * Resolve a string name from a use site: `from` is the ref's parent, or the
- * layer running `.constrain()`. This is the one lookup behind both.
+ * Resolve a string name from a use site: the layer running `.relate()`, for
+ * a constraint operand and for a string ref inside one of its clauses alike.
+ * This is the one lookup behind both.
  *
  * Search `from`'s subtree, then its parent's, one ancestor at a time, and stop
  * at the first level whose subtree contains the name. Within that level the

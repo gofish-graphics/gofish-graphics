@@ -169,9 +169,9 @@ function buildLeafMarkDefs(): Record<string, unknown> {
         ...properties,
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        constraints: {
+        relate: {
           type: "array",
-          items: { $ref: "#/$defs/ConstraintIR" },
+          items: { $ref: "#/$defs/RelateClauseIR" },
         },
         zOrder: { type: "number" },
         debug: { type: "boolean" },
@@ -277,7 +277,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         name: {
           type: "string",
           description:
-            "Chart-level name so a sibling Layer constrain callback can reference this chart.",
+            "Chart-level name so a sibling Layer relate callback can reference this chart.",
         },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
@@ -297,11 +297,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           },
         },
         options: { type: "object" },
-        constraints: {
+        relate: {
           type: "array",
-          items: { $ref: "#/$defs/ConstraintIR" },
+          items: { $ref: "#/$defs/RelateClauseIR" },
           description:
-            "Layer-level constraints (Layer([...]).constrain(...)), resolving refs against the child charts' names.",
+            "Layer-level relate clauses (layer([...]).relate(...)), resolving names against the child charts' names.",
         },
         builder: {
           type: "boolean",
@@ -565,9 +565,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         children: { type: "array", items: { $ref: "#/$defs/MarkIR" } },
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        constraints: {
+        relate: {
           type: "array",
-          items: { $ref: "#/$defs/ConstraintIR" },
+          items: { $ref: "#/$defs/RelateClauseIR" },
         },
         zOrder: { type: "number" },
         debug: { type: "boolean" },
@@ -625,6 +625,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           },
         },
       ],
+    },
+    RelateClauseIR: {
+      description:
+        "One clause of a .relate() callback: a constraint over names (carries refs), or a mark that draws, whose children may reference the layer's names.",
+      oneOf: [{ $ref: "#/$defs/ConstraintIR" }, { $ref: "#/$defs/MarkIR" }],
     },
     ConstraintIR: {
       type: "object",

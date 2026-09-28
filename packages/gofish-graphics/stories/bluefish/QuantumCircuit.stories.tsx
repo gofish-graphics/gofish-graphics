@@ -44,7 +44,7 @@ const WireSlot = createMark(({ content }: { content: any }) =>
   layer([
     rect({ w: GATE, h: GATE, fill: "transparent" }).name("slot"),
     content.name("content"),
-  ]).constrain(({ slot, content }) => [
+  ]).relate(({ slot, content }) => [
     Constraint.align({ x: "middle", y: "middle" }, [slot, content]),
   ])
 );
@@ -77,7 +77,7 @@ const BoxedSymbol = createMark(({ label }: { label: string }) =>
       fontStyle: "italic",
       fill: "black",
     }).name("label"),
-  ]).constrain(({ box, label }) => [
+  ]).relate(({ box, label }) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ])
 );
@@ -90,7 +90,7 @@ const OPlus = createMark(() =>
     ),
     rect({ w: 30, h: 3, fill: "black" }).name("hbar"),
     rect({ w: 3, h: 30, fill: "black" }).name("vbar"),
-  ]).constrain(({ ring, hbar, vbar }) => [
+  ]).relate(({ ring, hbar, vbar }) => [
     Constraint.align({ x: "middle", y: "middle" }, [ring, hbar, vbar]),
   ])
 );
@@ -135,7 +135,7 @@ const Wire = createMark(({ slots, span }: { slots: any[]; span?: number }) =>
       rect({ w: 10, h: GATE, fill: "transparent" }),
       ...slots,
     ]).name("gates"),
-  ]).constrain(({ line, gates }) => [
+  ]).relate(({ line, gates }) => [
     Constraint.align({ x: "start", y: "middle" }, [line, gates]),
   ])
 );

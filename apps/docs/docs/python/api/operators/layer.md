@@ -26,7 +26,7 @@ layer(children, **options) -> Mark
 
 The children are a positional list of marks; layout options are passed as
 kwargs. Children typically carry `.name(...)` tags so they can be referenced
-from a [`.constrain(...)`](/python/api/constraints/constrain) callback or by a
+from a [`.relate(...)`](/python/api/constraints/relate) callback or by a
 sibling relational mark like [`line`](/python/api/marks/line) / `ref`.
 
 ## Parameters
@@ -61,7 +61,7 @@ same control on a `ChartBuilder` as `.zOrder()`.
   of marks and renders directly. To overlay whole charts — for example to draw
   one chart's marks on top of another and relate them with cross-chart
   constraints — use the chart-composing form [`layer([chart1, chart2])`](/python/api/core/chart),
-  which composes `ChartBuilder` instances and accepts `.constrain(...)`.
+  which composes `ChartBuilder` instances and accepts `.relate(...)`.
 - Naming a child (`rect(...).name("a")`) makes it addressable from a
-  `.constrain(...)` callback and from a sibling
+  `.relate(...)` callback and from a sibling
   [`line`](/python/api/marks/line) or [`ribbon`](/python/api/marks/ribbon) drawn over the same layer.

@@ -17,7 +17,7 @@ import type { UnderlyingSpace } from "../underlyingSpace";
 /**
  * A constraint operand that lives INSIDE one of the layer's direct children
  * (`container`), not at the top level — e.g. `mercury` inside
- * `enclose(spread(...planets))` named from an outer layer's `.constrain()`.
+ * `enclose(spread(...planets))` named from an outer layer's `.relate()`.
  *
  * The container's own layout has already fixed where `node` sits inside it, so
  * the operand is rigidly attached to the container: its box is the container's

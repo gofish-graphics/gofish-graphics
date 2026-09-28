@@ -61,7 +61,7 @@ def story_default():
                     fontSize=35,
                     fill="#666",
                 ).name("label"),
-            ]).constrain(lambda bottle, line, label: [
+            ]).relate(lambda bottle, line, label: [
                 Constraint.align([bottle, line], x="start"),
                 Constraint.distribute([line, label], dir="y", spacing=0),
                 Constraint.align([label, line], x="end"),

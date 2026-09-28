@@ -15,8 +15,8 @@ two complementary mechanisms for this:
 
 ## Strings: component-local names
 
-`.name("x")` on a child of a [`layer`](/python/api/constraints/constrain) makes
-`x` available inside that layer's `.constrain()` callback. Strings never cross
+`.name("x")` on a child of a [`layer`](/python/api/constraints/relate) makes
+`x` available inside that layer's `.relate()` callback. Strings never cross
 component boundaries, never register globally, and never show up as path
 segments.
 
@@ -26,7 +26,7 @@ from gofish import layer, rect, text, Constraint
 layer([
     rect(w=200, h=150, fill="#eee").name("bg"),
     text(text="Title").name("label"),
-]).constrain(lambda bg, label: [
+]).relate(lambda bg, label: [
     Constraint.align([label, bg], x="middle", y="end"),
 ])
 ```
@@ -63,7 +63,7 @@ value_name = createName("value")
 layer([
     rect(w=40, h=40).name("box"),
     text(text="5").name(value_name),
-]).constrain(lambda box, value: [
+]).relate(lambda box, value: [
     Constraint.align([box, value], x="middle", y="middle"),
 ])
 ```
@@ -88,7 +88,7 @@ def stack_slot(variable, value):
         layer([
             rect(w=40, h=40).name(box_tag),
             text(text=value).name(value_tag),
-        ]).constrain(lambda box, value: [
+        ]).relate(lambda box, value: [
             Constraint.align([box, value], x="middle", y="middle"),
         ]),
     ], dir="x", spacing=5)
@@ -148,7 +148,7 @@ layer([
 
 | I want to…                                                   | Use                                                    |
 | ------------------------------------------------------------ | ------------------------------------------------------ |
-| Reference a sibling by name in a layer's `.constrain()`      | `.name("x")` string                                    |
+| Reference a sibling by name in a layer's `.relate()`         | `.name("x")` string                                    |
 | Make an inner node reachable from outside the component      | `createName("tag")` + `.name(token)`                   |
 | Give a component instance a global handle the caller can use | Caller calls `createName("foo")`, then `.name(handle)` |
 | Reach deep into another component                            | Path: `ref(token).tag[i]...`                           |
@@ -163,7 +163,7 @@ layer([
 - **The first path segment must be a Token.** Paths don't start from strings
   because strings have no global identity.
 - **Reserved names.** A handful of attribute names (`name`, `label`, `render`,
-  `to_dict`, `to_ir`, `constrain`, `multiplicity`, and any leading-underscore
+  `to_dict`, `to_ir`, `relate`, `multiplicity`, and any leading-underscore
   name) pass through to the underlying ref proxy instead of becoming path
   segments. Use `ref(token).path("name")` to reach a child whose tag collides
   with one of these.

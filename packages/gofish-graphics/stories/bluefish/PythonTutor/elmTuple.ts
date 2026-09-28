@@ -41,7 +41,7 @@ export const elmTuple = createMark(
         : text({ fontSize: 24, fontFamily, fill: "none", text: "" }).name(
             valTag
           ),
-    ]).constrain(({ box, label, val }) => [
+    ]).relate(({ box, label, val }) => [
       Constraint.align({ x: "middle", y: "middle" }, [val, box]),
       // y-down free space: "start" is the top edge — keep the index label in
       // the top-left of the cell (issue #143/#16).

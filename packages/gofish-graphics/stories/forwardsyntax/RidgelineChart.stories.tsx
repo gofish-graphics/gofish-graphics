@@ -172,7 +172,7 @@ export const Default: StoryObj<Args> = {
               y: rowPitch * k - 9,
             }).name(`label${k}`),
           ])
-        ).constrain((g) =>
+        ).relate((g) =>
           monthNames.map((_, k) =>
             Constraint.align({ x: "end" }, [g[`label${k}`], g[`anchor${k}`]])
           )

@@ -77,7 +77,7 @@ def story_zordered_mixed():
                 layer([_bars()]).name("barsWrap"),
                 layer([_heat()]).name("heatWrap"),
             ]
-        ).constrain(
+        ).relate(
             # Param names must match the child `.name(...)` values — the layer
             # passes the resolved refs as keyword args keyed by name.
             lambda barsWrap, heatWrap: [

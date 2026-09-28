@@ -8,8 +8,9 @@ References another node so later marks can reuse its position or bounding box �
 
 `ref` is the single reference noun, usable in two positions:
 
-- **Inline in a layout** (this page): `arrow(ref("a"), ref("b"))`,
-  `ref(token).row[2]` — resolved at layout time against the name tree.
+- **Inline in a layout** (this page): `arrow({}, [ref("a"), ref("b")])` inside
+  a [`.relate()`](/js/api/constraints/relate) clause, `ref(token).row[2]`
+  anywhere — resolved at layout time against the name tree.
 - **As chart data**: `chart(ref("maxBar")).mark(text(...))` — resolved at build
   time against the named-layer registry, where it must match **exactly one**
   node (use [`selectAll`](/js/api/selection/ref) for many). See
@@ -35,16 +36,18 @@ ref(
 
 ### String — nearest match
 
-`ref("x")` finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to where the ref sits. It searches the subtree of the ref's parent first, then the subtree of each ancestor in turn, and stops at the first level that has a match. Within that level the closest match wins, counted in steps down from the level, so a direct child beats a node with the same name nested deeper. The search never crosses a `createMark` boundary, in either direction. A nearer match hides a farther one with the same name. Two matches at the same smallest distance is an error, and so is no match at all. A data key is not a name, so `ref("a")` does not find a mark just because its row is keyed `"a"`.
+A string `ref("x")` is legal only inside a [`.relate()`](/js/api/constraints/relate) clause. Anywhere else it throws, and the message says to move it into `.relate()`. Inside a clause it finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to the layer that relates it: the closest match inside that layer wins, counted in steps down from the layer, so a direct child beats a node with the same name nested deeper. The search never crosses a `createMark` boundary, in either direction, and the match must lie inside the related layer. Two matches at the same smallest distance is an error, and so is no match at all. A data key is not a name, so `ref("a")` does not find a mark just because its row is keyed `"a"`.
 
 ```ts
 layer([
   rect({ w: 80, h: 40 }).name("bg"),
-  ref("bg"), // resolves to the rect above
+  text({ text: "label" }).name("label"),
+]).relate(() => [
+  arrow({}, [ref("label"), ref("bg")]), // resolve to the text and the rect
 ]);
 ```
 
-`.constrain()` operands use the same lookup, starting at the constrained layer. See [How to name and scope](/js/api/howto/naming-and-scoping) and [Name Resolution & Scoping](/internals/core/names-and-scoping).
+A `.relate()` operand is the same thing spelled as a variable: `({ bg, label }) => [arrow({}, [label, bg])]` builds those two refs. See [How to name and scope](/js/api/howto/naming-and-scoping) and [Name Resolution & Scoping](/internals/core/names-and-scoping).
 
 ### Token — globally addressable
 

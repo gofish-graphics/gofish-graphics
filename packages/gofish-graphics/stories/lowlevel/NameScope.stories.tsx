@@ -8,13 +8,12 @@ import {
   enclose,
   layer,
   rect,
-  ref,
   spread,
   text,
 } from "../../src/lib";
 
 // String-name resolution checks. NOT gallery-tagged: these are test-like.
-// `ref("x")` and `.constrain()` operands share one lookup: start at the use
+// `ref("x")` and `.relate()` operands share one lookup: start at the use
 // site, widen one ancestor at a time, stop at the first level that has the
 // name, never cross a createMark boundary. The error cases (duplicate at one
 // level, missing name, createMark boundary) are covered by
@@ -31,28 +30,35 @@ const planets = [
   { name: "mars", r: 10, fill: "#d9603b", stroke: "#b04424" },
 ];
 
-// An outer layer's `.constrain()` names `mercury`, which lives inside
-// enclose › spread. The nested operand is rigidly attached to `planets`.
+// An outer layer's `.relate()` names `mercury`, which lives inside
+// enclose › spread. The nested operand is rigidly attached to `planets`. The
+// arrow is a drawing clause, laid out after the constraints place the label.
 export const NestedOperand: StoryObj = {
   render: () => {
     const container = initializeContainer();
     layer([
-      enclose({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
-        spread(
-          { dir: "x", spacing: 50, alignment: "middle" },
-          planets.map((d) =>
-            circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 }).name(
-              d.name
+      enclose(
+        { padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 },
+        [
+          spread(
+            { dir: "x", spacing: 50, alignment: "middle" },
+            planets.map((d) =>
+              circle({
+                r: d.r,
+                fill: d.fill,
+                stroke: d.stroke,
+                strokeWidth: 3,
+              }).name(d.name)
             )
-          )
-        ),
-      ]).name("planets"),
+          ),
+        ]
+      ).name("planets"),
       text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
-      arrow({ stroke: "#E94560" }, [ref("label"), ref("mercury")]),
     ])
-      .constrain(({ mercury, planets, label }) => [
+      .relate(({ mercury, planets, label }) => [
         Constraint.align({ x: "middle" }, [mercury, label]),
         Constraint.distribute({ dir: "y", spacing: 20 }, [planets, label]),
+        arrow({ stroke: "#E94560" }, [label, mercury]),
       ])
       .render(container, { w: 400, h: 200 });
     return container;
@@ -77,7 +83,7 @@ export const PerRowNames: StoryObj = {
         layer([
           rect({ w: 40, h: "v", fill: "#9cc3e6" }).name("bar"),
           rect({ w: 16, h: 4, fill: "#1a5683" }).name("tick"),
-        ]).constrain(({ bar, tick }) => [
+        ]).relate(({ bar, tick }) => [
           Constraint.align({ x: "middle", y: "end" }, [bar, tick]),
         ])
       )

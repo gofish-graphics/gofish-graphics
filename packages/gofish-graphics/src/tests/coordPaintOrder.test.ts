@@ -38,7 +38,7 @@ function ok(name: string, cond: boolean, detail?: string): void {
 // the ordered `.node`s that `flattenLayout` emits for the given layer.
 async function paintOrder(layerNode: any): Promise<any[]> {
   const root: any = await coord({ transform: polar() }, [layerNode]);
-  root.resolveAliases();
+  await root.resolveAliases();
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   root.layout([400, 400], [undefined, undefined]);
@@ -82,7 +82,7 @@ console.log("# coord paint order: zAbove/zBelow constraints are honored inside c
   // flattened order must be [B, A].
   const A = rect().name("a");
   const B = rect().name("b");
-  const layerNode = Layer([A, B]).constrain((c: any) => [
+  const layerNode = Layer([A, B]).relate((c: any) => [
     Constraint.zAbove(c.a, c.b),
   ]);
   const order = await paintOrder(layerNode);
