@@ -49,7 +49,7 @@ Options: `--arms gofish,recharts,d3,matplotlib,ggplot2,altair,plot`, `--tasks <s
   `rescore` carries them over from the original results. Results from before
   contexts existed recorded the pack in `docsPack`, which is read as
   `pack:<file>`; a run from before either was recorded shows "not recorded".
-- `--extensions` sets whether ggplot2, matplotlib and altair get their
+- `--extensions` sets whether d3, plot, ggplot2, matplotlib and altair get their
   ecosystem's extension packages (see "Extensions"). Every job of those
   arms records the setting (`extensions`), the report header shows it, and
   the cost estimate names it. `references` always runs with it on, and
@@ -138,12 +138,13 @@ installed by hand for them. The ggplot2 arm runs `Rscript --vanilla` (from
 ggplot2 4.0.1 and svglite 2.2.2). Install its packages once:
 
 ```bash
-Rscript -e 'install.packages(c("ggplot2", "svglite", "jsonlite", "dplyr", "tidyr", "png", "ggmosaic", "ggridges", "treemapify", "packcircles", "ggforce", "waffle"), repos = "https://cloud.r-project.org")'
+Rscript -e 'install.packages(c("ggplot2", "svglite", "jsonlite", "dplyr", "tidyr", "png", "ggmosaic", "ggridges", "treemapify", "packcircles", "ggforce", "waffle", "ggalluvial", "ggbeeswarm", "ggraph", "tidygraph", "igraph", "hexbin"), repos = "https://cloud.r-project.org")'
 ```
 
-The last six are the ggplot2 extensions (see "Extensions"), developed with
-ggmosaic 0.4.0, ggridges 0.5.7, treemapify 2.6.1, packcircles 0.3.7,
-ggforce 0.5.0 and waffle 1.0.2.
+The last twelve are the ggplot2 extensions (see "Extensions"), developed
+with ggmosaic 0.4.0, ggridges 0.5.7, treemapify 2.6.1, packcircles 0.3.7,
+ggforce 0.5.0, waffle 1.0.2, ggalluvial 0.12.6, ggbeeswarm 0.7.3, ggraph
+2.2.2, tidygraph 1.3.1, igraph 2.3.3 and hexbin 1.28.6.
 
 A run checks that each script arm's packages load before it starts, and
 stops if they do not.
@@ -245,15 +246,15 @@ context (see "Contexts"; by default the skill in `context/skill/`, chosen from t
 system blocks carry `cache_control`, so repeated calls read them from the
 prompt cache.
 
-| Arm        | The model writes                                                                                                          | The harness                                                                                                 | Extension packages (with `--extensions on`)                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| gofish     | an ES module, `export default function render(container, data)`, importing from `"gofish-graphics"`                       | aliases `gofish-graphics` to `packages/gofish-graphics/src/lib.ts`, awaits the returned promise             | none                                                         |
-| d3         | the same contract, `import * as d3 from "d3"`                                                                             | same                                                                                                        | none (its hierarchy layouts are part of `d3`)                |
-| recharts   | a JSX module, `export default function Chart({ data })` with explicit `width`/`height`                                    | compiles the JSX with esbuild (React's automatic runtime) and renders `<Chart data={data} />` with React 19 | none                                                         |
-| matplotlib | a script that reads `DATA_PATH` (JSON rows) and saves SVG to `OUT_PATH`                                                   | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify, pywaffle                                 |
-| ggplot2    | an R script that reads `DATA_PATH` and saves SVG to `OUT_PATH` with `ggsave(..., device = svglite::svglite)`              | runs it with `Rscript --vanilla` (60 s limit), then loads the SVG into the same page                        | ggmosaic, ggridges, treemapify, packcircles, ggforce, waffle |
-| altair     | a script that reads `DATA_PATH` and saves SVG with `chart.save(OUT_PATH, format="svg")` (vl-convert)                      | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify                                           |
-| plot       | an ES module like d3's, `import * as Plot from "@observablehq/plot"` (and `d3` if it wants), appending `Plot.plot({...})` | same as gofish and d3 (`@observablehq/plot` 0.6.17)                                                         | none                                                         |
+| Arm        | The model writes                                                                                                          | The harness                                                                                                 | Extension packages (with `--extensions on`)                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| gofish     | an ES module, `export default function render(container, data)`, importing from `"gofish-graphics"`                       | aliases `gofish-graphics` to `packages/gofish-graphics/src/lib.ts`, awaits the returned promise             | none                                                                                                                          |
+| d3         | the same contract, `import * as d3 from "d3"`                                                                             | same                                                                                                        | d3-sankey, d3-hexbin                                                                                                          |
+| recharts   | a JSX module, `export default function Chart({ data })` with explicit `width`/`height`                                    | compiles the JSX with esbuild (React's automatic runtime) and renders `<Chart data={data} />` with React 19 | none                                                                                                                          |
+| matplotlib | a script that reads `DATA_PATH` (JSON rows) and saves SVG to `OUT_PATH`                                                   | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify, pywaffle, scipy                                                                                           |
+| ggplot2    | an R script that reads `DATA_PATH` and saves SVG to `OUT_PATH` with `ggsave(..., device = svglite::svglite)`              | runs it with `Rscript --vanilla` (60 s limit), then loads the SVG into the same page                        | ggmosaic, ggridges, treemapify, packcircles, ggforce, waffle, ggalluvial, ggbeeswarm, ggraph (with tidygraph, igraph), hexbin |
+| altair     | a script that reads `DATA_PATH` and saves SVG with `chart.save(OUT_PATH, format="svg")` (vl-convert)                      | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify                                                                                                            |
+| plot       | an ES module like d3's, `import * as Plot from "@observablehq/plot"` (and `d3` if it wants), appending `Plot.plot({...})` | same as gofish and d3 (`@observablehq/plot` 0.6.17)                                                         | d3-sankey, d3-hexbin (beside `d3`)                                                                                            |
 
 Details that keep the arms comparable:
 
@@ -307,43 +308,77 @@ height = 4, units = "in"`). svglite, like matplotlib, writes the size in
 
 ## Extensions
 
-A chart form that a library has no mark for (a treemap, circle packing, a
-waffle, a mosaic, a ridgeline) is, in practice, drawn with a popular package
-from the library's own ecosystem. `--extensions` (default `on`) sets whether
-the arms that have such packages get them, so each baseline can be measured
+A chart form that a library has no mark or layout for (a treemap, circle
+packing, a waffle, a mosaic, a ridgeline, a sankey or alluvial, a hexbin, a
+beeswarm, a dendrogram) is, in practice, drawn with a companion package from
+the library's own ecosystem. `--extensions` (default `on`) sets whether the
+arms that have such packages get them, so each baseline can be measured
 both ways: the library as people use it, and the library alone. The
 packages are listed in one table, `tests/scripts/llm-bench/extensions.ts`,
-which the prompts, the runtimes and the check below all read.
+which the prompts, the runtimes and the checks below all read.
 
-| Arm        | Extension packages                                                                                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ggplot2    | ggmosaic (mosaic plots), ggridges (ridgeline plots), treemapify (treemaps), packcircles (circle packing), ggforce (arcs, circles and more geoms), waffle (waffle charts) |
-| matplotlib | squarify 0.4.5 (treemaps), circlify 0.15.1 (circle packing), pywaffle 1.2.0 (waffle charts)                                                                              |
-| altair     | squarify 0.4.5 (treemaps), circlify 0.15.1 (circle packing)                                                                                                              |
+A package counts as a companion package when all of these hold:
 
-GoFish, Recharts, D3 and Plot are not affected by the setting. D3's hierarchy
-layouts (treemap, pack) are part of `d3` itself, so the d3 arm has them
-either way. Plot has no extension ecosystem: its prompt allows `d3` beside
-it (Plot is built on d3), which gives the plot arm the same layouts.
-Packages that every setting allows, such as ggplot2's `png` (for reading
-images), are not extensions.
+- it comes from the arm's own ecosystem, and people routinely install it
+  next to the library for a chart form or layout the library lacks;
+- it is widely used and still maintained;
+- the picture is still drawn by the arm's library, so it passes the arm
+  contract (see "The arm contract"). A package that draws with its own graphics
+  system does not qualify.
 
-- The prompt: each script arm's prompt has an `{{extensions}}` placeholder
-  at the end of its "May use" line. With extensions on it becomes ", and
-  these ...: <package> (<what it draws>), ..."; with them off it is empty,
-  so the line ends "... No other packages are available." as it did before
+| Arm        | Extension packages                                                                                                                                                                                                                                                                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| d3         | d3-sankey 0.12.3 (sankey and alluvial layouts), d3-hexbin 0.2.2 (hexagonal binning)                                                                                                                                                                                                                                                                    |
+| plot       | d3-sankey 0.12.3, d3-hexbin 0.2.2 (the same d3 modules)                                                                                                                                                                                                                                                                                                |
+| ggplot2    | ggmosaic (mosaic plots), ggridges (ridgeline plots), treemapify (treemaps), packcircles (circle packing), ggforce (arcs, circles and more geoms), waffle (waffle charts), ggalluvial (alluvial diagrams), ggbeeswarm (beeswarm plots), ggraph (dendrograms, trees and networks), tidygraph and igraph (graph data for ggraph), hexbin (for `geom_hex`) |
+| matplotlib | squarify 0.4.5 (treemaps), circlify 0.15.1 (circle packing), pywaffle 1.2.0 (waffle charts), scipy 1.15.3 (dendrograms, with `scipy.cluster.hierarchy`)                                                                                                                                                                                                |
+| altair     | squarify 0.4.5 (treemaps), circlify 0.15.1 (circle packing)                                                                                                                                                                                                                                                                                            |
+
+The npm modules are pinned exactly in `tests/package.json`, the Python
+packages by their uv pins, and the R versions are in "Requirements" above.
+D3's hierarchy and chord layouts (treemap, pack, partition, chord) are part
+of `d3` itself, so the d3 arm has them either way. The plot arm's prompt
+allows `d3` beside Plot in every setting (Plot is built on d3, and Plot
+users pull d3 modules as they need them), so it gets the same d3 modules
+as the d3 arm. Packages that every setting allows, such as ggplot2's `png`
+(for reading images) or `d3` for the plot arm, are not extensions.
+
+Not added, and why:
+
+- GoFish is the library under test, and Recharts ships its own `Treemap`
+  and `Sankey`; neither arm has companion packages.
+- circlize (R chord diagrams) draws with base R graphics, not ggplot2. Its
+  picture breaks the ggplot2 arm contract: the chart must be a ggplot.
+- pySankey (last release 2018) is unmaintained, and mpl-chord-diagram
+  (last release 2022) is a small single-maintainer package that is not in
+  common use, so the matplotlib arm gets neither. matplotlib's own
+  `matplotlib.sankey` is part of core matplotlib already.
+- Altair has no standard companion package: Vega-Lite's transforms are its
+  layout layer, and the Python layout helpers it can use (squarify,
+  circlify) are already listed.
+
+- The prompt: each arm's prompt with extensions has an `{{extensions}}`
+  placeholder at the end of its "May use" line (for d3 and plot, the line
+  that says how to import D3). With extensions on it becomes ", and these
+  ...: <package> (<what it draws>), ..."; with them off it is empty, so the
+  line ends "... No other packages are available." as it did before
   extensions existed.
 - With extensions off, the Python arms run without the packages installed
   (uv is not given their pins), so an import fails with
   `ModuleNotFoundError`, which goes back to the model like any render
-  error. The R packages are installed system-wide, so the ggplot2 arm is
-  held to its base packages by a static check before the script runs: a
+  error. The R packages are installed system-wide and the npm modules are
+  installed in `tests/`, so the ggplot2, d3 and plot arms are held to their
+  base packages by a static check before the program runs. For ggplot2, a
   `library()`, `require()`, `requireNamespace()` or `loadNamespace()` of an
   extension package, or a `pkg::` use of one (outside comments), fails the
-  render with "The R package <name> is not available in this run." It is a
-  render error, not a contract violation: it is the environment's error,
-  like a failed import. The check cannot see a package loaded through a
-  variable (`library(p, character.only = TRUE)`).
+  render with "The R package <name> is not available in this run." For d3
+  and plot, a static or dynamic import of an extension module fails it
+  with "The package <name> is not available in this run." It is a render
+  error, not a contract violation: it is the environment's error, like a
+  failed import. The check cannot see a package loaded through a variable
+  (`library(p, character.only = TRUE)`), nor one that another package
+  loads by itself: ggplot2's `geom_hex` loads hexbin without a
+  `library()` call, so `geom_hex` works with extensions off too.
 - The run's start-up probe loads exactly the packages the setting allows.
 - Reference solutions may use the extension packages, so `references`
   always runs with extensions on (it refuses `--extensions off`). With

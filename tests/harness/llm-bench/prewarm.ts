@@ -6,10 +6,15 @@
 // render time covers the program, not loading the library.
 export type Lib = "gofish" | "d3" | "recharts" | "plot";
 
+// The d3 and plot arms' extension packages (llm-bench/extensions.ts), which
+// both arms may import beside d3.
+const d3Modules = () =>
+  Promise.all([import("d3"), import("d3-sankey"), import("d3-hexbin")]);
+
 const loaders: Record<Lib, () => Promise<unknown>> = {
   gofish: () => import("gofish-graphics"),
-  d3: () => import("d3"),
-  plot: () => import("@observablehq/plot"),
+  d3: d3Modules,
+  plot: () => Promise.all([import("@observablehq/plot"), d3Modules()]),
   recharts: () =>
     Promise.all([
       import("react"),

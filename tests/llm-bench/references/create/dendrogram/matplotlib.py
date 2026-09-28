@@ -10,8 +10,8 @@ for name, parent in zip(df["name"], df["parent"]):
     children.setdefault(parent, []).append(name)
 root = children[""][0]
 
-# matplotlib has no tree layout (scipy's dendrogram takes a linkage matrix,
-# not a tree, and scipy is not available): leaves are evenly spaced in
+# matplotlib has no tree layout (scipy's dendrogram, an extension, takes a
+# linkage matrix, not a tree): leaves are evenly spaced in
 # depth-first order, and every other node sits at the middle of its children.
 x = {}
 leaves = []

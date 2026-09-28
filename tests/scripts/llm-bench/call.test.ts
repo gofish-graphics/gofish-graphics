@@ -972,7 +972,8 @@ const CC_OK: ClaudeCodeResult = {
     /GoFish context: not recorded\. Extensions: on \(ggplot2, altair\)\./
   );
   assert.equal(extensionsOf({ arm: "matplotlib" }), "off");
-  assert.equal(extensionsOf({ arm: "d3", extensions: "on" }), undefined);
+  assert.equal(extensionsOf({ arm: "recharts", extensions: "on" }), undefined);
+  assert.equal(extensionsOf({ arm: "d3" }), "off");
   assert.match(
     buildReport([job({ arm: "matplotlib" })], meta),
     /Extensions: off \(matplotlib\)\./
@@ -983,17 +984,36 @@ const CC_OK: ClaudeCodeResult = {
 // --- extensions: the prompt line and the R static check --------------------
 {
   const ctx = loadContext("cheatsheet", process.cwd());
-  const mayLine = (arm: "ggplot2" | "matplotlib" | "altair", e: Extensions) =>
+  const mayLine = (
+    arm: "ggplot2" | "matplotlib" | "altair" | "d3" | "plot",
+    e: Extensions
+  ) =>
     systemBlocks(arm, ctx, e)[0]
       .text.split("\n")
-      .find((l) => /^- May (use|import)/.test(l));
+      .find((l) => /^- (May (use|import)|Import)/.test(l));
   assert.equal(
     mayLine("ggplot2", "off"),
     "- May use ggplot2 (with scales, which it depends on), svglite, jsonlite, dplyr, tidyr, png (to read PNG images) and base R. No other packages are available."
   );
   assert.equal(
     mayLine("ggplot2", "on"),
-    "- May use ggplot2 (with scales, which it depends on), svglite, jsonlite, dplyr, tidyr, png (to read PNG images) and base R, and these popular ggplot2 extensions: ggmosaic (mosaic plots), ggridges (ridgeline plots), treemapify (treemaps), packcircles (circle packing), ggforce (arcs, circles and more geoms) and waffle (waffle charts). No other packages are available."
+    "- May use ggplot2 (with scales, which it depends on), svglite, jsonlite, dplyr, tidyr, png (to read PNG images) and base R, and these popular ggplot2 extensions: ggmosaic (mosaic plots), ggridges (ridgeline plots), treemapify (treemaps), packcircles (circle packing), ggforce (arcs, circles and more geoms), waffle (waffle charts), ggalluvial (alluvial diagrams), ggbeeswarm (beeswarm plots), ggraph (dendrograms, trees and networks), tidygraph (graph data for ggraph), igraph (graph data for ggraph) and hexbin (hexagonal binning, for geom_hex). No other packages are available."
+  );
+  assert.equal(
+    mayLine("d3", "off"),
+    '- Import D3 with `import * as d3 from "d3";`. No other packages are available.'
+  );
+  assert.equal(
+    mayLine("d3", "on"),
+    '- Import D3 with `import * as d3 from "d3";`, and these D3 modules, each imported by its package name: d3-sankey (sankey and alluvial layouts) and d3-hexbin (hexagonal binning). No other packages are available.'
+  );
+  assert.match(
+    mayLine("plot", "on")!,
+    /or layouts, and these D3 modules, each imported by its package name: d3-sankey \(sankey and alluvial layouts\) and d3-hexbin \(hexagonal binning\)\. No other packages are available\.$/
+  );
+  assert.match(
+    mayLine("plot", "off")!,
+    /or layouts\. No other packages are available\.$/
   );
   assert.equal(
     mayLine("matplotlib", "off"),
@@ -1001,7 +1021,7 @@ const CC_OK: ClaudeCodeResult = {
   );
   assert.equal(
     mayLine("matplotlib", "on"),
-    "- May import matplotlib, pandas, numpy and the Python standard library, and these layout helpers: squarify (treemaps), circlify (circle packing) and pywaffle (waffle charts). No other packages are available."
+    "- May import matplotlib, pandas, numpy and the Python standard library, and these layout helpers: squarify (treemaps), circlify (circle packing), pywaffle (waffle charts) and scipy (dendrograms, with scipy.cluster.hierarchy). No other packages are available."
   );
   assert.equal(
     mayLine("altair", "off"),
@@ -1055,7 +1075,32 @@ const CC_OK: ClaudeCodeResult = {
     unavailablePackage("ggplot2", "library(treemapify)", "off")!,
     /treemapify/
   );
-  console.log("ok  extensions prompt line and R static check");
+  // d3 and plot with extensions off: static and dynamic imports of a
+  // module (or a path inside it) are caught; d3 itself and look-alikes pass.
+  for (const arm of ["d3", "plot"] as const) {
+    for (const code of [
+      'import { sankey } from "d3-sankey";',
+      "import * as h from 'd3-hexbin';",
+      'const m = await import("d3-sankey");',
+      'import { hexbin } from "d3-hexbin/src/hexbin.js";',
+    ])
+      assert.equal(
+        unavailablePackage(arm, code, "off"),
+        `The package ${/d3-(sankey|hexbin)/.exec(code)![0]} is not available in this run.`,
+        code
+      );
+    for (const code of [
+      'import * as d3 from "d3";',
+      'import { x } from "d3-sankeyx";',
+      "// uses a sankey-like layout",
+    ])
+      assert.equal(unavailablePackage(arm, code, "off"), null, code);
+    assert.equal(
+      unavailablePackage(arm, 'import { sankey } from "d3-sankey";', "on"),
+      null
+    );
+  }
+  console.log("ok  extensions prompt line and static checks");
 }
 
 // --- retrieval is deterministic and sees only the instruction ---------------

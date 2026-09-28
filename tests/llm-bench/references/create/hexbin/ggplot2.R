@@ -5,8 +5,9 @@ data <- jsonlite::fromJSON(Sys.getenv("DATA_PATH"))
 sx <- 100   # budget between neighboring centers in a row
 sy <- 1000  # box office between rows of the same lattice
 
-# geom_hex needs the hexbin package, so the bins are computed here: each
-# film goes to the nearest center of the two offset lattices.
+# geom_hex anchors its lattice at the data range rounded to the bin width,
+# so it cannot put the centers where the task asks. The bins are computed
+# here: each film goes to the nearest center of the two offset lattices.
 ax <- round(data$budget / sx) * sx
 ay <- round(data$box_office / sy) * sy
 bx <- (round(data$budget / sx - 0.5) + 0.5) * sx

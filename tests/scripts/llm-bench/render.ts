@@ -345,11 +345,11 @@ export class Renderer {
       error: violation ? `${error}\n\n${violation}` : error,
       renderMs: ms,
     });
+    // An extension package used while extensions are off: the error a
+    // missing package gives (see extensions.ts), before the program runs.
+    const missing = unavailablePackage(arm, code, this.extensions);
+    if (missing) return { ...failed(missing, 0), errorKind: "render" };
     if (isScriptArm(arm)) {
-      // An extension package used while extensions are off: the error a
-      // missing package gives (see extensions.ts), before the script runs.
-      const missing = unavailablePackage(arm, code, this.extensions);
-      if (missing) return { ...failed(missing, 0), errorKind: "render" };
       const outSvg = `${base}.out.svg`;
       rmSync(outSvg, { force: true });
       const rt = scriptRuntime(arm, this.extensions);

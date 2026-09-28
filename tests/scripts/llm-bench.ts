@@ -35,8 +35,9 @@
  *                  (skill): how GoFish is presented to the gofish arm (mock
  *                  records it but ignores it); skill needs --backend
  *                  claude-code. --docs-pack <path> is --context pack:<path>.
- *     --extensions on|off (on): whether ggplot2, matplotlib and altair get
- *                  their ecosystem's extension packages (extensions.ts);
+ *     --extensions on|off (on): whether d3, plot, ggplot2, matplotlib and
+ *                  altair get their ecosystem's extension packages
+ *                  (extensions.ts);
  *                  references always run with them on, and rescore uses
  *                  the original run's setting
  */
