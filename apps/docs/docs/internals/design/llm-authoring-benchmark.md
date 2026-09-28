@@ -15,7 +15,8 @@ existing benchmarks and what to take from each, and which libraries people and l
 model products use today. Section 4 lays out the design choices, one
 axis at a time. Section 5 covers using the benchmark to write and tune a GoFish skill for
 language models. Section 6 lists the ways the results could be biased. Section 7 describes
-the parts of this repo a benchmark can reuse. Section 8 collects open questions.
+the parts of this repo a benchmark can reuse. Section 8 collects open questions. Section 9
+records what the first runs found and what it means for GoFish.
 
 The short version:
 
@@ -616,3 +617,120 @@ checks.
   test the harness and the checks before adding task kinds. A small animation slice could be
   about 10 tasks built on the Gapminder and bar chart race data, with GoFish, D3 and ECharts
   arms.
+
+## 9. Findings from the first runs
+
+This section records what the first version of the benchmark found, in September 2026. The
+harness is in `tests/llm-bench/` and the numbers are in `tests/llm-bench/results/`. The two
+goals were to find out how to make models better at writing GoFish, and to see how GoFish
+compares with other libraries when a model writes the code.
+
+### Setup
+
+- The model was claude-opus-5-5 at medium effort, run through headless Claude Code on the
+  subscription.
+- There were 31 create and edit tasks, split into 20 common charts and 11 charts beyond the
+  usual defaults, plus 2 edit chains. Each ran with 2 samples and up to 3 turns.
+- Seven libraries were compared:
+  - GoFish, presented as a skill;
+  - Recharts, D3, Matplotlib, ggplot2, Altair and Observable Plot, which get no docs.
+- Each library had to draw the picture itself, and checks read facts from the rendered
+  output.
+- Code size is measured in syntax tokens, and explicit calculation as arithmetic operators
+  and magic numbers.
+
+| Library         | Pass, common | Pass, beyond defaults | Median arithmetic ops | Median syntax tokens |
+| --------------- | ------------ | --------------------- | --------------------- | -------------------- |
+| GoFish (skill)  | 82%          | 64%                   | 0                     | 140                  |
+| Recharts        | 98%          | 100%                  | 4.5                   | 358                  |
+| D3              | 100%         | 100%                  | 14                    | 662                  |
+| Matplotlib      | 100%         | 91%                   | 8.5                   | 339                  |
+| ggplot2         | 98%          | 91%                   | 1.5                   | 213                  |
+| Altair          | 95%          | 73%                   | 1.5                   | 283                  |
+| Observable Plot | 100%         | 100%                  | 1.5                   | 236                  |
+
+These are without extension packages. With them, the numbers barely changed (finding 5).
+
+### Findings
+
+1. **GoFish needs a skill or a cheatsheet to be used well.** Models have seen little GoFish
+   code. A 1,600-token cheatsheet generated from the descriptor table did as well as a
+   9,000-token docs pack (66% and 65% pass). A skill, meaning a short core file plus gallery
+   examples the model reads on demand, did best. It passed 76% of tasks and 64% of the harder
+   charts, against 32% for the docs pack. It used fewer repair turns and less reasoning, and
+   it cost about 2.5 times as much per job. Worked examples matter more than reference text.
+2. **GoFish still has rough edges, even on basic charts.** It passes 82% of common tasks, while
+   the other libraries pass 95% to 100%. Most failures render without an error and draw the
+   wrong picture, so the model never gets a repair turn. The run found 7 silent failures and 4
+   error messages that don't say how to fix the problem (#943). Examples are a
+   field-driven circle size that is a diameter in axis units, and default per-series labels
+   that widen grouped bar charts.
+3. **GoFish code is strikingly short and declarative.** It has the smallest median code size
+   and the least explicit calculation. Half its programs contain no arithmetic, while D3 and
+   Recharts programs almost never reach zero. The advantage is concentrated in some chart
+   families: mosaics, ribbons, pie glyphs and waffles, where GoFish needs a small fraction of
+   the others' code. On circle packing, annotations and image compositing, GoFish needs more,
+   and those are the same tasks it fails. These numbers depend heavily on which tasks are in
+   the set, so they are not yet safe to publish as an overall claim (#946).
+4. **A frontier model can build every chart in a well-resourced library.** D3 and Observable
+   Plot passed every task, including charts they have no layout for, by writing the geometry
+   by hand. Reliability comes from how well the model knows the library, not from how
+   declarative the library is.
+5. **Models rarely use extension packages, even when told they are available.** Across the
+   runs with extensions, ggmosaic, ggridges, treemapify and waffle were used 0 times, and
+   packcircles, ggforce, squarify and circlify 2 to 4 times each. Possible reasons, all
+   untested:
+   - hand-written ggplot2 geometry is probably more common in training data;
+   - an extension API the model knows less well is riskier than code it is sure of;
+   - extension defaults can't always meet an exact spec, e.g. `geom_waffle` ignores the fill
+     direction;
+   - a list of package names in the prompt is a weak hint.
+
+   The ggmosaic we installed is archived. Its maintained successor, ggmosaic2, is now on
+   CRAN and should replace it in the next run.
+
+### What this means
+
+- **GoFish can't be pitched today as a better target for model-written code.** Its pass rate
+  is the lowest of the seven. Most of the gap looks fixable, through the skill and the rough
+  edges above. The realistic claim after that work is "as reliable as the others, and more
+  concise and declarative", not "better for models".
+- **GoFish is probably more readable, but the benchmark doesn't measure reading.** Its
+  advantage should be largest for custom and unfamiliar charts. For a common chart, a named
+  call such as `mosaic()` is likely easier to read than a composition of operators, which is
+  an argument for chart templates (#945). Two ways to measure reading are to score the edit
+  tasks, where the model must understand existing code, and to add comprehension tasks,
+  where the model predicts what given code draws.
+- **Structure has a practical use beyond taste.** GoFish specs are structured data: the IR,
+  Python and JS parity, and the display list. That made GoFish the easiest library to check in
+  this benchmark. Whether that helps users depends on tooling more than on who writes the
+  code.
+- **Chart code is small, so code-size gains matter less than elsewhere.** A chart cost about 1
+  to 5 cents and a few hundred tokens to generate, and the largest program in the set is
+  about 2,000 syntax tokens. Unlike proofs or user interfaces, chart code does not grow to
+  hundreds of thousands of lines, so efficiency per program says little about cost. What
+  matters is whether the first attempt is right, and whether a person can read and trust the
+  code. Diagrams are the likely exception. Some Bluefish diagrams already run to about a
+  thousand lines, so any scaling argument for GoFish is more likely to hold there. The task
+  set has no diagram section yet.
+- **The tasks are minimalist.** They ask for plain charts with little styling. Real charts
+  carry annotation, typography and theming, which add code in every library. Styled tasks
+  from the complex galleries in #946 would test whether GoFish stays concise under real
+  design requirements.
+- **We didn't use GoFish's ideas to design the charts in this study.** We chose chart forms
+  for these results by reasoning about comparison and distribution, e.g. pairing tasks and
+  sorting jobs, not by composing GoFish operators. The data's shape informed some choices,
+  but not in a GoFish-specific way.
+
+### Next steps
+
+- Ship GoFish to models as a skill plus a plain cheatsheet, and check it on held-out tasks
+  (#764).
+- Fix the silent failures and unhelpful errors (#943), then rerun the GoFish arm to confirm
+  the failures turn into repairable errors.
+- Sample tasks from outside sources, with a basic section and a complex section, and add
+  diagrams (#946).
+- Measure readability with edit and comprehension tasks.
+- Test why models skip extensions, e.g. by prompting them to prefer extensions, and replace
+  ggmosaic with ggmosaic2.
+- Measure whether chart templates help (#945).
