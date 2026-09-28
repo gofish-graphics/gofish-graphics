@@ -38,7 +38,7 @@ import { combine, byDepth, mount } from "./_shared";
 //  2. No angular auto-fit for POINT nodes: sibling θ spacing is a fixed per-level
 //     constant (2π/6 rad between centers) that does NOT shrink with the number of
 //     nodes at a depth. GoTree allocates angle by subtree leaf-count. Wedge
-//     (rect) nodes now auto-fit via thetaSize since #622; these circle nodes hit
+//     (rect) nodes now auto-fit via a data-sized θ extent since #622; these circle nodes hit
 //     the point-node gap tracked in #627, so deep/wide trees overflow the 2π
 //     budget and wedges wrap — visible here as the spiral overlap, which actually
 //     echoes the reference. (The #627 data-position workaround is demonstrated in

@@ -32,7 +32,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    constant; it does NOT shrink with the number of nodes at a depth. GoTree
 //    allocates θ by subtree leaf-count, so deep/wide trees there stay within 2π;
 //    here a wide level overflows the 2π budget and wedges wrap. Wedge (rect)
-//    nodes now auto-fit via thetaSize since #622; this point/circle-node gap is
+//    nodes now auto-fit via a data-sized θ extent since #622; this point/circle-node gap is
 //    tracked in #627 (data-position workaround shown in RadialDeep.stories.tsx).
 //    Spacing is hand-tuned for the small sampleTree.
 //  - polar() now takes options — { innerRadius, centralAngle, startAngle,

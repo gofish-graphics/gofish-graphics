@@ -12,7 +12,7 @@ import {
   Dimensions,
   displayDims as displayDimsOf,
   elaborateDims,
-  extractAliasCandidates,
+  deferAxisDims,
   FancyDims,
   FancySize,
   Size,
@@ -206,8 +206,8 @@ export const Petal = ({
     },
     []
   );
-  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-  node._pendingAliases = extractAliasCandidates(fancyDims);
+  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;
 };
 
@@ -216,6 +216,7 @@ export const petal = createMark(
   {
     w: "size",
     h: "size",
+    dims: "dims",
     fill: "color",
     stroke: "color",
   },

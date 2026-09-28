@@ -14,8 +14,8 @@ export type PolarOptions = {
 };
 
 /**
- * Polar coordinate transform: maps (θ, r) → screen. θ is the x-axis (alias
- * `theta`/`thetaSize`), r is the y-axis (alias `r`/`rSize`).
+ * Polar coordinate transform: maps (θ, r) → screen. θ is axis 0 (`x`, or the
+ * declared name `theta`), r is axis 1 (`y`, or `r`). See `dims` in dims.ts.
  *
  * Defaults reproduce the historical `polar()` exactly: θ=0 at 12 o'clock,
  * increasing clockwise, filled disc, full 2π sweep, centered at the origin

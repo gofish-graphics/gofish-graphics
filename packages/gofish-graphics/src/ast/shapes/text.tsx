@@ -15,7 +15,7 @@ import {
   Dimensions,
   displayTranslate,
   elaborateDims,
-  extractAliasCandidates,
+  deferAxisDims,
   FancyDims,
   Transform,
 } from "../dims";
@@ -448,14 +448,15 @@ export const Text = ({
     },
     []
   );
-  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-  node._pendingAliases = extractAliasCandidates(fancyDims);
+  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;
 };
 
 export const text = createMark(
   Text,
   {
+    dims: "dims",
     fill: "color",
     text: "raw",
   },

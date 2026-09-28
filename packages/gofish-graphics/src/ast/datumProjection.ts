@@ -321,9 +321,9 @@ export function splitEntries<T extends Record<string, any>>(
 
 /** Which axes a scatter-family opts object positions: `x`/`y` true when a
  *  plain point value or a full range (`Min`+`Max`) is given for that axis.
- *  Shared by `Scatter`'s own `hasX`/`hasY` guard and the `arrangement`
- *  declaration the scatter operator hands `createOperator` (both in
- *  `graphicalOperators/scatter.tsx`) so the two don't drift. */
+ *  Shared by `Scatter`'s `isPlaced` (over the axes merged with `dims`) and
+ *  the `arrangement` declaration the scatter operator hands `createOperator`
+ *  (both in `graphicalOperators/scatter.tsx`) so the two don't drift. */
 export function scatterPositions(opts: {
   x?: unknown;
   xMin?: unknown;

@@ -157,24 +157,65 @@ inferSizeDomains: (shared, children) => {
 
 The `computeIntrinsicSize()` function returns a `Monotonic` function that maps from data values to pixel sizes. This is used later during layout to determine how much space each element needs.
 
-### Pass 5.5: Coordinate-Space Alias Resolution
+### Pass 5.5: Axis-Name Resolution
 
 **Location**: `src/ast/gofish.tsx` (`child.resolveAliases()`), `src/ast/_node.ts`
 (`resolveAliases`)
 
-A coordinate transform may declare **axis-name aliases** for the marks inside it —
-`polar()`/`clock()` expose `{ x: "theta", y: "r" }`, so a mark can be authored with
-`theta`/`r` (positions) and `thetaSize`/`rSize` (extents) instead of `x`/`y`/`w`/`h`.
+`x`/`y`/`w`/`h` mean axis 0 and axis 1 in every coordinate space. A coordinate
+transform may also declare **names** for its two axes in its `aliases` field:
+`polar()`/`clock()` declare `{ x: "theta", y: "r" }` and `geo()` declares
+`{ x: "lon", y: "lat" }`. That declaration is the only source of the names. They are
+used in two places, and in both the meaning of a name depends on where the node sits,
+which a factory does not know when it runs:
+
+- a box-dims mark's `dims` option, keyed by axis name (`rect({ dims: { theta: { size:
+0.4 } } })`), and a treemap's `dims` for its own box. Channel inference has already
+  run on it at build time: a mark gives each slot a kind by its structure (`size` is
+  a size channel; a bare value, `min`, `center`, `max` are positions), and an
+  operator gives each slot the channel of its top-level counterpart. Neither depends
+  on the axis, so `mapAxisDims` applies it before the axis is known.
+- an operator's `dir` (spread, stack) and a scatter's `dims`. Everything in these
+  operators that needs the axis (the align/distribute or position constraints and
+  `axisDir`) waits for the axis, and so do the constraints `.relate()` installs.
+  Spread's per-entry `size` wrapper uses a `dims` option keyed by `dir`, so it
+  resolves in the same pass.
+
+Both kinds of work are deferred the same way: the factory sets one hook on the
+node, `_elaborateInAxisScope(outer, inner)`. `outer` is the scope the node's own box
+lives in (its parent's scope, even on a coord) and `inner` is the scope of its
+children. A mark's hook (`deferAxisDims` in `dims.ts`) writes its `dims` bag onto its
+per-axis dims array against `outer` with `applyAxisDims`. An operator's hook resolves
+its names against `inner` and calls `.relate()`, which is async. A spread given its
+own `dims` runs the layer's dims hook first, then its own.
+
 `resolveAliases` is a top-down pass (run before underlying space, which reads the
-resolved dims) that walks the tree carrying the **active alias scope**: it rebinds the
-scope at every `coord` node that declares aliases (a nested coord rebinds for its
-subtree), resolves each mark's stashed `_pendingAliases` into the canonical `x/y/w/h`
-facets of its `dims`, and **throws** if an alias is used outside any declaring coord or
-names an alias the enclosing coord doesn't declare (hygiene). Like the later embedding
-pass it mutates the shared `args.dims` element in place so the captured layout/space
-closures observe the resolution. The operator `dir` accepts the angular/radial aliases
-too (`elaborateDirection` maps `theta`→0, `r`→1 generically, since `dir` is baked at
-operator construction before its coord exists). See
+dims and the constraints) that carries the **axis scope**, a map from name to axis
+starting at `{ x: 0, y: 1 }`. Every `coord` replaces the scope for its subtree with
+`x`, `y`, and the names its transform declares. Most transforms (`linear`, `wavy`,
+`bipolar`, `arcLengthPolar`) declare none, so inside them only `x`/`y` are visible:
+a name has a meaning only inside the space that declares it, and the innermost coord
+wins. The walk is synchronous: it queues each node's hook with its two scopes, in
+pre-order. The pass then runs the queue one hook at a time, in
+that order. It does not run them concurrently, because an operator's `.relate()`
+walks the subtree to build its environment and must not interleave with a
+descendant's hook. The walk sees the tree before any hook runs; that is enough,
+because spread's and scatter's `.relate()` return constraints only and add no nodes.
+A name the scope does not declare **throws**, listing the names it does; so does
+setting one (axis, anchor) slot twice, across the top-level keys and `dims` or within
+`dims`. Scatter merges its top-level `x`/`xMin`/`xMax` (and `y` ones) with its `dims`
+through the same `mergeAxisDims` as the marks, with its own rules: a bare value is
+the point (`center`), and `size` is not a key. A span is checked on the merged axis,
+so `xMin` with `dims.x.max` is a span, and one end without the other throws, from
+either spelling. Like the later embedding pass it
+mutates the per-axis dims array by reassigning its elements, so the captured
+layout/space closures observe the result.
+
+A hook is cleared once it has run to completion, so the pass is idempotent. A hook
+that throws stays, and so do the hooks queued after it, so a rerun reports the same
+error instead of skipping work. That lets `gofish.tsx` rerun it
+after axis, title, and legend elaboration, whose chrome is built from `Spread` nodes
+that install their constraints in this pass. See
 [Authoring Coordinate Transforms](/internals/layout/coordinate-transforms).
 
 ### Pass 6: Underlying Space Resolution

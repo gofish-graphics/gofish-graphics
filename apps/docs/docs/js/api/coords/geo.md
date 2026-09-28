@@ -67,11 +67,22 @@ nicing, no zero included in the domain, and no padding: a longitude of −100 is
 what lets a country outline and a bird's flight path share one frame without
 either of them being re-scaled.
 
-## Axis aliases
+## Axis names
 
-Inside a `geo` coord, `x` can be written `lon` and `y` can be written `lat`.
-Like the polar aliases, they are scope-bounded: using them outside a coord that
-declares them throws.
+`x` and `y` always work, and inside a `geo` space they mean longitude and
+latitude. The space also declares the names `lon` and `lat`, which you can use
+wherever an axis is named: as a key of a mark's or a scatter's `dims` option,
+and as an operator's `dir`.
+
+```ts
+chart(cities, { coord: geo("equalEarth") })
+  .flow(scatter({ by: "name", dims: { lon: "lon", lat: "lat" } }))
+  .mark(circle({ r: 3 }));
+```
+
+This places each city exactly as `scatter({ by: "name", x: "lon", y: "lat" })`
+does. The names only work inside a `geo` space. Anywhere else, `lon` throws an
+error that lists the names you can use there.
 
 ## Layering over a basemap
 

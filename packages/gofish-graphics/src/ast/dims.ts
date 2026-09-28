@@ -1,3 +1,5 @@
+import { Frontend } from "gofish-ir";
+
 export type Interval<T = number> = {
   min?: T;
   center?: T;
@@ -19,80 +21,257 @@ export type XYWHDims<T = number> = {
   y2?: T;
   h?: T;
   emY?: boolean;
-  // Coordinate-space axis aliases (e.g. polar `theta`/`r`). Stored unresolved at
-  // construction and resolved to x/y/w/h by the `resolveAliases` pass once the
-  // enclosing coord's declared aliases are known. `<name>`→position (like x/y),
-  // `<name>Size`→extent (like w/h). See KNOWN_ALIAS_KEYS / extractAliasCandidates.
-  theta?: T;
-  thetaSize?: T;
-  r?: T;
-  rSize?: T;
+  /** Axis-name-keyed options, resolved against the enclosing coordinate
+   *  space's declared axis names. See {@link AxisDims}. */
+  dims?: AxisDims<T>;
 };
 
 /**
- * Recognized coordinate-space axis aliases. Extracted unresolved at construction
- * (a mark is built before its enclosing coord exists) and resolved to x/y/w/h by
- * the `resolveAliases` pass. Static (not a transform-call-time registry) because
- * that registration would run too late. Add a transform's alias names here when
- * it declares new ones (e.g. a future bipolar's `tau`/`sigma`/`tauSize`/…).
+ * A mark's `dims` option: axis name → value or interval. The legal names are
+ * `x`/`y` (always) plus the names the enclosing coordinate space declares in
+ * its `aliases` (polar: `theta`/`r`; geo: `lon`/`lat`). A bare value is a
+ * position with the same anchor as `x` (`min`); an interval object names its
+ * anchors. The channel kind follows from the structure: `size` is a size
+ * channel, and a bare value or `min`/`center`/`max` is a position channel. A
+ * mark is built before its enclosing coord exists, so the bag is deferred at
+ * construction ({@link deferAxisDims}) and written onto the mark's per-axis
+ * dims by `GoFishNode.resolveAliases` ({@link applyAxisDims}).
  */
-export const KNOWN_ALIAS_KEYS = new Set(["theta", "thetaSize", "r", "rSize"]);
+export type AxisDims<T = number> = Record<string, T | Interval<T>>;
 
-/** Pull the alias-keyed entries out of a mark's dim options, to stash on the
- * node for the `resolveAliases` pass. Non-alias keys are left for elaborateDims. */
-export const extractAliasCandidates = <T>(
-  dims: FancyDims<T>
-): Record<string, T> => {
-  const out: Record<string, T> = {};
-  for (const key of Object.keys(dims)) {
-    if (KNOWN_ALIAS_KEYS.has(key)) out[key] = (dims as any)[key];
+// The anchors an axis interval may name, and whether a `dims` entry is an
+// interval or a bare value (a position): one definition, shared with the IR
+// validator.
+const { AXIS_INTERVAL_KEYS, isAxisInterval } = Frontend;
+export { isAxisInterval };
+export type IntervalKey = (typeof AXIS_INTERVAL_KEYS)[number];
+
+/**
+ * How a family of options reads its `dims` bag: `where` prefixes messages,
+ * `bare` is the anchor a bare value fills, `topLevel` names the top-level
+ * option that writes each allowed anchor per axis (for messages), and
+ * `badKey` explains an anchor outside `topLevel`.
+ */
+export type AxisDimsForm = {
+  where: string;
+  bare: AxisDimsSlot;
+  topLevel: Partial<Record<IntervalKey, [string, string]>>;
+  badKey: string;
+};
+
+/** A box-dims mark's form: every anchor, a bare value at `min` like `x`. */
+export const MARK_DIMS: AxisDimsForm = {
+  where: "dims",
+  bare: "min",
+  topLevel: {
+    min: ["x", "y"],
+    center: ["cx", "cy"],
+    max: ["x2", "y2"],
+    size: ["w", "h"],
+    embedded: ["emX", "emY"],
+  },
+  badKey: `An axis interval takes ${AXIS_INTERVAL_KEYS.join(", ")}.`,
+};
+
+/** Read a `dims` entry as an interval (a bare value fills `form.bare`),
+ *  rejecting an interval with a key the form does not allow. */
+const toAxisInterval = <T>(
+  name: string,
+  entry: T | Interval<T>,
+  form: AxisDimsForm
+): Interval<T> => {
+  if (!isAxisInterval(entry)) return { [form.bare]: entry } as Interval<T>;
+  for (const key of Object.keys(entry)) {
+    if (!(key in form.topLevel)) {
+      throw new Error(
+        `${form.where}.${name}: unknown key "${key}". ${form.badKey}`
+      );
+    }
+  }
+  return entry as Interval<T>;
+};
+
+/** A value slot of a `dims` entry: a `bare` value, or one anchor of an
+ *  interval. (`embedded` is a flag, not a value.) */
+export type AxisDimsSlot = Exclude<IntervalKey, "embedded">;
+
+/**
+ * Map every value in a `dims` bag, telling `f` which anchor each value fills:
+ * `form.bare` for a bare value, which stays bare, and the key itself inside an
+ * interval. `embedded` passes through. An interval key the form does not allow
+ * is an error. This is the one walk over a bag's values, shared by mark
+ * channel inference (channels.ts) and operator channel inference
+ * (createOperator.ts), which decide what each anchor's channel is.
+ */
+export const mapAxisDims = <A, B>(
+  dims: AxisDims<A>,
+  f: (value: A, slot: AxisDimsSlot) => B,
+  form: AxisDimsForm = MARK_DIMS
+): AxisDims<B> => {
+  const out: AxisDims<B> = {};
+  for (const [name, entry] of Object.entries(dims)) {
+    if (entry === undefined) continue;
+    if (!isAxisInterval(entry)) {
+      out[name] = f(entry as A, form.bare);
+      continue;
+    }
+    const src = toAxisInterval<A>(name, entry, form);
+    const iv: Interval<B> = {};
+    for (const key of ["min", "center", "max", "size"] as const) {
+      if (src[key] !== undefined) iv[key] = f(src[key] as A, key);
+    }
+    if (src.embedded !== undefined) iv.embedded = src.embedded;
+    out[name] = iv;
   }
   return out;
 };
 
-/** How an alias key resolves onto a node's `dims`: which axis, and which box key
- * (position aliases set `min` like x/y; `<name>Size` aliases set `size` like w/h). */
-export type AliasResolution = { axis: Direction; key: "min" | "size" };
+/**
+ * The axis names visible at a point in the tree, each mapped to its axis.
+ * `x`/`y` are always present and always mean axis 0/1; a coordinate space adds
+ * the names it declares (polar `theta`/`r`, geo `lon`/`lat`).
+ */
+export type AxisScope = Readonly<Record<string, Direction>>;
 
-/** Build the alias→(axis, key) resolution map for a coord scope from the
- * transform's declared position aliases (e.g. `{ x: "theta", y: "r" }`). */
-export const buildAliasMap = (aliases: {
+/** The scope outside every coordinate space that declares names. */
+export const BASE_AXIS_SCOPE: AxisScope = { x: 0, y: 1 };
+
+/** The scope inside a coordinate space: `x`/`y` plus the names its transform
+ *  declares in `aliases` (none for most spaces). Every space establishes its
+ *  own scope, so the innermost one wins and an outer space's names are not
+ *  visible inside it. */
+export const axisScopeFor = (aliases: {
   x?: string;
   y?: string;
-}): Record<string, AliasResolution> => {
-  const map: Record<string, AliasResolution> = {};
-  if (aliases.x) {
-    map[aliases.x] = { axis: 0, key: "min" };
-    map[`${aliases.x}Size`] = { axis: 0, key: "size" };
-  }
-  if (aliases.y) {
-    map[aliases.y] = { axis: 1, key: "min" };
-    map[`${aliases.y}Size`] = { axis: 1, key: "size" };
-  }
-  return map;
+}): AxisScope => {
+  if (aliases.x === undefined && aliases.y === undefined)
+    return BASE_AXIS_SCOPE;
+  const scope: Record<string, Direction> = { ...BASE_AXIS_SCOPE };
+  if (aliases.x !== undefined) scope[aliases.x] = 0;
+  if (aliases.y !== undefined) scope[aliases.y] = 1;
+  return scope;
 };
+
+/** Resolve an axis name against `scope`, or throw an error that lists the
+ *  names the scope declares. `where` prefixes the message. */
+export const resolveAxisName = (
+  scope: AxisScope,
+  name: AxisName,
+  where: string
+): Direction => {
+  const axis = scope[name];
+  if (axis !== undefined) return axis;
+  const names = Object.keys(scope).join(", ");
+  throw new Error(
+    scope === BASE_AXIS_SCOPE
+      ? `${where}: the innermost enclosing coordinate space (if any) does ` +
+        `not declare the axis name "${name}", so only ${names} are ` +
+        `available here. Put the mark directly inside a coordinate space ` +
+        `that declares "${name}", or use x/y.`
+      : `${where}: the enclosing coordinate space does not declare the axis ` +
+        `name "${name}". Names available here: ${names}.`
+  );
+};
+
+/**
+ * Work a node defers until the axis names around it are known, run once by
+ * `GoFishNode.resolveAliases`. `outer` is the scope the node's own box lives
+ * in (its parent's), `inner` the scope of its children (different only on a
+ * coord that declares names).
+ */
+export type AxisScopeHook = (
+  outer: AxisScope,
+  inner: AxisScope
+) => void | Promise<void>;
+
+/** The hook a box-dims factory leaves on its node: write the `dims` option
+ *  (if any) onto the node's own per-axis dims array, against `outer`. */
+export const deferAxisDims = (
+  fancyDims: FancyDims<any>,
+  into: Dimensions<any>
+): AxisScopeHook | undefined => {
+  const entries = (fancyDims as XYWHDims<any>).dims;
+  return entries === undefined
+    ? undefined
+    : (outer) => {
+        applyAxisDims(into, entries, outer);
+      };
+};
+
+/**
+ * Merge a `dims` bag into the per-axis intervals `into`, which already hold
+ * the top-level options, resolving each name against `scope`. Each (axis,
+ * anchor) slot may be set once: a slot that a top-level option or an earlier
+ * `dims` entry already set is an error. `into` is mutated by reassigning its
+ * elements (not their fields), so closures that captured the same array
+ * observe the result. Returns the option that set each slot, for messages.
+ */
+export const mergeAxisDims = (
+  into: Interval<any>[],
+  entries: AxisDims<any>,
+  scope: AxisScope,
+  form: AxisDimsForm
+): ((key: IntervalKey, axis: Direction) => string) => {
+  const setBy: Record<string, string> = {};
+  const origin = (key: IntervalKey, axis: Direction) =>
+    setBy[`${key}:${axis}`] ?? form.topLevel[key]![axis];
+  for (const [name, entry] of Object.entries(entries)) {
+    if (entry === undefined) continue;
+    const where = `${form.where}.${name}`;
+    const axis = resolveAxisName(scope, name, where);
+    const iv = toAxisInterval(name, entry, form);
+    const next: Interval<any> = { ...into[axis] };
+    for (const key of AXIS_INTERVAL_KEYS) {
+      if (iv[key] === undefined) continue;
+      if (next[key] !== undefined) {
+        throw new Error(
+          `${where}: the ${key} of axis ${axis} is set twice, here and ` +
+            `by ${origin(key, axis)}. Set each axis anchor once.`
+        );
+      }
+      next[key] = iv[key];
+      setBy[`${key}:${axis}`] = where;
+    }
+    into[axis] = next;
+  }
+  return origin;
+};
+
+/**
+ * Write a mark's `dims` bag onto its per-axis `into` array
+ * ({@link mergeAxisDims}). A `min` still missing afterwards is derived from
+ * `center` and `size`, exactly as `elaborateDims` does for `cx` and `w`.
+ */
+export const applyAxisDims = (
+  into: Dimensions<any>,
+  entries: AxisDims<any>,
+  scope: AxisScope
+): void => {
+  mergeAxisDims(into, entries, scope, MARK_DIMS);
+  for (const axis of [0, 1] as const) {
+    const d = into[axis];
+    if (d.min === undefined && d.center !== undefined && d.size !== undefined) {
+      into[axis] = { ...d, min: deriveMin(d.center, d.size) };
+    }
+  }
+};
+
+/** `min` from `center` and `size`: the one derivation `elaborateDims` (for
+ *  `cx` with `w`) and {@link applyAxisDims} share. */
+const deriveMin = <T>(center: T, size: T): T =>
+  ((center as number) - (size as number) / 2) as T;
 
 export type IndexedDims<T = number> = {
   0?: Interval<T>;
   1?: Interval<T>;
 };
 
-export type WrappedDims<T = number> = { dims: Dimensions<T> };
-
-export type FancyDims<T = number> =
-  | XYWHDims<T>
-  | IndexedDims<T>
-  | WrappedDims<T>;
-
-const isWrappedDims = <T>(d: FancyDims<T>): d is WrappedDims<T> => "dims" in d;
+export type FancyDims<T = number> = XYWHDims<T> | IndexedDims<T>;
 
 const isIndexedDims = <T>(d: FancyDims<T>): d is IndexedDims<T> =>
   "0" in d || "1" in d;
 
 export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
-  if (isWrappedDims(dims)) {
-    return dims.dims;
-  }
   if (isIndexedDims(dims)) {
     return [
       {
@@ -115,12 +294,12 @@ export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
   if (!("x" in dims))
     dims.x =
       dims.cx !== undefined && dims.w !== undefined
-        ? (((dims.cx as number) - (dims.w as number) / 2) as T)
+        ? deriveMin(dims.cx, dims.w)
         : undefined;
   if (!("y" in dims))
     dims.y =
       dims.cy !== undefined && dims.h !== undefined
-        ? (((dims.cy as number) - (dims.h as number) / 2) as T)
+        ? deriveMin(dims.cy, dims.h)
         : undefined;
 
   return [
@@ -142,7 +321,15 @@ export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
 };
 
 export type Direction = 0 | 1;
-export type FancyDirection = "x" | "y" | "theta" | "r" | Direction;
+/** An axis by index or by its scope-free name. `x`/`y` mean axis 0/1 in every
+ *  coordinate space. */
+export type FancyDirection = "x" | "y" | Direction;
+
+/** An axis named the way an operator's `dir` or a mark's `dims` key names it:
+ *  `x`/`y`, or a name the enclosing coordinate space declares (polar
+ *  `theta`/`r`, geo `lon`/`lat`). Resolved by {@link resolveAxisName} once the
+ *  enclosing space is known. */
+export type AxisName = "x" | "y" | (string & {});
 
 export type Anchor = "min" | "max" | "center" | "baseline";
 
@@ -213,25 +400,8 @@ export const translateForAnchor = (
 ): number =>
   value - localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
 
-export const elaborateDirection = (direction: FancyDirection): Direction => {
-  switch (direction) {
-    case "x":
-      return 0;
-    case "y":
-      return 1;
-    // Coordinate-space direction aliases. Unlike mark dim aliases (resolved by
-    // the scope-bounded resolveAliases pass), `dir` is baked into an operator's
-    // constraints at construction — before its enclosing coord exists — so it
-    // can't be scope-checked. These map generically: `theta`=angular=x,
-    // `r`=radial=y, which is exactly polar's x/y assignment.
-    case "theta":
-      return 0;
-    case "r":
-      return 1;
-    default:
-      return direction;
-  }
-};
+export const elaborateDirection = (direction: FancyDirection): Direction =>
+  typeof direction === "number" ? direction : BASE_AXIS_SCOPE[direction];
 
 export type Position = [number | undefined, number | undefined];
 

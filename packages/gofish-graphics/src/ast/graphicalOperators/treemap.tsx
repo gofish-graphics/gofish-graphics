@@ -12,7 +12,14 @@ import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 import { GoFishNode, Placeable } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
-import { FancyDims, Size, Direction, elaborateDims } from "../dims";
+import {
+  FancyDims,
+  Size,
+  Direction,
+  MARK_DIMS,
+  deferAxisDims,
+  elaborateDims,
+} from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
@@ -91,7 +98,7 @@ const Treemap = createNodeOperator(
 
     const dims = elaborateDims(fancyDims);
 
-    return new GoFishNode(
+    const node = new GoFishNode(
       {
         type: "treemap",
         args: {
@@ -304,6 +311,10 @@ const Treemap = createNodeOperator(
       },
       children
     );
+    // The treemap's own box is named by axis in `dims` like a mark's; defer it
+    // to the resolveAliases pass.
+    node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+    return node;
   }
 );
 
@@ -330,6 +341,8 @@ export const treemap = createOperator<any, TreemapOptions>(
     channels: {
       w: "size",
       h: "size",
+      // Each `dims` slot infers as its top-level counterpart (`size` as w/h).
+      dims: { type: "dims", form: MARK_DIMS },
       size: { type: "size", entry: true },
     } as any,
   }

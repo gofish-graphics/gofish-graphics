@@ -23,7 +23,7 @@ text(*, text=None, fill=None, stroke=None, strokeWidth=None, filter=None,
      debugBoundingBox=None, rotate=None, textAnchor=None,
      x=None, cx=None, x2=None, w=None, emX=None,
      y=None, cy=None, y2=None, h=None, emY=None,
-     theta=None, thetaSize=None, r=None, rSize=None, key=None) -> Mark
+     dims=None, key=None) -> Mark
 ```
 
 Keyword-only (matches every existing call site, which already passes

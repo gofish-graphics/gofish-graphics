@@ -820,6 +820,39 @@ for the API.
         }
       ]
     },
+    "AxisInterval": {
+      "description": "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "center": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "max": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "size": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "embedded": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AxisDimsValue": {
+      "description": "A `dims` entry: a bare channel value (a position) or an AxisInterval.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        {
+          "$ref": "#/$defs/AxisInterval"
+        }
+      ]
+    },
     "DeriveOperator": {
       "description": "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
       "type": "object",
@@ -957,8 +990,8 @@ for the API.
           "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
         },
         "dir": {
-          "enum": ["x", "y"],
-          "description": "Direction to spread along."
+          "type": "string",
+          "description": "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
           "type": "number",
@@ -1043,8 +1076,8 @@ for the API.
           "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
         },
         "dir": {
-          "enum": ["x", "y"],
-          "description": "Direction to stack along."
+          "type": "string",
+          "description": "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
           "type": "number",
@@ -1186,6 +1219,13 @@ for the API.
         "yMax": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Range form: right/top edge, y."
+        },
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span."
         },
         "alignment": {
           "type": "string",
@@ -1339,6 +1379,13 @@ for the API.
         "h": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+        },
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "by": {
           "oneOf": [
@@ -1497,21 +1544,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -1679,21 +1717,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -1789,21 +1818,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -1890,21 +1910,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "key": {
           "type": "string",
@@ -2044,21 +2055,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "key": {
           "type": "string",

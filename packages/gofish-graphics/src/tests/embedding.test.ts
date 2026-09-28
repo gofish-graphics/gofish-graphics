@@ -40,7 +40,7 @@ async function embedOf(
   path: number[] = []
 ): Promise<[boolean | undefined, boolean | undefined]> {
   const root = await rootIn;
-  root.resolveAliases();
+  await root.resolveAliases();
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   let n = root;

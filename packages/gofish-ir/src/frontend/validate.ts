@@ -462,6 +462,49 @@ function walkFieldType(
   }
 }
 
+/** The anchors an axis interval may name: the keys of `AxisInterval`. */
+export const AXIS_INTERVAL_KEYS = [
+  "min",
+  "center",
+  "max",
+  "size",
+  "embedded",
+] as const;
+
+/**
+ * Is this `dims` entry (`AxisDimsValue`) an interval? A bare channel value (a
+ * number, field name, function, a tagged `datum(...)`/`field(...)` object, a
+ * bridge sentinel, an array) is not: it is a position. An interval is a plain
+ * object with no `type` tag. Shared with gofish-graphics' dims.ts, where a
+ * runtime value may be a class instance, hence the plain-prototype check.
+ */
+export const isAxisInterval = (v: unknown): v is Record<string, unknown> =>
+  isObject(v) &&
+  Object.getPrototypeOf(v) === Object.prototype &&
+  !("type" in v) &&
+  !("__gofish_lambda" in v);
+
+/** A `dims` entry: a bare channel value, or an interval whose keys are all
+ *  anchors ({@link isAxisInterval}). */
+function walkAxisDimsValue(value: unknown, path: string, ctx: Context): void {
+  if (!isAxisInterval(value)) {
+    walkChannelValue(value, path, ctx);
+    return;
+  }
+  for (const [key, v] of Object.entries(value)) {
+    if (!(AXIS_INTERVAL_KEYS as readonly string[]).includes(key)) {
+      ctx.errors.push({
+        path: `${path}.${key}`,
+        message: `unknown axis interval key "${key}" (expected ${AXIS_INTERVAL_KEYS.join(", ")})`,
+      });
+    } else if (key === "embedded") {
+      expectBoolean(v, `${path}.embedded`, ctx);
+    } else {
+      walkChannelValue(v, `${path}.${key}`, ctx);
+    }
+  }
+}
+
 /** Resolve a `t.ref(name)` against the small set of authored envelope
  *  shapes already validated elsewhere in this file. */
 function walkRefType(
@@ -502,6 +545,9 @@ function walkRefType(
         return;
       }
       walkFieldAccessor(value, path, ctx);
+      return;
+    case "AxisDimsValue":
+      walkAxisDimsValue(value, path, ctx);
       return;
     default:
       // Unknown ref name — permissive (forward-compat), mirrors the rest of

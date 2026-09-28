@@ -245,9 +245,10 @@ export async function layout(
   const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
-  // Resolve coordinate-space axis aliases (polar theta/r/…) into x/y/w/h BEFORE
-  // space inference reads the dims. Top-down + scope-bounded (see resolveAliases).
-  child.resolveAliases();
+  // Resolve axis names (polar theta/r, geo lon/lat, …) BEFORE space inference
+  // reads the dims: run each node's deferred axis-scope work (a mark's `dims`,
+  // spread's `dir`, scatter's `dims`). Top-down + scope-bounded (see resolveAliases).
+  await child.resolveAliases();
   child.resolveUnderlyingSpace();
   perfAdd("resolve", perfNow() - __tResolve);
 
@@ -288,10 +289,13 @@ export async function layout(
   // before the legend pass consumes it, and the later passes insert chrome with
   // non-literal fills ("gray" titles, swatches) that would otherwise be folded
   // into the palette as if they were data values.
-  const reresolve = (n: GoFishNode, withColorScale = false) => {
+  const reresolve = async (n: GoFishNode, withColorScale = false) => {
     if (contexts?.session) n.setRenderSession(contexts.session);
     if (withColorScale) n.resolveColorScale();
     n.resolveNames();
+    // The inserted chrome is built from operators (Spread) whose constraints
+    // install in this pass; nodes resolved before are consumed and untouched.
+    await n.resolveAliases();
     n.clearUnderlyingSpace();
     n.resolveUnderlyingSpace();
   };
@@ -328,7 +332,7 @@ export async function layout(
     titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
       child = elaborated.node;
-      reresolve(child, true);
+      await reresolve(child, true);
     }
   }
 
@@ -340,7 +344,7 @@ export async function layout(
   const labelRes = await elaborateLabels(child, { yUp });
   if (labelRes.changed) {
     child = labelRes.node;
-    reresolve(child);
+    await reresolve(child);
   }
 
   // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
@@ -476,7 +480,7 @@ export async function layout(
     });
     child = titled.node;
     xTitleNode = titled.xTitleNode;
-    reresolve(child);
+    await reresolve(child);
   }
 
   // Legend elaboration: turn the color scale into an ordinary subtree seated
@@ -511,7 +515,7 @@ export async function layout(
       chromeFlipsY
     );
     legendAdded = true;
-    reresolve(child);
+    await reresolve(child);
   }
   perfAdd("axes", perfNow() - __tAxes);
 

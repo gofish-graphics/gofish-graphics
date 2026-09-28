@@ -11,15 +11,29 @@ import {
   value,
   isField,
   isLiteral,
+  isValue,
   getMeasureProvenance,
   type FieldAccessor,
   type LiteralValue,
   type Measure,
 } from "./data";
 import { evalFieldValues, type FieldExpr } from "./fieldExpr";
+import {
+  mapAxisDims,
+  type AxisDims,
+  type AxisDimsForm,
+  type AxisDimsSlot,
+} from "./dims";
 import type { LiveValue } from "../interaction/live";
 
-export type ChannelType = "size" | "pos" | "color" | "raw";
+/**
+ * How a channel encodes data. `dims` is the axis-name-keyed bag of box
+ * dimensions (a `dims` option): each of its slots is a channel of its own. As
+ * a plain `"dims"` spec, a slot is a `size` or a `pos` channel according to its
+ * structure ({@link axisSlotKind}); a {@link DimsChannelSpec} makes each slot
+ * the channel of its top-level counterpart instead.
+ */
+export type ChannelType = "size" | "pos" | "color" | "raw" | "dims";
 
 /**
  * Channel spec. The plain string form is the default (aggregate over all data
@@ -33,7 +47,23 @@ export type ChannelType = "size" | "pos" | "color" | "raw";
  */
 export type ChannelSpec<C extends ChannelType = ChannelType> =
   | C
-  | { type: C; entry?: boolean; discrete?: boolean };
+  | { type: C; entry?: boolean; discrete?: boolean }
+  | ("dims" extends C ? DimsChannelSpec : never);
+
+/**
+ * A `dims` option whose slots infer exactly as the top-level options they
+ * stand for: the slot for anchor `k` is the channel `form.topLevel[k]` names
+ * (scatter's bare value and `center` infer as `x`, its `min` as `xMin`). The
+ * counterparts on the two axes must share one spec, since a slot's axis is
+ * known only once the enclosing coordinate space is. A counterpart with no
+ * channel leaves the slot as given.
+ */
+export type DimsChannelSpec = { type: "dims"; form: AxisDimsForm };
+
+/** The channel kind of a `dims` slot by its structure: `size` is a size, a
+ *  bare value or `min`/`center`/`max` a position. */
+export const axisSlotKind = (slot: AxisDimsSlot): "pos" | "size" =>
+  slot === "size" ? "size" : "pos";
 
 export type ChannelAnnotations<T, C extends ChannelType = ChannelType> = {
   [K in keyof T]?: ChannelSpec<C>;
@@ -96,7 +126,17 @@ export type DeriveMarkProps<
                   // measures the resolve-time value).
                   | LiveValue
                   | undefined
-              : ShapeProps[K]
+              : Channels[K] extends "dims" | { type: "dims" }
+                ?
+                    | AxisDims<
+                        | number
+                        | (keyof T & string)
+                        | ((d: T) => number)
+                        | Value<number>
+                        | FieldExpr
+                      >
+                    | undefined
+                : ShapeProps[K]
     : ShapeProps[K];
 } & { debug?: boolean };
 
@@ -192,6 +232,7 @@ export const inferEntrySize = <T>(
  * lodash aggregation (`sumBy` vs `meanBy`). Resolves a numeric value from a
  * field name, field expression, function accessor, or literal number:
  * - number / literal: passed through as a literal.
+ * - `datum(...)`: already a data value, passed through as-is.
  * - string / function / field expression: evaluated per-row via
  *   `evalFieldValues` (fieldExpr.ts) — an aggregate op like `.mean()` folds
  *   the rows there — then aggregated across whatever that evaluation produced.
@@ -211,6 +252,7 @@ const inferNumeric =
       | ((d: T) => number)
       | FieldAccessor
       | LiteralValue
+      | Value<number>
       | undefined,
     d: T | T[],
     measure?: Measure
@@ -218,6 +260,7 @@ const inferNumeric =
     if (accessor === undefined) return undefined;
     if (typeof accessor === "number") return accessor;
     if (isLiteral(accessor)) return accessor.value as number;
+    if (isValue(accessor)) return accessor as MaybeValue<number>;
     const data = Array.isArray(d) ? d : [d];
     // Expression evaluation is orthogonal to this channel: the pipeline maps
     // the rows to values, and an aggregate op (`.mean()`, `.count()`, ...)
@@ -340,4 +383,8 @@ export const CHANNEL_INFER: Record<
   pos: (val, data, measure) => inferPos(val, data, measure),
   color: (val, data) => inferColor(val, data),
   raw: (val, data) => inferRaw(val, data),
+  // Each slot resolves its own measure from `data`: the slots are separate
+  // channels that happen to share one option.
+  dims: (val: AxisDims<any>, data) =>
+    mapAxisDims(val, (v, slot) => CHANNEL_INFER[axisSlotKind(slot)](v, data)),
 };

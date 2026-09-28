@@ -47,6 +47,23 @@ chart(seafood).flow(
 ).mark(rect(h="count", fill="species"))
 ```
 
+## Naming the axis with `dir`
+
+`dir="x"` and `dir="y"` mean the first and second axis in any coordinate
+space. `dir` also takes the names the enclosing coordinate space declares, so
+under [`polar`](/python/api/coords/polar) you can write `dir="theta"` or
+`dir="r"`:
+
+```python
+chart(data, coord=polar()) \
+    .flow(spread(by="month", dir="theta", spacing=0)) \
+    .mark(rect(w=0.5, h="value"))
+```
+
+`dir="theta"` lays the months out exactly as `dir="x"` does. A name the
+enclosing space does not declare raises an error that lists the names it does.
+[`stack`](./stack) takes the same `dir`.
+
 ## Path-aware `by` {#path-aware-by}
 
 `by` accepts a **field name**, a **dotted path string**, or a
