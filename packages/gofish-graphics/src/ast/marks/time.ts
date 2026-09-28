@@ -34,12 +34,18 @@ import { Frame } from "../graphicalOperators/frame";
 import { tween } from "../graphicalOperators/tween";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
+import {
+  projectBy,
+  projectPath,
+  splitEntries,
+  type TimeTier,
+} from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
 import {
   assertOneRowPerKnot,
+  resolveMethod,
   type InterpolationMethod,
 } from "../../interpolate";
 import {
@@ -408,6 +414,7 @@ export const transition = createRelationalMark<TransitionOptions>(
       );
     }
     checkSequencePhases(o, "time.transition()");
+    const method = resolveMethod(o.curve, "time.transition({ curve })");
     // Both halves of "which run, read where" can be written out instead of
     // inferred: `along` names the keyframes' time field and `at` supplies the
     // playhead. Explicit wins, and either one alone is enough to drop the
@@ -453,8 +460,8 @@ export const transition = createRelationalMark<TransitionOptions>(
       times,
       "time.transition()",
       by,
-      typeof inferred.by === "string" && children.length > 0
-        ? projectPath([children[0]], inferred.by)
+      inferred.by !== undefined && children.length > 0
+        ? projectBy(children[0], inferred.by)
         : undefined
     );
     const run = unrollOrder(times, cycle);
@@ -474,7 +481,7 @@ export const transition = createRelationalMark<TransitionOptions>(
         at,
         run,
         sequence,
-        method: resolveMethod(o.curve),
+        method,
         ease: o.ease,
         msPerUnit: tier?.msPerUnit,
         moves: o.moves,
@@ -488,15 +495,6 @@ export const transition = createRelationalMark<TransitionOptions>(
   },
   { temporal: true }
 );
-
-/** `"auto"` on a time axis: the field is numeric (a sequence enforces that),
- *  so the run is a sample of a continuous variable and smooths — the same
- *  conclusion `connect`'s auto rule reaches for a continuous connection axis,
- *  and the reason a transition traces the curve a smooth threaded line
- *  draws. */
-function resolveMethod(curve: TransitionOptions["curve"]): InterpolationMethod {
-  return curve === undefined || curve === "auto" ? "monotone" : curve;
-}
 
 /**
  * Show the keyframes whose bands the sequence's window overlaps, and hide the

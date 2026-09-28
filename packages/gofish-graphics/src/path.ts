@@ -7,6 +7,10 @@ export const lerpPoint = (point1: Point, point2: Point, t: number): Point => {
 };
 
 export type Point = [number, number];
+
+/** Whether two points are the same, allowing for rounding. */
+export const samePoint = (p: Point, q: Point): boolean =>
+  Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9;
 export type LineSegment = {
   type: "line";
   points: [Point, Point];

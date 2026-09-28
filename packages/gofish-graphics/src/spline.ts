@@ -30,7 +30,7 @@
  * `timeWindow.ts`).
  */
 
-import { type BezierCurve, type Point, curve } from "./path";
+import { type BezierCurve, type Point, curve, samePoint } from "./path";
 
 /** d3's sign: 0 counts as positive, so a flat interval next to a rising one
  *  does not cancel it (the min in `monotoneSlopes` makes the slope 0 anyway). */
@@ -230,24 +230,21 @@ export function monotoneJet(
 /** Thread a run of points with the monotone cubic over `knots`: each
  *  coordinate is monotone between neighboring points.
  *
- *  A point that repeats the one before it, at the same knot, is one point, as
- *  d3 drops a coincident point: the slopes are worked out over the distinct
+ *  A point at the same knot as the one before it repeats that point, as d3
+ *  drops a coincident point: the slopes are worked out over the distinct
  *  points, the repeat takes the slope of the point it repeats, and its
- *  segment, of zero length, is that point. Every input interval keeps its
+ *  segment, of zero length, joins the two. Every input interval keeps its
  *  segment, so a time window can still cut the path by index. Centripetal
- *  knots are the only ones that repeat, and they repeat only where two points
- *  coincide. */
+ *  knots are the only ones that repeat: a run's own parameter never does
+ *  (`connect` only takes one that moves one way), and centripetal knots
+ *  repeat where two points are the same up to rounding (`samePoint`). */
 export function monotonePath(points: Point[], knots: number[]): BezierCurve[] {
   // The distinct points, and for each input point the distinct one it is.
   const kept: number[] = [];
   const keptAt: number[] = [];
-  points.forEach((p, i) => {
+  points.forEach((_, i) => {
     const last = kept[kept.length - 1];
-    const repeats =
-      last !== undefined &&
-      knots[i] === knots[last] &&
-      p[0] === points[last][0] &&
-      p[1] === points[last][1];
+    const repeats = last !== undefined && knots[i] === knots[last];
     if (!repeats) kept.push(i);
     keptAt.push(kept.length - 1);
   });
@@ -270,10 +267,15 @@ export function catmullRomPath(points: Point[]): BezierCurve[] {
  *  points. This is the parameterization that keeps a Catmull-Rom segment from
  *  forming a cusp or a loop (Yuksel, Schaefer and Keyser, 2011), and the one
  *  d3's `curveCatmullRom` uses by default. It depends on where the points sit
- *  on screen. */
+ *  on screen. Two points that are the same up to rounding (`samePoint`) are
+ *  one point, so the interval between them is exactly 0. */
 export function centripetalKnots(points: Point[]): number[] {
   const knots = points.length === 0 ? [] : [0];
   for (let i = 1; i < points.length; i++) {
+    if (samePoint(points[i], points[i - 1])) {
+      knots.push(knots[i - 1]);
+      continue;
+    }
     const distance = Math.hypot(
       points[i][0] - points[i - 1][0],
       points[i][1] - points[i - 1][1]

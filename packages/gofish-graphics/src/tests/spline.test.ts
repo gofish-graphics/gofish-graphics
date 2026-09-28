@@ -313,6 +313,51 @@ console.log("# monotone: the same curve as d3 on a repeated point");
   );
 }
 
+console.log("# monotone: a point off by rounding is a repeated point");
+{
+  // Threaded as a run with no parameter of its own, on centripetal knots.
+  const thread = (points: Point[]) =>
+    monotonePath(points, centripetalKnots(points));
+  const exact = thread([
+    [0, 0],
+    [50, 50],
+    [50, 50],
+    [100, 0],
+  ]);
+  const noisy = thread([
+    [0, 0],
+    [50, 50],
+    [50 + 1e-10, 50],
+    [100, 0],
+  ]);
+  const numbers = (path: typeof exact) =>
+    path.flatMap((c) => [...c.start, ...c.control1, ...c.control2, ...c.end]);
+  const a = numbers(exact);
+  const b = numbers(noisy);
+  ok(
+    "the same path as the exact repeat",
+    a.length === b.length && a.every((x, i) => near(x, b[i])),
+    JSON.stringify(noisy)
+  );
+  // Knots that round to one value where the points do not quite coincide
+  // are one moment, so they are one point too, and nothing throws.
+  let threw = false;
+  try {
+    monotonePath(
+      [
+        [0, 0],
+        [50, 50],
+        [50, 51],
+        [100, 0],
+      ],
+      [0, 1e20, 1e20, 2e20]
+    );
+  } catch {
+    threw = true;
+  }
+  ok("a repeated knot does not throw", !threw);
+}
+
 console.log("# monotone: the knots must be strictly ascending");
 {
   const throws = (knots: number[]) => {

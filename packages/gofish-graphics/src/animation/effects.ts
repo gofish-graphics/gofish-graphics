@@ -126,8 +126,10 @@ export type TimedEffect = {
  *  `time` (which would cycle). */
 export type TweenEffect = {
   readonly __tween: true;
-  /** How the run is read between keyframes, as for `time.transition`. */
-  readonly curve?: "auto" | InterpolationMethod;
+  /** How the run is read between keyframes, as for `time.transition`,
+   *  resolved (`resolveMethod`), so an unset curve and `"auto"` are
+   *  `"monotone"` here. */
+  readonly curve: InterpolationMethod;
   /** A time warp inside each keyframe interval, resolved. */
   readonly ease?: (u: number) => number;
   layer: () => unknown;

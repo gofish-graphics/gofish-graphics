@@ -23,6 +23,36 @@ import { lerp } from "./util";
  *  parameter; the screen-space Catmull-Rom a `line` can draw is not one. */
 export type InterpolationMethod = "step" | "linear" | "monotone";
 
+const METHODS: readonly InterpolationMethod[] = ["step", "linear", "monotone"];
+
+/**
+ * The method a `curve` (or `method`) option names. Unset and `"auto"` are
+ * `"monotone"`: the field is numeric, so the run is a sample of a continuous
+ * variable and smooths — the same conclusion `connect`'s auto rule reaches for
+ * a continuous connection axis, and the reason a transition traces the curve
+ * a smooth threaded line draws. Anything else that is not a method throws,
+ * naming `where` the option was written.
+ */
+export function resolveMethod(
+  curve: unknown,
+  where: string
+): InterpolationMethod {
+  if (curve === undefined || curve === "auto") return "monotone";
+  if (METHODS.includes(curve as InterpolationMethod)) {
+    return curve as InterpolationMethod;
+  }
+  const screenOnly =
+    curve === "catmullRom"
+      ? ` Catmull-Rom is a screen-space path curve: a line's or a ribbon's ` +
+        `\`curve\` can draw it, but nothing reads it over time.`
+      : "";
+  throw new Error(
+    `[gofish] ${where}: ${typeof curve === "string" ? JSON.stringify(curve) : String(curve)} is not a way to read a run ` +
+      `between its keyframes. Use "step", "linear" or "monotone".` +
+      screenOnly
+  );
+}
+
 /** Where `t` falls in a run: the segment index and the local fraction in it. */
 export type KnotLocation = { i: number; u: number };
 
@@ -238,8 +268,9 @@ export type InterpolateOptions = {
  */
 export function interpolate<T extends Record<string, unknown>>(
   rows: readonly T[],
-  { along, key, at, method = "monotone", fields }: InterpolateOptions
+  { along, key, at, method: written, fields }: InterpolateOptions
 ): Record<string, unknown>[] {
+  const method = resolveMethod(written, "interpolate({ method })");
   // Key order is first appearance, so the output is a deterministic function
   // of the input rather than of a hash's iteration order.
   const runs = Map.groupBy(rows, (row) => row[key]);

@@ -82,37 +82,43 @@ export type SequenceCurve = {
   takesKnots: boolean;
 };
 
-const registry = new Map<string, RouteEntry | SequenceCurve>();
+/** The pairwise routes, which `registerRoute` extends. */
+const routes = new Map<string, RouteEntry>();
 
-const isRoute = (entry: RouteEntry | SequenceCurve): entry is RouteEntry =>
-  "fn" in entry;
-
-const namesOf = (sequence: boolean): string[] =>
-  [...registry].filter(([, e]) => isRoute(e) !== sequence).map(([n]) => n);
+/** The sequence curves. These are built in: `connect` threads them over the
+ *  whole run, which a router never sees, so `registerRoute` cannot add or
+ *  replace one. */
+const sequenceCurves = new Map<string, SequenceCurve>();
 
 export function registerRoute(
   name: string,
   fn: Router,
   opts?: { ribbon?: boolean }
 ): void {
-  registry.set(name, { fn, ribbon: opts?.ribbon ?? false });
+  if (sequenceCurves.has(name)) {
+    throw new Error(
+      `[gofish] registerRoute("${name}"): "${name}" is a built-in sequence ` +
+        `curve, which threads the whole run of points rather than routing ` +
+        `each pair. Register the route under another name.`
+    );
+  }
+  routes.set(name, { fn, ribbon: opts?.ribbon ?? false });
 }
 
 export function getRoute(name: string): Router {
-  const entry = registry.get(name);
-  if (!entry || !isRoute(entry)) {
+  const entry = routes.get(name);
+  if (!entry) {
     throw new Error(
-      `connect: unknown route "${name}". Registered routes: ${namesOf(
-        false
-      ).join(", ")}.`
+      `connect: unknown route "${name}". Registered routes: ${[
+        ...routes.keys(),
+      ].join(", ")}.`
     );
   }
   return entry.fn;
 }
 
 export function hasRoute(name: string): boolean {
-  const entry = registry.get(name);
-  return entry !== undefined && isRoute(entry);
+  return routes.has(name);
 }
 
 /** The sequence curve registered under `name`, or undefined when `name` is a
@@ -120,12 +126,11 @@ export function hasRoute(name: string): boolean {
 export function sequenceCurve(
   name: string | undefined
 ): SequenceCurve | undefined {
-  const entry = name === undefined ? undefined : registry.get(name);
-  return entry === undefined || isRoute(entry) ? undefined : entry;
+  return name === undefined ? undefined : sequenceCurves.get(name);
 }
 
 /** The names of the registered sequence curves. */
-export const sequenceCurveNames = (): string[] => namesOf(true);
+export const sequenceCurveNames = (): string[] => [...sequenceCurves.keys()];
 
 /** Resolve a `Curve` (string or spec) to its router fn + options. */
 export function resolveCurve(curve: Curve): {
@@ -281,12 +286,12 @@ registerRoute("perfectArrows", perfectArrowsRouter, { ribbon: false });
 // The monotone cubic is read over the run's parameter, and a run with none is
 // threaded with centripetal knots. The Catmull-Rom is a shape on screen: its
 // knots are always centripetal.
-registry.set("monotone", {
+sequenceCurves.set("monotone", {
   thread: (points, knots) =>
     monotonePath(points, knots ?? centripetalKnots(points)),
   takesKnots: true,
 });
-registry.set("catmullRom", {
+sequenceCurves.set("catmullRom", {
   thread: (points) => catmullRomPath(points),
   takesKnots: false,
 });

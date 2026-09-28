@@ -62,8 +62,8 @@ value that orders the line. `line` uses the first of these that it finds:
 - The points' positions on the connection axis, when that axis is continuous
   and the points are in order along it, e.g., a line chart over x.
 - The distances between the points on the screen, when neither of the above
-  applies. These are centripetal knots. Two points at the same spot then make
-  a knot interval of zero length, which is an error.
+  applies. These are centripetal knots. Two points at the same spot, up to
+  rounding, are one point: the curve drops the repeat, as d3 does.
 
 Because the knots come from the data, a monotone line and a
 [`time.transition()`](/js/animation) through the same points follow the same

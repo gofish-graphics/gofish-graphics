@@ -1,4 +1,4 @@
-import { Path, transformPath } from "../../path";
+import { Path, samePoint, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, type ToPixel } from "../_node";
@@ -130,10 +130,6 @@ function firstStepBack(values: readonly number[]): number {
   }
   return -1;
 }
-
-/** Whether two points are the same, allowing for rounding. */
-const samePoint = (p: [number, number], q: [number, number]): boolean =>
-  Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9;
 
 /**
  * A candidate parameter of a run, as the knots of its curve: one value per

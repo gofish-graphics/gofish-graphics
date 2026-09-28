@@ -32,6 +32,7 @@ import { items, pausedClock } from "./animationTestHelpers";
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import { drivingShifts } from "../data/drivingShifts";
+import { sameTween } from "../animation/effects";
 
 const {
   animation,
@@ -45,6 +46,7 @@ const {
   layer,
   line,
   orthogonal,
+  registerRoute,
   ribbon,
   scatter,
   selectAll,
@@ -548,7 +550,9 @@ async function main(): Promise<void> {
         .filter(({ item }) => item.kind === "ellipse")
         .filter(({ item }) => item.style?.opacity !== 0).length;
     const dayCenters = items(
-      await days(1, true, Infinity).mark(circle({ r: 4 })).toDisplayList(OPTIONS)
+      await days(1, true, Infinity)
+        .mark(circle({ r: 4 }))
+        .toDisplayList(OPTIONS)
     )
       .filter((item) => item.kind === "ellipse")
       .map((item) => [item.cx, item.cy] as Point);
@@ -644,7 +648,9 @@ async function main(): Promise<void> {
 
     const why = await (async () => {
       try {
-        await days(1, 5).mark(circle({ r: 4 })).toDisplayList(OPTIONS);
+        await days(1, 5)
+          .mark(circle({ r: 4 }))
+          .toDisplayList(OPTIONS);
         return "no error";
       } catch (e) {
         const message = String((e as Error).message);
@@ -846,6 +852,76 @@ async function main(): Promise<void> {
     /interpolate\(\): the run for "us" has two rows at year = 1958\b.*Aggregate/
   );
   ok("interpolate() over two rows at one year", !why, why);
+  // The run's key is named whatever the split is: here a function.
+  why = await throws(
+    () =>
+      chart(doubled.map((d: any) => ({ ...d, who: "us" })))
+        .flow(
+          time.sequence({ by: "year", on: clockAt(1958.5) }),
+          group({ by: (d: any) => d.who }),
+          scatter({ x: "miles", y: "gas" })
+        )
+        .mark(circle({ r: 4 }))
+        .layer(time.transition())
+        .toDisplayList(OPTIONS),
+    /time\.transition\(\): the run for "us" has two rows at year = 1958\b/
+  );
+  ok("a transition split by a function names the run's key", !why, why);
+
+  // A curve that is not a reading of values over time is an error wherever
+  // it is written, and Catmull-Rom says it is a path curve.
+  const notAMethod = [
+    [
+      "catmullRom",
+      /"catmullRom" is not a way.*"step", "linear" or "monotone".*screen-space path curve/,
+    ],
+    ["linaer", /"linaer" is not a way.*"step", "linear" or "monotone"/],
+  ] as const;
+  for (const [curve, pattern] of notAMethod) {
+    why = await throws(
+      () =>
+        keyframes(drivingShifts, 1958.5)
+          .mark(circle({ r: 4 }))
+          .layer(time.transition({ curve }))
+          .toDisplayList(OPTIONS),
+      new RegExp(`time\\.transition\\(\\{ curve \\}\\): ${pattern.source}`)
+    );
+    ok(`time.transition({ curve: "${curve}" })`, !why, why);
+    why = await throws(
+      async () => animation.tween({ curve }),
+      new RegExp(`animation\\.tween\\(\\{ curve \\}\\): ${pattern.source}`)
+    );
+    ok(`animation.tween({ curve: "${curve}" })`, !why, why);
+    why = await throws(
+      async () =>
+        interpolate(
+          drivingShifts.map((d: any) => ({ ...d, key: "us" })),
+          { along: "year", key: "key", at: 1958.5, method: curve }
+        ),
+      new RegExp(`interpolate\\(\\{ method \\}\\): ${pattern.source}`)
+    );
+    ok(`interpolate({ method: "${curve}" })`, !why, why);
+  }
+
+  // Unset, "auto" and "monotone" are one curve, so one transition moves
+  // marks that chain any of them.
+  ok(
+    'tween(), tween({ curve: "auto" }) and tween({ curve: "monotone" }) are one tween',
+    sameTween(animation.tween(), animation.tween({ curve: "monotone" })) &&
+      sameTween(animation.tween({ curve: "auto" }), animation.tween()) &&
+      !sameTween(animation.tween(), animation.tween({ curve: "linear" }))
+  );
+
+  // The sequence curves are built in: a route cannot take their names.
+  for (const name of ["monotone", "catmullRom"]) {
+    why = await throws(
+      async () => registerRoute(name, () => []),
+      new RegExp(
+        `registerRoute\\("${name}"\\): "${name}" is a built-in sequence curve`
+      )
+    );
+    ok(`registerRoute("${name}", ...)`, !why, why);
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
