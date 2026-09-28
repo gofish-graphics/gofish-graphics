@@ -19,8 +19,9 @@
  * The dispatch's client_payload is { branch, run_id, paths, removals }.
  * GitHub allows at most 10 top-level keys and 65535 characters in it. Story
  * paths are about 60 characters, so this holds for about a thousand stories;
- * a larger request is refused with a pointer to running the accept script
- * with `--all` by hand.
+ * a larger request is refused. The error says how to run the accept script
+ * by hand: `--all` accepts every diff the run reported, or `--accept-file`
+ * and `--remove-file` take a chosen subset.
  *
  * GITHUB_TOKEN is a Cloudflare Pages secret. It needs Contents write, which
  * is what GitHub requires to send repository_dispatch, and Commit statuses
@@ -124,8 +125,9 @@ async function handleAccept(
       {
         ok: false,
         error:
-          "Too many paths for one repository_dispatch. Accept everything by hand instead: " +
-          `tests/scripts/accept-baselines.sh ${runId} ${branch} --all`,
+          "Too many paths for one repository_dispatch. Run the accept script by hand: " +
+          `tests/scripts/accept-baselines.sh ${runId} ${branch} --all accepts every diff this run reported, ` +
+          "or pass --accept-file/--remove-file for a subset.",
       },
       413
     );

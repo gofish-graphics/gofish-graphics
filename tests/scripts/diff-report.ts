@@ -143,6 +143,9 @@ function generateReport(entries: ReportEntry[]): string {
           </div>`;
       }
 
+      // tests/scripts/accept-baselines.sh --all reads the kind label and path
+      // spans below, and the "N difference(s) found" count, to learn which
+      // diffs a CI run reported. Keep them in step.
       return `
     <div style="border:1px solid #ddd;margin:16px 0;border-radius:6px;overflow:hidden;">
       <div style="padding:12px 16px;background:${kindColor[d.kind]}22;border-bottom:1px solid #ddd;">

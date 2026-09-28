@@ -14,7 +14,7 @@
 #
 # The `accept-visual-baselines.yml` workflow runs this when someone clicks
 # Accept on the review site. You can also run it locally; it needs `gh`
-# (authenticated), `git`, `git-lfs` and `jq`, and must run inside a clone of
+# (authenticated), `git`, `git-lfs` and (for --all) `python3`, and must run inside a clone of
 # the repository. Files always come from the CI run, never from a local
 # capture, so baselines are never rendered on a developer machine.
 #
@@ -24,10 +24,11 @@
 #       [--accept-file FILE] [--remove-file FILE] [--dry-run]
 #
 #   <branch>        code branch of the run, e.g. "my-feature" (not "snapshots/...")
-#   --all           accept everything a compare of the run's capture against
-#                   the current baseline reports: every story whose DOM differs
-#                   or has no baseline, and the removal of every baseline whose
-#                   story is not in the capture
+#   --all           accept exactly the diffs the run reported, as its review
+#                   site lists them: its regressions and new stories, and its
+#                   removed stories (whose baselines are deleted). The list is
+#                   read from the run's `visual-diff-report` artifact; the
+#                   script fails if that is missing or unreadable
 #   --accept-file   file with one story path per line (e.g. "forward-syntax/bar--basic.html")
 #   --remove-file   file with one story path per line whose baseline to delete
 #   --dry-run       build the commit but do not push it
@@ -172,24 +173,6 @@ checkout_base() {
   fi
 }
 
-# Lists what --all accepts, by comparing the capture against the checked-out
-# baseline exactly as compare.ts does (DOM text only).
-compute_all() {
-  : > "$WORK/accept.txt"
-  : > "$WORK/remove.txt"
-  local p
-  while IFS= read -r p; do
-    if ! cmp -s "$CAPTURE/$p" "$WT/dom/$p"; then
-      printf '%s\n' "$p" >> "$WORK/accept.txt"
-    fi
-  done < <(cd "$CAPTURE" && find . -name '*.html' | sed 's|^\./||' | LC_ALL=C sort)
-  if [ -d "$WT/dom" ]; then
-    while IFS= read -r p; do
-      [ -f "$CAPTURE/$p" ] || printf '%s\n' "$p" >> "$WORK/remove.txt"
-    done < <(cd "$WT/dom" && find . -name '*.html' | sed 's|^\./||' | LC_ALL=C sort)
-  fi
-}
-
 # Applies the accept and remove lists to $WT and creates the commit in
 # COMMIT (empty when nothing changed).
 build_commit() {
@@ -246,14 +229,60 @@ build_commit() {
   echo "Created $COMMIT: $message"
 }
 
+# --all: read the diff list the run itself reported, from its diff report
+# (tests/tmp/diff-report.html, uploaded as `visual-diff-report`). The review
+# site lists exactly the same entries: build-review-site.ts and diff-report.ts
+# both list collectDiffs() + collectRemovedStories() in the same job, over the
+# same capture and baselines. REGRESSION and NEW entries are accepted;
+# REMOVED entries delete their baseline. Nothing is recomputed against the
+# snapshot branch as it is now.
+if [ "$ALL" = 1 ]; then
+  echo "Downloading visual-diff-report from run $RUN_ID..."
+  if ! gh run download "$RUN_ID" --name visual-diff-report --dir "$WORK/report"; then
+    echo "error: run $RUN_ID has no visual-diff-report artifact (it reported no diffs, or the artifact expired)" >&2
+    exit 1
+  fi
+  python3 - "$WORK/report/diff-report.html" "$WORK/reported-accept.txt" "$WORK/reported-remove.txt" << 'EOF'
+import html, re, sys
+
+report, accept_out, remove_out = sys.argv[1:4]
+try:
+    text = open(report, encoding="utf-8").read()
+except OSError as e:
+    sys.exit(f"error: cannot read the diff report: {e}")
+# Markup written by tests/scripts/diff-report.ts: a kind label, then the path.
+entries = re.findall(
+    r'<span style="font-weight:bold;color:[^"]*;">([^<]*)</span>\s*'
+    r'<span style="margin-left:12px;font-family:monospace;">([^<]*)</span>',
+    text,
+)
+total = re.search(r"<p>(\d+) difference\(s\) found\.", text)
+if total is None or int(total.group(1)) != len(entries) or not entries:
+    sys.exit(
+        f"error: could not read the diff report: found {len(entries)} entries, "
+        f"header says {total.group(1) if total else 'nothing'}"
+    )
+kinds = {"REGRESSION": accept_out, "NEW (no baseline)": accept_out, "REMOVED": remove_out}
+lists = {accept_out: [], remove_out: []}
+for label, path in entries:
+    if label not in kinds:
+        sys.exit(f"error: the diff report has an entry of unknown kind '{label}': {path}")
+    lists[kinds[label]].append(html.unescape(path))
+for out, paths in lists.items():
+    with open(out, "w", encoding="utf-8") as f:
+        f.writelines(p + "\n" for p in paths)
+EOF
+  ACCEPT_FILE="$WORK/reported-accept.txt"
+  REMOVE_FILE="$WORK/reported-remove.txt"
+  echo "Run $RUN_ID reported $(wc -l < "$ACCEPT_FILE" | tr -d ' ') diff(s) to accept and $(wc -l < "$REMOVE_FILE" | tr -d ' ') removal(s):"
+  sed 's/^/  accept: /' "$ACCEPT_FILE"
+  sed 's/^/  remove: /' "$REMOVE_FILE"
+fi
+
 for attempt in 1 2 3 4 5; do
   checkout_base
-  if [ "$ALL" = 1 ]; then
-    compute_all
-  else
-    read_list "$ACCEPT_FILE" > "$WORK/accept.txt"
-    read_list "$REMOVE_FILE" > "$WORK/remove.txt"
-  fi
+  read_list "$ACCEPT_FILE" > "$WORK/accept.txt"
+  read_list "$REMOVE_FILE" > "$WORK/remove.txt"
   build_commit
 
   if [ -z "$COMMIT" ] || [ "$DRY_RUN" = 1 ]; then
