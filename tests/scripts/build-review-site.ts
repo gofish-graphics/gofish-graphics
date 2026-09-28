@@ -121,18 +121,18 @@ write(
 // data/meta.json
 // ---------------------------------------------------------------------------
 
-const codeBranch = process.env.REVIEW_BRANCH ?? "unknown";
 const meta = {
   repo: process.env.REVIEW_REPO ?? "unknown/repo",
-  branch: codeBranch,
+  /** Code branch. Accepted baselines go to the snapshot branch
+   *  `snapshots/<branch>`. */
+  branch: process.env.REVIEW_BRANCH ?? "unknown",
   sha: process.env.REVIEW_SHA ?? "unknown",
-  /** The orphan branch that receives accepted snapshots. */
-  snapshotBranch: `snapshots/${codeBranch}`,
-  /** Workflow run id. After Commit Accepted, the commit endpoint sends it in a
-   *  repository_dispatch; the rerun-visual-tests workflow waits for the run to
-   *  finish and re-runs its failed jobs. That re-runs only the cheap
-   *  `visual-test` compare job against the newly accepted baselines; it reuses
-   *  the JS capture that the first attempt uploaded as an artifact. */
+  /** Workflow run id. Commit Accepted sends it, with the accepted paths, to
+   *  the commit endpoint, which dispatches the accept-visual-baselines
+   *  workflow. That workflow copies the accepted files from this run's
+   *  `js-dom-capture` artifact, commits them, and then re-runs the run's
+   *  failed jobs, which re-runs only the cheap `visual-test` compare job
+   *  against the new baselines. */
   runId: process.env.REVIEW_RUN_ID ?? "",
 };
 
@@ -143,7 +143,7 @@ console.log(
 );
 
 // ---------------------------------------------------------------------------
-// data/dom-diffs/{path}.html  and  screenshots/  and  _after-files/
+// data/dom-diffs/{path}.html  and  screenshots/
 // ---------------------------------------------------------------------------
 
 for (const entry of diffs) {
@@ -179,20 +179,6 @@ for (const entry of diffs) {
     copyFile(
       entry.afterScreenshotPath,
       join(OUT_DIR, "screenshots/after", pngPath)
-    );
-  }
-
-  // _after-files/dom/{path}.html  — used by Pages Functions for accept
-  if (entry.afterDom !== null) {
-    write(join(OUT_DIR, "_after-files/dom", entry.path), entry.afterDom);
-  }
-
-  // _after-files/screenshots/{path}.png
-  if (entry.afterScreenshotPath) {
-    const pngPath = entry.path.replace(/\.html$/, ".png");
-    copyFile(
-      entry.afterScreenshotPath,
-      join(OUT_DIR, "_after-files/screenshots", pngPath)
     );
   }
 }
@@ -489,13 +475,6 @@ const html = `<!DOCTYPE html>
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function arrayBufferToBase64(buf) {
-    const bytes = new Uint8Array(buf);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary);
-  }
-
   function stopStrobe() {
     if (strobeInterval) { clearInterval(strobeInterval); strobeInterval = null; }
   }
@@ -691,7 +670,7 @@ const html = `<!DOCTYPE html>
     document.getElementById('btn-accept-all').disabled = busy;
     document.getElementById('btn-commit').disabled = busy || !hasUncommittedAccepts;
     if (busy) {
-      document.getElementById('action-status').innerHTML = '<span class="spinner"></span>Committing...';
+      document.getElementById('action-status').innerHTML = '<span class="spinner"></span>Sending...';
     }
   }
 
@@ -734,118 +713,53 @@ const html = `<!DOCTYPE html>
     const acceptedEntries = allDiffs.filter(d => d.status === 'accepted');
     if (acceptedEntries.length === 0) return;
 
-    // "removed" entries have no after-state to write — accepting one means
-    // deleting the baseline instead of updating it. Split so we only fetch
-    // after-files for real updates.
-    const updateEntries = acceptedEntries.filter(e => e.kind !== 'removed');
-    const removalEntries = acceptedEntries.filter(e => e.kind === 'removed');
-
-    // Cloudflare Workers cap each invocation at 50 outgoing subrequests
-    // (free plan). The Worker spends 5–7 on fixed Git data API calls and
-    // 1 blob-create per accepted screenshot, so a single /api/commit
-    // beyond ~42 entries trips the limit. Chunk the accepts (updates and
-    // removals together) and let the Worker make one commit per chunk on
-    // top of the previous chunk's HEAD — final result is a small commit
-    // chain instead of one.
-    const CHUNK_SIZE = 25;
+    // Only the decision goes to the server. The accept-visual-baselines
+    // GitHub workflow copies the files from this run's capture artifact and
+    // commits them, so nothing is downloaded or uploaded here. "removed"
+    // entries have no after-state: accepting one deletes the baseline.
+    const paths = acceptedEntries.filter(e => e.kind !== 'removed').map(e => e.path);
+    const removals = acceptedEntries.filter(e => e.kind === 'removed').map(e => e.path);
 
     setAcceptBusy(true);
     try {
-      // Phase 1: fetch file contents in the browser (avoids Worker subrequest limit)
-      document.getElementById('action-status').innerHTML =
-        '<span class="spinner"></span>Fetching ' + updateEntries.length + ' file(s)...';
-      const domContents = {};
-      const screenshotContents = {};
-      await Promise.all(updateEntries.map(async (entry) => {
-        const pngPath = entry.path.replace(/\\.html$/, '.png');
-        const [domRes, screenshotRes] = await Promise.all([
-          fetch('/_after-files/dom/' + entry.path),
-          fetch('/_after-files/screenshots/' + pngPath),
-        ]);
-        if (domRes.ok) domContents[entry.path] = await domRes.text();
-        if (screenshotRes.ok) screenshotContents[pngPath] = arrayBufferToBase64(await screenshotRes.arrayBuffer());
-      }));
-
-      // Phase 2: send to Worker for committing, chunked.
-      const combined = [
-        ...updateEntries.map(e => ({ path: e.path, action: 'update' })),
-        ...removalEntries.map(e => ({ path: e.path, action: 'remove' })),
-      ];
-      const chunks = [];
-      for (let i = 0; i < combined.length; i += CHUNK_SIZE) {
-        chunks.push(combined.slice(i, i + CHUNK_SIZE));
+      const res = await fetch('/api/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repo: meta.repo,
+          branch: meta.branch,
+          runId: meta.runId,
+          headSha: meta.sha,
+          paths,
+          removals,
+        }),
+      });
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        const text = await res.text();
+        setActionStatus('Server error (' + res.status + '): expected JSON but got ' + ct.split(';')[0].trim() + '. Check that the review site was built and deployed with the latest functions.', true);
+        console.error('/api/commit non-JSON response:', text.slice(0, 500));
+        return;
       }
-
-      let totalAccepted = 0;
-      let totalRemoved = 0;
-      let lastCommitSha = '';
-      const allErrors = [];
-      const allWarnings = [];
-
-      for (let ci = 0; ci < chunks.length; ci++) {
-        const chunk = chunks[ci];
-        const isLastChunk = ci === chunks.length - 1;
-        const chunkPaths = chunk.filter(c => c.action === 'update').map(c => c.path);
-        const chunkRemovals = chunk.filter(c => c.action === 'remove').map(c => c.path);
-        const chunkDom = {};
-        const chunkScreens = {};
-        for (const path of chunkPaths) {
-          if (domContents[path] != null) chunkDom[path] = domContents[path];
-          const pngPath = path.replace(/\\.html$/, '.png');
-          if (screenshotContents[pngPath] != null) chunkScreens[pngPath] = screenshotContents[pngPath];
-        }
-
-        const label = chunks.length > 1 ? ' (' + (ci + 1) + '/' + chunks.length + ')' : '';
-        document.getElementById('action-status').innerHTML =
-          '<span class="spinner"></span>Committing' + label + '...';
-
-        const res = await fetch('/api/commit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paths: chunkPaths,
-            removals: chunkRemovals,
-            domContents: chunkDom,
-            screenshotContents: chunkScreens,
-            repo: meta.repo,
-            branch: meta.snapshotBranch,
-            // Only run post-commit actions (CI rerun + status update) once,
-            // after the final chunk lands.
-            runId: isLastChunk ? meta.runId : undefined,
-            headSha: isLastChunk ? meta.sha : undefined,
-          }),
-        });
-        const ct = res.headers.get('content-type') || '';
-        if (!ct.includes('application/json')) {
-          const text = await res.text();
-          setActionStatus('Server error (' + res.status + ') on chunk ' + (ci + 1) + '/' + chunks.length + ': expected JSON but got ' + ct.split(';')[0].trim() + '. Check that the review site was built and deployed with the latest functions.', true);
-          console.error('/api/commit non-JSON response:', text.slice(0, 500));
-          return;
-        }
-        const data = await res.json();
-        if (res.status === 401) {
-          setActionStatus('Token expired — GITHUB_TOKEN is invalid or revoked.', true);
-          return;
-        }
-        if (!res.ok || !data.ok) {
-          setActionStatus('Error on chunk ' + (ci + 1) + '/' + chunks.length + ': ' + (data.error || 'Unknown error'), true);
-          return;
-        }
-        totalAccepted += data.accepted || 0;
-        totalRemoved += data.removed || 0;
-        lastCommitSha = data.commitSha || lastCommitSha;
-        if (data.errors && data.errors.length) allErrors.push(...data.errors);
-        if (data.postCommitWarnings && data.postCommitWarnings.length) allWarnings.push(...data.postCommitWarnings);
+      const data = await res.json();
+      if (res.status === 401) {
+        setActionStatus('Token expired: GITHUB_TOKEN is invalid or revoked.', true);
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        setActionStatus('Error: ' + (data.error || 'Unknown error'), true);
+        return;
       }
 
       hasUncommittedAccepts = false;
-      const warnings = allWarnings.join('; ');
-      const commitsNote = chunks.length > 1 ? ' over ' + chunks.length + ' commits' : '';
-      const removedNote = totalRemoved > 0 ? ', removed ' + totalRemoved : '';
-      const msg = 'Committed ' + totalAccepted + ' diff(s)' + removedNote + commitsNote + ': ' + (lastCommitSha || '').slice(0, 8) +
-        (allErrors.length ? ' (' + allErrors.length + ' errors)' : '') +
-        (warnings ? ' — warnings: ' + warnings : '');
-      setActionStatus(msg, allErrors.length > 0 || Boolean(warnings));
+      const removedNote = removals.length > 0 ? ', removing ' + removals.length : '';
+      const warnings = (data.warnings || []).join('; ');
+      const el = document.getElementById('action-status');
+      el.className = warnings ? 'error' : '';
+      el.innerHTML = 'Accepting ' + paths.length + ' diff(s)' + removedNote + '. ' +
+        'A GitHub Action commits the baselines in about a minute, then re-runs the failed visual tests once this run has finished. ' +
+        '<a href="' + escHtml(data.workflowUrl) + '" target="_blank" rel="noopener">Follow it on GitHub</a>' +
+        (warnings ? ' (warnings: ' + escHtml(warnings) + ')' : '');
       renderSidebar();
       updateCommitBtn();
     } catch (e) {

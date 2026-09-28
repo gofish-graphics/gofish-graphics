@@ -1,73 +1,55 @@
 /**
- * Cloudflare Pages Function: batch-commit accepted visual diff stories.
+ * Cloudflare Pages Function: hand accepted visual diffs to GitHub Actions.
  *
  * Route: POST /api/commit
  *
- * The client fetches file contents in the browser (no subrequest limit) and
- * sends them in the request body. The Worker only makes GitHub API calls:
- * - 1 blob creation per screenshot (binary, needs blob API)
- * - DOM files use tree `content` field directly (no blob API needed)
- * - Deletions (`removals`) use the same tree API with `sha: null` — no blob
- *   calls, plus 1 extra recursive-tree fetch (only when removals is
- *   non-empty) to know which paths actually exist on the base tree, since
- *   the tree API errors if asked to delete a path that isn't there.
- * - 6–9 fixed GitHub calls: get ref, get commit, (get recursive tree if
- *   removals present), create tree, create commit, update/create ref, and
- *   (final chunk only) status update + repository_dispatch.
- *
- * Cloudflare caps each invocation at 50 outgoing subrequests (free plan),
- * so the client splits accepts into chunks of ~25 and calls /api/commit
- * once per chunk. Each chunk creates a follow-on commit on top of the
- * previous chunk's HEAD — fine for the snapshot orphan branch, whose
- * history is already a long "Accept N visual diff(s)" chain.
+ * The review site sends only what the reviewer decided: which stories of
+ * which CI run to accept, and which stale baselines to remove. This function
+ * sends that as one `visual-baselines-accept` repository_dispatch and returns
+ * right away. The `accept-visual-baselines.yml` workflow does the file work
+ * with plain git from the run's own `js-dom-capture` artifact (see
+ * tests/scripts/accept-baselines.sh): it commits the baselines to
+ * `snapshots/<branch>` in one commit, marks the `Visual Diff Review` status
+ * as success, and re-runs the run's failed jobs once the run has finished.
  *
  * Request body:
- *   { paths, removals?, domContents, screenshotContents, repo, branch,
- *     headSha?, runId? }  // headSha/runId set on the final chunk only
+ *   { repo, branch, runId, headSha?, paths, removals? }
+ *   branch is the code branch (the workflow writes to snapshots/<branch>).
  *
- * GITHUB_TOKEN is a Cloudflare Pages secret. It needs Contents write (to
- * commit baselines and to send repository_dispatch) and Commit statuses write.
- * It does not need Actions write: re-running the failed jobs happens in the
- * `rerun-visual-tests.yml` workflow, which the dispatch triggers. That
- * workflow waits for the run to finish first, because GitHub rejects
- * rerun-failed-jobs with 403 while any job of the run is still in progress
- * (people usually accept while `python-parity` is still running).
+ * The dispatch's client_payload is { branch, run_id, paths, removals }.
+ * GitHub allows at most 10 top-level keys and 65535 characters in it. Story
+ * paths are about 60 characters, so this holds for about a thousand stories;
+ * a larger request is refused with a pointer to running the accept script
+ * with `--all` by hand.
+ *
+ * GITHUB_TOKEN is a Cloudflare Pages secret. It needs Contents write, which
+ * is what GitHub requires to send repository_dispatch, and Commit statuses
+ * write, to mark the review as pending while the workflow runs (optional:
+ * without it the accept still happens). It no longer writes any files, and
+ * it does not need Actions access: the workflow downloads the artifact and
+ * re-runs the jobs with its own token.
  */
 
 interface Env {
   GITHUB_TOKEN: string;
 }
 
-interface CommitBody {
-  /** Story paths to add/update as baselines. */
-  paths: string[];
-  /**
-   * Story paths whose baseline (dom + screenshot) should be deleted from
-   * the snapshot branch — the accept-removal counterpart to `paths`.
-   * Additive: omitting it (older clients) behaves exactly as before.
-   */
-  removals?: string[];
-  domContents: Record<string, string>; // storyPath → HTML text
-  screenshotContents: Record<string, string>; // pngPath → base64
+interface AcceptBody {
   repo: string;
-  /** The snapshot branch to commit to (e.g. "snapshots/my-feature") */
+  /** Code branch of the run, e.g. "my-feature" (not "snapshots/..."). */
   branch: string;
-  /** PR head SHA — used to update the Visual Diff Review commit status. */
+  /** Visual Tests workflow run id whose capture to accept. */
+  runId: string | number;
+  /** PR head SHA, for the pending `Visual Diff Review` status. */
   headSha?: string;
-  /** Workflow run id. If provided, a `visual-baselines-accepted`
-   *  repository_dispatch is sent post-commit; the rerun-visual-tests workflow
-   *  waits for that run to finish and re-runs its failed jobs, so the cheap
-   *  visual-test compare job re-runs against the new baselines. */
-  runId?: string;
+  /** Story paths to accept as baselines. */
+  paths: string[];
+  /** Story paths whose baselines to delete (accepted removals). */
+  removals?: string[];
 }
 
-type TreeItem = {
-  path: string;
-  mode: string;
-  type: string;
-  sha?: string | null;
-  content?: string;
-};
+const WORKFLOW_FILE = "accept-visual-baselines.yml";
+const MAX_CLIENT_PAYLOAD_CHARS = 65535;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -76,74 +58,78 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-async function createBlob(
-  apiBase: string,
-  headers: Record<string, string>,
-  content: string
-): Promise<string> {
-  const res = await fetch(`${apiBase}/git/blobs`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ content, encoding: "base64" }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`GitHub blob creation failed (${res.status}): ${text}`);
-  }
-  const data = (await res.json()) as { sha: string };
-  return data.sha;
-}
-
-async function githubJson<T>(res: Response, label: string): Promise<T> {
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`GitHub ${label} failed (${res.status}): ${text}`);
-  }
-  return res.json() as Promise<T>;
+function isStoryPathList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (p) =>
+        typeof p === "string" &&
+        p.endsWith(".html") &&
+        !p.startsWith("/") &&
+        !`/${p}/`.includes("/../")
+    )
+  );
 }
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   try {
-    return await handleCommit(ctx);
+    return await handleAccept(ctx);
   } catch (e) {
     return json({ ok: false, error: `Unexpected error: ${String(e)}` }, 500);
   }
 };
 
-async function handleCommit(
+async function handleAccept(
   ctx: EventContext<Env, string, unknown>
 ): Promise<Response> {
   const { env, request } = ctx;
 
   const token = env.GITHUB_TOKEN;
   if (!token) {
-    return json({ error: "GITHUB_TOKEN not configured" }, 500);
+    return json({ ok: false, error: "GITHUB_TOKEN not configured" }, 500);
   }
 
-  let body: CommitBody;
+  let body: AcceptBody;
   try {
-    const raw = (await request.json()) as Partial<CommitBody>;
-    const hasPaths = Array.isArray(raw.paths) && raw.paths.length > 0;
-    const hasRemovals = Array.isArray(raw.removals) && raw.removals.length > 0;
-    if ((!hasPaths && !hasRemovals) || !raw.repo || !raw.branch) {
-      return json({ error: "Invalid request body" }, 400);
+    const raw = (await request.json()) as Partial<AcceptBody>;
+    const paths = raw.paths ?? [];
+    const removals = raw.removals ?? [];
+    if (
+      typeof raw.repo !== "string" ||
+      !/^[\w.-]+\/[\w.-]+$/.test(raw.repo) ||
+      typeof raw.branch !== "string" ||
+      raw.branch === "" ||
+      !/^\d+$/.test(String(raw.runId ?? "")) ||
+      !isStoryPathList(paths) ||
+      !isStoryPathList(removals) ||
+      paths.length + removals.length === 0
+    ) {
+      return json({ ok: false, error: "Invalid request body" }, 400);
     }
-    body = raw as CommitBody;
+    body = { ...raw, paths, removals } as AcceptBody;
   } catch {
-    return json({ error: "Invalid JSON body" }, 400);
+    return json({ ok: false, error: "Invalid JSON body" }, 400);
   }
 
-  const {
-    paths = [],
-    removals = [],
-    domContents = {},
-    screenshotContents = {},
-    repo,
+  const { repo, branch, runId, headSha, paths, removals = [] } = body;
+
+  const clientPayload = {
     branch,
-    headSha: prHeadSha,
-    runId,
-  } = body;
-  const [owner, repoName] = repo.split("/");
+    run_id: Number(runId),
+    paths,
+    removals,
+  };
+  if (JSON.stringify(clientPayload).length > MAX_CLIENT_PAYLOAD_CHARS) {
+    return json(
+      {
+        ok: false,
+        error:
+          "Too many paths for one repository_dispatch. Accept everything by hand instead: " +
+          `tests/scripts/accept-baselines.sh ${runId} ${branch} --all`,
+      },
+      413
+    );
+  }
 
   const githubHeaders = {
     Authorization: `token ${token}`,
@@ -151,290 +137,67 @@ async function handleCommit(
     "Content-Type": "application/json",
     "User-Agent": "gofish-visual-review/1.0",
   };
-  const apiBase = `https://api.github.com/repos/${owner}/${repoName}`;
+  const apiBase = `https://api.github.com/repos/${repo}`;
+  const workflowUrl = `https://github.com/${repo}/actions/workflows/${WORKFLOW_FILE}`;
 
-  const treeItems: TreeItem[] = [];
-  const errors: string[] = [];
-  let accepted = 0;
-
-  for (const storyPath of paths) {
-    const pngPath = storyPath.replace(/\.html$/, ".png");
-    try {
-      const domContent = domContents[storyPath];
-      if (domContent == null) {
-        errors.push(`${storyPath}: DOM content not provided`);
-        continue;
-      }
-
-      // Use tree `content` for DOM files — GitHub creates the blob internally,
-      // saving a subrequest compared to creating the blob explicitly.
-      // On the snapshot branch, files live at dom/ and screenshots/ (no __snapshots__/ prefix).
-      treeItems.push({
-        path: `dom/${storyPath}`,
-        mode: "100644",
-        type: "blob",
-        content: domContent,
-      });
-
-      // Screenshots are binary, so they still need the blob API.
-      const screenshotBase64 = screenshotContents[pngPath];
-      if (screenshotBase64) {
-        const screenshotBlobSha = await createBlob(
-          apiBase,
-          githubHeaders,
-          screenshotBase64
-        );
-        treeItems.push({
-          path: `screenshots/${pngPath}`,
-          mode: "100644",
-          type: "blob",
-          sha: screenshotBlobSha,
-        });
-      }
-
-      accepted++;
-    } catch (e) {
-      errors.push(`${storyPath}: ${String(e)}`);
-    }
-  }
-
-  // Get current HEAD SHA of the snapshot branch, or null if it doesn't exist yet.
-  const refRes = await fetch(`${apiBase}/git/ref/heads/${branch}`, {
+  const dispatchRes = await fetch(`${apiBase}/dispatches`, {
+    method: "POST",
     headers: githubHeaders,
+    body: JSON.stringify({
+      event_type: "visual-baselines-accept",
+      client_payload: clientPayload,
+    }),
   });
-
-  let headSha: string | null = null;
-  let baseTreeSha: string | null = null;
-
-  if (refRes.ok) {
-    const refData = (await refRes.json()) as { object: { sha: string } };
-    headSha = refData.object.sha;
-
-    // Get base tree SHA from the existing commit.
-    const commitData = await githubJson<{ tree: { sha: string } }>(
-      await fetch(`${apiBase}/git/commits/${headSha}`, {
-        headers: githubHeaders,
-      }),
-      `get commit ${headSha}`
+  if (!dispatchRes.ok) {
+    const text = await dispatchRes.text();
+    let message = text;
+    try {
+      message = (JSON.parse(text) as { message?: string }).message ?? text;
+    } catch {
+      // Not JSON; report the raw body.
+    }
+    return json(
+      {
+        ok: false,
+        error: `GitHub repository_dispatch failed (${dispatchRes.status}): ${message}`,
+      },
+      dispatchRes.status === 401 ? 401 : 502
     );
-    baseTreeSha = commitData.tree.sha;
-  } else if (refRes.status === 404) {
-    // Per-PR snapshot branch doesn't exist yet — initialize from snapshots/main
-    // so the new orphan inherits all baselines, with accepted entries layered on top.
-    // Without this, the new branch would contain ONLY the accepted entries, and the
-    // next CI run (which prefers the per-PR branch over snapshots/main) would report
-    // every other story as "new".
-    const mainRefRes = await fetch(`${apiBase}/git/ref/heads/snapshots/main`, {
-      headers: githubHeaders,
-    });
-    if (mainRefRes.ok) {
-      const mainRefData = (await mainRefRes.json()) as {
-        object: { sha: string };
-      };
-      const mainCommit = await githubJson<{ tree: { sha: string } }>(
-        await fetch(`${apiBase}/git/commits/${mainRefData.object.sha}`, {
-          headers: githubHeaders,
-        }),
-        `get commit ${mainRefData.object.sha}`
-      );
-      baseTreeSha = mainCommit.tree.sha;
-      // headSha stays null so the new commit is parentless and the branch ref is
-      // created via POST /git/refs below.
-    } else if (mainRefRes.status !== 404) {
-      const text = await mainRefRes.text();
-      throw new Error(
-        `GitHub get snapshots/main ref failed (${mainRefRes.status}): ${text}`
-      );
-    }
-    // If snapshots/main also doesn't exist (truly fresh repo), baseTreeSha stays
-    // null and we fall back to creating an empty-base orphan.
-  } else {
-    const text = await refRes.text();
-    throw new Error(`GitHub get ref failed (${refRes.status}): ${text}`);
   }
 
-  // Process removals (accept-removal: delete a stale baseline). Uses the
-  // same git data/trees API as the additions above — a tree entry with
-  // `sha: null` deletes that path — so no Contents-API blob-sha lookups are
-  // needed. The tree API errors if asked to delete a path that isn't on the
-  // base tree, so first fetch the base tree's full path list (one recursive
-  // GET, regardless of how many removals there are) and only emit delete
-  // entries for paths that are actually present.
-  let removed = 0;
-  if (removals.length > 0 && baseTreeSha) {
-    let existingPaths = new Set<string>();
+  // Best effort: show on the PR that the accept is in progress. The
+  // workflow sets the final state.
+  const warnings: string[] = [];
+  if (headSha && /^[0-9a-f]{40}$/.test(headSha)) {
     try {
-      const treeData = await githubJson<{ tree: { path: string }[] }>(
-        await fetch(`${apiBase}/git/trees/${baseTreeSha}?recursive=1`, {
-          headers: githubHeaders,
-        }),
-        `get tree ${baseTreeSha} (recursive)`
-      );
-      existingPaths = new Set(treeData.tree.map((t) => t.path));
-    } catch (e) {
-      errors.push(`list existing baseline tree for removals: ${String(e)}`);
-    }
-
-    for (const storyPath of removals) {
-      const domPath = `dom/${storyPath}`;
-      const screenshotPath = `screenshots/${storyPath.replace(/\.html$/, ".png")}`;
-      if (existingPaths.has(domPath)) {
-        treeItems.push({
-          path: domPath,
-          mode: "100644",
-          type: "blob",
-          sha: null,
-        });
-      }
-      if (existingPaths.has(screenshotPath)) {
-        treeItems.push({
-          path: screenshotPath,
-          mode: "100644",
-          type: "blob",
-          sha: null,
-        });
-      }
-      removed++;
-    }
-  } else if (removals.length > 0) {
-    // No base tree at all (fresh repo, no snapshots/main either) — nothing
-    // to delete, but the desired end state (baseline absent) already holds.
-    removed = removals.length;
-  }
-
-  if (treeItems.length === 0) {
-    return json({ ok: false, accepted, removed, errors });
-  }
-
-  // Create tree with all changes (base_tree omitted for orphan branch creation).
-  const newTree = await githubJson<{ sha: string }>(
-    await fetch(`${apiBase}/git/trees`, {
-      method: "POST",
-      headers: githubHeaders,
-      body: JSON.stringify({
-        ...(baseTreeSha ? { base_tree: baseTreeSha } : {}),
-        tree: treeItems,
-      }),
-    }),
-    "create tree"
-  );
-
-  // Create single commit (no parents if this is a new orphan branch).
-  const messageParts: string[] = [];
-  if (accepted > 0) messageParts.push(`Accept ${accepted} visual diff(s)`);
-  if (removed > 0) messageParts.push(`remove ${removed} stale baseline(s)`);
-  const commitMessage =
-    messageParts.length > 0 ? messageParts.join(", ") : "Update snapshots";
-
-  const newCommit = await githubJson<{ sha: string }>(
-    await fetch(`${apiBase}/git/commits`, {
-      method: "POST",
-      headers: githubHeaders,
-      body: JSON.stringify({
-        message: commitMessage,
-        tree: newTree.sha,
-        parents: headSha ? [headSha] : [],
-      }),
-    }),
-    "create commit"
-  );
-
-  // Create or update the snapshot branch ref.
-  if (headSha) {
-    // Branch exists — fast-forward.
-    const updateRes = await fetch(`${apiBase}/git/refs/heads/${branch}`, {
-      method: "PATCH",
-      headers: githubHeaders,
-      body: JSON.stringify({ sha: newCommit.sha }),
-    });
-    if (!updateRes.ok) {
-      const text = await updateRes.text();
-      throw new Error(`Failed to update branch ref: ${text}`);
-    }
-  } else {
-    // Branch doesn't exist — create it.
-    const createRes = await fetch(`${apiBase}/git/refs`, {
-      method: "POST",
-      headers: githubHeaders,
-      body: JSON.stringify({
-        ref: `refs/heads/${branch}`,
-        sha: newCommit.sha,
-      }),
-    });
-    if (!createRes.ok) {
-      const text = await createRes.text();
-      throw new Error(`Failed to create branch ref: ${text}`);
-    }
-  }
-
-  // Best-effort post-commit actions: flip the Visual Diff Review status to
-  // success (so the PR's checks reflect the action immediately) and send a
-  // `visual-baselines-accepted` repository_dispatch. The rerun-visual-tests
-  // workflow it triggers waits for the run to finish, then re-runs its failed
-  // jobs, which re-runs the cheap `visual-test` compare job against the newly
-  // accepted baselines (it reuses the JS capture artifact from the first
-  // attempt, so nothing is captured again). Failures here are non-fatal — the
-  // snapshot commit already succeeded.
-  const postCommitWarnings: string[] = [];
-
-  if (prHeadSha) {
-    try {
-      const statusRes = await fetch(`${apiBase}/statuses/${prHeadSha}`, {
+      const statusRes = await fetch(`${apiBase}/statuses/${headSha}`, {
         method: "POST",
         headers: githubHeaders,
         body: JSON.stringify({
-          state: "success",
-          target_url: `https://github.com/${repo}/tree/${branch}`,
+          state: "pending",
+          target_url: workflowUrl,
           description:
-            `Accepted ${accepted} diff(s)` +
-            (removed > 0 ? `, removed ${removed}` : "") +
-            `; re-running tests`,
+            `Accepting ${paths.length} diff(s)` +
+            (removals.length > 0 ? `, removing ${removals.length}` : "") +
+            "; committing baselines",
           context: "Visual Diff Review",
         }),
       });
       if (!statusRes.ok) {
-        postCommitWarnings.push(
-          `status update failed (${statusRes.status}) — token may be missing 'statuses: write'`
+        warnings.push(
+          `status update failed (${statusRes.status}); the token may be missing 'Commit statuses: write'`
         );
       }
     } catch (e) {
-      postCommitWarnings.push(`status update threw: ${String(e)}`);
-    }
-  }
-
-  if (runId) {
-    try {
-      const dispatchRes = await fetch(`${apiBase}/dispatches`, {
-        method: "POST",
-        headers: githubHeaders,
-        body: JSON.stringify({
-          event_type: "visual-baselines-accepted",
-          client_payload: { run_id: Number(runId), branch },
-        }),
-      });
-      if (!dispatchRes.ok) {
-        const text = await dispatchRes.text();
-        let message = text;
-        try {
-          message = (JSON.parse(text) as { message?: string }).message ?? text;
-        } catch {
-          // Not JSON; report the raw body.
-        }
-        postCommitWarnings.push(
-          `dispatch failed (${dispatchRes.status}): ${message}`
-        );
-      }
-    } catch (e) {
-      postCommitWarnings.push(`dispatch threw: ${String(e)}`);
+      warnings.push(`status update threw: ${String(e)}`);
     }
   }
 
   return json({
-    ok: errors.length === 0,
-    accepted,
-    removed,
-    errors,
-    commitSha: newCommit.sha,
-    postCommitWarnings,
+    ok: true,
+    accepted: paths.length,
+    removed: removals.length,
+    workflowUrl,
+    warnings,
   });
 }

@@ -166,7 +166,7 @@ open tests/tmp/diff-report.html
 The `Visual Tests` workflow splits the work into three jobs:
 
 - `js-capture` captures every story once (the slow part) and uploads `tests/tmp/js/` as the `js-dom-capture` artifact.
-- `visual-test` downloads that artifact and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there commits the new baselines and sends a `visual-baselines-accepted` repository_dispatch. The `Rerun Visual Tests` workflow (`rerun-visual-tests.yml`) waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and then re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again.
+- `visual-test` downloads that artifact and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there sends only the run id and the accepted story paths, as a `visual-baselines-accept` repository_dispatch. The `Accept Visual Baselines` workflow (`accept-visual-baselines.yml`) runs `scripts/accept-baselines.sh`, which copies the accepted files from the run's `js-dom-capture` artifact to `snapshots/<branch>` in one commit. The workflow then waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again. You can run the script by hand too, for example `tests/scripts/accept-baselines.sh <run-id> <branch> --all` to accept everything a run reported.
 - `python-parity` downloads the same artifact, captures the Python stories, and runs `compare-python.ts` against the JS capture. It runs at the same time as `visual-test` and does not wait on the visual review.
 
 ## Python Parity
@@ -208,6 +208,7 @@ tests/
     compare.ts                 # Compare JS vs baselines (+ Python vs JS unless --js-only)
     compare-python.ts          # Compare Python vs the JS capture (CI parity gate)
     update-baselines.ts        # Accept current snapshots as baselines
+    accept-baselines.sh        # Accept a CI run's captured diffs onto snapshots/<branch>
     diff-report.ts             # Generate HTML diff report
     normalize-dom.ts           # DOM normalization pipeline
     derive-server.py           # Python derive function HTTP server
