@@ -33,7 +33,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //
 //   THE SWIRL-LINK TRICK. The dsl asks for arccurve links (ArcDirection
 //   bottom); curved-link interpolation is unimplemented (tracked for PR #637).
-//   But under coord(polar()), connect's `curve:"straight"` interpolates
+//   But under coord(polar()), connect's `curve:"linear"` interpolates
 //   in (θ, r) space and ADAPTIVELY RESAMPLES the segment (adaptive-resampling.ts
 //   subdivides on the transform's curvature), so a straight (θ,r) segment
 //   renders as a smooth screen curve. We exploit that twice:
@@ -170,7 +170,7 @@ const links = placed
       return [
         line(
           {
-            curve: "straight",
+            curve: "linear",
             fill: "none",
             stroke: LINK_STROKE,
             strokeWidth: LINK_WIDTH,
@@ -185,7 +185,7 @@ const links = placed
     return [
       line(
         {
-          curve: "straight",
+          curve: "linear",
           fill: "none",
           stroke: LINK_STROKE,
           strokeWidth: LINK_WIDTH,

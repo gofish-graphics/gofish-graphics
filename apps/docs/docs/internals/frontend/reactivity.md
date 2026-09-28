@@ -420,17 +420,23 @@ a live opacity installed on each group's subtree
 unchanged) evaluated inside the thunk. A jump costs one opacity write per
 keyframe item; the chart is laid out once however long it plays.
 
-The two compose with nothing to coordinate, and that is the test of the rule
-rather than a happy accident. A transition takes its keyframes over by emitting
-nothing at all for them, and a node with no items has nothing to patch, so the
-sequence's visibility thunks simply find nothing to act on. Neither construct
-has to know the other is there.
+The two compose with nothing to coordinate. The keyframe marks a transition
+moves emit nothing at all, since the moving mark is their drawing, and the
+sequence's visibility thunks find nothing to act on. A trail behind the moving
+mark is a separate layer of the same mark, a `time.history({ last })`: the
+sequence gives each `time.history` inside a keyframe a visibility rule of its
+own, set under the same sequence as the rule on the keyframe group, so for the
+marks under it it stands in for the group's rule and widens the band to the
+window `[T − last, T]`. Each rule reads what its window shows through one value
+worked out once per playhead value and `last` (`sequenceWindow`).
 
 The price is the live channels' standing one: what the display list carries, and
 therefore what serialization and the runtime's hit-test frame see, is the value
 lowered at resolve. A keyframe hidden at paint is still in the frame, so it
 still answers to a pointer, and a headless `toDisplayList` shows every keyframe
-with the held one at its own opacity and the rest at 0.
+with the shown ones at their own opacity and the rest at 0. It is also why a
+sequence over tens of thousands of rows is slow to play: every one of its marks
+re-reads the clock on every tick (#848).
 
 ## Incremental outlook
 

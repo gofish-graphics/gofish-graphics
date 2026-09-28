@@ -93,6 +93,29 @@ console.log("# coord paint order: zAbove/zBelow constraints are honored inside c
   );
 }
 
+console.log("# a constraint that names a plain layer orders what it paints");
+{
+  // The plain layer `pair` is hoisted away, so the units are its two rects;
+  // zAbove(A, pair) must put A after both of them.
+  const A = rect().name("a");
+  const P1 = rect();
+  const P2 = rect();
+  const layerNode = Layer([A, Layer([P1, P2]).name("pair")]).relate(
+    (c: any) => [Constraint.zAbove(c.a, c.pair)]
+  );
+  const order = await paintOrder(layerNode);
+  const label = (n: any) =>
+    n === A ? "A" : n === P1 ? "P1" : n === P2 ? "P2" : "?";
+  ok(
+    "zAbove(A, pair) paints A over both of the pair's marks",
+    order.length === 3 &&
+      order[0] === P1 &&
+      order[1] === P2 &&
+      order[2] === A,
+    `order = [${order.map(label).join(", ")}]`
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 declare const process: { exit(code: number): never };
 if (failed > 0) process.exit(1);

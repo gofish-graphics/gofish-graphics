@@ -759,9 +759,10 @@ export type LineOptions = {
   strokeDasharray?: string;
   opacity?: number | LiveValue;
   mixBlendMode?: "normal" | "multiply";
-  // Screen-space path shape, as a factory call (`straight()`, `bezier()`,
-  // `catmullRom()`, `orthogonal()`, `arc({ direction })`, `perfectArrows({ bow })`,
-  // …) or a bare name (`"straight"` | `"bezier"`). The single path-shaping key.
+  // Screen-space path shape, as a factory call (`bezier()`, `orthogonal()`,
+  // `arc({ direction })`, `perfectArrows({ bow })`, …) or a bare name
+  // (`"linear"` | `"bezier"` | `"monotone"` | `"catmullRom"`). The single
+  // path-shaping key.
   curve?: Curve;
   dir?: "x" | "y";
   // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
@@ -790,27 +791,30 @@ export type LineOptions = {
 };
 
 // `line` — a center-mode connector (the "line" component): the path between the
-// centers of consecutive marks. `route` picks the shape (straight | bezier |
+// centers of consecutive marks. `route` picks the shape (linear | bezier |
 // orthogonal | arc | perfectArrows | …).
-export const line = createRelationalMark<LineOptions>("line", (o, children) =>
-  Connect(
-    {
-      direction: o.dir ?? "x",
-      mode: "center",
-      fill: o.fill,
-      stroke: o.stroke,
-      strokeWidth: o.strokeWidth ?? 1,
-      strokeDasharray: o.strokeDasharray,
-      opacity: o.opacity,
-      mixBlendMode: o.mixBlendMode,
-      // Omitted ⇒ "auto": connect smooths (catmullRom) when the connected
-      // points share a continuous connection axis, else a straight line.
-      curve: o.curve,
-      source: o.source,
-      target: o.target,
-    },
-    children
-  )
+export const line = createRelationalMark<LineOptions>(
+  "line",
+  (o, children, inferred) =>
+    Connect(
+      {
+        direction: o.dir ?? "x",
+        mode: "center",
+        fill: o.fill,
+        stroke: o.stroke,
+        strokeWidth: o.strokeWidth ?? 1,
+        strokeDasharray: o.strokeDasharray,
+        opacity: o.opacity,
+        mixBlendMode: o.mixBlendMode,
+        // Omitted ⇒ "auto": connect smooths (monotone) when the connected
+        // points share a continuous connection axis, else a straight line.
+        curve: o.curve,
+        source: o.source,
+        target: o.target,
+        along: inferred.along,
+      },
+      children
+    )
 );
 
 export type RibbonOptions = {
@@ -820,8 +824,8 @@ export type RibbonOptions = {
   opacity?: number | LiveValue;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
-  // Screen-space path shape for the band edges (`straight()` | `bezier()`).
-  // Edge mode honors straight (linear band) vs bezier (S-curve band).
+  // Screen-space path shape for the band edges (`"linear"` | `bezier()`).
+  // Edge mode honors linear (linear band) vs bezier (S-curve band).
   curve?: Curve;
   from?: string;
   to?: string;
@@ -847,7 +851,7 @@ export type RibbonOptions = {
 // consecutive marks (areas, streamgraphs, sankey ribbons).
 export const ribbon = createRelationalMark<RibbonOptions>(
   "ribbon",
-  (o, children) =>
+  (o, children, inferred) =>
     Connect(
       {
         direction: o.dir ?? "x",
@@ -857,9 +861,10 @@ export const ribbon = createRelationalMark<RibbonOptions>(
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
         opacity: o.opacity,
-        // Omitted ⇒ "auto": edge mode currently resolves to a bezier band
-        // (continuous-ribbon Catmull-Rom is a follow-on).
+        // Omitted ⇒ "auto": a smooth (monotone) band over a continuous
+        // connection axis, else a bezier band.
         curve: o.curve,
+        along: inferred.along,
       },
       children
     )

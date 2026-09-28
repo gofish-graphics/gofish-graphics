@@ -29,6 +29,7 @@ import {
   type FieldOp,
 } from "./fieldExpr";
 import { binRows } from "./transforms";
+import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
 function eqKey(v: unknown): string {
@@ -36,9 +37,14 @@ function eqKey(v: unknown): string {
 }
 
 /** Distinct values produced by walking `segments` from `obj`, projecting over
- *  any array encountered (mapping the remaining walk across its elements).
+ *  any array encountered (mapping the remaining walk across its elements), and
+ *  reading each value the walk reaches with `read` when one is given.
  *  Returns the de-duplicated values in first-seen order. */
-function projectValues(obj: unknown, segments: string[]): unknown[] {
+function projectValues(
+  obj: unknown,
+  segments: string[],
+  read?: (row: any) => unknown
+): unknown[] {
   const out: unknown[] = [];
   const seen = new Set<string>();
   const push = (v: unknown) => {
@@ -64,7 +70,7 @@ function projectValues(obj: unknown, segments: string[]): unknown[] {
       return;
     }
     if (i === segments.length) {
-      push(current);
+      push(read === undefined ? current : read(current));
       return;
     }
     walk((current as Record<string, unknown>)[segments[i]], i + 1);
@@ -83,6 +89,19 @@ function projectValues(obj: unknown, segments: string[]): unknown[] {
 export function projectPath(obj: unknown, path: string): unknown {
   const segments = toPath(path);
   const values = projectValues(obj, segments);
+  return values.length === 1 ? values[0] : undefined;
+}
+
+/** The key a `by`-style selector gives `obj` (a row, a bag of rows, or a ref
+ *  standing in for one), with projection and homogeneity collapse as
+ *  `projectPath` does for a field path. A key function is applied to each ROW
+ *  the walk reaches, never to the ref or the bag, so it reads the same data
+ *  it grouped the rows by. */
+export function projectBy(obj: unknown, by: SplitBy): unknown {
+  const values =
+    typeof by === "function"
+      ? projectValues(obj, [], by)
+      : projectValues(obj, toPath(fieldNameOf(by)!));
   return values.length === 1 ? values[0] : undefined;
 }
 
@@ -116,6 +135,11 @@ export function fieldNameOf(by: unknown): string | undefined {
 export type InferredRelational = {
   by?: SplitBy;
   dir?: "x" | "y";
+  /** The path tier's own `by`: the connection variable the connector
+   *  threads its operands along, whether `along` named the tier or it was
+   *  inferred. A smooth `line` or `ribbon` uses each operand's value of it as
+   *  the knots of its curve (see `runKnots` in `connect.tsx`). */
+  along?: SplitBy;
   resolved?: boolean;
   /** The flow's temporal tier, for a TEMPORAL relational mark
    *  (`time.transition()`). A spatial connector threads a tier of the flow
@@ -140,6 +164,9 @@ export type TimeTier = {
    *  split on. A transition reads it to tell a gap in one mark's run (two of
    *  its knots that are NOT neighbors here) from a step between neighbors. */
   knots: () => number[];
+  /** The cycle of the time axis when the sequence is cyclic: every reader of
+   *  time reads it around the seam (see `src/timeWindow.ts`). */
+  cycle: () => Cycle | undefined;
   /** Wall-clock milliseconds per unit of `by` on the clock (ms per year, say),
    *  so a timing written in ms (a stagger's `lag`) can be read against a
    *  stretch between two keyframes. */

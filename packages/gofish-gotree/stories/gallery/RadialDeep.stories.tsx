@@ -35,7 +35,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //   Links: the dsl asks for `curve` links; curve interpolation is unimplemented
 //   (tracked for PR #637). `curve:"bezier"` was tried first, but under
 //   the polar transform its control-point resampling winds the parent→child
-//   segments into wild spirals, so we fall back to `curve:"straight"`.
+//   segments into wild spirals, so we fall back to `curve:"linear"`.
 //   Linear segments resample cleanly into the (near-)radial spokes seen here;
 //   the reference's gentle curve is therefore drawn straight. Link thickness
 //   tapers by depth (dsl Thickness=depth, Min 1 / Max 9): thick near the root,
@@ -172,7 +172,7 @@ const links = placed
       parent.depth === 0 ? [p.theta, 0] : [parent.theta, parent.r];
     return line(
       {
-        curve: "straight",
+        curve: "linear",
         fill: "none",
         stroke: "#5f6b7a",
         strokeWidth: linkWidth(parent.depth),

@@ -190,6 +190,12 @@ packages/gofish-graphics/stories/animated-vega-lite/GapminderTower.stories.tsx
 # exemption is per FILE (same trade-off as issue #856).
 packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx
 
+# The connected scatterplot — exempt for the same reason as the Gapminder
+# panels. Every story in it is driven by `time.sequence(...)`, which owns or is
+# handed a `timer()` clock, a live JS signal the derive RPC cannot carry, and
+# `history` is an option of that JS-only operator.
+packages/gofish-graphics/stories/animated-vega-lite/ConnectedScatterplot.stories.tsx
+
 # The build-in animation prototype (draft PR #901). Every story renders a
 # build-in: `.transition()` on operators and marks, `time.stagger` /
 # `time.transition({ enter })`, and a `timer()` clock the build owns, all

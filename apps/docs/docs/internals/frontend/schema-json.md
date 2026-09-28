@@ -2270,7 +2270,7 @@ for the API.
           "description": "Blend mode where connectors overlap."
         },
         "curve": {
-          "description": "Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = \"auto\" (catmullRom on a homogeneous continuous connection axis, else straight)."
+          "description": "Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name (\"linear\"/\"bezier\"/\"monotone\"/\"catmullRom\"). \"monotone\" is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate \"monotone\". \"catmullRom\" is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows the monotone curve). Omitted = \"auto\" (monotone on a homogeneous continuous connection axis, else linear)."
         },
         "dir": {
           "enum": ["x", "y"],
@@ -2369,7 +2369,7 @@ for the API.
           "description": "Connection axis."
         },
         "curve": {
-          "description": "Screen-space band-edge shape (straight() | bezier()). Omitted = \"auto\" (bezier)."
+          "description": "Screen-space band-edge shape (\"linear\" | bezier() | \"monotone\" | \"catmullRom\"). \"monotone\" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate \"monotone\"); \"catmullRom\" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = \"auto\" (monotone on a homogeneous continuous connection axis, else a bezier band)."
         },
         "from": {
           "type": "string"

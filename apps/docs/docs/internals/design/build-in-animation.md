@@ -638,8 +638,8 @@ GSAP, Motion) can come later.
   `animation-fill-mode: backwards` and GSAP's `immediateRender`. Without this,
   a late bar shows at full height and then jumps to zero when its turn comes.
 - **After.** The final state. This is pict's `sustain`. The connected
-  scatterplot work in progress adds a `history` option to `time.sequence` for
-  the same idea at the sequence level, i.e., keyframes that stay visible after
+  scatterplot work in progress adds a `time.history({ last })` operator for the
+  same idea at the sequence level, i.e., keyframes that stay visible after
   their band. A build-in's hold should use that name and not a new one.
 
 Current main reads a missing row at a keyframe as "absent," which is pict's pad.
@@ -694,7 +694,8 @@ Level 3 should run on current main. By our reading of the code (not yet run),
 it draws an exact staggered grow at constant speed, stacks included, because
 every keyframe is a true layout and each ramp is a straight line between
 keyframes. It needs `curve: "linear"`, because the default Catmull-Rom curve
-overshoots at the corners of each ramp, and it needs `loop: false`. It cannot
+overshoots at the corners of each ramp, and it needs `loop: false`. (Since
+#902 the default is monotone, which does not overshoot.) It cannot
 give each bar its own ease except by adding more rows. That makes it a good
 reference render to check level 0 against.
 

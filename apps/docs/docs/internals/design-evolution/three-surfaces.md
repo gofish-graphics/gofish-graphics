@@ -65,10 +65,12 @@ or `ribbon` (edge band, formerly the `area` mark) — invoked with an explicit
 array of `ref(...)` children. The shape of the drawn path is a single `curve`
 key, backed by the pluggable router registry that `lib.ts` re-exports from
 `ast/graphicalOperators/routers` (`registerRoute` / `getRoute` / `resolveCurve`
-and the built-in `straight` / `bezier` / `orthogonal` / `arc` / `perfectArrows`
-routers). `curve: "auto"` smooths automatically on continuous axes — see
-[Underlying Space](/internals/core/underlying-space) for the positioning-space
-test that decides this.
+and the built-in `linear` / `bezier` / `orthogonal` / `arc` / `perfectArrows`
+routers; every built-in but `linear` has a factory of the same name, since
+`linear()` is already the Cartesian coordinate transform, so that curve is
+written as the bare string `"linear"`). `curve: "auto"` smooths automatically
+on continuous axes — see [Underlying Space](/internals/core/underlying-space)
+for the positioning-space test that decides this.
 
 `background` is a second lowercase name for `enclose`: `lib.ts` exports the
 same factory under both names, so a `background(...)` call builds and
@@ -92,7 +94,8 @@ combinator form described above all funnel through it. See
 [`.layer()`](/js/api/core/layer) for the current API.
 
 One export is deliberately not a bare name: `time`, the animation surface, is a
-single namespace object holding `time.sequence` and `time.transition`. The
+single namespace object holding `time.sequence`, `time.history` and
+`time.transition` (with the build-in's `time.stagger` and `time.parallel`). The
 animation design note's §9.1 decision is that temporal constructs get their own
 vocabulary rather than a `dir: "t"` on the spatial operators, and the namespace
 is that decision made visible at the import site — `spread` and `line` stay
