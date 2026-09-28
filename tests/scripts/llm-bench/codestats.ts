@@ -44,6 +44,7 @@ const LANG: Record<Arm, Lang> = {
   matplotlib: "python",
   altair: "python",
   ggplot2: "r",
+  plot: "js",
 };
 
 export interface CodeStats {
@@ -76,6 +77,9 @@ const JS_TOKEN = new RegExp(
     String.raw`'(?:\\[\s\S]|[^'\\])*'`, // single-quoted string
     String.raw`\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\.\d+`, // number
     String.raw`[A-Za-z_$][\w$]*`, // identifier or keyword
+    // JSX tag punctuation, so a closing or self-closing tag is not read as a
+    // division operator.
+    String.raw`<\/|\/>`,
     String.raw`\*\*=|=>|\.\.\.|===|!==|==|!=|<=|>=|&&|\|\||\?\?|\?\.|\*\*|\+\+|--|[+\-*/%]=`,
     String.raw`[{}()\[\];,.<>+\-*/%=!&|^~?:]`, // single-character punctuation
   ].join("|"),
@@ -261,7 +265,11 @@ export function explicitCalculation(
   let arithOps = 0;
   let magicNumbers = 0;
   toks.forEach((t, i) => {
-    if (ARITH[lang].has(t) && !composing.has(i)) arithOps++;
+    // `import * as d3` (JS), `export * from` (JS) and `from m import *`
+    // (Python) are import syntax, not multiplication.
+    const importStar =
+      t === "*" && (toks[i - 1] === "import" || toks[i - 1] === "export");
+    if (ARITH[lang].has(t) && !composing.has(i) && !importStar) arithOps++;
     if (MATH_LIBS.has(t) && toks[i + 1] === ".") arithOps++;
     if (
       lang === "r" &&
