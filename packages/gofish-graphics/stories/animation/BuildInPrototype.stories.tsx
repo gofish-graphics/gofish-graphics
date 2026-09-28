@@ -473,16 +473,16 @@ const painted = () =>
     requestAnimationFrame(() => requestAnimationFrame(() => done()))
   );
 
-/** 4a as a single bare row on a 960×540 page, for recording a clip. The row
- *  keeps its natural size (so the shown code is the code that runs) and is
- *  scaled with CSS to fill the page. The chart starts held at t = 0;
+/** 4a on a 540×540 page (1080×1080 at 2x), for recording a clip: the chart
+ *  with its code below it. The row keeps its natural size (so the shown code is
+ *  the code that runs) and is scaled with CSS to fill the page. The chart starts held at t = 0;
  *  `window.__seek(t)` holds it at another time. */
 export const Ex4aClip: StoryObj = {
   parameters: { layout: "fullscreen" },
   render: () => {
-    const W = 960;
+    const W = 540;
     const H = 540;
-    const MARGIN = 40;
+    const MARGIN = 24;
     const page = el("div", {
       width: `${W}px`,
       height: `${H}px`,
@@ -499,19 +499,20 @@ export const Ex4aClip: StoryObj = {
       hold: { playing: false, at: 0 },
       onHighlighted: () => highlighted(),
     });
-    // Size the columns to their content so the row has a natural box.
+    // One column sized to its content, chart first and code below it.
+    row.appendChild(row.firstElementChild!);
     Object.assign(row.style, {
-      gridTemplateColumns: "max-content max-content",
-      alignItems: "center",
-      gap: "32px",
+      gridTemplateColumns: "max-content",
+      justifyItems: "center",
+      gap: "16px",
       margin: "0",
       position: "absolute",
       left: "0",
       top: "0",
       transformOrigin: "0 0",
     });
-    // A larger code font so the code holds its own next to the chart.
-    (row.firstElementChild as HTMLElement).style.fontSize = "14px";
+    // A larger code font so the code holds its own under the chart.
+    (row.lastElementChild as HTMLElement).style.fontSize = "14px";
     page.appendChild(row);
     const fit = () => {
       const w = row.offsetWidth;
