@@ -63,9 +63,10 @@ a chart can update without a full rebuild. The
 flattens its subtree into a flat, absolutely-positioned list before applying its
 coordinate transform. A coordinate transform is parameterized
 (`polar()`/`clock()` take `innerRadius`/`centralAngle`/`startAngle`/…) and may declare
-**axis-name aliases** (`theta`/`r`); a small top-down pass before layout resolves those
-aliases into the canonical `x`/`y`/`w`/`h` facets (see
-[Pass 5.5](/internals/layout/passes#pass-5-5-coordinate-space-alias-resolution)).
+**names for its axes** (polar `theta`/`r`, geo `lon`/`lat`), which marks use as keys of a
+`dims` option and operators as a `dir`; a small top-down pass before layout gives those
+names their meaning in the scope of the enclosing coord (see
+[Pass 5.5](/internals/layout/passes#pass-5-5-axis-name-resolution)).
 A second top-down pass, `resolveEmbedding` (a `GoFishNode` method wired into the
 pipeline before layout), authors each dim's `embedded` flag — whether a coord
 warps that axis's extent into an arc/wedge (point/line/area) — gating a mark's

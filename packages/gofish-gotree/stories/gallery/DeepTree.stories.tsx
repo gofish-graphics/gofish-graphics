@@ -33,7 +33,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    sibling-subtree *centers* a fixed angle apart regardless of how wide each
 //    subtree is, so a genuinely deep/wide tree overflows the 2π budget —
 //    subtrees overlap and the outer rings wrap. Wedge (rect) nodes now auto-fit
-//    angularly via thetaSize since #622; the gap for point/circle nodes like
+//    angularly via a data-sized θ extent since #622; the gap for point/circle nodes like
 //    these is tracked in #627, and its data-position workaround (leaf-slot box
 //    packing in the data pass) is demonstrated in RadialDeep.stories.tsx. The
 //    tree below is kept modest so the structure stays legible.

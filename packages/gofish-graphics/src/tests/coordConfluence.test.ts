@@ -54,7 +54,7 @@ const dist = (cs: any[]) => {
 // extent (intrinsicDims[0].size, in radians of coord space).
 async function leafThetaSizes(child: any): Promise<number[]> {
   const root: any = await coord({ transform: polar() }, [child]);
-  root.resolveAliases();
+  await root.resolveAliases();
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   root.layout([400, 400], [undefined, undefined]);

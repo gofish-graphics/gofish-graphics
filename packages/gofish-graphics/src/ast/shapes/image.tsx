@@ -8,7 +8,7 @@ import {
   Dimensions,
   displayTranslate,
   elaborateDims,
-  extractAliasCandidates,
+  deferAxisDims,
   FancyDims,
   Transform,
 } from "../dims";
@@ -380,12 +380,12 @@ export const Image = ({
     },
     []
   );
-  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-  node._pendingAliases = extractAliasCandidates(fancyDims);
+  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;
 };
 
-const rawImage = createMark(Image, {}, "image");
+const rawImage = createMark(Image, { dims: "dims" }, "image");
 
 /** Wrap an image mark so it awaits intrinsic dimension loading before producing
  *  a node. Recursively wraps .name/.label so chained calls stay awaiting. */

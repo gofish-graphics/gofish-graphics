@@ -37,6 +37,10 @@ stack({ dir, ... }, [m1, m2, ...])
 ::: gofish-ref stack
 :::
 
+`dir` takes `"x"`, `"y"`, or an axis name the enclosing coordinate space
+declares, such as `"theta"` under polar; see
+[`spread` → naming the axis](/js/api/operators/spread#naming-the-axis-with-dir).
+
 Same as [`spread`](/js/api/operators/spread) without `spacing` or `glue` —
 `stack` always glues, so neither is configurable. Its `by` is the same
 path-aware option (`"field"`, which also works on refs after a

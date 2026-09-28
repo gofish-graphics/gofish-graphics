@@ -67,7 +67,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //  - Angular gaps: GoTree's flatten Margin gives the thin white seams; here they
 //    are a small fixed angular inset per wedge plus the white stroke.
 //  - polar() options (#620: innerRadius/direction/startAngle/centralAngle) and
-//    thetaSize auto-fit (#622) would let the DSL express the ring fit and hole;
+//    θ-extent auto-fit (#622) would let the DSL express the ring fit and hole;
 //    the numbers bake them in instead. The PolarAxis θ/r swap is still not
 //    expressible (no transposed variant).
 

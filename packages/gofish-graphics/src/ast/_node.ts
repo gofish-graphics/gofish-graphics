@@ -28,8 +28,10 @@ import {
   translateForAnchor,
   Size,
   Transform,
-  AliasResolution,
-  buildAliasMap,
+  axisScopeFor,
+  BASE_AXIS_SCOPE,
+  type AxisScope,
+  type AxisScopeHook,
 } from "./dims";
 import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
 import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
@@ -538,16 +540,19 @@ export class GoFishNode {
    */
   public axisDir?: 0 | 1;
   /**
-   * Alias-keyed dim options (e.g. `{ theta: 0.5, rSize: "value" }`) stashed by a
-   * mark factory at construction, before its enclosing coord exists. Resolved
-   * into `args.dims` by {@link resolveAliases} once the coord's declared aliases
-   * are known. See `extractAliasCandidates` (dims.ts).
+   * The part of this node's elaboration that depends on which axis an axis
+   * NAME means: a mark's `dims` option (e.g. `{ theta: { size: 0.5 } }`,
+   * written onto its per-axis dims against `outer`, see `deferAxisDims` in
+   * dims.ts), or an operator's constraints (spread's `dir`, scatter's `dims`,
+   * which relate the children, so against `inner`). Deferred at construction,
+   * because a name like `theta` only has a meaning inside the coordinate space
+   * that declares it, and run once by {@link resolveAliases}.
    */
-  public _pendingAliases?: Record<string, any>;
+  public _elaborateInAxisScope?: AxisScopeHook;
   /**
-   * Position aliases a `coord` node declares for its subtree (the transform's
+   * Axis names a `coord` node declares for its subtree (the transform's
    * `aliases`, e.g. `{ x: "theta", y: "r" }`). Read by {@link resolveAliases} to
-   * rebind the active alias scope while walking into this coord.
+   * rebind the axis-name scope while walking into this coord.
    */
   public _aliases?: { x?: string; y?: string };
   constructor(
@@ -753,54 +758,64 @@ export class GoFishNode {
   }
 
   /**
-   * Top-down pass that resolves coordinate-space axis aliases (e.g. polar
-   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` channels of each
-   * mark's `dims`. Mirrors {@link resolveAxes}: it carries the `active` alias
-   * scope downward, rebinding it at every `coord` node that declares aliases
-   * (a nested coord rebinds for its subtree).
+   * Top-down pass that gives axis NAMES their meaning. `x`/`y` mean axis 0/1
+   * everywhere; a coordinate space adds the names its transform declares in
+   * `aliases` (polar `theta`/`r`, geo `lon`/`lat`). Mirrors {@link resolveAxes}:
+   * it carries the scope downward, and every `coord` rebinds it for its
+   * subtree to the names it declares (the innermost coord wins; one that
+   * declares no names leaves only `x`/`y`).
    *
-   * Runs BEFORE `resolveUnderlyingSpace` (which reads the resolved dims). It
-   * mutates `args.dims` in place — reassigning the array element (not its fields)
-   * so the mark's layout/space closures, which captured the same array reference,
-   * observe the resolution. The `embedded` flag is authored later by
-   * {@link resolveEmbedding}, not here.
+   * At each node it consumes the {@link _elaborateInAxisScope} hook, the work a
+   * factory could not do at construction, when the enclosing coord did not
+   * exist yet. The hook gets both scopes: `outer`, where the node's own box
+   * lives (its PARENT's space, even on a coord), and `inner`, its children's.
    *
-   * Hygiene: using an alias outside any coord that declares it (no `active` map),
-   * or naming an alias the enclosing coord doesn't declare, is a build-time error.
+   * The walk is synchronous and only collects the hooks, in pre-order; they
+   * then run one at a time in that order. Not concurrently: an operator's hook
+   * calls `relate`, whose environment walks the subtree, so it must not
+   * interleave with a descendant's hook. The walk sees the tree as it was
+   * before any hook ran, which is enough: spread's and scatter's `relate`
+   * return constraints only, so no hook adds a node that needs a hook of its
+   * own.
+   *
+   * A hook is cleared once it has run to completion, so the pass is
+   * idempotent and can rerun over a tree that an elaboration pass (axes,
+   * legends) extended with new nodes. A hook that throws stays in place, as do
+   * the hooks queued after it, so a rerun meets the same error again instead
+   * of silently skipping the rest of the work.
+   *
+   * Runs BEFORE `resolveUnderlyingSpace` (which reads the dims and the
+   * constraints). The `embedded` flag is authored later by
+   * {@link resolveEmbedding}, not here. A name no enclosing coord declares is
+   * a build-time error that lists the names that are declared.
    */
-  public resolveAliases(active?: Record<string, AliasResolution>): void {
-    // A coord that declares aliases rebinds the scope for its subtree.
-    let next = active;
-    if (this.type === "coord" && this._aliases) {
-      next = buildAliasMap(this._aliases);
-    }
+  public async resolveAliases(): Promise<void> {
+    const work: (() => Promise<void>)[] = [];
+    this.collectAxisScopeWork(BASE_AXIS_SCOPE, work);
+    for (const run of work) await run();
+  }
 
-    const pending = this._pendingAliases;
-    if (pending) {
-      const dims = this.args?.dims as Dimensions | undefined;
-      for (const [key, value] of Object.entries(pending)) {
-        const res = next?.[key];
-        if (res === undefined) {
-          throw new Error(
-            next === undefined
-              ? `Axis alias "${key}" used outside any coordinate space that declares it. Wrap the mark in a coord (e.g. polar()) or use x/y/w/h.`
-              : `Axis alias "${key}" is not declared by the enclosing coordinate space. Declared aliases: ${Object.keys(
-                  next
-                ).join(", ")}.`
-          );
-        }
-        if (dims) {
-          dims[res.axis] = {
-            ...dims[res.axis],
-            [res.key]: value,
-          };
-        }
-      }
+  /** The synchronous walk of {@link resolveAliases}: queue each node's hook,
+   *  with its scopes, in pre-order. Every coord establishes its own scope: the
+   *  names its transform declares, or only `x`/`y` when it declares none (a
+   *  name has a meaning only inside the space that declares it). */
+  private collectAxisScopeWork(
+    outer: AxisScope,
+    work: (() => Promise<void>)[]
+  ): void {
+    const inner =
+      this.type === "coord" ? axisScopeFor(this._aliases ?? {}) : outer;
+    const hook = this._elaborateInAxisScope;
+    if (hook) {
+      work.push(async () => {
+        await hook(outer, inner);
+        if (this._elaborateInAxisScope === hook)
+          this._elaborateInAxisScope = undefined;
+      });
     }
-
-    this.children.forEach((c) => {
-      if (c instanceof GoFishNode) c.resolveAliases(next);
-    });
+    for (const c of this.children) {
+      if (c instanceof GoFishNode) c.collectAxisScopeWork(inner, work);
+    }
   }
 
   /**

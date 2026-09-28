@@ -29,7 +29,7 @@ import { combine, byDepth, mount, sampleTree } from "./_shared";
 //  - No angular auto-fit for POINT nodes. Sibling θ spacing is a fixed per-level
 //    constant; it does not shrink with node count, so wide groups can overflow
 //    the 2π budget and wrap. GoTree allocates θ by subtree leaf-count. Wedge
-//    (rect) nodes now auto-fit via thetaSize since #622; this point/circle-node
+//    (rect) nodes now auto-fit via a data-sized θ extent since #622; this point/circle-node
 //    gap is tracked in #627 (data-position workaround shown in
 //    RadialDeep.stories.tsx).
 //  - `nest` on θ (an embedded/periodic dimension) is geometrically odd: nest's

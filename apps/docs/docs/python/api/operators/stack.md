@@ -38,6 +38,10 @@ low-level form behind the `stackX`/`stackY` operators).
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
+`dir` takes `"x"`, `"y"`, or an axis name the enclosing coordinate space
+declares, such as `"theta"` under polar; see
+[`spread` → naming the axis](/python/api/operators/spread#naming-the-axis-with-dir).
+
 ## Examples
 
 ```python
