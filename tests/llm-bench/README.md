@@ -28,6 +28,7 @@ pnpm llm-bench run --yes               # calls the API
 pnpm llm-bench run --backend claude-code --yes  # runs through Claude Code on the subscription
 pnpm llm-bench rescore <runDir>        # score a saved run again under the current rules (no API)
 pnpm llm-bench compare <runDir>[=label] ...  # one table comparing the gofish arm across runs
+pnpm llm-bench gallery <runDir>[=label] ... [--references <runDir>] [--out <dir>]  # a page comparing every arm's pictures and code
 pnpm llm-bench:contexts                # regenerate the cheatsheet, gallery index and skill folder
 ```
 
@@ -94,6 +95,28 @@ Options: `--arms gofish,recharts,d3,matplotlib,ggplot2,altair,plot`, `--tasks <s
   parts is one row. A run without a label is named by its context. Code
   statistics missing from an older run are filled in from its saved programs
   (all but model tokens).
+- `gallery` takes run directories (or run ids), each with an optional
+  `=label`, and writes a static page to `--out` (default
+  `tests/tmp/llm-bench/gallery/`). The overview is a grid with one row per
+  task, grouped by chart family (from `corpus/manifest.csv`, else the task
+  group), and one column per arm. Each cell shows the final turn's picture,
+  the outcome, the turns used, and the final program's syntax tokens and
+  arithmetic operations; a cell that did not pass also shows its first
+  failing check or error. Runs given the same label are pooled. When two
+  labels cover the same arm (extensions on and off, say), a switch picks
+  which one the grid shows. Filters pick a family and an outcome of one arm,
+  and the grid can be sorted by the gofish arm's syntax tokens. Opening a
+  task shows its instruction, every arm's picture, and two arms side by
+  side (gofish and the arm with the fewest syntax tokens, at first): every
+  turn's picture, the error sent back before each repair, and the final
+  program with syntax highlighting. With `--references <runDir>` (a
+  `references` run), the page can show each arm's reference picture and
+  program beside the model's. `--tasks` and `--group` narrow the tasks. The
+  folder is `index.html`, `data.js` (the overview, with small WebP
+  thumbnails) and `tasks/<task>.js` (each task's pictures as WebP and its
+  programs, loaded when the task is opened), so it opens from disk and can
+  be published as it is. The URL hash names the task and the two arms
+  (`#task=create/alluvial&a=gofish&b=plot`).
 
 Every invocation writes a run directory under `tests/tmp/llm-bench/runs/`. For
 each job and turn it holds the reply (`turnN.reply.md`), the program

@@ -22,6 +22,9 @@
  *     compare <runDir>[=label] ...
  *                  one table comparing the gofish arm across runs (for
  *                  example, one run per --context)
+ *     gallery <runDir>[=label] ... [--references <runDir>] [--out <dir>]
+ *                  a static page comparing every arm's pictures and
+ *                  programs, task by task (default tests/tmp/llm-bench/gallery/)
  *   Options:
  *     --arms gofish,recharts,d3,matplotlib,ggplot2,altair,plot   --tasks <substring>
  *     --samples N (1)   --max-turns N (3)   --budget-usd X (10, API)
@@ -48,7 +51,7 @@ import {
   rmSync,
   writeFileSync,
 } from "fs";
-import { dirname, join, relative, resolve } from "path";
+import { join, relative, resolve } from "path";
 import {
   preserved as preservedCheck,
   runChecks,
@@ -84,6 +87,7 @@ import {
   type CodeStats,
 } from "./llm-bench/codestats";
 import { compareRuns } from "./llm-bench/compare";
+import { buildGallery } from "./llm-bench/gallery";
 import {
   contextOf,
   examplesMessage,
@@ -163,7 +167,7 @@ const SKILL_RESERVE_FACTOR = 4;
 // CLI
 // ---------------------------------------------------------------------------
 
-type Mode = "references" | "mock" | "run" | "rescore" | "compare";
+type Mode = "references" | "mock" | "run" | "rescore" | "compare" | "gallery";
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 interface Options {
@@ -190,8 +194,12 @@ interface Options {
   yes: boolean;
   /** rescore: the run directory to rescore. */
   runDir?: string;
-  /** compare: the run directories, each with an optional label. */
-  compare?: { dir: string; label?: string }[];
+  /** compare, gallery: the run directories, each with an optional label. */
+  runs?: { dir: string; label?: string }[];
+  /** gallery: a references run whose renders are shown beside the
+   *  model's, and the output folder. */
+  references?: string;
+  out?: string;
 }
 
 /** A run directory named by path (from where the command was typed) or by
@@ -208,11 +216,13 @@ function findRunDir(arg: string): string {
 function parseArgs(argv: string[]): Options {
   const mode = argv[0] as Mode;
   if (
-    !["references", "mock", "run", "rescore", "compare"].includes(mode) ||
-    ((mode === "rescore" || mode === "compare") && !argv[1])
+    !["references", "mock", "run", "rescore", "compare", "gallery"].includes(
+      mode
+    ) ||
+    (["rescore", "compare", "gallery"].includes(mode) && !argv[1])
   ) {
     console.error(
-      "usage: llm-bench <references|mock|run|rescore <runDir>|compare <runDir>[=label] ...> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--subscription-cap-usd X] [--model ID] [--backend api|claude-code] [--effort E] [--concurrency N] [--context pack:<path>|cheatsheet|retrieval|skill] [--docs-pack path] [--extensions on|off] [--mock-break-first] [--yes]"
+      "usage: llm-bench <references|mock|run|rescore <runDir>|compare <runDir>[=label] ...|gallery <runDir>[=label] ... [--references <runDir>] [--out <dir>]> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--subscription-cap-usd X] [--model ID] [--backend api|claude-code] [--effort E] [--concurrency N] [--context pack:<path>|cheatsheet|retrieval|skill] [--docs-pack path] [--extensions on|off] [--mock-break-first] [--yes]"
     );
     process.exit(2);
   }
@@ -239,11 +249,11 @@ function parseArgs(argv: string[]): Options {
   const typedFrom = process.env.INIT_CWD ?? process.cwd();
   let i0 = 1;
   if (mode === "rescore") opts.runDir = findRunDir(argv[i0++]);
-  if (mode === "compare") {
-    opts.compare = [];
+  if (mode === "compare" || mode === "gallery") {
+    opts.runs = [];
     while (i0 < argv.length && !argv[i0].startsWith("--")) {
       const [dir, label] = argv[i0++].split("=");
-      opts.compare.push({ dir: findRunDir(dir), label });
+      opts.runs.push({ dir: findRunDir(dir), label });
     }
   }
   for (let i = i0; i < argv.length; i++) {
@@ -284,7 +294,9 @@ function parseArgs(argv: string[]): Options {
       if (!EFFORTS.includes(e))
         throw new Error(`--effort must be one of ${EFFORTS.join(", ")}`);
       opts.effort = e;
-    } else if (flag === "--mock-break-first") opts.mockBreakFirst = true;
+    } else if (flag === "--references") opts.references = findRunDir(value());
+    else if (flag === "--out") opts.out = resolve(typedFrom, value());
+    else if (flag === "--mock-break-first") opts.mockBreakFirst = true;
     else if (flag === "--yes") opts.yes = true;
     else throw new Error(`unknown option ${flag}`);
   }
@@ -1264,9 +1276,17 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.mode === "rescore") return rescore(opts);
   if (opts.mode === "compare") {
-    console.log(compareRuns(opts.compare!));
+    console.log(compareRuns(opts.runs!));
     return;
   }
+  if (opts.mode === "gallery")
+    return buildGallery({
+      runs: opts.runs!,
+      references: opts.references,
+      out: opts.out ?? join(OUT_ROOT, "gallery"),
+      tasks: opts.tasks,
+      group: opts.group,
+    });
   const all = await loadTasks();
   const tasks = all.filter(
     (t) =>

@@ -24,7 +24,7 @@ import { GROUPS } from "./tasks";
 /** A saved result, with the outcome of results from before outcomes
  *  existed and the code statistics of results from before they were
  *  recorded. */
-function load(dir: string): JobResult[] {
+export function loadResults(dir: string): JobResult[] {
   return readFileSync(join(dir, "results.jsonl"), "utf8")
     .split("\n")
     .filter((l) => l.trim())
@@ -61,7 +61,7 @@ export function compareRuns(runs: { dir: string; label?: string }[]): string {
     { contexts: Set<string>; dirs: string[]; results: JobResult[] }
   >();
   for (const { dir, label } of runs) {
-    const results = load(dir).filter(
+    const results = loadResults(dir).filter(
       (r) => isScored(r) && r.arm === "gofish" && r.kind !== "chain"
     );
     const ctx = results.map(contextOf).find(Boolean);
