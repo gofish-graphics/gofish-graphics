@@ -4,10 +4,11 @@ import { MaybeValue, type PositionValue } from "../data";
 import {
   FancyDims,
   isAxisInterval,
-  resolveAxisName,
+  mergeAxisDims,
   type AxisDims,
-  type AxisInterval,
+  type AxisDimsForm,
   type AxisScope,
+  type Interval,
 } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
@@ -41,36 +42,24 @@ export type ScatterProps = {
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 } & Omit<FancyDims<MaybeValue<number>>, "dims">;
 
-/** One axis of a scatter's placement: a point per child, or a span. */
-type AxisPlacement = {
-  point?: PositionValue[];
-  min?: MaybeValue<number>[];
-  max?: MaybeValue<number>[];
-};
+/** One axis of a scatter's placement: a point per child (`center`), or a
+ *  span (`min`, `max`). */
+type AxisPlacement = Interval<any[]>;
 
-/** The top-level option that fills each placement slot, per axis. */
-const TOP_LEVEL_SLOT: Record<keyof AxisPlacement, [string, string]> = {
-  point: ["x", "y"],
-  min: ["xMin", "yMin"],
-  max: ["xMax", "yMax"],
-};
-
-/** A `dims` interval as scatter placement slots: `center` is the point,
- *  `min`/`max` the span. A scatter sizes nothing, so `size` is an error. */
-const intervalSlots = (name: string, iv: AxisInterval<any>): AxisPlacement => {
-  for (const key of Object.keys(iv)) {
-    if (key !== "min" && key !== "max" && key !== "center") {
-      throw new Error(
-        `scatter dims.${name}: "${key}" is not a scatter placement. A ` +
-          `scatter puts each child at a point (a bare value or { center }) ` +
-          `or across a span ({ min, max }); size the child mark instead.`
-      );
-    }
-  }
-  if ((iv.min === undefined) !== (iv.max === undefined)) {
-    throw new Error(`scatter dims.${name}: a span needs both min and max.`);
-  }
-  return { point: iv.center, min: iv.min, max: iv.max };
+/** How a scatter reads `dims`: a bare value is the point, like `x`, and a
+ *  scatter sizes nothing, so `size` is not a key. */
+const SCATTER_DIMS: AxisDimsForm = {
+  where: "scatter dims",
+  bare: "center",
+  topLevel: {
+    center: ["x", "y"],
+    min: ["xMin", "yMin"],
+    max: ["xMax", "yMax"],
+  },
+  badKey:
+    "It is not a scatter placement. A scatter puts each child at a point " +
+    "(a bare value or { center }) or across a span ({ min, max }); size the " +
+    "child mark instead.",
 };
 
 /**
@@ -79,53 +68,30 @@ const intervalSlots = (name: string, iv: AxisInterval<any>): AxisPlacement => {
  * may be set once, and every array must have one entry per child.
  */
 function scatterAxes(
-  xy: {
-    x?: PositionValue[];
-    y?: PositionValue[];
-    xMin?: MaybeValue<number>[];
-    xMax?: MaybeValue<number>[];
-    yMin?: MaybeValue<number>[];
-    yMax?: MaybeValue<number>[];
-  },
+  xy: Pick<ScatterProps, "x" | "y" | "xMin" | "xMax" | "yMin" | "yMax">,
   dims: AxisDims<PositionValue[]> | undefined,
   scope: AxisScope,
   count: number
-): [AxisPlacement, AxisPlacement] {
-  const axes: [AxisPlacement, AxisPlacement] = [
-    { point: xy.x, min: xy.xMin, max: xy.xMax },
-    { point: xy.y, min: xy.yMin, max: xy.yMax },
+): AxisPlacement[] {
+  const axes: AxisPlacement[] = [
+    { center: xy.x, min: xy.xMin, max: xy.xMax },
+    { center: xy.y, min: xy.yMin, max: xy.yMax },
   ];
-  const label: Record<string, string> = {};
-  for (const axis of [0, 1] as const) {
-    for (const slot of ["point", "min", "max"] as const) {
-      label[`${slot}:${axis}`] = TOP_LEVEL_SLOT[slot][axis];
-    }
-  }
+  const origin = mergeAxisDims(axes, dims ?? {}, scope, SCATTER_DIMS);
   for (const [name, entry] of Object.entries(dims ?? {})) {
-    if (entry === undefined) continue;
-    const axis = resolveAxisName(scope, name, `scatter dims.${name}`);
-    const slots: AxisPlacement = isAxisInterval(entry)
-      ? intervalSlots(name, entry)
-      : { point: entry };
-    for (const slot of ["point", "min", "max"] as const) {
-      if (slots[slot] === undefined) continue;
-      const key = `${slot}:${axis}`;
-      if (axes[axis][slot] !== undefined) {
-        throw new Error(
-          `scatter dims.${name}: axis ${axis} already has a ${slot} ` +
-            `placement, from ${label[key]}. Place each axis once.`
-        );
-      }
-      (axes[axis] as any)[slot] = slots[slot];
-      label[key] = `dims.${name}`;
+    if (
+      isAxisInterval(entry) &&
+      (entry.min === undefined) !== (entry.max === undefined)
+    ) {
+      throw new Error(`scatter dims.${name}: a span needs both min and max.`);
     }
   }
   for (const axis of [0, 1] as const) {
-    for (const slot of ["point", "min", "max"] as const) {
-      const arr = axes[axis][slot];
+    for (const key of ["center", "min", "max"] as const) {
+      const arr = axes[axis][key];
       if (arr !== undefined && arr.length !== count) {
         throw new Error(
-          `Scatter operator ${label[`${slot}:${axis}`]} array must match ` +
+          `Scatter operator ${origin(key, axis)} array must match ` +
             `children length`
         );
       }
@@ -139,7 +105,7 @@ function scatterAxes(
 
 /** Does this axis place the children (a point, or a full span)? */
 const isPlaced = (a: AxisPlacement): boolean =>
-  a.point !== undefined || (a.min !== undefined && a.max !== undefined);
+  a.center !== undefined || (a.min !== undefined && a.max !== undefined);
 
 const Scatter = createNodeOperator(
   async (
@@ -190,11 +156,11 @@ const Scatter = createNodeOperator(
     // `dims` names its axes the way the enclosing coordinate space does
     // (`theta`, `lon`, ...), so the per-axis placement, and the constraints
     // built from it, wait for the resolveAliases pass.
-    node._elaborateInAxisScope = async (scope) => {
+    node._elaborateInAxisScope = async (_outer, inner) => {
       const placement = scatterAxes(
         { x, y, xMin, xMax, yMin, yMax },
         dims,
-        scope,
+        inner,
         childList.length
       );
       await node.relate((g) => {
@@ -212,7 +178,7 @@ const Scatter = createNodeOperator(
           } = {};
           ([0, 1] as const).forEach((axis) => {
             const name = axisName(axis);
-            const { point, min, max } = placement[axis];
+            const { center: point, min, max } = placement[axis];
             if (point?.[i] !== undefined) pos[name] = point[i];
             if (min?.[i] !== undefined && max?.[i] !== undefined)
               span[name] = [min[i], max[i]];

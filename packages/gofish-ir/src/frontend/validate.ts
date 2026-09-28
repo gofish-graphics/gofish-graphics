@@ -462,31 +462,43 @@ function walkFieldType(
   }
 }
 
-const AXIS_INTERVAL_KEYS = ["min", "center", "max", "size", "embedded"];
+/** The anchors an axis interval may name: the keys of `AxisInterval`. */
+export const AXIS_INTERVAL_KEYS = [
+  "min",
+  "center",
+  "max",
+  "size",
+  "embedded",
+] as const;
 
-/** A `dims` entry (`AxisDimsValue`): a bare channel value, or an interval —
- *  a plain object with no `type` tag (and no bridge sentinel) whose keys are
- *  all anchors. Mirrors `isAxisInterval` in gofish-graphics' dims.ts. */
+/**
+ * Is this `dims` entry (`AxisDimsValue`) an interval? A bare channel value (a
+ * number, field name, function, a tagged `datum(...)`/`field(...)` object, a
+ * bridge sentinel, an array) is not: it is a position. An interval is a plain
+ * object with no `type` tag. Shared with gofish-graphics' dims.ts, where a
+ * runtime value may be a class instance, hence the plain-prototype check.
+ */
+export const isAxisInterval = (v: unknown): v is Record<string, unknown> =>
+  isObject(v) &&
+  Object.getPrototypeOf(v) === Object.prototype &&
+  !("type" in v) &&
+  !("__gofish_lambda" in v);
+
+/** A `dims` entry: a bare channel value, or an interval whose keys are all
+ *  anchors ({@link isAxisInterval}). */
 function walkAxisDimsValue(value: unknown, path: string, ctx: Context): void {
-  const isInterval =
-    isObject(value) && !("type" in value) && !("__gofish_lambda" in value);
-  if (!isInterval) {
+  if (!isAxisInterval(value)) {
     walkChannelValue(value, path, ctx);
     return;
   }
   for (const [key, v] of Object.entries(value)) {
-    if (!AXIS_INTERVAL_KEYS.includes(key)) {
+    if (!(AXIS_INTERVAL_KEYS as readonly string[]).includes(key)) {
       ctx.errors.push({
         path: `${path}.${key}`,
         message: `unknown axis interval key "${key}" (expected ${AXIS_INTERVAL_KEYS.join(", ")})`,
       });
     } else if (key === "embedded") {
-      if (typeof v !== "boolean") {
-        ctx.errors.push({
-          path: `${path}.embedded`,
-          message: `expected boolean, got ${typeNameOf(v)}`,
-        });
-      }
+      expectBoolean(v, `${path}.embedded`, ctx);
     } else {
       walkChannelValue(v, `${path}.${key}`, ctx);
     }

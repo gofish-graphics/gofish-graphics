@@ -8,7 +8,7 @@ import {
   Dimensions,
   displayTranslate,
   elaborateDims,
-  stashAxisDims,
+  deferAxisDims,
   FancyDims,
   Transform,
 } from "../dims";
@@ -380,8 +380,8 @@ export const Image = ({
     },
     []
   );
-  // Stash the axis-name-keyed `dims` option for the resolveAliases pass.
-  node._pendingDims = stashAxisDims(fancyDims, dims);
+  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;
 };
 

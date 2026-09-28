@@ -155,9 +155,12 @@ export const Spread = createNodeOperator(
     // `dir` names an axis in the scope of the spread's children: `x`/`y`, or a
     // name the enclosing coordinate space declares (`theta`, `lon`, ...). The
     // spread is built before that space exists, so the constraints, which need
-    // the axis, are installed by the resolveAliases pass.
-    node._elaborateInAxisScope = async (scope) => {
-      const stackDir = resolveAxisName(scope, dirName, `spread({ dir })`);
+    // the axis, are installed by the resolveAliases pass, after the layer's
+    // own `dims` hook (if the spread was given `dims`).
+    const layerDims = node._elaborateInAxisScope;
+    node._elaborateInAxisScope = async (outer, inner) => {
+      await layerDims?.(outer, inner);
+      const stackDir = resolveAxisName(inner, dirName, `spread({ dir })`);
       const alignAxis = axisName((1 - stackDir) as Direction);
       const stackAxis = axisName(stackDir);
       await node.relate((g) => {

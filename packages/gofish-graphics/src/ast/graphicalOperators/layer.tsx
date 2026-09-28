@@ -10,7 +10,7 @@ import { isToken } from "../createName";
 import {
   Size,
   elaborateDims,
-  stashAxisDims,
+  deferAxisDims,
   FancyDims,
   displayTranslate,
 } from "../dims";
@@ -874,8 +874,8 @@ export const layer = createNodeOperatorSequential(
       },
       children
     );
-    // Stash the axis-name-keyed `dims` option for the resolveAliases pass.
-    node._pendingDims = stashAxisDims(options, dims);
+    // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+    node._elaborateInAxisScope = deferAxisDims(options, dims);
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)
     // found anywhere in this layer's subtree — see the doc comment above.
     applyRelationalZBelowDefaults(node, children);

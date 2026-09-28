@@ -361,8 +361,10 @@ Constraints likewise stay authored. So do `AxisInterval` and `AxisDimsValue`,
 the value shape of a `dims` option (`t.record(t.ref("AxisDimsValue"))` in the
 table): a bare `ChannelValue` or an interval object with only
 `min`/`center`/`max`/`size`/`embedded` keys. `validate.ts` tells the two apart
-the way the renderer does (an interval is a plain object with no `type` tag), so
-a misspelled anchor is reported rather than read as an unknown channel shape.
+with `isAxisInterval` (an interval is a plain object with no `type` tag), so a
+misspelled anchor is reported rather than read as an unknown channel shape. It
+exports that predicate and the key list `AXIS_INTERVAL_KEYS`, and the renderer's
+`dims.ts` imports both, so the wire and the renderer share one definition.
 The keys of `dims` are axis names that only mean something inside the enclosing
 coordinate space, so the wire keeps them open and carries them verbatim; the
 same goes for `spread`/`stack`'s `dir`, which is a plain string on the wire.

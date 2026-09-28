@@ -28,11 +28,10 @@ import {
   translateForAnchor,
   Size,
   Transform,
-  applyAxisDims,
   axisScopeFor,
   BASE_AXIS_SCOPE,
   type AxisScope,
-  type PendingAxisDims,
+  type AxisScopeHook,
 } from "./dims";
 import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
 import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
@@ -541,20 +540,15 @@ export class GoFishNode {
    */
   public axisDir?: 0 | 1;
   /**
-   * A mark's axis-name-keyed `dims` option (e.g. `{ theta: { size: 0.5 } }`),
-   * stashed by its factory at construction, before its enclosing coord exists,
-   * together with the per-axis dims array it resolves onto. Consumed by
-   * {@link resolveAliases}. See `stashAxisDims` / `applyAxisDims` (dims.ts).
+   * The part of this node's elaboration that depends on which axis an axis
+   * NAME means: a mark's `dims` option (e.g. `{ theta: { size: 0.5 } }`,
+   * written onto its per-axis dims against `outer`, see `deferAxisDims` in
+   * dims.ts), or an operator's constraints (spread's `dir`, scatter's `dims`,
+   * which relate the children, so against `inner`). Deferred at construction,
+   * because a name like `theta` only has a meaning inside the coordinate space
+   * that declares it, and run once by {@link resolveAliases}.
    */
-  public _pendingDims?: PendingAxisDims;
-  /**
-   * The part of an operator's elaboration that depends on which axis an axis
-   * NAME means (spread's `dir`, scatter's `dims`): the constraints it installs
-   * on this node. Deferred at construction, because an axis name like `theta`
-   * only has a meaning inside the coordinate space that declares it, and run
-   * once by {@link resolveAliases} with the scope of this node's children.
-   */
-  public _elaborateInAxisScope?: (scope: AxisScope) => Promise<void>;
+  public _elaborateInAxisScope?: AxisScopeHook;
   /**
    * Axis names a `coord` node declares for its subtree (the transform's
    * `aliases`, e.g. `{ x: "theta", y: "r" }`). Read by {@link resolveAliases} to
@@ -767,47 +761,53 @@ export class GoFishNode {
    * Top-down pass that gives axis NAMES their meaning. `x`/`y` mean axis 0/1
    * everywhere; a coordinate space adds the names its transform declares in
    * `aliases` (polar `theta`/`r`, geo `lon`/`lat`). Mirrors {@link resolveAxes}:
-   * it carries the `active` scope downward, and a `coord` that declares names
-   * rebinds it for its subtree (the innermost declaring coord wins).
+   * it carries the scope downward, and a `coord` that declares names rebinds
+   * it for its subtree (the innermost declaring coord wins).
    *
-   * At each node it consumes the two kinds of name-dependent work a factory
-   * could not do at construction, when the enclosing coord did not exist yet:
-   * - a mark's `dims` option ({@link _pendingDims}), written onto its per-axis
-   *   dims. A node's own box lives in its PARENT's space, so this resolves
-   *   against `active`, even on a coord.
-   * - an operator's axis-dependent elaboration ({@link _elaborateInAxisScope}:
-   *   spread's `dir`, scatter's `dims`), which relates the node's CHILDREN, so it
-   *   runs with the children's scope.
+   * At each node it consumes the {@link _elaborateInAxisScope} hook, the work a
+   * factory could not do at construction, when the enclosing coord did not
+   * exist yet. The hook gets both scopes: `outer`, where the node's own box
+   * lives (its PARENT's space, even on a coord), and `inner`, its children's.
    *
-   * Each is consumed once, so the pass is idempotent and can rerun over a tree
-   * that an elaboration pass (axes, legends) extended with new nodes.
+   * The walk is synchronous and only collects the hooks, in pre-order; they
+   * then run one at a time in that order. Not concurrently: an operator's hook
+   * calls `relate`, whose environment walks the subtree, so it must not
+   * interleave with a descendant's hook. The walk sees the tree as it was
+   * before any hook ran, which is enough: spread's and scatter's `relate`
+   * return constraints only, so no hook adds a node that needs a hook of its
+   * own.
+   *
+   * Each hook is consumed once, so the pass is idempotent and can rerun over a
+   * tree that an elaboration pass (axes, legends) extended with new nodes.
    *
    * Runs BEFORE `resolveUnderlyingSpace` (which reads the dims and the
    * constraints). The `embedded` flag is authored later by
    * {@link resolveEmbedding}, not here. A name no enclosing coord declares is
    * a build-time error that lists the names that are declared.
    */
-  public async resolveAliases(
-    active: AxisScope = BASE_AXIS_SCOPE
-  ): Promise<void> {
+  public async resolveAliases(): Promise<void> {
+    const work: (() => void | Promise<void>)[] = [];
+    this.collectAxisScopeWork(BASE_AXIS_SCOPE, work);
+    for (const run of work) await run();
+  }
+
+  /** The synchronous walk of {@link resolveAliases}: consume each node's hook
+   *  and queue it, with its scopes, in pre-order. */
+  private collectAxisScopeWork(
+    outer: AxisScope,
+    work: (() => void | Promise<void>)[]
+  ): void {
     const inner =
       this.type === "coord" && this._aliases
         ? axisScopeFor(this._aliases)
-        : active;
-
-    const pending = this._pendingDims;
-    if (pending) {
-      this._pendingDims = undefined;
-      applyAxisDims(pending, active);
-    }
-    const elaborate = this._elaborateInAxisScope;
-    if (elaborate) {
+        : outer;
+    const hook = this._elaborateInAxisScope;
+    if (hook) {
       this._elaborateInAxisScope = undefined;
-      await elaborate(inner);
+      work.push(() => hook(outer, inner));
     }
-
     for (const c of this.children) {
-      if (c instanceof GoFishNode) await c.resolveAliases(inner);
+      if (c instanceof GoFishNode) c.collectAxisScopeWork(inner, work);
     }
   }
 

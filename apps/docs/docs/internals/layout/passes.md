@@ -170,34 +170,43 @@ used in two places, and in both the meaning of a name depends on where the node 
 which a factory does not know when it runs:
 
 - a box-dims mark's `dims` option, keyed by axis name (`rect({ dims: { theta: { size:
-0.4 } } })`). The factory stashes the bag, with the per-axis dims array it writes
-  onto, as `_pendingDims` (`stashAxisDims` in `dims.ts`). Channel inference has already
-  run on it at mark-build time: the channel kind of each slot follows from its
-  structure (`size` is a size channel; a bare value, `min`, `center`, `max` are
-  positions), which does not depend on the axis, so `mapAxisDims` applies it through
-  the ordinary `"dims"` channel kind.
+0.4 } } })`). Channel inference has already run on it at mark-build time: the
+  channel kind of each slot follows from its structure (`size` is a size channel; a
+  bare value, `min`, `center`, `max` are positions), which does not depend on the
+  axis, so `mapAxisDims` applies it through the ordinary `"dims"` channel kind.
 - an operator's `dir` (spread, stack) and a scatter's `dims`. Everything in these
   operators that needs the axis (the align/distribute or position constraints and
-  `axisDir`) is deferred into `_elaborateInAxisScope`, a callback set at construction.
-  The callback installs the constraints with `.relate()`, which is async, so the
-  callback returns a promise and the pass awaits it.
+  `axisDir`) waits for the axis, and so do the constraints `.relate()` installs.
   Spread's per-entry `size` wrapper uses a `dims` option keyed by `dir`, so it
   resolves in the same pass.
+
+Both kinds of work are deferred the same way: the factory sets one hook on the
+node, `_elaborateInAxisScope(outer, inner)`. `outer` is the scope the node's own box
+lives in (its parent's scope, even on a coord) and `inner` is the scope of its
+children. A mark's hook (`deferAxisDims` in `dims.ts`) writes its `dims` bag onto its
+per-axis dims array against `outer` with `applyAxisDims`. An operator's hook resolves
+its names against `inner` and calls `.relate()`, which is async. A spread given its
+own `dims` runs the layer's dims hook first, then its own.
 
 `resolveAliases` is a top-down pass (run before underlying space, which reads the
 dims and the constraints) that carries the **axis scope**, a map from name to axis
 starting at `{ x: 0, y: 1 }`. A `coord` whose transform declares names replaces the
 scope for its subtree with `x`, `y`, and its own names, so the innermost declaring
-coord wins. At each node it consumes the node's `_pendingDims` against the scope the
-node's own box lives in (for a coord, its parent's scope) with `applyAxisDims`, and
-awaits `_elaborateInAxisScope` with the scope of the node's children, before it walks
-those children. A name the scope
-does not declare **throws**, listing the names it does; so does setting one
-(axis, anchor) slot twice, across the top-level keys and `dims` or within `dims`.
-Like the later embedding pass it mutates the per-axis dims array by reassigning its
-elements, so the captured layout/space closures observe the result.
+coord wins. The walk is synchronous: it consumes each node's hook and queues it with
+its two scopes, in pre-order. The pass then runs the queue one hook at a time, in
+that order. It does not run them concurrently, because an operator's `.relate()`
+walks the subtree to build its environment and must not interleave with a
+descendant's hook. The walk sees the tree before any hook runs; that is enough,
+because spread's and scatter's `.relate()` return constraints only and add no nodes.
+A name the scope does not declare **throws**, listing the names it does; so does
+setting one (axis, anchor) slot twice, across the top-level keys and `dims` or within
+`dims`. Scatter merges its top-level `x`/`xMin`/`xMax` (and `y` ones) with its `dims`
+through the same `mergeAxisDims` as the marks, with its own rules: a bare value is
+the point (`center`), and `size` is not a key. Like the later embedding pass it
+mutates the per-axis dims array by reassigning its elements, so the captured
+layout/space closures observe the result.
 
-Both stashes are consumed, so the pass is idempotent. That lets `gofish.tsx` rerun it
+Each hook is consumed, so the pass is idempotent. That lets `gofish.tsx` rerun it
 after axis, title, and legend elaboration, whose chrome is built from `Spread` nodes
 that install their constraints in this pass. See
 [Authoring Coordinate Transforms](/internals/layout/coordinate-transforms).

@@ -11,7 +11,7 @@ import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
 import {
   displayTranslate,
   elaborateDims,
-  stashAxisDims,
+  deferAxisDims,
   FancyDims,
   Interval,
   Size,
@@ -868,12 +868,12 @@ export const coord = createNodeOperator(
       },
       children
     );
-    // Declare this space's axis aliases (e.g. polar `{ x: "theta", y: "r" }`) so
-    // resolveAliases can rebind the alias scope for the coord's subtree.
+    // Declare this space's axis names (e.g. polar `{ x: "theta", y: "r" }`) so
+    // resolveAliases can rebind the axis-name scope for the coord's subtree.
     coordNode._aliases = coordTransform.aliases;
     // The coord's own box lives in its parent's space, so its `dims` option
-    // resolves against the parent's names (see resolveAliases).
-    coordNode._pendingDims = stashAxisDims(fancyDims, dims);
+    // resolves against the parent's names (the hook's `outer` scope).
+    coordNode._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
     return coordNode;
   }
 );

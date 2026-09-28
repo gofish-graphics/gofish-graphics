@@ -1,3 +1,5 @@
+import { Frontend } from "gofish-ir";
+
 export type Interval<T = number> = {
   min?: T;
   center?: T;
@@ -25,62 +27,68 @@ export type XYWHDims<T = number> = {
 };
 
 /**
- * One axis's options inside a mark's `dims` bag. A bare value is a position
- * with the same anchor as `x` (`min`); an interval object names its anchors.
- * The channel kind follows from the structure: `size` is a size channel, and a
- * bare value or `min`/`center`/`max` is a position channel.
- */
-export type AxisInterval<T = number> = Interval<T>;
-
-/**
  * A mark's `dims` option: axis name → value or interval. The legal names are
  * `x`/`y` (always) plus the names the enclosing coordinate space declares in
- * its `aliases` (polar: `theta`/`r`; geo: `lon`/`lat`). A mark is built before
- * its enclosing coord exists, so the bag is stored unresolved at construction
- * ({@link stashAxisDims}) and written onto the mark's per-axis dims by
- * `GoFishNode.resolveAliases` ({@link applyAxisDims}).
+ * its `aliases` (polar: `theta`/`r`; geo: `lon`/`lat`). A bare value is a
+ * position with the same anchor as `x` (`min`); an interval object names its
+ * anchors. The channel kind follows from the structure: `size` is a size
+ * channel, and a bare value or `min`/`center`/`max` is a position channel. A
+ * mark is built before its enclosing coord exists, so the bag is deferred at
+ * construction ({@link deferAxisDims}) and written onto the mark's per-axis
+ * dims by `GoFishNode.resolveAliases` ({@link applyAxisDims}).
  */
-export type AxisDims<T = number> = Record<string, T | AxisInterval<T>>;
+export type AxisDims<T = number> = Record<string, T | Interval<T>>;
 
-export const INTERVAL_KEYS = [
-  "min",
-  "center",
-  "max",
-  "size",
-  "embedded",
-] as const;
+// The anchors an axis interval may name, and whether a `dims` entry is an
+// interval or a bare value (a position): one definition, shared with the IR
+// validator.
+const { AXIS_INTERVAL_KEYS, isAxisInterval } = Frontend;
+export { isAxisInterval };
+export type IntervalKey = (typeof AXIS_INTERVAL_KEYS)[number];
 
 /**
- * Is this `dims` entry an interval? A bare value (number, field name, function,
- * a tagged `datum(...)`/`field(...)` object, a per-entry array) is not: it is a
- * position. An interval is a plain object with no `type` tag.
+ * How a family of options reads its `dims` bag: `where` prefixes messages,
+ * `bare` is the anchor a bare value fills, `topLevel` names the top-level
+ * option that writes each allowed anchor per axis (for messages), and
+ * `badKey` explains an anchor outside `topLevel`.
  */
-export const isAxisInterval = <T>(
-  v: T | AxisInterval<T>
-): v is AxisInterval<T> =>
-  typeof v === "object" &&
-  v !== null &&
-  !Array.isArray(v) &&
-  Object.getPrototypeOf(v) === Object.prototype &&
-  !("type" in v) &&
-  !("__gofish_lambda" in v);
+export type AxisDimsForm = {
+  where: string;
+  bare: IntervalKey;
+  topLevel: Partial<Record<IntervalKey, [string, string]>>;
+  badKey: string;
+};
 
-/** Read a `dims` entry as an interval (a bare value is `{ min: value }`),
- *  rejecting an interval with a key that is not an anchor. */
+/** A box-dims mark's form: every anchor, a bare value at `min` like `x`. */
+const MARK_DIMS: AxisDimsForm = {
+  where: "dims",
+  bare: "min",
+  topLevel: {
+    min: ["x", "y"],
+    center: ["cx", "cy"],
+    max: ["x2", "y2"],
+    size: ["w", "h"],
+    embedded: ["emX", "emY"],
+  },
+  badKey: `An axis interval takes ${AXIS_INTERVAL_KEYS.join(", ")}.`,
+};
+
+/** Read a `dims` entry as an interval (a bare value fills `form.bare`),
+ *  rejecting an interval with a key the form does not allow. */
 const toAxisInterval = <T>(
   name: string,
-  entry: T | AxisInterval<T>
-): AxisInterval<T> => {
-  if (!isAxisInterval(entry)) return { min: entry as T };
+  entry: T | Interval<T>,
+  form: AxisDimsForm
+): Interval<T> => {
+  if (!isAxisInterval(entry)) return { [form.bare]: entry } as Interval<T>;
   for (const key of Object.keys(entry)) {
-    if (!(INTERVAL_KEYS as readonly string[]).includes(key)) {
+    if (!(key in form.topLevel)) {
       throw new Error(
-        `dims.${name}: unknown key "${key}". An axis interval takes ` +
-          `${INTERVAL_KEYS.join(", ")}.`
+        `${form.where}.${name}: unknown key "${key}". ${form.badKey}`
       );
     }
   }
-  return entry;
+  return entry as Interval<T>;
 };
 
 /**
@@ -101,8 +109,8 @@ export const mapAxisDims = <A, B>(
       out[name] = f(entry as A, "pos");
       continue;
     }
-    const src = toAxisInterval(name, entry);
-    const iv: AxisInterval<B> = {};
+    const src = toAxisInterval<A>(name, entry, MARK_DIMS);
+    const iv: Interval<B> = {};
     for (const key of ["min", "center", "max"] as const) {
       if (src[key] !== undefined) iv[key] = f(src[key] as A, "pos");
     }
@@ -129,25 +137,26 @@ export const axisScopeFor = (aliases: {
   x?: string;
   y?: string;
 }): AxisScope => {
+  if (aliases.x === undefined && aliases.y === undefined)
+    return BASE_AXIS_SCOPE;
   const scope: Record<string, Direction> = { ...BASE_AXIS_SCOPE };
   if (aliases.x !== undefined) scope[aliases.x] = 0;
   if (aliases.y !== undefined) scope[aliases.y] = 1;
   return scope;
 };
 
-/** Resolve an axis name (or index) against `scope`, or throw an error that
- *  lists the names the scope declares. `where` prefixes the message. */
+/** Resolve an axis name against `scope`, or throw an error that lists the
+ *  names the scope declares. `where` prefixes the message. */
 export const resolveAxisName = (
   scope: AxisScope,
-  name: AxisName | Direction,
+  name: AxisName,
   where: string
 ): Direction => {
-  if (name === 0 || name === 1) return name;
   const axis = scope[name];
   if (axis !== undefined) return axis;
   const names = Object.keys(scope).join(", ");
   throw new Error(
-    Object.keys(scope).length === Object.keys(BASE_AXIS_SCOPE).length
+    scope === BASE_AXIS_SCOPE
       ? `${where}: no enclosing coordinate space declares the axis name ` +
         `"${name}", so only ${names} are available here. Put the mark ` +
         `inside a coordinate space that declares "${name}", or use x/y.`
@@ -156,63 +165,81 @@ export const resolveAxisName = (
   );
 };
 
-/** The top-level option that writes each (anchor, axis) slot, for messages. */
-const TOP_LEVEL_KEY: Record<(typeof INTERVAL_KEYS)[number], [string, string]> =
-  {
-    min: ["x", "y"],
-    center: ["cx", "cy"],
-    max: ["x2", "y2"],
-    size: ["w", "h"],
-    embedded: ["emX", "emY"],
-  };
+/**
+ * Work a node defers until the axis names around it are known, run once by
+ * `GoFishNode.resolveAliases`. `outer` is the scope the node's own box lives
+ * in (its parent's), `inner` the scope of its children (different only on a
+ * coord that declares names).
+ */
+export type AxisScopeHook = (
+  outer: AxisScope,
+  inner: AxisScope
+) => void | Promise<void>;
 
-/** A mark's unresolved `dims` bag and the per-axis array it resolves onto. */
-export type PendingAxisDims = { into: Dimensions<any>; entries: AxisDims<any> };
-
-/** The stash a box-dims factory leaves on its node for `resolveAliases`:
- *  the `dims` option (if any) and the node's own per-axis dims array. */
-export const stashAxisDims = (
+/** The hook a box-dims factory leaves on its node: write the `dims` option
+ *  (if any) onto the node's own per-axis dims array, against `outer`. */
+export const deferAxisDims = (
   fancyDims: FancyDims<any>,
   into: Dimensions<any>
-): PendingAxisDims | undefined => {
+): AxisScopeHook | undefined => {
   const entries = (fancyDims as XYWHDims<any>).dims;
-  return entries === undefined ? undefined : { into, entries };
+  return entries === undefined
+    ? undefined
+    : (outer) => {
+        applyAxisDims(into, entries, outer);
+      };
 };
 
 /**
- * Write a mark's `dims` bag onto its per-axis `into` array, resolving each name
- * against `scope`. Each (axis, anchor) slot may be set once: a slot that a
- * top-level option (x, w, ...) or an earlier `dims` entry already set is an
- * error. `into` is mutated by reassigning its elements (not their fields), so
- * the mark's closures, which captured the same array, observe the result. A
- * `min` still missing afterwards is derived from `center` and `size`, exactly
- * as `elaborateDims` does for `cx` and `w`.
+ * Merge a `dims` bag into the per-axis intervals `into`, which already hold
+ * the top-level options, resolving each name against `scope`. Each (axis,
+ * anchor) slot may be set once: a slot that a top-level option or an earlier
+ * `dims` entry already set is an error. `into` is mutated by reassigning its
+ * elements (not their fields), so closures that captured the same array
+ * observe the result. Returns the option that set each slot, for messages.
  */
-export const applyAxisDims = (
-  { into, entries }: PendingAxisDims,
-  scope: AxisScope
-): void => {
+export const mergeAxisDims = (
+  into: Interval<any>[],
+  entries: AxisDims<any>,
+  scope: AxisScope,
+  form: AxisDimsForm
+): ((key: IntervalKey, axis: Direction) => string) => {
   const setBy: Record<string, string> = {};
+  const origin = (key: IntervalKey, axis: Direction) =>
+    setBy[`${key}:${axis}`] ?? form.topLevel[key]![axis];
   for (const [name, entry] of Object.entries(entries)) {
     if (entry === undefined) continue;
-    const axis = resolveAxisName(scope, name, `dims.${name}`);
-    const iv = toAxisInterval(name, entry);
+    const where = `${form.where}.${name}`;
+    const axis = resolveAxisName(scope, name, where);
+    const iv = toAxisInterval(name, entry, form);
     const next: Interval<any> = { ...into[axis] };
-    for (const key of INTERVAL_KEYS) {
+    for (const key of AXIS_INTERVAL_KEYS) {
       if (iv[key] === undefined) continue;
-      const slot = `${key}:${axis}`;
       if (next[key] !== undefined) {
         throw new Error(
-          `dims.${name}: the ${key} of axis ${axis} is set twice, here and ` +
-            `by ${setBy[slot] ?? TOP_LEVEL_KEY[key][axis]}. Set each axis ` +
-            `anchor once.`
+          `${where}: the ${key} of axis ${axis} is set twice, here and ` +
+            `by ${origin(key, axis)}. Set each axis anchor once.`
         );
       }
       next[key] = iv[key];
-      setBy[slot] = `dims.${name}`;
+      setBy[`${key}:${axis}`] = where;
     }
     into[axis] = next;
   }
+  return origin;
+};
+
+/**
+ * Write a mark's `dims` bag onto its per-axis `into` array
+ * ({@link mergeAxisDims}). A `min` still missing afterwards is derived from
+ * `center` and `size`, exactly as `elaborateDims` does for `cx` and `w`.
+ */
+export const applyAxisDims = (
+  into: Dimensions<any>,
+  entries: AxisDims<any>,
+  scope: AxisScope
+): void => {
+  mergeAxisDims(into, entries, scope, MARK_DIMS);
   for (const axis of [0, 1] as const) {
     const d = into[axis];
     if (d.min === undefined && d.center !== undefined && d.size !== undefined) {
@@ -365,16 +392,8 @@ export const translateForAnchor = (
 ): number =>
   value - localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
 
-export const elaborateDirection = (direction: FancyDirection): Direction => {
-  switch (direction) {
-    case "x":
-      return 0;
-    case "y":
-      return 1;
-    default:
-      return direction;
-  }
-};
+export const elaborateDirection = (direction: FancyDirection): Direction =>
+  typeof direction === "number" ? direction : BASE_AXIS_SCOPE[direction];
 
 export type Position = [number | undefined, number | undefined];
 

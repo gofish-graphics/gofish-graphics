@@ -306,7 +306,7 @@ async function main() {
     );
     check(
       "scatter x with dims.theta throws",
-      scatterTwice.includes("from x"),
+      scatterTwice.includes("by x"),
       scatterTwice
     );
   }

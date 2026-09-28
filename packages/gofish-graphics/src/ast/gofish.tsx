@@ -245,8 +245,9 @@ export async function layout(
   const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
-  // Resolve coordinate-space axis aliases (polar theta/r/…) into x/y/w/h BEFORE
-  // space inference reads the dims. Top-down + scope-bounded (see resolveAliases).
+  // Resolve axis names (polar theta/r, geo lon/lat, …) BEFORE space inference
+  // reads the dims: run each node's deferred axis-scope work (a mark's `dims`,
+  // spread's `dir`, scatter's `dims`). Top-down + scope-bounded (see resolveAliases).
   await child.resolveAliases();
   child.resolveUnderlyingSpace();
   perfAdd("resolve", perfNow() - __tResolve);
