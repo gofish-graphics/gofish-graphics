@@ -71,6 +71,7 @@ axes: { x: { title: false }, y: true }         // suppress the inferred x title
 axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
 axes: { x: { labelAngle: 45 } }                // rotate x tick/category labels 45°
 axes: { x: { labelAngle: [45] } }              // rotate only the innermost tier
+axes: { x: { labelAngle: "auto" } }            // rotate only if labels would collide
 ```
 
 Each per-axis object also accepts `side: "start" | "end"`. By default a
@@ -84,7 +85,7 @@ that with the literal **frame-relative** seating: `"start"` is the near/origin e
 
 ### Rotating tick and category labels
 
-Each per-axis object also accepts `labelAngle: number | number[]` — degrees,
+Each per-axis object also accepts `labelAngle: number | number[] | "auto"` — degrees,
 **clockwise on screen**, matching Vega-Lite's `labelAngle`. It rotates both
 continuous tick labels and ordinal category labels on that axis. This is useful
 when category labels would otherwise overlap at small chart sizes:
@@ -130,9 +131,38 @@ gf.chart(cityYear, { axes: { x: { labelAngle: [45] } } }) // year rotated, city 
   .render(root, { w: 300, h: 210 });
 ```
 
-There is currently no "auto" mode that rotates only when labels would collide —
-`labelAngle` is a manual, always-on rotation (auto-rotation is tracked in
-[#486](https://github.com/gofish-graphics/gofish/issues/486)).
+#### Choosing the angle automatically
+
+`labelAngle: "auto"` rotates only when it has to. GoFish tries 0°, then 45°,
+then 90°, and keeps the first angle at which no two labels in the same row
+overlap or come closer than 2px. If every angle collides, it keeps the one with
+the least overlap. The check covers the whole chart, so in a grouped bar chart a
+year label under one city that runs into a year label under the next city
+counts as a collision.
+
+```js
+gf.chart(sales, { axes: { x: { labelAngle: "auto" } } })
+  .flow(
+    gf.spread({ by: "region", dir: "x", spacing: 24 }),
+    gf.spread({ by: "product", dir: "x", spacing: 0 })
+  )
+  .mark(gf.rect({ h: "sales", fill: "product" }))
+  .render(root, { w: 400, h: 210 });
+```
+
+At `w: 900` the product names fit upright and stay at 0°. At `w: 400` they
+would overlap, so they slant to 45°. At `w: 220` only vertical names clear each
+other, so they turn to 90°.
+
+A few rules:
+
+- One angle applies to every tier of the axis, like a plain number. `"auto"`
+  cannot be an entry of a per-tier array.
+- Each axis is chosen on its own, so `x` and `y` can both be `"auto"`.
+- GoFish lays the chart out once for each angle it tries. That needs a chart it
+  can build again, which is what `chart(...)` and a component function passed to
+  `gofish()` are. A node built ahead of time and passed to `gofish()` can be laid
+  out only once, so `"auto"` there is an error.
 
 `axes` is most naturally a `chart()`/`chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as

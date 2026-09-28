@@ -189,6 +189,8 @@ function tickMark(
     fill: AXIS_COLOR,
     rotate: labelAngle,
   });
+  // A continuous axis has one tier (see `AxisOptions.labelAngle`).
+  text.axisLabel = { dim, tier: 0 };
   const tick = tickRect(dim);
   return (Spread as any)(
     {
@@ -444,14 +446,17 @@ function elaborateContinuousAxis(
       : (v, _i, name) =>
           tickMark(dim, fmtNum(v), name, side, labelRotation?.rotate),
     tickLabel: oblique
-      ? (v, _i, name) =>
-          Text({
+      ? (v, _i, name) => {
+          const label = Text({
             text: fmtNum(v),
             fontSize: LABEL_FONT_SIZE,
             fill: AXIS_COLOR,
             rotate: labelRotation!.rotate,
             textAnchor: labelRotation!.textAnchor,
-          }).name(name)
+          }).name(name);
+          label.axisLabel = { dim, tier: 0 };
+          return label;
+        }
       : undefined,
     labelRotation,
     crossFloor,
@@ -513,7 +518,8 @@ function elaborateOrdinalAxis(
   keyMap: Record<string, GoFishNode>,
   prefix: string,
   side: "start" | "end" = "start",
-  labelRotation?: LabelRotation
+  labelRotation?: LabelRotation,
+  tier = 0
 ): AxisElaboration {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
   const trackAxis = dirName(dim); // labels track their key along the axis dim
@@ -533,15 +539,15 @@ function elaborateOrdinalAxis(
 
   const nodes: GoFishNode[] = [];
   keys.forEach((k, i) => {
-    nodes.push(
-      Text({
-        text: k,
-        fontSize: LABEL_FONT_SIZE,
-        fill: AXIS_COLOR,
-        rotate: labelRotation?.rotate,
-        textAnchor: labelRotation?.textAnchor,
-      }).name(lName(i))
-    );
+    const label = Text({
+      text: k,
+      fontSize: LABEL_FONT_SIZE,
+      fill: AXIS_COLOR,
+      rotate: labelRotation?.rotate,
+      textAnchor: labelRotation?.textAnchor,
+    }).name(lName(i));
+    label.axisLabel = { dim, tier };
+    nodes.push(label);
     nodes.push((ref(keyMap[k]) as any).name(rName(i)) as GoFishNode);
   });
 
@@ -770,7 +776,8 @@ function elaborationsFor(
           keyMap,
           prefix,
           sides[dim] ?? "start",
-          resolvedLabelRotation(dim, tier)
+          resolvedLabelRotation(dim, tier),
+          tier
         )
       );
       outTierCounts[dim] = tier + 1;

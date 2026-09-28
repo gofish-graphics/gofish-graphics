@@ -5,6 +5,8 @@ order: 50
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/axes/elaborate.tsx
+  - packages/gofish-graphics/src/ast/axes/autoLabelAngle.ts
+  - packages/gofish-graphics/src/ast/choice/choose.ts
   - packages/gofish-graphics/src/ast/_node.ts
 ---
 
@@ -102,7 +104,7 @@ wherever `axisSide` put the line, so the two always land together.
 
 ### Label rotation (`labelAngle`)
 
-The public `axes: { x: { labelAngle: number | number[] } }` option (#746, extended
+The public `axes: { x: { labelAngle: number | number[] | "auto" } }` option (#746, extended
 to per-tier arrays afterward) rotates a tick or category label about its anchor,
 authored **screen-clockwise** to match Vega-Lite's `labelAngle`. It is threaded the
 same way `side` is —
@@ -115,8 +117,9 @@ the same predicate `axisSide` already uses for its cross-flip check
 (`yUp || underCoord || isCONTINUOUS(space[1])` — this is dim-independent: it's
 really "does this node's own y mirror", not specific to the axis being labeled),
 canceling the render-time negation so the label lands at the literal screen angle
-regardless of the frame's orientation. There is no "auto" rotation mode (deferred
-to #486) — this is a manual, always-on angle.
+regardless of the frame's orientation. A number or array is a manual, always-on
+angle; `"auto"` picks one of 0°, 45°, and 90° per axis (see
+[Automatic label angle](#automatic-label-angle-labelangle-auto) below).
 
 **The hanging-point rule.** `resolveLabelRotation` (`axes/elaborate.tsx`) turns
 the authored angle `a` into a `LabelRotation` descriptor — `rotate` (the
@@ -193,6 +196,69 @@ next-outer tier reads the incremented count. Continuous/difference axes are
 always single-owner and single-tier (`resolveAxes`: "Continuous: single-owner —
 only the root-most unclaimed dim claims"), so they always resolve tier `0` —
 i.e. the number, or `array[0]`.
+
+### Automatic label angle (`labelAngle: "auto"`)
+
+`labelAngle: "auto"` picks each axis's angle from 0°, 45°, and 90°, in that
+order of preference: the first angle at which no two labels in a row collide
+wins, and if all collide, the one with the least overlap wins. It is a v0 of a
+general choice mechanism, split into two modules:
+
+- `choice/choose.ts` holds the generic strategy, `chooseFirstFit(candidates,
+run, score, fits)`: run candidates in order, return the first whose score
+  fits, else the lexicographic minimum (ties go to the earlier candidate).
+- `axes/autoLabelAngle.ts` holds the label policy: the candidate list, the
+  collision score, and `layoutWithAutoLabelAngles`, which `runLayout`
+  (`gofish.tsx`) calls when some axis asks for `"auto"`. A chart without
+  `"auto"` takes the single `layoutOnce` path, unchanged.
+
+**Why the whole chart is the unit.** An axis label is a `Text` whose underlying
+space is UNDEFINED, so its angle never changes σ (bar widths); it only changes
+how far the labels hang into the margin. But layout measures and places in one
+recursive pass and writes each node's box once (the bbox ledger), so a subtree
+cannot be laid out again with a different angle. And the rows that can collide
+are not local to one node: a grouped bar chart's inner year tier is elaborated
+separately inside each city group, so a 2024 label under Austin can hit a 2022
+label under Boston, which only the root can see. So v0 lays out the whole chart
+once per candidate, on a **freshly built tree** each time, scores the finished
+geometry, and returns the winning run's layout as is (no extra layout pass). The
+fresh tree comes from `GoFishNode.rebuild`, which the surface that built the root
+sets: the builder terminals (`marks/terminals.ts`) and the `gofish()` component
+thunk path. A node built by hand has no `rebuild`, and `"auto"` on it throws.
+
+**Tagging and reading labels.** Axis elaboration tags every tick and category
+label `Text` with `axisLabel = { dim, tier }` (continuous labels are tier 0;
+difference-axis delta labels are not tagged, since the angle does not apply to
+them). After a run, `collectLabelBoxes` walks the laid-out tree, and for each
+tagged label reads its unrotated text box and rotation from the `Text` node and
+its origin by summing its own and every ancestor's `projectedTranslate`. That
+puts every label in the root's layout frame, before the paint-time y-up mirror.
+A mirror reflects positions and angles together, so overlap measured there
+equals overlap on screen, provided the labels of one row share a mirror (an
+axis's labels do).
+
+**The score.** Labels are grouped by (axis, tier). Within a row all labels share
+one angle, so the scorer turns every origin back by that angle and compares the
+labels as plain axis-aligned boxes in their own frame. That is exact for
+parallel slanted text, where axis-aligned bounding boxes would report
+collisions between labels that do not touch. Each box is widened by half of a
+2px clearance (`AUTO_LABEL_GAP`) on every side; a pair whose widened boxes
+overlap collides. The score is `[unwidened overlap area, colliding pairs]`,
+summed over the axis's tiers; an angle fits when the pair count is 0. Pairs are
+found with a sweep along the row, so any two labels are compared, not only
+neighbors.
+
+**Per-axis choice.** Each `"auto"` axis is chosen independently. Runs apply the
+same candidate angle to every `"auto"` axis and score each axis separately (runs
+are memoized by angle), which is sound because labels do not feed σ, so one
+axis's angle cannot move the other axis's labels. If the per-axis winners differ,
+that combination is laid out once more. A scalar `"auto"` applies one angle to
+all tiers of its axis; `"auto"` inside a per-tier array is an error.
+
+**Where it goes next.** The compositional form is a node-local choice that lays
+out its own alternatives and prunes dominated ones (#486, #630). That replaces
+the whole-chart strategy in `choose.ts`; the policy half (candidates plus score)
+is meant to carry over unchanged.
 
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying

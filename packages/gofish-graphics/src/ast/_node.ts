@@ -541,6 +541,18 @@ export class GoFishNode {
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
   public _ordinalKeyMap?: Record<string, GoFishNode>;
+  /** Set on a tick or category label `Text` made by axis elaboration: which
+   *  axis (`dim`) and which ordinal tier (0 = innermost; always 0 on a
+   *  continuous axis) it labels. `labelAngle: "auto"` reads these tags after
+   *  layout to score label collisions per (axis, tier) across the whole chart
+   *  (see axes/autoLabelAngle.ts). */
+  public axisLabel?: { dim: 0 | 1; tier: number };
+  /** Set on a ROOT node by the surface that built it (a chart builder or a
+   *  component thunk): builds a fresh, unlaid-out copy of the same chart.
+   *  Layout writes each node's box once, so a choice that must lay the chart
+   *  out once per candidate (`labelAngle: "auto"`) needs a new tree for each
+   *  run (see `runLayout` in gofish.tsx). A node built by hand has none. */
+  public rebuild?: () => Promise<GoFishNode>;
   /**
    * Stack direction of the operator that created this node.
    * Used in coord.tsx collectOverrides to route axis: overrides to the
