@@ -1,6 +1,6 @@
 /**
  * LLM authoring benchmark runner (v0: static charts; arms gofish, recharts,
- * d3, matplotlib). Design: apps/docs/docs/internals/design/llm-authoring-benchmark.md.
+ * d3, matplotlib, ggplot2, altair). Design: apps/docs/docs/internals/design/llm-authoring-benchmark.md.
  * How to use and extend it: tests/llm-bench/README.md.
  *
  * Usage:
@@ -23,7 +23,7 @@
  *                  one table comparing the gofish arm across runs (for
  *                  example, one run per --context)
  *   Options:
- *     --arms gofish,recharts,d3,matplotlib   --tasks <substring>
+ *     --arms gofish,recharts,d3,matplotlib,ggplot2,altair   --tasks <substring>
  *     --samples N (1)   --max-turns N (3)   --budget-usd X (10, API)
  *     --subscription-cap-usd X (40, claude-code at list price)
  *     --model ID (claude-opus-5-5)   --backend api|claude-code (claude-code)
@@ -32,6 +32,10 @@
  *                  (skill): how GoFish is presented to the gofish arm (mock
  *                  records it but ignores it); skill needs --backend
  *                  claude-code. --docs-pack <path> is --context pack:<path>.
+ *     --extensions on|off (on): whether ggplot2, matplotlib and altair get
+ *                  their ecosystem's extension packages (extensions.ts);
+ *                  references always run with them on, and rescore uses
+ *                  the original run's setting
  */
 
 import {
@@ -86,6 +90,13 @@ import {
   loadContext,
   type GofishContext,
 } from "./llm-bench/context";
+import {
+  EXTENSION_SETTINGS,
+  extensionsField,
+  extensionsOf,
+  hasExtensions,
+  type Extensions,
+} from "./llm-bench/extensions";
 import {
   extractCode,
   firstMessage,
@@ -171,6 +182,9 @@ interface Options {
   concurrency: number;
   /** How GoFish is presented to the gofish arm (see context.ts). */
   context: string;
+  /** Whether the script arms get their extension packages (see
+   *  extensions.ts). */
+  extensions: Extensions;
   mockBreakFirst: boolean;
   yes: boolean;
   /** rescore: the run directory to rescore. */
@@ -197,7 +211,7 @@ function parseArgs(argv: string[]): Options {
     ((mode === "rescore" || mode === "compare") && !argv[1])
   ) {
     console.error(
-      "usage: llm-bench <references|mock|run|rescore <runDir>|compare <runDir>[=label] ...> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--subscription-cap-usd X] [--model ID] [--backend api|claude-code] [--effort E] [--concurrency N] [--context pack:<path>|cheatsheet|retrieval|skill] [--docs-pack path] [--mock-break-first] [--yes]"
+      "usage: llm-bench <references|mock|run|rescore <runDir>|compare <runDir>[=label] ...> [--arms a,b] [--tasks substr] [--samples N] [--max-turns N] [--budget-usd X] [--subscription-cap-usd X] [--model ID] [--backend api|claude-code] [--effort E] [--concurrency N] [--context pack:<path>|cheatsheet|retrieval|skill] [--docs-pack path] [--extensions on|off] [--mock-break-first] [--yes]"
     );
     process.exit(2);
   }
@@ -216,6 +230,7 @@ function parseArgs(argv: string[]): Options {
     effort: "medium",
     concurrency: 3,
     context: "skill",
+    extensions: "on",
     mockBreakFirst: false,
     yes: false,
   };
@@ -252,7 +267,12 @@ function parseArgs(argv: string[]): Options {
     else if (flag === "--docs-pack")
       opts.context = `pack:${resolve(typedFrom, value())}`;
     else if (flag === "--context") opts.context = value();
-    else if (flag === "--backend") {
+    else if (flag === "--extensions") {
+      const e = value() as Extensions;
+      if (!EXTENSION_SETTINGS.includes(e))
+        throw new Error("--extensions must be on or off");
+      opts.extensions = e;
+    } else if (flag === "--backend") {
       const b = value() as Backend;
       if (!(b in COST_BASIS))
         throw new Error("--backend must be api or claude-code");
@@ -267,6 +287,12 @@ function parseArgs(argv: string[]): Options {
     else throw new Error(`unknown option ${flag}`);
   }
   prices(opts.model); // fail now on a model with no prices
+  // References are written with the extension packages available (the
+  // ggplot2 ones use them), so they are always checked with them on.
+  if (opts.mode === "references" && opts.extensions !== "on")
+    throw new Error(
+      "references always run with --extensions on: the reference solutions may use the extension packages"
+    );
   if (
     opts.context === "skill" &&
     opts.mode === "run" &&
@@ -314,6 +340,14 @@ class BaseRecords {
         key,
         (async () => {
           const base = this.tasks.get(baseId) as SingleTask;
+          // A missing base reference fails the jobs that need it (their
+          // preservation has nothing to compare with), not the whole run.
+          if (!existsSync(referencePath(baseId, arm))) {
+            console.error(
+              `base reference ${baseId}/${arm} is missing: ${relative(BENCH_DIR, referencePath(baseId, arm))}`
+            );
+            return null;
+          }
           const dir = join(this.runDir, "_base", slug(baseId), arm);
           mkdirSync(dir, { recursive: true });
           const codePath = join(dir, `reference.${ARM_EXT[arm]}`);
@@ -459,6 +493,7 @@ async function runReferences(
   const results: JobResult[] = [];
   const job = (task: Task, arm: Arm, turns: TurnResult[]): JobResult => ({
     mode: "references",
+    ...extensionsField(arm, opts.extensions),
     task: task.id,
     kind: task.kind,
     group: taskGroup(task),
@@ -562,7 +597,7 @@ async function converse(
   const { opts, model, ledger, renderer, runDir } = ctx;
   mkdirSync(dir, { recursive: true });
   const data = loadData(task);
-  const system = systemBlocks(arm, ctx.context);
+  const system = systemBlocks(arm, ctx.context, opts.extensions);
   const gofish = arm === "gofish";
   // Retrieval sees the instruction only: not the task id, checks or
   // references.
@@ -737,6 +772,7 @@ function finishJob(
     model: ctx.model.id,
     backend: ctx.model.backend,
     context: { name: ctx.context.name, sha256: ctx.context.sha256 },
+    ...extensionsField(arm, ctx.opts.extensions),
     ...(retrieved?.length ? { retrieved } : {}),
     task: task.id,
     kind: task.kind,
@@ -872,7 +908,7 @@ type Sizer = (code: string, arm: Arm) => Promise<CodeStats>;
 /** Saved per-job files copied into the rescored run (the rendered outputs
  *  are produced again). */
 const SAVED_FILE =
-  /^(turn\d+\.(reply\.md|js|jsx|py)|reference\.(js|jsx|py)|transcript\.md)$/;
+  /^(turn\d+\.(reply\.md|js|jsx|py|R)|reference\.(js|jsx|py|R)|transcript\.md)$/;
 
 /** Copy the saved files of a job directory (and its chain step
  *  directories). */
@@ -1071,6 +1107,9 @@ async function rescoreJob(
       rescoreNote: notes.length ? notes.join("; ") : undefined,
     };
   }
+  // Recorded explicitly, so a result from before the field existed carries
+  // the setting it was rescored under.
+  Object.assign(result, extensionsField(job.arm, renderer.extensions));
   writeFileSync(
     join(outDir, jobRel, "result.json"),
     JSON.stringify(result, null, 1)
@@ -1155,12 +1194,17 @@ async function rescore(opts: Options): Promise<void> {
     /Backend: ([\w-]+)/.exec(origReport)?.[1] ??
     (original.some((r) => r.mode === "run") ? "api" : ran ? "mock" : "-");
   const context = original.map(contextOf).find(Boolean);
+  // The original run's extensions setting (results from before it was
+  // recorded ran without extensions); --extensions does not apply here.
+  const extensions: Extensions =
+    original.map(extensionsOf).find(Boolean) ?? "off";
   const counter = new ModelTokenCounter(TOKEN_CACHE, apiKey());
   const size: Sizer = (code, arm) =>
     codeStats(code, arm, model === "-" ? DEFAULT_MODEL : model, counter);
 
   const renderer = await Renderer.start({
-    python: original.some((r) => r.arm === "matplotlib"),
+    arms: [...new Set(original.map((r) => r.arm))],
+    extensions,
   });
   const bases = new BaseRecords(renderer, outDir, byId);
   const results: JobResult[] = [];
@@ -1252,7 +1296,7 @@ async function main() {
     );
     for (const task of conversations)
       for (const arm of opts.arms) {
-        const sys = systemBlocks(arm, context!).reduce(
+        const sys = systemBlocks(arm, context!, opts.extensions).reduce(
           (n, b) => n + b.text.length,
           0
         );
@@ -1275,11 +1319,12 @@ async function main() {
     const b = opts.backend;
     const typicalUsd = costUsd(typical, opts.model);
     const k = (n: number) => `${Math.round(n / 1000)}k`;
+    const extArms = opts.arms.filter(hasExtensions);
     const tokens =
       `~${k(typical.input + typical.cacheRead)} input tokens (~${k(typical.cacheRead)} of them from the cache` +
       `${extra ? `, including ~${extra} per call that Claude Code adds` : ""}) and ~${k(typical.output)} output tokens`;
     console.log(
-      `Model ${opts.model}, effort ${opts.effort}, backend ${b}, context ${context!.name} (sha256 ${context!.sha256})${context!.skillDir ? " (skill calls also read files, which this estimate leaves out)" : ""}. ${firstTurns} jobs (${tasks.length} tasks x ${opts.arms.length} arms x ${opts.samples} samples), up to ${opts.maxTurns} turns each.\n` +
+      `Model ${opts.model}, effort ${opts.effort}, backend ${b}, context ${context!.name} (sha256 ${context!.sha256})${context!.skillDir ? " (skill calls also read files, which this estimate leaves out)" : ""}${extArms.length ? `, extensions ${opts.extensions} (${extArms.join(", ")})` : ""}. ${firstTurns} jobs (${tasks.length} tasks x ${opts.arms.length} arms x ${opts.samples} samples), up to ${opts.maxTurns} turns each.\n` +
         (b === "api"
           ? `Estimate: ~$${typicalUsd.toFixed(2)} if every job passes on turn 1 (${tokens}); worst case ~$${worst.toFixed(2)}.\n` +
             `API ledger so far: $${ledger.total(b).toFixed(4)}; budget cap $${ledger.cap(b).toFixed(2)} (calls stop before the cap).`
@@ -1302,7 +1347,8 @@ async function main() {
   const runDir = join(OUT_ROOT, "runs", runId);
   mkdirSync(runDir, { recursive: true });
   const renderer = await Renderer.start({
-    python: opts.arms.includes("matplotlib"),
+    arms: opts.arms,
+    extensions: opts.extensions,
   });
   const bases = new BaseRecords(renderer, runDir, byId);
   let results: JobResult[] = [];

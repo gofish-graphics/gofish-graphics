@@ -23,6 +23,8 @@ const task: Task = {
     },
     { check: "sizeAbout" },
   ],
-  mayChange: [],
+  // Changing orientation moves the category labels from the bottom axis to
+  // the left one, so the chart's outer size changes with the axis layout.
+  mayChange: ["size"],
 };
 export default task;

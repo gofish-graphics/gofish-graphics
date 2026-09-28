@@ -21,8 +21,23 @@ export const TOKEN_CACHE = join(
   "../../tmp/llm-bench/token-cache.json"
 );
 
-export const ARMS = ["gofish", "recharts", "d3", "matplotlib"] as const;
+export const ARMS = [
+  "gofish",
+  "recharts",
+  "d3",
+  "matplotlib",
+  "ggplot2",
+  "altair",
+] as const;
 export type Arm = (typeof ARMS)[number];
+
+/** Arms whose program is a script run in its own process (Python or R),
+ *  which saves an SVG file that the harness then loads into the page. The
+ *  other arms are JS modules rendered in the page. */
+export const SCRIPT_ARMS = ["matplotlib", "ggplot2", "altair"] as const;
+export type ScriptArm = (typeof SCRIPT_ARMS)[number];
+export const isScriptArm = (arm: Arm): arm is ScriptArm =>
+  (SCRIPT_ARMS as readonly Arm[]).includes(arm);
 
 /** File extension of a program in each arm. */
 export const ARM_EXT: Record<Arm, string> = {
@@ -30,6 +45,8 @@ export const ARM_EXT: Record<Arm, string> = {
   recharts: "jsx",
   d3: "js",
   matplotlib: "py",
+  ggplot2: "R",
+  altair: "py",
 };
 
 /** Fenced-code language tag each arm is asked to use (informational). */
@@ -38,6 +55,8 @@ export const ARM_LANG: Record<Arm, string> = {
   recharts: "jsx",
   d3: "js",
   matplotlib: "python",
+  ggplot2: "r",
+  altair: "python",
 };
 
 export interface Size {

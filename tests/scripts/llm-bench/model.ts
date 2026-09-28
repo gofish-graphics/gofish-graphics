@@ -31,6 +31,7 @@ import type { SystemBlock } from "./prompt";
 import {
   ARM_LANG,
   BENCH_DIR,
+  isScriptArm,
   loadReference,
   type Arm,
   type SingleTask,
@@ -99,7 +100,8 @@ export function textOf(content: Content): string {
 
 /** A program that fails to parse in the arm's language. */
 function broken(arm: Arm, code: string): string {
-  return arm === "matplotlib"
+  // An unclosed call is a syntax error in Python and in R.
+  return isScriptArm(arm)
     ? `${code}\nprint("unclosed"\n`
     : `${code}\nexport default }\n`;
 }

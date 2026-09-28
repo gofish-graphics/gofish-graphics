@@ -40,7 +40,10 @@ const task: Task = {
         { check: "textIncludes", strings: LAKES },
         { check: "sizeAbout" },
       ],
-      mayChange: [],
+      // Changing orientation moves the category labels from the bottom axis
+      // to the left one, so the chart's outer size changes with the axis
+      // layout.
+      mayChange: ["size"],
     },
     {
       instruction:

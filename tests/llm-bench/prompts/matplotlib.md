@@ -4,7 +4,7 @@ Reply with exactly one fenced code block, marked `python`, containing the comple
 
 The script:
 
-- May import matplotlib, pandas, numpy and the Python standard library. No other packages are available.
+- May import matplotlib, pandas, numpy and the Python standard library{{extensions}}. No other packages are available.
 - Reads the task's data from the JSON file at `os.environ["DATA_PATH"]`: an array of row objects (for example `pandas.read_json(os.environ["DATA_PATH"])` or `json.load`).
 - Saves the figure as SVG with `plt.savefig(os.environ["OUT_PATH"], format="svg")` (or `fig.savefig(...)`). Do not call `plt.show()`.
 - Runs without a display (the Agg backend) and must finish within 60 seconds.

@@ -1,0 +1,18 @@
+import os
+
+import altair as alt
+import pandas as pd
+
+df = pd.read_json(os.environ["DATA_PATH"])
+
+chart = (
+    alt.Chart(df)
+    .mark_arc(innerRadius=80, outerRadius=160, stroke="white")
+    .encode(
+        theta="visits:Q",
+        order=alt.Order("visits:Q", sort="descending"),
+        color=alt.Color("channel:N", sort=None),
+    )
+    .properties(width=330, height=330)
+)
+chart.save(os.environ["OUT_PATH"], format="svg")

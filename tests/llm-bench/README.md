@@ -1,8 +1,10 @@
 # LLM authoring benchmark (v0)
 
-This benchmark measures how well a language model writes static charts in four
+This benchmark measures how well a language model writes static charts in six
 libraries, which we call arms: **gofish** (this repo), **recharts** (React),
-**d3**, and **matplotlib** (Python). The model is `claude-opus-5-5` by
+**d3**, **matplotlib** (Python), and two grammars of graphics, **ggplot2** (R)
+and **altair** (Python, on Vega-Lite). The grammar arms compare GoFish with
+declarative libraries, not only with imperative ones. The model is `claude-opus-5-5` by
 default (`--model`), run through the Anthropic API or through headless Claude
 Code (see "Backends"). The design
 and its reasoning are in
@@ -29,13 +31,14 @@ pnpm llm-bench compare <runDir>[=label] ...  # one table comparing the gofish ar
 pnpm llm-bench:contexts                # regenerate the cheatsheet, gallery index and skill folder
 ```
 
-Options: `--arms gofish,recharts,d3,matplotlib`, `--tasks <substring of task id>`,
+Options: `--arms gofish,recharts,d3,matplotlib,ggplot2,altair`, `--tasks <substring of task id>`,
 `--samples N` (1), `--max-turns N` (3), `--budget-usd X` (10, API),
 `--subscription-cap-usd X` (40, claude-code at list price),
 `--model ID` (`claude-opus-5-5`), `--backend api|claude-code` (claude-code),
 `--effort low|medium|high|xhigh|max` (medium), `--concurrency N` (3),
 `--context pack:<path>|cheatsheet|retrieval|skill` (`pack:context/gofish.md`).
 `--docs-pack <path>` is the same as `--context pack:<path>`.
+`--extensions on|off` (on).
 
 - `--context` picks how GoFish is presented to the gofish arm in `mock` and
   `run` (see "Contexts"). The other arms get no documentation. A mock run
@@ -45,13 +48,19 @@ Options: `--arms gofish,recharts,d3,matplotlib`, `--tasks <substring of task id>
   `rescore` carries them over from the original results. Results from before
   contexts existed recorded the pack in `docsPack`, which is read as
   `pack:<file>`; a run from before either was recorded shows "not recorded".
+- `--extensions` sets whether ggplot2, matplotlib and altair get their
+  ecosystem's extension packages (see "Extensions"). Every job of those
+  arms records the setting (`extensions`), the report header shows it, and
+  the cost estimate names it. `references` always runs with it on, and
+  `rescore` uses the original run's setting.
 
 - `references` must pass for every arm on every task before any paid run. It is
   the test that the checks are fair to every library. It exits non-zero on any
   failure. For a chain it checks every step's reference, each against the
   render of the step before it (the base task's reference for step 1), even
   when an earlier step fails. A missing reference file fails that job and
-  the run goes on.
+  the run goes on; so does a missing base reference, which fails the edits
+  and chains built on it.
 - `mock` replays each task's reference solution as the model's reply (for a
   chain step, that step's reference). Token counts and costs in a mock run
   are simulated from character counts and are not added to the ledger.
@@ -88,16 +97,33 @@ Options: `--arms gofish,recharts,d3,matplotlib`, `--tasks <substring of task id>
 
 Every invocation writes a run directory under `tests/tmp/llm-bench/runs/`. For
 each job and turn it holds the reply (`turnN.reply.md`), the program
-(`turnN.js|jsx|py`), the saved SVG, a PNG screenshot, the extracted record
+(`turnN.js|jsx|py|R`), the saved SVG, a PNG screenshot, the extracted record
 (`turnN.record.json`), `result.json`, and `transcript.md` (the whole conversation as text). A chain job keeps each step's
 turns and transcript in a `stepK/` folder. The run directory also holds
 `results.jsonl` (one line per job) and `report.md`. The latest report is copied
 to `tests/tmp/llm-bench/report.md`.
 
-Requirements: Playwright's Chromium (already used by the visual tests) and
-`uv` (in `~/.local/bin` or on `PATH`). The matplotlib arm runs with
-`uv run --no-project --with matplotlib==3.10.9 --with pandas==2.3.3`, so nothing
-needs to be installed by hand.
+Requirements: Playwright's Chromium (already used by the visual tests),
+`uv` (in `~/.local/bin` or on `PATH`), and R for the ggplot2 arm. The
+matplotlib arm runs with
+`uv run --no-project --with matplotlib==3.10.9 --with pandas==2.3.3`, and the
+altair arm with `uv run --no-project --with altair==5.5.0 --with
+vl-convert-python==1.9.0.post1 --with pandas==2.3.3` (each plus its
+extension pins when extensions are on), so nothing needs to be
+installed by hand for them. The ggplot2 arm runs `Rscript --vanilla` (from
+`/usr/local/bin`, `/opt/homebrew/bin` or `PATH`; developed on R 4.5.2 with
+ggplot2 4.0.1 and svglite 2.2.2). Install its packages once:
+
+```bash
+Rscript -e 'install.packages(c("ggplot2", "svglite", "jsonlite", "dplyr", "tidyr", "png", "ggmosaic", "ggridges", "treemapify", "packcircles", "ggforce", "waffle"), repos = "https://cloud.r-project.org")'
+```
+
+The last six are the ggplot2 extensions (see "Extensions"), developed with
+ggmosaic 0.4.0, ggridges 0.5.7, treemapify 2.6.1, packcircles 0.3.7,
+ggforce 0.5.0 and waffle 1.0.2.
+
+A run checks that each script arm's packages load before it starts, and
+stops if they do not.
 
 ## Backends
 
@@ -196,12 +222,14 @@ context (see "Contexts"; by default the skill in `context/skill/`, chosen from t
 system blocks carry `cache_control`, so repeated calls read them from the
 prompt cache.
 
-| Arm        | The model writes                                                                                    | The harness                                                                                                 |
-| ---------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| gofish     | an ES module, `export default function render(container, data)`, importing from `"gofish-graphics"` | aliases `gofish-graphics` to `packages/gofish-graphics/src/lib.ts`, awaits the returned promise             |
-| d3         | the same contract, `import * as d3 from "d3"`                                                       | same                                                                                                        |
-| recharts   | a JSX module, `export default function Chart({ data })` with explicit `width`/`height`              | compiles the JSX with esbuild (React's automatic runtime) and renders `<Chart data={data} />` with React 19 |
-| matplotlib | a script that reads `DATA_PATH` (JSON rows) and saves SVG to `OUT_PATH`                             | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       |
+| Arm        | The model writes                                                                                             | The harness                                                                                                 | Extension packages (with `--extensions on`)                  |
+| ---------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| gofish     | an ES module, `export default function render(container, data)`, importing from `"gofish-graphics"`          | aliases `gofish-graphics` to `packages/gofish-graphics/src/lib.ts`, awaits the returned promise             | none                                                         |
+| d3         | the same contract, `import * as d3 from "d3"`                                                                | same                                                                                                        | none (its hierarchy layouts are part of `d3`)                |
+| recharts   | a JSX module, `export default function Chart({ data })` with explicit `width`/`height`                       | compiles the JSX with esbuild (React's automatic runtime) and renders `<Chart data={data} />` with React 19 | none                                                         |
+| matplotlib | a script that reads `DATA_PATH` (JSON rows) and saves SVG to `OUT_PATH`                                      | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify, pywaffle                                 |
+| ggplot2    | an R script that reads `DATA_PATH` and saves SVG to `OUT_PATH` with `ggsave(..., device = svglite::svglite)` | runs it with `Rscript --vanilla` (60 s limit), then loads the SVG into the same page                        | ggmosaic, ggridges, treemapify, packcircles, ggforce, waffle |
+| altair     | a script that reads `DATA_PATH` and saves SVG with `chart.save(OUT_PATH, format="svg")` (vl-convert)         | runs it with `uv` (60 s limit), then loads the SVG into the same page                                       | squarify, circlify                                           |
 
 Details that keep the arms comparable:
 
@@ -209,8 +237,18 @@ Details that keep the arms comparable:
   converts it to `figsize` at dpi 100. matplotlib writes SVG sizes in points
   (72 per inch) whatever the dpi, so the harness shows the file at inches times
   100 px, which is the size the prompt promised.
+- For ggplot2 the prompt converts the size to `ggsave`'s `width` and
+  `height` in inches at 100 px per inch (640 x 400 px is `width = 6.4,
+height = 4, units = "in"`). svglite, like matplotlib, writes the size in
+  points, and the harness shows it the same way.
+- For altair the prompt says that `.properties(width, height)` sizes the plot
+  area, not the whole chart, and asks for a whole chart of about the task's
+  size. Vega writes the SVG's size in px, which the harness keeps. As for
+  GoFish, whose `render` size is also the plot area, `sizeAbout`'s loose
+  bound allows for the axes and legend.
 - matplotlib runs with a `matplotlibrc` (`tests/harness/llm-bench/`) that keeps
-  text as `<text>` instead of glyph outlines, so labels are readable.
+  text as `<text>` instead of glyph outlines, so labels are readable. svglite
+  and vl-convert write `<text>` without any setting.
 - All JavaScript libraries run in their production builds (`NODE_ENV` is
   `production`). The harness treats any `console.error` as a render error, and
   development builds log advice that says nothing about the picture, such as
@@ -225,7 +263,8 @@ Details that keep the arms comparable:
 - Task assets (images a task draws, such as `bottle.png`) live in
   `tests/llm-bench/assets/`, and every arm gets the same files. The harness's
   Vite server serves the folder at `/assets/<file>` for the JS arms, and the
-  matplotlib script gets its path in the `ASSET_DIR` environment variable. The
+  scripts (matplotlib, ggplot2, altair) get its path in the `ASSET_DIR`
+  environment variable. The
   task's instruction states both, in the same words for every arm.
 - A render fails when: the program does not parse, a module cannot be loaded,
   the render throws or rejects, a timer throws afterwards, anything is logged
@@ -233,8 +272,56 @@ Details that keep the arms comparable:
   there is no non-empty `<svg>`, or the picture breaks the arm contract (below).
   The model sees the error message with stack frames pointing at its own file.
 - Render time is the wall time of the render itself: module load plus render
-  call for the JS arms (the library is loaded beforehand), and the whole Python
-  process, including interpreter start-up, for matplotlib.
+  call for the JS arms (the library is loaded beforehand), and the whole
+  script process, including interpreter start-up, for matplotlib, ggplot2
+  and altair.
+
+## Extensions
+
+A chart form that a library has no mark for (a treemap, circle packing, a
+waffle, a mosaic, a ridgeline) is, in practice, drawn with a popular package
+from the library's own ecosystem. `--extensions` (default `on`) sets whether
+the arms that have such packages get them, so each baseline can be measured
+both ways: the library as people use it, and the library alone. The
+packages are listed in one table, `tests/scripts/llm-bench/extensions.ts`,
+which the prompts, the runtimes and the check below all read.
+
+| Arm        | Extension packages                                                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ggplot2    | ggmosaic (mosaic plots), ggridges (ridgeline plots), treemapify (treemaps), packcircles (circle packing), ggforce (arcs, circles and more geoms), waffle (waffle charts) |
+| matplotlib | squarify 0.4.5 (treemaps), circlify 0.15.1 (circle packing), pywaffle 1.2.0 (waffle charts)                                                                              |
+| altair     | squarify 0.4.5 (treemaps), circlify 0.15.1 (circle packing)                                                                                                              |
+
+GoFish, Recharts and D3 are not affected by the setting. D3's hierarchy
+layouts (treemap, pack) are part of `d3` itself, so the d3 arm has them
+either way. Packages that every setting allows, such as ggplot2's `png`
+(for reading images), are not extensions.
+
+- The prompt: each script arm's prompt has an `{{extensions}}` placeholder
+  at the end of its "May use" line. With extensions on it becomes ", and
+  these ...: <package> (<what it draws>), ..."; with them off it is empty,
+  so the line ends "... No other packages are available." as it did before
+  extensions existed.
+- With extensions off, the Python arms run without the packages installed
+  (uv is not given their pins), so an import fails with
+  `ModuleNotFoundError`, which goes back to the model like any render
+  error. The R packages are installed system-wide, so the ggplot2 arm is
+  held to its base packages by a static check before the script runs: a
+  `library()`, `require()`, `requireNamespace()` or `loadNamespace()` of an
+  extension package, or a `pkg::` use of one (outside comments), fails the
+  render with "The R package <name> is not available in this run." It is a
+  render error, not a contract violation: it is the environment's error,
+  like a failed import. The check cannot see a package loaded through a
+  variable (`library(p, character.only = TRUE)`).
+- The run's start-up probe loads exactly the packages the setting allows.
+- Reference solutions may use the extension packages, so `references`
+  always runs with extensions on (it refuses `--extensions off`). With
+  extensions off, `mock` replays those references and they fail, as
+  expected. An edit's base reference is the program the model starts from,
+  so it must not use an extension package.
+- Results from before the setting was recorded ran without extensions (the
+  packages were not offered yet), so a missing `extensions` field reads as
+  `off`.
 
 ## Contexts
 
@@ -310,8 +397,9 @@ arm checks it in the way its library allows. The code is in
 extractor; the checks stay library-neutral.
 
 - Every arm, before rendering: the program imports the arm's library
-  (`gofish-graphics`, `recharts`, `d3` or a `d3-*` module, `matplotlib`).
-  This is a cheap first filter on the source text.
+  (`gofish-graphics`, `recharts`, `d3` or a `d3-*` module, `matplotlib`,
+  `altair`), or for ggplot2 calls `ggplot()` outside a comment. This is a
+  cheap first filter on the source text.
 - gofish: every painted SVG element in the container was created by
   gofish-graphics. Before the program loads, the harness wraps
   `createElementNS`, `cloneNode` and `importNode` and records the call stack
@@ -327,6 +415,12 @@ extractor; the checks stay library-neutral.
   SVG laid over the chart does not.
 - matplotlib: the saved SVG carries matplotlib's creator metadata
   (`Matplotlib v...`) or its figure group (`<g id="figure_1">`).
+- ggplot2: the saved SVG was written by svglite, the device `ggsave` is
+  told to use: it has svglite's root group (`<g class='svglite'>`). R's own
+  `svg()` device (Cairo) fails, since it writes text as glyph outlines.
+- altair: the saved SVG was written by Vega's SVG renderer, which
+  `chart.save` runs through vl-convert: the root `<svg>` has class `marks`,
+  and there is at least one Vega mark group (`<g class="mark-...">`).
 - d3: the program must also use something it imports from d3. There is no
   runtime check. d3 is a DOM toolkit, so appending elements through d3
   selections is how d3 draws, and telling that apart from hand-written SVG
@@ -384,19 +478,53 @@ final program, and the job's are the last step's):
   keywords, literals, operators and punctuation), without whitespace and
   comments, so line breaking does not change it. JS and JSX use a small
   regex lexer. Python follows its `tokenize` rules, except that an f-string
-  counts as one token.
+  counts as one token. R uses a small lexer that follows R's own tokens:
+  names may hold `.` and `_`, `1L` and `.5` are numbers, and `<-`, `|>`,
+  `::` and every `%op%` (such as `%>%` and `%in%`) are one token each.
 - **model tokens**: the program's length in the model's tokens, from the
   Anthropic token-counting endpoint (`messages.countTokens`, which is free
   and is not booked in the ledger). Counts are cached by model and sha256 in
   `tests/tmp/llm-bench/token-cache.json`. Without a key, or offline, it is 4
   characters per token and the column says "(est.)".
 - **lines of code**: lines that are not blank and not only comments.
-- **arithmetic operators**: `+ - * / % **` (and `//` in Python), their
-  compound assignments, and every call into `Math`, `math`, `np` or `numpy`.
+- **arithmetic operators**: `+ - * / % **` (and `//` in Python; `^`, `%%`
+  and `%/%` in R), their compound assignments, and every call into the
+  language's math library: `Math`, `math`, `np` or `numpy`, and in R, which
+  has no math namespace, the base functions that mirror `Math` (`abs`,
+  `sqrt`, `exp`, `log`, `floor`, `ceiling`, `round`, the trigonometric
+  functions, `min`, `max`, `pmin`, `pmax`, and `pi`) plus `cumsum` and
+  `cumprod`, which numpy has as `np.cumsum` and `np.cumprod`. A `+` that
+  composes charts is not arithmetic (see below).
 - **magic numbers**: numeric literals other than 0 and 1.
 
 The last two measure explicit calculation, which a declarative library
-should leave to the library. The per-arm table shows the mean of each
+should leave to the library.
+
+Two arms overload an arithmetic operator to compose charts. In ggplot2, `+`
+adds layers, scales, labels and themes to a plot; in Altair, `+` layers
+charts (and `|` and `&` concatenate them, but those are not arithmetic in
+any arm). Such a `+` joins parts of a chart specification and calculates
+nothing, so it is not counted. The rule is the same for every arm: a `+` is
+composition when its right operand, after any opening parentheses, starts
+with a chart part. A chart part is:
+
+- ggplot2: a call to a ggplot component (`ggplot`, `aes`, `geom_*`,
+  `stat_*`, `scale_*`, `coord_*`, `facet_*`, `theme` and `theme_*`, `labs`,
+  `xlab`, `ylab`, `ggtitle`, `guides`, `annotate`, `annotation_*`, `xlim`,
+  `ylim`, `lims`, `expand_limits`, `position_*`, `guide_*`), also as
+  `ggplot2::geom_col(...)`, or a `list(...)` of them;
+- altair: a chart constructor (`alt.Chart`, `alt.layer`, `alt.hconcat`,
+  `alt.vconcat`, `alt.concat`, `alt.repeat`, `alt.LayerChart` and the other
+  chart classes);
+- in both, a name whose last assignment starts with a chart part
+  (`base = alt.Chart(df)`, then `bars = base.mark_bar()`, then `bars + text`;
+  `p <- ggplot(df)`, or `my_theme <- theme(...)` and then `p + my_theme`).
+
+The other arms have no operator that composes charts (GoFish, Recharts and
+d3 compose with calls, methods and JSX), so every `+` there is arithmetic.
+Arithmetic inside a string is not seen: a Vega expression such as
+`transform_calculate(share="datum.units / datum.total")` counts as one
+string token and no operator. The per-arm table shows the mean of each
 measure (and the median of the last two). "Code size per task" shows the
 mean syntax tokens per task and arm, and "Explicit calculation per task"
 the arithmetic operators and magic numbers, each with the reference
@@ -519,6 +647,14 @@ on every aspect not listed in `mayChange`:
 Data marks are rects, circles, wedges and filled paths that are not background
 and not hairlines (thinner than 2 px).
 
+An edit that changes the chart's orientation or swaps its axes lists `size` in
+`mayChange`: `edit/bar-to-horizontal` and step 2 of `chain/bars-evolve` (the
+category labels move from the bottom axis to the left one), and step 1 of
+`chain/scatter-evolve` (the two fields' tick labels and titles trade axes, and
+their widths differ). The program keeps its size settings, but a library that
+fits the axes inside or around the plot gives a different outer size once the
+axis layout changes. Every other edit keeps `size` strict.
+
 A chain task is a series of edits on one chart, as in ChartEditBench:
 
 ```ts
@@ -578,8 +714,10 @@ swatches), and compares positions up to an unknown linear scale per axis.
 Each returns `{ pass, detail }`, and a task passes when all of its checks pass.
 
 Terms: the **ink** of a mark is its fill, or its stroke when the fill is
-missing, near-white or transparent. A **background** mark has no ink or covers
-at least 40% of the chart. Two colors are the **same** when their RGBA distance
+missing, near-white or transparent. A **background** mark has no ink, or is a
+rect (a `<rect>`, or any shape that nearly fills its bounding box) covering at
+least 40% of the chart. Wedges, circles and other paths are never background
+because of their size, so the biggest slice of a large pie still counts. Two colors are the **same** when their RGBA distance
 (alpha scaled to 0-255) is at most 24.
 
 Values for `bars`, `referenceLine`, `wedges` and `waffle` are either literal
@@ -620,7 +758,7 @@ the chart's opacity may stay) and every other mark shares one other color.
 | `unitBlocks`     | `category`, `value`, `per` (1), `width`, `start` (`"bottom-left"`, ...), `labels`                                    | each category is one block of equal squares, as many as its summed `value` / `per`, all squares on one regular lattice. Blocks run left to right in category order, at least one square apart, with their `start` edges (bottoms for a bottom start) on one line. Each block is `width` squares wide and fills rows away from its `start` corner, each row from that corner's side, so only the last row is partial and its squares sit at that side. One color per block, distinct across blocks. With `labels`, each category's name is centered under its block, at most 40 px below. Squares of another size, and lattice-connected groups that are not a block, are ignored.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `ribbons`        | `orientation`, `category`, `series`, `value`, `direction`, `tol`                                                     | `stackedBars` passes, and for every series and every pair of neighboring stacks there is a filled shape whose cross-section at the first stack's far edge spans the series' segment there, and at the next stack's near edge spans its segment there, within max(2 px, `tol` of the segment). The cross-section is read 3 px and 6 px into the gap and extrapolated to the edge, so the gap must be at least 12 px. The band has the series' color, or its hue is nearer that series' hue than any other's (after compositing over white), so lighter or semi-transparent bands count. One shape may carry several bands.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
-The checks were tried against throwaway programs in all four arms before any
+The checks were tried against throwaway programs in the first four arms before any
 task used them: stacked and grouped bars, three smoothed and straight line
 series, and pies and donuts with slices down to 5%. Wrong pictures failed as
 they should, including a grouped chart checked as stacked, a sqrt-scaled pie,

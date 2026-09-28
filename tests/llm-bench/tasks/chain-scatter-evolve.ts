@@ -15,7 +15,10 @@ const task: Task = {
         { check: "textIncludes", strings: ["Horsepower", "Miles per gallon"] },
         { check: "sizeAbout" },
       ],
-      mayChange: [],
+      // Swapping the axes swaps their tick labels and titles between the
+      // bottom and left axes, and the two fields' tick labels have different
+      // widths, so the chart's outer size changes with the axis layout.
+      mayChange: ["size"],
     },
     {
       instruction:

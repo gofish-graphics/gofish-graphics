@@ -11,8 +11,10 @@
  * Shared vocabulary:
  *   ink(mark)      the color a reader sees: the fill, or the stroke when the
  *                  fill is missing, near-white or transparent.
- *   background     a mark with no ink, or one covering >= 40% of the chart
- *                  (panels, plot backgrounds).
+ *   background     a mark with no ink, or a rect (a <rect>, or any shape
+ *                  that nearly fills its box) covering >= 40% of the chart
+ *                  (panels, plot backgrounds). Wedges, circles and other
+ *                  paths are never background by size.
  *   same color     RGBA distance <= SAME_COLOR (alpha scaled to 0-255).
  */
 
@@ -395,8 +397,12 @@ function chartArea(rec: RenderRecord): number {
   return s ? s.w * s.h : Infinity;
 }
 
+/** A panel behind the chart: a mark with no ink, or a rect covering at least
+ *  40% of the chart. Only rects count by size: a large wedge, circle or
+ *  filled path is a data mark however much of the chart its box covers (the
+ *  biggest slice of a pie, say). */
 function isBackground(m: Mark, rec: RenderRecord): boolean {
-  return !ink(m) || m.w * m.h >= 0.4 * chartArea(rec);
+  return !ink(m) || (m.kind === "rect" && m.w * m.h >= 0.4 * chartArea(rec));
 }
 
 /** Marks that encode data: filled rects, circles, wedges and filled paths

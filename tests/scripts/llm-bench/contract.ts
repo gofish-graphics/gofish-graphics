@@ -8,7 +8,8 @@
  * checks (checks.ts) stay library-neutral. The rule has two parts:
  *
  *   1. Static, every arm (`staticViolation`, run before rendering): the
- *      program imports the arm's library. A cheap first filter.
+ *      program imports the arm's library (for ggplot2: calls `ggplot()`).
+ *      A cheap first filter.
  *   2. Provenance, per arm (after a successful render):
  *      - gofish: every painted SVG element in the container was created by
  *        gofish-graphics code. The harness records, for each SVG element
@@ -24,6 +25,12 @@
  *      - matplotlib: the saved SVG carries matplotlib's own markers: the
  *        creator metadata ("Matplotlib v...") or its figure group
  *        (`<g id="figure_1">`).
+ *      - ggplot2: the saved SVG was written by svglite, the SVG device
+ *        ggsave uses: everything is drawn inside svglite's root group
+ *        (`<g class='svglite'>`).
+ *      - altair: the saved SVG was written by Vega's SVG renderer (through
+ *        vl-convert): the root <svg> has class "marks" and the marks sit in
+ *        Vega's mark groups (`<g class="mark-...">`).
  *      - d3: none beyond the static rule, which for d3 also requires that an
  *        imported binding is used. d3 is a DOM toolkit, so appending
  *        elements through d3 selections is how d3 draws; a module that
@@ -37,13 +44,15 @@
  * module also loads in Node.
  */
 
-import type { Arm } from "./tasks";
+import type { Arm, ScriptArm } from "./tasks";
 
 const LIBRARY: Record<Arm, string> = {
   gofish: "GoFish (gofish-graphics)",
   recharts: "Recharts (recharts)",
   d3: "D3 (d3)",
   matplotlib: "matplotlib",
+  ggplot2: "ggplot2",
+  altair: "Altair (altair)",
 };
 
 /** The message the model sees, with an optional detail line. */
@@ -59,7 +68,7 @@ export function contractError(arm: Arm, detail?: string): string {
 // ---------------------------------------------------------------------------
 
 /** JS import specifiers of each JS arm's library. */
-const JS_SPECIFIER: Record<Exclude<Arm, "matplotlib">, RegExp> = {
+const JS_SPECIFIER: Record<Exclude<Arm, ScriptArm>, RegExp> = {
   gofish: /^gofish-graphics$/,
   recharts: /^recharts$/,
   d3: /^d3(-[a-z-]+)?$/,
@@ -97,12 +106,24 @@ function jsImports(code: string): { spec: string; names: string[] }[] {
   return out;
 }
 
+/** Python imports of the Python arms' libraries. */
+const PY_IMPORT: Record<"matplotlib" | "altair", RegExp> = {
+  matplotlib: /^\s*(import\s+matplotlib\b|from\s+matplotlib\b)/m,
+  altair: /^\s*(import\s+altair\b|from\s+altair\b)/m,
+};
+
 /** Why `code` breaks the static rule for `arm`, or null. */
 export function staticViolation(arm: Arm, code: string): string | null {
-  if (arm === "matplotlib") {
-    return /^\s*(import\s+matplotlib\b|from\s+matplotlib\b)/m.test(code)
+  if (arm === "matplotlib" || arm === "altair") {
+    return PY_IMPORT[arm].test(code)
       ? null
-      : contractError(arm, "The script does not import matplotlib.");
+      : contractError(arm, `The script does not import ${arm}.`);
+  }
+  if (arm === "ggplot2") {
+    // `ggplot(` or `ggplot2::ggplot(`, outside comments.
+    return /\bggplot\s*\(/.test(code.replace(/#[^\n]*/g, ""))
+      ? null
+      : contractError(arm, "The script does not call ggplot().");
   }
   const imports = jsImports(code).filter((i) => JS_SPECIFIER[arm].test(i.spec));
   const pkg = arm === "gofish" ? "gofish-graphics" : arm;
@@ -126,19 +147,38 @@ export function staticViolation(arm: Arm, code: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// matplotlib (Node side, on the saved SVG text)
+// Script arms (Node side, on the saved SVG text)
 // ---------------------------------------------------------------------------
 
-/** Why the saved SVG is not matplotlib output, or null. */
-export function matplotlibViolation(svgText: string): string | null {
-  const creator = /Matplotlib v\d/.test(svgText);
-  const figure = /<g id="figure_\d+">/.test(svgText);
-  return creator || figure
-    ? null
-    : contractError(
-        "matplotlib",
-        "The saved SVG was not written by matplotlib's savefig."
-      );
+/** For each script arm, a test that the saved SVG was written by its
+ *  library, and what to say when it was not. */
+const WRITER: Record<
+  ScriptArm,
+  { test: (svg: string) => boolean; why: string }
+> = {
+  matplotlib: {
+    test: (svg) =>
+      /Matplotlib v\d/.test(svg) || /<g id="figure_\d+">/.test(svg),
+    why: "The saved SVG was not written by matplotlib's savefig.",
+  },
+  ggplot2: {
+    test: (svg) => /<g class=['"]svglite['"]>/.test(svg),
+    why: "The saved SVG was not written by ggsave with the svglite device.",
+  },
+  altair: {
+    test: (svg) =>
+      /<svg\b[^>]*\bclass="marks"/.test(svg) &&
+      /<g\b[^>]*\bclass="mark-[a-z]+/.test(svg),
+    why: "The saved SVG was not written by Altair's chart.save (vl-convert).",
+  },
+};
+
+/** Why the SVG a script arm saved is not its library's output, or null. */
+export function scriptViolation(
+  arm: ScriptArm,
+  svgText: string
+): string | null {
+  return WRITER[arm].test(svgText) ? null : contractError(arm, WRITER[arm].why);
 }
 
 // ---------------------------------------------------------------------------

@@ -4,8 +4,9 @@
  * One Vite server (tests/harness/llm-bench) and one Chromium are shared by a
  * whole run; every render gets a fresh browser context, so no state leaks
  * between programs. JS arms load the program as an ES module through Vite;
- * the matplotlib arm runs the script with uv and loads the SVG it saved into
- * the same page, so every arm goes through the same extractor.
+ * the script arms (matplotlib and altair in Python with uv, ggplot2 in R)
+ * run the script in its own process and load the SVG it saved into the same
+ * page, so every arm goes through the same extractor.
  *
  * Every render also enforces the arm contract (contract.ts): the program
  * must import its arm's library, and the picture must have been produced by
@@ -21,9 +22,20 @@ import { basename, dirname, join } from "path";
 import { homedir } from "os";
 import { transform } from "esbuild";
 import { startViteServer } from "../capture-core";
-import { matplotlibViolation, staticViolation } from "./contract";
+import { scriptViolation, staticViolation } from "./contract";
+import {
+  extensionPackages,
+  unavailablePackage,
+  type Extensions,
+} from "./extensions";
 import type { RenderRecord } from "./record";
-import { BENCH_DIR, type Arm, type Size } from "./tasks";
+import {
+  BENCH_DIR,
+  isScriptArm,
+  type Arm,
+  type ScriptArm,
+  type Size,
+} from "./tasks";
 
 const HARNESS_DIR = join(import.meta.dirname, "../../harness/llm-bench");
 const REPO_ROOT = join(import.meta.dirname, "../../..");
@@ -34,26 +46,121 @@ export const HARNESS_PORT = Number(process.env.LLM_BENCH_PORT ?? 3005);
 const SETTLE_VIRTUAL_MS = 2000;
 /** Real-time limit on one render call (module load + render). */
 const RENDER_TIMEOUT_MS = 20_000;
-/** Real-time limit on one matplotlib script. */
-const PYTHON_TIMEOUT_MS = 60_000;
+/** Real-time limit on one script (Python or R). */
+const SCRIPT_TIMEOUT_MS = 60_000;
 
 export const MATPLOTLIB_VERSION = "3.10.9";
 export const PANDAS_VERSION = "2.3.3";
+export const ALTAIR_VERSION = "5.5.0";
+export const VL_CONVERT_VERSION = "1.9.0.post1";
 
 function uvPath(): string {
   const local = join(homedir(), ".local/bin/uv");
   return existsSync(local) ? local : "uv";
 }
 
-const UV_ARGS = [
-  "run",
-  "--no-project",
-  "--with",
-  `matplotlib==${MATPLOTLIB_VERSION}`,
-  "--with",
-  `pandas==${PANDAS_VERSION}`,
-  "python",
-];
+function rscriptPath(): string {
+  for (const p of ["/usr/local/bin/Rscript", "/opt/homebrew/bin/Rscript"])
+    if (existsSync(p)) return p;
+  return "Rscript";
+}
+
+/**
+ * How a script arm runs: `cmd` with `args`, then the script's file name (or
+ * `probe`, to prewarm). The script gets `DATA_PATH`, `OUT_PATH` and
+ * `ASSET_DIR` in its environment, plus `env`.
+ */
+interface ScriptRuntime {
+  cmd: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+  /** Loads the arm's packages once, so the first timed render does not pay
+   *  for installing them. */
+  probe: [string, string];
+}
+
+/** Python through uv, with each package pinned (`pin`) and imported by the
+ *  probe (`name`). */
+function uvPython(
+  pkgs: { name: string; pin: string }[],
+  env: NodeJS.ProcessEnv
+): ScriptRuntime {
+  return {
+    cmd: uvPath(),
+    args: [
+      "run",
+      "--no-project",
+      ...pkgs.flatMap((p) => ["--with", p.pin]),
+      "python",
+    ],
+    env,
+    probe: ["-c", `import ${pkgs.map((p) => p.name).join(", ")}`],
+  };
+}
+
+/** Each script arm's runtime, with its extension packages (extensions.ts)
+ *  when they are on. Without them, the Python arms do not have them
+ *  installed, so importing one fails like any missing module. The R
+ *  packages are installed system-wide, so with extensions off the ggplot2
+ *  arm is held to its core packages by a static check instead
+ *  (`unavailablePackage`). */
+function scriptRuntime(arm: ScriptArm, extensions: Extensions): ScriptRuntime {
+  const ext = extensionPackages(arm, extensions);
+  const pandas = { name: "pandas", pin: `pandas==${PANDAS_VERSION}` };
+  const pyExt = ext.map((p) => ({ name: p.name, pin: p.pin! }));
+  switch (arm) {
+    case "matplotlib":
+      return uvPython(
+        [
+          { name: "matplotlib", pin: `matplotlib==${MATPLOTLIB_VERSION}` },
+          pandas,
+          ...pyExt,
+        ],
+        {
+          MPLBACKEND: "Agg",
+          // Keep text as <text> (not glyph outlines) so labels are readable
+          // by the extractor, and make ids deterministic.
+          MATPLOTLIBRC: join(HARNESS_DIR, "matplotlibrc"),
+        }
+      );
+    case "altair":
+      return uvPython(
+        [
+          { name: "altair", pin: `altair==${ALTAIR_VERSION}` },
+          {
+            name: "vl_convert",
+            pin: `vl-convert-python==${VL_CONVERT_VERSION}`,
+          },
+          pandas,
+          ...pyExt,
+        ],
+        {}
+      );
+    case "ggplot2": {
+      const pkgs = [
+        "ggplot2",
+        "scales",
+        "svglite",
+        "jsonlite",
+        "dplyr",
+        "tidyr",
+        "png",
+        ...ext.map((p) => p.name),
+      ];
+      return {
+        // --vanilla: no user or site profile, so every run starts the same.
+        // The packages are installed once by hand (see the README).
+        cmd: rscriptPath(),
+        args: ["--vanilla"],
+        env: {},
+        probe: [
+          "-e",
+          `for (p in c(${pkgs.map((p) => `'${p}'`).join(", ")})) library(p, character.only = TRUE)`,
+        ],
+      };
+    }
+  }
+}
 
 export interface RenderOutcome {
   ok: boolean;
@@ -65,7 +172,7 @@ export interface RenderOutcome {
    *  "render" for everything else. */
   errorKind?: "render" | "contract";
   /** Wall time of the render itself: the program's module load + render call
-   *  in the page for JS arms, the python process for matplotlib. */
+   *  in the page for JS arms, the whole script process for script arms. */
   renderMs: number;
   /** The picture, read back. Present when `ok`, and also on a contract
    *  failure: the program drew a picture, just not with the library. */
@@ -141,10 +248,16 @@ function cleanError(error: string, codePath: string): string {
 export class Renderer {
   private constructor(
     private vite: ChildProcess,
-    private browser: Browser
+    private browser: Browser,
+    /** Whether the script arms get their extension packages (see
+     *  extensions.ts); the same for every render of a run. */
+    readonly extensions: Extensions
   ) {}
 
-  static async start(opts: { python: boolean }): Promise<Renderer> {
+  static async start(opts: {
+    arms: Arm[];
+    extensions: Extensions;
+  }): Promise<Renderer> {
     const vite = startViteServer(HARNESS_DIR, HARNESS_PORT);
     let viteLog = "";
     vite.stdout?.on("data", (d) => (viteLog += d));
@@ -166,24 +279,24 @@ export class Renderer {
       await new Promise((r) => setTimeout(r, 300));
     }
     const browser = await chromium.launch();
-    const renderer = new Renderer(vite, browser);
+    const renderer = new Renderer(vite, browser, opts.extensions);
     // Transform + pre-bundle every library once so the first timed render
-    // does not pay for it, and install the pinned matplotlib into uv's cache.
+    // does not pay for it, and install each script arm's pinned packages
+    // (into uv's cache) or check they load (R).
     const page = await browser.newPage();
     await page.goto(`http://localhost:${HARNESS_PORT}/index.html`);
     await page.waitForFunction(() => !!(window as any).llmBench);
     await page.evaluate(() => (window as any).llmBench.prewarm());
     await page.close();
-    if (opts.python) {
-      const r = await run(
-        uvPath(),
-        [...UV_ARGS, "-c", "import matplotlib, pandas"],
-        {
-          timeoutMs: 300_000,
-        }
-      );
+    for (const arm of new Set(opts.arms.filter(isScriptArm))) {
+      const rt = scriptRuntime(arm, opts.extensions);
+      const r = await run(rt.cmd, [...rt.args, ...rt.probe], {
+        timeoutMs: 300_000,
+      });
       if (r.code !== 0)
-        throw new Error(`uv could not install matplotlib:\n${r.stderr}`);
+        throw new Error(
+          `The ${arm} arm's runtime could not load its packages:\n${r.stderr}`
+        );
     }
     return renderer;
   }
@@ -232,29 +345,31 @@ export class Renderer {
       error: violation ? `${error}\n\n${violation}` : error,
       renderMs: ms,
     });
-    if (arm === "matplotlib") {
-      const outSvg = `${base}.mpl.svg`;
+    if (isScriptArm(arm)) {
+      // An extension package used while extensions are off: the error a
+      // missing package gives (see extensions.ts), before the script runs.
+      const missing = unavailablePackage(arm, code, this.extensions);
+      if (missing) return { ...failed(missing, 0), errorKind: "render" };
+      const outSvg = `${base}.out.svg`;
       rmSync(outSvg, { force: true });
+      const rt = scriptRuntime(arm, this.extensions);
       const t0 = performance.now();
-      const r = await run(uvPath(), [...UV_ARGS, basename(codePath)], {
+      const r = await run(rt.cmd, [...rt.args, basename(codePath)], {
         cwd: dirname(codePath),
         env: {
+          ...rt.env,
           DATA_PATH: dataPath,
           OUT_PATH: outSvg,
-          MPLBACKEND: "Agg",
-          // Keep text as <text> (not glyph outlines) so labels are readable
-          // by the extractor, and make ids deterministic.
-          MATPLOTLIBRC: join(HARNESS_DIR, "matplotlibrc"),
           // Task assets (images). JS programs load the same files from the
           // URL /assets/<file> (the harness's Vite config serves them).
           ASSET_DIR: join(BENCH_DIR, "assets"),
         },
-        timeoutMs: PYTHON_TIMEOUT_MS,
+        timeoutMs: SCRIPT_TIMEOUT_MS,
       });
       renderMs = performance.now() - t0;
       if (r.timedOut)
         return failed(
-          `The script did not finish within ${PYTHON_TIMEOUT_MS / 1000}s.`,
+          `The script did not finish within ${SCRIPT_TIMEOUT_MS / 1000}s.`,
           renderMs
         );
       if (r.code !== 0)
@@ -268,7 +383,7 @@ export class Renderer {
           renderMs
         );
       svgText = readFileSync(outSvg, "utf8");
-      violation ??= matplotlibViolation(svgText);
+      violation ??= scriptViolation(arm, svgText);
     } else {
       // Syntax errors surface here with a precise location; through Vite
       // they would only say "failed to fetch module".
@@ -367,7 +482,7 @@ export class Renderer {
       await page.clock.install();
       await page.goto(`http://localhost:${HARNESS_PORT}/index.html`);
       await page.waitForFunction(() => !!(window as any).llmBench);
-      if (arm !== "matplotlib") {
+      if (!isScriptArm(arm)) {
         const lib =
           arm === "gofish" ? "gofish" : arm === "d3" ? "d3" : "recharts";
         await page.evaluate((l) => (window as any).llmBench.prewarm(l), lib);
@@ -375,29 +490,28 @@ export class Renderer {
       if (arm === "gofish")
         await page.evaluate(() => (window as any).llmBench.trackCreation());
       const t0 = performance.now();
-      const call =
-        arm === "matplotlib"
-          ? page.evaluate((s) => {
+      const call = isScriptArm(arm)
+        ? page.evaluate((s) => {
+            try {
+              (window as any).llmBench.renderSvg(s);
+              return null;
+            } catch (e) {
+              return (window as any).llmBench.describe(e);
+            }
+          }, svgText!)
+        : page.evaluate(
+            async ({ url, data, react }) => {
               try {
-                (window as any).llmBench.renderSvg(s);
+                if (react)
+                  await (window as any).llmBench.renderReact(url, data);
+                else await (window as any).llmBench.renderModule(url, data);
                 return null;
               } catch (e) {
                 return (window as any).llmBench.describe(e);
               }
-            }, svgText!)
-          : page.evaluate(
-              async ({ url, data, react }) => {
-                try {
-                  if (react)
-                    await (window as any).llmBench.renderReact(url, data);
-                  else await (window as any).llmBench.renderModule(url, data);
-                  return null;
-                } catch (e) {
-                  return (window as any).llmBench.describe(e);
-                }
-              },
-              { url: moduleUrl!, data, react: arm === "recharts" }
-            );
+            },
+            { url: moduleUrl!, data, react: arm === "recharts" }
+          );
       let timer: NodeJS.Timeout | undefined;
       const timeout = new Promise<string>((resolve) => {
         timer = setTimeout(
@@ -410,7 +524,7 @@ export class Renderer {
       });
       const thrown = await Promise.race([call, timeout]);
       clearTimeout(timer);
-      if (arm !== "matplotlib") renderMs = performance.now() - t0;
+      if (!isScriptArm(arm)) renderMs = performance.now() - t0;
       if (thrown) return { ok: false, error: thrown, renderMs };
 
       try {

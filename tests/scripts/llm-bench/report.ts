@@ -5,6 +5,7 @@
 import type { ChecksOutcome } from "./checks";
 import type { CodeStats } from "./codestats";
 import type { ContextInfo } from "./context";
+import { extensionsOf, type Extensions } from "./extensions";
 import { COST_BASIS, type Backend, type CostBasis, type Usage } from "./cost";
 import { ARMS, GROUPS, type Arm, type Group } from "./tasks";
 
@@ -191,6 +192,11 @@ export interface JobResult {
   /** Results from before `context` recorded the docs pack here (read by
    *  `contextOf` in context.ts). */
   docsPack?: { file: string; sha256: string };
+  /** Whether the arm had its extension packages (see extensions.ts; the
+   *  same for every job of a run). Only on arms that have extensions;
+   *  missing in results from before it was recorded, which ran without them
+   *  (read it with `extensionsOf`). */
+  extensions?: Extensions;
   /** Retrieval context: the gallery examples sent with each conversation
    *  (one entry, or one per chain step). */
   retrieved?: { step?: number; ids: string[] }[];
@@ -628,8 +634,18 @@ export function buildReport(
     "claude-code":
       "claude-code (headless Claude Code, billed to the Claude subscription)",
   };
+  // Extension packages (extensions.ts): shown when an arm that has them ran.
+  const extArms = ARMS.filter((a) =>
+    results.some((r) => r.arm === a && extensionsOf(r))
+  );
+  const extSettings = [
+    ...new Set(results.map(extensionsOf).filter(Boolean)),
+  ].join(", ");
+  const extensions = extArms.length
+    ? ` Extensions: ${extSettings} (${extArms.join(", ")}).`
+    : "";
   out.push(
-    `Model: ${meta.model}. Backend: ${backendNote[meta.backend] ?? meta.backend}. Effort: ${meta.effort}. GoFish context: ${meta.context ? `${meta.context.name} (sha256 ${meta.context.sha256})` : meta.backend === "-" ? "-" : "not recorded"}. Max turns: ${meta.maxTurns}. Run directory: \`${meta.runDir}\`. ` +
+    `Model: ${meta.model}. Backend: ${backendNote[meta.backend] ?? meta.backend}. Effort: ${meta.effort}. GoFish context: ${meta.context ? `${meta.context.name} (sha256 ${meta.context.sha256})` : meta.backend === "-" ? "-" : "not recorded"}.${extensions} Max turns: ${meta.maxTurns}. Run directory: \`${meta.runDir}\`. ` +
       `Jobs: ${results.length}, of which ${ran.length} scored and ${unscored.length} not scored (infrastructure; excluded from every rate and comparison below).`
   );
   const spend =

@@ -38,6 +38,7 @@ import {
   Retriever,
   terms,
 } from "./context";
+import { scriptViolation, staticViolation } from "./contract";
 import { firstMessage, systemBlocks } from "./prompt";
 import {
   buildReport,
@@ -49,7 +50,13 @@ import {
   type JobResult,
   type TurnResult,
 } from "./report";
-import type { Task } from "./tasks";
+import {
+  extensionsField,
+  extensionsOf,
+  unavailablePackage,
+  type Extensions,
+} from "./extensions";
+import { ARMS, type Task } from "./tasks";
 
 const connection = () =>
   new Anthropic.APIConnectionError({ message: "Connection error." });
@@ -831,13 +838,19 @@ const CC_OK: ClaudeCodeResult = {
   // the others keep it. Other arms get no context.
   const text = (blocks: { text: string }[]) =>
     blocks.map((b) => b.text).join("\n");
-  assert.match(text(systemBlocks("gofish", sheet)), /documentation follows/);
-  assert.doesNotMatch(
-    text(systemBlocks("gofish", skill)),
+  assert.match(
+    text(systemBlocks("gofish", sheet, "on")),
     /documentation follows/
   );
-  assert.match(text(systemBlocks("gofish", skill)), /read SKILL\.md first/);
-  assert.equal(systemBlocks("d3", retrieval).length, 1);
+  assert.doesNotMatch(
+    text(systemBlocks("gofish", skill, "on")),
+    /documentation follows/
+  );
+  assert.match(
+    text(systemBlocks("gofish", skill, "on")),
+    /read SKILL\.md first/
+  );
+  assert.equal(systemBlocks("d3", retrieval, "on").length, 1);
   // Retrieved examples go before the task in the user message.
   const msg = firstMessage("THE TASK", retrieval.retrieve!("a pie chart"));
   assert.ok(msg.endsWith("The task:\n\nTHE TASK"));
@@ -932,6 +945,115 @@ const CC_OK: ClaudeCodeResult = {
     /mean code syntax tok \| mean code model tok \| mean code LOC \| arith ops mean \(median\) \| magic numbers mean \(median\)/
   );
   console.log("ok  contexts are recorded and reported");
+
+  // Extensions: recorded on the arms that have them, shown in the header.
+  // A result from before the field existed ran without extensions.
+  const meta = {
+    mode: "run",
+    runDir: "x",
+    maxTurns: 3,
+    model: "claude-opus-5-5",
+    backend: "claude-code",
+    spendUsd: 0.01,
+    ledger: LEDGER_META,
+    effort: "medium",
+  } as const;
+  assert.doesNotMatch(buildReport([job({})], meta), /Extensions:/);
+  const mixed = [
+    job({}),
+    job({ arm: "ggplot2", ...extensionsField("ggplot2", "on") }),
+    job({ arm: "altair", ...extensionsField("altair", "on") }),
+  ];
+  assert.deepEqual(extensionsField("gofish", "on"), {});
+  assert.match(
+    buildReport(mixed, meta),
+    /GoFish context: not recorded\. Extensions: on \(ggplot2, altair\)\./
+  );
+  assert.equal(extensionsOf({ arm: "matplotlib" }), "off");
+  assert.equal(extensionsOf({ arm: "d3", extensions: "on" }), undefined);
+  assert.match(
+    buildReport([job({ arm: "matplotlib" })], meta),
+    /Extensions: off \(matplotlib\)\./
+  );
+  console.log("ok  extensions are recorded and reported");
+}
+
+// --- extensions: the prompt line and the R static check --------------------
+{
+  const ctx = loadContext("cheatsheet", process.cwd());
+  const mayLine = (arm: "ggplot2" | "matplotlib" | "altair", e: Extensions) =>
+    systemBlocks(arm, ctx, e)[0]
+      .text.split("\n")
+      .find((l) => /^- May (use|import)/.test(l));
+  assert.equal(
+    mayLine("ggplot2", "off"),
+    "- May use ggplot2 (with scales, which it depends on), svglite, jsonlite, dplyr, tidyr, png (to read PNG images) and base R. No other packages are available."
+  );
+  assert.equal(
+    mayLine("ggplot2", "on"),
+    "- May use ggplot2 (with scales, which it depends on), svglite, jsonlite, dplyr, tidyr, png (to read PNG images) and base R, and these popular ggplot2 extensions: ggmosaic (mosaic plots), ggridges (ridgeline plots), treemapify (treemaps), packcircles (circle packing), ggforce (arcs, circles and more geoms) and waffle (waffle charts). No other packages are available."
+  );
+  assert.equal(
+    mayLine("matplotlib", "off"),
+    "- May import matplotlib, pandas, numpy and the Python standard library. No other packages are available."
+  );
+  assert.equal(
+    mayLine("matplotlib", "on"),
+    "- May import matplotlib, pandas, numpy and the Python standard library, and these layout helpers: squarify (treemaps), circlify (circle packing) and pywaffle (waffle charts). No other packages are available."
+  );
+  assert.equal(
+    mayLine("altair", "off"),
+    "- May import altair, pandas, numpy and the Python standard library. No other packages are available."
+  );
+  assert.equal(
+    mayLine("altair", "on"),
+    "- May import altair, pandas, numpy and the Python standard library, and these layout helpers: squarify (treemaps) and circlify (circle packing). No other packages are available."
+  );
+  // No prompt keeps the placeholder.
+  for (const arm of ARMS)
+    for (const e of ["on", "off"] as const)
+      assert.doesNotMatch(
+        systemBlocks(arm, ctx, e)[0].text,
+        /\{\{extensions\}\}/
+      );
+
+  // ggplot2 with extensions off: every way of loading one is caught.
+  for (const code of [
+    "library(treemapify)",
+    'library("ggridges")',
+    "suppressPackageStartupMessages(require(ggforce))",
+    'requireNamespace("packcircles", quietly = TRUE)',
+    "p <- ggplot(df) + ggmosaic::geom_mosaic(aes())",
+    "waffle:::waffle(x)",
+    "library(package = waffle)",
+  ])
+    assert.match(
+      unavailablePackage("ggplot2", code, "off") ?? "",
+      /^The R package \w+ is not available in this run\.$/,
+      code
+    );
+  assert.equal(
+    unavailablePackage("ggplot2", "library(treemapify)", "on"),
+    null
+  );
+  // Core packages, comments, look-alike names and other arms pass.
+  for (const code of [
+    "library(ggplot2)\nlibrary(dplyr)",
+    "# library(treemapify)\nggplot(df)",
+    "library(ggforcex)",
+    "my.waffle::x",
+    "geom_waffle <- function() NULL",
+  ])
+    assert.equal(unavailablePackage("ggplot2", code, "off"), null, code);
+  assert.equal(
+    unavailablePackage("matplotlib", "import squarify", "off"),
+    null
+  );
+  assert.match(
+    unavailablePackage("ggplot2", "library(treemapify)", "off")!,
+    /treemapify/
+  );
+  console.log("ok  extensions prompt line and R static check");
 }
 
 // --- retrieval is deterministic and sees only the instruction ---------------
@@ -1023,6 +1145,61 @@ const CC_OK: ClaudeCodeResult = {
     ),
     { arithOps: 4, magicNumbers: 1 }
   );
+  // R: its own lexer (<-, |>, %op% are one token; 1L and .5 are numbers).
+  const r = [
+    "# comment",
+    "library(ggplot2)",
+    "x <- c(1L, 2.5e3, .5)   # trailing",
+    's <- "a # not a comment"',
+    "df |> f() %>% g(y = x %% 2)",
+  ].join("\n");
+  assert.equal(linesOfCode(r, "ggplot2"), 4);
+  // library ( ggplot2 ) = 4; x <- c ( 1L , 2.5e3 , .5 ) = 10; s <- "..." = 3;
+  // df |> f ( ) %>% g ( y = x %% 2 ) = 14
+  assert.equal(syntaxTokens(r, "ggplot2"), 31);
+  // R arithmetic: ^ %/% and the base math functions; df$max is a column.
+  assert.deepEqual(
+    explicitCalculation(
+      "x <- sqrt(a) ^ 2 + pi - df$max * 3L %/% 2; y <- max(b)",
+      "ggplot2"
+    ),
+    { arithOps: 8, magicNumbers: 3 }
+  );
+  // Composition: ggplot2's + joins plot parts (also through names bound to
+  // parts, parentheses, pkg:: and list()); only the other + are arithmetic.
+  assert.deepEqual(
+    explicitCalculation(
+      [
+        "base <- ggplot(df, aes(x, y))",
+        'thm <- theme_minimal() + theme(legend.position = "none")',
+        "p <- base + geom_col(width = 0.5 + 0.1) + ggplot2::labs(x = NULL) +",
+        '  (thm) + list(xlab("a")) + n + 1',
+      ].join("\n"),
+      "ggplot2"
+    ),
+    { arithOps: 3, magicNumbers: 2 }
+  );
+  // Altair: + layers charts (| and & concatenate; never arithmetic).
+  assert.deepEqual(
+    explicitCalculation(
+      [
+        'base = alt.Chart(df).encode(x="a")',
+        "bars = base.mark_bar()",
+        "text = base.mark_text(dy=-4)",
+        "n = 2 + 3",
+        "chart = (bars + text).properties(width=400 - 20)",
+        "out = alt.hconcat(bars, text) | bars & text",
+        "m = n + alt.datum.x",
+      ].join("\n"),
+      "altair"
+    ),
+    { arithOps: 4, magicNumbers: 5 }
+  );
+  // The same text in a non-grammar arm: every + is arithmetic.
+  assert.equal(
+    explicitCalculation("chart = (bars + text)", "matplotlib").arithOps,
+    1
+  );
   // The final program is the last turn that had one.
   const t = (codeStats?: CodeStats): TurnResult => ({
     turn: 1,
@@ -1045,6 +1222,35 @@ const CC_OK: ClaudeCodeResult = {
     est: true,
   });
   console.log("ok  code size");
+}
+
+// --- arm contract of the grammar arms ------------------------------------------
+{
+  assert.equal(staticViolation("ggplot2", "p <- ggplot2::ggplot(df)"), null);
+  assert.match(
+    staticViolation("ggplot2", "# ggplot(df)\nlibrary(ggplot2)") ?? "",
+    /does not call ggplot\(\)/
+  );
+  assert.equal(staticViolation("altair", "import altair as alt"), null);
+  assert.match(staticViolation("altair", "import pandas") ?? "", /altair/);
+  assert.equal(
+    scriptViolation("ggplot2", "<svg><g class='svglite'><rect/></g></svg>"),
+    null
+  );
+  assert.match(
+    scriptViolation("ggplot2", "<svg><rect/></svg>") ?? "",
+    /svglite/
+  );
+  assert.equal(
+    scriptViolation(
+      "altair",
+      '<svg class="marks" width="9"><g class="mark-rect role-mark"></g></svg>'
+    ),
+    null
+  );
+  // Vega's root class alone is not enough.
+  assert.ok(scriptViolation("altair", '<svg class="marks"><rect/></svg>'));
+  console.log("ok  grammar arm contract");
 }
 
 // --- claude-code stream-json output ------------------------------------------

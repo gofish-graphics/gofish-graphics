@@ -10,6 +10,7 @@ import {
   type GalleryEntry,
   type GofishContext,
 } from "./context";
+import { extensionsClause, type Extensions } from "./extensions";
 import { ARM_LANG, BENCH_DIR, type Arm, type SingleTask } from "./tasks";
 
 export interface SystemBlock {
@@ -19,15 +20,24 @@ export interface SystemBlock {
 }
 
 /**
- * The arm's system prompt, stable per arm and context, so it is cached: the
- * last block carries `cache_control`, which caches every system block up to
- * and including it. The gofish arm's prompt is followed by the context's
- * system text. Its last line ("GoFish documentation follows.") introduces a
- * document, so for the skill context, which sends a pointer to a folder
- * instead, that line is left out.
+ * The arm's system prompt, stable per arm, context and extensions setting,
+ * so it is cached: the last block carries `cache_control`, which caches
+ * every system block up to and including it. The prompt's `{{extensions}}`
+ * placeholder becomes the arm's extension packages (extensions.ts), or
+ * nothing when they are off. The gofish arm's prompt is followed by the
+ * context's system text. Its last line ("GoFish documentation follows.")
+ * introduces a document, so for the skill context, which sends a pointer to
+ * a folder instead, that line is left out.
  */
-export function systemBlocks(arm: Arm, context: GofishContext): SystemBlock[] {
-  let prompt = readFileSync(join(BENCH_DIR, "prompts", `${arm}.md`), "utf8");
+export function systemBlocks(
+  arm: Arm,
+  context: GofishContext,
+  extensions: Extensions
+): SystemBlock[] {
+  let prompt = readFileSync(
+    join(BENCH_DIR, "prompts", `${arm}.md`),
+    "utf8"
+  ).replace("{{extensions}}", extensionsClause(arm, extensions));
   if (arm === "gofish" && context.skillDir)
     prompt = prompt.replace(/\n*GoFish documentation follows\.\s*$/, "\n");
   const blocks: SystemBlock[] = [{ type: "text", text: prompt }];
@@ -78,9 +88,11 @@ export function dataPreview(data: Record<string, unknown>[], rows = 5): string {
 function sizeLine(task: SingleTask, arm: Arm): string {
   const { w, h } = task.size;
   const px = `${w} x ${h} px`;
-  return arm === "matplotlib"
-    ? `Chart size: ${px} (figsize=(${w / 100}, ${h / 100}) at dpi 100).`
-    : `Chart size: ${px}.`;
+  if (arm === "matplotlib")
+    return `Chart size: ${px} (figsize=(${w / 100}, ${h / 100}) at dpi 100).`;
+  if (arm === "ggplot2")
+    return `Chart size: ${px} (ggsave width = ${w / 100}, height = ${h / 100}, units = "in").`;
+  return `Chart size: ${px}.`;
 }
 
 export function taskMessage(

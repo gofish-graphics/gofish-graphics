@@ -9,8 +9,9 @@
  *   renderReact  — recharts: a module (already compiled from JSX to JS by the
  *                  runner) whose default export is a React component
  *                  `Chart({ data })`.
- *   renderSvg    — matplotlib: the SVG file the script saved, shown at the
- *                  figure's size in px at 100 dpi (see renderSvg).
+ *   renderSvg    — script arms (matplotlib, ggplot2, altair): the SVG file
+ *                  the script saved, shown at the size the prompt asked for
+ *                  (see renderSvg).
  *
  * For gofish the runner calls `trackCreation()` before the render and
  * `provenance("gofish")` after it; for recharts, `provenance("recharts")`.
@@ -103,11 +104,13 @@ async function renderReact(url: string, data: unknown): Promise<void> {
   if (error) throw error;
 }
 
-/** Show a matplotlib SVG at the size the prompt asked for. matplotlib writes
- *  the figure size in points (72 per inch) regardless of dpi, while the
- *  prompt defines size as figsize at dpi 100; rewrite width/height to
- *  inches * 100 px, keeping the viewBox, so every arm is measured in the same
- *  CSS pixels. */
+/** Show a saved SVG at the size the prompt asked for. matplotlib and
+ *  svglite (ggplot2) write the figure size in points (72 per inch) whatever
+ *  the dpi, while their prompts define size in inches at 100 px each
+ *  (figsize at dpi 100, ggsave's width and height in inches); rewrite a
+ *  width/height in pt to inches * 100 px, keeping the viewBox, so every arm
+ *  is measured in the same CSS pixels. Vega (altair) writes px, which is
+ *  left as it is. */
 function renderSvg(svgText: string): void {
   root.innerHTML = svgText;
   const svg = root.querySelector("svg");
