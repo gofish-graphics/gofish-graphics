@@ -14,7 +14,7 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
   chart(weather)
     .flow(
       spread({ by: "month", dir: "x" }),
-      spread({ by: "city", dir: "x", spacing: 0 })
+      spread({ by: "city", dir: "x", spacing: 0, axes: { x: false } })
     )
     .mark(rect({ h: "precipitation", fill: "city" }).name("bars"))
     .layer(

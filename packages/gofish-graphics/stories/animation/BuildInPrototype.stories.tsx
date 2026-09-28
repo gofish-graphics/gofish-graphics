@@ -6,7 +6,7 @@
  * `Gallery` shows every example as a row: its source on the left (the module
  * in `./build-in/`, imported twice, once to run and once with `?raw` to show,
  * so the code on screen is the code that runs) and the animation on the
- * right, with a Replay button.
+ * right, with a Replay button. `Showcase` is the same rows for three of them.
  *
  * Each example also has a story of its own that draws it as a FILMSTRIP: the
  * same chart held still at several times (the render options
@@ -232,7 +232,7 @@ const EXAMPLES: Record<string, Example> = {
     section: SECTIONS.canis,
     title: "CAST+ Gantt · duration from a field (stretch)",
     caption:
-      "Tasks wipe in from the left one after another, and each wipe lasts in proportion to the task's days, as `w: \"days\"` sizes the bar. DECLARED SHORTCUT: the time scale is linear with the longest task at 1000 ms (Build, 12 days); a real time scale for field-valued durations is open. The build lasts 36 days × 1000 / 12 = 3000 ms.",
+      'Tasks wipe in from the left one after another, and each wipe lasts in proportion to the task\'s days, as `w: "days"` sizes the bar. DECLARED SHORTCUT: the time scale is linear with the longest task at 1000 ms (Build, 12 days); a real time scale for field-valued durations is open. The build lasts 36 days × 1000 / 12 = 3000 ms.',
     file: "gantt",
     frames: [0, 700, 1500, 2300, 3000],
   },
@@ -287,6 +287,80 @@ const play = (
   modules[pathOf(example)].default(box, hold);
 };
 
+/** `source` without its leading imports; a comment above them stays. */
+const withoutImports = (source: string) =>
+  source.replace(/^((?:\/\/.*\n)*)(?:(?:import\b[^;]*;|[ \t]*)\n)*/, "$1");
+
+/** One example as a row: its code on the left, and on the right its title,
+ *  a Replay button, its caption and the running chart. The replay is pushed
+ *  onto `replays` so a "Replay all" button can run it. */
+const exampleRow = (example: Example, replays: (() => void)[]): HTMLElement => {
+  const shown = withoutImports(sources[pathOf(example)]);
+  const row = el("div", {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+    gap: "20px",
+    alignItems: "start",
+    margin: "0 0 24px",
+  });
+  const code = el(
+    "pre",
+    {
+      margin: "0",
+      padding: "10px 12px",
+      background: "#f6f7f9",
+      border: "1px solid #e3e5e8",
+      borderRadius: "6px",
+      fontSize: "12px",
+      lineHeight: "1.45",
+      overflowX: "auto",
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    },
+    shown
+  );
+  // Plain text first, then swap in shiki's highlighted tokens (its <pre>
+  // wrapper dropped so the panel keeps its own box).
+  codeToHtml(shown, {
+    lang: "ts",
+    theme: "github-light",
+  }).then((html) => {
+    const tmp = el("div");
+    tmp.innerHTML = html;
+    code.innerHTML = tmp.querySelector("code")!.outerHTML;
+  });
+  const right = el("div");
+  const head = el("div", {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    marginBottom: "4px",
+  });
+  head.appendChild(el("strong", { fontSize: "14px" }, example.title));
+  const replay = el(
+    "button",
+    { fontSize: "12px", padding: "2px 10px" },
+    "Replay"
+  );
+  head.appendChild(replay);
+  right.appendChild(head);
+  right.appendChild(
+    el(
+      "p",
+      { fontSize: "13px", color: "#555", margin: "0 0 6px" },
+      example.caption
+    )
+  );
+  const host = el("div");
+  right.appendChild(host);
+  const again = () => play(host, example);
+  replay.onclick = again;
+  replays.push(again);
+  again();
+  row.appendChild(code);
+  row.appendChild(right);
+  return row;
+};
+
 export const Gallery: StoryObj = {
   render: () => {
     const page = initializeContainer();
@@ -327,75 +401,37 @@ export const Gallery: StoryObj = {
         section = example.section;
         page.appendChild(el("h2", H2, section));
       }
-      const row = el("div", {
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-        gap: "20px",
-        alignItems: "start",
-        margin: "0 0 24px",
-      });
-      const code = el(
-        "pre",
-        {
-          margin: "0",
-          padding: "10px 12px",
-          background: "#f6f7f9",
-          border: "1px solid #e3e5e8",
-          borderRadius: "6px",
-          fontSize: "12px",
-          lineHeight: "1.45",
-          overflowX: "auto",
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        },
-        sources[pathOf(example)]
-      );
-      // Plain text first, then swap in shiki's highlighted tokens (its <pre>
-      // wrapper dropped so the panel keeps its own box).
-      codeToHtml(sources[pathOf(example)], {
-        lang: "ts",
-        theme: "github-light",
-      }).then((html) => {
-        const tmp = el("div");
-        tmp.innerHTML = html;
-        code.innerHTML = tmp.querySelector("code")!.outerHTML;
-      });
-      const right = el("div");
-      const head = el("div", {
-        display: "flex",
-        alignItems: "center",
-        gap: "10px",
-        marginBottom: "4px",
-      });
-      head.appendChild(el("strong", { fontSize: "14px" }, example.title));
-      const replay = el(
-        "button",
-        { fontSize: "12px", padding: "2px 10px" },
-        "Replay"
-      );
-      head.appendChild(replay);
-      right.appendChild(head);
-      right.appendChild(
-        el(
-          "p",
-          { fontSize: "13px", color: "#555", margin: "0 0 6px" },
-          example.caption
-        )
-      );
-      const host = el("div");
-      right.appendChild(host);
-      const again = () => play(host, example);
-      replay.onclick = again;
-      replays.push(again);
-      again();
-      row.appendChild(code);
-      row.appendChild(right);
-      page.appendChild(row);
+      page.appendChild(exampleRow(example, replays));
     }
 
     page.appendChild(el("h2", H2, "Not in this prototype"));
     const list = el("ul", { fontSize: "14px", color: "#333" });
     for (const line of NOT_BUILT) list.appendChild(el("li", {}, line));
     page.appendChild(list);
+    return page;
+  },
+};
+
+/** Three examples, one after another, for showing the syntax off. */
+export const Showcase: StoryObj = {
+  render: () => {
+    const page = initializeContainer();
+    Object.assign(page.style, { fontFamily: FONT, maxWidth: "1400px" });
+    page.appendChild(
+      el("h1", { fontSize: "22px", margin: "0 0 12px" }, "Build-in animations")
+    );
+
+    const replays: (() => void)[] = [];
+    const replayAll = el(
+      "button",
+      { fontSize: "14px", padding: "6px 14px", marginBottom: "16px" },
+      "Replay all"
+    );
+    replayAll.onclick = () => replays.forEach((r) => r());
+    page.appendChild(replayAll);
+
+    for (const example of [EXAMPLES.ex4a, EXAMPLES.ex4c, EXAMPLES.canis1bSel])
+      page.appendChild(exampleRow(example, replays));
     return page;
   },
 };
