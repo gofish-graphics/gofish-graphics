@@ -9,9 +9,9 @@
  * Outputs:
  *   tests/tmp/diff-report.html  the report
  *   tests/tmp/diff-list.json    the same list, machine-readable:
- *     { runId, branch, diffs: [{ kind, path }] }
+ *     { diffs: [{ kind, path }] }
  *   CI uploads both as the `visual-diff-report` artifact, and
- *   tests/scripts/accept-baselines.sh --all accepts exactly the diffs in
+ *   tests/scripts/accept-baselines.ts --all accepts exactly the diffs in
  *   diff-list.json.
  */
 
@@ -204,12 +204,7 @@ function main() {
   writeFileSync(
     LIST_OUTPUT,
     JSON.stringify(
-      {
-        // Set in GitHub Actions; absent in local runs.
-        runId: process.env.GITHUB_RUN_ID,
-        branch: process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME,
-        diffs: allDiffs.map((d) => ({ kind: d.kind, path: d.path })),
-      },
+      { diffs: allDiffs.map((d) => ({ kind: d.kind, path: d.path })) },
       null,
       2
     ) + "\n"

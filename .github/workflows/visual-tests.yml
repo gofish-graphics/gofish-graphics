@@ -273,7 +273,7 @@ jobs:
         run: pnpm --filter @gofish/tests update-baselines
 
       # diff-list.json is the machine-readable list of the diffs this run
-      # reported; `accept-baselines.sh --all` accepts exactly those.
+      # reported; `accept-baselines.ts --all` accepts exactly those.
       - name: Upload diff report
         if: failure() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v5

@@ -13,6 +13,10 @@
  *
  * These map to __snapshots__/dom/ and __snapshots__/screenshots/ locally,
  * but __snapshots__/ is gitignored on code branches — it is a local cache only.
+ *
+ * The remote is the source of truth: both reading (`pullSnapshots`) and
+ * writing (`commitToSnapshotBranch`) start from what origin has now, and a
+ * branch that does not exist yet falls back to snapshots/main.
  */
 
 import { execSync } from "child_process";
@@ -24,6 +28,9 @@ export const ROOT = join(import.meta.dirname, "../..");
 const GITATTRIBUTES_CONTENT =
   "screenshots/**/*.png filter=lfs diff=lfs merge=lfs -text\n";
 
+const MAIN_SNAPSHOT_BRANCH = "snapshots/main";
+const PUSH_ATTEMPTS = 5;
+
 // ---------------------------------------------------------------------------
 // Shared git helpers (also used by capture-diff.ts)
 // ---------------------------------------------------------------------------
@@ -32,16 +39,18 @@ interface GitOptions {
   cwd?: string;
   input?: string;
   ignoreError?: boolean;
+  env?: Record<string, string>;
 }
 
 export function git(cmd: string, opts: GitOptions = {}): string {
-  const { cwd = ROOT, input, ignoreError = false } = opts;
+  const { cwd = ROOT, input, ignoreError = false, env } = opts;
   try {
     return execSync(cmd, {
       cwd,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       input,
+      env: env ? { ...process.env, ...env } : undefined,
     }).trim();
   } catch (e) {
     if (ignoreError) return "";
@@ -70,6 +79,39 @@ function syncDir(src: string, dest: string): void {
   cpSync(src, dest, { recursive: true });
 }
 
+function sleep(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Which of `snapshotBranch` and snapshots/main exist on origin, in one
+ * ls-remote. Returns the branch to build on: `snapshotBranch` itself, or
+ * snapshots/main when it does not exist yet, or null when neither does.
+ */
+function remoteBase(snapshotBranch: string): string | null {
+  const out = git(
+    `git ls-remote origin "refs/heads/${snapshotBranch}" "refs/heads/${MAIN_SNAPSHOT_BRANCH}"`
+  );
+  const refs = new Set(out.split("\n").map((line) => line.split("\t")[1]));
+  if (refs.has(`refs/heads/${snapshotBranch}`)) return snapshotBranch;
+  if (refs.has(`refs/heads/${MAIN_SNAPSHOT_BRANCH}`))
+    return MAIN_SNAPSHOT_BRANCH;
+  return null;
+}
+
+/**
+ * Fetches a branch from origin and returns its head commit. The fetch is
+ * shallow (only the head commit) when the clone is already shallow, as CI
+ * checkouts are; a full clone is left full, since a shallow fetch would mark
+ * a developer's clone as shallow.
+ */
+function fetchHead(branch: string): string {
+  const depth =
+    git("git rev-parse --is-shallow-repository") === "true" ? "--depth=1" : "";
+  git(`git fetch --quiet --no-tags ${depth} origin "refs/heads/${branch}"`);
+  return git("git rev-parse FETCH_HEAD");
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -96,60 +138,8 @@ export function getSnapshotBranchName(codeBranch?: string): string {
   return `snapshots/${branch}`;
 }
 
-/** Returns true if the snapshot branch exists on the remote. */
-export function snapshotBranchExistsRemote(snapshotBranch: string): boolean {
-  const result = git(`git ls-remote --heads origin "${snapshotBranch}"`, {
-    ignoreError: true,
-  });
-  return result.length > 0;
-}
-
-/** Returns true if the snapshot branch exists locally. */
-export function snapshotBranchExistsLocal(snapshotBranch: string): boolean {
-  const result = git(`git show-ref --verify "refs/heads/${snapshotBranch}"`, {
-    ignoreError: true,
-  });
-  return result.length > 0;
-}
-
 /**
- * Ensures the snapshot branch exists locally.
- * - If already local: no-op.
- * - If on remote only: fetches to create a local tracking branch.
- * - If nowhere: creates a new orphan branch with .gitattributes (LFS config).
- */
-export function ensureSnapshotBranch(snapshotBranch: string): void {
-  if (snapshotBranchExistsLocal(snapshotBranch)) return;
-
-  if (snapshotBranchExistsRemote(snapshotBranch)) {
-    git(`git fetch origin "${snapshotBranch}:${snapshotBranch}"`);
-    return;
-  }
-
-  // Create new orphan branch via git plumbing (no worktree switching).
-  // 1. Blob for .gitattributes
-  const blobSha = git("git hash-object -w --stdin", {
-    input: GITATTRIBUTES_CONTENT,
-  });
-
-  // 2. Tree containing .gitattributes
-  const treeSha = git("git mktree", {
-    input: `100644 blob ${blobSha}\t.gitattributes\n`,
-  });
-
-  // 3. Orphan commit (no parents)
-  const commitSha = git(
-    `git commit-tree ${treeSha} -m "Initial snapshot branch"`
-  );
-
-  // 4. Create the branch ref
-  git(`git update-ref "refs/heads/${snapshotBranch}" ${commitSha}`);
-
-  console.log(`Created orphan snapshot branch: ${snapshotBranch}`);
-}
-
-/**
- * Populates targetDir (__snapshots__/) from the snapshot branch.
+ * Populates targetDir (__snapshots__/) from the snapshot branch on origin.
  * Uses a temporary git worktree so that LFS objects are resolved.
  *
  * Falls back to snapshots/main if the specific branch doesn't exist.
@@ -164,44 +154,25 @@ export function pullSnapshots(snapshotBranch: string, targetDir: string): void {
     return;
   }
 
-  // Determine which branch to use (with main fallback).
-  let branch = snapshotBranch;
-  if (
-    !snapshotBranchExistsRemote(branch) &&
-    !snapshotBranchExistsLocal(branch)
-  ) {
-    if (branch === "snapshots/main") {
-      console.log("No snapshot branch found; starting with empty baselines.");
-      mkdirSync(join(targetDir, "dom"), { recursive: true });
-      mkdirSync(join(targetDir, "screenshots"), { recursive: true });
-      return;
-    }
+  const branch = remoteBase(snapshotBranch);
+  if (branch === null) {
+    console.log("No snapshot branch found; starting with empty baselines.");
+    mkdirSync(join(targetDir, "dom"), { recursive: true });
+    mkdirSync(join(targetDir, "screenshots"), { recursive: true });
+    return;
+  }
+  if (branch !== snapshotBranch) {
     console.log(
-      `Snapshot branch ${branch} not found; falling back to snapshots/main.`
+      `Snapshot branch ${snapshotBranch} not found; falling back to ${branch}.`
     );
-    branch = "snapshots/main";
-    if (
-      !snapshotBranchExistsRemote(branch) &&
-      !snapshotBranchExistsLocal(branch)
-    ) {
-      console.log("No snapshot branch found; starting with empty baselines.");
-      mkdirSync(join(targetDir, "dom"), { recursive: true });
-      mkdirSync(join(targetDir, "screenshots"), { recursive: true });
-      return;
-    }
   }
 
-  // Ensure local branch exists (fetch from remote if needed).
-  if (!snapshotBranchExistsLocal(branch)) {
-    console.log(`Fetching ${branch}...`);
-    git(`git fetch origin "${branch}:${branch}"`);
-  }
-
+  const head = fetchHead(branch);
   const wtPath = `/tmp/gofish-snap-pull-${process.pid}`;
   if (existsSync(wtPath)) removeWorktree(wtPath);
 
   try {
-    git(`git worktree add --detach "${wtPath}" "${branch}"`);
+    git(`git worktree add --detach "${wtPath}" ${head}`);
 
     // Resolve LFS objects for PNG screenshots.
     try {
@@ -225,51 +196,143 @@ export function pullSnapshots(snapshotBranch: string, targetDir: string): void {
 }
 
 /**
- * Commits local snapshot files to the snapshot branch and pushes to origin.
+ * The one writer of snapshot branches. Checks out the branch's current head
+ * from origin, lets `apply` change `dom/` and `screenshots/` in that
+ * checkout, and pushes the result as ONE commit.
  *
- * Maps:
- *   sourceDir/dom/*         → dom/*         (on snapshot branch)
- *   sourceDir/screenshots/* → screenshots/* (on snapshot branch, LFS for PNGs)
+ * - A branch that does not exist yet starts as a parentless commit on top of
+ *   snapshots/main's tree, so it inherits every other baseline.
+ * - If the push is rejected because the branch moved, it starts over on the
+ *   new head (running `apply` again), up to 5 attempts. It never forces.
+ * - PNG baselines stay LFS pointers in the checkout (GIT_LFS_SKIP_SMUDGE):
+ *   only the PNGs `apply` writes are uploaded, by object id. The push itself
+ *   sets GIT_LFS_SKIP_PUSH, because the LFS pre-push hook would try to upload
+ *   every object the tree references, most of which are not downloaded here
+ *   (and it does not run at all when husky has moved core.hooksPath).
  *
- * Creates the snapshot branch if it doesn't exist yet.
+ * Returns the new commit, or null when `apply` changed nothing. With
+ * `dryRun`, builds the commit but pushes nothing.
+ */
+export function commitToSnapshotBranch(
+  snapshotBranch: string,
+  message: string,
+  apply: (checkoutDir: string) => void,
+  { dryRun = false } = {}
+): string | null {
+  for (let attempt = 1; attempt <= PUSH_ATTEMPTS; attempt++) {
+    const base = remoteBase(snapshotBranch);
+    const head = base === null ? emptyBaseCommit() : fetchHead(base);
+    const parent = base === snapshotBranch ? head : null;
+    if (base !== snapshotBranch) {
+      console.log(
+        base === null
+          ? `Creating ${snapshotBranch} with empty baselines.`
+          : `${snapshotBranch} does not exist; starting it from ${base}'s tree.`
+      );
+    }
+
+    const wtPath = `/tmp/gofish-snap-push-${process.pid}`;
+    if (existsSync(wtPath)) removeWorktree(wtPath);
+    try {
+      git(`git worktree add --detach "${wtPath}" ${head}`, {
+        env: { GIT_LFS_SKIP_SMUDGE: "1" },
+      });
+      apply(wtPath);
+
+      // Stage only the data dirs, never anything else in the checkout.
+      const dataDirs = ["dom", "screenshots"].filter(
+        (dir) =>
+          existsSync(join(wtPath, dir)) ||
+          git(`git ls-files -- ${dir}`, { cwd: wtPath }) !== ""
+      );
+      if (dataDirs.length > 0) {
+        git(`git add -A -- ${dataDirs.join(" ")}`, { cwd: wtPath });
+      }
+      if (!git("git diff --cached --name-only", { cwd: wtPath })) {
+        console.log("No changes to snapshot baselines.");
+        return null;
+      }
+
+      const tree = git("git write-tree", { cwd: wtPath });
+      const commit = git(
+        `git commit-tree ${tree}${parent ? ` -p ${parent}` : ""} -F -`,
+        { cwd: wtPath, input: message + "\n" }
+      );
+      if (dryRun) {
+        console.log(`Dry run: built ${commit} (${message}); not pushed.`);
+        console.log(
+          git(`git diff --stat ${head} ${commit}`, { cwd: wtPath })
+            .split("\n")
+            .slice(-1)[0]
+        );
+        return commit;
+      }
+
+      pushChangedLfsObjects(wtPath);
+      try {
+        git(`git push origin ${commit}:refs/heads/${snapshotBranch}`, {
+          cwd: wtPath,
+          env: { GIT_LFS_SKIP_PUSH: "1" },
+        });
+        console.log(`Pushed ${commit} to ${snapshotBranch}: ${message}`);
+        return commit;
+      } catch (e) {
+        if (attempt === PUSH_ATTEMPTS) throw e;
+        console.log(
+          `Push rejected; ${snapshotBranch} moved. Retrying on top of it...`
+        );
+      }
+    } finally {
+      removeWorktree(wtPath);
+    }
+    sleep(attempt * 2000);
+  }
+  throw new Error(`could not push to ${snapshotBranch}`);
+}
+
+/**
+ * Commits sourceDir's `dom/` and `screenshots/` as the whole content of the
+ * snapshot branch and pushes it.
  */
 export function commitAndPushSnapshots(
   snapshotBranch: string,
   sourceDir: string,
   message: string
 ): void {
-  ensureSnapshotBranch(snapshotBranch);
+  commitToSnapshotBranch(snapshotBranch, message, (checkoutDir) => {
+    syncDir(join(sourceDir, "dom"), join(checkoutDir, "dom"));
+    syncDir(join(sourceDir, "screenshots"), join(checkoutDir, "screenshots"));
+  });
+}
 
-  const wtPath = `/tmp/gofish-snap-push-${process.pid}`;
-  if (existsSync(wtPath)) removeWorktree(wtPath);
+/** A parentless commit holding only .gitattributes (no snapshots/main yet). */
+function emptyBaseCommit(): string {
+  const blob = git("git hash-object -w --stdin", {
+    input: GITATTRIBUTES_CONTENT,
+  });
+  const tree = git("git mktree", {
+    input: `100644 blob ${blob}\t.gitattributes\n`,
+  });
+  return git(`git commit-tree ${tree} -m "Initial snapshot branch"`);
+}
 
-  try {
-    git(`git worktree add "${wtPath}" "${snapshotBranch}"`);
-
-    // Sync files from sourceDir into the worktree.
-    syncDir(join(sourceDir, "dom"), join(wtPath, "dom"));
-    syncDir(join(sourceDir, "screenshots"), join(wtPath, "screenshots"));
-
-    // Stage only the data dirs. Avoid `git add -A` so husky/lfs-installed
-    // hook files in .husky/_/ (created during pnpm install) don't get
-    // committed to the data-only snapshot branch.
-    git("git add -A dom screenshots", { cwd: wtPath });
-
-    // Check if there's anything staged. Use --cached so untracked files
-    // like .husky/ (created by pnpm install) don't fool us into running
-    // `git commit` with an empty index.
-    const staged = git("git diff --cached --name-only", { cwd: wtPath });
-    if (!staged) {
-      console.log("No changes to snapshot baselines.");
-      return;
-    }
-
-    // Commit using -F - to avoid shell-quoting the message.
-    git("git commit -F -", { cwd: wtPath, input: message + "\n" });
-    git(`git push origin "${snapshotBranch}"`, { cwd: wtPath });
-
-    console.log(`Pushed snapshot baselines to ${snapshotBranch}.`);
-  } finally {
-    removeWorktree(wtPath);
+/** Uploads the LFS objects of the PNGs staged in the checkout. */
+function pushChangedLfsObjects(wtPath: string): void {
+  const changed = git(
+    "git diff --cached --diff-filter=AM --name-only -- screenshots",
+    { cwd: wtPath }
+  )
+    .split("\n")
+    .filter(Boolean);
+  const oids = changed
+    .map(
+      (file) =>
+        /^oid sha256:([0-9a-f]{64})$/m.exec(
+          git(`git cat-file -p ":${file}"`, { cwd: wtPath })
+        )?.[1]
+    )
+    .filter((oid): oid is string => oid !== undefined);
+  if (oids.length > 0) {
+    git(`git lfs push --object-id origin ${oids.join(" ")}`, { cwd: wtPath });
   }
 }

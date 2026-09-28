@@ -69,7 +69,7 @@ console.log("Building review site...");
 // other unreviewed change (see compare.ts), and accepting one deletes the
 // baseline instead of writing a new one.
 // This is the same list the diff report writes to diff-list.json, which
-// accept-baselines.sh --all accepts.
+// accept-baselines.ts --all accepts.
 const diffs: DiffEntry[] = collectReviewDiffs();
 const removedCount = diffs.filter((d) => d.kind === "removed").length;
 console.log(`  ${diffs.length} diff(s) found`);
@@ -730,7 +730,6 @@ const html = `<!DOCTYPE html>
           repo: meta.repo,
           branch: meta.branch,
           runId: meta.runId,
-          headSha: meta.sha,
           paths,
           removals,
         }),
@@ -754,13 +753,11 @@ const html = `<!DOCTYPE html>
 
       hasUncommittedAccepts = false;
       const removedNote = removals.length > 0 ? ', removing ' + removals.length : '';
-      const warnings = (data.warnings || []).join('; ');
       const el = document.getElementById('action-status');
-      el.className = warnings ? 'error' : '';
+      el.className = '';
       el.innerHTML = 'Accepting ' + paths.length + ' diff(s)' + removedNote + '. ' +
         'A GitHub Action commits the baselines in about a minute, then re-runs the failed visual tests once this run has finished. ' +
-        '<a href="' + escHtml(data.workflowUrl) + '" target="_blank" rel="noopener">Follow it on GitHub</a>' +
-        (warnings ? ' (warnings: ' + escHtml(warnings) + ')' : '');
+        '<a href="' + escHtml(data.workflowUrl) + '" target="_blank" rel="noopener">Follow it on GitHub</a>';
       renderSidebar();
       updateCommitBtn();
     } catch (e) {
