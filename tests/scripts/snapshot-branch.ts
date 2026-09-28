@@ -30,6 +30,7 @@ const GITATTRIBUTES_CONTENT =
 
 const MAIN_SNAPSHOT_BRANCH = "snapshots/main";
 const PUSH_ATTEMPTS = 5;
+const NETWORK_ATTEMPTS = 3;
 
 // ---------------------------------------------------------------------------
 // Shared git helpers (also used by capture-diff.ts)
@@ -83,33 +84,83 @@ function sleep(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+function stderrOf(e: unknown): string {
+  return String((e as { stderr?: unknown }).stderr ?? e);
+}
+
+/**
+ * Runs a git command that talks to origin, retrying up to 3 times on errors
+ * that look like a transient network failure. Other errors throw at once.
+ */
+function gitNetwork(cmd: string, opts: GitOptions = {}): string {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return git(cmd, opts);
+    } catch (e) {
+      const transient =
+        /Could not resolve host|Connection (reset|refused|timed out)|timed out|early EOF|RPC failed|unexpected disconnect|HTTP 5\d\d|50[234]/i.test(
+          stderrOf(e)
+        );
+      if (!transient || attempt === NETWORK_ATTEMPTS) throw e;
+      sleep(attempt * 2000);
+    }
+  }
+}
+
+/** A snapshot branch and the commit to build on. */
+interface Base {
+  branch: string;
+  sha: string;
+}
+
 /**
  * Which of `snapshotBranch` and snapshots/main exist on origin, in one
- * ls-remote. Returns the branch to build on: `snapshotBranch` itself, or
- * snapshots/main when it does not exist yet, or null when neither does.
+ * ls-remote. Returns the branch to build on, with its head commit:
+ * `snapshotBranch` itself, or snapshots/main when it does not exist yet, or
+ * null when neither does.
  */
-function remoteBase(snapshotBranch: string): string | null {
-  const out = git(
+function remoteBase(snapshotBranch: string): Base | null {
+  const out = gitNetwork(
     `git ls-remote origin "refs/heads/${snapshotBranch}" "refs/heads/${MAIN_SNAPSHOT_BRANCH}"`
   );
-  const refs = new Set(out.split("\n").map((line) => line.split("\t")[1]));
-  if (refs.has(`refs/heads/${snapshotBranch}`)) return snapshotBranch;
-  if (refs.has(`refs/heads/${MAIN_SNAPSHOT_BRANCH}`))
-    return MAIN_SNAPSHOT_BRANCH;
+  const heads = new Map(
+    out
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [sha, ref] = line.split("\t");
+        return [ref.replace(/^refs\/heads\//, ""), sha] as const;
+      })
+  );
+  for (const branch of [snapshotBranch, MAIN_SNAPSHOT_BRANCH]) {
+    const sha = heads.get(branch);
+    if (sha) return { branch, sha };
+  }
   return null;
 }
 
 /**
- * Fetches a branch from origin and returns its head commit. The fetch is
- * shallow (only the head commit) when the clone is already shallow, as CI
- * checkouts are; a full clone is left full, since a shallow fetch would mark
- * a developer's clone as shallow.
+ * Fetches exactly the commit `ls-remote` reported, so a push that lands in
+ * between cannot change what we build on. The fetch is shallow (only that
+ * commit) when the clone is already shallow, as CI checkouts are; a full
+ * clone is left full, since a shallow fetch would mark a developer's clone
+ * as shallow.
  */
-function fetchHead(branch: string): string {
+function fetchCommit(sha: string): void {
   const depth =
     git("git rev-parse --is-shallow-repository") === "true" ? "--depth=1" : "";
-  git(`git fetch --quiet --no-tags ${depth} origin "refs/heads/${branch}"`);
-  return git("git rev-parse FETCH_HEAD");
+  gitNetwork(`git fetch --quiet --no-tags ${depth} origin ${sha}`);
+}
+
+/** A local snapshot branch to read when origin cannot be reached. */
+function localBase(snapshotBranch: string): Base | null {
+  for (const branch of [snapshotBranch, MAIN_SNAPSHOT_BRANCH]) {
+    const sha = git(`git rev-parse --verify --quiet "refs/heads/${branch}"`, {
+      ignoreError: true,
+    });
+    if (sha) return { branch, sha };
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,20 +205,34 @@ export function pullSnapshots(snapshotBranch: string, targetDir: string): void {
     return;
   }
 
-  const branch = remoteBase(snapshotBranch);
-  if (branch === null) {
+  // Read origin; when it cannot be reached (offline, no `origin`), fall back
+  // to a local snapshot branch if there is one.
+  let base: Base | null;
+  try {
+    base = remoteBase(snapshotBranch);
+    if (base) fetchCommit(base.sha);
+  } catch (e) {
+    base = localBase(snapshotBranch);
+    console.warn(
+      `Warning: cannot read snapshot branches from origin (${stderrOf(e).trim().split("\n")[0]}); ` +
+        (base
+          ? `using local ${base.branch}.`
+          : "no local snapshot branch either.")
+    );
+  }
+  if (base === null) {
     console.log("No snapshot branch found; starting with empty baselines.");
     mkdirSync(join(targetDir, "dom"), { recursive: true });
     mkdirSync(join(targetDir, "screenshots"), { recursive: true });
     return;
   }
+  const { branch, sha: head } = base;
   if (branch !== snapshotBranch) {
     console.log(
       `Snapshot branch ${snapshotBranch} not found; falling back to ${branch}.`
     );
   }
 
-  const head = fetchHead(branch);
   const wtPath = `/tmp/gofish-snap-pull-${process.pid}`;
   if (existsSync(wtPath)) removeWorktree(wtPath);
 
@@ -202,8 +267,15 @@ export function pullSnapshots(snapshotBranch: string, targetDir: string): void {
  *
  * - A branch that does not exist yet starts as a parentless commit on top of
  *   snapshots/main's tree, so it inherits every other baseline.
- * - If the push is rejected because the branch moved, it starts over on the
- *   new head (running `apply` again), up to 5 attempts. It never forces.
+ * - The push never forces. When it is rejected because the branch moved
+ *   (non-fast-forward), `retryOnMovedBranch` decides what happens:
+ *   - true: start over on the new head, running `apply` again, up to 5
+ *     attempts. Only for an `apply` that changes specific files (accepting
+ *     some stories), which is still right on top of someone else's commit.
+ *   - false: fail. Required for an `apply` that replaces the whole of dom/
+ *     and screenshots/ (commitAndPushSnapshots), because redoing it on a
+ *     newer head would let older captures overwrite newer baselines.
+ *   Any other push failure (auth, branch protection) fails at once.
  * - PNG baselines stay LFS pointers in the checkout (GIT_LFS_SKIP_SMUDGE):
  *   only the PNGs `apply` writes are uploaded, by object id. The push itself
  *   sets GIT_LFS_SKIP_PUSH, because the LFS pre-push hook would try to upload
@@ -217,17 +289,25 @@ export function commitToSnapshotBranch(
   snapshotBranch: string,
   message: string,
   apply: (checkoutDir: string) => void,
-  { dryRun = false } = {}
+  {
+    retryOnMovedBranch,
+    dryRun = false,
+  }: {
+    retryOnMovedBranch: boolean;
+    dryRun?: boolean;
+  }
 ): string | null {
-  for (let attempt = 1; attempt <= PUSH_ATTEMPTS; attempt++) {
+  const attempts = retryOnMovedBranch ? PUSH_ATTEMPTS : 1;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     const base = remoteBase(snapshotBranch);
-    const head = base === null ? emptyBaseCommit() : fetchHead(base);
-    const parent = base === snapshotBranch ? head : null;
-    if (base !== snapshotBranch) {
+    if (base) fetchCommit(base.sha);
+    const head = base ? base.sha : emptyBaseCommit();
+    const parent = base?.branch === snapshotBranch ? head : null;
+    if (base?.branch !== snapshotBranch) {
       console.log(
         base === null
           ? `Creating ${snapshotBranch} with empty baselines.`
-          : `${snapshotBranch} does not exist; starting it from ${base}'s tree.`
+          : `${snapshotBranch} does not exist; starting it from ${base.branch}'s tree.`
       );
     }
 
@@ -253,6 +333,7 @@ export function commitToSnapshotBranch(
         return null;
       }
 
+      const lfsObjects = stagedLfsObjects(wtPath);
       const tree = git("git write-tree", { cwd: wtPath });
       const commit = git(
         `git commit-tree ${tree}${parent ? ` -p ${parent}` : ""} -F -`,
@@ -268,7 +349,11 @@ export function commitToSnapshotBranch(
         return commit;
       }
 
-      pushChangedLfsObjects(wtPath);
+      if (lfsObjects.length > 0) {
+        gitNetwork(`git lfs push --object-id origin ${lfsObjects.join(" ")}`, {
+          cwd: wtPath,
+        });
+      }
       try {
         git(`git push origin ${commit}:refs/heads/${snapshotBranch}`, {
           cwd: wtPath,
@@ -277,7 +362,19 @@ export function commitToSnapshotBranch(
         console.log(`Pushed ${commit} to ${snapshotBranch}: ${message}`);
         return commit;
       } catch (e) {
-        if (attempt === PUSH_ATTEMPTS) throw e;
+        const moved = /\[rejected\].*\((non-fast-forward|fetch first)\)/.test(
+          stderrOf(e)
+        );
+        if (!moved) throw e;
+        if (attempt === attempts) {
+          throw new Error(
+            `${snapshotBranch} moved while committing; not retrying ` +
+              (retryOnMovedBranch
+                ? `after ${attempts} attempts.`
+                : "(a full-tree update must not overwrite newer baselines)."),
+            { cause: e }
+          );
+        }
         console.log(
           `Push rejected; ${snapshotBranch} moved. Retrying on top of it...`
         );
@@ -292,17 +389,23 @@ export function commitToSnapshotBranch(
 
 /**
  * Commits sourceDir's `dom/` and `screenshots/` as the whole content of the
- * snapshot branch and pushes it.
+ * snapshot branch and pushes it. Fails, without retrying, if the branch
+ * moved since it was read (see commitToSnapshotBranch).
  */
 export function commitAndPushSnapshots(
   snapshotBranch: string,
   sourceDir: string,
   message: string
 ): void {
-  commitToSnapshotBranch(snapshotBranch, message, (checkoutDir) => {
-    syncDir(join(sourceDir, "dom"), join(checkoutDir, "dom"));
-    syncDir(join(sourceDir, "screenshots"), join(checkoutDir, "screenshots"));
-  });
+  commitToSnapshotBranch(
+    snapshotBranch,
+    message,
+    (checkoutDir) => {
+      syncDir(join(sourceDir, "dom"), join(checkoutDir, "dom"));
+      syncDir(join(sourceDir, "screenshots"), join(checkoutDir, "screenshots"));
+    },
+    { retryOnMovedBranch: false }
+  );
 }
 
 /** A parentless commit holding only .gitattributes (no snapshots/main yet). */
@@ -316,23 +419,43 @@ function emptyBaseCommit(): string {
   return git(`git commit-tree ${tree} -m "Initial snapshot branch"`);
 }
 
-/** Uploads the LFS objects of the PNGs staged in the checkout. */
-function pushChangedLfsObjects(wtPath: string): void {
-  const changed = git(
-    "git diff --cached --diff-filter=AM --name-only -- screenshots",
+/**
+ * The LFS object ids of the PNGs staged (added or modified) in the checkout.
+ * Throws if one of them was staged as a raw blob instead of an LFS pointer,
+ * which means the LFS clean filter is not active.
+ */
+function stagedLfsObjects(wtPath: string): string[] {
+  const files = git(
+    "git diff --cached --no-renames --diff-filter=AM --name-only -z -- screenshots",
     { cwd: wtPath }
   )
-    .split("\n")
+    .split("\0")
     .filter(Boolean);
-  const oids = changed
-    .map(
-      (file) =>
-        /^oid sha256:([0-9a-f]{64})$/m.exec(
-          git(`git cat-file -p ":${file}"`, { cwd: wtPath })
-        )?.[1]
-    )
-    .filter((oid): oid is string => oid !== undefined);
-  if (oids.length > 0) {
-    git(`git lfs push --object-id origin ${oids.join(" ")}`, { cwd: wtPath });
+  if (files.length === 0) return [];
+
+  // One `cat-file --batch` for all of them: "<sha> <type> <size>\n<content>\n".
+  const out = execSync("git cat-file --batch", {
+    cwd: wtPath,
+    input: files.map((f) => `:${f}\n`).join(""),
+    maxBuffer: 1024 * 1024 * 1024,
+  });
+  const oids: string[] = [];
+  let pos = 0;
+  for (const file of files) {
+    const headerEnd = out.indexOf(0x0a, pos);
+    const size = Number(out.subarray(pos, headerEnd).toString().split(" ")[2]);
+    const content = out.subarray(headerEnd + 1, headerEnd + 1 + size);
+    pos = headerEnd + 1 + size + 1;
+    const oid = /^oid sha256:([0-9a-f]{64})$/m.exec(
+      content.toString("latin1")
+    )?.[1];
+    if (!oid || !content.toString("latin1").startsWith("version ")) {
+      throw new Error(
+        `${file} was staged as a raw file, not a Git LFS pointer: the LFS ` +
+          "clean filter is inactive; run `git lfs install`."
+      );
+    }
+    oids.push(oid);
   }
+  return oids;
 }

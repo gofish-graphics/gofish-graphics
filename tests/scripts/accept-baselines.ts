@@ -15,8 +15,12 @@
  *   --accept-file   file with one story path per line (e.g. "forward-syntax/bar--basic.html")
  *   --remove-file   file with one story path per line whose baseline to delete
  *   --dry-run       build the commit but do not push it
+ *   --check         only check the run and the path lists, then write the
+ *                   run's `head-sha` to $GITHUB_OUTPUT and exit
  *
- * The run must be a Visual Tests run of <branch>. Files come from the run's
+ * The run must be a pull_request or push Visual Tests run of <branch> in
+ * this repository (not a fork's branch of the same name). Accepted stories
+ * must be in the run's capture; removed ones must not be. Files come from the run's
  * `js-dom-capture` artifact, never from a local capture, so baselines are
  * never rendered on a developer machine. The commit goes to
  * snapshots/<branch> through `commitToSnapshotBranch` (one commit; a new
@@ -72,6 +76,41 @@ function readList(file: string | undefined): string[] {
   return readFileSync(file, "utf-8").split("\n").filter(Boolean);
 }
 
+function checkPathShapes(paths: string[]): void {
+  for (const p of paths) {
+    if (!isStoryPath(p)) fail(`invalid story path '${p}'`);
+  }
+}
+
+interface RunInfo {
+  path: string;
+  event: string;
+  head_branch: string;
+  head_sha: string;
+  head_repo: string | null;
+}
+
+/**
+ * Only a Visual Tests run of a branch of this repository, for this branch,
+ * can be accepted, so a request can never copy one branch's capture (or a
+ * fork's branch of the same name) onto another branch's baselines.
+ */
+function checkRun(run: RunInfo, repo: string, branch: string): string | null {
+  if (run.path !== VISUAL_TESTS_WORKFLOW) {
+    return `is from '${run.path}', not the Visual Tests workflow`;
+  }
+  if (run.event !== "pull_request" && run.event !== "push") {
+    return `was triggered by '${run.event}', not a pull_request or push`;
+  }
+  if (run.head_repo?.toLowerCase() !== repo.toLowerCase()) {
+    return `ran on a branch of '${run.head_repo}', not of ${repo}`;
+  }
+  if (run.head_branch !== branch) {
+    return `is for branch '${run.head_branch}', not '${branch}'`;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Arguments
 // ---------------------------------------------------------------------------
@@ -80,12 +119,14 @@ const args = process.argv.slice(2);
 const [runId, branch] = args;
 let all = false;
 let dryRun = false;
+let check = false;
 let acceptFile: string | undefined;
 let removeFile: string | undefined;
 for (let i = 2; i < args.length; i++) {
   const arg = args[i];
   if (arg === "--all") all = true;
   else if (arg === "--dry-run") dryRun = true;
+  else if (arg === "--check") check = true;
   else if (arg === "--accept-file") acceptFile = args[++i];
   else if (arg === "--remove-file") removeFile = args[++i];
   else fail(`unknown argument '${arg}'`);
@@ -115,16 +156,25 @@ const run = JSON.parse(
     "api",
     `repos/${repo}/actions/runs/${runId}`,
     "--jq",
-    "{path, head_branch}",
+    "{path, event, head_branch, head_sha, head_repo: .head_repository.full_name}",
   ])
-) as { path: string; head_branch: string };
-// Only accept files from a Visual Tests run of this same branch, so a request
-// can never copy one branch's capture onto another branch's baselines.
-if (run.path !== VISUAL_TESTS_WORKFLOW) {
-  fail(`run ${runId} is from '${run.path}', not the Visual Tests workflow`);
-}
-if (run.head_branch !== branch) {
-  fail(`run ${runId} is for branch '${run.head_branch}', not '${branch}'`);
+) as RunInfo;
+const problem = checkRun(run, repo, branch);
+if (problem) fail(`run ${runId} ${problem}`);
+
+// Paths from files are checked before anything else happens (--check);
+// --all paths come from the run's own report, checked below.
+let accepts = readList(acceptFile);
+let removals = readList(removeFile);
+checkPathShapes([...accepts, ...removals]);
+
+if (check) {
+  // The workflow sets the PR's status only after this passes.
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `head-sha=${run.head_sha}\n`);
+  }
+  console.log(`Run ${runId} checks out (head ${run.head_sha}).`);
+  process.exit(0);
 }
 
 const work = mkdtempSync(join(tmpdir(), "accept-baselines-"));
@@ -167,8 +217,6 @@ if (listHtmlFiles(captureDir).length === 0) {
 // What to accept
 // -------------------------------------------------------------------------
 
-let accepts: string[];
-let removals: string[];
 if (all) {
   // diff-list.json is written by diff-report.ts from collectReviewDiffs(),
   // the same list the review site shows.
@@ -187,16 +235,20 @@ if (all) {
   console.log(
     `Run ${runId} reported ${accepts.length} diff(s) to accept and ${removals.length} removal(s).`
   );
-} else {
-  accepts = readList(acceptFile);
-  removals = readList(removeFile);
+  checkPathShapes([...accepts, ...removals]);
 }
-for (const p of [...accepts, ...removals]) {
-  if (!isStoryPath(p)) fail(`invalid story path '${p}'`);
-}
+// An accepted story must be in the capture; a removed one must not be (the
+// story no longer renders).
 for (const p of accepts) {
   if (!existsSync(join(captureDir, p))) {
     fail(`${p} is not in the capture of run ${runId}`);
+  }
+}
+for (const p of removals) {
+  if (existsSync(join(captureDir, p))) {
+    fail(
+      `cannot remove the baseline of ${p}: the story still renders in run ${runId}`
+    );
   }
 }
 for (const p of accepts) console.log(`  accept: ${p}`);
@@ -221,7 +273,8 @@ commitToSnapshotBranch(
     }
     for (const p of removals) removeBaselineStory(p, checkoutDir);
   },
-  { dryRun }
+  // Accepting specific files is still right on top of a newer head.
+  { retryOnMovedBranch: true, dryRun }
 );
 
 if (process.env.GITHUB_OUTPUT) {
