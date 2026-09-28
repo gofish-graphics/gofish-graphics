@@ -410,6 +410,8 @@ export interface TreemapOperator
   y?: ChannelValue;
   w?: ChannelValue;
   h?: ChannelValue;
+  /** The same box by axis name (see `AxisDims`). */
+  dims?: AxisDims;
 }
 
 // ---------------------------------------------------------------------------

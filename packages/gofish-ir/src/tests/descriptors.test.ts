@@ -101,6 +101,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "y",
     "w",
     "h",
+    "dims",
     "by",
     "paddingInner",
     "paddingOuter",

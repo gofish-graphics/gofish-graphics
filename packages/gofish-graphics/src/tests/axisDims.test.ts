@@ -23,11 +23,15 @@ const {
   stack,
   scatter,
   group,
+  treemap,
   rect,
   circle,
   polar,
+  wavy,
   geo,
   layer,
+  datum,
+  field,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -308,6 +312,158 @@ async function main() {
       "scatter x with dims.theta throws",
       scatterTwice.includes("by x"),
       scatterTwice
+    );
+  }
+
+  console.log("\n# every coord establishes its own axis-name scope");
+  {
+    // wavy declares no names, so polar's theta is not visible inside it.
+    const inClock = await errorOf(() =>
+      chart(rose, { coord: polar() })
+        .flow(spread({ by: "month", dir: "x" }))
+        .mark(
+          layer({ coord: wavy() }, [
+            rect({ dims: { theta: { size: 1 } }, h: 5 }),
+          ])
+        )
+        .toDisplayList(SIZE)
+    );
+    check(
+      "theta is not visible inside a wavy space nested in polar",
+      inClock.includes('"theta"') && inClock.includes("x, y"),
+      inClock
+    );
+  }
+
+  console.log("\n# a hook is cleared only once it has run");
+  {
+    const bad = await rect({ dims: { theta: { size: 1 } }, h: 5 })();
+    const good = await rect({ dims: { x: { size: 7 } }, h: 5 })();
+    const root = await layer([bad, good])();
+    const first = await errorOf(() => root.resolveAliases());
+    check(
+      "the throwing hook reports its error",
+      first.includes('"theta"'),
+      first
+    );
+    check(
+      "a hook queued after the throw is kept for a rerun",
+      good._elaborateInAxisScope !== undefined
+    );
+    const again = await errorOf(() => root.resolveAliases());
+    check(
+      "a rerun meets the same error instead of skipping the hook",
+      again.includes('"theta"'),
+      again
+    );
+  }
+
+  console.log("\n# scatter dims slots infer like their top-level options");
+  {
+    const rows = [
+      { k: "a", angle: 1, lo: 1, hi: 2, name: "p" },
+      { k: "b", angle: 2, lo: 2, hi: 4, name: "q" },
+      { k: "c", angle: 3, lo: 3, hi: 5, name: "r" },
+    ];
+    // The two ends of a span share one measure.
+    const lo = field("lo", "span");
+    const hi = field("hi", "span");
+    const dots = async (opts: any, coord?: any) =>
+      (
+        await chart(rows, coord ? { coord } : {})
+          .flow(scatter({ by: "k", ...opts }))
+          .mark(circle({ r: 3 }))
+          .toDisplayList(SIZE)
+      ).items.filter((it: any) => it.kind === "ellipse");
+
+    // A datum is already a value: every slot passes it through, one per
+    // entry, as the top-level channel does. (A constant position is a
+    // degenerate domain, so only equality with the top-level spelling is
+    // checked here.)
+    const dimsDatum = await errorOf(() =>
+      dots({ dims: { x: datum(5), y: "angle" } })
+    );
+    check("dims {x: datum(5)} renders", dimsDatum === "", dimsDatum);
+    check(
+      "dims {x: datum(5)} ≡ x: datum(5)",
+      same(
+        await dots({ dims: { x: datum(5), y: "angle" } }),
+        await dots({ x: datum(5), y: "angle" })
+      )
+    );
+    check(
+      "dims {x: {min, max}} ≡ xMin/xMax",
+      same(
+        await dots({ dims: { x: { min: lo, max: hi } }, y: "angle" }),
+        await dots({ xMin: lo, xMax: hi, y: "angle" })
+      )
+    );
+    // `x` is discrete for a non-numeric field; `xMin`/`xMax` are not.
+    check(
+      "dims {x: <non-numeric field>} ≡ x (both discrete)",
+      same(
+        await dots({ dims: { x: "name" }, y: "angle" }),
+        await dots({ x: "name", y: "angle" })
+      )
+    );
+    const minDims = await dots({
+      dims: { x: { min: "name", max: "name" } },
+      y: "angle",
+    });
+    const minTop = await dots({ xMin: "name", xMax: "name", y: "angle" });
+    check(
+      "dims {x: {min: <non-numeric>}} ≡ xMin (neither discrete)",
+      same(minDims, minTop),
+      JSON.stringify([minDims, minTop])
+    );
+
+    const mixed = await errorOf(() =>
+      dots({ xMin: lo, dims: { x: { max: hi } }, y: "angle" })
+    );
+    check("xMin with dims.x.max is a span", mixed === "", mixed);
+    check(
+      "xMin with dims.x.max ≡ xMin/xMax",
+      same(
+        await dots({ xMin: lo, dims: { x: { max: hi } }, y: "angle" }),
+        await dots({ xMin: lo, xMax: hi, y: "angle" })
+      )
+    );
+    const lone = await errorOf(() => dots({ xMin: "lo", y: "angle" }));
+    check(
+      "a lone top-level xMin throws, naming it",
+      lone.includes("xMin") && lone.includes("both ends"),
+      lone
+    );
+    const loneDims = await errorOf(() =>
+      dots({ dims: { x: { min: "lo" } }, y: "angle" })
+    );
+    check(
+      "a lone dims.x.min throws, naming it",
+      loneDims.includes("dims.x") && loneDims.includes("both ends"),
+      loneDims
+    );
+  }
+
+  console.log("\n# treemap takes dims");
+  {
+    const rows = [
+      { k: "a", v: 1 },
+      { k: "b", v: 3 },
+    ];
+    const tm = async (opts: any) =>
+      (
+        await chart(rows)
+          .flow(treemap({ by: "k", size: "v", ...opts }))
+          .mark(rect({ fill: "k" }))
+          .toDisplayList(SIZE)
+      ).items.filter((it: any) => it.kind === "rect");
+    const wh = await tm({ w: 120, h: 80 });
+    const named = await tm({ dims: { x: { size: 120 }, y: { size: 80 } } });
+    const full = await tm({});
+    check("treemap dims {x, y} sizes ≡ w/h", same(wh, named));
+    check(
+      "treemap dims is not dropped (differs from no size)",
+      !same(wh, full)
     );
   }
 

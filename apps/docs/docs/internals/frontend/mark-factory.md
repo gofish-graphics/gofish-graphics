@@ -133,7 +133,7 @@ Walking `withGoFish.ts:431-477`:
      (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
      channel, and its kind comes from its structure, not its name: `size` is
      a `"size"` channel, and a bare value or `min`/`center`/`max` is a
-     `"pos"` channel (`mapAxisDims` in `dims.ts`; `inferAxisDims` in
+     `"pos"` channel (`mapAxisDims` in `dims.ts`; `axisSlotKind` in
      `channels.ts`). A `Value` in a slot passes through, as it does at the top
      level. The kind does not depend on which axis the name means, so it can
      run here, before the [axis-name

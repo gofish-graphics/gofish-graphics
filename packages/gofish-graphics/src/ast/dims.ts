@@ -54,13 +54,13 @@ export type IntervalKey = (typeof AXIS_INTERVAL_KEYS)[number];
  */
 export type AxisDimsForm = {
   where: string;
-  bare: IntervalKey;
+  bare: AxisDimsSlot;
   topLevel: Partial<Record<IntervalKey, [string, string]>>;
   badKey: string;
 };
 
 /** A box-dims mark's form: every anchor, a bare value at `min` like `x`. */
-const MARK_DIMS: AxisDimsForm = {
+export const MARK_DIMS: AxisDimsForm = {
   where: "dims",
   bare: "min",
   topLevel: {
@@ -91,30 +91,35 @@ const toAxisInterval = <T>(
   return entry as Interval<T>;
 };
 
+/** A value slot of a `dims` entry: a `bare` value, or one anchor of an
+ *  interval. (`embedded` is a flag, not a value.) */
+export type AxisDimsSlot = Exclude<IntervalKey, "embedded">;
+
 /**
- * Map every value in a `dims` bag, telling `f` which channel kind each slot is:
- * `size` is "size"; a bare value or `min`/`center`/`max` is "pos". `embedded`
- * passes through, and a bare value stays bare. This is the one place the
- * structure → channel-kind rule lives, shared by mark channel inference
- * (withGoFish.ts) and operator channel inference (createOperator.ts).
+ * Map every value in a `dims` bag, telling `f` which anchor each value fills:
+ * `form.bare` for a bare value, which stays bare, and the key itself inside an
+ * interval. `embedded` passes through. An interval key the form does not allow
+ * is an error. This is the one walk over a bag's values, shared by mark
+ * channel inference (channels.ts) and operator channel inference
+ * (createOperator.ts), which decide what each anchor's channel is.
  */
 export const mapAxisDims = <A, B>(
   dims: AxisDims<A>,
-  f: (value: A, kind: "pos" | "size") => B
+  f: (value: A, slot: AxisDimsSlot) => B,
+  form: AxisDimsForm = MARK_DIMS
 ): AxisDims<B> => {
   const out: AxisDims<B> = {};
   for (const [name, entry] of Object.entries(dims)) {
     if (entry === undefined) continue;
     if (!isAxisInterval(entry)) {
-      out[name] = f(entry as A, "pos");
+      out[name] = f(entry as A, form.bare);
       continue;
     }
-    const src = toAxisInterval<A>(name, entry, MARK_DIMS);
+    const src = toAxisInterval<A>(name, entry, form);
     const iv: Interval<B> = {};
-    for (const key of ["min", "center", "max"] as const) {
-      if (src[key] !== undefined) iv[key] = f(src[key] as A, "pos");
+    for (const key of ["min", "center", "max", "size"] as const) {
+      if (src[key] !== undefined) iv[key] = f(src[key] as A, key);
     }
-    if (src.size !== undefined) iv.size = f(src.size as A, "size");
     if (src.embedded !== undefined) iv.embedded = src.embedded;
     out[name] = iv;
   }
@@ -131,8 +136,10 @@ export type AxisScope = Readonly<Record<string, Direction>>;
 /** The scope outside every coordinate space that declares names. */
 export const BASE_AXIS_SCOPE: AxisScope = { x: 0, y: 1 };
 
-/** The scope inside a coordinate space that declares `aliases`. The innermost
- *  declaring space wins: its names replace any outer space's names. */
+/** The scope inside a coordinate space: `x`/`y` plus the names its transform
+ *  declares in `aliases` (none for most spaces). Every space establishes its
+ *  own scope, so the innermost one wins and an outer space's names are not
+ *  visible inside it. */
 export const axisScopeFor = (aliases: {
   x?: string;
   y?: string;
@@ -157,9 +164,10 @@ export const resolveAxisName = (
   const names = Object.keys(scope).join(", ");
   throw new Error(
     scope === BASE_AXIS_SCOPE
-      ? `${where}: no enclosing coordinate space declares the axis name ` +
-        `"${name}", so only ${names} are available here. Put the mark ` +
-        `inside a coordinate space that declares "${name}", or use x/y.`
+      ? `${where}: the innermost enclosing coordinate space (if any) does ` +
+        `not declare the axis name "${name}", so only ${names} are ` +
+        `available here. Put the mark directly inside a coordinate space ` +
+        `that declares "${name}", or use x/y.`
       : `${where}: the enclosing coordinate space does not declare the axis ` +
         `name "${name}". Names available here: ${names}.`
   );

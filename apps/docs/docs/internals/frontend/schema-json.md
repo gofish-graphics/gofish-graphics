@@ -1380,6 +1380,13 @@ for the API.
           "$ref": "#/$defs/ChannelValue",
           "description": "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
         },
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        },
         "by": {
           "oneOf": [
             {

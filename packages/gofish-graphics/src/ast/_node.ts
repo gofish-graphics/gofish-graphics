@@ -761,8 +761,9 @@ export class GoFishNode {
    * Top-down pass that gives axis NAMES their meaning. `x`/`y` mean axis 0/1
    * everywhere; a coordinate space adds the names its transform declares in
    * `aliases` (polar `theta`/`r`, geo `lon`/`lat`). Mirrors {@link resolveAxes}:
-   * it carries the scope downward, and a `coord` that declares names rebinds
-   * it for its subtree (the innermost declaring coord wins).
+   * it carries the scope downward, and every `coord` rebinds it for its
+   * subtree to the names it declares (the innermost coord wins; one that
+   * declares no names leaves only `x`/`y`).
    *
    * At each node it consumes the {@link _elaborateInAxisScope} hook, the work a
    * factory could not do at construction, when the enclosing coord did not
@@ -777,8 +778,11 @@ export class GoFishNode {
    * return constraints only, so no hook adds a node that needs a hook of its
    * own.
    *
-   * Each hook is consumed once, so the pass is idempotent and can rerun over a
-   * tree that an elaboration pass (axes, legends) extended with new nodes.
+   * A hook is cleared once it has run to completion, so the pass is
+   * idempotent and can rerun over a tree that an elaboration pass (axes,
+   * legends) extended with new nodes. A hook that throws stays in place, as do
+   * the hooks queued after it, so a rerun meets the same error again instead
+   * of silently skipping the rest of the work.
    *
    * Runs BEFORE `resolveUnderlyingSpace` (which reads the dims and the
    * constraints). The `embedded` flag is authored later by
@@ -786,25 +790,28 @@ export class GoFishNode {
    * a build-time error that lists the names that are declared.
    */
   public async resolveAliases(): Promise<void> {
-    const work: (() => void | Promise<void>)[] = [];
+    const work: (() => Promise<void>)[] = [];
     this.collectAxisScopeWork(BASE_AXIS_SCOPE, work);
     for (const run of work) await run();
   }
 
-  /** The synchronous walk of {@link resolveAliases}: consume each node's hook
-   *  and queue it, with its scopes, in pre-order. */
+  /** The synchronous walk of {@link resolveAliases}: queue each node's hook,
+   *  with its scopes, in pre-order. Every coord establishes its own scope: the
+   *  names its transform declares, or only `x`/`y` when it declares none (a
+   *  name has a meaning only inside the space that declares it). */
   private collectAxisScopeWork(
     outer: AxisScope,
-    work: (() => void | Promise<void>)[]
+    work: (() => Promise<void>)[]
   ): void {
     const inner =
-      this.type === "coord" && this._aliases
-        ? axisScopeFor(this._aliases)
-        : outer;
+      this.type === "coord" ? axisScopeFor(this._aliases ?? {}) : outer;
     const hook = this._elaborateInAxisScope;
     if (hook) {
-      this._elaborateInAxisScope = undefined;
-      work.push(() => hook(outer, inner));
+      work.push(async () => {
+        await hook(outer, inner);
+        if (this._elaborateInAxisScope === hook)
+          this._elaborateInAxisScope = undefined;
+      });
     }
     for (const c of this.children) {
       if (c instanceof GoFishNode) c.collectAxisScopeWork(inner, work);

@@ -216,13 +216,18 @@ field name like `x: "miles"` becomes a per-group mean position
 `discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
 slot coordinate instead of an invalid numeric mean.
 
-A `{ type: "dims", ... }` channel is an axis-name-keyed bag
-(`scatter({ dims: { theta: "bearing", r: "distance" } })`). `applyChannels`
-runs the bag's `entry`/`discrete` flags over every slot, with each slot's kind
-taken from its structure (`size` is `"size"`, anything else `"pos"`; see
-`inferAxisDims`), so `dims.theta` is inferred exactly as `x` would be. Which
-axis `theta` means is not known here: the scatter defers the constraints that
-need it to the [axis-name pass](/internals/layout/passes#pass-5-5-axis-name-resolution).
+A `{ type: "dims", form }` channel is an axis-name-keyed bag
+(`scatter({ dims: { theta: "bearing", r: "distance" } })`). `form` is the
+same `AxisDimsForm` the operator later merges the bag with, and its
+`topLevel` table names the top-level option each anchor stands for. For each
+slot, `applyChannels` looks up that option's own channel spec and applies it,
+so a slot infers exactly as its counterpart: scatter's bare value and
+`center` as `x` (per entry, discrete for a nonnumeric field), its `min` as
+`xMin` (per entry, never discrete). A counterpart with no channel leaves the
+slot as given (treemap's `min` stands for its unannotated `x`), and the
+counterparts on the two axes must share one spec. Which axis `theta` means is
+not known here: the scatter defers the constraints that need it to the
+[axis-name pass](/internals/layout/passes#pass-5-5-axis-name-resolution).
 
 `axisFields` returns its grouping fields keyed by axis **name**, the way the
 operator names the axis (`spread({ by, dir: "theta" })` reports

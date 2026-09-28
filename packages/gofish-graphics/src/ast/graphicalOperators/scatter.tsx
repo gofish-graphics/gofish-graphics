@@ -3,7 +3,7 @@ import type { AxisOptions } from "../gofish";
 import { MaybeValue, type PositionValue } from "../data";
 import {
   FancyDims,
-  isAxisInterval,
+  type Direction,
   mergeAxisDims,
   type AxisDims,
   type AxisDimsForm,
@@ -78,12 +78,17 @@ function scatterAxes(
     { center: xy.y, min: xy.yMin, max: xy.yMax },
   ];
   const origin = mergeAxisDims(axes, dims ?? {}, scope, SCATTER_DIMS);
-  for (const [name, entry] of Object.entries(dims ?? {})) {
-    if (
-      isAxisInterval(entry) &&
-      (entry.min === undefined) !== (entry.max === undefined)
-    ) {
-      throw new Error(`scatter dims.${name}: a span needs both min and max.`);
+  for (const axis of [0, 1] as const) {
+    // Checked on the merged axis, so the two ends may come from different
+    // spellings (`xMin` with `dims.x.max`).
+    const { min, max } = axes[axis];
+    if ((min === undefined) !== (max === undefined)) {
+      const [set, unset] = min !== undefined ? ["min", "max"] : ["max", "min"];
+      throw new Error(
+        `${origin(set as "min" | "max", axis)} sets one end of a scatter ` +
+          `span on axis ${axis}, but nothing sets its ${unset}. A span ` +
+          `needs both ends.`
+      );
     }
   }
   for (const axis of [0, 1] as const) {
@@ -97,15 +102,26 @@ function scatterAxes(
       }
     }
   }
-  if (!axes.some(isPlaced)) {
+  if (!axes.some((_, axis) => isPlaced(axes, axis as Direction))) {
     throw new Error("Scatter operator requires at least one of x or y");
   }
   return axes;
 }
 
-/** Does this axis place the children (a point, or a full span)? */
-const isPlaced = (a: AxisPlacement): boolean =>
-  a.center !== undefined || (a.min !== undefined && a.max !== undefined);
+/** Does this axis place the children (a point, or a full span)? The same
+ *  test as the operator's `arrangement` (`scatterPositions`). */
+const isPlaced = (axes: AxisPlacement[], axis: Direction): boolean => {
+  const [x, y] = axes;
+  const placed = scatterPositions({
+    x: x.center,
+    xMin: x.min,
+    xMax: x.max,
+    y: y.center,
+    yMin: y.min,
+    yMax: y.max,
+  });
+  return axis === 0 ? placed.x : placed.y;
+};
 
 const Scatter = createNodeOperator(
   async (
@@ -192,7 +208,7 @@ const Scatter = createNodeOperator(
         // frame; `align` leaves the points where their own scale puts them by
         // reading their abstract placement (no guard flag needed).
         ([0, 1] as const).forEach((axis) => {
-          if (!isPlaced(placement[axis]))
+          if (!isPlaced(placement, axis))
             cs.push(Constraint.align({ [axisName(axis)]: alignment }, refs));
         });
         return cs;
@@ -253,7 +269,8 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
     xMax: { type: "pos", entry: true },
     yMin: { type: "pos", entry: true },
     yMax: { type: "pos", entry: true },
-    dims: { type: "dims", entry: true, discrete: true },
+    // Each `dims` slot infers exactly as its top-level counterpart above.
+    dims: { type: "dims", form: SCATTER_DIMS },
   },
   axisFields: ({ x, y, xMin, xMax, yMin, yMax }) => {
     const fields: { x?: string; y?: string } = {};

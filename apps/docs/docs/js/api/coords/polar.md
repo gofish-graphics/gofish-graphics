@@ -73,7 +73,9 @@ gf.chart(seafood, { coord: gf.polar() })
 :::
 
 The names only work inside a coordinate space that declares them. Outside
-polar, `theta` throws an error that lists the names you can use there.
+polar, `theta` throws an error that lists the names you can use there. A
+coordinate space nested inside polar that declares no names, such as
+`wavy()`, hides them too.
 
 Each part of an axis can be set once. `w: 0.4` together with
 `dims: { theta: { size: 0.4 } }` is an error, because both set the angular

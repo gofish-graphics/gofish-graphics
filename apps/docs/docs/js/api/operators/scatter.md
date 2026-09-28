@@ -54,8 +54,11 @@ value is the point, like `x`, and `{ min, max }` is the span, like
 
 A scatter only places its children, so a `size` inside `dims` is an error; size
 the mark instead. Placing an axis twice, such as `x` together with
-`dims.theta`, is an error too. The circle's `r` above is its radius, not the
-polar axis: axis names only appear as keys of `dims`.
+`dims.theta`, is an error too. The two ends of a span may come from either
+spelling (`xMin` with `dims: { x: { max: "hi" } }`), but one end without the
+other is an error. Each value in `dims` is read like its top-level
+counterpart: a point like `x`, a `min` like `xMin`. The circle's `r` above is
+its radius, not the polar axis: axis names only appear as keys of `dims`.
 
 ## Example
 

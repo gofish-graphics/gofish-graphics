@@ -524,8 +524,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       // position (`x`/`y`) and size (`w`/`h`) are both real options. Only
       // `w`/`h` carry channel annotations (`createOperator`'s `channels`), so
       // those two resolve data-driven values; `x`/`y` pass through as literals.
-      // The polar aliases (theta/r/...) are deliberately NOT here: `Treemap`
-      // never calls `extractAliasCandidates`, so they would not resolve.
+      // `dims` names the same box by axis name and is written onto it by the
+      // resolveAliases pass (`deferAxisDims`); each slot infers as its
+      // top-level counterpart.
       x: ch.num(
         "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
       ),
@@ -537,6 +538,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       ),
       h: ch.num(
         "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+      ),
+      dims: axisDims(
+        "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
       ),
       by: {
         type: t.union(t.string, t.ref("FieldAccessor")),

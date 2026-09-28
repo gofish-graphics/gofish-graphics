@@ -38,7 +38,13 @@ import {
   resolveMarkResult,
   stashLayerName,
 } from "./chartBuilder";
-import { CHANNEL_INFER, inferAxisDims, resolveMeasure } from "../channels";
+import {
+  CHANNEL_INFER,
+  axisSlotKind,
+  resolveMeasure,
+  type DimsChannelSpec,
+} from "../channels";
+import { mapAxisDims, type AxisDimsSlot } from "../dims";
 
 import type {
   ChannelAnnotations as MarkChannelAnnotations,
@@ -839,23 +845,77 @@ function applyChannels<Options extends Record<string, any>>(
   if (!channels) return opts;
   const wholeData = Array.isArray(d) ? d : [d];
   const out: any = { ...opts };
+  const infer = (
+    type: Exclude<ChannelType, "dims">,
+    spec: ChannelSpec,
+    val: any
+  ) => {
+    const flags =
+      typeof spec === "object" && !isDimsFormSpec(spec) ? spec : undefined;
+    return applyChannel(
+      type,
+      flags?.entry === true,
+      flags?.discrete === true,
+      val,
+      wholeData,
+      entries,
+      opts
+    );
+  };
   for (const key of Object.keys(channels) as Array<keyof Options>) {
     const spec = channels[key];
     const val = out[key];
     if (val === undefined || spec === undefined) continue;
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
-    const perEntry = typeof spec === "object" && spec.entry === true;
-    const discrete = typeof spec === "object" && spec.discrete === true;
-    // A `dims` bag is one channel per slot, each a size or a position by its
-    // structure, with the bag's entry/discrete flags.
-    out[key] =
-      type === "dims"
-        ? inferAxisDims(val, (v, kind) =>
-            applyChannel(kind, perEntry, discrete, v, wholeData, entries, opts)
-          )
-        : applyChannel(type, perEntry, discrete, val, wholeData, entries, opts);
+    if (type !== "dims") {
+      out[key] = infer(type, spec, val);
+      continue;
+    }
+    // A `dims` bag is one channel per slot: the channel of the slot's
+    // top-level counterpart when the spec names a form, else a size or a
+    // position by the slot's structure, with the bag's flags.
+    const form = isDimsFormSpec(spec) ? spec.form : undefined;
+    out[key] = mapAxisDims(
+      val,
+      (v, slot) => {
+        if (form === undefined) return infer(axisSlotKind(slot), spec, v);
+        const counterpart = counterpartSpec(channels, form, slot);
+        if (counterpart === undefined) return v;
+        const t =
+          typeof counterpart === "string" ? counterpart : counterpart.type;
+        if (t === "dims")
+          throw new Error(
+            `${form.where}: a slot cannot stand for a dims option.`
+          );
+        return infer(t, counterpart, v);
+      },
+      form
+    );
   }
   return out as Options;
+}
+
+const isDimsFormSpec = (spec: ChannelSpec): spec is DimsChannelSpec =>
+  typeof spec === "object" && "form" in spec;
+
+/** The spec of the top-level option a `dims` slot stands for
+ *  ({@link DimsChannelSpec}), or `undefined` when that option has no channel.
+ *  The counterparts on the two axes must agree, since the slot's axis is not
+ *  known until the enclosing coordinate space is. */
+function counterpartSpec(
+  channels: Record<string, ChannelSpec | undefined>,
+  form: DimsChannelSpec["form"],
+  slot: AxisDimsSlot
+): ChannelSpec | undefined {
+  const [x, y] = form.topLevel[slot]!;
+  const spec = channels[x];
+  if (JSON.stringify(spec) !== JSON.stringify(channels[y])) {
+    throw new Error(
+      `${form.where}: the ${slot} slot stands for ${x} and ${y}, whose ` +
+        `channels differ, so it has no single channel.`
+    );
+  }
+  return spec;
 }
 
 /** One channel of {@link applyChannels}: infer `val` as a `type` channel. */
