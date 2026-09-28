@@ -403,6 +403,9 @@ importers:
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
+      shiki:
+        specifier: ^4.1.0
+        version: 4.1.0
       storybook:
         specifier: ^9.1.6
         version: 9.1.6(@testing-library/dom@10.4.1)(prettier@3.6.2)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0))

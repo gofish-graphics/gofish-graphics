@@ -78,6 +78,7 @@
     "fast-kde": "^0.2.2",
     "happy-dom": "^20.10.6",
     "prettier": "^3.6.2",
+    "shiki": "^4.1.0",
     "storybook": "^9.1.6",
     "storybook-solidjs-vite": "^9.0.3",
     "topojson-client": "^3.1.0",

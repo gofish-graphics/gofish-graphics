@@ -16,6 +16,7 @@
  * Not gallery-tagged: this is a prototype for review, not a docs example.
  */
 import type { Meta, StoryObj } from "@storybook/html";
+import { codeToHtml } from "shiki";
 import type { BuildClockOptions } from "../../src/lib";
 import { initializeContainer } from "../helper";
 
@@ -348,6 +349,16 @@ export const Gallery: StoryObj = {
         },
         sources[pathOf(example)]
       );
+      // Plain text first, then swap in shiki's highlighted tokens (its <pre>
+      // wrapper dropped so the panel keeps its own box).
+      codeToHtml(sources[pathOf(example)], {
+        lang: "ts",
+        theme: "github-light",
+      }).then((html) => {
+        const tmp = el("div");
+        tmp.innerHTML = html;
+        code.innerHTML = tmp.querySelector("code")!.outerHTML;
+      });
       const right = el("div");
       const head = el("div", {
         display: "flex",
