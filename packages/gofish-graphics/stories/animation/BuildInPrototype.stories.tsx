@@ -290,8 +290,17 @@ const play = (
 
 /** `source` as the rows show it: without its leading comment lines and
  *  imports, so it starts at `export default`. */
+// TODO(shortcut): the `(container, clock?) =>` wrapper and `...clock` are
+// harness plumbing (the clock only holds filmstrips and recordings), so they
+// are cut from the shown code. The right fix moves the hold out of the example
+// source, so what is shown is exactly what runs.
 const shownSource = (source: string) =>
-  source.replace(/^(?:(?:\/\/.*|import\b[^;]*;|[ \t]*)\n)*/, "");
+  source
+    .replace(/^(?:(?:\/\/.*|import\b[^;]*;|[ \t]*)\n)*/, "")
+    .replace(/^export default \(container[^\n]*=>\n/, "")
+    .replace(/^ {2}/gm, "")
+    .replace(/\n[ \t]*\.\.\.clock,?(?=\n)/, "")
+    .replace(/, \.\.\.clock/, "");
 
 /** Re-run a row's chart, playing or held at a time. */
 type Replay = (hold?: BuildClockOptions) => void;
