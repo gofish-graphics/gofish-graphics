@@ -133,12 +133,18 @@ gf.chart(cityYear, { axes: { x: { labelAngle: [45] } } }) // year rotated, city 
 
 #### Choosing the angle automatically
 
-`labelAngle: "auto"` rotates only when it has to. GoFish tries 0°, then 45°,
-then 90°, and keeps the first angle at which no two labels in the same row
-overlap or come closer than 2px. If every angle collides, it keeps the one with
-the least overlap. The check covers the whole chart, so in a grouped bar chart a
-year label under one city that runs into a year label under the next city
-counts as a collision.
+`labelAngle: "auto"` rotates only when it has to. Each row of labels gets its
+own angle: GoFish tries 0°, then 45°, then 90°, and keeps the first angle at
+which no two labels in that row overlap or come closer than 2px. If a row of
+category labels collides at every angle, GoFish hides that row instead of
+drawing labels on top of each other, and the rows and title outside it move in
+to take its place. A row of numeric tick labels is never hidden, because
+nothing else would show those values; if it collides at every angle, it keeps
+the angle with the least overlap. A nested axis has one row
+per tier, so in a grouped bar chart the crowded inner row can slant while the
+outer row, which has plenty of room, stays upright. The check covers the whole
+chart, so a year label under one city that runs into a year label under the
+next city counts as a collision.
 
 ```js
 gf.chart(sales, { axes: { x: { labelAngle: "auto" } } })
@@ -152,12 +158,14 @@ gf.chart(sales, { axes: { x: { labelAngle: "auto" } } })
 
 At `w: 900` the product names fit upright and stay at 0°. At `w: 400` they
 would overlap, so they slant to 45°. At `w: 220` only vertical names clear each
-other, so they turn to 90°.
+other, so they turn to 90°. At `w: 90` they collide even vertically, so the
+product row is hidden; the color legend still names each product. The region
+names (North, South, West) stay at 0° at every one of these widths.
 
 A few rules:
 
-- One angle applies to every tier of the axis, like a plain number. `"auto"`
-  cannot be an entry of a per-tier array.
+- `"auto"` applies to the whole axis and chooses per row. It cannot be an entry
+  of a per-tier array; to fix one row's angle yourself, write the whole array.
 - Each axis is chosen on its own, so `x` and `y` can both be `"auto"`.
 - GoFish lays the chart out once for each angle it tries. That needs a chart it
   can build again, which is what `chart(...)` and a component function passed to

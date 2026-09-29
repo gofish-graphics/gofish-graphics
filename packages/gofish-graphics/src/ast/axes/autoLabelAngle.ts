@@ -3,9 +3,9 @@
 // </gofish-wiki>
 
 /**
- * `labelAngle: "auto"`: pick each axis's label angle from 0°, 45°, and 90°,
- * in that order of preference, taking the first angle at which no two labels
- * of the same row collide.
+ * `labelAngle: "auto"`: pick each label ROW's angle (one row per axis tier)
+ * from 0°, 45°, and 90°, in that order of preference, taking the first angle
+ * at which no two labels of that row collide.
  *
  * This module is the POLICY half of the choice (the candidate list and the
  * score). The evaluation strategy is the generic whole-chart
@@ -21,11 +21,30 @@
  * labels and nothing else.
  */
 import { GoFishNode } from "../_node";
-import type { AxesOptions, GoFishRenderOptions } from "../gofish";
+import type { GoFishRenderOptions } from "../gofish";
+import {
+  labelRowSettingsFromAngles,
+  type LabelRow,
+  type LabelRowSetting,
+} from "./elaborate";
 import { chooseFirstFit, type Score } from "../choice/choose";
 
-/** Candidate angles, most readable first. */
-export const AUTO_LABEL_ANGLES = [0, 45, 90] as const;
+/**
+ * Candidates per row, most readable first. A category (ordinal) row that
+ * collides at every angle is hidden rather than drawn overlapping: hidden
+ * always fits, so an ordinal row never reaches the least-overlap fallback.
+ * A continuous row cannot be hidden, because nothing else (no legend) can
+ * carry its tick values; that is inherent to the domain, not a gap. It keeps
+ * the least-overlap fallback. The right future answer for a crowded
+ * continuous row is tick thinning (drawing fewer ticks), which this does not do.
+ */
+export const ORDINAL_CANDIDATES: readonly LabelRowSetting[] = [
+  0,
+  45,
+  90,
+  "hidden",
+];
+export const CONTINUOUS_CANDIDATES: readonly LabelRowSetting[] = [0, 45, 90];
 
 /** Clearance (px) two labels of one row need to count as not colliding. */
 const AUTO_LABEL_GAP = 2;
@@ -43,39 +62,12 @@ type RelBox = { minX: number; minY: number; maxX: number; maxY: number };
  */
 export type LabelBox = {
   dim: 0 | 1;
+  kind: "ordinal" | "continuous";
   tier: number;
   pivot: [number, number];
   rotate: number;
   rel: RelBox;
 };
-
-/** Which axes ask for `labelAngle: "auto"`. */
-export function autoLabelAngleDims(axes: AxesOptions | undefined): (0 | 1)[] {
-  if (!axes || typeof axes !== "object") return [];
-  const dims: (0 | 1)[] = [];
-  const isAuto = (o: unknown) =>
-    typeof o === "object" &&
-    o !== null &&
-    (o as { labelAngle?: unknown }).labelAngle === "auto";
-  if (isAuto(axes.x)) dims.push(0);
-  if (isAuto(axes.y)) dims.push(1);
-  return dims;
-}
-
-/** `axes` with each dim's `labelAngle` replaced by `angles[dim]` wherever that
- *  dim asked for "auto". */
-function withAngles(
-  axes: AxesOptions | undefined,
-  autoDims: (0 | 1)[],
-  angles: [number, number]
-): AxesOptions {
-  const out = { ...(axes as Exclude<AxesOptions, boolean>) };
-  for (const d of autoDims) {
-    const key = d === 0 ? "x" : "y";
-    out[key] = { ...(out[key] as object), labelAngle: angles[d] };
-  }
-  return out;
-}
 
 /** Rotate `p` by `deg` degrees counterclockwise about the origin. */
 function rotatePoint([x, y]: [number, number], deg: number): [number, number] {
@@ -133,6 +125,7 @@ export function collectLabelBoxes(root: GoFishNode): LabelBox[] {
         }
         out.push({
           dim: n.axisLabel.dim,
+          kind: n.axisLabel.kind,
           tier: n.axisLabel.tier,
           pivot,
           rotate: (n.args?.rotate as number | undefined) ?? 0,
@@ -204,38 +197,62 @@ function scoreRow(row: LabelBox[]): [number, number] {
   return [area, pairs];
 }
 
-/** Score axis `dim`'s labels across all of its tiers: the per-tier
- *  `[overlap area, colliding pairs]`, summed. */
-export function scoreAxisLabels(boxes: LabelBox[], dim: 0 | 1): Score {
-  const tiers = new Map<number, LabelBox[]>();
+const rowKey = (r: LabelRow): string => `${r.dim}:${r.kind}:${r.tier}`;
+
+/** Score every label row: `[overlap area, colliding pairs]` per
+ *  (axis, kind, tier), keyed by `rowKey`. */
+export function scoreLabelRows(
+  boxes: LabelBox[]
+): Map<string, { row: LabelRow; score: Score }> {
+  const rows = new Map<string, { row: LabelRow; boxes: LabelBox[] }>();
   for (const b of boxes) {
-    if (b.dim !== dim) continue;
-    let row = tiers.get(b.tier);
-    if (!row) tiers.set(b.tier, (row = []));
-    row.push(b);
+    const row: LabelRow = { dim: b.dim, kind: b.kind, tier: b.tier };
+    const key = rowKey(row);
+    let entry = rows.get(key);
+    if (!entry) rows.set(key, (entry = { row, boxes: [] }));
+    entry.boxes.push(b);
   }
-  let area = 0;
-  let pairs = 0;
-  for (const row of tiers.values()) {
-    const [a, p] = scoreRow(row);
-    area += a;
-    pairs += p;
-  }
-  return [area, pairs];
+  const out = new Map<string, { row: LabelRow; score: Score }>();
+  for (const [key, { row, boxes: rowBoxes }] of rows)
+    out.set(key, { row, score: scoreRow(rowBoxes) });
+  return out;
 }
 
-/** An angle fits when no pair of labels collides (clearance included). */
+/** The score of `row` among scored rows. A row with no labels (a hidden row)
+ *  has nothing to collide. */
+export const rowScore = (
+  rows: Map<string, { row: LabelRow; score: Score }>,
+  row: LabelRow
+): Score => rows.get(rowKey(row))?.score ?? [0, 0];
+
+/** A setting fits a row when no pair of its labels collides (clearance
+ *  included). */
 export const labelsFit = (s: Score): boolean => s[1] === 0;
 
+/** The candidates a row chooses from (see `ORDINAL_CANDIDATES`). */
+export const candidatesFor = (row: LabelRow): readonly LabelRowSetting[] =>
+  row.kind === "ordinal" ? ORDINAL_CANDIDATES : CONTINUOUS_CANDIDATES;
+
+type AxisAngle = number | number[] | "auto" | undefined;
+
 /**
- * Lay the chart out with each "auto" axis's angle chosen. `layoutOnce` is the
- * unchanged single-layout pipeline; it consumes the tree it is given.
+ * Lay the chart out with each label row of every "auto" axis at its own chosen
+ * setting (an angle, or hidden for a category row). `layoutOnce` is the
+ * unchanged single-layout pipeline; it consumes the tree it is given, and
+ * `labelRowSettings` tells it how to draw each row.
  *
- * Each axis is chosen on its own. Runs apply the same candidate angle to every
- * "auto" axis, and each axis is scored separately. That is sound under an
- * assumption that holds today: labels do not feed σ, so one axis's angle
- * cannot move the other axis's labels. If the per-axis winners differ (say x
- * needs 45° while y fits at 0°), that combination is laid out once more.
+ * Every row is chosen on its own, from uniform runs: each run applies one
+ * candidate to every row of every "auto" axis (a continuous row, which cannot
+ * be hidden, stays upright in the "hidden" run and is never scored there),
+ * and each row is scored separately. That rests on two assumptions that hold
+ * today:
+ *  - Axes don't interact: labels do not feed σ, so one axis's labels cannot
+ *    move the other axis's labels along their track.
+ *  - Rows don't interact for collisions: each tier is its own cross-axis row,
+ *    and collisions are counted only within a row. A row's setting pushes the
+ *    rows outside it further into (or back out of) the margin, but does not
+ *    change their spacing along the track.
+ * When the rows' winners differ, that combination is laid out once more.
  *
  * Throws when the root cannot be rebuilt: a node built by hand and passed to
  * `gofish()` is laid out in place, so it can be laid out only once.
@@ -245,8 +262,12 @@ export async function layoutWithAutoLabelAngles<
 >(
   options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>,
-  autoDims: (0 | 1)[],
-  layoutOnce: (options: GoFishRenderOptions, child: GoFishNode) => Promise<D>
+  angles: [AxisAngle, AxisAngle],
+  layoutOnce: (
+    options: GoFishRenderOptions,
+    child: GoFishNode,
+    labelRowSettings: (row: LabelRow) => LabelRowSetting
+  ) => Promise<D>
 ): Promise<D> {
   const root = await child;
   const rebuild = root.rebuild;
@@ -267,34 +288,59 @@ export async function layoutWithAutoLabelAngles<
     return t ?? rebuild();
   };
 
-  type Run = { data: D; scores: [Score, Score] };
+  // Axes without "auto" keep their authored angles in every run.
+  const isAuto = (dim: 0 | 1) => angles[dim] === "auto";
+  const manual = labelRowSettingsFromAngles([
+    isAuto(0) ? undefined : (angles[0] as number | number[] | undefined),
+    isAuto(1) ? undefined : (angles[1] as number | number[] | undefined),
+  ]);
+
+  type Run = {
+    data: D;
+    rows: Map<string, { row: LabelRow; score: Score }>;
+  };
   const runs = new Map<string, Run>();
-  const run = async (chosen: [number, number]): Promise<Run> => {
-    const key = autoDims.map((d) => chosen[d]).join(",");
+  const run = async (
+    key: string,
+    auto: (row: LabelRow) => LabelRowSetting
+  ): Promise<Run> => {
     const memo = runs.get(key);
     if (memo) return memo;
-    const data = await layoutOnce(
-      { ...options, axes: withAngles(options.axes, autoDims, chosen) },
-      await nextTree()
-    );
-    const boxes = collectLabelBoxes(data.child);
+    const settings = (row: LabelRow) =>
+      isAuto(row.dim) ? auto(row) : manual(row);
+    const data = await layoutOnce(options, await nextTree(), settings);
     const result: Run = {
       data,
-      scores: [scoreAxisLabels(boxes, 0), scoreAxisLabels(boxes, 1)],
+      rows: scoreLabelRows(collectLabelBoxes(data.child)),
     };
     runs.set(key, result);
     return result;
   };
+  const uniform = (c: LabelRowSetting) =>
+    run(`all:${c}`, (row) => (candidatesFor(row).includes(c) ? c : 0));
 
-  const winner: [number, number] = [0, 0];
-  for (const d of autoDims) {
+  // The rows to choose for: the "auto" axes' rows, as the first run (every
+  // row drawn upright) finds them. Rows are a property of the chart's
+  // structure, not of the angle.
+  const rows = [...(await uniform(0)).rows.values()]
+    .map((r) => r.row)
+    .filter((r) => isAuto(r.dim));
+
+  const winners = new Map<string, LabelRowSetting>();
+  for (const row of rows) {
     const { candidate } = await chooseFirstFit(
-      AUTO_LABEL_ANGLES,
-      (a) => run([a, a]),
-      (r) => r.scores[d],
+      candidatesFor(row),
+      uniform,
+      (r) => rowScore(r.rows, row),
       labelsFit
     );
-    winner[d] = candidate;
+    winners.set(rowKey(row), candidate);
   }
-  return (await run(winner)).data;
+
+  // One uniform run already is the winning combination when every row chose
+  // the same setting; otherwise lay the winners out together.
+  const chosen = [...new Set(winners.values())];
+  if (chosen.length <= 1) return (await uniform(chosen[0] ?? 0)).data;
+  const key = JSON.stringify([...winners].sort());
+  return (await run(key, (row) => winners.get(rowKey(row)) ?? 0)).data;
 }

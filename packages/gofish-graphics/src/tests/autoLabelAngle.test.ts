@@ -1,23 +1,30 @@
 /**
  * Unit tests for `labelAngle: "auto"`: the generic whole-chart choice
- * (`src/ast/choice/choose.ts`), the label collision score
+ * (`src/ast/choice/choose.ts`), the per-row label collision score
  * (`src/ast/axes/autoLabelAngle.ts`), and the option's validation. Run:
  * `tsx src/tests/autoLabelAngle.test.ts` (wired into `pnpm test` as
  * `test:auto-label-angle`).
  *
- * The contract: candidates run in preference order (0°, 45°, 90°) and the
- * first whose labels do not collide wins; if all collide, the one with the
- * least overlap wins, ties going to the more preferred angle.
+ * The contract: each label row (axis tier) tries 0°, 45°, 90° in order and
+ * keeps the first angle at which its labels do not collide; if all collide,
+ * the one with the least overlap wins, ties going to the more preferred angle.
  */
 // The library first, so its modules initialize in their usual order.
 import { chart, spread, rect } from "../lib";
-import { chooseFirstFit, compareScores, type Score } from "../ast/choice/choose";
 import {
-  AUTO_LABEL_ANGLES,
+  chooseFirstFit,
+  compareScores,
+  type Score,
+} from "../ast/choice/choose";
+import {
+  candidatesFor,
+  collectLabelBoxes,
   labelsFit,
-  scoreAxisLabels,
+  rowScore,
+  scoreLabelRows,
   type LabelBox,
 } from "../ast/axes/autoLabelAngle";
+import type { LabelRowSetting } from "../ast/axes/elaborate";
 import { resolveAxisLabelAngles, runLayout } from "../ast/gofish";
 import { Rect } from "../ast/shapes/rect";
 
@@ -80,69 +87,166 @@ ok("compareScores orders lexicographically", compareScores([1, 5], [2, 0]) < 0);
 // A row of `n` labels of width `w` and height 10 whose origins sit `pitch`
 // apart along x, turned by `angle` (counterclockwise, like Text's `rotate`)
 // about their start baseline.
-const row = (n: number, w: number, pitch: number, angle: number): LabelBox[] =>
+const row = (
+  n: number,
+  w: number,
+  pitch: number,
+  angle: number,
+  tier = 0,
+  kind: "ordinal" | "continuous" = "ordinal"
+): LabelBox[] =>
   Array.from({ length: n }, (_, i) => ({
     dim: 0 as const,
-    tier: 0,
-    pivot: [i * pitch, 0] as [number, number],
+    kind,
+    tier,
+    pivot: [i * pitch, tier * 50] as [number, number],
     rotate: angle,
     rel: { minX: 0, maxX: w, minY: -3, maxY: 7 },
   }));
 
-console.log("scoreAxisLabels");
-ok(
-  "separated labels score zero",
-  scoreAxisLabels(row(4, 20, 30, 0), 0).join() === "0,0"
-);
+/** The score of a row, or zero when the row is absent (hidden). */
+const scoreOf = (
+  boxes: LabelBox[],
+  dim: 0 | 1 = 0,
+  tier = 0,
+  kind: "ordinal" | "continuous" = "ordinal"
+): Score => rowScore(scoreLabelRows(boxes), { dim, kind, tier });
+
+console.log("scoreLabelRows");
+ok("separated labels score zero", scoreOf(row(4, 20, 30, 0)).join() === "0,0");
 {
-  const s = scoreAxisLabels(row(3, 20, 15, 0), 0);
-  ok("overlapping labels count area and pairs", s[0] === 100 && s[1] === 2, s.join());
+  const s = scoreOf(row(3, 20, 15, 0));
+  ok(
+    "overlapping labels count area and pairs",
+    s[0] === 100 && s[1] === 2,
+    s.join()
+  );
 }
 {
-  const s = scoreAxisLabels(row(2, 20, 21, 0), 0);
-  ok("a 1px gap is a collision with no area", s[0] === 0 && s[1] === 1, s.join());
+  const s = scoreOf(row(2, 20, 21, 0));
+  ok(
+    "a 1px gap is a collision with no area",
+    s[0] === 0 && s[1] === 1,
+    s.join()
+  );
 }
 {
   // Slanted parallel labels: their axis-aligned boxes overlap, but the
   // labels themselves do not (perpendicular clearance 30·sin45 ≈ 21 > 10).
-  const s = scoreAxisLabels(row(4, 60, 30, -45), 0);
-  ok("parallel slanted labels are compared in their own frame", s.join() === "0,0", s.join());
+  const s = scoreOf(row(4, 60, 30, -45));
+  ok(
+    "parallel slanted labels are compared in their own frame",
+    s.join() === "0,0",
+    s.join()
+  );
 }
 {
-  const boxes = [...row(3, 20, 15, 0), ...row(3, 20, 15, 0).map((b) => ({ ...b, dim: 1 as const }))];
-  const s = scoreAxisLabels(boxes, 0);
-  ok("scores only the requested axis", s[0] === 100 && s[1] === 2, s.join());
+  const boxes = [
+    ...row(3, 20, 15, 0),
+    ...row(3, 20, 30, 0).map((b) => ({ ...b, dim: 1 as const })),
+  ];
+  ok(
+    "axes are scored separately",
+    scoreOf(boxes, 0).join() === "100,2" && scoreOf(boxes, 1).join() === "0,0"
+  );
 }
 {
+  // Tier 1 sits exactly where tier 0 does, offset half a pitch: were they one
+  // row, they would collide.
   const a = row(2, 20, 30, 0);
-  const b = row(2, 20, 30, 0).map((x) => ({ ...x, tier: 1, pivot: [x.pivot[0] + 15, 0] as [number, number] }));
-  const s = scoreAxisLabels([...a, ...b], 0);
-  ok("tiers are scored separately", s.join() === "0,0", s.join());
+  const b = row(2, 20, 30, 0).map((x) => ({
+    ...x,
+    tier: 1,
+    pivot: [x.pivot[0] + 15, 0] as [number, number],
+  }));
+  const s = [...scoreLabelRows([...a, ...b]).values()].map((r) =>
+    r.score.join()
+  );
+  ok(
+    "tiers are scored as separate rows",
+    s.join("|") === "0,0|0,0",
+    s.join("|")
+  );
+}
+{
+  // A continuous tick row and an ordinal tier 0 on the same axis are
+  // different rows, even though both are tier 0.
+  const a = row(2, 20, 30, 0, 0, "continuous");
+  const b = row(2, 20, 30, 0, 0, "ordinal").map((x) => ({
+    ...x,
+    pivot: [x.pivot[0] + 15, 0] as [number, number],
+  }));
+  ok(
+    "kinds are scored as separate rows",
+    scoreLabelRows([...a, ...b]).size === 2
+  );
 }
 
-// --- choosing an angle on synthetic label geometry ---------------------------
+// --- choosing a setting on synthetic label geometry --------------------------
 
-// A labels-only "chart": `n` labels of width `w` at band pitch `pitch`, turned
-// to the candidate angle. The angle Text receives is counterclockwise; the
-// screen-clockwise user angle is its negation.
-const pick = async (w: number, pitch: number, n = 6) =>
-  (
-    await chooseFirstFit(
-      AUTO_LABEL_ANGLES,
-      async (a) => row(n, w, pitch, -a),
-      (boxes) => scoreAxisLabels(boxes, 0),
-      labelsFit
-    )
-  ).candidate;
+// A labels-only "chart" with an inner row (tier 0) and an outer row (tier 1),
+// both set to the candidate, as a uniform run sets every row. A hidden row
+// draws no labels. The angle Text receives is counterclockwise; the
+// screen-clockwise user angle is its negation. Each row picks its own setting
+// from the same runs.
+const pickRows = async (
+  inner: [w: number, pitch: number],
+  outer: [w: number, pitch: number],
+  innerKind: "ordinal" | "continuous" = "ordinal"
+): Promise<LabelRowSetting[]> => {
+  const draw = (
+    c: LabelRowSetting,
+    spec: [number, number],
+    tier: number,
+    kind: "ordinal" | "continuous"
+  ) =>
+    c === "hidden"
+      ? []
+      : row(tier === 0 ? 6 : 2, spec[0], spec[1], -(c ?? 0), tier, kind);
+  const uniform = async (c: LabelRowSetting) => [
+    ...draw(c, inner, 0, innerKind),
+    ...draw(c, outer, 1, "ordinal"),
+  ];
+  const pick = async (tier: number, kind: "ordinal" | "continuous") => {
+    const labelRow = { dim: 0 as const, kind, tier };
+    return (
+      await chooseFirstFit(
+        candidatesFor(labelRow),
+        uniform,
+        (boxes) => scoreOf(boxes, 0, tier, kind),
+        labelsFit
+      )
+    ).candidate;
+  };
+  return [await pick(0, innerKind), await pick(1, "ordinal")];
+};
 
-console.log("choosing an angle");
-ok("0° fits → 0°", (await pick(20, 30)) === 0);
-ok("0° collides, 45° fits → 45°", (await pick(60, 20)) === 45);
-ok("only 90° fits → 90°", (await pick(60, 13)) === 90);
+console.log("choosing a setting per row");
+ok("0° fits → 0°", (await pickRows([20, 30], [30, 100])).join() === "0,0");
+ok(
+  "inner collides at 0°, outer fits → inner 45°, outer 0°",
+  (await pickRows([60, 20], [30, 100])).join() === "45,0"
+);
+ok(
+  "inner fits only at 90°, outer fits → inner 90°, outer 0°",
+  (await pickRows([60, 13], [30, 100])).join() === "90,0"
+);
 {
-  const first = await pick(60, 4);
-  const again = await pick(60, 4);
-  ok("all collide → the least overlap (90°), deterministically", first === 90 && again === 90, String(first));
+  const first = await pickRows([60, 4], [30, 100]);
+  const again = await pickRows([60, 4], [30, 100]);
+  ok(
+    "a category row colliding at 0°, 45° and 90° is hidden, deterministically",
+    first.join() === "hidden,0" && again.join() === "hidden,0",
+    first.join()
+  );
+}
+{
+  const s = await pickRows([60, 4], [30, 100], "continuous");
+  ok(
+    "a continuous row is never hidden: it falls back to the least overlap (90°)",
+    s.join() === "90,0",
+    s.join()
+  );
 }
 
 // --- validation --------------------------------------------------------------
@@ -175,8 +279,10 @@ ok(
 );
 ok(
   '"auto" and numbers pass through',
-  resolveAxisLabelAngles({ x: { labelAngle: "auto" }, y: { labelAngle: [45, 0] } }).join("|") ===
-    "auto|45,0"
+  resolveAxisLabelAngles({
+    x: { labelAngle: "auto" },
+    y: { labelAngle: [45, 0] },
+  }).join("|") === "auto|45,0"
 );
 ok(
   '"auto" on a prebuilt node is an error',
@@ -194,45 +300,97 @@ ok(
 
 // Grouped bars with long inner labels, as in the BarAxesPermutations stories.
 // The builder rebuilds the chart for each candidate; the winner's layout is
-// what gets lowered, so its label rotation shows the selected angle.
-const regionProduct = ["Laptops", "Smartphones", "Accessories", "Wearables"]
-  .flatMap((product, i) =>
-    ["North", "South", "West"].map((region, j) => ({
-      region,
-      product,
-      sales: 30 + ((i * 17 + j * 11) % 40),
-    }))
-  );
-const selectedAngle = async (w: number): Promise<number[]> => {
-  const doc = await chart(regionProduct, { axes: { x: { labelAngle: "auto" } } })
+// what gets lowered, so its label rotation shows the selected angles.
+const regionProduct = [
+  "Laptops",
+  "Smartphones",
+  "Accessories",
+  "Wearables",
+].flatMap((product, i) =>
+  ["North", "South", "West"].map((region, j) => ({
+    region,
+    product,
+    sales: 30 + ((i * 17 + j * 11) % 40),
+  }))
+);
+const groupedProducts = () =>
+  chart(regionProduct, { axes: { x: { labelAngle: "auto" } } })
     .flow(
       spread({ by: "region", dir: "x", spacing: 24 }),
       spread({ by: "product", dir: "x", spacing: 0 })
     )
-    .mark(rect({ h: "sales", fill: "product" }))
-    .toDisplayList({ w, h: 210, legend: false });
-  const angles = new Set<number>();
+    .mark(rect({ h: "sales", fill: "product" }));
+
+/** The distinct rotations of the inner (product) and outer (region) rows. */
+const rowAngles = async (w: number): Promise<[number[], number[]]> => {
+  const doc = await groupedProducts().toDisplayList({
+    w,
+    h: 210,
+    legend: false,
+  });
+  const inner = new Set<number>();
+  const outer = new Set<number>();
   const walk = (it: any) => {
-    if (it.kind === "text" && it.text === "Laptops") angles.add(it.rotate ?? 0);
+    if (it.kind === "text" && it.text === "Laptops") inner.add(it.rotate ?? 0);
+    if (it.kind === "text" && it.text === "North") outer.add(it.rotate ?? 0);
     (it.children ?? []).forEach(walk);
   };
   doc.items.forEach(walk);
-  return [...angles];
+  return [[...inner], [...outer]];
 };
 
 console.log("end to end");
 {
-  const wide = await selectedAngle(900);
-  ok("a wide chart keeps its labels upright", wide.join() === "0", wide.join());
-  const narrow = await selectedAngle(220);
+  const [wideIn, wideOut] = await rowAngles(900);
   ok(
-    "a narrow chart turns every Laptops label to one nonzero angle",
-    narrow.length === 1 && narrow[0] !== 0,
-    narrow.join()
+    "a wide chart keeps both rows upright",
+    wideIn.join() === "0" && wideOut.join() === "0",
+    `${wideIn}|${wideOut}`
   );
+  const [narrowIn, narrowOut] = await rowAngles(220);
+  ok(
+    "a narrow chart turns the inner row and leaves the outer row upright",
+    narrowIn.length === 1 && narrowIn[0] !== 0 && narrowOut.join() === "0",
+    `${narrowIn}|${narrowOut}`
+  );
+  const [tinyIn, tinyOut] = await rowAngles(90);
+  ok(
+    "a tiny chart hides the colliding inner row and keeps the outer row upright",
+    tinyIn.length === 0 && tinyOut.join() === "0",
+    `${tinyIn}|${tinyOut}`
+  );
+
+  // The final (combined) run keeps every row collision-free that its uniform
+  // run found collision-free: turning the inner row must not make the outer
+  // row collide.
+  for (const w of [900, 400, 220, 90]) {
+    const builder = groupedProducts();
+    const node = await builder.resolve();
+    node.rebuild = () => builder.resolve();
+    const data = await runLayout(
+      { w, h: 210, legend: false, axes: { x: { labelAngle: "auto" } } },
+      node
+    );
+    const scores = [
+      ...scoreLabelRows(collectLabelBoxes(data.child)).values(),
+    ].filter((r) => r.row.dim === 0);
+    ok(
+      `w=${w}: every row of the chosen layout is collision-free`,
+      scores.length > 0 && scores.every((r) => labelsFit(r.score)),
+      scores
+        .map((r) => `${r.row.dim}:${r.row.tier}=${r.score.join()}`)
+        .join(" ")
+    );
+  }
+
   // A continuous axis: stacked tick labels never collide, so they stay upright.
-  const doc = await chart(regionProduct, { axes: { y: { labelAngle: "auto" } } })
-    .flow(spread({ by: "region", dir: "x" }), spread({ by: "product", dir: "x" }))
+  const doc = await chart(regionProduct, {
+    axes: { y: { labelAngle: "auto" } },
+  })
+    .flow(
+      spread({ by: "region", dir: "x" }),
+      spread({ by: "product", dir: "x" })
+    )
     .mark(rect({ h: "sales" }))
     .toDisplayList({ w: 300, h: 210 });
   const ticks: number[] = [];

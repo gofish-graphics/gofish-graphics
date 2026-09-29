@@ -541,12 +541,17 @@ export class GoFishNode {
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
   public _ordinalKeyMap?: Record<string, GoFishNode>;
-  /** Set on a tick or category label `Text` made by axis elaboration: which
-   *  axis (`dim`) and which ordinal tier (0 = innermost; always 0 on a
-   *  continuous axis) it labels. `labelAngle: "auto"` reads these tags after
-   *  layout to score label collisions per (axis, tier) across the whole chart
-   *  (see axes/autoLabelAngle.ts). */
-  public axisLabel?: { dim: 0 | 1; tier: number };
+  /** Set on a tick or category label `Text` made by axis elaboration: the
+   *  label row it belongs to — which axis (`dim`), whether it labels
+   *  categories or continuous ticks (`kind`), and which ordinal tier
+   *  (0 = innermost; always 0 on a continuous axis). `labelAngle: "auto"` reads
+   *  these tags after layout to score label collisions per row across the
+   *  whole chart (see axes/autoLabelAngle.ts). */
+  public axisLabel?: {
+    dim: 0 | 1;
+    kind: "ordinal" | "continuous";
+    tier: number;
+  };
   /** Set on a ROOT node by the surface that built it (a chart builder or a
    *  component thunk): builds a fresh, unlaid-out copy of the same chart.
    *  Layout writes each node's box once, so a choice that must lay the chart

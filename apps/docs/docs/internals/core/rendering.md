@@ -398,8 +398,9 @@ Every render path reaches layout through `runLayout`, which normally runs the
 pipeline once (`layoutOnce`). The one exception is an axis with
 `labelAngle: "auto"`: `runLayout` then hands off to
 `layoutWithAutoLabelAngles` (`axes/autoLabelAngle.ts`), which builds and lays out
-the chart once per candidate angle, scores the finished label geometry, and
-returns the winning run's `LayoutData`. Paint then proceeds from that data
+the chart once per candidate angle, scores the finished label geometry per label
+row, and returns the winning `LayoutData` (laying out once more when the rows
+chose different angles). Paint then proceeds from that data
 exactly as above. Because layout writes each node's box once, each run needs a
 fresh tree, which comes from the root's `rebuild` (set by the surface that built
 it). See [Axes](/internals/frontend/axes#automatic-label-angle-labelangle-auto).

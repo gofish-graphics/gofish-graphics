@@ -116,14 +116,14 @@ def story_grouped_label_angle_none():
     return _grouped_bar(None)
 
 
-# labelAngle "auto" (#486) tries 0, 45, then 90 degrees and keeps the first
-# angle at which no two labels in a row collide, across the whole chart. Each
-# story names the angle it is expected to select.
+# labelAngle "auto" (#486) chooses each label row (inner and outer tier) on its
+# own: the first of 0, 45, 90 degrees at which no two labels in the row collide,
+# across the whole chart. Each story names the inner and outer angles.
 def story_grouped_label_angle_auto0():
     return _grouped_bar("auto", w=400)
 
 
-def story_grouped_label_angle_auto45():
+def story_grouped_label_angle_auto_inner45_outer0():
     return _grouped_bar("auto", w=250)
 
 
@@ -151,20 +151,34 @@ def story_grouped_label_angle_auto_long0():
     return _grouped_products(900)
 
 
-def story_grouped_label_angle_auto_long45():
+def story_grouped_label_angle_auto_long_inner45_outer0():
     return _grouped_products(400)
 
 
-def story_grouped_label_angle_auto_long90():
+def story_grouped_label_angle_auto_long_inner90_outer0():
     return _grouped_products(220)
 
 
-# Every angle collides: falls back to the least overlap (90 degrees).
-def story_grouped_label_angle_auto_fallback():
+# The products collide at every angle: that row is hidden and the color legend
+# names them; the regions stay upright.
+def story_grouped_label_angle_auto_inner_hidden_outer0():
     return _grouped_products(90)
 
 
-# Horizontal grouped bars: an ordinal y axis with "auto" (selects 0 degrees).
+# The same, colored by region, so no legend names the products (warns).
+def story_grouped_label_angle_auto_inner_hidden_no_legend():
+    return (
+        chart(REGION_PRODUCT, axes={"x": {"labelAngle": "auto"}})
+        .flow(
+            spread(by="region", dir="x", spacing=24),
+            spread(by="product", dir="x", spacing=0),
+        )
+        .mark(rect(h="sales", fill="region")),
+        {"w": 90, "h": 210},
+    )
+
+
+# Horizontal grouped bars: an ordinal y axis with "auto" (both rows 0 degrees).
 def story_grouped_horizontal_label_angle_auto0():
     return (
         chart(REGION_PRODUCT, axes={"y": {"labelAngle": "auto"}})

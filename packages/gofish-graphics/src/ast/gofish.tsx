@@ -40,11 +40,13 @@ import {
   perfEnabled,
   perfSetCount,
 } from "./perf";
-import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import {
-  autoLabelAngleDims,
-  layoutWithAutoLabelAngles,
-} from "./axes/autoLabelAngle";
+  elaborateAxes,
+  elaborateAxisTitles,
+  labelRowSettingsFromAngles,
+  type LabelRowSettings,
+} from "./axes/elaborate";
+import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import { getScopeRegistry, type EqualMeasureAxis } from "./solver/scopes";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
@@ -107,10 +109,14 @@ export type AxisOptions =
        *  — matches Vega-Lite's `labelAngle` (e.g. `45` slants a label down to
        *  the right, `90` reads top-to-bottom).
        *
-       *  **`"auto"`** picks the angle for you: the first of 0°, 45°, 90° at
-       *  which no two labels in a row collide (at least 2px apart), else the
-       *  angle with the least overlap. One angle applies to every tier of the
-       *  axis, and collisions are counted across the whole chart. The chart is
+       *  **`"auto"`** picks the angle for you, separately for each label row
+       *  (each tier of a nested ordinal axis): the first of 0°, 45°, 90° at
+       *  which no two labels in that row collide (at least 2px apart). A
+       *  category row that collides at every angle is hidden and takes no
+       *  space; a continuous tick row cannot be hidden and keeps the angle
+       *  with the least overlap. So a grouped bar chart's crowded inner row
+       *  can slant (or disappear) while its roomy outer row stays upright.
+       *  Collisions are counted across the whole chart. The chart is
        *  laid out once per angle tried, so it must be rebuildable: a chart
        *  builder or a component thunk, not a prebuilt node (see
        *  axes/autoLabelAngle.ts). "auto" cannot be an entry of a per-tier
@@ -176,11 +182,11 @@ export const resolveAxisLabelAngles = (
   return [checkLabelAngle(x, "x"), checkLabelAngle(y, "y")];
 };
 
-/** The per-axis angles `layout()` accepts: `resolveAxisLabelAngles` with no
- *  "auto" left (`runLayout` replaces it with a concrete angle per run). */
-function concreteLabelAngles(
+/** The label-row settings a manual `labelAngle` describes. "auto" has none of
+ *  its own: `runLayout` chooses them and hands them to `layout()` directly. */
+function manualLabelRowSettings(
   axes: AxesOptions | undefined
-): [number | number[] | undefined, number | number[] | undefined] {
+): LabelRowSettings {
   const angles = resolveAxisLabelAngles(axes);
   if (angles[0] === "auto" || angles[1] === "auto") {
     throw new Error(
@@ -188,10 +194,9 @@ function concreteLabelAngles(
         "gofish(), a chart builder, or runLayout()."
     );
   }
-  return angles as [
-    number | number[] | undefined,
-    number | number[] | undefined,
-  ];
+  return labelRowSettingsFromAngles(
+    angles as [number | number[] | undefined, number | number[] | undefined]
+  );
 }
 
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
@@ -251,6 +256,7 @@ export async function layout(
     axes = false,
     legend = true,
     yUp = false,
+    labelRowSettings,
   }: {
     w?: number;
     h?: number;
@@ -261,6 +267,9 @@ export async function layout(
     axes?: AxesOptions;
     legend?: boolean;
     yUp?: boolean;
+    /** Internal: how each axis label row is drawn, as chosen by
+     *  `labelAngle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
+    labelRowSettings?: LabelRowSettings;
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts?: {
@@ -379,7 +388,7 @@ export async function layout(
       resolveAxisSides(axes),
       yUp,
       false,
-      concreteLabelAngles(axes)
+      labelRowSettings ?? manualLabelRowSettings(axes)
     );
     titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
@@ -951,15 +960,17 @@ export async function runLayout(
   options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>
 ): Promise<LayoutData> {
-  const autoDims = autoLabelAngleDims(options.axes);
-  if (autoDims.length === 0) return layoutOnce(options, child);
-  return layoutWithAutoLabelAngles(options, child, autoDims, layoutOnce);
+  const angles = resolveAxisLabelAngles(options.axes);
+  if (angles[0] !== "auto" && angles[1] !== "auto")
+    return layoutOnce(options, child);
+  return layoutWithAutoLabelAngles(options, child, angles, layoutOnce);
 }
 
 /** One pass of the pipeline over `child`, which it lays out in place. */
 async function layoutOnce(
   options: GoFishRenderOptions,
-  child: GoFishNode | Promise<GoFishNode>
+  child: GoFishNode | Promise<GoFishNode>,
+  labelRowSettings?: LabelRowSettings
 ): Promise<LayoutData> {
   const {
     w,
@@ -1013,7 +1024,18 @@ async function layoutOnce(
     }
 
     return await layout(
-      { w, h, x, y, transform, debug, axes, legend, yUp: options.yUp },
+      {
+        w,
+        h,
+        x,
+        y,
+        transform,
+        debug,
+        axes,
+        legend,
+        yUp: options.yUp,
+        labelRowSettings,
+      },
       child,
       contexts
     );

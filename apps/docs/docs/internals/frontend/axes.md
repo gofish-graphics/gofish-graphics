@@ -118,7 +118,7 @@ the same predicate `axisSide` already uses for its cross-flip check
 really "does this node's own y mirror", not specific to the axis being labeled),
 canceling the render-time negation so the label lands at the literal screen angle
 regardless of the frame's orientation. A number or array is a manual, always-on
-angle; `"auto"` picks one of 0°, 45°, and 90° per axis (see
+angle; `"auto"` picks one of 0°, 45°, and 90° per label row (see
 [Automatic label angle](#automatic-label-angle-labelangle-auto) below).
 
 **The hanging-point rule.** `resolveLabelRotation` (`axes/elaborate.tsx`) turns
@@ -199,9 +199,13 @@ i.e. the number, or `array[0]`.
 
 ### Automatic label angle (`labelAngle: "auto"`)
 
-`labelAngle: "auto"` picks each axis's angle from 0°, 45°, and 90°, in that
-order of preference: the first angle at which no two labels in a row collide
-wins, and if all collide, the one with the least overlap wins. It is a v0 of a
+`labelAngle: "auto"` picks each label row's setting from 0°, 45°, 90°, and (for
+a category row only) hidden, in that order of preference: the first setting at
+which no two labels in the row collide wins. Hidden always fits (a hidden row
+has no labels to collide), so a category row never reaches the least-overlap
+fallback; a continuous tick row cannot be hidden, since no legend can carry
+tick values (a domain fact; the future answer there is tick thinning), and
+keeps the angle with the least overlap. It is a v0 of a
 general choice mechanism, split into two modules:
 
 - `choice/choose.ts` holds the generic strategy, `chooseFirstFit(candidates,
@@ -221,13 +225,15 @@ are not local to one node: a grouped bar chart's inner year tier is elaborated
 separately inside each city group, so a 2024 label under Austin can hit a 2022
 label under Boston, which only the root can see. So v0 lays out the whole chart
 once per candidate, on a **freshly built tree** each time, scores the finished
-geometry, and returns the winning run's layout as is (no extra layout pass). The
+geometry, and returns the winning layout as is (see "Per-row choice" for the one
+case that needs one more run). The
 fresh tree comes from `GoFishNode.rebuild`, which the surface that built the root
 sets: the builder terminals (`marks/terminals.ts`) and the `gofish()` component
 thunk path. A node built by hand has no `rebuild`, and `"auto"` on it throws.
 
 **Tagging and reading labels.** Axis elaboration tags every tick and category
-label `Text` with `axisLabel = { dim, tier }` (continuous labels are tier 0;
+label `Text` with `axisLabel = { dim, kind, tier }` (`kind` is `"ordinal"` or
+`"continuous"`; continuous labels are tier 0;
 difference-axis delta labels are not tagged, since the angle does not apply to
 them). After a run, `collectLabelBoxes` walks the laid-out tree, and for each
 tagged label reads its unrotated text box and rotation from the `Text` node and
@@ -237,23 +243,36 @@ A mirror reflects positions and angles together, so overlap measured there
 equals overlap on screen, provided the labels of one row share a mirror (an
 axis's labels do).
 
-**The score.** Labels are grouped by (axis, tier). Within a row all labels share
-one angle, so the scorer turns every origin back by that angle and compares the
+**The score.** Labels are grouped into rows, one per (axis, kind, tier), and
+`scoreLabelRows` scores each row on its own. Within a row all labels share one
+angle, so the scorer turns every origin back by that angle and compares the
 labels as plain axis-aligned boxes in their own frame. That is exact for
 parallel slanted text, where axis-aligned bounding boxes would report
 collisions between labels that do not touch. Each box is widened by half of a
 2px clearance (`AUTO_LABEL_GAP`) on every side; a pair whose widened boxes
-overlap collides. The score is `[unwidened overlap area, colliding pairs]`,
-summed over the axis's tiers; an angle fits when the pair count is 0. Pairs are
-found with a sweep along the row, so any two labels are compared, not only
-neighbors.
+overlap collides. A row's score is `[unwidened overlap area, colliding pairs]`,
+and an angle fits the row when the pair count is 0. Pairs are found with a
+sweep along the row, so any two labels are compared, not only neighbors.
 
-**Per-axis choice.** Each `"auto"` axis is chosen independently. Runs apply the
-same candidate angle to every `"auto"` axis and score each axis separately (runs
-are memoized by angle), which is sound because labels do not feed σ, so one
-axis's angle cannot move the other axis's labels. If the per-axis winners differ,
-that combination is laid out once more. A scalar `"auto"` applies one angle to
-all tiers of its axis; `"auto"` inside a per-tier array is an error.
+**Per-row choice.** Every row of every `"auto"` axis is chosen independently,
+so a grouped bar chart's crowded product row can slant to 45° (or be hidden)
+while its region row stays at 0°. Axis elaboration takes a `LabelRowSettings`
+function, `(row) => angle | "hidden" | undefined`, asked once per row; a manual
+`labelAngle` becomes one via `labelRowSettingsFromAngles`, and `runLayout` hands
+`layout()` the chosen one directly (an internal option, not a public value). A
+hidden ordinal row is simply not elaborated: the node still claims the axis and
+its tier, but adds no labels, so the row takes no space. The runs are uniform:
+each applies one candidate to every row of every `"auto"` axis (memoized by
+candidate; in the "hidden" run a continuous row stays upright and is never
+scored), and each row runs its own `chooseFirstFit` over its candidates
+(`ORDINAL_CANDIDATES` or `CONTINUOUS_CANDIDATES`) and those runs' per-row
+scores. If the winners are not all the same, that combination is laid out once
+more. This rests on two
+assumptions that hold today. Axes don't interact: labels do not feed σ, so one
+axis's angles cannot move the other axis's labels along their track. Rows don't
+interact for collisions: each tier is its own cross-axis row, and a tier's angle
+pushes the rows outside it further into (or back out of) the margin without changing their
+spacing along the track. `"auto"` inside a per-tier array is an error.
 
 **Where it goes next.** The compositional form is a node-local choice that lays
 out its own alternatives and prunes dominated ones (#486, #630). That replaces

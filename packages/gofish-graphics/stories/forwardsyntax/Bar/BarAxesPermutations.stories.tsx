@@ -151,20 +151,21 @@ export const GroupedLabelAngleNone: StoryObj<Args> = {
   render: (args: Args) => renderGroupedBar(args, undefined),
 };
 
-// labelAngle: "auto" (#486) tries 0°, 45°, then 90° and keeps the first angle
-// at which no two labels in a row collide, counting collisions across the
-// whole chart (a year label under Austin can hit one under Boston). Each story
-// below names the angle it is expected to select.
+// labelAngle: "auto" (#486) chooses each label row (inner tier, outer tier) on
+// its own: it tries 0°, 45°, then 90° and keeps the first angle at which no two
+// labels in that row collide, counting collisions across the whole chart (a
+// year label under Austin can hit one under Boston). Each story below names
+// the angles it is expected to select for the inner and outer rows.
 
-// Wide enough for upright years: selects 0°.
+// Wide enough for upright years: inner 0°, outer 0°.
 export const GroupedLabelAngleAuto0: StoryObj<Args> = {
   args: { w: 400, h: 210 },
   render: (args: Args) => renderGroupedBar(args, "auto"),
 };
 
-// Narrower than GroupedLabelAngleNone, so upright years would overlap:
-// selects 45°.
-export const GroupedLabelAngleAuto45: StoryObj<Args> = {
+// Narrower than GroupedLabelAngleNone, so upright years would overlap, while
+// the city names still fit: inner (year) 45°, outer (city) 0°.
+export const GroupedLabelAngleAutoInner45Outer0: StoryObj<Args> = {
   args: { w: 250, h: 210 },
   render: (args: Args) => renderGroupedBar(args, "auto"),
 };
@@ -193,33 +194,55 @@ function renderGroupedProducts(args: Args, labelAngle: LabelAngle) {
   return container;
 }
 
-// Wide: the product names fit upright, selects 0°.
+// Wide: the product names fit upright: inner 0°, outer 0°.
 export const GroupedLabelAngleAutoLong0: StoryObj<Args> = {
   args: { w: 900, h: 210 },
   render: (args: Args) => renderGroupedProducts(args, "auto"),
 };
 
-// Medium: upright names collide, slanted ones clear each other, selects 45°.
-export const GroupedLabelAngleAutoLong45: StoryObj<Args> = {
+// Medium: upright product names collide, slanted ones clear each other, and
+// the region names have plenty of room: inner (product) 45°, outer (region) 0°.
+export const GroupedLabelAngleAutoLongInner45Outer0: StoryObj<Args> = {
   args: { w: 400, h: 210 },
   render: (args: Args) => renderGroupedProducts(args, "auto"),
 };
 
-// Narrow: only vertical names clear each other, selects 90°.
-export const GroupedLabelAngleAutoLong90: StoryObj<Args> = {
+// Narrow: only vertical product names clear each other: inner 90°, outer 0°.
+export const GroupedLabelAngleAutoLongInner90Outer0: StoryObj<Args> = {
   args: { w: 220, h: 210 },
   render: (args: Args) => renderGroupedProducts(args, "auto"),
 };
 
-// Extremely narrow: every angle collides, so it falls back to the angle with
-// the least overlap (90°).
-export const GroupedLabelAngleAutoFallback: StoryObj<Args> = {
+// Extremely narrow: the product names collide at every angle, so that row is
+// hidden and takes no space; the color legend still names each product. The
+// region names fit upright: inner hidden, outer 0°.
+export const GroupedLabelAngleAutoInnerHiddenOuter0: StoryObj<Args> = {
   args: { w: 90, h: 210 },
   render: (args: Args) => renderGroupedProducts(args, "auto"),
 };
 
+// The same, but colored by region, so no legend names the products: inner
+// hidden, outer 0°. This is the case that warns that the product categories
+// are not labeled.
+export const GroupedLabelAngleAutoInnerHiddenNoLegend: StoryObj<Args> = {
+  args: { w: 90, h: 210 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(regionProduct, { axes: { x: { labelAngle: "auto" } } })
+      .flow(
+        spread({ by: "region", dir: "x", spacing: 24 }),
+        spread({ by: "product", dir: "x", spacing: 0 })
+      )
+      .mark(rect({ h: "sales", fill: "region" }))
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
 // Horizontal grouped bars: an ordinal y axis with "auto". Tall bands leave room
-// for upright names, so this selects 0°.
+// for upright names: inner 0°, outer 0°.
 export const GroupedHorizontalLabelAngleAuto0: StoryObj<Args> = {
   args: { w: 300, h: 400 },
   render: (args: Args) => {
