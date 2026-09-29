@@ -221,9 +221,9 @@ export const GroupedLabelAngleAutoInnerHiddenOuter0: StoryObj<Args> = {
   render: (args: Args) => renderGroupedProducts(args, "auto"),
 };
 
-// The same, but colored by region, so no legend names the products: inner
-// hidden, outer 0°. This is the case that warns that the product categories
-// are not labeled.
+// The same, but colored by region: the legend shows "region", so nothing names
+// the products. Inner hidden, outer 0°, and it logs a console warning that
+// the "product" categories are not labeled.
 export const GroupedLabelAngleAutoInnerHiddenNoLegend: StoryObj<Args> = {
   args: { w: 90, h: 210 },
   render: (args: Args) => {

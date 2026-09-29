@@ -10,7 +10,10 @@
  * the one with the least overlap wins, ties going to the more preferred angle.
  */
 // The library first, so its modules initialize in their usual order.
-import { chart, spread, rect } from "../lib";
+import { chart, spread, rect, field } from "../lib";
+import * as Serialize from "../serialize";
+import { inferColor } from "../ast/channels";
+import { datum } from "../ast/data";
 import {
   chooseFirstFit,
   compareScores,
@@ -403,6 +406,125 @@ console.log("end to end");
     "a continuous axis accepts auto (upright ticks)",
     ticks.length > 0 && ticks.every((a) => a === 0),
     ticks.join()
+  );
+}
+
+// --- the unlabeled-categories warning ----------------------------------------
+
+// At w=90 the product row collides at every angle and is hidden. It warns
+// unless a rendered legend shows "product" (the color scale records the
+// fields it maps).
+const warningsOf = async (
+  fill: any,
+  opts: { legend?: boolean; viaIR?: boolean } = {}
+): Promise<string[]> => {
+  let builder: any = chart(regionProduct, {
+    axes: { x: { labelAngle: "auto" } },
+  })
+    .flow(
+      spread({ by: "region", dir: "x", spacing: 24 }),
+      spread({ by: "product", dir: "x", spacing: 0 })
+    )
+    .mark(rect({ h: "sales", fill }));
+  if (opts.viaIR) {
+    // The Python path: serialize to the frontend IR and rebuild from it.
+    const doc = await builder.toJSON();
+    builder = Serialize.buildChart(
+      doc.root,
+      regionProduct,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+  }
+  const warnings: string[] = [];
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => void warnings.push(args.join(" "));
+  try {
+    await builder.toDisplayList({
+      w: 90,
+      h: 210,
+      axes: { x: { labelAngle: "auto" } },
+      ...(opts.legend === false ? { legend: false } : {}),
+    });
+  } finally {
+    console.warn = warn;
+  }
+  return warnings.filter((w) => w.includes('labelAngle: "auto"'));
+};
+
+console.log("unlabeled-categories warning");
+{
+  const shown = await warningsOf("product");
+  ok(
+    "a legend showing the field: no warning",
+    shown.length === 0,
+    shown.join()
+  );
+  const suppressed = await warningsOf("product", { legend: false });
+  ok(
+    "the legend suppressed: warns once, naming the field",
+    suppressed.length === 1 &&
+      suppressed[0].includes('x-axis "product" labels') &&
+      suppressed[0].includes('no legend shows "product"'),
+    suppressed.join()
+  );
+  const other = await warningsOf("region");
+  ok("colored by another field: warns", other.length === 1, other.join());
+  const fn = await warningsOf((d: any) => d.product);
+  ok(
+    "colored by a function accessor (no field): warns",
+    fn.length === 1,
+    fn.join()
+  );
+  const fieldAccessor = await warningsOf(field("product"));
+  ok(
+    'colored by field("product"): no warning',
+    fieldAccessor.length === 0,
+    fieldAccessor.join()
+  );
+  const ir = await warningsOf("product", { viaIR: true });
+  ok(
+    "rebuilt from the IR (the Python path): no warning",
+    ir.length === 0,
+    ir.join()
+  );
+  const irOther = await warningsOf("region", { viaIR: true });
+  ok(
+    "rebuilt from the IR, colored by another field: warns",
+    irOther.length === 1,
+    irOther.join()
+  );
+}
+
+// --- color field provenance --------------------------------------------------
+
+console.log("color field provenance");
+{
+  const rows = [{ product: "Laptops" }];
+  const named = inferColor("product", rows) as any;
+  ok("a field-name color records its field", named?.field === "product");
+  ok(
+    "field(...) records its field",
+    (inferColor(field("product") as any, rows) as any)?.field === "product"
+  );
+  ok(
+    "a function accessor records no field",
+    (inferColor((d: any) => d.product, rows) as any)?.field === undefined
+  );
+  ok(
+    "a literal color is not a value",
+    inferColor("steelblue", rows) === "steelblue"
+  );
+  ok(
+    "lighten / darken / offset keep the field",
+    named.lighten(0.2).field === "product" &&
+      named.darken(0.2).field === "product" &&
+      named.offset(3).field === "product"
+  );
+  ok(
+    "toJSON writes the field only when present",
+    named.toJSON().field === "product" &&
+      !("field" in (datum("x") as any).toJSON())
   );
 }
 

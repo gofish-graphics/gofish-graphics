@@ -569,7 +569,7 @@ function elaborateOrdinalAxis(
       rotate: labelRotation?.rotate,
       textAnchor: labelRotation?.textAnchor,
     }).name(lName(i));
-    label.axisLabel = { dim, kind: "ordinal", tier };
+    label.axisLabel = { dim, kind: "ordinal", tier, field: space.measure };
     nodes.push(label);
     nodes.push((ref(keyMap[k]) as any).name(rName(i)) as GoFishNode);
   });

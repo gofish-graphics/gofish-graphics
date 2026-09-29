@@ -54,6 +54,12 @@ import { elaborateLabels } from "./labels/elaborate";
 export type CategoricalScale = {
   color: Map<any, string>;
   colorConfig?: ColorConfig;
+  /** The data fields the scale maps from: the `field` each mark's color value
+   *  was read from, when its color channel named one (see
+   *  `DatumValueImpl.field`). A scale shared by several layers can
+   *  map several fields. Empty or absent when every color came from a
+   *  function accessor or a hand-made value. */
+  fields?: Set<string>;
 };
 
 export type ContinuousScale = {
@@ -72,6 +78,8 @@ export type ContinuousColorScale = {
   scaleFn: (value: number) => string;
   domain: [number, number];
   colorConfig: GradientScale;
+  /** The data fields the scale maps from (see `CategoricalScale.fields`). */
+  fields?: Set<string>;
   /**
    * Internal: set once the gradient domain has been resolved over the full
    * subtree (first writer wins), so deeper nodes don't recompute a narrower one.
@@ -289,6 +297,7 @@ export async function layout(
   topOverhang: number;
   leftOverhang: number;
   bottomOverhang: number;
+  legendFields: ReadonlySet<string>;
 }> {
   child = await child;
   if (contexts?.session) {
@@ -873,6 +882,13 @@ export async function layout(
     topOverhang,
     leftOverhang,
     bottomOverhang,
+    // The fields a rendered legend shows: the color scale's fields when the
+    // legend was drawn, none when it was suppressed or had nothing to show.
+    legendFields: legendAdded
+      ? new Set(
+          (unitScale as { fields?: Set<string> } | undefined)?.fields ?? []
+        )
+      : new Set<string>(),
   };
 }
 
@@ -944,6 +960,8 @@ type LayoutData = {
   topOverhang: number;
   leftOverhang: number;
   bottomOverhang: number;
+  /** The data fields the rendered legend shows (empty without a legend). */
+  legendFields: ReadonlySet<string>;
 };
 
 /**

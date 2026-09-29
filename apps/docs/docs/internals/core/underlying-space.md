@@ -250,6 +250,11 @@ discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
 own resolved space — a continuous axis by its unit, an ordinal axis by its
 grouping field (see [the layout passes](/internals/layout/passes)).
 
+A datum value can also carry a `field`: the data field it was read from, set
+by `inferColor` when a color channel names one. That is provenance, not a
+measure: it never enters `resolveMeasure` or unit unification, and only the
+color scale reads it (see [Color Scale Resolution](/internals/layout/color-scales)).
+
 A companion predicate, **`isPositioningSpace`**, folds the two axis-bearing
 kinds together: it holds for `POSITION` (a data axis) and `ORDINAL` (a category
 axis) but not for `SIZE` (a mark's own extent) or `UNDEFINED`. In other words it

@@ -64,6 +64,8 @@ export type LabelBox = {
   dim: 0 | 1;
   kind: "ordinal" | "continuous";
   tier: number;
+  /** The data field a category row labels, when known. */
+  field?: string;
   pivot: [number, number];
   rotate: number;
   rel: RelBox;
@@ -126,6 +128,7 @@ export function collectLabelBoxes(root: GoFishNode): LabelBox[] {
         out.push({
           dim: n.axisLabel.dim,
           kind: n.axisLabel.kind,
+          field: n.axisLabel.field,
           tier: n.axisLabel.tier,
           pivot,
           rotate: (n.args?.rotate as number | undefined) ?? 0,
@@ -199,11 +202,12 @@ function scoreRow(row: LabelBox[]): [number, number] {
 
 const rowKey = (r: LabelRow): string => `${r.dim}:${r.kind}:${r.tier}`;
 
+/** One scored label row, with the field it labels (for a category row). */
+export type RowScore = { row: LabelRow; field?: string; score: Score };
+
 /** Score every label row: `[overlap area, colliding pairs]` per
  *  (axis, kind, tier), keyed by `rowKey`. */
-export function scoreLabelRows(
-  boxes: LabelBox[]
-): Map<string, { row: LabelRow; score: Score }> {
+export function scoreLabelRows(boxes: LabelBox[]): Map<string, RowScore> {
   const rows = new Map<string, { row: LabelRow; boxes: LabelBox[] }>();
   for (const b of boxes) {
     const row: LabelRow = { dim: b.dim, kind: b.kind, tier: b.tier };
@@ -212,18 +216,20 @@ export function scoreLabelRows(
     if (!entry) rows.set(key, (entry = { row, boxes: [] }));
     entry.boxes.push(b);
   }
-  const out = new Map<string, { row: LabelRow; score: Score }>();
+  const out = new Map<string, RowScore>();
   for (const [key, { row, boxes: rowBoxes }] of rows)
-    out.set(key, { row, score: scoreRow(rowBoxes) });
+    out.set(key, {
+      row,
+      field: rowBoxes[0]?.field,
+      score: scoreRow(rowBoxes),
+    });
   return out;
 }
 
 /** The score of `row` among scored rows. A row with no labels (a hidden row)
  *  has nothing to collide. */
-export const rowScore = (
-  rows: Map<string, { row: LabelRow; score: Score }>,
-  row: LabelRow
-): Score => rows.get(rowKey(row))?.score ?? [0, 0];
+export const rowScore = (rows: Map<string, RowScore>, row: LabelRow): Score =>
+  rows.get(rowKey(row))?.score ?? [0, 0];
 
 /** A setting fits a row when no pair of its labels collides (clearance
  *  included). */
@@ -258,7 +264,7 @@ type AxisAngle = number | number[] | "auto" | undefined;
  * `gofish()` is laid out in place, so it can be laid out only once.
  */
 export async function layoutWithAutoLabelAngles<
-  D extends { child: GoFishNode },
+  D extends { child: GoFishNode; legendFields: ReadonlySet<string> },
 >(
   options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>,
@@ -297,7 +303,7 @@ export async function layoutWithAutoLabelAngles<
 
   type Run = {
     data: D;
-    rows: Map<string, { row: LabelRow; score: Score }>;
+    rows: Map<string, RowScore>;
   };
   const runs = new Map<string, Run>();
   const run = async (
@@ -322,9 +328,10 @@ export async function layoutWithAutoLabelAngles<
   // The rows to choose for: the "auto" axes' rows, as the first run (every
   // row drawn upright) finds them. Rows are a property of the chart's
   // structure, not of the angle.
-  const rows = [...(await uniform(0)).rows.values()]
-    .map((r) => r.row)
-    .filter((r) => isAuto(r.dim));
+  const upright = [...(await uniform(0)).rows.values()].filter((r) =>
+    isAuto(r.row.dim)
+  );
+  const rows = upright.map((r) => r.row);
 
   const winners = new Map<string, LabelRowSetting>();
   for (const row of rows) {
@@ -340,7 +347,41 @@ export async function layoutWithAutoLabelAngles<
   // One uniform run already is the winning combination when every row chose
   // the same setting; otherwise lay the winners out together.
   const chosen = [...new Set(winners.values())];
-  if (chosen.length <= 1) return (await uniform(chosen[0] ?? 0)).data;
-  const key = JSON.stringify([...winners].sort());
-  return (await run(key, (row) => winners.get(rowKey(row)) ?? 0)).data;
+  const { data } =
+    chosen.length <= 1
+      ? await uniform(chosen[0] ?? 0)
+      : await run(
+          JSON.stringify([...winners].sort()),
+          (row) => winners.get(rowKey(row)) ?? 0
+        );
+  warnUnlabeledRows(
+    upright.filter((r) => winners.get(rowKey(r.row)) === "hidden"),
+    data.legendFields
+  );
+  return data;
+}
+
+/**
+ * Warn about each hidden category row whose categories nothing else names: a
+ * row is covered when a rendered legend shows the field it labels (the color
+ * scale records the fields it maps). A suppressed legend, a legend for another
+ * field, or a color from a function accessor (no field) leaves it uncovered.
+ * Called once per render, on the chosen layout only.
+ */
+export function warnUnlabeledRows(
+  hidden: { row: LabelRow; field?: string }[],
+  legendFields: ReadonlySet<string>
+): void {
+  for (const { row, field } of hidden) {
+    if (field !== undefined && legendFields.has(field)) continue;
+    const axis = row.dim === 0 ? "x" : "y";
+    console.warn(
+      field !== undefined
+        ? `labelAngle: "auto": hid the ${axis}-axis "${field}" labels because ` +
+            `they overlap at every angle, and no legend shows "${field}"; ` +
+            `the categories are not labeled.`
+        : `labelAngle: "auto": hid a row of ${axis}-axis labels because they ` +
+            `overlap at every angle; the categories are not labeled.`
+    );
+  }
 }

@@ -167,6 +167,13 @@ A few rules:
 - `"auto"` applies to the whole axis and chooses per row. It cannot be an entry
   of a per-tier array; to fix one row's angle yourself, write the whole array.
 - Each axis is chosen on its own, so `x` and `y` can both be `"auto"`.
+- When a category row is hidden and no legend shows its field, GoFish logs a
+  console warning, because nothing on the chart names those categories any
+  more. That happens when the legend is turned off (`legend: false`), when the
+  marks are colored by a different field, or when the color comes from a
+  function (`fill: (d) => ...`), which does not tell GoFish which field it
+  reads. Coloring by the same field (`fill: "product"`) with the legend on
+  keeps the categories named, so there is no warning.
 - GoFish lays the chart out once for each angle it tries. That needs a chart it
   can build again, which is what `chart(...)` and a component function passed to
   `gofish()` are. A node built ahead of time and passed to `gofish()` can be laid

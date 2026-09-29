@@ -129,7 +129,10 @@ Walking `withGoFish.ts:431-477`:
      string, sum that field across `data`; if a number, use as-is.
    - `"color"` channel → `inferColor(markValue, data)`. If the string matches
      a field in the first datum, wrap it as a `Value` so the color scale
-     picks it up; otherwise treat the string as a literal color.
+     picks it up; otherwise treat the string as a literal color. A value
+     read from a named field (a field-name string or `field(...)`) records
+     that field as its provenance, `DatumValueImpl.field`, so the color
+     scale knows which field it maps; a function accessor records none.
    - `"dims"` channel → the axis-name-keyed `dims` option
      (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
      channel, and its kind comes from its structure, not its name: `size` is
@@ -472,7 +475,8 @@ the pairwise form, is a builder-time error rather than a silent no-op
 chart.ts). A split connector's `fill` may be a shared field name rather than
 a literal color; `resolveGroupFill` in chart.ts resolves it per group via
 `inferColor` (same channel helper `createMark` uses) before it reaches
-`Connect`, reading a representative row off the group's ref bag.
+`Connect`, reading a representative row off the group's ref bag (so the
+resolved paint carries its field the same way).
 
 ### Default grouping: a fused connector's split, and `along`
 

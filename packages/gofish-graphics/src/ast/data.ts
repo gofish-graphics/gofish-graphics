@@ -125,6 +125,7 @@ type DatumValue = {
   measure?: Measure;
   offset?: number;
   colorOps?: ColorOp[];
+  field?: string;
 };
 
 /**
@@ -143,7 +144,12 @@ export class DatumValueImpl {
     /** @internal accumulated pixel offset; read via {@link getValueOffset} */
     public readonly _offset?: number,
     /** @internal accumulated color transforms; read via {@link getValueColorOps} */
-    public readonly _colorOps?: ColorOp[]
+    public readonly _colorOps?: ColorOp[],
+    /** The data field this datum was read from, when a channel named one
+     *  (`fill: "product"` reads `row.product`). Provenance only: it is not a
+     *  measure and plays no part in unit checking. Read via
+     *  {@link getValueField}. */
+    public readonly field?: string
   ) {}
 
   /** A new value at the same datum, shifted `px` pixels post-scale —
@@ -153,7 +159,8 @@ export class DatumValueImpl {
       this.datum,
       this.measure,
       (this._offset ?? 0) + px,
-      this._colorOps
+      this._colorOps,
+      this.field
     );
   }
 
@@ -172,10 +179,13 @@ export class DatumValueImpl {
   }
 
   private _withColorOp(op: ColorOp): DatumValueImpl {
-    return new DatumValueImpl(this.datum, this.measure, this._offset, [
-      ...(this._colorOps ?? []),
-      op,
-    ]);
+    return new DatumValueImpl(
+      this.datum,
+      this.measure,
+      this._offset,
+      [...(this._colorOps ?? []), op],
+      this.field
+    );
   }
 
   toJSON(): DatumValue {
@@ -185,6 +195,7 @@ export class DatumValueImpl {
       ...(this.measure !== undefined ? { measure: this.measure } : {}),
       ...(this._offset ? { offset: this._offset } : {}),
       ...(this._colorOps?.length ? { colorOps: this._colorOps } : {}),
+      ...(this.field !== undefined ? { field: this.field } : {}),
     };
   }
 }
@@ -314,6 +325,12 @@ export const getValueOffset = <T>(value: MaybeValue<T>): number => {
  * (a plain object with a `colorOps` array, as the Python wrapper emits for
  * `datum(v).lighten(t)`). Empty when the value carries no color transform.
  */
+/** The data field a value was read from (see {@link DatumValueImpl.field}),
+ *  in either the class or the wire form; `undefined` for a literal, a
+ *  hand-made value, or one read by a function accessor. */
+export const getValueField = <T>(value: MaybeValue<T>): string | undefined =>
+  isValue(value) ? (value as DatumValue).field : undefined;
+
 export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
   if (!isValue(value)) return [];
   const v = value as any;

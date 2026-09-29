@@ -84,6 +84,20 @@ gradient(stops); // constructor
    - `"palette"` → assign `assignPaletteColor(config, key, index)` per value into the `color` map (`CategoricalScale`)
 3. Falls back to `color6` cycling when no `colorConfig` is set
 
+The scale also records which data fields it maps, not only which values: every
+branch reads the field off each colored node's color value (`getValueField`)
+into `unit.fields` (a set, since one scale can be shared by several layers).
+The field is the value's provenance, `DatumValueImpl.field`: `inferColor` sets
+it when a color channel named a field (`fill: "product"`,
+`fill: field("product")`), and `offset`/`lighten`/`darken` keep it. A function
+accessor, a literal, or a hand-made `datum(...)` has none, so the scale knows
+no field for it. It is not a measure and plays no part in unit checking. A legend draws the
+scale, so `layout()` reports the fields a rendered legend shows as
+`LayoutData.legendFields` (empty when the legend is suppressed). No legend
+title reads it yet; `labelAngle: "auto"` uses it to decide whether a hidden
+category row is still named somewhere (see
+[Axes](/internals/frontend/axes#automatic-label-angle-labelangle-auto)).
+
 ### Literal hex passthrough
 
 Fill values that are pre-computed hex strings (e.g. from `derive`) pass through the color map directly — if the value is not found in the map, the value itself is used as the color.

@@ -274,6 +274,17 @@ interact for collisions: each tier is its own cross-axis row, and a tier's angle
 pushes the rows outside it further into (or back out of) the margin without changing their
 spacing along the track. `"auto"` inside a per-tier array is an error.
 
+**Warning when categories go unlabeled.** A hidden category row is fine when a
+legend still names its categories. Ordinal labels carry the field their row
+labels (`axisLabel.field`, the ordinal space's measure), and `layout()` reports
+the fields the rendered legend shows (`LayoutData.legendFields`, read off the
+color scale's recorded fields; see
+[Color Scale Resolution](/internals/layout/color-scales)). After the choice,
+`warnUnlabeledRows` logs one `console.warn` per hidden row whose field the
+legend does not show: the legend is suppressed, it colors by another field, or
+the color came from a function accessor (the scale knows no field for it).
+Only the chosen layout is checked, so a render warns at most once per row.
+
 **Where it goes next.** The compositional form is a node-local choice that lays
 out its own alternatives and prunes dominated ones (#486, #630). That replaces
 the whole-chart strategy in `choose.ts`; the policy half (candidates plus score)
