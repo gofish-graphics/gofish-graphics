@@ -31,6 +31,7 @@ import {
   chart,
   circle,
   filter,
+  blank,
   layer,
   line,
   live,
@@ -228,6 +229,9 @@ const PANEL_GAP = 16;
  *  it, which is what the step curve coincides with. */
 type Reading = "step" | "linear" | "monotone" | "smooth" | "smoother" | null;
 
+/** A reading that moves the marks: every reading but the sequence alone. */
+type Curve = Exclude<Reading, null>;
+
 /** The four readings, left to right. */
 const CURVES: { caption: string; curve: Reading }[] = [
   { caption: "no transition (sequence alone)", curve: null },
@@ -353,7 +357,7 @@ export const CurvesThree: StoryObj<Args> = {
 
 /** The five readings of the curve ladder, left to right, each captioned with
  *  what it guarantees. The kinematics stories read these. */
-const LADDER: { caption: string; curve: Reading }[] = [
+const LADDER: { caption: string; curve: Curve }[] = [
   { caption: "step: hold, then jump", curve: "step" },
   { caption: "linear: C0, velocity jumps", curve: "linear" },
   { caption: "monotone: C1, no overshoot", curve: "monotone" },
@@ -667,6 +671,52 @@ const kinematicsBlock = (rows: any[], clock: any) => {
 };
 
 /**
+ * One panel of the curve ladder, with the sparklines' country picked out.
+ *
+ * Every country still moves, read with the panel's curve, but faded to grey,
+ * so the others give context without competing. Over them, two charts of the
+ * one country's rows are layered: its whole path through all of its years,
+ * drawn with the panel's curve along the year, and its moving dot, larger
+ * and darker, read with the same curve. The path is a `line` over the
+ * country's own keyframes and the dot a `time.transition` over the same
+ * keyframes on the same clock, so the dot rides exactly on the path: both
+ * read one data-space curve over the years. The path is not threaded through
+ * the sequence, so it is drawn whole, and shows where the dot is heading.
+ * The layered charts place their marks by the same fields as the panel, so
+ * they share its x and y scales.
+ */
+const highlightPanel = (rows: any[], clock: any, curve: Curve) => {
+  const own = rows.filter((d) => d.country === SPARK_COUNTRY);
+  const place = scatter({ x: "fertility", y: "life_expect" });
+  return chart(rows, { legend: false, padding: 0 })
+    .flow(
+      time.sequence({ by: "year", on: clock }),
+      scatter({ by: "country", x: "fertility", y: "life_expect" })
+    )
+    .mark(circle({ r: 4, fill: "#bbb", opacity: 0.35 }))
+    .layer(time.transition({ curve: curve }))
+    .layer(
+      chart(own)
+        .flow(scatter({ by: "year", x: "fertility", y: "life_expect" }))
+        .mark(blank())
+        .layer(
+          line({
+            along: "year",
+            curve: curve,
+            stroke: "#e4572e",
+            strokeWidth: 1.5,
+          })
+        )
+    )
+    .layer(
+      chart(own)
+        .flow(time.sequence({ by: "year", on: clock }), place)
+        .mark(circle({ r: 6, fill: "#e4572e", stroke: "#fff", strokeWidth: 1.5 }))
+        .layer(time.transition({ curve: curve }))
+    );
+};
+
+/**
  * The curve ladder with the reason underneath it: step, linear, monotone,
  * smooth and smoother, and under each one country's position, velocity and
  * acceleration.
@@ -696,7 +746,7 @@ export const CurvesKinematics: StoryObj<Args> = {
       args,
       year,
       LADDER,
-      (curve) => curvePanel(gapminder, year, curve),
+      (curve) => highlightPanel(gapminder, year, curve),
       kinematicsBlock(gapminder, year),
       { panelW: LADDER_PANEL_W, leadW: LEAD_W }
     );
@@ -724,7 +774,7 @@ export const CurvesKinematicsPaused: StoryObj<Args> = {
       args,
       year,
       LADDER,
-      (curve) => curvePanel(gapminder, year, curve),
+      (curve) => highlightPanel(gapminder, year, curve),
       kinematicsBlock(gapminder, year),
       { panelW: LADDER_PANEL_W, leadW: LEAD_W }
     );
