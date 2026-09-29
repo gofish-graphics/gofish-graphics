@@ -30,7 +30,8 @@ import {
   type Keyframe,
   type SequenceWindow,
 } from "../timeWindow";
-import { sourceIndex } from "../interpolate";
+import { interpolateRun, sourceIndex } from "../interpolate";
+import { threadPath } from "../spline";
 import {
   curve,
   lerpPoint,
@@ -216,6 +217,54 @@ console.log("# the cut: edges of the run");
   ok(
     "until it has passed the run entirely",
     windowPath(pieces(straight), knots, windowAt(2010, 2)).length === 0
+  );
+}
+
+console.log("# the cut: a step drawn with several cubics");
+{
+  // `smoother` draws each interior step with several cubics that split its
+  // time evenly, so a cut by time lands in the right cubic, at the right
+  // place, and the tip is where a reading at that time puts the mark.
+  const years = [2000, 2001, 2003, 2004, 2008, 2009];
+  const run: Point[] = [
+    [0, 0],
+    [40, 10],
+    [45, 300],
+    [120, 310],
+    [130, 20],
+    [200, 0],
+  ];
+  const steps = threadPath(run, years, "smoother");
+  const xs = run.map((p) => p[0]);
+  const ys = run.map((p) => p[1]);
+  const at = (t: number): Point => [
+    interpolateRun(years, xs, t, "smoother"),
+    interpolateRun(years, ys, t, "smoother"),
+  ];
+  // Within the drawing error of `smoother` (`SMOOTHER_PIECES`), which on
+  // this uneven run is a few thousandths of a pixel.
+  const nearish = (p: Point, q: Point) =>
+    Math.abs(p[0] - q[0]) < 0.01 && Math.abs(p[1] - q[1]) < 0.01;
+  let tipsOk = true;
+  for (const T of [2000.3, 2001.5, 2002.99, 2003.5, 2005.1, 2008.7, 2009]) {
+    const cut = windowPath(steps, years, windowAt(T, Infinity));
+    if (!nearish(endOf(cut[cut.length - 1]), at(T))) tipsOk = false;
+  }
+  ok("the tip is the reading at the playhead, at every playhead", tipsOk);
+  const within = windowPath(steps, years, windowAt(2002.5, 1));
+  const k = steps[1].length;
+  ok(
+    "a window inside one step keeps only the cubics it reaches",
+    within.length === k / 2 &&
+      nearish(startOf(within[0]), at(2001.5)) &&
+      nearish(endOf(within[within.length - 1]), at(2002.5)),
+    `${within.length} of ${k}`
+  );
+  const whole = windowPath(steps, years, windowAt(2009, Infinity));
+  ok(
+    "the whole window keeps every cubic, unchanged",
+    whole.length === steps.flat().length &&
+      whole.every((seg, i) => seg === steps.flat()[i])
   );
 }
 

@@ -349,7 +349,9 @@ export type TransitionOptions = {
    *  run — the temporal reading of `connect`'s auto rule, with the time
    *  values as its knots, which is the curve a smooth `line` threaded through
    *  the same keyframes draws. Between two keyframes each channel only rises
-   *  or only falls, so the mark never goes past either of them. `"linear"`
+   *  or only falls, so the mark never goes past either of them. `"smooth"`
+   *  and `"smoother"` read the run with the smoother curves of the same
+   *  names, which can round a turn past its keyframe. `"linear"`
    *  moves straight from each keyframe to the next. `"step"` does not move
    *  between them at all: the mark holds one keyframe's value until the next
    *  keyframe's own time arrives, and then jumps — the same picture the

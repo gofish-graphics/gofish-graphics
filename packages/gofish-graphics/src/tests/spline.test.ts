@@ -11,15 +11,27 @@
  * knots must be strictly ascending. The Catmull-Rom
  * contract: its knots are always centripetal, and it is the Barry-Goldman
  * spline over them.
+ *
+ * The `smooth` contract: it is SciPy's modified Akima (`makima`) cubic, and a
+ * run of equal values stays flat. The `smoother` contract: it passes through
+ * every value, its acceleration is continuous at every knot, it is local (a
+ * value moves at most the two segments on each side of it), and the cubics
+ * that draw it stay within the stated error of the curve, with their own
+ * parameter linear in time.
  */
 
 import {
+  SMOOTHER_PIECES,
+  SMOOTH_CURVES,
   catmullRomPath,
   centripetalKnots,
+  channelSpline,
   monotoneCubics,
   monotoneJet,
-  monotonePath,
   monotoneSlopes,
+  smoothSlopes,
+  smootherJet,
+  threadPath,
 } from "../spline";
 import {
   channelReader,
@@ -62,6 +74,14 @@ function randomRun(rand: () => number, n: number) {
   const points: Point[] = knots.map(() => [rand() * 500, rand() * 500]);
   return { knots, points };
 }
+
+/** A run threaded with the monotone cubic, which draws each step with ONE
+ *  cubic, so the path is those cubics in order. */
+const monotonePath = (points: Point[], knots: number[]) =>
+  threadPath(points, knots, "monotone").map((step) => {
+    if (step.length !== 1) throw new Error("a monotone step is one cubic");
+    return step[0];
+  });
 
 /** The point de Casteljau cuts a path's segment at, which is how
  *  `windowPath` cuts a threaded line. */
@@ -427,7 +447,7 @@ console.log("# a prepared channel reads what a single read reads");
     const n = 1 + Math.floor(rand() * 8);
     const { knots, points } = randomRun(rand, n);
     const values = points.map((p) => p[0]);
-    for (const method of ["step", "linear", "monotone"] as const) {
+    for (const method of ["step", "linear", ...SMOOTH_CURVES] as const) {
       const read = channelReader(knots, values, method);
       for (let s = -2; s <= 42; s++) {
         const t = knots[0] + (s / 40) * (knots[n - 1] - knots[0] || 1);
@@ -579,6 +599,427 @@ console.log("# centripetal knots");
     [path[1].control1, path[1].control2].every(
       ([x, y]) => near(x, 10) && near(y, 5)
     )
+  );
+}
+
+console.log("# smooth: the same curve as SciPy's makima");
+{
+  // Reference slopes and values from SciPy 1.18's
+  // `Akima1DInterpolator(t, v, method="makima")`, which is not a dependency
+  // of this package: they were recorded once and are hard-coded here. The
+  // values are read at u = 0.25, 0.5 and 0.8 of every segment.
+  const cases = [
+    {
+      name: "Akima's 1970 data",
+      t: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      v: [10, 10, 10, 10, 10, 10, 10.5, 15, 50, 60, 85],
+      slopes: [
+        0, 0, 0, 0, 0, 0, 0.5588235294117647, 8.171296296296296,
+        19.818731117824772, 17.5, 30.131578947368425,
+      ],
+      values: [
+        10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+        10.051930147058822, 10.180147058823529, 10.376470588235293,
+        10.898680044934641, 11.798440904139433, 13.50395642701525,
+        20.688835520518627, 31.044070647308942, 44.0846838983999,
+        53.52919656344411, 55.289841389728096, 57.354199395770394,
+        64.95476973684211, 70.92105263157895, 79.10315789473687,
+      ],
+    },
+    {
+      name: "a step",
+      t: [0, 1, 2, 3, 4, 5, 6, 7],
+      v: [0, 0, 0, 0, 1, 1, 1, 1],
+      slopes: [0, 0, 0, 0, 0, 0, 0, 0],
+      values: [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0.15625, 0.5, 0.8959999999999997, 1, 1, 1,
+        1, 1, 1, 1, 1, 1,
+      ],
+    },
+    {
+      name: "uneven knots",
+      t: [0, 0.5, 2, 2.3, 5, 9, 9.4],
+      v: [1, 3, 2, -1, 4, 4.5, 0],
+      slopes: [
+        5.343434343434343, 2.0000000000000004, -3.3222407099278985,
+        0.0004439117503416412, 1.0150031696837354, -0.8704397940913158,
+        -14.652455849889616,
+      ],
+      values: [
+        1.6413352272727273, 2.208964646464646, 2.749494949494949,
+        3.499220049916805, 3.4979201331114806, 2.8378702163061558,
+        1.391086727540925, 0.3753993266870662, -0.7199105570265196,
+        -0.34704279092039036, 1.1575862504474792, 3.1292532585325303,
+        4.812271744339223, 5.192721481887526, 5.023585580294273,
+        4.022646308767798, 2.9391008027899277, 1.2070641101499804,
+      ],
+    },
+    {
+      name: "three values",
+      t: [0, 1, 3],
+      v: [0, 2, 1],
+      slopes: [2.7065217391304346, 0.5625, -1.3125],
+      values: [
+        0.6667374320652174, 1.2680027173913042, 1.8066086956521739, 2.125,
+        1.96875, 1.4759999999999995,
+      ],
+    },
+  ];
+  const close = (a: number, b: number) =>
+    Math.abs(a - b) <= 1e-12 * (1 + Math.abs(b));
+  for (const { name, t, v, slopes, values } of cases) {
+    const m = smoothSlopes(t, v);
+    const spline = channelSpline("smooth", t, v);
+    const read: number[] = [];
+    for (let i = 0; i + 1 < t.length; i++) {
+      for (const u of [0.25, 0.5, 0.8]) read.push(spline.at(i, u));
+    }
+    ok(
+      `${name}: slopes and values match to 1e-12`,
+      m.every((s, i) => close(s, slopes[i])) &&
+        read.every((x, i) => close(x, values[i])),
+      JSON.stringify({ m, read })
+    );
+  }
+}
+
+console.log("# smooth: a run of three or more equal values stays flat");
+{
+  // Akima's data is flat for its first five segments: the curve must not
+  // move there at all, though it rounds the turn after the flat run.
+  const t = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const v = [10, 10, 10, 10, 10, 10, 10.5, 15, 50, 60, 85];
+  const spline = channelSpline("smooth", t, v);
+  let worst = 0;
+  for (let i = 0; i < 5; i++) {
+    for (let s = 0; s <= 100; s++) {
+      worst = Math.max(worst, Math.abs(spline.at(i, s / 100) - 10));
+    }
+  }
+  ok("Akima's flat run stays at 10", worst < 1e-12, `${worst}`);
+  // Random runs with flat stretches inserted: every flat interval next to
+  // another flat interval has both end slopes exactly 0. (A lone flat
+  // interval between two changes can bow, as it does in SciPy.)
+  const rand = random(2019);
+  let bad = 0;
+  let flats = 0;
+  for (let trial = 0; trial < 200; trial++) {
+    const n = 3 + Math.floor(rand() * 8);
+    const { knots, points } = randomRun(rand, n);
+    const values = points.map((p) => p[1]);
+    for (let i = 1; i < n; i++) if (rand() < 0.4) values[i] = values[i - 1];
+    const m = smoothSlopes(knots, values);
+    const flat = (i: number) =>
+      i >= 0 && i + 1 < n && values[i] === values[i + 1];
+    for (let i = 0; i + 1 < n; i++) {
+      if (!flat(i) || !(flat(i - 1) || flat(i + 1))) continue;
+      flats++;
+      if (m[i] !== 0 || m[i + 1] !== 0) bad++;
+    }
+  }
+  ok(
+    `${flats} flat intervals in runs of equal values, on 200 random runs`,
+    bad === 0,
+    `${bad} moved`
+  );
+}
+
+console.log("# smooth and smoother: small runs, and the knots' order");
+{
+  const two = [0, 4];
+  const twoValues = [1, 9];
+  ok(
+    "two values are a straight line",
+    (["smooth", "smoother"] as const).every((curve) => {
+      const spline = channelSpline(curve, two, twoValues);
+      return [0, 0.3, 0.5, 1].every((u) =>
+        near(spline.at(0, u), 1 + 8 * u, 1e-12)
+      );
+    })
+  );
+  // Three values: both segments of `smoother` are end segments, so the whole
+  // curve is the one parabola through the three points.
+  const t3 = [0, 1, 3];
+  const v3 = [0, 2, 1];
+  const parabola = (x: number) =>
+    (0 * (x - 1) * (x - 3)) / 3 +
+    (2 * x * (x - 3)) / -2 +
+    (1 * x * (x - 1)) / 6;
+  const three = channelSpline("smoother", t3, v3);
+  ok(
+    "smoother through three values is their parabola",
+    [0, 0.2, 0.5, 0.9].every(
+      (u) =>
+        near(three.at(0, u), parabola(u), 1e-12) &&
+        near(three.at(1, u), parabola(1 + 2 * u), 1e-12)
+    )
+  );
+  const throws = (f: () => unknown) => {
+    try {
+      f();
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  for (const [name, knots] of [
+    ["a zero gap", [0, 1, 1, 2]],
+    ["a negative gap", [0, 2, 1, 3]],
+  ] as const) {
+    ok(
+      `smooth and smoother throw on ${name}`,
+      throws(() => smoothSlopes([...knots], [0, 1, 2, 3])) &&
+        throws(() => channelSpline("smoother", [...knots], [0, 1, 2, 3]))
+    );
+  }
+}
+
+/** The parabola through knots j − 1, j and j + 1 of a run, at x. */
+function parabolaAt(t: number[], v: number[], j: number, x: number): number {
+  const [a, b, c] = [t[j - 1], t[j], t[j + 1]];
+  return (
+    (v[j - 1] * (x - b) * (x - c)) / ((a - b) * (a - c)) +
+    (v[j] * (x - a) * (x - c)) / ((b - a) * (b - c)) +
+    (v[j + 1] * (x - a) * (x - b)) / ((c - a) * (c - b))
+  );
+}
+
+console.log("# smoother: through every value, and C2 at every knot");
+{
+  const rand = random(2020);
+  let worstValue = 0;
+  let worstVelocity = 0;
+  let worstAcceleration = 0;
+  let monotoneJumps = 0;
+  let knotsChecked = 0;
+  for (let trial = 0; trial < 200; trial++) {
+    const n = 4 + Math.floor(rand() * 7);
+    const { knots, points } = randomRun(rand, n);
+    const values = points.map((p) => p[1]);
+    const spline = channelSpline("smoother", knots, values);
+    for (let i = 0; i + 1 < n; i++) {
+      worstValue = Math.max(
+        worstValue,
+        Math.abs(spline.at(i, 0) - values[i]),
+        Math.abs(spline.at(i, 1) - values[i + 1])
+      );
+    }
+    // Velocity and acceleration from both sides of each interior knot: the
+    // velocity from the jet, the acceleration by a second-order one-sided
+    // difference of it.
+    const cubics = monotoneCubics(knots, values);
+    const d = 1e-5;
+    const velocity = (i: number, u: number) =>
+      smootherJet(knots, values, i, u)[1];
+    for (let i = 1; i + 1 < n; i++) {
+      const hl = knots[i] - knots[i - 1];
+      const hr = knots[i + 1] - knots[i];
+      const vl = velocity(i - 1, 1);
+      const vr = velocity(i, 0);
+      const al =
+        (3 * vl - 4 * velocity(i - 1, 1 - d) + velocity(i - 1, 1 - 2 * d)) /
+        (2 * d * hl);
+      const ar =
+        (-3 * vr + 4 * velocity(i, d) - velocity(i, 2 * d)) / (2 * d * hr);
+      worstVelocity = Math.max(
+        worstVelocity,
+        Math.abs(vl - vr) / (1 + Math.abs(vr))
+      );
+      worstAcceleration = Math.max(
+        worstAcceleration,
+        Math.abs(al - ar) / (1 + Math.abs(ar))
+      );
+      // The same check on the monotone cubic, which is only C1, to show the
+      // check can tell the two apart.
+      const ml = monotoneJet(knots, cubics, i - 1, 1)[2];
+      const mr = monotoneJet(knots, cubics, i, 0)[2];
+      if (Math.abs(ml - mr) / (1 + Math.abs(mr)) > 1e-2) monotoneJumps++;
+      knotsChecked++;
+    }
+  }
+  ok("every value is on the curve", worstValue < 1e-9, `${worstValue}`);
+  ok(
+    `the velocity is continuous at ${knotsChecked} knots`,
+    worstVelocity < 1e-9,
+    `${worstVelocity}`
+  );
+  ok(
+    "and so is the acceleration",
+    worstAcceleration < 1e-5,
+    `${worstAcceleration}`
+  );
+  ok(
+    `while the monotone cubic's jumps at most of them (${monotoneJumps})`,
+    monotoneJumps > knotsChecked / 2
+  );
+}
+
+console.log("# smoother: moving one value moves at most two segments each side");
+{
+  const rand = random(4);
+  let leaks = 0;
+  let unmoved = 0;
+  for (let trial = 0; trial < 100; trial++) {
+    const n = 4 + Math.floor(rand() * 8);
+    const { knots, points } = randomRun(rand, n);
+    const values = points.map((p) => p[1]);
+    const k = Math.floor(rand() * n);
+    const moved = values.slice();
+    moved[k] += 50;
+    const before = channelSpline("smoother", knots, values);
+    const after = channelSpline("smoother", knots, moved);
+    for (let i = 0; i + 1 < n; i++) {
+      const changes = [0.1, 0.5, 0.9].some(
+        (u) => before.at(i, u) !== after.at(i, u)
+      );
+      const inReach = i >= k - 2 && i <= k + 1;
+      if (changes && !inReach) leaks++;
+      if (!changes && (i === k - 1 || i === k)) unmoved++;
+    }
+  }
+  ok("no segment outside k − 2 .. k + 1 moves", leaks === 0, `${leaks}`);
+  ok("the two segments at the value do move", unmoved === 0, `${unmoved}`);
+}
+
+console.log("# smoother: its cubics stay within the stated error");
+{
+  // The stated bound (`SMOOTHER_PIECES`): at most 3.9e-5 times the gap D
+  // between the two parabolas a segment blends, at its middle. Each cubic's
+  // own parameter s is linear in time, so cubic j at s is compared with the
+  // curve at u = (j + s) / k.
+  const rand = random(12);
+  let worstRatio = 0;
+  for (let trial = 0; trial < 200; trial++) {
+    const n = 4 + Math.floor(rand() * 7);
+    const { knots, points } = randomRun(rand, n);
+    const values = points.map((p) => p[1]);
+    const spline = channelSpline("smoother", knots, values);
+    for (let i = 0; i + 1 < n; i++) {
+      const b = spline.bezier(i);
+      const interior = i > 0 && i < n - 2;
+      const pieces = b.length / 4;
+      if (pieces !== (interior ? SMOOTHER_PIECES : 1)) worstRatio = Infinity;
+      let err = 0;
+      for (let j = 0; j < pieces; j++) {
+        for (let s = 0; s <= 40; s++) {
+          const u = (j + s / 40) / pieces;
+          const cubic = b.slice(4 * j, 4 * j + 4);
+          const drawn =
+            (1 - s / 40) ** 3 * cubic[0] +
+            3 * (1 - s / 40) ** 2 * (s / 40) * cubic[1] +
+            3 * (1 - s / 40) * (s / 40) ** 2 * cubic[2] +
+            (s / 40) ** 3 * cubic[3];
+          err = Math.max(err, Math.abs(drawn - spline.at(i, u)));
+        }
+      }
+      if (!interior) {
+        // An end segment is a parabola, which one cubic draws exactly.
+        worstRatio = Math.max(worstRatio, err > 1e-9 ? Infinity : 0);
+        continue;
+      }
+      const mid = (knots[i] + knots[i + 1]) / 2;
+      const gap = Math.abs(
+        parabolaAt(knots, values, i, mid) - parabolaAt(knots, values, i + 1, mid)
+      );
+      if (gap > 1e-6) worstRatio = Math.max(worstRatio, err / gap);
+    }
+  }
+  ok(
+    "error / gap is at most 3.9e-5",
+    worstRatio <= 3.9e-5,
+    `worst ${worstRatio}`
+  );
+  // A connected scatter plot of the driving-shifts data in a 500px box, over
+  // its years: the case the error is sized for.
+  const xs = drivingShifts.map((d) => d.miles);
+  const ys = drivingShifts.map((d) => d.gas);
+  const box = (vs: number[]) => {
+    const lo = Math.min(...vs);
+    const hi = Math.max(...vs);
+    return vs.map((v) => ((v - lo) / (hi - lo)) * 500);
+  };
+  const years = drivingShifts.map((d) => d.year);
+  let worstPx = 0;
+  for (const values of [box(xs), box(ys)]) {
+    const spline = channelSpline("smoother", years, values);
+    for (let i = 0; i + 1 < years.length; i++) {
+      const b = spline.bezier(i);
+      const pieces = b.length / 4;
+      for (let j = 0; j < pieces; j++) {
+        for (let s = 0; s <= 40; s++) {
+          const [c0, c1, c2, c3] = b.slice(4 * j, 4 * j + 4);
+          const w = s / 40;
+          const drawn =
+            (1 - w) ** 3 * c0 +
+            3 * (1 - w) ** 2 * w * c1 +
+            3 * (1 - w) * w ** 2 * c2 +
+            w ** 3 * c3;
+          worstPx = Math.max(
+            worstPx,
+            Math.abs(drawn - spline.at(i, (j + w) / pieces))
+          );
+        }
+      }
+    }
+  }
+  ok(
+    "under 0.01px on the driving-shifts scatter in a 500px box",
+    worstPx < 0.01,
+    `worst ${worstPx}px`
+  );
+}
+
+console.log("# smooth and smoother: a path's steps are the readings over time");
+{
+  const rand = random(957);
+  let worst = { smooth: 0, smoother: 0 };
+  let shapeOk = true;
+  for (let trial = 0; trial < 100; trial++) {
+    const n = 2 + Math.floor(rand() * 8);
+    const { knots, points } = randomRun(rand, n);
+    const xs = points.map((p) => p[0]);
+    const ys = points.map((p) => p[1]);
+    for (const curve of ["smooth", "smoother"] as const) {
+      const steps = threadPath(points, knots, curve);
+      if (steps.length !== n - 1) shapeOk = false;
+      steps.forEach((step, i) => {
+        // The step runs from its point to the next, with no gaps between its
+        // cubics.
+        if (step[0].start !== points[i]) shapeOk = false;
+        if (step[step.length - 1].end !== points[i + 1]) shapeOk = false;
+        for (let j = 1; j < step.length; j++) {
+          if (step[j].start[0] !== step[j - 1].end[0]) shapeOk = false;
+        }
+        // What the step may be off by: nothing for a cubic curve or an end
+        // segment, and the stated drawing error (`SMOOTHER_PIECES`) for an
+        // interior segment of `smoother`.
+        const mid = (knots[i] + knots[i + 1]) / 2;
+        const gap = (vs: number[]) =>
+          Math.abs(parabolaAt(knots, vs, i, mid) - parabolaAt(knots, vs, i + 1, mid));
+        const interior = curve === "smoother" && i > 0 && i < n - 2;
+        const allowed = [xs, ys].map(
+          (vs) => 1e-9 + (interior ? 3.9e-5 * gap(vs) : 0)
+        );
+        const k = step.length;
+        for (const u of [0.13, 0.5, 0.77]) {
+          const j = Math.floor(u * k);
+          const [x, y] = subdivideCurve1(step[j], u * k - j)[0].end;
+          const t = knots[i] + u * (knots[i + 1] - knots[i]);
+          worst[curve] = Math.max(
+            worst[curve],
+            Math.abs(x - interpolateRun(knots, xs, t, curve)) / allowed[0],
+            Math.abs(y - interpolateRun(knots, ys, t, curve)) / allowed[1]
+          );
+        }
+      });
+    }
+  }
+  ok("one step per interval, each from its point to the next", shapeOk);
+  ok("smooth: exactly the reading", worst.smooth <= 1, `${worst.smooth}`);
+  ok(
+    "smoother: the reading, within the drawing error",
+    worst.smoother <= 1,
+    `${worst.smoother}`
   );
 }
 

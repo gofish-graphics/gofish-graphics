@@ -6,7 +6,8 @@
  * So the knots here are the data values, and nothing is reparameterized: two
  * keyframes ten years apart take ten years' worth of the clock, whatever the
  * distance between them on screen. A smooth `line` threaded through the same
- * keyframes draws the same monotone cubic (`spline.ts`) over the same knots.
+ * keyframes with the same `curve` draws the same curve (`spline.ts`) over the
+ * same knots.
  *
  * Every method is a pure function of `(knots, values, t)`. `knots` must be
  * sorted ascending and the same length as `values`; the caller sorts once and
@@ -16,14 +17,20 @@
  * rows at one moment has no one value there.
  */
 
-import { cubicAt, monotoneCubics } from "./spline";
+import { SMOOTH_CURVES, type SmoothCurve, channelSpline } from "./spline";
 import { lerp } from "./util";
 
-/** How a run is read between its knots. These are readings of values over a
- *  parameter; the screen-space Catmull-Rom a `line` can draw is not one. */
-export type InterpolationMethod = "step" | "linear" | "monotone";
+/** How a run is read between its knots, from the least to the most smooth.
+ *  These are readings of values over a parameter; the screen-space
+ *  Catmull-Rom a `line` can draw is not one. The three smooth ones are
+ *  `spline.ts`'s data-space curves. */
+export type InterpolationMethod = "step" | "linear" | SmoothCurve;
 
-const METHODS: readonly InterpolationMethod[] = ["step", "linear", "monotone"];
+const METHODS: readonly InterpolationMethod[] = [
+  "step",
+  "linear",
+  ...SMOOTH_CURVES,
+];
 
 /**
  * The method a `curve` (or `method`) option names. Unset and `"auto"` are
@@ -48,7 +55,9 @@ export function resolveMethod(
       : "";
   throw new Error(
     `[gofish] ${where}: ${typeof curve === "string" ? JSON.stringify(curve) : String(curve)} is not a way to read a run ` +
-      `between its keyframes. Use "step", "linear" or "monotone".` +
+      `between its keyframes. Use ${METHODS.slice(0, -1)
+        .map((m) => JSON.stringify(m))
+        .join(", ")} or ${JSON.stringify(METHODS[METHODS.length - 1])}.` +
       screenOnly
   );
 }
@@ -169,7 +178,7 @@ export function interpolateRun(
 
 /**
  * One channel of a keyframe run, prepared once for reading at many located
- * parameters, with a smooth run's cubics worked out here rather than on every
+ * parameters, with a smooth run's curve worked out here rather than on every
  * read. A transition reads every channel of its run on every frame, so it
  * builds these at layout. A run of fewer than two knots holds its one value
  * (or is NaN when empty), wherever it is read.
@@ -192,8 +201,8 @@ export function channelReader(
   if (method === "linear") {
     return ({ i, u }) => lerp(values[i], values[i + 1], u);
   }
-  const cubics = monotoneCubics(knots, values);
-  return ({ i, u }) => cubicAt(cubics, i, u);
+  const spline = channelSpline(method, knots, values);
+  return ({ i, u }) => spline.at(i, u);
 }
 
 /**
@@ -236,7 +245,8 @@ export type InterpolateOptions = {
   key: string;
   /** Where to read the run, in `along`'s units. */
   at: number;
-  /** How a run is read between its keyframes. Default `"monotone"`, the
+  /** How a run is read between its keyframes: `"step"`, `"linear"`,
+   *  `"monotone"`, `"smooth"` or `"smoother"`. Default `"monotone"`, the
    *  same default `time.transition()` takes for the same reason (the field is
    *  numeric, so the run is a sample of something continuous). `"step"` does
    *  not blend at all: each keyframe's values hold until the next one's time

@@ -476,7 +476,9 @@ export const connect = createNodeOperator(
               renderData: { paths, defaultColor },
             };
           }
-          /** A line's path, one piece per step from a point to the next. */
+          /** A line's path, one piece per step from a point to the next. A
+           *  piece is one segment, or for a sequence curve the cubics that
+           *  draw one step (`SequenceCurve.thread`). */
           let steps: Path[] = [];
 
           // If in center mode, adjust bounding boxes to have zero width/height
@@ -506,7 +508,8 @@ export const connect = createNodeOperator(
             }
           }
 
-          // A *sequence* curve (`monotone`, `catmullRom`) threads the whole
+          // A *sequence* curve (`monotone`, `smooth`, `smoother`,
+          // `catmullRom`) threads the whole
           // run of points as one spline, bypassing the pairwise router loop.
           // A line (center) threads its centers; a ribbon (edge) threads BOTH
           // facing boundaries of the band — forward along the near edge, a
@@ -524,7 +527,7 @@ export const connect = createNodeOperator(
             const mains = childPlaceables.map(
               (c) => centerPoint(c.dims)[mainAxis]
             );
-            // A curve read over the run's parameter (the monotone cubic)
+            // A curve read over the run's parameter (a data-space curve)
             // takes the run's own parameter when it has one (#635), so the
             // curve follows the data rather than the distances between its
             // points on screen. A line through a sequence's keyframes uses
@@ -541,11 +544,12 @@ export const connect = createNodeOperator(
             // The spline is evaluated here, in layout space, before any
             // coordinate transform. That equals evaluating it in data space
             // and placing the result because every position scale is affine
-            // (see `monotoneSlopes`). A non-affine position scale (log, pow)
+            // and every data-space curve commutes with an affine map of each
+            // channel (see `monotoneSlopes`). A non-affine position scale (log, pow)
             // would need the spline evaluated upstream of the scale instead.
             //
             // A screen-space curve (`catmullRom`) takes no parameter. A
-            // transition along the same run reads the monotone cubic, so its
+            // transition along the same run reads a data-space curve, so its
             // moving mark can sit slightly off a Catmull-Rom line (a known
             // gap, left open on purpose).
             const knots = !sequence.takesKnots
@@ -560,7 +564,7 @@ export const connect = createNodeOperator(
             const thread = (
               points: [number, number][],
               backward = false
-            ): Path =>
+            ): Path[] =>
               sequence.thread(
                 points,
                 knots !== undefined && backward
@@ -570,8 +574,8 @@ export const connect = createNodeOperator(
             if (mode === "center") {
               const centers = childPlaceables.map((c) => centerPoint(c.dims));
               const threaded = thread(centers);
-              paths.push(threaded);
-              steps = threaded.map((seg) => [seg]);
+              paths.push(threaded.flat());
+              steps = threaded;
             } else {
               const near: [number, number][] = [];
               const far: [number, number][] = [];
@@ -582,9 +586,9 @@ export const connect = createNodeOperator(
               });
               const farRev = far.slice().reverse();
               paths.push([
-                ...thread(near),
+                ...thread(near).flat(),
                 { type: "line", points: [near[near.length - 1], farRev[0]] },
-                ...thread(farRev, true),
+                ...thread(farRev, true).flat(),
                 { type: "line", points: [farRev[farRev.length - 1], near[0]] },
               ]);
             }
@@ -779,17 +783,21 @@ export const connect = createNodeOperator(
           };
 
           // A threaded line is cut inside one step of its path by data time
-          // (`windowPath`), which needs each step from one keyframe to the
-          // next to be ONE straight or cubic segment from the one keyframe's
-          // center to the next's.
+          // (`windowPath`), which needs each step to run from the one
+          // keyframe's center to the next's, with time running evenly along
+          // its segments. A sequence curve's step promises that, however many
+          // cubics it has (`SequenceCurve.thread`). A pairwise route promises
+          // nothing about time, so its step can be cut only when it is ONE
+          // straight or cubic segment, whose own parameter is then the time.
           let timeRun: TimeRun | undefined;
           if (timeKnots !== undefined) {
             const centers = childPlaceables.map((c) => centerPoint(c.dims));
             const ends = (seg: Path[number]): [number, number][] =>
               seg.type === "line" ? seg.points : [seg.start, seg.end];
             const threads = steps.every((piece, i) => {
-              if (piece.length !== 1) return false;
-              const [start, end] = ends(piece[0]);
+              if (sequence === undefined && piece.length !== 1) return false;
+              const [start] = ends(piece[0]);
+              const [, end] = ends(piece[piece.length - 1]);
               return (
                 samePoint(start, centers[i]) && samePoint(end, centers[i + 1])
               );
@@ -806,8 +814,8 @@ export const connect = createNodeOperator(
                   `threads the keyframes of a time.sequence, so it is drawn ` +
                   `only over the stretch of time the sequence shows, cut at ` +
                   `the exact point in data time. That cut needs each step ` +
-                  `from one keyframe to the next to be ONE straight or cubic ` +
-                  `segment between the keyframes' centers, which ` +
+                  `from one keyframe to the next to run between the keyframes' ` +
+                  `centers with time running evenly along it, which ` +
                   `${threadingCurves} draw and "${resolvedCurveName}" does ` +
                   `not. Use one of those, or open an issue for ` +
                   `"${resolvedCurveName}".`

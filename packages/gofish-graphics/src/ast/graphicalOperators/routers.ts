@@ -9,8 +9,8 @@
  *
  * Built-ins below are the *routing* curves (linear / bezier / orthogonal /
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
- * pairwise, and the *sequence* curves (monotone, catmullRom), which thread the
- * whole point run (`sequenceCurve`).
+ * pairwise, and the *sequence* curves (monotone, smooth, smoother,
+ * catmullRom), which thread the whole point run (`sequenceCurve`).
  *
  * Register a new router with `registerRoute(name, fn)`; look one up with
  * `getRoute(name)`.
@@ -25,7 +25,12 @@ import {
 import type { Dimensions } from "../dims";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { getBoxToBoxArrow } from "perfect-arrows";
-import { catmullRomPath, centripetalKnots, monotonePath } from "../../spline";
+import {
+  SMOOTH_CURVES,
+  catmullRomPath,
+  centripetalKnots,
+  threadPath,
+} from "../../spline";
 
 /** Context handed to a router for one endpoint pair. */
 export type RouteContext = {
@@ -56,7 +61,7 @@ export type Router = (
  *
  * `curve` is the single screen-space path-shaping key on `line`/`ribbon` — it
  * holds both interpolating curves that thread the point sequence (linear,
- * bezier, monotone, catmullRom) and routing curves that shape the stroke between two
+ * bezier, monotone, smooth, smoother, catmullRom) and routing curves that shape the stroke between two
  * anchors (orthogonal, arc, perfectArrows). A curve resolves to a `Router`.
  */
 export type CurveSpec = { type: string; options?: Record<string, any> };
@@ -74,9 +79,13 @@ type RouteEntry = {
  * from the full point sequence instead of the pairwise router loop.
  */
 export type SequenceCurve = {
-  /** Thread the run. `knots` is the run's own parameter, one per point, or
-   *  undefined when it has none; it is only passed when `takesKnots`. */
-  thread: (points: Point[], knots?: number[]) => BezierCurve[];
+  /** Thread the run, as one step per interval between neighboring points.
+   *  A step is one or more cubics from the one point to the next. `knots` is
+   *  the run's own parameter, one per point, or undefined when it has none;
+   *  it is only passed when `takesKnots`, and then the cubics of a step split
+   *  its share of the parameter evenly, each with its own parameter linear
+   *  in the knot parameter (`threadPath`). */
+  thread: (points: Point[], knots?: number[]) => BezierCurve[][];
   /** Whether the curve is read over the run's parameter (so `connect` works
    *  one out), or is a shape on screen that ignores it. */
   takesKnots: boolean;
@@ -283,16 +292,18 @@ registerRoute("orthogonal", orthogonalRouter, { ribbon: false });
 registerRoute("arc", arcRouter, { ribbon: false });
 registerRoute("perfectArrows", perfectArrowsRouter, { ribbon: false });
 
-// The monotone cubic is read over the run's parameter, and a run with none is
-// threaded with centripetal knots. The Catmull-Rom is a shape on screen: its
-// knots are always centripetal.
-sequenceCurves.set("monotone", {
-  thread: (points, knots) =>
-    monotonePath(points, knots ?? centripetalKnots(points)),
-  takesKnots: true,
-});
+// The data-space curves (monotone, smooth, smoother) are read over the run's
+// parameter, and a run with none is threaded with centripetal knots. The
+// Catmull-Rom is a shape on screen: its knots are always centripetal.
+for (const smooth of SMOOTH_CURVES) {
+  sequenceCurves.set(smooth, {
+    thread: (points, knots) =>
+      threadPath(points, knots ?? centripetalKnots(points), smooth),
+    takesKnots: true,
+  });
+}
 sequenceCurves.set("catmullRom", {
-  thread: (points) => catmullRomPath(points),
+  thread: (points) => catmullRomPath(points).map((seg) => [seg]),
   takesKnots: false,
 });
 
@@ -300,9 +311,9 @@ sequenceCurves.set("catmullRom", {
 // Builder-object idiom (like `polar({…})` / axis / label specs): each returns a
 // serializable `CurveSpec` carrying its own options, so call sites read
 // `line({ curve: orthogonal() })`, `line({ curve: arc({ direction: "down" }) })`.
-// The option-less `"linear"`, `"monotone"` and `"catmullRom"` have no factory;
-// pass the bare name. (`linear()` is already the Cartesian coordinate
-// transform.)
+// The option-less `"linear"`, `"monotone"`, `"smooth"`, `"smoother"` and
+// `"catmullRom"` have no factory; pass the bare name. (`linear()` is
+// already the Cartesian coordinate transform.)
 
 /** Cubic bezier (d3.linkVertical/horizontal convention). */
 export const bezier = (): CurveSpec => ({ type: "bezier" });

@@ -761,8 +761,8 @@ export type LineOptions = {
   mixBlendMode?: "normal" | "multiply";
   // Screen-space path shape, as a factory call (`bezier()`, `orthogonal()`,
   // `arc({ direction })`, `perfectArrows({ bow })`, …) or a bare name
-  // (`"linear"` | `"bezier"` | `"monotone"` | `"catmullRom"`). The single
-  // path-shaping key.
+  // (`"linear"` | `"bezier"` | `"monotone"` | `"smooth"` | `"smoother"` |
+  // `"catmullRom"`). The single path-shaping key.
   curve?: Curve;
   dir?: "x" | "y";
   // Anchor mode: pin each endpoint to a normalized point on its mark's bbox

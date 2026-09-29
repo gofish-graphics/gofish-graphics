@@ -299,7 +299,10 @@ async function main(): Promise<void> {
     /** Each year's mark is a white dot kept once reached (the trail) and a
      *  red dot that glides from year to year (the head), with a line layered
      *  over the year marks. The head is the only red dot. */
-    const trail = (at: number, curve: "linear" | "monotone" | "step") =>
+    const trail = (
+      at: number,
+      curve: "linear" | "monotone" | "smooth" | "smoother" | "step"
+    ) =>
       keyframes(rows, at)
         .mark(
           layer([
@@ -348,11 +351,13 @@ async function main(): Promise<void> {
       );
       ok(`linear at ${at}: the line is the data-space rung`, !diff, diff);
     }
-    for (const at of [1956.5, 1958.7, 1963, 1966, 1970.25, 1983, 2000.9]) {
-      ok(
-        `monotone at ${at}: one moving dot, on the line's tip`,
-        onTip(await trail(at, "monotone"))
-      );
+    for (const curve of ["monotone", "smooth", "smoother"] as const) {
+      for (const at of [1956.5, 1958.7, 1963, 1966, 1970.25, 1983, 2000.9]) {
+        ok(
+          `${curve} at ${at}: one moving dot, on the line's tip`,
+          onTip(await trail(at, curve))
+        );
+      }
     }
     const stepped = await trail(1979.25, "step");
     ok(
@@ -873,9 +878,9 @@ async function main(): Promise<void> {
   const notAMethod = [
     [
       "catmullRom",
-      /"catmullRom" is not a way.*"step", "linear" or "monotone".*screen-space path curve/,
+      /"catmullRom" is not a way.*"step", "linear", "monotone", "smooth" or "smoother".*screen-space path curve/,
     ],
-    ["linaer", /"linaer" is not a way.*"step", "linear" or "monotone"/],
+    ["linaer", /"linaer" is not a way.*"step", "linear", "monotone", "smooth" or "smoother"/],
   ] as const;
   for (const [curve, pattern] of notAMethod) {
     why = await throws(

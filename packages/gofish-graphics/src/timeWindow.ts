@@ -24,7 +24,7 @@
  *   sequence, so it runs along the time tier) draws only the part of itself
  *   that lies inside the window of the lifetime of the marks it connects, cut
  *   at the exact point in DATA time: knot `i` sits at its keyframe's time
- *   `t_i`, and inside a segment time moves linearly with the segment's own
+ *   `t_i`, and inside a step time moves linearly with the step's own
  *   parameter (`windowPath`). So the tip of a line drawn up to the playhead is
  *   where a moving mark would be at the same moment. Arc length would pace the
  *   drawing by distance on screen instead, and the distance one year covers
@@ -170,14 +170,16 @@ export function showingAt(
 /**
  * The part of a threaded run that lies inside a window, cut by data time.
  *
- * `pieces[i]` is the step from knot `i` to knot `i + 1`, drawn as ONE straight
- * or cubic segment (the caller checks that), and `knots` are the knots' times,
- * strictly increasing. A point at local parameter `u` of piece `i` sits at
- * time `t_i + u·(t_{i+1} − t_i)`, so a piece the window's edge falls inside is
- * cut at that edge's `u`: a line by interpolating its endpoints, a cubic by de
- * Casteljau. A window that meets the run in a single instant, or not at all,
- * draws nothing, and a window ending exactly on a knot ends with the piece
- * before it.
+ * `pieces[i]` is the step from knot `i` to knot `i + 1`, drawn as one or more
+ * straight or cubic segments that split the step's time evenly, each with its
+ * own parameter linear in time (the caller checks that), and `knots` are the
+ * knots' times, strictly increasing. A point at local parameter `u` of step
+ * `i` sits at time `t_i + u·(t_{i+1} − t_i)`; with `k` segments, it is at
+ * parameter `u·k − j` of segment `j`. So a segment the window's edge falls
+ * inside is cut at that edge's parameter: a line by interpolating its
+ * endpoints, a cubic by de Casteljau. A window that meets the run in a single
+ * instant, or not at all, draws nothing, and a window ending exactly on a
+ * knot ends with the step before it.
  */
 export function windowPath(
   pieces: Path[],
@@ -192,13 +194,15 @@ export function windowPath(
   const last = end.u === 0 ? end.i - 1 : end.i;
   const out: Path = [];
   for (let i = start.i; i <= last; i++) {
-    out.push(
-      cutSegment(
-        pieces[i][0],
-        i === start.i ? start.u : 0,
-        i === end.i ? end.u : 1
-      )
-    );
+    const step = pieces[i];
+    const u0 = i === start.i ? start.u : 0;
+    const u1 = i === end.i ? end.u : 1;
+    const k = step.length;
+    for (let j = 0; j < k; j++) {
+      const from = Math.max(u0 * k - j, 0);
+      const to = Math.min(u1 * k - j, 1);
+      if (from < to) out.push(cutSegment(step[j], from, to));
+    }
   }
   return out;
 }
