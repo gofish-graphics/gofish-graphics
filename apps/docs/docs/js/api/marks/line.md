@@ -43,7 +43,34 @@ When `curve` is omitted (`"auto"`), `line` inspects the connected points. If the
 share a continuous connection axis, it smooths them with `"monotone"`.
 Otherwise it draws a straight polyline.
 
-`"monotone"` is piecewise monotone. Between two neighboring points, each
+## Curves through data
+
+Five curve names read a run of values over the field that orders it, such as
+the years of a line chart. From the least to the most smooth, they are `step`,
+`linear`, `monotone`, `smooth` and `smoother`. The same names work in
+[`time.transition()`](/js/animation), `animation.tween()` and
+[`interpolate()`](/js/animation#interpolate-rows-options), so a moving mark and a line
+through the same points can follow the same curve.
+
+A few terms help compare them. A curve is **C0** when it has no breaks, **C1**
+when its direction also never changes suddenly (it has no corners), and **C2**
+when its curvature never changes suddenly either. A curve **overshoots** when,
+between two neighboring points, it goes above the higher one or below the
+lower one. A curve is **local** when changing one value changes the curve only
+near that point.
+
+| Name       | What you see                                                                        | Algorithm                                                                           | Continuity     | Local | Never overshoots |
+| ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------- | ----- | ---------------- |
+| `step`     | Each value holds until the next one's time arrives, and then jumps.                 | d3's `curveStepAfter`, read over time                                               | not continuous | yes   | yes              |
+| `linear`   | Straight segments from point to point.                                              | straight lines                                                                      | C0             | yes   | yes              |
+| `monotone` | A smooth curve that turns exactly on the points.                                    | Steffen (1990), the same curve as d3's `curveMonotoneX`                             | C1             | yes   | yes              |
+| `smooth`   | Rounder peaks that can pass a little beyond their points. Long flat runs stay flat. | modified Akima, also called makima (Moler 2019), as in MATLAB and SciPy             | C1             | yes   | no               |
+| `smoother` | The smoothest curve, with no sudden change in curvature. It can dip next to a jump. | Yuksel (2020), "A Class of C2 Interpolating Curves", applied to one value at a time | C2             | yes   | no               |
+
+`step` is a way to read values over time, not a shape for a line: a `line`
+does not take it. The other four also work as `line` and `ribbon` curves.
+
+`"monotone"` is **piecewise** monotone. Between two neighboring points, each
 coordinate only rises or only falls, so the curve never goes past either point.
 It does not make the whole line monotone. The line still turns where the data
 turns, and the peak sits exactly on the data point. For a path in x and y, such
@@ -51,8 +78,20 @@ as a connected scatterplot, this holds for x and y separately, over the field
 that orders the line. It is the same curve as d3's `curveMonotoneX` and
 Vega-Lite's `interpolate: "monotone"`.
 
-A monotone line takes the knots of its curve from the data when the data has a
-value that orders the line. `line` uses the first of these that it finds:
+`"smooth"` lets a peak round off a little past its point. A run of three or
+more equal values stays exactly flat. A single flat step between a rise and a
+fall, such as two equal peak values, can bow a little.
+
+`"smoother"` has no sudden change in curvature anywhere, so it looks the most
+even. Next to a sudden jump in the data it can dip a little past the points on
+either side. It is not a cubic curve, so GoFish draws each stretch between two
+points with 12 short cubic pieces. At usual chart sizes the drawn line is
+within a few thousandths of a pixel of the exact curve.
+
+A line drawn with one of these curves takes the knots of its curve from the
+data when the data has a value that orders the line. (The knots are the
+positions along the curve where it passes through each point.) `line` uses the
+first of these that it finds:
 
 - The values of the field the line runs along, when they are numbers that only
   go up or only go down along the line. This is the field `along` names, or the
@@ -65,19 +104,19 @@ value that orders the line. `line` uses the first of these that it finds:
   applies. These are centripetal knots. Two points at the same spot, up to
   rounding, are one point: the curve drops the repeat, as d3 does.
 
-Because the knots come from the data, a monotone line and a
+Because the knots come from the data, a line and a
 [`time.transition()`](/js/animation) through the same points follow the same
-curve.
+curve when they use the same curve name.
 
 `"catmullRom"` draws a centripetal Catmull-Rom spline through the points on the
 screen, as d3's `curveCatmullRom` does. Its knots are always the distances
 between the points on the screen, whatever field orders the line. It can
 overshoot between two points. It is not used when values are read over time: a
-`time.transition()` along the same points follows the monotone curve, so its
-moving mark can sit slightly off a Catmull-Rom line.
+`time.transition()` along the same points follows one of the curves above, so
+its moving mark can sit slightly off a Catmull-Rom line.
 
-`curve` accepts the strings `"linear"`, `"bezier"`, `"monotone"` or
-`"catmullRom"`, or a `CurveSpec` factory:
+`curve` accepts the strings `"linear"`, `"bezier"`, `"monotone"`, `"smooth"`,
+`"smoother"` or `"catmullRom"`, or a `CurveSpec` factory:
 `bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`, or
 `perfectArrows({ bow })`. `"linear"` has no factory, because
 [`linear()`](/js/api/coords/linear) is the coordinate transform. The `orthogonal`

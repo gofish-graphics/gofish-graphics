@@ -36,6 +36,44 @@ line(stroke=None, strokeWidth=None, strokeDasharray=None, opacity=None, curve=No
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
+## Curves through data
+
+Four curve names draw a line through a run of values, read over the field that
+orders it, such as the years of a line chart. From the least to the most
+smooth, they are `"linear"`, `"monotone"`, `"smooth"` and `"smoother"`. When
+`curve` is left out, a line over a continuous axis uses `"monotone"`.
+
+A few terms help compare them. A curve is **C0** when it has no breaks, **C1**
+when its direction also never changes suddenly (it has no corners), and **C2**
+when its curvature never changes suddenly either. A curve **overshoots** when,
+between two neighboring points, it goes above the higher one or below the
+lower one. A curve is **local** when changing one value changes the curve only
+near that point.
+
+| Name       | What you see                                                                        | Algorithm                                                                           | Continuity | Local | Never overshoots |
+| ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------- | ----- | ---------------- |
+| `linear`   | Straight segments from point to point.                                              | straight lines                                                                      | C0         | yes   | yes              |
+| `monotone` | A smooth curve that turns exactly on the points.                                    | Steffen (1990), the same curve as d3's `curveMonotoneX`                             | C1         | yes   | yes              |
+| `smooth`   | Rounder peaks that can pass a little beyond their points. Long flat runs stay flat. | modified Akima, also called makima (Moler 2019), as in MATLAB and SciPy             | C1         | yes   | no               |
+| `smoother` | The smoothest curve, with no sudden change in curvature. It can dip next to a jump. | Yuksel (2020), "A Class of C2 Interpolating Curves", applied to one value at a time | C2         | yes   | no               |
+
+`"monotone"` is **piecewise** monotone. Between two neighboring points, each
+coordinate only rises or only falls, so the curve never goes past either point.
+It does not make the whole line monotone. The line still turns where the data
+turns, and the peak sits exactly on the data point.
+
+`"smooth"` lets a peak round off a little past its point. A run of three or
+more equal values stays exactly flat, while a single flat step between a rise
+and a fall can bow a little. `"smoother"` has no sudden change in curvature
+anywhere. Next to a sudden jump in the data it can dip a little past the points
+on either side.
+
+The JavaScript library also has `"step"`, the first rung of the same ladder. It
+is a way to read values over time in an animation, which the Python package
+does not have yet. See the
+[JavaScript `line` page](/js/api/marks/line#curves-through-data) for how a
+line picks the knots of its curve.
+
 ## The line pattern
 
 A line needs points to connect. The idiomatic recipe:

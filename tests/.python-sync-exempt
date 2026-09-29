@@ -203,3 +203,10 @@ packages/gofish-graphics/stories/animated-vega-lite/ConnectedScatterplot.stories
 # The race example holds a `time.sequence` clock, exempt for the same reason
 # as BarChartRace above.
 packages/gofish-graphics/stories/animation/BuildInPrototype.stories.tsx
+
+# The data-space curve ladder: the same data drawn with each curve name, as a
+# test-like side-by-side comparison. It is not one spec: it lays ten charts out
+# in an HTML grid from a JS loop, and its `step` row samples the run with
+# `interpolate()`, a JS-only data helper. Every curve name it shows is an
+# ordinary `line({ curve })` value that crosses the bridge as a string.
+packages/gofish-graphics/stories/forwardsyntax/CurveLadder.stories.tsx
