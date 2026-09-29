@@ -1,4 +1,6 @@
+import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
+import { boxOfDims } from "../geometry";
 import { GoFishAST } from "../_ast";
 import { displayTranslate, Size } from "../dims";
 import { POSITION, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
@@ -177,6 +179,18 @@ export const Polygon = ({
           },
         ];
       },
+      // The smallest circle through the ring's vertices (Welzl, via d3's
+      // `packEnclose` over zero-radius circles), in the local frame `layout`
+      // resolved the ring into.
+      geometry: ({ intrinsicDims }, _children, node) => ({
+        box: boxOfDims(intrinsicDims, node.type),
+        enclosingCircle: () => {
+          const e = packEnclose(
+            localRef.current.map(([x, y]) => ({ x, y, r: 0 }))
+          );
+          return { cx: e.x, cy: e.y, r: e.r };
+        },
+      }),
     },
     []
   );

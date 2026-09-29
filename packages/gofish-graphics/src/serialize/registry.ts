@@ -52,6 +52,7 @@ import { arrow } from "../ast/graphicalOperators/arrow";
 import { enclose } from "../ast/graphicalOperators/enclose";
 import { position } from "../ast/graphicalOperators/position";
 import { treemap } from "../ast/graphicalOperators/treemap";
+import { pack } from "../ast/graphicalOperators/pack";
 // `cut` (the pure slice primitive, returns an array of slice node promises)
 // and `cutMark` (the expand-mark form) — the deserializer dispatches
 // between them by context: a `cut` IR node used as a chart `.mark(...)` →
@@ -212,6 +213,7 @@ export const OPERATOR_MAP: Record<
   scatter: (opts) => scatter(opts as any),
   table: (opts) => table(opts as any),
   treemap: (opts) => treemap(opts as any),
+  pack: (opts) => pack(opts as any),
   log: (opts) => log(opts.prefix),
 };
 

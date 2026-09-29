@@ -682,6 +682,7 @@ from ._generated import (  # noqa: E402
     _table_opts,
     _treemap_opts,
     _treemap_combinator_opts,
+    _pack_opts,
     _line_opts,
     _ribbon_opts,
     _polar_config,
@@ -1951,6 +1952,47 @@ def treemap(
     if by is not None:
         options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))
+
+
+def circles() -> Dict[str, Any]:
+    """
+    The ``circles()`` strategy for :func:`pack`: pack each child's enclosing
+    circle with d3's front-chain algorithm. Takes no options yet.
+
+    Mirrors JS ``circles()``; the strategy is a plain object on the wire,
+    ``{"kind": "circles"}``.
+    """
+    return {"kind": "circles"}
+
+
+def pack(
+    *,
+    by: Optional[Union[str, "FieldAccessor"]] = None,
+    **options: Any,
+) -> Operator:
+    """
+    Pack operator: place each group (or row, without ``by``) so the children's
+    enclosing circles touch without overlapping.
+
+    Children keep their pixel size, and the pack does not yet fit itself to
+    the available space (#967).
+
+    Example::
+
+        chart(seafood).flow(pack(by="lake"), pack()).mark(circle(r=12))
+
+    Args:
+        by: Field name to group by, or a ``field(...)`` accessor. Omit for
+            one child per row.
+        **options:
+            method: The packing strategy, e.g. ``circles()`` (the default).
+
+    Returns:
+        Operator object
+    """
+    if by is not None:
+        options["by"] = by
+    return Operator("pack", **_pack_opts(**options))
 
 
 def table(

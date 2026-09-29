@@ -197,6 +197,10 @@ The container carries the write-back; the stand-in's own placement writes do
 nothing. A nested operand cannot be resized from outside, so its size hooks
 throw: the target of `"span"` or `"size"` must be a direct child.
 
+A nested operand and a `ref` both share their target's local frame, so each one
+returns its target's `geometry()` (the shape queries described under
+[Layout Calculation](/internals/layout/passes)).
+
 ## Drawing clauses and their order
 
 A clause that is not a constraint draws: an operator or mark such as `arrow`,

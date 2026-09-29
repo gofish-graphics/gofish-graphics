@@ -17,6 +17,7 @@ import {
   scatter,
   group,
   treemap,
+  pack,
   table,
   log as logOp,
   derive,
@@ -412,6 +413,8 @@ function mapOperator(
       return applyTranslate(applyLabel(table(opts as any)));
     case "treemap":
       return applyTranslate(applyLabel(treemap(opts as any)));
+    case "pack":
+      return applyTranslate(applyLabel(pack(opts as any)));
     case "log":
       return applyTranslate(logOp(opts.prefix));
     default:

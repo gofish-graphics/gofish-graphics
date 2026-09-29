@@ -93,6 +93,13 @@ import {
   type LabelOptions,
   type LabelSpec,
 } from "./labels/labelPlacement";
+import { packEnclose } from "d3-hierarchy";
+import {
+  boxOfDims,
+  enclosingCircle,
+  translateCircle,
+  type Geometry,
+} from "./geometry";
 
 export type RenderSession = {
   tokenContext: TokenContext;
@@ -123,6 +130,9 @@ export type RenderSession = {
 
 export type Placeable = {
   dims: Dimensions;
+  /** The node's shape in its LOCAL layout frame (see {@link GeometryFn}).
+   *  Available only after layout. */
+  geometry: () => Geometry;
   /** Placement state; `translate[i] === undefined` means "parent may place
    *  me". Exposed so the `baseline` align anchor can read a target's origin. */
   transform?: Transform;
@@ -239,6 +249,55 @@ export type Lower = (
   children: DisplayList.DisplayItem[],
   node: GoFishNode
 ) => DisplayList.DisplayItem[];
+
+/**
+ * A node's shape queries (see `geometry/index.ts`), computed from its laid-out
+ * state. The result is in the node's LOCAL layout frame: the frame of
+ * `intrinsicDims`, with no translate applied. `box` must equal
+ * `intrinsicDims` as a box, and the shape a query describes must lie inside
+ * that box. Called lazily, at most once per layout, by
+ * {@link GoFishNode.geometry}.
+ */
+export type GeometryFn = (
+  laidOut: {
+    intrinsicDims: Dimensions;
+    transform?: Transform;
+    renderData?: any;
+  },
+  children: GoFishAST[],
+  node: GoFishNode
+) => Geometry;
+
+/** The geometry a node has when its definition supplies none. A leaf answers
+ *  only `box`. A node with children also answers `enclosingCircle`, lazily: the
+ *  smallest circle around its children's enclosing circles, each moved by the
+ *  child's translate into this node's frame. */
+export const defaultGeometry: GeometryFn = (
+  { intrinsicDims },
+  children,
+  node
+) => {
+  const box = boxOfDims(intrinsicDims, node.type);
+  if (children.length === 0) return { box };
+  return {
+    box,
+    enclosingCircle: () => {
+      const circles = children.map((child) => {
+        const tx = child.projectedTranslate(0);
+        const ty = child.projectedTranslate(1);
+        if (tx === undefined || ty === undefined)
+          throw new Error(
+            `[gofish] geometry(): a child of ${node.type} was not placed, so ` +
+              `its position in the ${node.type}'s frame is unknown`
+          );
+        const c = translateCircle(enclosingCircle(child.geometry()), [tx, ty]);
+        return { x: c.cx, y: c.cy, r: c.r };
+      });
+      const e = packEnclose(circles);
+      return { cx: e.x, cy: e.y, r: e.r };
+    },
+  };
+};
 
 export type ResolveUnderlyingSpace = (
   childSpaces: Size<UnderlyingSpace>[],
@@ -400,6 +459,10 @@ export class GoFishNode {
    *  {@link INTERNAL_emitNothing} silences it, so what it lends
    *  ({@link INTERNAL_lendDrawing}) is always its real drawing. */
   private readonly _ownLower?: Lower;
+  /** Shape queries (see {@link GeometryFn}); absent means the default. */
+  private readonly _geometryFn?: GeometryFn;
+  /** Memo for {@link geometry}; cleared by every `layout()`. */
+  private _geometry?: Geometry;
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
@@ -571,6 +634,7 @@ export class GoFishNode {
       resolveUnderlyingSpace,
       layout,
       lower,
+      geometry,
       shared = [false, false],
       color,
     }: {
@@ -580,6 +644,7 @@ export class GoFishNode {
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
       layout: Layout;
       lower?: Lower;
+      geometry?: GeometryFn;
       shared?: Size<boolean>;
       color?: MaybeValue<string>;
     },
@@ -590,6 +655,7 @@ export class GoFishNode {
     this._layout = layout;
     this._lower = lower;
     this._ownLower = lower;
+    this._geometryFn = geometry;
     this.children = children;
     children.forEach((child) => {
       child.parent = this;
@@ -1154,6 +1220,7 @@ export class GoFishNode {
     this.intrinsicDims = elaborateDims(intrinsicDims);
     this.transform = elaborateTransform(transform);
     this.renderData = renderData;
+    this._geometry = undefined;
 
     // Seed the per-axis ledger from this node's own layout: the `size` is
     // frame-invariant, and a self-placed node (`translate` defined) also records
@@ -1176,6 +1243,27 @@ export class GoFishNode {
       this._clearTranslateIfSolved(dir);
     }
     return this;
+  }
+
+  /**
+   * This node's shape in its LOCAL layout frame (see {@link GeometryFn}),
+   * computed on first call after layout and memoized until the next layout.
+   * Geometry exists only after layout; a sizing-time form is #967.
+   */
+  public geometry(): Geometry {
+    if (!this.intrinsicDims)
+      throw new Error(
+        `[gofish] geometry() called on ${this.type} before it was laid out`
+      );
+    return (this._geometry ??= (this._geometryFn ?? defaultGeometry)(
+      {
+        intrinsicDims: this.intrinsicDims,
+        transform: this.transform,
+        renderData: this.renderData,
+      },
+      this.children,
+      this
+    ));
   }
 
   public get dims(): Dimensions {
@@ -1286,7 +1374,10 @@ export class GoFishNode {
     // only thing place() can record is the local `min` — `center`/`max` aren't
     // stored, and `baseline` can't resolve its origin without a local `min`.
     if (!anchorDetermined(this.intrinsicDims?.[dir], anchor)) {
-      if (anchor === "min") this.intrinsicDims![dir].min = value;
+      if (anchor === "min") {
+        this.intrinsicDims![dir].min = value;
+        this._geometry = undefined;
+      }
       return;
     }
 
@@ -1366,6 +1457,7 @@ export class GoFishNode {
       min: 0,
       size,
     };
+    this._geometry = undefined;
     // Translate is derived from the solved ledger, not written here; clear any
     // stale prior value (see `_clearTranslateIfSolved`).
     this._clearTranslateIfSolved(dir);
@@ -1443,6 +1535,7 @@ export class GoFishNode {
     const dir = elaborateDirection(axis);
     if (!this.intrinsicDims) this.intrinsicDims = [];
     this.intrinsicDims[dir] = { ...(this.intrinsicDims[dir] ?? {}), size };
+    this._geometry = undefined;
   }
 
   /** {@link Placeable.spaceOn} */

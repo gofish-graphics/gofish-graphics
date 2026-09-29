@@ -129,7 +129,10 @@ the auto-naming + `selectAll` wiring at resolve time — the producer's
 auto-minted layer name never appears in the IR (mirroring how a relational
 mark's zBelow-by-default paint order stays a resolve-time constraint rather
 than a serialized field). Operators are a flat list (`derive`, `resolve`,
-`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`) — note `join`
+`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
+`pack`). `pack`'s `method` is a strategy object made by a function call
+(`circles()` in both languages), so on the wire it is plain data,
+`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
@@ -492,7 +495,8 @@ generated Python" norm Altair and Plotly.py both follow. It emits:
   killing four previously hand-copied wire-name tables.
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
-  `layer`, the polar coord family) — just the kwargs→dict half. The
+  `layer`, the polar coord family), plus the operator-only `pack` — just the
+  kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 
