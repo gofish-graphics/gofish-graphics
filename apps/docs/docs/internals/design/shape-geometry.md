@@ -407,20 +407,31 @@ questions every frame. Our layout runs once, so a memo on the node is enough.
   - Swarm and jitter are both strategies on `scatter`. They are strategy objects, so
     users can add their own, the way ggplot2 packages add `position_*` functions.
   - The name `dodge` is out, because ggplot2's `position_dodge` means grouped bars.
-  - Circle packing is `circlePack`, because many things can be packed, e.g. into a grid.
+  - Swarm has no anchor option of its own. Today `scatter` emits
+    `Constraint.align(alignment)` on every axis that no data field places
+    (`scatter.tsx`). An overlap strategy takes the place of that align on the free axis
+    and reads `alignment` as the line it grows from. `"middle"` gives a centered swarm,
+    and `"start"`, `"end"`, and `"baseline"` give a swarm on one side. With no strategy,
+    every dot sits on the alignment line, which is today's strip plot.
+  - The unit violin in `stories/atom/Violin.stories.tsx` becomes
+    `spread(pclass) → scatter({ y: "age", alignment: "middle", overlap: swarm() })`. We
+    accept that this is not literally the same chain as the binned version, because a
+    swarm has to see all of its siblings at once.
+  - The circle packing name is open. The two options that stay consistent with earlier
+    choices are `pack` with a strategy option, like `treemap`'s `tile`, and a
+    verb plus noun such as `packCircles`, which would also mean `binHex`.
 
   ```ts
-  // swarm: x from data, y left free, overlap resolved on y
+  // swarm: x from data, y left free, overlap resolved on y around the middle
   chart(films)
     .flow(
-      scatter({ x: "year", overlap: swarm({ anchor: "center", padding: 1 }) })
+      scatter({
+        x: "year",
+        alignment: "middle",
+        overlap: swarm({ padding: 1 }),
+      })
     )
     .mark(circle({ r: 3 }));
-
-  // nested circle packs, one operator per level, like nested spreads
-  chart(countries)
-    .flow(circlePack({ by: "continent" }), circlePack({ by: "country" }))
-    .mark(circle({ area: "population" }));
   ```
 
 A first slice, if we go ahead, would be:
