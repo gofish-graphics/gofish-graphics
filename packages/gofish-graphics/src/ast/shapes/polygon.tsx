@@ -9,6 +9,7 @@ import { getValue, isValue, MaybeValue, value } from "../data";
 import { posFn } from "../domain";
 import { interval } from "../../util/interval";
 import { path, transformPath } from "../../path";
+import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -40,8 +41,8 @@ const ringExtent = (
 };
 
 export type PolygonProps = {
-  fill?: string;
-  stroke?: string;
+  fill?: MaybeValue<string>;
+  stroke?: MaybeValue<string>;
   strokeWidth?: number;
   opacity?: number;
   /**
@@ -92,6 +93,9 @@ export const Polygon = ({
   return new GoFishNode(
     {
       type: "polygon",
+      // Used to seed the unit color scale. Prefer whichever channel is
+      // data-driven — the same rule `rect` follows.
+      color: isValue(fill) ? fill : stroke,
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
@@ -162,6 +166,10 @@ export const Polygon = ({
               { resample: true }
             )
           : path(displayPoints, { closed: true });
+        const unitScale = node.getRenderSession().scaleContext?.unit;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
+        const resolvedStroke =
+          resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
         return [
           {
             kind: "path",
@@ -169,8 +177,8 @@ export const Polygon = ({
             datum: node.datum,
             role: roleFor(node.datum),
             style: lowerStyle({
-              fill,
-              stroke: stroke ?? fill ?? "black",
+              fill: resolvedFill,
+              stroke: resolvedStroke,
               strokeWidth: strokeWidth ?? 0,
               opacity,
             }),
@@ -182,9 +190,17 @@ export const Polygon = ({
   );
 };
 
-const literalPolygon = createMark(Polygon, undefined, "polygon");
+/** `fill`/`stroke` are color channels, as on `rect`: a field name (or
+ *  `field(...)`) reads the row's value and goes through the chart's color
+ *  scale; any other string is a literal color. */
+const POLYGON_CHANNELS = { fill: "color", stroke: "color" } as const;
 
-export type PolygonMarkProps = Omit<PolygonProps, "points"> & {
+const basePolygon = createMark(Polygon, POLYGON_CHANNELS, "polygon");
+
+export type PolygonMarkProps = Omit<
+  Parameters<typeof basePolygon>[0],
+  "points"
+> & {
   /** A literal ring, or the name of a field holding one ring per row. */
   points: Ring | string;
 };
@@ -200,24 +216,32 @@ export type PolygonMarkProps = Omit<PolygonProps, "points"> & {
  */
 export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
   if (typeof opts.points !== "string") {
-    return literalPolygon(opts as PolygonProps);
+    return basePolygon(opts as any);
   }
   const field = opts.points;
   const mark = async (d: any) => {
     const rows: any[] = Array.isArray(d) ? d : [d];
-    const nodes = rows.map((row) => {
-      const ring = row?.[field];
-      if (!Array.isArray(ring)) {
-        throw new Error(
-          `polygon({ points: "${field}" }): row has no array in field ` +
-            `"${field}" — a field-bound \`points\` reads one ring per row.`
-        );
-      }
-      const node = Polygon({ ...opts, points: value(ring as Ring) });
-      node.datum = row;
-      node.name("");
-      return node;
-    });
+    const nodes = await Promise.all(
+      rows.map(async (row) => {
+        const ring = row?.[field];
+        if (!Array.isArray(ring)) {
+          throw new Error(
+            `polygon({ points: "${field}" }): row has no array in field ` +
+              `"${field}" — a field-bound \`points\` reads one ring per row.`
+          );
+        }
+        // Each row is one ordinary `polygon` mark over that row: the mark factory
+        // resolves `fill`/`stroke` against the row exactly as it does for a
+        // literal ring (and as `rect` does), and the `value(...)` ring passes
+        // through as the data-bound reading.
+        const node = (await basePolygon({
+          ...opts,
+          points: value(ring as Ring),
+        } as any)(row)) as GoFishNode;
+        node.name("");
+        return node;
+      })
+    );
     if (nodes.length === 1) return nodes[0];
     const group = (await Layer({}, nodes)) as GoFishNode;
     group.datum = d;

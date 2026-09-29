@@ -92,10 +92,23 @@ polygon(
 )
 ```
 
+## Data-driven fill
+
+`fill` and `stroke` work as they do on [`rect`](/python/api/marks/rect). A
+field name reads that field off each row and sends it through the chart's
+color scale. Any other string is a literal color. When `stroke` is omitted it
+follows the fill.
+
+```python
+chart(rows, color=gradient(["#fff5eb", "#7f2704"])).mark(
+    polygon(points="ring", fill="n")
+)
+```
+
+Here `points="ring"` names a field holding one ring per row, so the mark draws
+one polygon per row, each colored by its own `n`.
+
 ## Notes
 
 - The polygon is always closed — the last point connects back to the first
   automatically.
-- Points are literals, not channel-bound. If you need a polygon whose shape
-  depends on data, compose multiple polygons or use a derived mark
-  ([`@mark`](/python/api/core/mark)).
