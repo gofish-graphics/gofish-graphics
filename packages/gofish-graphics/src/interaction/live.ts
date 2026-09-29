@@ -22,7 +22,14 @@
  * resolve-time color scale). See the plan's "Design notes".
  */
 
-import { untrack } from "solid-js";
+import {
+  createComputed,
+  createSignal,
+  getOwner,
+  onCleanup,
+  untrack,
+  type Owner,
+} from "solid-js";
 import { runInLiveEval } from "./resolveContext";
 
 const LIVE_BRAND = Symbol.for("gofish.liveValue");
@@ -64,6 +71,56 @@ export const evalLiveStatic = (accessor: LiveValue, datum: unknown): unknown =>
  */
 export const readLive = <T>(read: () => T): T =>
   untrack(() => runInLiveEval(read));
+
+/** The shared decisions of the paint in progress, per paint (the reactive
+ *  owner the paint runs under) and per thunk. */
+const decisions = new WeakMap<Owner, WeakMap<() => unknown, () => unknown>>();
+
+/**
+ * `read` as ONE reactive decision for the paint in progress, made the first
+ * time any slot of this paint asks for `read` and handed to every slot after
+ * that. The decision re-reads `read`'s inputs on each change, and the slots
+ * that read it are notified only when its VALUE changes.
+ *
+ * This is what a rule many items share wants. A keyframe's visibility is read
+ * by every item under the keyframe; read directly, each item's slot would
+ * re-read the clock on every tick, so a tick would cost one effect per item of
+ * the whole chart. Read through its decision, a tick costs one evaluation per
+ * rule, and only the items whose rule changed its answer are touched.
+ *
+ * It is a computation that writes a signal rather than a `createMemo`: when an
+ * input changes, Solid marks everything downstream of a memo as pending before
+ * it knows whether the memo's value changed, which is still a visit to every
+ * item per tick. A signal notifies its readers only when it is written with a
+ * new value.
+ *
+ * The decision belongs to the paint that made it, so it is disposed with that
+ * paint and a later paint makes its own. A lowering with no reactive owner (a
+ * headless `toDisplayList`) paints nothing, so no slot reads the thunk
+ * reactively there, and `read` itself is its decision.
+ */
+export function sharedDecision<T>(read: () => T): () => T {
+  const owner = getOwner();
+  if (owner === null) return read;
+  let memos = decisions.get(owner);
+  if (memos === undefined) {
+    decisions.set(owner, (memos = new WeakMap()));
+    // The owner outlives this paint when it re-runs, and the decisions go
+    // with the paint.
+    onCleanup(() => decisions.delete(owner));
+  }
+  let decision = memos.get(read);
+  if (decision === undefined) {
+    const [value, setValue] = createSignal(readLive(read));
+    createComputed(() => {
+      const next = runInLiveEval(read);
+      setValue(() => next);
+    });
+    decision = value;
+    memos.set(read, decision);
+  }
+  return decision as () => T;
+}
 
 /**
  * The `live(...)` channels of an options bag, keyed by channel name — or

@@ -38,7 +38,7 @@ import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
-import { readLive } from "../interaction/live";
+import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
 import { GoFishRef } from "./_ref";
@@ -1576,7 +1576,9 @@ export class GoFishNode {
       for (const [owner, rule] of n.__gfVisible) {
         if (owners.has(owner)) continue;
         owners.add(owner);
-        rules.push(rule);
+        // One decision per rule, shared by every item the rule covers, so a
+        // tick patches the items whose rule changed its answer and no others.
+        rules.push(sharedDecision(rule));
       }
     }
     if (rules.length === 0) return undefined;

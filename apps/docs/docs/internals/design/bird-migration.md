@@ -389,10 +389,11 @@ overlaps `[T - 20, T]`, which is 21 days counting the current one. Both are
 fine for this picture.
 
 The filter was kept at first because of speed. Played, each of the 52,560
-circles (365 days x 72 species x 2 layers) reads the clock on every tick to
-decide whether it shows. In the Node DOM test harness that measured about 460 ms
-a tick. In a real browser it plays smoothly, so panels D and E now use
-`time.history`. The per-frame cost is tracked in #848.
+circles (365 days x 72 species x 2 layers) read the clock on every tick to
+decide whether it shows. Panels D and E now use `time.history`, and the
+decision is made once per keyframe rule per tick and shared by the circles
+under it, so a tick touches only the circles whose day entered or left the
+window (#848).
 
 ### Step 5: panel E, controls at the low-level tier
 
