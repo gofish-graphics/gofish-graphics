@@ -197,6 +197,28 @@ function boundary(g: Geometry, tolerance: number): Point[] {
 This is the tldraw pattern without a class hierarchy. A shape supplies a query when it has
 a better answer than the box, and every node answers every query.
 
+**Decided (2026-09-29): one file per query, joined with `extends`.** Each query lives in
+its own file under `ast/geometry/`, with its type, its box fallback, and its helper. One
+index file lists every query:
+
+```ts
+// ast/geometry/enclosingCircle.ts
+export interface HasEnclosingCircle {
+  enclosingCircle?: () => Circle;
+}
+export const enclosingCircle = (g: Geometry): Circle =>
+  g.enclosingCircle?.() ?? circleAroundBox(g.box);
+
+// ast/geometry/index.ts
+export interface Geometry extends HasBox, HasEnclosingCircle {}
+```
+
+We rejected declaration merging (`declare module` from the layout that uses a query). The
+merge is global, so it gives no real modularity. It also puts the query inside a layout,
+and then a shape that implements the query has to import that layout. A typed registry of
+query keys would let users add their own queries, and we can move to one if that need
+arrives.
+
 A query joins the interface only together with its first consumer. `enclosingCircle` enters
 with dodge and pack. `boundary` enters with the first bitmap labeler or hull enclosure. A
 ray hit (`rayHit(origin, dir)`) would enter when `connect` learns to end on a circle's
@@ -313,6 +335,18 @@ condition a foreign layout must meet to join the engine's sizing. Padding in pix
 the linear scaling. d3 handles this by packing twice, and we would need the same
 workaround or a different padding rule.
 
+**Decided (2026-09-29): the first version is a declared shortcut.** Geometry is available
+only after layout, which is exact for placement, because pack and swarm read their
+children's geometry inside their own `layout()`. It is not enough for sizing. Pack works
+bottom up, so to report its size in the space pass it needs its children's enclosing
+radii before layout. So the first `circlePack` keeps radii in pixels, does not fit itself
+to the available size, and has no padding. It carries a TODO and an issue. The right fix is
+a sizing-time form of the query, where a child reports its enclosing radius as a
+`Monotonic` in σ next to the width and height it already reports. When every radius comes
+from data, R(σ) = R(1) × σ, so the pack's size is linear. When pixel and data radii mix,
+the greedy front chain is not even guaranteed to be monotone, and that case needs a
+decision.
+
 **Tidy tree.** The input is a box per node, and the contour is a silhouette. So this layout
 needs the silhouette note's contour instance, not this note's shape queries.
 
@@ -369,17 +403,23 @@ questions every frame. Our layout runs once, so a memo on the node is enough.
   - seaborn's `swarmplot`.
   - d3's `pack().size().padding()`.
 
-  Two spellings to compare on real renders:
+  The current leaning (2026-09-29, not signed off) is below.
+  - Swarm and jitter are both strategies on `scatter`. They are strategy objects, so
+    users can add their own, the way ggplot2 packages add `position_*` functions.
+  - The name `dodge` is out, because ggplot2's `position_dodge` means grouped bars.
+  - Circle packing is `circlePack`, because many things can be packed, e.g. into a grid.
 
   ```ts
-  // dodge as its own operator, placed after the x scatter
+  // swarm: x from data, y left free, overlap resolved on y
   chart(films)
-    .flow(dodge("year", { dir: "x", anchor: "middle", padding: 1 }))
+    .flow(
+      scatter({ x: "year", overlap: swarm({ anchor: "center", padding: 1 }) })
+    )
     .mark(circle({ r: 3 }));
 
-  // nested packs, one operator per level, like nested spreads
+  // nested circle packs, one operator per level, like nested spreads
   chart(countries)
-    .flow(pack("continent"), pack("country"))
+    .flow(circlePack({ by: "continent" }), circlePack({ by: "country" }))
     .mark(circle({ area: "population" }));
   ```
 
