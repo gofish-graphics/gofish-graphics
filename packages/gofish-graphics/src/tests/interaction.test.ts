@@ -957,6 +957,16 @@ async function main() {
       playResolves === afterPause,
       `resolves=${playResolves} (after pause ${afterPause})`
     );
+    // The dependency is on the READABLE, not the whole timer: a spec that
+    // reads only the play state does not re-run when the value moves.
+    tPlay.set(10);
+    tPlay.set(20);
+    await settle();
+    ok(
+      "a value change does not re-run a spec that reads only isPlaying()",
+      playResolves === afterPause,
+      `resolves=${playResolves} (after pause ${afterPause})`
+    );
   }
 
   /* ----------------------- click arming ---------------------------- */
@@ -1637,6 +1647,21 @@ async function main() {
       readout()
     );
 
+    // The value is read at PAINT: a write moves the handle and the readout in
+    // the svg already on screen, without a re-render (which would replace it).
+    const painted = svg();
+    level.set(42);
+    await settle();
+    ok(
+      "a value change repaints the slider without re-rendering",
+      svg() === painted &&
+        Math.abs(Number(handle().getAttribute("cx")) - xFor(42)) < 1e-6 &&
+        readout() === "0|v=42",
+      `same svg=${svg() === painted} cx=${handle().getAttribute("cx")} ${readout()}`
+    );
+    level.set(50);
+    await settle();
+
     // A press on the BARE TRACK at a quarter of the travel lands the handle
     // there: 0 + 0.25 · 100 = 25.
     track().dispatchEvent(
@@ -1647,6 +1672,11 @@ async function main() {
       "a press on the track jumps to the pointed-at value",
       inputs.length === 1 && inputs[0] === 25 && level() === 25,
       `${inputs.join(",")} / ${level()}`
+    );
+    ok(
+      "a press shades the handle and scrubs without re-rendering",
+      svg() === painted && handle().getAttribute("fill") === "#111",
+      `same svg=${svg() === painted} fill=${handle().getAttribute("fill")}`
     );
     ok(
       "the handle is under the pointer that pressed the track",

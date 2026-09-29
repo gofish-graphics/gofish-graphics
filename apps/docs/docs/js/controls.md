@@ -78,12 +78,16 @@ that matters for where you call it.
   call makes one `drag()` or `click()` input and one write effect, and those have
   to survive every re-render (a drag in flight must not be rebuilt under the
   pointer).
-- The **thunk** is what re-runs: each resolve re-invokes the mark, which reads
-  `value()` again and places the handle again. A control's geometry depends on
-  its value, and geometry cannot be `live()` — `live()` patches attributes at
-  paint, it does not move a node — so the spec itself must be re-evaluable. That
-  is exactly what the thunk form of the terminal,
-  `gofish(container, options, () => node)`, is for.
+- The **thunk** is what re-runs when the spec changes: each resolve re-invokes
+  the mark and builds its nodes again. A button whose `label` is a function
+  needs this, because a new caption measures differently. That is exactly what
+  the thunk form of the terminal, `gofish(container, options, () => node)`, is
+  for.
+- The slider's **value is not part of the spec.** The handle's position, the
+  readout's text and the pressed shading are read at paint, like a
+  [`live()`](/js/reactivity) channel, so a value that changes every frame (a
+  playing `timer()`) moves the handle without laying the chart out again. This
+  works because the slider's box does not depend on its value (see below).
 
 ## Panel E: a play button and a scrub slider over a clock
 
@@ -97,19 +101,20 @@ const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
 const map = basemap({ padding: 0 }).layer(
   chart(birds)
     .flow(
-      // Day-of-year is cyclic, so the 20-day trail is a window on the wrapped
-      // distance back from the playhead.
-      filter((d) =>
-        between((day() - d.day + 365) % 365, 0, 20, { closed: "left" })
-      ),
+      // One keyframe per day. Day-of-year is cyclic, so early in January the
+      // trail reaches back into December instead of stopping.
+      time.sequence({ by: "day", on: day, cyclic: true }),
       scatter({ x: "lon", y: "lat" })
     )
     .mark(
-      circle({
-        r: 3,
-        fill: "species",
-        opacity: (d) => (d.day === day() ? 1 : 0.1),
-      })
+      // A faint circle kept on screen for 20 days after its own (the trail),
+      // and a solid circle shown during its day.
+      layer([
+        time.history({ last: 20 }, [
+          circle({ r: 3, fill: "species", opacity: 0.1 }),
+        ]),
+        circle({ r: 3, fill: "species" }),
+      ])
     )
 );
 
@@ -122,7 +127,7 @@ const timeSlider = slider({
   domain: day.domain,
   step: day.step,
   w: 300,
-  // Day-of-year is a cycle, like the trail filter above: a scrub off either end
+  // Day-of-year is a cycle, like the time axis above: a scrub off either end
   // of the track continues around the year instead of stopping.
   wrap: true,
   format: (d) => `day ${d}`,

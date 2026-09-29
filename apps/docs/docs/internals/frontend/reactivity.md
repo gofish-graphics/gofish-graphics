@@ -64,31 +64,41 @@ themselves on read.
 `AmbientRegistrar`). The **render terminal** (`renderTerminal.ts`,
 `renderWithInteraction`) wraps resolution in `withInteractiveResolve(runtime,
 fn)`, which sets the variable for the duration of the resolve and restores it
-after. Every library input's accessor, when read, does:
+after. Every library input's accessor, when read, runs the `track` half of one
+of the input's **dependencies** (`dependency(input)` in `inputs.ts`):
 
 ```ts
 const reg = ambientRegistrar();
 if (!reg) return; // read outside a resolve — just a plain read
-reg.registerInput(this); // wire this input into event dispatch (idempotent)
-if (!inLiveEval()) this.usedInSpec = true; // a spec read → pipeline dependency
+reg.registerInput(input); // wire this input into event dispatch (idempotent)
+if (!inLiveEval()) readers.add(reg); // a spec read → pipeline dependency
 ```
 
-Two flags carry the whole mechanism:
+Two pieces of state carry the whole mechanism:
 
-- **`usedInSpec`** — set when the input is read _outside_ a `live()` channel.
-  The runtime resets it on every input at the start of each resolve
-  (`beginResolve`), so it always reflects reads in the _current_ resolve: an
-  input read in resolve _N_ but not _N+1_ stops invalidating.
+- **The reader sets** (`InputPrimitive.specReaders`) — one set per _readable_
+  of the input, each holding the runtimes of the charts that read that readable
+  _outside_ a `live()` channel. A runtime removes itself from every set at the
+  start of each resolve (`beginResolve`), so the sets always reflect reads in
+  the _current_ resolve: an input read in resolve _N_ but not _N+1_ stops
+  invalidating, and a shared input keeps its edges to other charts.
 - **`inLiveEval`** — a depth counter set while a `live()` channel is being
-  evaluated _at resolve time_. Reads under it wire event dispatch but do **not**
-  mark `usedInSpec`, because a live channel re-runs at paint, not at resolve.
+  evaluated _at resolve time_. Reads under it wire event dispatch but join no
+  reader set, because a live channel re-runs at paint, not at resolve.
 
-When a signal is written (pointer move, wheel tick, `signal.set`), the input asks
-the runtime to `invalidate()` **only if `usedInSpec` is true**. A purely-`live()`
-input never invalidates; its changes are picked up by Solid at paint. If nothing
-registers during a resolve, the runtime reports `hasWork() === false` and the
-chart renders down the static path untouched — no `data-gf-id`, output identical
-to a non-interactive build.
+When a signal is written (pointer move, wheel tick, `signal.set`), the input
+calls the `invalidate` half of that readable's dependency, which invalidates
+**only the runtimes in its reader set**. A purely-`live()` input never
+invalidates; its changes are picked up by Solid at paint.
+
+The edge is per readable, not per input, because one input's readables can
+change at very different rates. Most inputs have one: a pointer event writes
+position, datum and button state together, so they share a set. A `timer()`
+has two, its value and its play state, so a spec that reads only
+`isPlaying()` (a play/pause caption) re-runs on play and pause and not on every
+tick of the value. If nothing registers during a resolve, the runtime reports
+`hasWork() === false` and the chart renders down the static path untouched — no
+`data-gf-id`, output identical to a non-interactive build.
 
 > **Concurrency caveat.** The ambient context is a module variable, so two
 > charts resolving _concurrently_ (interleaving at `await` points — e.g. a Python
@@ -280,8 +290,9 @@ Three consequences fall out of that, all of them in `inputs.ts`:
   tracked at its read location like every other accessor, so `play()`, `pause()`
   and the self-pause that ends a non-looping sweep all write it through one
   helper that invalidates the specs reading it — and only on an actual
-  transition. A spec whose caption says "pause" therefore refreshes on a
-  `play()` from anywhere, not only on the click that happened to invalidate it
+  transition. It is its own dependency, separate from the value's, so a tick
+  does not re-run a spec that reads only the play state. A spec whose caption
+  says "pause" therefore refreshes on a `play()` from anywhere, not only on the click that happened to invalidate it
   for another reason.
 
 ### A timer ticks only while something reads it
@@ -291,10 +302,11 @@ suspends an unobserved computed (`onBecomeUnobserved`), TC39 Signals report
 `watched`/`unwatched`, and RxJS's `refCount` unsubscribes from its source. The
 readers are the two tiers a read can land in:
 
-- **spec readers**: the runtimes in the input's `specRuntimes`, each a chart
-  that read the clock outside `live()`. A runtime leaves the set when its chart
-  unmounts (`InteractionRuntime.dispose`), and for the length of a re-resolve
-  (`beginResolve`) until its read recurs;
+- **spec readers**: the runtimes in either of the clock's two reader sets
+  (`specReaders`, one for the value and one for the play state), each a chart
+  that read that readable outside `live()`. A runtime leaves every set when its
+  chart unmounts (`InteractionRuntime.dispose`), and for the length of a
+  re-resolve (`beginResolve`) until its read recurs;
 - **paint readers**: the reactive computations that read the clock, such as a
   `live()` channel's attribute effect or a `sharedDecision`. A read under a
   Solid listener counts once (`getListener()`), and the listener's cleanup
@@ -304,7 +316,8 @@ readers are the two tiers a read can land in:
   paint effect still counts.
 
 Three functions in `timer()` own this, and nothing outside it knows:
-`isWatched()` says whether any reader of either kind remains; `watch()`, called
+`isWatched()` says whether any reader of either kind remains (a paint reader,
+or a non-empty reader set for either readable); `watch()`, called
 on every read of `t()` or `isPlaying()`, counts the current reader and starts
 the interval if the clock is playing; and the tick (`sample`) stops the
 interval when it finds no reader left. The stop is lazy, one tick after the last
@@ -351,14 +364,34 @@ milliseconds, and fits it to the milliseconds between two keyframes
 ## Controls are marks, not nodes
 
 `widgets.ts` builds `slider` and `button` out of the same three pieces every
-other spec uses: shapes, operators, and an input read during resolve. Three
-constraints decide their shape, and all three are consequences of the
-architecture above rather than widget-specific choices.
+other spec uses: shapes, operators, and inputs. Three constraints decide their
+shape, and all three are consequences of the architecture above rather than
+widget-specific choices.
+
+**What a control shows is painted; what sizes it is resolved.** A control's box
+never depends on the state it displays: the slider's handle travels inside the
+track and its readout is right-aligned in a reserved slot (both below). So the
+slider reads `value()` and the drag state only at **paint**. The readout's text
+and the handle's pressed shading are `live()` channels, and the handle's
+position is a paint rule on the handle node (`INTERNAL_animate`, the hook the
+build-in uses): lowered items are in pixels, so the rule moves the `cx` it was
+lowered at by the change in the value's fraction times the travel mapped
+through `toPixel`. The one resolve-time read is `readLive(value)`, the value
+the handle is laid out at, which registers the input without making it a
+pipeline dependency. The result is that a clock driving a slider patches three
+attributes per tick and never re-lays-out the chart around it. The button's
+caption is the opposite case: a different caption measures differently, so it
+is read at resolve and re-measures, while its pressed shading is `live()`. The
+known limit is the one every live geometry slot has: the frame the runtime
+publishes records the handle where it was laid out, so its recorded box is
+stale while the value moves. Nothing reads that box (the drag maps against the
+track's box, and hit-testing goes through the DOM element, which moves).
 
 **A control is a mark.** The layout pipeline is tree-consuming: lay a node out
 twice and the second pass finds every operand already placed, so it keeps the
-first placement. A control's geometry depends on `value()`, so it must be rebuilt
-per resolve — and a mark _is_ a deferred node constructor, re-invoked by whatever
+first placement. Whenever the spec around a control resolves again (a caption
+changes, or the chart reads some other input), the control must build fresh
+nodes — and a mark _is_ a deferred node constructor, re-invoked by whatever
 operator holds it. So `slider(...)` returns a mark. Its `drag()`/`click()` input
 and its write effect, by contrast, are created **once**, when the widget is made:
 recreating them per resolve would grow the runtime's input list without bound and
@@ -374,8 +407,8 @@ nodes it drew: it records the uids of its own two nodes on each build and matche
 `hit.id` against them. The widget still computes no layout of its own — it asks by
 identity, and the surrounding operators stay in charge of placement. Both controls
 are the same three-part scaffold (`control` in `widgets.ts`): an input that only
-accepts its own hits, ONE write effect created once, and a mark that rebuilds the
-picture per resolve, so each widget contributes only geometry and a write.
+accepts its own hits, ONE write effect created once, and a mark that builds the
+picture on each resolve, so each widget contributes only geometry and a write.
 
 **The pixel→domain map is absolute, through the frame.** The slider maps
 `current.x` onto the fraction of the handle's travel it fell at, so a press on the
