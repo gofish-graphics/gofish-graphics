@@ -207,5 +207,7 @@ packages/gofish-graphics/stories/animation/BuildInPrototype.stories.tsx
 # The data-space curve ladder: the same data drawn with each curve name, as a
 # test-like side-by-side comparison. It is not one spec: it lays ten charts out
 # in an HTML grid from a JS loop. Every curve name it shows is an ordinary
-# `line({ curve })` value that crosses the bridge as a string.
+# `line({ curve })` value that crosses the bridge as a string. The animated
+# exports are also driven by `time.sequence` on a `timer()` clock, a live JS
+# signal the derive RPC cannot carry (same reason as the Gapminder panels).
 packages/gofish-graphics/stories/forwardsyntax/CurveLadder.stories.tsx
