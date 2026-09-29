@@ -42,7 +42,7 @@
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
-import type { SkippedExample } from "./bench";
+import type { SkippedExample, SkippedPoint } from "./bench";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const BENCH_DIR = join(TESTS_DIR, "tmp/bench");
@@ -78,6 +78,7 @@ type Results = {
   examplesJsSkipped?: SkippedExample[]; // absent in older history files
   examplesPy: { path: string; totalMs: Stat; loadMs: Stat; overheadMs: Stat }[];
   synthetic: SyntheticPoint[];
+  syntheticSkipped?: SkippedPoint[]; // absent in older history files
 };
 
 // --- history.json contract (fixed — the trend-plot story reads exactly this) ---
@@ -536,6 +537,16 @@ function main() {
     lines.push("");
     for (const s of skipped)
       lines.push(`- \`${s.title}/${s.name}\` (${s.reason})`);
+    lines.push("");
+  }
+  const synSkipped = results.syntheticSkipped ?? [];
+  if (synSkipped.length > 0) {
+    lines.push(
+      `**${synSkipped.length} synthetic point(s) not measured** (each ended its family):`
+    );
+    lines.push("");
+    for (const s of synSkipped)
+      lines.push(`- \`${s.family}\` n=${s.n} (${s.reason})`);
     lines.push("");
   }
   lines.push(
