@@ -4166,17 +4166,23 @@ function checkSignedArea(
   const y0 = Y.b;
   const vmax = Math.max(...rows.map((r) => Math.abs(num(r[c.y]))));
   const reach = Math.max(3, 0.02 * Math.abs(Y.a) * vmax);
-  // Probe columns: each row's x, stepped just inside the first and last
-  // points (where the area's edge is), with the value's y; and the middle
-  // between neighboring rows on the same side of zero, with the drawn
-  // line's y there (so a smoothed line is followed).
+  // Probe columns: each row's x, with the value's y, the first and last
+  // stepped just inside their points (where the area's edge is), with the
+  // drawn line's y there (on a steep end segment the line moves by more
+  // than the step); and the middle between neighboring rows on the same
+  // side of zero, with the drawn line's y there (so a smoothed line is
+  // followed).
   const px = rows.map((r) => X.a * num(r[c.x]) + X.b);
   const py = rows.map((r) => Y.a * num(r[c.y]) + Y.b);
-  const probes: { x: number; y: number; name: string }[] = rows.map((r, i) => ({
-    x: px[i] + (i === 0 ? 0.75 : i === rows.length - 1 ? -0.75 : 0),
-    y: py[i],
-    name: `${c.x} ${r[c.x]}`,
-  }));
+  const probes: { x: number; y: number; name: string }[] = rows.map((r, i) => {
+    const step = i === 0 ? 0.75 : i === rows.length - 1 ? -0.75 : 0;
+    const x = px[i] + step;
+    return {
+      x,
+      y: step === 0 ? py[i] : (yOnPolyline(line.points!, x) ?? py[i]),
+      name: `${c.x} ${r[c.x]}`,
+    };
+  });
   for (let i = 0; i + 1 < rows.length; i++) {
     if (Math.sign(py[i] - y0) !== Math.sign(py[i + 1] - y0)) continue;
     const xm = (px[i] + px[i + 1]) / 2;
@@ -5764,7 +5770,11 @@ function checkAlluvial(
     cats[s].map((v) => sumWhere((r) => String(r[f]) === v))
   );
   const grand = totals[0].reduce((a, b) => a + b, 0);
-  const rects = barCandidates(rec);
+  // Node rects: filled or only outlined (a node drawn as an outline, with
+  // the ribbons' colors showing through it, is a node too).
+  const rects = rec.marks.filter(
+    (m) => m.kind === "rect" && !isBackground(m, rec)
+  );
   // Columns: rects sharing one x extent (within 1.5px), left to right.
   const columns: Mark[][] = [];
   for (const m of rects) {
@@ -5775,8 +5785,18 @@ function checkAlluvial(
     if (col) col.push(m);
     else columns.push([m]);
   }
+  // In each column, rects drawn inside another (the ribbons' slices through
+  // an outlined node, or a second copy of a node) belong to the outer one:
+  // keep only the outermost, largest first.
+  const inside = (m: Mark, o: Mark) =>
+    m.y >= o.y - 0.5 && m.y + m.h <= o.y + o.h + 0.5;
+  for (const col of columns) {
+    const kept: Mark[] = [];
+    for (const m of [...col].sort((a, b) => b.h - a.h))
+      if (!kept.some((o) => inside(m, o))) kept.push(m);
+    col.splice(0, col.length, ...kept.sort((a, b) => a.y - b.y));
+  }
   columns.sort((a, b) => a[0].x - b[0].x);
-  for (const col of columns) col.sort((a, b) => a.y - b.y);
   // One column per step, in order; k from the first column's total height.
   const picked: Mark[][] = [];
   let k = NaN;
