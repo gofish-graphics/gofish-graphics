@@ -15,10 +15,12 @@
  * SEQUENCE ONLY drops the transition: a sequence gives each keyframe a band of
  * time, so the chart holds a frame and then jumps, which is already an
  * animation. CURVES and CURVES PAUSED put that reading beside the three a
- * transition offers, four charts on one clock. CURVES THREE KINEMATICS cuts
- * that down to three readings and puts one country's position, velocity and
- * acceleration under each of them, on the same clock, which is where the
- * jerkiness of a straight reading becomes something you can point at.
+ * transition offers, four charts on one clock. CURVES KINEMATICS shows the
+ * whole curve ladder (step, linear, monotone, smooth, smoother) and puts one
+ * country's position, velocity and acceleration under each reading, on the
+ * same clock, which is where the jerkiness of a straight reading, and the
+ * difference between a curve that is C1 and one that is C2, become something
+ * you can point at.
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
@@ -42,7 +44,7 @@ import {
   time,
   timer,
 } from "../../src/lib";
-import { monotoneCubics, monotoneJet } from "../../src/spline";
+import { SMOOTH_CURVES, channelSpline } from "../../src/spline";
 import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
 
@@ -224,7 +226,7 @@ const PANEL_GAP = 16;
 
 /** How a panel reads the run. `null` is the sequence with nothing layered over
  *  it, which is what the step curve coincides with. */
-type Reading = "step" | "linear" | "monotone" | null;
+type Reading = "step" | "linear" | "monotone" | "smooth" | "smoother" | null;
 
 /** The four readings, left to right. */
 const CURVES: { caption: string; curve: Reading }[] = [
@@ -262,14 +264,17 @@ const curvePanel = (rows: any[], clock: any, curve: Reading) => {
 
 /** A row of panels, one per reading, each under its caption, on a clock the
  *  caller hands in — so the playing and the paused stories are one picture
- *  read at two playheads. `panel` draws a reading's panel. */
+ *  read at two playheads. `panel` draws a reading's panel. `panelW` is a
+ *  panel's width, and `leadW` the width of an empty cell before the first
+ *  panel, which leaves a column for the labels of what goes `below`. */
 const curvesRow = <C,>(
   container: HTMLElement,
   args: Args,
   clock: any,
   readings: { caption: string; curve: C }[],
   panel: (curve: C) => any,
-  below: any[] = []
+  below: any[] = [],
+  { panelW = PANEL_W, leadW }: { panelW?: number; leadW?: number } = {}
 ) =>
   gofish(
     container,
@@ -281,15 +286,17 @@ const curvesRow = <C,>(
           fontSize: 40,
           fill: "#ccc",
         }),
-        spreadX(
-          { spacing: 16, alignment: "end" },
-          readings.map(({ caption, curve }) =>
+        spreadX({ spacing: PANEL_GAP, alignment: "end" }, [
+          ...(leadW === undefined
+            ? []
+            : [rect({ w: leadW, h: 1, fill: "none" })]),
+          ...readings.map(({ caption, curve }) =>
             spreadY({ spacing: 8, alignment: "middle" }, [
               text({ text: caption, fontSize: 12, fill: "#555" }),
-              frame({ w: PANEL_W, h: 280 }, [panel(curve)]),
+              frame({ w: panelW, h: 280 }, [panel(curve)]),
             ])
-          )
-        ),
+          ),
+        ]),
         ...below,
       ])
   );
@@ -344,11 +351,31 @@ export const CurvesThree: StoryObj<Args> = {
   },
 };
 
+/** The five readings of the curve ladder, left to right, each captioned with
+ *  what it guarantees. The kinematics stories read these. */
+const LADDER: { caption: string; curve: Reading }[] = [
+  { caption: "step: hold, then jump", curve: "step" },
+  { caption: "linear: C0, velocity jumps", curve: "linear" },
+  { caption: "monotone: C1, no overshoot", curve: "monotone" },
+  { caption: "smooth: C1, rounds peaks", curve: "smooth" },
+  { caption: "smoother: C2, curvature never jumps", curve: "smoother" },
+];
+/** The kinematics stories' panels are narrower than the other rows', so five
+ *  of them fit across. */
+const LADDER_PANEL_W = 170;
+
 /** The country the sparklines read, and the channel they read. Jamaica's life
  *  expectancy changes direction several times over the run, by amounts of the
- *  same order, so every keyframe leaves a mark of comparable size — a country
- *  with one huge event in it (China in 1960) would put one spike on the chart
- *  and leave the rest of the run looking flat. */
+ *  same order, so every keyframe leaves a mark of comparable size, and the
+ *  turns are where the curves differ: `smooth` rounds the 1980 and 1990 peaks a
+ *  little past the data, and `smoother` swings furthest past its points just
+ *  after the sharp 1985 to 1990 rise, while the knots of the other candidates
+ *  tell the curves apart less. Rwanda's 1990s crash is
+ *  one smooth fall and recovery that every curve follows closely (the two
+ *  smooth curves pass its points by 0.4% and 0.3% of its range, against
+ *  Jamaica's 0.5% and 1.3%). China has one huge event in it (1960), which
+ *  puts one spike on each chart and leaves the rest of the run looking
+ *  flat. */
 const SPARK_COUNTRY = "Jamaica";
 const SPARK_FIELD = "life_expect";
 /** How many samples of each KEYFRAME INTERVAL a sparkline is drawn from. The
@@ -356,7 +383,7 @@ const SPARK_FIELD = "life_expect";
  *  is ever averaged across a keyframe: every quantity here is defined one
  *  interval at a time, and the ones that jump at a keyframe jump because two
  *  samples sit on either side of it rather than because a difference reached
- *  across it. A straight segment needs two samples and a cubic needs a few
+ *  across it. A straight segment needs two samples and a curve needs a few
  *  dozen, so the intervals that are straight ask for fewer. */
 const SPARK_PER_INTERVAL = 20;
 /** The nudge, in years, that lets a riser be vertical. A vertical step wants
@@ -366,20 +393,22 @@ const SPARK_PER_INTERVAL = 20;
  *  So the second sample is moved a thousandth of a year along instead, which
  *  is a hundredth of a pixel wide on screen and still strictly increasing. */
 const SPARK_EPS = 1e-3;
-/** One sparkline's box. Two of them plus a gap is one pair of panels — but
- *  the gap is the one the PANELS end up with, not the one they ask for: a
- *  panel's y-axis chrome is drawn outside its box, which pushes the panels
- *  apart by roughly 29px more than the `spacing` says. The sparklines have no
- *  chrome, so they have to be told that number to line up under the panels,
- *  and `SPARK_LABEL_W` is what slides the whole block right by the same
- *  reasoning (the block is centered, so a cell of width L moves it L/2). Both
- *  were read off a render, and both are cosmetic: a wrong number leaves the
- *  sparklines a few pixels off their panel, nothing more. */
+/** One sparkline's height, and the layout numbers that line the sparklines
+ *  up under the panels. A panel's y-axis chrome is drawn outside its box,
+ *  which pushes the panels apart by roughly 29px more than the `spacing`
+ *  says. The sparklines have no chrome, so they are told that number
+ *  (`SPARK_GAP`), and the label column under the row's empty lead cell is
+ *  wider by the same amount, for the first panel's chrome. Both were read off
+ *  a render, and both are cosmetic: a wrong number leaves the sparklines a few
+ *  pixels off their panel, nothing more. */
 const SPARK_H_PX = 70;
 const PANEL_CHROME = 29;
 const SPARK_GAP = PANEL_GAP + PANEL_CHROME;
-const SPARK_W = PANEL_W * 2 + SPARK_GAP;
-const SPARK_LABEL_W = 295;
+/** The width of `n` sparklines side by side, one under each of `n` panels. */
+const sparkW = (n: number) => n * LADDER_PANEL_W + (n - 1) * SPARK_GAP;
+/** The width of the empty cell that leads the row of panels, and of the
+ *  label column under it. */
+const LEAD_W = 70;
 
 /** What is plotted: where the value is, how fast it is moving, and how fast
  *  that is changing. */
@@ -398,24 +427,26 @@ type Sample = { t: number; method: string; value: number };
  * differenced across a keyframe, because the whole point of the picture is
  * what happens at the keyframes.
  *
- * Under the LINEAR reading the position is a chain of straight segments, so
- * it is exactly its eleven keyframes. Its velocity is constant inside each
- * interval, (p₂ − p₁)/(t₂ − t₁), and changes instantly at every keyframe: a
- * staircase of plateaus joined by vertical risers. Its acceleration is zero
- * everywhere except at the keyframes, where it is an impulse — infinitely
- * tall and infinitely brief, with a finite weight equal to the jump in
- * velocity. An impulse cannot be plotted, so what is drawn is the comb of
- * weights: a zero line with a vertical spike at each keyframe whose height is
- * that jump, sign and all. It is a picture OF the impulses, not of a function.
+ * Some of these quantities are not functions. Under the STEP reading the
+ * position holds, then jumps at each keyframe by some amount J. Its velocity
+ * is zero except at the keyframes, where it is an impulse of weight J:
+ * infinitely tall and infinitely brief. An impulse cannot be plotted, so what
+ * is drawn is the comb of weights, a zero line with a vertical spike of
+ * height J at each keyframe. It is a picture OF the impulses, not of a
+ * function. The acceleration is the derivative of an impulse, a doublet,
+ * drawn the usual way as a spike of J up and then one of J down, side by
+ * side. Under the LINEAR reading the position is a chain of straight
+ * segments, its velocity a staircase of plateaus joined by risers, and its
+ * acceleration a comb of impulses whose weights are the jumps in velocity.
  *
- * Under the SMOOTH reading all three are functions. The position is the
- * spline, the velocity is continuous, and the acceleration is finite but
- * DISCONTINUOUS at the knots — a monotone cubic is only C¹ — so each interval is
- * sampled just inside its own ends and the intervals are joined by risers,
- * which is what makes the jumps read as jumps rather than as a steep ramp.
- * All three come from `monotoneJet`, the library's own spline read with its
- * derivatives, so the velocity and acceleration are exact derivatives of the
- * very curve the transition above is following.
+ * Under the three smooth readings all three quantities are functions, and
+ * they come from `channelSpline(...).jet`: exact derivatives of the very
+ * curve the transition above is following. The velocity is continuous for
+ * all three. The acceleration of `monotone` and `smooth` is finite but jumps
+ * at the knots (they are only C1), so each interval is sampled just inside
+ * its own ends and the intervals are joined by risers, which is what makes
+ * the jumps read as jumps rather than as a steep ramp. For `smoother` the two
+ * one-sided values agree (it is C2), so its risers have no height.
  */
 const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
   const run = rows
@@ -433,6 +464,36 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
   };
   const at = (q: Quantity, method: string, t: number, value: number) =>
     out[q].push({ t, method, value });
+
+  // ── The step reading ─────────────────────────────────────────────────
+  // The jump at keyframe k, and where its spike is drawn: on the keyframe,
+  // except the last one, whose spike is drawn just before it so that it
+  // stays inside the run.
+  const jump = (k: number) => values[k] - values[k - 1];
+  const spikeAt = (k: number) => knots[k] - (k === last ? 2 * SPARK_EPS : 0);
+
+  at("position", "step", knots[0], values[0]);
+  for (let k = 1; k <= last; k++) {
+    at("position", "step", knots[k] - SPARK_EPS, values[k - 1]);
+    at("position", "step", knots[k], values[k]);
+  }
+
+  at("velocity", "step", knots[0], 0);
+  for (let k = 1; k <= last; k++) {
+    at("velocity", "step", spikeAt(k) - SPARK_EPS, 0);
+    at("velocity", "step", spikeAt(k), jump(k));
+    at("velocity", "step", spikeAt(k) + SPARK_EPS, 0);
+  }
+
+  at("acceleration", "step", knots[0], 0);
+  for (let k = 1; k <= last; k++) {
+    const c = spikeAt(k);
+    at("acceleration", "step", c - SPARK_EPS, 0);
+    at("acceleration", "step", c - SPARK_EPS / 2, jump(k));
+    at("acceleration", "step", c, 0);
+    at("acceleration", "step", c + SPARK_EPS / 2, -jump(k));
+    at("acceleration", "step", c + SPARK_EPS, 0);
+  }
 
   // ── The linear reading ────────────────────────────────────────────────
   // The velocity of interval i, in years of life expectancy per year.
@@ -458,31 +519,28 @@ const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
   }
   at("acceleration", "linear", knots[last], 0);
 
-  // ── The smooth reading ────────────────────────────────────────────────
-  const cubics = monotoneCubics(knots, values);
-  for (let i = 0; i < last; i++) {
-    const span = knots[i + 1] - knots[i];
-    for (let s = 0; s <= SPARK_PER_INTERVAL; s++) {
-      const u = s / SPARK_PER_INTERVAL;
-      const t = knots[i] + span * u;
-      // Position and velocity are continuous across a knot, so the shared
-      // endpoint is emitted once, by the interval on its left.
-      if (i === 0 || s > 0) {
-        const [position, velocity] = monotoneJet(knots, cubics, i, u);
-        at("position", "monotone", t, position);
-        at("velocity", "monotone", t, velocity);
+  // ── The smooth readings ───────────────────────────────────────────────
+  for (const curve of SMOOTH_CURVES) {
+    const spline = channelSpline(curve, knots, values);
+    for (let i = 0; i < last; i++) {
+      const span = knots[i + 1] - knots[i];
+      for (let s = 0; s <= SPARK_PER_INTERVAL; s++) {
+        const u = s / SPARK_PER_INTERVAL;
+        const t = knots[i] + span * u;
+        // Position and velocity are continuous across a knot, so the shared
+        // endpoint is emitted once, by the interval on its left.
+        if (i === 0 || s > 0) {
+          const [position, velocity] = spline.jet(i, u);
+          at("position", curve, t, position);
+          at("velocity", curve, t, velocity);
+        }
+        // Acceleration can have two values at a knot. Sample just inside
+        // both ends of the interval instead, which takes the one-sided limits
+        // and leaves the pair of them to be joined by a riser.
+        const tA =
+          t + (s === 0 ? SPARK_EPS : s === SPARK_PER_INTERVAL ? -SPARK_EPS : 0);
+        at("acceleration", curve, tA, spline.jet(i, (tA - knots[i]) / span)[2]);
       }
-      // Acceleration has two values at a knot. Sample just inside both ends
-      // of the interval instead, which takes the one-sided limits and leaves
-      // the pair of them to be joined by a riser.
-      const tA =
-        t + (s === 0 ? SPARK_EPS : s === SPARK_PER_INTERVAL ? -SPARK_EPS : 0);
-      at(
-        "acceleration",
-        "monotone",
-        tA,
-        monotoneJet(knots, cubics, i, (tA - knots[i]) / span)[2]
-      );
     }
   }
   return out;
@@ -506,17 +564,18 @@ const sparkSamples = (samples: Sample[]) =>
     .mark(circle({ r: 2.5, opacity: 0 }));
 
 /**
- * One quantity's pair of sparklines, and the dot that walks them.
+ * Sparklines for some of the readings, one per reading, and the dot that
+ * walks them. `w` is the width they share.
  *
- * Both readings are ONE chart, `spread` by method across x, which is what
- * makes the two curves comparable: a chart resolves its scales over all of its
- * rows, so the linear sparkline and the smooth one are drawn against the same
- * y domain, for every quantity, without a domain ever being written down.
+ * The readings are ONE chart, `spread` by method across x, which is what
+ * makes the curves comparable: a chart resolves its scales over all of its
+ * rows, so every sparkline in it is drawn against the same y domain, without
+ * a domain ever being written down.
  *
  * The moving dot is a `time.transition` read on the samples themselves. The
  * samples are a run of keyframes like any other — `along: "t"` names their
- * time field and `at` hands the transition the clock the three panels share —
- * so the transition paints one dot per run and slides it along the sampled
+ * time field and `at` hands the transition the clock the panels share — so
+ * the transition paints one dot per run and slides it along the sampled
  * curve. The samples' own marks are there to be moved between rather than
  * seen, so they are drawn at `opacity: 0` and the transition supplies the
  * paint. This is the spelled-out form of the sugar the panels use, the one
@@ -530,28 +589,25 @@ const sparkSamples = (samples: Sample[]) =>
  * through the same flow with the same mark, so they infer the same scales and
  * land on the same pixels.
  */
-const sparkRow = (samples: Sample[], clock: any) =>
+const sparkRow = (samples: Sample[], clock: any, w: number) =>
   // A sparkline is a chart with no axes, and the coordinate frame is what says
   // so here: the whole picture is rendered with `axes: true`, an embedded
   // chart's own `axes: false` option is only read when that chart renders
   // itself, and an `axes: false` on the operators only silences the operator
   // that carries it, not the frame above it that ends up drawing the axis. A
   // coordinate frame owns its space, so no Cartesian axis is drawn inside one.
-  frame({ w: SPARK_W, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
-    frame({ w: SPARK_W, h: SPARK_H_PX }, [
+  frame({ w, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
+    frame({ w, h: SPARK_H_PX }, [
       sparkSamples(samples)
         // `curve: "linear"` is not a default worth leaning on here, it is
         // the whole point: an omitted curve is `auto`, and `auto` over a
         // continuous axis smooths with a monotone cubic — which would round the
         // corners off the staircase and turn the impulses into bumps, drawing
-        // the smooth reading of a picture whose subject is that the two
-        // readings differ. (Here "linear" is the screen-space path shape; it
-        // is the same name and the same idea as `curve: "linear"` on a
-        // transition, which names an interpolation in time rather than a path
-        // in space.)
+        // the smooth reading of a picture whose subject is that the readings
+        // differ. The samples are already dense wherever a curve bends.
         .layer(line({ stroke: "#999", strokeWidth: 1, curve: "linear" })),
     ]),
-    frame({ w: SPARK_W, h: SPARK_H_PX }, [
+    frame({ w, h: SPARK_H_PX }, [
       sparkSamples(samples).layer(
         time.transition({
           along: "t",
@@ -566,12 +622,8 @@ const sparkRow = (samples: Sample[], clock: any) =>
 
 /**
  * The block of sparklines that sits under the row of panels: one row per
- * quantity, each row a label in the leftmost column and the two sparklines
- * under the linear and smooth panels, with one caption under the lot.
- *
- * The leftmost column is the "no interpolation" panel's, and there is nothing
- * kinematic to say about it — it does not move between keyframes, it jumps —
- * so the quantity labels live there instead of a fourth empty column.
+ * quantity, each row a label in the leftmost column and a sparkline under
+ * each panel.
  */
 const kinematicsBlock = (rows: any[], clock: any) => {
   const samples = kinematics(rows);
@@ -584,15 +636,30 @@ const kinematicsBlock = (rows: any[], clock: any) => {
       { spacing: 8, alignment: "middle" },
       QUANTITIES.map((q) =>
         spreadX({ spacing: PANEL_GAP, alignment: "middle" }, [
-          // The label's cell is as wide as the "no interpolation" column, and
-          // an empty `rect` is what gives it that width: a `frame`'s own `w`
-          // sizes the box it lays out in, but a lone text mark does not fill
-          // it, so the cell would collapse to the word.
-          frame({ w: SPARK_LABEL_W, h: SPARK_H_PX }, [
-            rect({ w: SPARK_LABEL_W, h: SPARK_H_PX, fill: "none" }),
+          // The label's cell is as wide as the row's lead cell plus the first
+          // panel's chrome, and an empty `rect` is what gives it that width:
+          // a `frame`'s own `w` sizes the box it lays out in, but a lone text
+          // mark does not fill it, so the cell would collapse to the word.
+          frame({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX }, [
+            rect({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX, fill: "none" }),
             text({ text: q, fontSize: 11, fill: "#888" }),
           ]),
-          sparkRow(samples[q], clock),
+          // The step column is a chart of its own, with its own scale: its
+          // velocity and acceleration are combs of impulse weights, which
+          // are amounts, not rates, and would flatten every other curve in
+          // the row. The other four share one scale.
+          spreadX({ spacing: SPARK_GAP }, [
+            sparkRow(
+              samples[q].filter((d) => d.method === "step"),
+              clock,
+              sparkW(1)
+            ),
+            sparkRow(
+              samples[q].filter((d) => d.method !== "step"),
+              clock,
+              sparkW(LADDER.length - 1)
+            ),
+          ]),
         ])
       )
     ),
@@ -600,21 +667,24 @@ const kinematicsBlock = (rows: any[], clock: any) => {
 };
 
 /**
- * The three-panel cut with the reason underneath it.
+ * The curve ladder with the reason underneath it: step, linear, monotone,
+ * smooth and smoother, and under each one country's position, velocity and
+ * acceleration.
  *
- * The panels say what the two readings look like; the sparklines say why. Read
- * down the linear column: the position is a chain of straight segments, so the
- * velocity is a staircase that changes value instantly at each keyframe, and
- * the acceleration is nothing at all except a spike at each of those instants.
- * A spike in acceleration is exactly what the eye reads as a jolt. Down the
- * smooth column the position has no corners, the velocity is a continuous
- * curve, and the acceleration stays bounded, so nothing ever jolts.
+ * The panels say what the readings look like; the sparklines say why. Read
+ * across the velocity row: it is a comb of impulses under step and a
+ * staircase that changes value instantly at each keyframe under linear, and
+ * a continuous curve under the other three. Read across the acceleration
+ * row: doublets under step and impulses under linear, a curve that jumps at
+ * each keyframe under monotone and smooth, and a continuous curve only under
+ * smoother. A spike or a jump in acceleration is what the eye reads as a
+ * jolt.
  *
  * Everything moves on one clock, the dots on the sparklines included, so at
  * any moment the dots mark the state the panels above them are drawing.
  */
-export const CurvesThreeKinematics: StoryObj<Args> = {
-  args: { w: 880, h: 620 },
+export const CurvesKinematics: StoryObj<Args> = {
+  args: { w: 1180, h: 620 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -625,9 +695,10 @@ export const CurvesThreeKinematics: StoryObj<Args> = {
       container,
       args,
       year,
-      CURVES_THREE,
+      LADDER,
       (curve) => curvePanel(gapminder, year, curve),
-      kinematicsBlock(gapminder, year)
+      kinematicsBlock(gapminder, year),
+      { panelW: LADDER_PANEL_W, leadW: LEAD_W }
     );
 
     return container;
@@ -640,8 +711,8 @@ export const CurvesThreeKinematics: StoryObj<Args> = {
  * the sparklines marking the position, velocity and acceleration each reading
  * has there.
  */
-export const CurvesThreeKinematicsPaused: StoryObj<Args> = {
-  args: { w: 880, h: 620 },
+export const CurvesKinematicsPaused: StoryObj<Args> = {
+  args: { w: 1180, h: 620 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -652,9 +723,10 @@ export const CurvesThreeKinematicsPaused: StoryObj<Args> = {
       container,
       args,
       year,
-      CURVES_THREE,
+      LADDER,
       (curve) => curvePanel(gapminder, year, curve),
-      kinematicsBlock(gapminder, year)
+      kinematicsBlock(gapminder, year),
+      { panelW: LADDER_PANEL_W, leadW: LEAD_W }
     );
 
     return container;

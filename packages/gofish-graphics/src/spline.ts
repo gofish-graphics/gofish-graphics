@@ -194,7 +194,8 @@ export function smoothSlopes(t: number[], v: number[]): number[] {
 
 /**
  * The `smoother` curve on one channel, at local parameter `u` of segment `i`:
- * its value and its velocity per unit of the knot parameter.
+ * its value, and its velocity and acceleration per unit of the knot
+ * parameter.
  *
  * This is Yuksel's "A Class of C2 Interpolating Curves" (2020) with
  * parabolas as the interpolating functions, applied to a channel over its
@@ -217,14 +218,15 @@ export function smootherJet(
   v: number[],
   i: number,
   u: number
-): [value: number, velocity: number] {
+): [value: number, velocity: number, acceleration: number] {
   const n = t.length;
   const h = t[i + 1] - t[i];
-  if (n === 2) return [v[0] + u * (v[1] - v[0]), (v[1] - v[0]) / h];
+  if (n === 2) return [v[0] + u * (v[1] - v[0]), (v[1] - v[0]) / h, 0];
   // At u = 1 the knot itself, which `t_i + h` can miss by rounding.
   const x = u === 1 ? t[i + 1] : t[i] + u * h;
-  /** The parabola through knots j − 1, j and j + 1, and its slope, at x. */
-  const parabola = (j: number): [number, number] => {
+  /** The parabola through knots j − 1, j and j + 1, with its slope and its
+   *  (constant) acceleration, at x. */
+  const parabola = (j: number): [number, number, number] => {
     const a = t[j - 1];
     const b = t[j];
     const c = t[j + 1];
@@ -234,17 +236,24 @@ export function smootherJet(
     return [
       la * (x - b) * (x - c) + lb * (x - a) * (x - c) + lc * (x - a) * (x - b),
       la * (2 * x - b - c) + lb * (2 * x - a - c) + lc * (2 * x - a - b),
+      2 * (la + lb + lc),
     ];
   };
   if (i === 0) return parabola(1);
   if (i === n - 2) return parabola(n - 2);
-  const [left, leftSlope] = parabola(i);
-  const [right, rightSlope] = parabola(i + 1);
+  const [left, leftSlope, leftBend] = parabola(i);
+  const [right, rightSlope, rightBend] = parabola(i + 1);
+  // w = cos²θ = (1 + cos πu) / 2, and its derivatives per unit of t.
   const w = Math.cos((Math.PI / 2) * u) ** 2;
   const wSlope = (-(Math.PI / 2) * Math.sin(Math.PI * u)) / h;
+  const wBend = ((-(Math.PI * Math.PI) / 2) * Math.cos(Math.PI * u)) / (h * h);
   return [
     w * left + (1 - w) * right,
     w * leftSlope + (1 - w) * rightSlope + wSlope * (left - right),
+    w * leftBend +
+      (1 - w) * rightBend +
+      2 * wSlope * (leftSlope - rightSlope) +
+      wBend * (left - right),
   ];
 }
 
@@ -280,6 +289,12 @@ export const SMOOTH_CURVES: readonly SmoothCurve[] = [
 export type ChannelSpline = {
   /** The value at local parameter `u` of segment `i`. */
   at: (i: number, u: number) => number;
+  /** The value at local parameter `u` of segment `i`, with its velocity and
+   *  acceleration per unit of the knot parameter: exact derivatives of the
+   *  curve. For `monotone` and `smooth` the acceleration jumps at a knot, so
+   *  it belongs to one segment, and the two segments that meet at a knot give
+   *  its two one-sided values; for `smoother` they agree. */
+  jet: (i: number, u: number) => [number, number, number];
   /** Segment `i` in Bézier form, flattened: one or more cubics
    *  `[b0, b1, b2, b3]` in order, each covering an equal share of `u`, with
    *  its own parameter linear in `u`. */
@@ -298,6 +313,7 @@ export function channelSpline(
     const cubics = hermiteCubics(knots, values, slopes(knots, values));
     return {
       at: (i, u) => cubicAt(cubics, i, u),
+      jet: (i, u) => cubicJet(knots, cubics, i, u),
       bezier: (i) => cubics.slice(4 * i, 4 * i + 4),
     };
   }
@@ -305,6 +321,7 @@ export function channelSpline(
   const n = knots.length;
   return {
     at: (i, u) => smootherJet(knots, values, i, u)[0],
+    jet: (i, u) => smootherJet(knots, values, i, u),
     bezier: (i) => {
       const interior = i > 0 && i < n - 2;
       const pieces = interior ? SMOOTHER_PIECES : 1;
@@ -402,12 +419,6 @@ function hermitePath(
   return out;
 }
 
-/** One channel's monotone cubics, in the flattened Bézier form `cubicAt`
- *  and `monotoneJet` read. */
-export function monotoneCubics(knots: number[], values: number[]): number[] {
-  return hermiteCubics(knots, values, monotoneSlopes(knots, values));
-}
-
 /** The cubic `[b0, b1, b2, b3]` in Bernstein form at `u`. */
 function bernstein(
   b0: number,
@@ -422,18 +433,19 @@ function bernstein(
   );
 }
 
-/** Segment `i` of cubics from `monotoneCubics`, at local parameter `u`. */
-export function cubicAt(cubics: number[], i: number, u: number): number {
+/** Segment `i` of flattened cubics (`hermiteCubics`), at local parameter
+ *  `u`. */
+function cubicAt(cubics: number[], i: number, u: number): number {
   const k = 4 * i;
   return bernstein(cubics[k], cubics[k + 1], cubics[k + 2], cubics[k + 3], u);
 }
 
-/** One channel at local parameter `u` of segment `i` of cubics from
- *  `monotoneCubics`, with its first and second derivatives with respect to
+/** One channel at local parameter `u` of segment `i` of flattened cubics
+ *  (`hermiteCubics`), with its first and second derivatives with respect to
  *  the knot parameter. The velocity is continuous across a knot, but the
  *  acceleration jumps there, so the derivatives belong to one segment. They
  *  divide by its length, `knots[i + 1] − knots[i]`. */
-export function monotoneJet(
+function cubicJet(
   knots: number[],
   cubics: number[],
   i: number,

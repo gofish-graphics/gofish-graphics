@@ -26,8 +26,6 @@ import {
   catmullRomPath,
   centripetalKnots,
   channelSpline,
-  monotoneCubics,
-  monotoneJet,
   monotoneSlopes,
   smoothSlopes,
   smootherJet,
@@ -472,7 +470,8 @@ console.log("# the jet's derivatives are the value's");
 {
   const rand = random(2026);
   let worst = 0;
-  for (let trial = 0; trial < 100; trial++) {
+  for (let trial = 0; trial < 300; trial++) {
+    const curve = SMOOTH_CURVES[trial % 3];
     const n = 2 + Math.floor(rand() * 7);
     const { knots, points } = randomRun(rand, n);
     const values = points.map((p) => p[1]);
@@ -480,9 +479,9 @@ console.log("# the jet's derivatives are the value's");
     const span = knots[i + 1] - knots[i];
     const u = 0.1 + 0.8 * rand();
     const h = 1e-4;
-    const cubics = monotoneCubics(knots, values);
-    const value = (du: number) => monotoneJet(knots, cubics, i, u + du)[0];
-    const [, velocity, acceleration] = monotoneJet(knots, cubics, i, u);
+    const spline = channelSpline(curve, knots, values);
+    const value = (du: number) => spline.jet(i, u + du)[0];
+    const [, velocity, acceleration] = spline.jet(i, u);
     // Central differences in u, converted to per unit of the knot parameter.
     const dv = (value(h) - value(-h)) / (2 * h) / span;
     const da = (value(h) - 2 * value(0) + value(-h)) / (h * h) / (span * span);
@@ -492,13 +491,12 @@ console.log("# the jet's derivatives are the value's");
       Math.abs(da - acceleration) / (1 + Math.abs(acceleration))
     );
   }
-  ok("velocity and acceleration match differences", worst < 1e-3, `${worst}`);
-  const [, velocity] = monotoneJet(
-    [0, 1, 2],
-    monotoneCubics([0, 1, 2], [0, 5, 1]),
-    0,
-    1
+  ok(
+    "for every smooth curve, velocity and acceleration match differences",
+    worst < 1e-3,
+    `${worst}`
   );
+  const [, velocity] = channelSpline("monotone", [0, 1, 2], [0, 5, 1]).jet(0, 1);
   ok("the velocity at a turn is 0", velocity === 0, `${velocity}`);
 }
 
@@ -798,6 +796,7 @@ console.log("# smoother: through every value, and C2 at every knot");
   let worstVelocity = 0;
   let worstAcceleration = 0;
   let monotoneJumps = 0;
+  let worstExact = 0;
   let knotsChecked = 0;
   for (let trial = 0; trial < 200; trial++) {
     const n = 4 + Math.floor(rand() * 7);
@@ -814,7 +813,7 @@ console.log("# smoother: through every value, and C2 at every knot");
     // Velocity and acceleration from both sides of each interior knot: the
     // velocity from the jet, the acceleration by a second-order one-sided
     // difference of it.
-    const cubics = monotoneCubics(knots, values);
+    const monotone = channelSpline("monotone", knots, values);
     const d = 1e-5;
     const velocity = (i: number, u: number) =>
       smootherJet(knots, values, i, u)[1];
@@ -838,8 +837,17 @@ console.log("# smoother: through every value, and C2 at every knot");
       );
       // The same check on the monotone cubic, which is only C1, to show the
       // check can tell the two apart.
-      const ml = monotoneJet(knots, cubics, i - 1, 1)[2];
-      const mr = monotoneJet(knots, cubics, i, 0)[2];
+      const ml = monotone.jet(i - 1, 1)[2];
+      const mr = monotone.jet(i, 0)[2];
+      // And the exact acceleration of smoother agrees from both sides.
+      worstExact = Math.max(
+        worstExact,
+        Math.abs(
+          smootherJet(knots, values, i - 1, 1)[2] -
+            smootherJet(knots, values, i, 0)[2]
+        ) /
+          (1 + Math.abs(smootherJet(knots, values, i, 0)[2]))
+      );
       if (Math.abs(ml - mr) / (1 + Math.abs(mr)) > 1e-2) monotoneJumps++;
       knotsChecked++;
     }
@@ -854,6 +862,11 @@ console.log("# smoother: through every value, and C2 at every knot");
     "and so is the acceleration",
     worstAcceleration < 1e-5,
     `${worstAcceleration}`
+  );
+  ok(
+    "the exact acceleration agrees from both sides",
+    worstExact < 1e-9,
+    `${worstExact}`
   );
   ok(
     `while the monotone cubic's jumps at most of them (${monotoneJumps})`,
