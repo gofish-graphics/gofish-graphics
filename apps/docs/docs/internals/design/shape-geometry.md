@@ -432,8 +432,10 @@ questions every frame. Our layout runs once, so a memo on the node is enough.
     ([#693](https://github.com/gofish-graphics/gofish-graphics/issues/693) declarative
     binning, [#737](https://github.com/gofish-graphics/gofish-graphics/issues/737) 2D
     binned counts, [#763](https://github.com/gofish-graphics/gofish-graphics/issues/763)).
-  - Still open: the name of `pack`'s strategy key and of the circle strategy's
-    constructor. `circle` is taken by the mark.
+  - **Decided (2026-09-29):** `pack`'s default strategy is `circles()`, so
+    `pack({ by: "continent" })` packs circles. Parameters go on the strategy, e.g.
+    `circles({ padding: 2 })`. The key that holds the strategy is still open. The
+    leaning is `method`, which ggbeeswarm and Vega's `treemap` use.
 
   ```ts
   // swarm: x from data, y left free, overlap resolved on y around the middle
