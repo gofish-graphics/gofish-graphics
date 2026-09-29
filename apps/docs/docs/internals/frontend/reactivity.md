@@ -113,7 +113,10 @@ the same container. It hands each resolve a `RenderPass` that says whether this
 is the chart's first render or a re-render, and lets the resolve register a
 cleanup that runs before the next render. The chart pipeline uses it to play the
 build-in on the first render only and to stop that render's build clock (a
-declared shortcut, #914). Three callers share it:
+declared shortcut, #914). It resolves to the chart's `View` (see
+[Rendering](/internals/core/rendering)), and a re-render that finishes resolving
+after its chart was unmounted (`runtime.isDisposed()`) returns without mounting
+anything. Three callers share it:
 
 - `ChartBuilder.render` and `LayerBuilder.render` — the fluent chart pipeline. Both
   get `render` from the shared terminal registry (`marks/terminals.ts`) with
@@ -280,6 +283,43 @@ Three consequences fall out of that, all of them in `inputs.ts`:
   transition. A spec whose caption says "pause" therefore refreshes on a
   `play()` from anywhere, not only on the click that happened to invalidate it
   for another reason.
+
+### A timer ticks only while something reads it
+
+The sampling interval is reference-counted on the clock's readers, the way MobX
+suspends an unobserved computed (`onBecomeUnobserved`), TC39 Signals report
+`watched`/`unwatched`, and RxJS's `refCount` unsubscribes from its source. The
+readers are the two tiers a read can land in:
+
+- **spec readers**: the runtimes in the input's `specRuntimes`, each a chart
+  that read the clock outside `live()`. A runtime leaves the set when its chart
+  unmounts (`InteractionRuntime.dispose`), and for the length of a re-resolve
+  (`beginResolve`) until its read recurs;
+- **paint readers**: the reactive computations that read the clock, such as a
+  `live()` channel's attribute effect or a `sharedDecision`. A read under a
+  Solid listener counts once (`getListener()`), and the listener's cleanup
+  uncounts it (`onCleanup`), which runs when the computation re-runs or when
+  its chart's root is disposed. This is the only place a live-tier read is
+  visible: a `live()` channel on a plain node has no runtime at all, yet its
+  paint effect still counts.
+
+Three functions in `timer()` own this, and nothing outside it knows:
+`isWatched()` says whether any reader of either kind remains; `watch()`, called
+on every read of `t()` or `isPlaying()`, counts the current reader and starts
+the interval if the clock is playing; and the tick (`sample`) stops the
+interval when it finds no reader left. The stop is lazy, one tick after the last
+reader leaves, so a re-render that drops its read and makes it again in the
+same pass does not restart the interval. `play()` starts ticking only if the
+clock is watched.
+
+Stopping is invisible because of the first consequence above: the value is
+derived from elapsed wall time, never accumulated per tick. A clock that is
+playing but not ticking has no reader except the one reading it now (a watched,
+playing clock always ticks), so every read first catches the value up
+(`catchUp`, the same `sample` the tick runs, including the self-pause at the end
+of a non-looping sweep). A restarted clock therefore reads exactly what a clock
+that never stopped would, and `day()` typed into a console with no chart on the
+page still returns the current day.
 
 A **quantized** domain — the band form (`domain: values[]`), or `[lo, hi]` with a
 `step` — is the same equation with a band scale, and one number decides it: the
