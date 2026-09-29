@@ -417,9 +417,23 @@ questions every frame. Our layout runs once, so a memo on the node is enough.
     `spread(pclass) → scatter({ y: "age", alignment: "middle", overlap: swarm() })`. We
     accept that this is not literally the same chain as the binned version, because a
     swarm has to see all of its siblings at once.
-  - The circle packing name is open. The two options that stay consistent with earlier
-    choices are `pack` with a strategy option, like `treemap`'s `tile`, and a
-    verb plus noun such as `packCircles`, which would also mean `binHex`.
+  - **Decided (2026-09-29):** circle packing is one `pack` operator with an extensible
+    strategy, and circles are its first strategy. Other packings, e.g. rectangles, are
+    later strategies, not new operators. We rejected `packCircles`, because v3 already
+    moved from `stackX` to `stack({ dir })`.
+  - **Decided (2026-09-29):** strategies are objects made by function calls, e.g.
+    `swarm({ padding: 1 })`, never strings. Parameters are then easy to add. `treemap`'s
+    string `tile` option is not the model to follow.
+  - `overlap` is an option on `scatter`, not a modifier. Modifiers apply to any operator
+    or mark, and `overlap` only makes sense on `scatter`.
+  - Binning is deferred. A `bin` with an extensible strategy (rectangles, hexagons) is
+    attractive, but the name `bin` is taken by the data transform
+    `bin(field, { thresholds })`. That question belongs with the open binning issues
+    ([#693](https://github.com/gofish-graphics/gofish-graphics/issues/693) declarative
+    binning, [#737](https://github.com/gofish-graphics/gofish-graphics/issues/737) 2D
+    binned counts, [#763](https://github.com/gofish-graphics/gofish-graphics/issues/763)).
+  - Still open: the name of `pack`'s strategy key and of the circle strategy's
+    constructor. `circle` is taken by the mark.
 
   ```ts
   // swarm: x from data, y left free, overlap resolved on y around the middle
