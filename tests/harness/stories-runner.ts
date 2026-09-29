@@ -4,6 +4,8 @@
  * in the same page (no navigation between stories).
  */
 
+import { disposeChart } from "../../packages/gofish-graphics/src/ast/gofish";
+
 // Import all story modules eagerly so they're available synchronously after page
 // load. Both workspace packages with stories are scanned: gofish-graphics and the
 // gofish-gotree tree-DSL package (the latter compiles its SolidJS source directly
@@ -87,6 +89,25 @@ declare global {
 window.__listStories__ = () => allStories;
 
 /**
+ * Tear down whatever the previous story rendered before the next one renders
+ * into this same page. Clearing the DOM is not enough: a chart that read an
+ * input (a `timer()`, a slider) keeps an interaction runtime, and a live input
+ * keeps re-rendering that chart into its detached container forever. Over many
+ * stories and bench samples those dead charts pile up and starve the page. So
+ * dispose every chart first, then clear the DOM.
+ *
+ * The walk covers all of `document.body`, not just the root: the stories'
+ * `initializeContainer()` appends its container to `<body>`, and a story that
+ * renders into a container it does not return would leave a chart there.
+ */
+function disposePreviousStory(root: HTMLElement): void {
+  for (const el of document.body.querySelectorAll<HTMLElement>("*")) {
+    disposeChart(el);
+  }
+  root.innerHTML = "";
+}
+
+/**
  * Render a single story into #stories-root.
  * Returns true on success, false on error (check __STORY_RENDER_ERROR__).
  */
@@ -95,7 +116,7 @@ window.__renderStory__ = async (id: string): Promise<boolean> => {
   window.__STORY_RENDER_ERROR__ = null;
 
   const root = document.getElementById("stories-root")!;
-  root.innerHTML = "";
+  disposePreviousStory(root);
 
   const info = allStories.find((s) => s.id === id);
   if (!info) {

@@ -1004,6 +1004,34 @@ function renderLayout(
   );
 }
 
+/** What `gofish()` stashes on a container it rendered into: the Solid root's
+ *  teardown, and the interaction runtime when the chart has one. */
+type ChartState = {
+  dispose: () => void;
+  runtime?: InteractionRuntime;
+};
+type ChartHost = HTMLElement & { __gofishState?: ChartState };
+
+/**
+ * Tear down the chart `gofish()` rendered into `container`, if any: dispose its
+ * Solid root (which empties the container) and its interaction runtime, which
+ * detaches its DOM listeners and drops it from every input it read. After that
+ * a still-running input, such as a looping `timer()` the chart read, no longer
+ * re-renders the dead chart. The input itself keeps running, because an input
+ * is not owned by any one chart. A no-op on an element no chart rendered into.
+ *
+ * Not part of the public API yet. The story harness uses it to clear one
+ * story before rendering the next into the same page.
+ */
+export function disposeChart(container: HTMLElement): void {
+  const host = container as ChartHost;
+  const state = host.__gofishState;
+  if (!state) return;
+  host.__gofishState = undefined;
+  state.dispose();
+  state.runtime?.dispose();
+}
+
 export const gofish = (
   container: HTMLElement,
   options: GoFishRenderOptions,
@@ -1033,11 +1061,7 @@ export const gofish = (
 
   const svgPadding = options.padding ?? PADDING;
 
-  type GofishState = {
-    dispose: () => void;
-    runtime?: InteractionRuntime;
-  };
-  const stateHost = container as HTMLElement & { __gofishState?: GofishState };
+  const stateHost = container as ChartHost;
 
   // Re-rendering into the same container must always dispose the previous Solid
   // root, or roots and DOM accumulate. TWO cases enter here with a prior state:
@@ -1051,9 +1075,10 @@ export const gofish = (
   //     chart whose container is now someone else's.
   const prev = stateHost.__gofishState;
   if (prev) {
-    prev.dispose();
     if (prev.runtime && prev.runtime !== options.interaction) {
-      prev.runtime.dispose();
+      disposeChart(container);
+    } else {
+      prev.dispose();
     }
   }
 

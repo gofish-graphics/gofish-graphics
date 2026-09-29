@@ -27,7 +27,12 @@
  *     --quick: tiny sweeps / few examples for a local smoke test
  */
 
-import { chromium, type Browser, type Page } from "playwright";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from "playwright";
 import { spawn, type ChildProcess } from "child_process";
 import {
   writeFileSync,
@@ -124,6 +129,18 @@ const COUNT_NS = QUICK
 const NEST_DEPTHS = QUICK ? [2, 8] : [1, 2, 4, 8, 16, 32, 64, 128];
 const PER_RENDER_CEILING_MS = 20_000;
 
+// Wall-clock budget for ONE render of an example story (one page.evaluate of
+// `__renderStory__`). The slowest healthy render, an animated bird-migration
+// panel whose live clock keeps re-laying out the chart, takes ~10s locally. A
+// render over budget is stuck, not slow: the story is recorded as skipped and
+// its page is thrown away so the stuck work can't bleed into the next story.
+// The budget is per render, not per story, because a story's total is several
+// renders (warmups + samples) and a slow animated story can pass 60s in total
+// while every render is healthy. `sampleLoop` stops after MEASURE_MIN samples
+// once its time budget is spent, so a story is still bounded at
+// (WARMUP + MEASURE_MIN) × RENDER_BUDGET_MS.
+const RENDER_BUDGET_MS = 60_000;
+
 type Labels = Record<string, number>;
 type Stat = { median: number; min: number; p95: number; n: number };
 
@@ -168,9 +185,14 @@ type Counts = { nodes: number; displayItems: number };
 /** Ask Chromium to GC between samples (needs --js-flags=--expose-gc); no-op if absent. */
 const gc = async (page: Page): Promise<void> => {
   try {
-    await page.evaluate(() => (globalThis as any).gc?.());
+    // Budgeted so a page whose main thread is stuck can't hang here; the next
+    // render hits the same budget and reports the story as timed out.
+    await withinBudget(
+      page.evaluate(() => (globalThis as any).gc?.()),
+      RENDER_BUDGET_MS
+    );
   } catch {
-    /* expose-gc not available */
+    /* expose-gc not available, or the page is stuck */
   }
 };
 
@@ -329,7 +351,21 @@ type JsStoryInfo = {
   moduleKey: string;
 };
 
-async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
+/** An example story that produced no measurement, and why. */
+type SkippedExample = {
+  id: string;
+  title: string;
+  name: string;
+  // `timeout`: a render went over RENDER_BUDGET_MS. `error`: it failed.
+  reason: "timeout" | "error";
+};
+
+/** A fresh page on the stories runner, ready to render. */
+async function openStoriesRunner(context: BrowserContext): Promise<Page> {
+  const page = await context.newPage();
+  page.on("pageerror", (e) => {
+    if (process.env.DEBUG) console.error(`[pageerror] ${e.message}`);
+  });
   await page.goto(`http://localhost:${HARNESS_PORT}/stories-runner.html`, {
     waitUntil: "domcontentloaded",
   });
@@ -337,6 +373,30 @@ async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
     () => (window as any).__STORIES_RUNNER_READY__ === true,
     { timeout: 30_000 }
   );
+  return page;
+}
+
+class RenderTimeout extends Error {}
+
+/** `work`, or throw RenderTimeout if it hasn't settled within `ms`. The
+ *  abandoned `work` is left to reject when its page closes. */
+async function withinBudget<T>(work: Promise<T>, ms: number): Promise<T> {
+  work.catch(() => {});
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new RenderTimeout()), ms);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function benchExamplesJs(
+  context: BrowserContext
+): Promise<{ results: ExampleResult[]; skipped: SkippedExample[] }> {
+  let page = await openStoriesRunner(context);
 
   let stories = (await page.evaluate(() =>
     (window as any).__listStories__()
@@ -353,12 +413,16 @@ async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
 
   console.log(`\n[examples-js] ${stories.length} stories\n`);
   const results: ExampleResult[] = [];
+  const skipped: SkippedExample[] = [];
 
   for (const story of stories) {
     process.stdout.write(`  ${story.title}/${story.name} ... `);
+    const storyStart = performance.now();
+    const elapsed = () =>
+      `(${((performance.now() - storyStart) / 1000).toFixed(1)}s)`;
     type Sample = { labels: Labels; wallMs: number; counts?: Counts };
-    const samples = await sampleLoop<Sample>(page, async () => {
-      const r = await page.evaluate(async (id) => {
+    const renderOnce = () =>
+      page.evaluate(async (id) => {
         const w = window as any;
         w.__GOFISH_PERF__ = { enabled: true, current: null };
         w.__STORY_RENDER_WALL_MS__ = 0;
@@ -376,31 +440,48 @@ async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
           counts: w.__GOFISH_PERF__?.current?.counts as Counts | undefined,
         };
       }, story.id);
-      if (!r.ok) return { ok: false };
-      return {
-        ok: true,
-        value: { labels: r.labels, wallMs: r.wallMs, counts: r.counts },
-      };
-    });
+    const { id, title, name } = story;
+    let samples: Sample[] | null;
+    try {
+      samples = await sampleLoop<Sample>(page, async () => {
+        const r = await withinBudget(renderOnce(), RENDER_BUDGET_MS);
+        if (!r.ok) return { ok: false };
+        return {
+          ok: true,
+          value: { labels: r.labels, wallMs: r.wallMs, counts: r.counts },
+        };
+      });
+    } catch (err) {
+      if (!(err instanceof RenderTimeout)) throw err;
+      console.log(`TIMEOUT ${elapsed()}`);
+      skipped.push({ id, title, name, reason: "timeout" });
+      await page.close();
+      page = await openStoriesRunner(context);
+      continue;
+    }
     if (!samples || samples.length === 0) {
-      console.log("SKIP");
+      console.log(`SKIP ${elapsed()}`);
+      skipped.push({ id, title, name, reason: "error" });
       continue;
     }
     // moduleKey is relative to tests/harness; resolve to hash the source file.
     const specHash = specHashOf(resolvePath(HARNESS_DIR, story.moduleKey));
     results.push({
-      id: story.id,
-      title: story.title,
-      name: story.name,
+      id,
+      title,
+      name,
       specHash,
       passes: labelStats(samples.map((s) => s.labels)),
       totalMs: stat(samples.map((s) => sumPasses(s.labels))),
       wallMs: stat(samples.map((s) => s.wallMs)),
       counts: samples[samples.length - 1].counts,
     });
-    console.log(`${results[results.length - 1].totalMs.median.toFixed(2)}ms`);
+    console.log(
+      `${results[results.length - 1].totalMs.median.toFixed(2)}ms ${elapsed()}`
+    );
   }
-  return results;
+  await page.close();
+  return { results, skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -1028,6 +1109,10 @@ type BenchResults = {
     ruler: RulerMeta | null;
   };
   examplesJs: ExampleResult[];
+  // Stories the examples-js leg ran but could not measure. Kept out of
+  // `examplesJs` so every entry there has real stats; a skipped story simply
+  // has no match in cross-run comparisons. Absent in older results files.
+  examplesJsSkipped?: SkippedExample[];
   examplesPy: PythonResult[];
   synthetic: SyntheticPoint[];
 };
@@ -1209,7 +1294,11 @@ async function main() {
         results.synthetic = await benchSynthetic(page);
       }
     }
-    if (wantJs) results.examplesJs = await benchExamplesJs(page);
+    if (wantJs) {
+      const js = await benchExamplesJs(context);
+      results.examplesJs = js.results;
+      results.examplesJsSkipped = js.skipped;
+    }
     if (wantPy) results.examplesPy = await benchExamplesPy(page);
 
     // Ruler leg (any mode): measure the hermetic reference workload in this same
@@ -1241,6 +1330,8 @@ async function main() {
     `  engine: ${prodBuild ? "prod (dist-bench)" : "dev-mode source alias"}`
   );
   console.log(`  examples-js: ${results.examplesJs.length}`);
+  for (const s of results.examplesJsSkipped ?? [])
+    console.log(`    skipped (${s.reason}): ${s.title}/${s.name}`);
   console.log(`  examples-py: ${results.examplesPy.length}`);
   console.log(`  synthetic points: ${results.synthetic.length}`);
   if (results.meta.ruler)

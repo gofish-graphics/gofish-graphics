@@ -74,6 +74,14 @@ type Results = {
     ruler: RulerMeta | null;
   };
   examplesJs: ExampleResult[];
+  // Stories bench.ts could not measure (see SkippedExample there). Optional:
+  // older history files predate it.
+  examplesJsSkipped?: {
+    id: string;
+    title: string;
+    name: string;
+    reason: "timeout" | "error";
+  }[];
   examplesPy: { path: string; totalMs: Stat; loadMs: Stat; overheadMs: Stat }[];
   synthetic: SyntheticPoint[];
 };
@@ -524,6 +532,16 @@ function main() {
       lines.push(`| warm \`/load\` (Python) | ${fmt(pyLoad)} ms |${span}`);
       lines.push(`| deserialize + RPC (Python) | ${fmt(pyOver)} ms |${span}`);
     }
+    lines.push("");
+  }
+  const skipped = results.examplesJsSkipped ?? [];
+  if (skipped.length > 0) {
+    lines.push(
+      `**${skipped.length} JS example(s) not measured** (left out of every number above):`
+    );
+    lines.push("");
+    for (const s of skipped)
+      lines.push(`- \`${s.title}/${s.name}\` (${s.reason})`);
     lines.push("");
   }
   lines.push(
