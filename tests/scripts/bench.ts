@@ -120,25 +120,17 @@ const MEASURE_BUDGET_MS = QUICK ? 300 : 1500;
 const MEASURE_MIN = QUICK ? 2 : 4;
 const MEASURE_MAX = 20;
 
-// Synthetic sweep. Capped to keep the DOM/paint from OOMing; the per-point
-// ceiling stops a family early once a single render blows past the budget so
-// we still capture the asymptote leading up to it.
+// Synthetic sweep. Capped to keep the DOM/paint from OOMing.
 const COUNT_NS = QUICK
   ? [10, 100, 1000]
   : [10, 30, 100, 300, 1000, 3000, 10000, 30000];
 const NEST_DEPTHS = QUICK ? [2, 8] : [1, 2, 4, 8, 16, 32, 64, 128];
+// A measured render slower than this ends its synthetic family: the point is
+// healthy but too slow to sample further, and the asymptote is already caught.
 const PER_RENDER_CEILING_MS = 20_000;
 
-// Wall-clock budget for ONE render of an example story (one page.evaluate of
-// `__renderStory__`). The slowest healthy render, an animated bird-migration
-// panel whose live clock keeps re-laying out the chart, takes ~10s locally. A
-// render over budget is stuck, not slow: the story is recorded as skipped and
-// its page is thrown away so the stuck work can't bleed into the next story.
-// The budget is per render, not per story, because a story's total is several
-// renders (warmups + samples) and a slow animated story can pass 60s in total
-// while every render is healthy. `sampleLoop` stops after MEASURE_MIN samples
-// once its time budget is spent, so a story is still bounded at
-// (WARMUP + MEASURE_MIN) × RENDER_BUDGET_MS.
+// Timeout for any one `page.evaluate` (a render, a gc): past it the page is
+// stuck, not slow. The slowest healthy render (a bird-migration panel) is ~10s.
 const RENDER_BUDGET_MS = 60_000;
 
 type Labels = Record<string, number>;
@@ -182,17 +174,40 @@ const sumPasses = (labels: Labels): number =>
 
 type Counts = { nodes: number; displayItems: number };
 
+/** A render past RENDER_BUDGET_MS: its page is stuck. Only the examples-js
+ *  leg, whose stories can run open-ended animations, skips the story and
+ *  recovers; in every other leg it ends the run. */
+class RenderTimeout extends Error {}
+
+/** `work`, or throw RenderTimeout if it hasn't settled within RENDER_BUDGET_MS.
+ *  The abandoned `work` is left to reject when its page closes. */
+async function withinBudget<T>(work: Promise<T>): Promise<T> {
+  work.catch(() => {});
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new RenderTimeout()), RENDER_BUDGET_MS);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Log a page's uncaught errors under DEBUG. */
+function logPageErrors(page: Page, tag = "pageerror"): void {
+  page.on("pageerror", (e) => {
+    if (process.env.DEBUG) console.error(`[${tag}] ${e.message}`);
+  });
+}
+
 /** Ask Chromium to GC between samples (needs --js-flags=--expose-gc); no-op if absent. */
 const gc = async (page: Page): Promise<void> => {
   try {
-    // Budgeted so a page whose main thread is stuck can't hang here; the next
-    // render hits the same budget and reports the story as timed out.
-    await withinBudget(
-      page.evaluate(() => (globalThis as any).gc?.()),
-      RENDER_BUDGET_MS
-    );
-  } catch {
-    /* expose-gc not available, or the page is stuck */
+    await withinBudget(page.evaluate(() => (globalThis as any).gc?.()));
+  } catch (err) {
+    if (err instanceof RenderTimeout) throw err;
+    /* expose-gc not available */
   }
 };
 
@@ -352,7 +367,7 @@ type JsStoryInfo = {
 };
 
 /** An example story that produced no measurement, and why. */
-type SkippedExample = {
+export type SkippedExample = {
   id: string;
   title: string;
   name: string;
@@ -363,9 +378,7 @@ type SkippedExample = {
 /** A fresh page on the stories runner, ready to render. */
 async function openStoriesRunner(context: BrowserContext): Promise<Page> {
   const page = await context.newPage();
-  page.on("pageerror", (e) => {
-    if (process.env.DEBUG) console.error(`[pageerror] ${e.message}`);
-  });
+  logPageErrors(page);
   await page.goto(`http://localhost:${HARNESS_PORT}/stories-runner.html`, {
     waitUntil: "domcontentloaded",
   });
@@ -374,23 +387,6 @@ async function openStoriesRunner(context: BrowserContext): Promise<Page> {
     { timeout: 30_000 }
   );
   return page;
-}
-
-class RenderTimeout extends Error {}
-
-/** `work`, or throw RenderTimeout if it hasn't settled within `ms`. The
- *  abandoned `work` is left to reject when its page closes. */
-async function withinBudget<T>(work: Promise<T>, ms: number): Promise<T> {
-  work.catch(() => {});
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new RenderTimeout()), ms);
-  });
-  try {
-    return await Promise.race([work, timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 async function benchExamplesJs(
@@ -421,30 +417,30 @@ async function benchExamplesJs(
     const elapsed = () =>
       `(${((performance.now() - storyStart) / 1000).toFixed(1)}s)`;
     type Sample = { labels: Labels; wallMs: number; counts?: Counts };
-    const renderOnce = () =>
-      page.evaluate(async (id) => {
-        const w = window as any;
-        w.__GOFISH_PERF__ = { enabled: true, current: null };
-        w.__STORY_RENDER_WALL_MS__ = 0;
-        const success = await w.__renderStory__(id);
-        if (!success)
-          return {
-            ok: false as const,
-            labels: {} as Record<string, number>,
-            wallMs: 0,
-          };
-        return {
-          ok: true as const,
-          labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
-          wallMs: (w.__STORY_RENDER_WALL_MS__ as number) ?? 0,
-          counts: w.__GOFISH_PERF__?.current?.counts as Counts | undefined,
-        };
-      }, story.id);
-    const { id, title, name } = story;
-    let samples: Sample[] | null;
+    let samples: Sample[] | null = null;
+    let reason: SkippedExample["reason"] = "error";
     try {
       samples = await sampleLoop<Sample>(page, async () => {
-        const r = await withinBudget(renderOnce(), RENDER_BUDGET_MS);
+        const r = await withinBudget(
+          page.evaluate(async (id) => {
+            const w = window as any;
+            w.__GOFISH_PERF__ = { enabled: true, current: null };
+            w.__STORY_RENDER_WALL_MS__ = 0;
+            const success = await w.__renderStory__(id);
+            if (!success)
+              return {
+                ok: false as const,
+                labels: {} as Record<string, number>,
+                wallMs: 0,
+              };
+            return {
+              ok: true as const,
+              labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
+              wallMs: (w.__STORY_RENDER_WALL_MS__ as number) ?? 0,
+              counts: w.__GOFISH_PERF__?.current?.counts as Counts | undefined,
+            };
+          }, story.id)
+        );
         if (!r.ok) return { ok: false };
         return {
           ok: true,
@@ -453,23 +449,27 @@ async function benchExamplesJs(
       });
     } catch (err) {
       if (!(err instanceof RenderTimeout)) throw err;
-      console.log(`TIMEOUT ${elapsed()}`);
-      skipped.push({ id, title, name, reason: "timeout" });
+      reason = "timeout";
+      // The stuck work must not bleed into the next story.
       await page.close();
       page = await openStoriesRunner(context);
-      continue;
     }
     if (!samples || samples.length === 0) {
-      console.log(`SKIP ${elapsed()}`);
-      skipped.push({ id, title, name, reason: "error" });
+      console.log(`${reason === "timeout" ? "TIMEOUT" : "SKIP"} ${elapsed()}`);
+      skipped.push({
+        id: story.id,
+        title: story.title,
+        name: story.name,
+        reason,
+      });
       continue;
     }
     // moduleKey is relative to tests/harness; resolve to hash the source file.
     const specHash = specHashOf(resolvePath(HARNESS_DIR, story.moduleKey));
     results.push({
-      id,
-      title,
-      name,
+      id: story.id,
+      title: story.title,
+      name: story.name,
       specHash,
       passes: labelStats(samples.map((s) => s.labels)),
       totalMs: stat(samples.map((s) => sumPasses(s.labels))),
@@ -648,30 +648,35 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
         deriveServerUrl,
       };
 
-      const r = await page.evaluate(async (s) => {
-        const w = window as any;
-        w.__GOFISH_PERF__ = { enabled: true, current: null };
-        const root = document.getElementById("gofish-harness-root");
-        if (root) root.innerHTML = "";
-        w.__GOFISH_RENDER_COMPLETE__ = false;
-        w.__GOFISH_RENDER_ERROR__ = null;
-        const t0 = performance.now();
-        w.__renderChart__(s);
-        // Poll with setTimeout(0), not a fixed 5ms tick — the old quantization
-        // added 0–5ms of slop, the same order as the Python tax being measured.
-        const deadline = performance.now() + 30000;
-        while (!w.__GOFISH_RENDER_COMPLETE__ && performance.now() < deadline) {
-          await new Promise((res) => setTimeout(res, 0));
-          if (w.__GOFISH_RENDER_ERROR__) break;
-        }
-        const wallMs = performance.now() - t0;
-        return {
-          err: w.__GOFISH_RENDER_ERROR__ as string | null,
-          wallMs,
-          labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
-          counts: w.__GOFISH_PERF__?.current?.counts as Counts | undefined,
-        };
-      }, spec);
+      const r = await withinBudget(
+        page.evaluate(async (s) => {
+          const w = window as any;
+          w.__GOFISH_PERF__ = { enabled: true, current: null };
+          const root = document.getElementById("gofish-harness-root");
+          if (root) root.innerHTML = "";
+          w.__GOFISH_RENDER_COMPLETE__ = false;
+          w.__GOFISH_RENDER_ERROR__ = null;
+          const t0 = performance.now();
+          w.__renderChart__(s);
+          // Poll with setTimeout(0), not a fixed 5ms tick — the old quantization
+          // added 0–5ms of slop, the same order as the Python tax being measured.
+          const deadline = performance.now() + 30000;
+          while (
+            !w.__GOFISH_RENDER_COMPLETE__ &&
+            performance.now() < deadline
+          ) {
+            await new Promise((res) => setTimeout(res, 0));
+            if (w.__GOFISH_RENDER_ERROR__) break;
+          }
+          const wallMs = performance.now() - t0;
+          return {
+            err: w.__GOFISH_RENDER_ERROR__ as string | null,
+            wallMs,
+            labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
+            counts: w.__GOFISH_PERF__?.current?.counts as Counts | undefined,
+          };
+        }, spec)
+      );
 
       if (r.err) return { ok: false };
       return {
@@ -746,11 +751,14 @@ async function evalSyntheticSample(
   n: number
 ): Promise<SyntheticSample | null> {
   try {
-    return (await page.evaluate(
-      ([f, k]) => (window as any).__runSyntheticBench__(f, k),
-      [family, n] as [string, number]
+    return (await withinBudget(
+      page.evaluate(([f, k]) => (window as any).__runSyntheticBench__(f, k), [
+        family,
+        n,
+      ] as [string, number])
     )) as SyntheticSample;
-  } catch {
+  } catch (err) {
+    if (err instanceof RenderTimeout) throw err;
     return null;
   }
 }
@@ -992,12 +1000,15 @@ async function benchRuler(
       process.stdout.write(`  ${pt.family} n=${pt.n} ... `);
       const samples = await sampleLoop<number>(page, async () => {
         try {
-          const r = (await page.evaluate(
-            ([f, n]) => (window as any).__runRulerPoint__(f, n),
-            [pt.family, pt.n] as [string, number]
+          const r = (await withinBudget(
+            page.evaluate(([f, n]) => (window as any).__runRulerPoint__(f, n), [
+              pt.family,
+              pt.n,
+            ] as [string, number])
           )) as { wallMs: number };
           return { ok: true, value: r.wallMs };
-        } catch {
+        } catch (err) {
+          if (err instanceof RenderTimeout) throw err;
           return { ok: false };
         }
       });
@@ -1266,16 +1277,12 @@ async function main() {
       viewport: { width: 1280, height: 720 },
     });
     const page = await context.newPage();
-    page.on("pageerror", (e) => {
-      if (process.env.DEBUG) console.error(`[pageerror] ${e.message}`);
-    });
+    logPageErrors(page);
 
     if (wantSyn) {
       if (abActive && abBase) {
         const basePage = await context.newPage();
-        basePage.on("pageerror", (e) => {
-          if (process.env.DEBUG) console.error(`[base pageerror] ${e.message}`);
-        });
+        logPageErrors(basePage, "base pageerror");
         const { head, base } = await benchSyntheticAB(page, basePage);
         results.synthetic = head;
         await basePage.close();

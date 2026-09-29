@@ -42,6 +42,7 @@
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
+import type { SkippedExample } from "./bench";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const BENCH_DIR = join(TESTS_DIR, "tmp/bench");
@@ -74,14 +75,7 @@ type Results = {
     ruler: RulerMeta | null;
   };
   examplesJs: ExampleResult[];
-  // Stories bench.ts could not measure (see SkippedExample there). Optional:
-  // older history files predate it.
-  examplesJsSkipped?: {
-    id: string;
-    title: string;
-    name: string;
-    reason: "timeout" | "error";
-  }[];
+  examplesJsSkipped?: SkippedExample[]; // absent in older history files
   examplesPy: { path: string; totalMs: Stat; loadMs: Stat; overheadMs: Stat }[];
   synthetic: SyntheticPoint[];
 };

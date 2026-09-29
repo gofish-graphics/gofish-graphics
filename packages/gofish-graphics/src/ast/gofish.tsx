@@ -1012,17 +1012,9 @@ type ChartState = {
 };
 type ChartHost = HTMLElement & { __gofishState?: ChartState };
 
-/**
- * Tear down the chart `gofish()` rendered into `container`, if any: dispose its
- * Solid root (which empties the container) and its interaction runtime, which
- * detaches its DOM listeners and drops it from every input it read. After that
- * a still-running input, such as a looping `timer()` the chart read, no longer
- * re-renders the dead chart. The input itself keeps running, because an input
- * is not owned by any one chart. A no-op on an element no chart rendered into.
- *
- * Not part of the public API yet. The story harness uses it to clear one
- * story before rendering the next into the same page.
- */
+/** Tear down the chart `gofish()` rendered into `container`, if any: its Solid
+ *  root and its interaction runtime. A no-op on an element no chart rendered
+ *  into. Internal (see "Frame publication" in the Rendering essay). */
 export function disposeChart(container: HTMLElement): void {
   const host = container as ChartHost;
   const state = host.__gofishState;
@@ -1075,10 +1067,9 @@ export const gofish = (
   //     chart whose container is now someone else's.
   const prev = stateHost.__gofishState;
   if (prev) {
+    prev.dispose();
     if (prev.runtime && prev.runtime !== options.interaction) {
-      disposeChart(container);
-    } else {
-      prev.dispose();
+      prev.runtime.dispose();
     }
   }
 

@@ -88,23 +88,30 @@ declare global {
 
 window.__listStories__ = () => allStories;
 
+/** The children `<body>` had at load; anything else there a story appended. */
+const bodyAtLoad = new Set<Node>(document.body.childNodes);
+
 /**
  * Tear down whatever the previous story rendered before the next one renders
  * into this same page. Clearing the DOM is not enough: a chart that read an
  * input (a `timer()`, a slider) keeps an interaction runtime, and a live input
- * keeps re-rendering that chart into its detached container forever. Over many
- * stories and bench samples those dead charts pile up and starve the page. So
- * dispose every chart first, then clear the DOM.
+ * keeps re-rendering that chart into its detached container forever. So every
+ * chart is disposed first, then the root is cleared and the containers the
+ * stories' `initializeContainer()` appended to `<body>` are removed.
  *
- * The walk covers all of `document.body`, not just the root: the stories'
- * `initializeContainer()` appends its container to `<body>`, and a story that
- * renders into a container it does not return would leave a chart there.
+ * Charts are found by the `__gofishState` they leave on their containers,
+ * not through a registry in the engine, which this page's engine source and
+ * the prod bench's `dist-bench` bundle would not share (see "Frame
+ * publication" in the Rendering essay).
  */
 function disposePreviousStory(root: HTMLElement): void {
   for (const el of document.body.querySelectorAll<HTMLElement>("*")) {
     disposeChart(el);
   }
   root.innerHTML = "";
+  for (const child of [...document.body.childNodes]) {
+    if (!bodyAtLoad.has(child)) child.remove();
+  }
 }
 
 /**

@@ -28,7 +28,9 @@ import {
   getOwner,
   onCleanup,
   untrack,
+  type Accessor,
   type Owner,
+  type Setter,
 } from "solid-js";
 import { runInLiveEval } from "./resolveContext";
 
@@ -80,19 +82,10 @@ const decisions = new WeakMap<Owner, WeakMap<() => unknown, () => unknown>>();
  * `read` as ONE reactive decision for the paint in progress, made the first
  * time any slot of this paint asks for `read` and handed to every slot after
  * that. The decision re-reads `read`'s inputs on each change, and the slots
- * that read it are notified only when its VALUE changes.
- *
- * This is what a rule many items share wants. A keyframe's visibility is read
- * by every item under the keyframe; read directly, each item's slot would
- * re-read the clock on every tick, so a tick would cost one effect per item of
- * the whole chart. Read through its decision, a tick costs one evaluation per
- * rule, and only the items whose rule changed its answer are touched.
- *
- * It is a computation that writes a signal rather than a `createMemo`: when an
- * input changes, Solid marks everything downstream of a memo as pending before
- * it knows whether the memo's value changed, which is still a visit to every
- * item per tick. A signal notifies its readers only when it is written with a
- * new value.
+ * that read it are notified only when its VALUE changes, so a rule many items
+ * share (a keyframe's visibility) costs one evaluation per tick instead of one
+ * per item. Why it writes a signal rather than being a `createMemo` is in the
+ * Reactivity essay ("Animation: containment, twice").
  *
  * The decision belongs to the paint that made it, so it is disposed with that
  * paint and a later paint makes its own. A lowering with no reactive owner (a
@@ -102,24 +95,26 @@ const decisions = new WeakMap<Owner, WeakMap<() => unknown, () => unknown>>();
 export function sharedDecision<T>(read: () => T): () => T {
   const owner = getOwner();
   if (owner === null) return read;
-  let memos = decisions.get(owner);
-  if (memos === undefined) {
-    decisions.set(owner, (memos = new WeakMap()));
+  let byRead = decisions.get(owner);
+  if (byRead === undefined) {
+    decisions.set(owner, (byRead = new WeakMap()));
     // The owner outlives this paint when it re-runs, and the decisions go
     // with the paint.
     onCleanup(() => decisions.delete(owner));
   }
-  let decision = memos.get(read);
-  if (decision === undefined) {
-    const [value, setValue] = createSignal(readLive(read));
-    createComputed(() => {
-      const next = runInLiveEval(read);
-      setValue(() => next);
-    });
-    decision = value;
-    memos.set(read, decision);
-  }
-  return decision as () => T;
+  const made = byRead.get(read);
+  if (made !== undefined) return made as () => T;
+  let decision: Accessor<T> | undefined;
+  let setDecision: Setter<T> | undefined;
+  // A computation's first run is synchronous: it creates the signal from its
+  // first reading, so `decision` is set by the time `createComputed` returns.
+  createComputed(() => {
+    const next = runInLiveEval(read);
+    if (setDecision === undefined) [decision, setDecision] = createSignal(next);
+    else setDecision(() => next);
+  });
+  byRead.set(read, decision!);
+  return decision!;
 }
 
 /**
