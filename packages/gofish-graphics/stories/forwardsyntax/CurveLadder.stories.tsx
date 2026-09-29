@@ -13,6 +13,14 @@ import {
   timer,
 } from "../../src/lib";
 import { pausedClock } from "../animated-vega-lite/pausedClock";
+import {
+  type Gap,
+  type LadderCurve,
+  type PixelMap,
+  largestGaps,
+  samplePath,
+  toPixels,
+} from "./curveGaps";
 
 /**
  * The data-space curve ladder, from the least to the most smooth: the same
@@ -78,41 +86,145 @@ export const Ladder: StoryObj = {
 /** The years the driving data covers, which the shared clock plays. */
 const YEARS: [number, number] = [1956, 2010];
 
+/** A panel's plot size, and its pixel map. Every gap below is measured
+ *  through this map, so a gap's "px" is a distance on this 560 × 420 plot.
+ *
+ *  The map is the one the chart resolves: its axes run over the data's
+ *  extents rounded out to their ticks, 3,500 to 10,500 miles and $1.20 to
+ *  $3.40, spread over the plot (read off a render). Every panel resolves the
+ *  same domain because everything layered into one stays inside it: the
+ *  curves pass the data by at most a few cents, and the rings and their
+ *  labels are placed inside the plot. */
+const PANEL = { w: 560, h: 420 };
+const knots = drivingShifts.map((d) => d.year);
+const milesOf = drivingShifts.map((d) => d.miles);
+const gasOf = drivingShifts.map((d) => d.gas);
+const PIXELS: PixelMap = { x: [3500, 10500], y: [1.2, 3.4], ...PANEL };
+/** A point on the panel, in pixels, back in data: where a ring is placed. */
+const toData = (p: { x: number; y: number }) => ({
+  miles: PIXELS.x[0] + (p.x / PIXELS.w) * (PIXELS.x[1] - PIXELS.x[0]),
+  gas: PIXELS.y[1] - (p.y / PIXELS.h) * (PIXELS.y[1] - PIXELS.y[0]),
+});
+
+/** Each curve's path on the panel, in pixels, sampled densely over year. */
+const pathOf = (curve: LadderCurve) =>
+  samplePath(curve, knots, milesOf, gasOf).map((p) => toPixels(PIXELS, p));
+
+/** Where each curve parts company from the rung below it: the three largest
+ *  gaps, from distinct places. */
+const GAPS = new Map(
+  CURVES.slice(1).map((curve, k) => [
+    curve,
+    { below: CURVES[k], gaps: largestGaps(pathOf(curve), pathOf(CURVES[k]), knots) },
+  ])
+);
+
+const RING = "#d62728";
+
+/** The rings around one panel's gaps, each with its rank and size written
+ *  just above it. Ordinary marks in a chart of their own, placed by the same
+ *  fields as the panel, so they share its scales. */
+const rings = (gaps: Gap[]) => {
+  if (gaps.length === 0) return [];
+  const rows = gaps.map((g, i) => ({
+    id: i,
+    ...toData(g.at),
+    label: `${i + 1} · ${g.px.toFixed(1)} px`,
+  }));
+  const labels = gaps.map((g, i) => ({
+    id: i,
+    // Above the ring in the lower half of the plot, below it in the upper
+    // half, so a label never leaves the plot.
+    ...toData({ x: g.at.x, y: g.at.y + (g.at.y < PANEL.h / 2 ? 30 : -30) }),
+    label: rows[i].label,
+  }));
+  return [
+    chart(rows)
+      .flow(scatter({ by: "id", x: "miles", y: "gas" }))
+      .mark(circle({ r: 16, fill: "none", stroke: RING, strokeWidth: 2 })),
+    chart(labels)
+      .flow(scatter({ by: "id", x: "miles", y: "gas" }))
+      .mark((group: any[]) =>
+        text({ text: group[0].label, fontSize: 12, fill: RING })
+      ),
+  ];
+};
+
 /**
- * One panel of the animated ladder: the static `Ladder` panel, with a moving
- * dot layered over it. The dot is a second chart of the same rows, played by
+ * One panel of the animated ladder: the driving connected scatter plot drawn
+ * with the panel's curve, thick, over a faint dashed ghost of the rung below
+ * it, with red rings around the three places the two part company most, and
+ * a moving dot. The dot is a chart of the same rows, played by
  * `time.sequence` over year on the shared clock and moved by
- * `time.transition` with the panel's curve. The line and the transition read
- * the same curve over the same knots (the years), so the dot rides exactly on
- * the line. The layered chart places its marks by the same fields as the
- * panel, so it shares the panel's scales.
+ * `time.transition` with the panel's curve, so it rides exactly on the line.
+ * The layered charts place their marks by the same fields as the panel, so
+ * they share its scales.
  */
-const animatedPanel = (
-  x: string,
-  curve: (typeof CURVES)[number],
-  clock: any
-) =>
-  chart(drivingShifts, { axes: true })
-    .flow(scatter({ by: "year", x, y: "gas" }))
-    .mark(circle({ r: 2.5, fill: "white", stroke: "black", strokeWidth: 1 }))
-    .layer(line({ along: "year", curve, stroke: "steelblue" }))
+const animatedPanel = (curve: LadderCurve, clock: any) => {
+  const below = GAPS.get(curve);
+  /** The years as points, placed on the panel. The ghost and the panel's own
+   *  curve are each a line threaded along year through their own copy. */
+  const points = () =>
+    chart(drivingShifts).flow(scatter({ by: "year", x: "miles", y: "gas" }));
+  // The panel's frame and axes, with the ghost of the rung below, if any,
+  // drawn first so everything else sits over it.
+  let panel = chart(drivingShifts, { axes: true })
+    .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+    .mark(circle({ r: 3.5, opacity: 0 }));
+  if (below !== undefined) {
+    panel = panel.layer(
+      line({
+        along: "year",
+        curve: below.below,
+        stroke: "#999",
+        strokeWidth: 1.5,
+        strokeDasharray: "6,4",
+      })
+    );
+  }
+  panel = panel
+    .layer(
+      points()
+        .mark(
+          circle({ r: 3.5, fill: "white", stroke: "black", strokeWidth: 1 })
+        )
+        .layer(
+          line({ along: "year", curve, stroke: "steelblue", strokeWidth: 2.5 })
+        )
+    )
     .layer(
       chart(drivingShifts)
         .flow(
           time.sequence({ by: "year", on: clock }),
-          scatter({ x, y: "gas" })
+          scatter({ x: "miles", y: "gas" })
         )
-        .mark(
-          circle({ r: 5, fill: "#e4572e", stroke: "black", strokeWidth: 1.5 })
-        )
+        .mark(circle({ r: 7, fill: "#e4572e", stroke: "black", strokeWidth: 1.5 }))
         .layer(time.transition({ curve }))
     );
+  for (const ringChart of below === undefined ? [] : rings(below.gaps)) {
+    panel = panel.layer(ringChart);
+  }
+  return panel;
+};
+
+/** The caption under a panel: what it is compared with, and the largest gap. */
+const caption = (curve: LadderCurve): string => {
+  const below = GAPS.get(curve);
+  if (below === undefined) {
+    return "step: holds each point until the next year, then jumps";
+  }
+  const [top] = below.gaps;
+  if (top === undefined) {
+    return `vs ${below.below} (dashed): the same path. On a connected scatter plot step holds both values and jumps diagonally, so it differs only in timing.`;
+  }
+  return `vs ${below.below} (dashed): largest gap ${top.px.toFixed(1)} px, ${top.from}–${top.to}`;
+};
 
 /**
- * The ladder as a grid with one column per curve, so the curves sit side by
- * side: gas price by year on top, the connected scatter plot of miles against
- * gas price below. Every panel's dot moves on one clock, and the year is
- * written once above the grid.
+ * The ladder as a wrapping grid of large panels, one per curve, each the
+ * driving connected scatter plot. Every panel's dot moves on one clock, and
+ * the year is written once above the grid. Gaps are distances in pixels on
+ * a 560 × 420 panel, with the data's extents spread over the panel.
  */
 const animatedLadder = (clock: any) => {
   const container = initializeContainer();
@@ -130,22 +242,25 @@ const animatedLadder = (clock: any) => {
 
   const grid = document.createElement("div");
   grid.style.display = "grid";
-  grid.style.gridTemplateColumns = `repeat(${CURVES.length}, 230px)`;
-  grid.style.gap = "4px 12px";
+  grid.style.gridTemplateColumns = `repeat(auto-fill, ${PANEL.w + 40}px)`;
+  grid.style.gap = "24px 8px";
   container.appendChild(grid);
   for (const curve of CURVES) {
-    const label = document.createElement("div");
-    label.textContent = curve;
-    label.style.fontWeight = "bold";
-    label.style.textAlign = "center";
-    grid.appendChild(label);
-  }
-  for (const x of ["year", "miles"]) {
-    for (const curve of CURVES) {
-      const cell = document.createElement("div");
-      grid.appendChild(cell);
-      animatedPanel(x, curve, clock).render(cell, { w: 175, h: 280 });
-    }
+    const cell = document.createElement("div");
+    const title = document.createElement("div");
+    title.textContent = curve;
+    title.style.fontWeight = "bold";
+    cell.appendChild(title);
+    const plot = document.createElement("div");
+    cell.appendChild(plot);
+    const note = document.createElement("div");
+    note.textContent = caption(curve);
+    note.style.fontSize = "13px";
+    note.style.color = "#555";
+    note.style.maxWidth = `${PANEL.w + 30}px`;
+    cell.appendChild(note);
+    grid.appendChild(cell);
+    animatedPanel(curve, clock).render(plot, PANEL);
   }
   return container;
 };
@@ -156,9 +271,8 @@ export const LadderAnimated: StoryObj = {
   render: () => animatedLadder(timer({ domain: YEARS, duration: 20000 })),
 };
 
-/** The animated ladder held at 1980.5, between the 1980 and 1981 gas peaks of
- *  3.30: `monotone` stays flat at 3.30, while `smooth` and `smoother` pass
- *  above it. */
-export const LadderAnimatedPaused1980: StoryObj = {
-  render: () => animatedLadder(pausedClock(YEARS, 20000, 1980.5)),
+/** The animated ladder held at 1986.3, where `smooth` and `smoother` are
+ *  furthest apart: the 1986 fall in gas prices, which `smoother` overshoots. */
+export const LadderAnimatedPaused1986: StoryObj = {
+  render: () => animatedLadder(pausedClock(YEARS, 20000, 1986.3)),
 };
