@@ -46,6 +46,33 @@ export type PathSegment = LineSegment | BezierCurve;
 
 export type Path = PathSegment[];
 
+/**
+ * One step of a threaded run: the segments drawn from one point to the next,
+ * and how the step's time is shared out among them. `spans[j]` is the share
+ * of the step's time segment `j` takes, a fraction of the step, and the
+ * shares add up to 1. Inside a segment with a nonzero share, time moves
+ * linearly with the segment's own parameter. A segment with a share of 0 is
+ * an instant: it is drawn all at once, at the moment the shares before it add
+ * up to (`windowPath` in `timeWindow.ts`).
+ */
+export type Step = { segments: PathSegment[]; spans: number[] };
+
+/** A step whose segments split its time evenly. */
+export const evenStep = (segments: PathSegment[]): Step => ({
+  segments,
+  spans: segments.map(() => 1 / segments.length),
+});
+
+/** A segment traversed from its end to its start: the same points. */
+export const reverseSegment = (seg: PathSegment): PathSegment =>
+  seg.type === "line"
+    ? segment(seg.points[1], seg.points[0])
+    : curve(seg.end, seg.control2, seg.control1, seg.start);
+
+/** A path traversed from its end to its start: the same points. */
+export const reversePath = (path: Path): Path =>
+  path.map(reverseSegment).reverse();
+
 export const segmentToSVG = (segment: PathSegment): string => {
   if (segment.type === "line") {
     const [[x1, y1], [x2, y2]] = segment.points;

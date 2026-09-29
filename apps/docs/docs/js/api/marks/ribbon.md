@@ -38,8 +38,8 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x",
 ::: gofish-ref ribbon
 :::
 
-`curve` accepts the strings `"linear"`, `"bezier"`, `"monotone"`, `"smooth"`,
-`"smoother"` or `"catmullRom"`, or a `CurveSpec` factory: `bezier()`, `orthogonal()`,
+`curve` accepts the strings `"linear"`, `"bezier"`, `"step"`, `"monotone"`,
+`"smooth"`, `"smoother"` or `"catmullRom"`, or a `CurveSpec` factory: `bezier()`, `orthogonal()`,
 `arc({ direction: "up" | "down" })`, or `perfectArrows({ bow })`. `"linear"`
 has no factory, because [`linear()`](/js/api/coords/linear) is the coordinate
 transform. The default `"auto"` inspects the connection axis: over a
@@ -61,7 +61,7 @@ the whole edge monotone: the band still turns where the data turns, and the
 peak sits exactly on the data point. It is the same curve as d3's
 `curveMonotoneX` and Vega-Lite's `interpolate: "monotone"`. `"smooth"` and
 `"smoother"` are smoother curves over the same knots, and can go a little past
-a point. The
+a point. `"step"` steps both edges, as Vega-Lite's stepped area does. The
 [curves table on the `line` page](/js/api/marks/line#curves-through-data)
 compares them. `"catmullRom"` is a
 centripetal Catmull-Rom spline through the edge points on the screen. Its knots

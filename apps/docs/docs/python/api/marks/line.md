@@ -38,9 +38,10 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
 ## Curves through data
 
-Four curve names draw a line through a run of values, read over the field that
+Five curve names draw a line through a run of values, read over the field that
 orders it, such as the years of a line chart. From the least to the most
-smooth, they are `"linear"`, `"monotone"`, `"smooth"` and `"smoother"`. When
+smooth, they are `"step"`, `"linear"`, `"monotone"`, `"smooth"` and
+`"smoother"`. When
 `curve` is left out, a line over a continuous axis uses `"monotone"`.
 
 A few terms help compare them. A curve is **C0** when it has no breaks, **C1**
@@ -50,12 +51,13 @@ between two neighboring points, it goes above the higher one or below the
 lower one. A curve is **local** when changing one value changes the curve only
 near that point.
 
-| Name       | What you see                                                                        | Algorithm                                                                           | Continuity | Local | Never overshoots |
-| ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------- | ----- | ---------------- |
-| `linear`   | Straight segments from point to point.                                              | straight lines                                                                      | C0         | yes   | yes              |
-| `monotone` | A smooth curve that turns exactly on the points.                                    | Steffen (1990), the same curve as d3's `curveMonotoneX`                             | C1         | yes   | yes              |
-| `smooth`   | Rounder peaks that can pass a little beyond their points. Long flat runs stay flat. | modified Akima, also called makima (Moler 2019), as in MATLAB and SciPy             | C1         | yes   | no               |
-| `smoother` | The smoothest curve, with no sudden change in curvature. It can dip next to a jump. | Yuksel (2020), "A Class of C2 Interpolating Curves", applied to one value at a time | C2         | yes   | no               |
+| Name       | What you see                                                                        | Algorithm                                                                           | Continuity     | Local | Never overshoots |
+| ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------- | ----- | ---------------- |
+| `step`     | Each value holds until the next point, and then jumps.                              | step-after, like d3's `curveStepAfter`                                              | not continuous | yes   | yes              |
+| `linear`   | Straight segments from point to point.                                              | straight lines                                                                      | C0             | yes   | yes              |
+| `monotone` | A smooth curve that turns exactly on the points.                                    | Steffen (1990), the same curve as d3's `curveMonotoneX`                             | C1             | yes   | yes              |
+| `smooth`   | Rounder peaks that can pass a little beyond their points. Long flat runs stay flat. | modified Akima, also called makima (Moler 2019), as in MATLAB and SciPy             | C1             | yes   | no               |
+| `smoother` | The smoothest curve, with no sudden change in curvature. It can dip next to a jump. | Yuksel (2020), "A Class of C2 Interpolating Curves", applied to one value at a time | C2             | yes   | no               |
 
 `"monotone"` is **piecewise** monotone. Between two neighboring points, each
 coordinate only rises or only falls, so the curve never goes past either point.
@@ -68,11 +70,19 @@ and a fall can bow a little. `"smoother"` has no sudden change in curvature
 anywhere. Next to a sudden jump in the data it can dip a little past the points
 on either side.
 
-The JavaScript library also has `"step"`, the first rung of the same ladder. It
-is a way to read values over time in an animation, which the Python package
-does not have yet. See the
-[JavaScript `line` page](/js/api/marks/line#curves-through-data) for how a
-line picks the knots of its curve.
+`step` holds every value that depends on the field that orders the line until
+the next point's value of that field, and then jumps. It never holds the field
+itself. On a line chart over years, the year is the x axis, so the line moves
+along x while y holds, and the jump is a vertical riser: the staircase of d3's
+`curveStepAfter` and Vega-Lite's `interpolate: "step-after"`. On a connected
+scatterplot over years, x and y both depend on the year, so both hold, and
+the jump is a straight line from one point to the next, so it looks like
+`linear`. This differs on purpose from d3's step curves, which always draw a
+horizontal step and then a vertical one on the screen, whatever the axes
+mean.
+
+See the [JavaScript `line` page](/js/api/marks/line#curves-through-data) for
+how a line picks the knots of its curve.
 
 ## The line pattern
 

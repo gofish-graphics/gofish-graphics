@@ -533,6 +533,17 @@ arrangement tier (`spread`/`stack`) travels its own `dir`; anything else
 (a scatter) travels flow order, leaving `dir` unset so `line`/`ribbon`'s own
 `?? "x"` applies — an explicit `opts.dir` still wins over either.
 
+The same pass writes one more cell, `inferred.parameterAxis`: the axis the
+path tier places its groups on by its own `by` field, when it does. It reads
+the path tier's `fields` (its `axisFields`, which `createOperator` copies onto
+the `__arrangement` tag), so `scatter({ by: "year", x: "year" })` and
+`spread({ by: "year", dir: "x" })` both report `"x"`, and
+`scatter({ by: "year", x: "miles" })` reports nothing. That axis draws the
+connection variable itself. `line`/`ribbon` pass it to `connect`, where the
+`step` curve lets that coordinate advance while every other one holds (a
+staircase on a line chart over years, straight jumps on a connected
+scatterplot). The smooth curves ignore it.
+
 Either way, once the path tier index is settled, the path tier's own `by`
 orders the path and never splits; every _other_ flow tier's `by` becomes one
 term of a synthesized composite split key (`ChartBuilder`'s

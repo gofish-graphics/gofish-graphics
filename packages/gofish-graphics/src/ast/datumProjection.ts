@@ -140,6 +140,11 @@ export type InferredRelational = {
    *  inferred. A smooth `line` or `ribbon` uses each operand's value of it as
    *  the knots of its curve (see `runKnots` in `connect.tsx`). */
   along?: SplitBy;
+  /** The axis the path tier places its groups on by its own `by` field, when
+   *  it does: the x of `scatter({ by: "year", x: "year" })`. That axis draws
+   *  the connection variable itself, so a `step` curve lets it advance while
+   *  every other coordinate holds (`stepPath` in `spline.ts`). */
+  parameterAxis?: "x" | "y";
   resolved?: boolean;
   /** The flow's temporal tier, for a TEMPORAL relational mark
    *  (`time.transition()`). A spatial connector threads a tier of the flow

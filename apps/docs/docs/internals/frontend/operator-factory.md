@@ -232,7 +232,11 @@ not known here: the scatter defers the constraints that need it to the
 `axisFields` returns its grouping fields keyed by axis **name**, the way the
 operator names the axis (`spread({ by, dir: "theta" })` reports
 `{ theta: by }`), and the node builder looks its own measure up by that same
-name, so the measure needs no axis index at build time.
+name, so the measure needs no axis index at build time. The factory also
+copies these fields onto the operator's `__arrangement` tag as `fields`, which
+the relational-mark pass reads to tell whether a path tier draws its own `by`
+on an axis (`inferred.parameterAxis`; see
+[the mark factory](/internals/frontend/mark-factory)).
 
 **Windowed `normalize()` on an entry-flagged `size` channel.** `spread`/
 `stack` declare `size: { type: "size", entry: true }` (#700 Phase 2) — a

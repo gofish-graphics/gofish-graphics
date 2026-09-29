@@ -61,14 +61,24 @@ near that point.
 
 | Name       | What you see                                                                        | Algorithm                                                                           | Continuity     | Local | Never overshoots |
 | ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------- | ----- | ---------------- |
-| `step`     | Each value holds until the next one's time arrives, and then jumps.                 | d3's `curveStepAfter`, read over time                                               | not continuous | yes   | yes              |
+| `step`     | Each value holds until the next point, and then jumps.                              | step-after, like d3's `curveStepAfter`                                              | not continuous | yes   | yes              |
 | `linear`   | Straight segments from point to point.                                              | straight lines                                                                      | C0             | yes   | yes              |
 | `monotone` | A smooth curve that turns exactly on the points.                                    | Steffen (1990), the same curve as d3's `curveMonotoneX`                             | C1             | yes   | yes              |
 | `smooth`   | Rounder peaks that can pass a little beyond their points. Long flat runs stay flat. | modified Akima, also called makima (Moler 2019), as in MATLAB and SciPy             | C1             | yes   | no               |
 | `smoother` | The smoothest curve, with no sudden change in curvature. It can dip next to a jump. | Yuksel (2020), "A Class of C2 Interpolating Curves", applied to one value at a time | C2             | yes   | no               |
 
-`step` is a way to read values over time, not a shape for a line: a `line`
-does not take it. The other four also work as `line` and `ribbon` curves.
+`step` holds every value that depends on the field that orders the line until
+the next point's value of that field, and then jumps. It never holds the field
+itself. On a line chart over years, the year is the x axis, so the line moves
+along x while y holds, and the jump is a vertical riser: the staircase of d3's
+`curveStepAfter` and Vega-Lite's `interpolate: "step-after"`. On a connected
+scatterplot over years, x and y both depend on the year, so both hold, and
+the jump is a straight line from one point to the next. It looks like
+`linear`, but all of the time is spent at the points, so a line drawn in over
+time jumps from one point to the next at the moment the next year arrives.
+This differs on purpose from d3's step curves, which always draw a
+horizontal step and then a vertical one on the screen, whatever the axes
+mean.
 
 `"monotone"` is **piecewise** monotone. Between two neighboring points, each
 coordinate only rises or only falls, so the curve never goes past either point.
@@ -115,8 +125,8 @@ overshoot between two points. It is not used when values are read over time: a
 `time.transition()` along the same points follows one of the curves above, so
 its moving mark can sit slightly off a Catmull-Rom line.
 
-`curve` accepts the strings `"linear"`, `"bezier"`, `"monotone"`, `"smooth"`,
-`"smoother"` or `"catmullRom"`, or a `CurveSpec` factory:
+`curve` accepts the strings `"linear"`, `"bezier"`, `"step"`, `"monotone"`,
+`"smooth"`, `"smoother"` or `"catmullRom"`, or a `CurveSpec` factory:
 `bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`, or
 `perfectArrows({ bow })`. `"linear"` has no factory, because
 [`linear()`](/js/api/coords/linear) is the coordinate transform. The `orthogonal`

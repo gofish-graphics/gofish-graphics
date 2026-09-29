@@ -24,8 +24,8 @@
  *   sequence, so it runs along the time tier) draws only the part of itself
  *   that lies inside the window of the lifetime of the marks it connects, cut
  *   at the exact point in DATA time: knot `i` sits at its keyframe's time
- *   `t_i`, and inside a step time moves linearly with the step's own
- *   parameter (`windowPath`). So the tip of a line drawn up to the playhead is
+ *   `t_i`, and inside a step each segment takes its share of the step's time,
+ *   moving linearly with the segment's own parameter (`windowPath`). So the tip of a line drawn up to the playhead is
  *   where a moving mark would be at the same moment. Arc length would pace the
  *   drawing by distance on screen instead, and the distance one year covers
  *   can differ many times over from one year to the next.
@@ -55,6 +55,7 @@ import { mod } from "./util";
 import {
   type Path,
   type PathSegment,
+  type Step,
   lerpPoint,
   segment,
   subdivideCurve1,
@@ -170,19 +171,24 @@ export function showingAt(
 /**
  * The part of a threaded run that lies inside a window, cut by data time.
  *
- * `pieces[i]` is the step from knot `i` to knot `i + 1`, drawn as one or more
- * straight or cubic segments that split the step's time evenly, each with its
- * own parameter linear in time (the caller checks that), and `knots` are the
- * knots' times, strictly increasing. A point at local parameter `u` of step
- * `i` sits at time `t_i + u·(t_{i+1} − t_i)`; with `k` segments, it is at
- * parameter `u·k − j` of segment `j`. So a segment the window's edge falls
- * inside is cut at that edge's parameter: a line by interpolating its
- * endpoints, a cubic by de Casteljau. A window that meets the run in a single
- * instant, or not at all, draws nothing, and a window ending exactly on a
- * knot ends with the step before it.
+ * `pieces[i]` is the step from knot `i` to knot `i + 1`: its straight or
+ * cubic segments, each with its share of the step's time (`Step`; the caller
+ * checks the step runs from the one knot's point to the next's), and `knots`
+ * are the knots' times, strictly increasing. A point at local parameter `u`
+ * of step `i` sits at time `t_i + u·(t_{i+1} − t_i)`. A segment that starts
+ * at share `c` of the step and takes share `s` covers `[c, c + s]` of it, and
+ * inside it time moves linearly with the segment's own parameter, so a
+ * segment the window's edge falls inside is cut at `(u − c) / s`: a line by
+ * interpolating its endpoints, a cubic by de Casteljau. A segment with share
+ * 0 is an instant at `c`, drawn whole when the window holds that instant and
+ * not at all otherwise; so the riser of a `step` curve, an instant at the end
+ * of its step, is drawn once the window reaches the next knot's time. A
+ * window that meets the run in a single instant, or not at all, draws
+ * nothing, and a window ending exactly on a knot ends with the step before
+ * it.
  */
 export function windowPath(
-  pieces: Path[],
+  pieces: Step[],
   knots: number[],
   window: TimeWindow
 ): Path {
@@ -194,15 +200,24 @@ export function windowPath(
   const last = end.u === 0 ? end.i - 1 : end.i;
   const out: Path = [];
   for (let i = start.i; i <= last; i++) {
-    const step = pieces[i];
+    const { segments, spans } = pieces[i];
     const u0 = i === start.i ? start.u : 0;
     const u1 = i === end.i ? end.u : 1;
-    const k = step.length;
-    for (let j = 0; j < k; j++) {
-      const from = Math.max(u0 * k - j, 0);
-      const to = Math.min(u1 * k - j, 1);
-      if (from < to) out.push(cutSegment(step[j], from, to));
-    }
+    // Where each segment starts and ends in the step. The last one ends at
+    // exactly 1, since the shares add up to 1, whatever the rounding.
+    let c = 0;
+    segments.forEach((seg, j) => {
+      const s = spans[j];
+      const next = j === segments.length - 1 ? 1 : c + s;
+      if (s === 0) {
+        if (u0 <= c && c <= u1) out.push(seg);
+      } else {
+        const a = u0 <= c ? 0 : (u0 - c) / s;
+        const b = u1 >= next ? 1 : (u1 - c) / s;
+        if (a < b) out.push(cutSegment(seg, a, b));
+      }
+      c = next;
+    });
   }
   return out;
 }

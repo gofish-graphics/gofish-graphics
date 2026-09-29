@@ -31,6 +31,7 @@ import {
   monotoneSlopes,
   smoothSlopes,
   smootherJet,
+  stepPath,
   threadPath,
 } from "../spline";
 import {
@@ -39,7 +40,13 @@ import {
   interpolateRun,
   locate,
 } from "../interpolate";
-import { type Point, subdivideCurve1 } from "../path";
+import {
+  type BezierCurve,
+  type Path,
+  type Point,
+  reversePath,
+  subdivideCurve1,
+} from "../path";
 import { drivingShifts } from "../data/drivingShifts";
 
 let passed = 0;
@@ -78,9 +85,9 @@ function randomRun(rand: () => number, n: number) {
 /** A run threaded with the monotone cubic, which draws each step with ONE
  *  cubic, so the path is those cubics in order. */
 const monotonePath = (points: Point[], knots: number[]) =>
-  threadPath(points, knots, "monotone").map((step) => {
-    if (step.length !== 1) throw new Error("a monotone step is one cubic");
-    return step[0];
+  threadPath(points, knots, "monotone").map(({ segments }) => {
+    if (segments.length !== 1) throw new Error("a monotone step is one cubic");
+    return segments[0] as BezierCurve;
   });
 
 /** The point de Casteljau cuts a path's segment at, which is how
@@ -980,7 +987,16 @@ console.log("# smooth and smoother: a path's steps are the readings over time");
     const xs = points.map((p) => p[0]);
     const ys = points.map((p) => p[1]);
     for (const curve of ["smooth", "smoother"] as const) {
-      const steps = threadPath(points, knots, curve);
+      const threaded = threadPath(points, knots, curve);
+      // Every cubic of a step takes an equal share of its time.
+      if (
+        !threaded.every(({ segments, spans }) =>
+          spans.every((s) => s === 1 / segments.length)
+        )
+      ) {
+        shapeOk = false;
+      }
+      const steps = threaded.map(({ segments }) => segments as BezierCurve[]);
       if (steps.length !== n - 1) shapeOk = false;
       steps.forEach((step, i) => {
         // The step runs from its point to the next, with no gaps between its
@@ -1021,6 +1037,78 @@ console.log("# smooth and smoother: a path's steps are the readings over time");
     worst.smoother <= 1,
     `${worst.smoother}`
   );
+}
+
+console.log("# step: step-after over the run's parameter");
+{
+  // Reference vertices from d3-shape 3.2.0's `curveStepAfter`, recorded once
+  // on the first eight years of the driving-shifts data (gas by year), and
+  // for the lower edge of `area().y0(gas / 2).y1(gas)`, which d3 draws back
+  // from the last year to the first.
+  const rows = drivingShifts.slice(0, 8);
+  const d3Line: Point[] = [
+    [1956, 2.38], [1957, 2.38], [1957, 2.4], [1958, 2.4], [1958, 2.26],
+    [1959, 2.26], [1959, 2.31], [1960, 2.31], [1960, 2.27], [1961, 2.27],
+    [1961, 2.25], [1962, 2.25], [1962, 2.22], [1963, 2.22], [1963, 2.12],
+  ];
+  const d3Lower: Point[] = [
+    [1963, 1.06], [1963, 1.11], [1962, 1.11], [1962, 1.125], [1961, 1.125],
+    [1961, 1.135], [1960, 1.135], [1960, 1.155], [1959, 1.155], [1959, 1.13],
+    [1958, 1.13], [1958, 1.2], [1957, 1.2], [1957, 1.19], [1956, 1.19],
+  ];
+  const verticesOf = (path: Path): Point[] => {
+    const ends = (seg: Path[number]): [Point, Point] =>
+      seg.type === "line" ? seg.points : [seg.start, seg.end];
+    return [ends(path[0])[0], ...path.map((seg) => ends(seg)[1])];
+  };
+  const same = (a: Point[], b: Point[]) =>
+    a.length === b.length &&
+    a.every((p, i) => near(p[0], b[i][0], 1e-12) && near(p[1], b[i][1], 1e-12));
+  const byYear = stepPath(
+    rows.map((d) => [d.year, d.gas] as Point),
+    0
+  );
+  ok(
+    "with x drawing the parameter, the staircase d3's curveStepAfter draws",
+    same(verticesOf(byYear.flatMap((s) => s.segments)), d3Line),
+    JSON.stringify(verticesOf(byYear.flatMap((s) => s.segments)))
+  );
+  const lower = stepPath(
+    rows.map((d) => [d.year, d.gas / 2] as Point),
+    0
+  );
+  ok(
+    "and a band's far edge, drawn back, is the lower edge of d3's stepped area",
+    same(verticesOf(reversePath(lower.flatMap((s) => s.segments))), d3Lower)
+  );
+  ok(
+    "each step holds for all of its time, and its riser is an instant",
+    byYear.every(
+      ({ segments, spans }) =>
+        segments.length === 2 && spans[0] === 1 && spans[1] === 0
+    )
+  );
+  // No coordinate draws the parameter: both hold, so the hold is the point
+  // itself and the riser runs straight to the next point.
+  const points: Point[] = [
+    [0, 0],
+    [40, 10],
+    [20, 30],
+  ];
+  const diagonal = stepPath(points);
+  ok(
+    "with no coordinate drawing it, each hold is a point and each riser a diagonal",
+    diagonal.every(({ segments: [hold, riser] }, i) => {
+      if (hold.type !== "line" || riser.type !== "line") return false;
+      return (
+        hold.points[0] === points[i] &&
+        hold.points[1][0] === points[i][0] &&
+        hold.points[1][1] === points[i][1] &&
+        riser.points[1] === points[i + 1]
+      );
+    })
+  );
+  ok("a single point threads nothing", stepPath([[1, 2]]).length === 0);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

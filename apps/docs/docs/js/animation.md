@@ -602,9 +602,12 @@ another, or several at once), no staggering, and no options to restyle how
 marks enter and exit. The value axis cannot rescale from one keyframe to the
 next.
 
-A threaded line can be cut only when time runs evenly along each step from one
-keyframe to the next. The curves `"linear"`, `"bezier"`, `"monotone"`,
-`"smooth"`, `"smoother"` and `"catmullRom"` work. The routing curves `orthogonal()`, `arc()` and
+A threaded line can be cut only when each step from one keyframe to the next
+says how its time runs along it. The curves `"linear"`, `"bezier"`, `"step"`,
+`"monotone"`, `"smooth"`, `"smoother"` and `"catmullRom"` work. A `"step"` line
+spends all of a step's time at the earlier keyframe and draws the jump to the
+next one the moment its time arrives, which is where a mark moving with
+`curve: "step"` is. The routing curves `orthogonal()`, `arc()` and
 `perfectArrows()` throw an error, and so do a threaded `ribbon` and a threaded
 line pinned with `source` or `target`.
 

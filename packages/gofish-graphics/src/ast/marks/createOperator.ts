@@ -1224,6 +1224,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         kind: cfg.arrangement.kind,
         positions: cfg.arrangement.positions?.(opts) ?? { x: false, y: false },
         by: (opts as any).by,
+        fields: cfg.axisFields?.(opts),
       };
     }
     // Tag the operator with IR-serialization metadata so the frontend-IR

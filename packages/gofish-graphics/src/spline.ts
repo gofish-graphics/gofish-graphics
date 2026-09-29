@@ -32,7 +32,9 @@
  * `time.transition()` and `interpolate()` read one channel at the clock's
  * time (`channelSpline`), with the data's own time values as the knots;
  * `line` and `ribbon` thread their points with it (`threadPath`), with the
- * data's own parameter as the knots when the run has one.
+ * data's own parameter as the knots when the run has one. They thread a run
+ * with the `step` curve too (`stepPath`), which is not a spline: it holds
+ * every coordinate but the one that draws the parameter, and then jumps.
  *
  * The Catmull-Rom (`catmullRomPath`) threads a run of points on screen with
  * centripetal knots (`centripetalKnots`), as d3's `curveCatmullRom` does. It
@@ -48,7 +50,15 @@
  * line be cut by time (`windowPath` in `timeWindow.ts`).
  */
 
-import { type BezierCurve, type Point, curve, samePoint } from "./path";
+import {
+  type BezierCurve,
+  type Point,
+  type Step,
+  curve,
+  evenStep,
+  samePoint,
+  segment,
+} from "./path";
 
 /** Throw unless the knots are strictly ascending: every data-space curve
  *  divides by the length of each interval. A NaN knot is not caught here. */
@@ -446,7 +456,7 @@ export function monotoneJet(
 /** Thread a run of points with a smooth curve over `knots`: each coordinate
  *  is a channel of the same curve. The path comes back as one step per knot
  *  interval, and a step is the cubics that draw that interval
- *  (`ChannelSpline.bezier`), which split its share of the parameter evenly.
+ *  (`ChannelSpline.bezier`), which split its time evenly.
  *  Fewer than two points thread nothing.
  *
  *  A point at the same knot as the one before it repeats that point, as d3
@@ -461,7 +471,7 @@ export function threadPath(
   points: Point[],
   knots: number[],
   smooth: SmoothCurve
-): BezierCurve[][] {
+): Step[] {
   // The distinct points, and for each input point the distinct one it is.
   const kept: number[] = [];
   const keptAt: number[] = [];
@@ -479,12 +489,12 @@ export function threadPath(
     );
   const xs = channel(0);
   const ys = channel(1);
-  const steps: BezierCurve[][] = [];
+  const steps: Step[] = [];
   for (let i = 0; i + 1 < points.length; i++) {
     const start = points[i];
     const end = points[i + 1];
     if (keptAt[i + 1] === keptAt[i]) {
-      steps.push([curve(start, start, end, end)]);
+      steps.push(evenStep([curve(start, start, end, end)]));
       continue;
     }
     const bx = xs.bezier(keptAt[i]);
@@ -502,7 +512,46 @@ export function threadPath(
         )
       );
     }
-    steps.push(step);
+    steps.push(evenStep(step));
+  }
+  return steps;
+}
+
+/**
+ * Thread a run of points with the `step` curve: step-after over the run's
+ * parameter. The parameter advances, every other channel holds its value
+ * until the next point's time arrives, and the jump to the next point is
+ * drawn as a straight connector that takes no time. So step `i` is a hold
+ * from point `i`, which takes all of the step's time, and then a riser to
+ * point `i + 1`, which is an instant at the next point's time. That is the
+ * reading `interpolate({ method: "step" })` and `time.transition({ curve:
+ * "step" })` give: at the next point's time the value is already the next
+ * point's.
+ *
+ * `parameterAxis` is the coordinate that draws the parameter itself, when
+ * one does: a line chart over years, whose x is the year. That coordinate
+ * advances during the hold, so the hold is a horizontal run and the riser is
+ * vertical, the staircase d3's `curveStepAfter` and Vega-Lite's
+ * `interpolate: "step-after"` draw. When no coordinate draws the parameter
+ * (a connected scatter plot over years, a run of keyframes, or a run threaded
+ * with centripetal knots, whose parameter is only the order of the points),
+ * both coordinates hold. The hold is then a single point, and the riser is a
+ * straight diagonal: the drawn shape is the linear one, but all the time is
+ * spent at the points and every jump is instant. This differs on purpose from
+ * d3's `curveStep` family, which always draws horizontal-then-vertical steps
+ * on screen, whatever the axes mean.
+ */
+export function stepPath(points: Point[], parameterAxis?: 0 | 1): Step[] {
+  const steps: Step[] = [];
+  for (let i = 0; i + 1 < points.length; i++) {
+    const start = points[i];
+    const end = points[i + 1];
+    const held: Point = [start[0], start[1]];
+    if (parameterAxis !== undefined) held[parameterAxis] = end[parameterAxis];
+    steps.push({
+      segments: [segment(start, held), segment(held, end)],
+      spans: [1, 0],
+    });
   }
   return steps;
 }

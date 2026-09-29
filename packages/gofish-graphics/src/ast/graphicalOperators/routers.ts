@@ -9,7 +9,7 @@
  *
  * Built-ins below are the *routing* curves (linear / bezier / orthogonal /
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
- * pairwise, and the *sequence* curves (monotone, smooth, smoother,
+ * pairwise, and the *sequence* curves (step, monotone, smooth, smoother,
  * catmullRom), which thread the whole point run (`sequenceCurve`).
  *
  * Register a new router with `registerRoute(name, fn)`; look one up with
@@ -19,6 +19,8 @@ import {
   type Path,
   type Point,
   type BezierCurve,
+  type Step,
+  evenStep,
   segment,
   curve,
 } from "../../path";
@@ -29,6 +31,7 @@ import {
   SMOOTH_CURVES,
   catmullRomPath,
   centripetalKnots,
+  stepPath,
   threadPath,
 } from "../../spline";
 
@@ -61,7 +64,7 @@ export type Router = (
  *
  * `curve` is the single screen-space path-shaping key on `line`/`ribbon` — it
  * holds both interpolating curves that thread the point sequence (linear,
- * bezier, monotone, smooth, smoother, catmullRom) and routing curves that shape the stroke between two
+ * bezier, step, monotone, smooth, smoother, catmullRom) and routing curves that shape the stroke between two
  * anchors (orthogonal, arc, perfectArrows). A curve resolves to a `Router`.
  */
 export type CurveSpec = { type: string; options?: Record<string, any> };
@@ -80,15 +83,24 @@ type RouteEntry = {
  */
 export type SequenceCurve = {
   /** Thread the run, as one step per interval between neighboring points.
-   *  A step is one or more cubics from the one point to the next. `knots` is
-   *  the run's own parameter, one per point, or undefined when it has none;
-   *  it is only passed when `takesKnots`, and then the cubics of a step split
-   *  its share of the parameter evenly, each with its own parameter linear
-   *  in the knot parameter (`threadPath`). */
-  thread: (points: Point[], knots?: number[]) => BezierCurve[][];
+   *  A step is one or more segments from the one point to the next, each
+   *  with its share of the step's time (`Step`). The run's parameter is only
+   *  passed when `takesKnots`. */
+  thread: (points: Point[], parameter: RunParameter) => Step[];
   /** Whether the curve is read over the run's parameter (so `connect` works
    *  one out), or is a shape on screen that ignores it. */
   takesKnots: boolean;
+};
+
+/** What a sequence curve knows of the parameter a run is read over. */
+export type RunParameter = {
+  /** The run's own parameter, one value per point, strictly ascending; or
+   *  undefined when it has none. */
+  knots?: number[];
+  /** The coordinate (0 = x, 1 = y) that draws the parameter itself, when one
+   *  does: the x of a line chart over years, when the years are the
+   *  parameter. Undefined when no coordinate does. */
+  parameterAxis?: 0 | 1;
 };
 
 /** The pairwise routes, which `registerRoute` extends. */
@@ -292,18 +304,24 @@ registerRoute("orthogonal", orthogonalRouter, { ribbon: false });
 registerRoute("arc", arcRouter, { ribbon: false });
 registerRoute("perfectArrows", perfectArrowsRouter, { ribbon: false });
 
-// The data-space curves (monotone, smooth, smoother) are read over the run's
-// parameter, and a run with none is threaded with centripetal knots. The
-// Catmull-Rom is a shape on screen: its knots are always centripetal.
+// The data-space curves are read over the run's parameter. A smooth one
+// threads a run with none with centripetal knots. `step` holds every
+// coordinate but the one that draws the parameter, which a run with no
+// parameter of its own has none of. The Catmull-Rom is a shape on screen: its
+// knots are always centripetal.
+sequenceCurves.set("step", {
+  thread: (points, { parameterAxis }) => stepPath(points, parameterAxis),
+  takesKnots: true,
+});
 for (const smooth of SMOOTH_CURVES) {
   sequenceCurves.set(smooth, {
-    thread: (points, knots) =>
+    thread: (points, { knots }) =>
       threadPath(points, knots ?? centripetalKnots(points), smooth),
     takesKnots: true,
   });
 }
 sequenceCurves.set("catmullRom", {
-  thread: (points) => catmullRomPath(points).map((seg) => [seg]),
+  thread: (points) => catmullRomPath(points).map((seg) => evenStep([seg])),
   takesKnots: false,
 });
 
@@ -311,7 +329,7 @@ sequenceCurves.set("catmullRom", {
 // Builder-object idiom (like `polar({…})` / axis / label specs): each returns a
 // serializable `CurveSpec` carrying its own options, so call sites read
 // `line({ curve: orthogonal() })`, `line({ curve: arc({ direction: "down" }) })`.
-// The option-less `"linear"`, `"monotone"`, `"smooth"`, `"smoother"` and
+// The option-less `"linear"`, `"step"`, `"monotone"`, `"smooth"`, `"smoother"` and
 // `"catmullRom"` have no factory; pass the bare name. (`linear()` is
 // already the Cartesian coordinate transform.)
 
