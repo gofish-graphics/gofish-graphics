@@ -25,7 +25,29 @@ gf.chart(seafood)
 
 ```ts
 pack({ by?, method? })
+pack({ method? }, marks)
 ```
+
+## Combinator form
+
+Given a list of marks, `pack` packs those marks instead of rows of data. It
+returns a mark, so a `pack` can hold another `pack`.
+
+::: gofish
+
+```js
+gf.pack({}, [
+  gf.circle({ r: 60 }),
+  gf.ellipse({ w: 90, h: 44 }),
+  gf.pack({}, [
+    gf.circle({ r: 26 }),
+    gf.circle({ r: 18 }),
+    gf.circle({ r: 14 }),
+  ]),
+]).render(root, { w: 420, h: 420 });
+```
+
+:::
 
 ## Parameters
 

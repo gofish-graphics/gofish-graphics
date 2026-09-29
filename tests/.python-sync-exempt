@@ -27,12 +27,10 @@ packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
 # bridge. The other TextMarks exports are ported.
 packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx::PolarText
 
-# pack: the low-level story uses pack's combinator form (`pack({}, [marks])`),
-# which is not in the IR yet (only the `.flow()` operator is). NestedByCount
-# computes each pixel radius in a JS function mark, because pack cannot yet
-# scale a data-driven size (#967); a function mark cannot cross the bridge.
-# Forward Syntax/Pack::Nested is ported.
-packages/gofish-graphics/stories/lowlevel/Pack.stories.tsx
+# pack: NestedByCount computes each pixel radius in a JS function mark,
+# because pack cannot yet scale a data-driven size (#967); a function mark
+# cannot cross the bridge. Forward Syntax/Pack::Nested and Low Level
+# Syntax/Pack are ported.
 packages/gofish-graphics/stories/forwardsyntax/Pack.stories.tsx::NestedByCount
 
 # Docs regression test

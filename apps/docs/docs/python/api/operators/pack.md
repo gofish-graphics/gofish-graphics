@@ -23,7 +23,23 @@ chart(seafood).flow(
 
 ```python
 pack(*, by=None, **options) -> Operator
+pack(children, **options) -> Mark
 circles() -> dict
+```
+
+## Combinator form
+
+Given a list of marks, `pack` packs those marks instead of rows of data. It
+returns a mark, so a `pack` can hold another `pack`. It takes no `by`.
+
+```python
+from gofish import circle, ellipse, pack
+
+pack([
+    circle(r=60),
+    ellipse(w=90, h=44),
+    pack([circle(r=26), circle(r=18), circle(r=14)]),
+]).render(w=420, h=420)
 ```
 
 ## Parameters

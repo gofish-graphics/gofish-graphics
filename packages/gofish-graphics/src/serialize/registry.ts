@@ -134,6 +134,7 @@ export const COMBINATOR_FACTORIES: Record<
   ribbon: (opts, marks) => (ribbon as any)(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) =>
     (treemap as any)(opts, marks) as unknown as Mark<any>,
+  pack: (opts, marks) => (pack as any)(opts, marks) as unknown as Mark<any>,
   // Keys are the IR wire types (unchanged); values are the renamed
   // (Figma-inspired, #196/#202) combinator factories.
   over: (opts, marks) => (over as any)(opts, marks) as unknown as Mark<any>,

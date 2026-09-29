@@ -1966,30 +1966,47 @@ def circles() -> Dict[str, Any]:
 
 
 def pack(
+    children: Optional[List["Mark"]] = None,
     *,
     by: Optional[Union[str, "FieldAccessor"]] = None,
     **options: Any,
-) -> Operator:
+) -> Union[Operator, "Mark"]:
     """
-    Pack operator: place each group (or row, without ``by``) so the children's
-    enclosing circles touch without overlapping.
+    Pack — polymorphic. Places children so their enclosing circles touch
+    without overlapping.
+
+    Operator form (no positional arg): packs each group (or row, without
+    ``by``). Used inside `.flow(...)`.
+
+        chart(seafood).flow(pack(by="lake"), pack()).mark(circle(r=12))
+
+    Combinator form (positional list of marks): returns a low-level Mark that
+    packs the given child marks. A pack nested in a pack is packed by the
+    circle around its own children.
+
+        pack([circle(r=60), ellipse(w=90, h=44), pack([circle(r=26), circle(r=18)])])
 
     Children keep their pixel size, and the pack does not yet fit itself to
     the available space (#967).
 
-    Example::
-
-        chart(seafood).flow(pack(by="lake"), pack()).mark(circle(r=12))
-
     Args:
-        by: Field name to group by, or a ``field(...)`` accessor. Omit for
-            one child per row.
+        children: When provided, switches to combinator form. List of child
+            Marks to pack.
+        by: Field name to group by, or a ``field(...)`` accessor (operator
+            form only). Omit for one child per row.
         **options:
             method: The packing strategy, e.g. ``circles()`` (the default).
 
     Returns:
-        Operator object
+        Operator (no children) or Mark (with children).
     """
+    if children is not None:
+        if by is not None:
+            raise ValueError(
+                "pack() combinator form (with children) does not accept "
+                "`by` — the layout is over the explicit child list, not data."
+            )
+        return Mark("pack", _children=list(children), **_pack_opts(**options))
     if by is not None:
         options["by"] = by
     return Operator("pack", **_pack_opts(**options))

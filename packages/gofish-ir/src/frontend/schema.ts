@@ -420,8 +420,9 @@ export type PackMethodIR = { kind: "circles" };
 
 /**
  * `pack({...})` — circle packing: children are placed so their enclosing
- * circles touch without overlapping. Mirrors JS's `PackOptions`
- * (`graphicalOperators/pack.tsx`).
+ * circles touch without overlapping. Dual-form like `treemap`: also a
+ * low-level combinator mark (`CombinatorMarkType`'s `"pack"`). Mirrors JS's
+ * `PackOptions` (`graphicalOperators/pack.tsx`).
  */
 export interface PackOperator
   extends BaseIRNode,
@@ -478,6 +479,7 @@ export type CombinatorMarkType =
   | "line"
   | "ribbon"
   | "treemap"
+  | "pack"
   | "over"
   | "inside"
   | "xor"
@@ -842,6 +844,7 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "line",
   "ribbon",
   "treemap",
+  "pack",
   "over",
   "inside",
   "xor",

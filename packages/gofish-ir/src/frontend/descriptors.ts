@@ -1120,6 +1120,11 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     },
   }),
 
+  pack: combinatorMark("pack", {
+    doc: "Low-level combinator form of `pack`: packs the given child marks by their enclosing circles.",
+    fields: resolveFields(OPERATORS.pack),
+  }),
+
   // Porter-Duff-style compositing quartet + `over`/`mask`. Wire `type` stays
   // the original Porter-Duff string; `pyName` carries the Figma-inspired
   // JS/Python-facing rename (#196/#202).

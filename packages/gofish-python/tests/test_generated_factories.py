@@ -85,6 +85,18 @@ def test_pack_serializes_by_and_method():
     assert "method" not in pack().to_dict()
 
 
+def test_pack_combinator_form():
+    d = pack([circle(r=10), pack([circle(r=4)])], method=circles()).to_dict()
+    assert d["type"] == "pack"
+    assert d["__combinator"] is True
+    assert d["options"] == {"method": {"kind": "circles"}}
+    assert [c["type"] for c in d["children"]] == ["circle", "pack"]
+    assert d["children"][1]["__combinator"] is True
+    assert pack([circle(r=1)]).to_dict()["options"] == {}
+    with pytest.raises(ValueError):
+        pack([circle(r=1)], by="lake")
+
+
 def test_treemap_combinator_accepts_key():
     node = treemap([], size="gross", key="genre")
     d = node.to_dict()

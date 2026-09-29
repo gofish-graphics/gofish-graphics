@@ -105,6 +105,7 @@ const COMBINATOR_FACTORIES: Record<
   line: (opts, marks) => line(opts, marks) as unknown as Mark<any>,
   ribbon: (opts, marks) => ribbon(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) => treemap(opts, marks) as unknown as Mark<any>,
+  pack: (opts, marks) => pack(opts, marks) as unknown as Mark<any>,
   // Keys are the IR wire types (UNCHANGED — the serializer never renamed
   // them); values are the renamed (#196/#202) combinator factories. Mirrors
   // packages/gofish-graphics/src/serialize/registry.ts's COMBINATOR_FACTORIES.
