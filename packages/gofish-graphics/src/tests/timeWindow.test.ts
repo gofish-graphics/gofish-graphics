@@ -37,6 +37,7 @@ import {
   evenStep,
   lerpPoint,
   segment,
+  subdivideCurve1,
   type BezierCurve,
   type Path,
   type PathSegment,
@@ -225,9 +226,11 @@ console.log("# the cut: edges of the run");
 
 console.log("# the cut: a step drawn with several cubics");
 {
-  // `smoother` draws each interior step with several cubics that split its
-  // time evenly, so a cut by time lands in the right cubic, at the right
-  // place, and the tip is where a reading at that time puts the mark.
+  // A step can be drawn with several segments that split its time evenly
+  // (a routed step is). Here each `smooth` cubic is cut into four pieces at
+  // even shares of its parameter, which is linear in time, so a cut by time
+  // lands in the right piece, at the right place, and the tip is where a
+  // reading at that time puts the mark.
   const years = [2000, 2001, 2003, 2004, 2008, 2009];
   const run: Point[] = [
     [0, 0],
@@ -237,17 +240,24 @@ console.log("# the cut: a step drawn with several cubics");
     [130, 20],
     [200, 0],
   ];
-  const steps = threadPath(run, years, "smoother");
+  const quarters = (c: BezierCurve): BezierCurve[] => {
+    const [a, rest] = subdivideCurve1(c, 0.25);
+    const [b, rest2] = subdivideCurve1(rest, 1 / 3);
+    const [d, e] = subdivideCurve1(rest2, 0.5);
+    return [a, b, d, e];
+  };
+  const steps = threadPath(run, years, "smooth").map(({ segments }) =>
+    evenStep(quarters(segments[0] as BezierCurve))
+  );
   const xs = run.map((p) => p[0]);
   const ys = run.map((p) => p[1]);
   const at = (t: number): Point => [
-    interpolateRun(years, xs, t, "smoother"),
-    interpolateRun(years, ys, t, "smoother"),
+    interpolateRun(years, xs, t, "smooth"),
+    interpolateRun(years, ys, t, "smooth"),
   ];
-  // Within the drawing error of `smoother` (`SMOOTHER_PIECES`), which on
-  // this uneven run is a few thousandths of a pixel.
+  // Up to the rounding of the subdivisions.
   const nearish = (p: Point, q: Point) =>
-    Math.abs(p[0] - q[0]) < 0.01 && Math.abs(p[1] - q[1]) < 0.01;
+    Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
   let tipsOk = true;
   for (const T of [2000.3, 2001.5, 2002.99, 2003.5, 2005.1, 2008.7, 2009]) {
     const cut = windowPath(steps, years, windowAt(T, Infinity));

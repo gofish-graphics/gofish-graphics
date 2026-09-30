@@ -1,7 +1,7 @@
 /**
- * The smooth curves: the three data-space curves (`monotone`, `smooth` and
- * `smoother`), used by everything that reads or draws a run of values over a
- * parameter, and the centripetal Catmull-Rom, a screen-space path curve only.
+ * The smooth curves: the two data-space curves (`monotone` and `smooth`),
+ * used by everything that reads or draws a run of values over a parameter,
+ * and the centripetal Catmull-Rom, a screen-space path curve only.
  *
  * The data-space curves read one channel of a run at a time, over knots at
  * the data's own parameter values. Each passes through every value. From
@@ -16,18 +16,11 @@
  *   2019), the one MATLAB's `makima` and SciPy's
  *   `Akima1DInterpolator(method="makima")` draw. A peak can round past its
  *   knot, but a run of three or more equal values stays exactly flat.
- * - `smoother` (`smootherJet`) is Yuksel's (2020) C2 interpolating curve,
- *   applied to one channel over its knots (the paper works on curves in the
- *   plane; the one-channel reading is ours). Its acceleration is continuous
- *   through every knot, so it has no visible corners in its curvature. Next
- *   to a jump it can dip a little past its knots.
  *
- * `monotone` and `smooth` are cubic Hermite splines: one cubic per interval
- * between neighboring knots, passing through the values at its two ends, with
- * a velocity at each knot shared by the two cubics that meet there. They
- * differ only in that velocity (the knot's slope). `smoother` is not a
- * cubic: it blends two parabolas with trigonometric weights, so it is drawn
- * with several cubics per interval (`SMOOTHER_PIECES`).
+ * Both are cubic Hermite splines: one cubic per interval between neighboring
+ * knots, passing through the values at its two ends, with a velocity at each
+ * knot shared by the two cubics that meet there. They differ only in that
+ * velocity (the knot's slope).
  *
  * `time.transition()` and `interpolate()` read one channel at the clock's
  * time (`channelSpline`), with the data's own time values as the knots;
@@ -43,11 +36,10 @@
  * the points between them.
  *
  * Segment `i` runs from knot `i` to knot `i + 1`, and its local parameter `u`
- * is linear in the knot parameter: `u = (t − t_i) / (t_{i+1} − t_i)`. When a
- * segment is drawn with several cubics, each covers an equal share of `u`,
- * and its own parameter is linear in `u` too. So a path's cubic at `u` is the
- * point a reading at the matching `t` gives, which is what lets a threaded
- * line be cut by time (`windowPath` in `timeWindow.ts`).
+ * is linear in the knot parameter: `u = (t − t_i) / (t_{i+1} − t_i)`, and the
+ * cubic that draws the segment has `u` as its own parameter. So a path's
+ * cubic at `u` is the point a reading at the matching `t` gives, which is
+ * what lets a threaded line be cut by time (`windowPath` in `timeWindow.ts`).
  */
 
 import {
@@ -192,95 +184,11 @@ export function smoothSlopes(t: number[], v: number[]): number[] {
   });
 }
 
-/**
- * The `smoother` curve on one channel, at local parameter `u` of segment `i`:
- * its value, and its velocity and acceleration per unit of the knot
- * parameter.
- *
- * This is Yuksel's "A Class of C2 Interpolating Curves" (2020) with
- * parabolas as the interpolating functions, applied to a channel over its
- * knots. `P_j` is the parabola through knots `j − 1`, `j` and `j + 1`, at
- * their real (possibly uneven) positions. Segment `i` blends the two
- * parabolas that pass through both of its ends:
- *
- *   θ = (π / 2) u,   C = cos²θ · P_i + sin²θ · P_{i+1}
- *
- * The weights have no slope at either end of the segment, so the value, the
- * velocity and the acceleration at knot `i` are all `P_i`'s, whichever
- * segment reads them: the curve is C2 (its acceleration is continuous). A
- * segment depends on four knots, so the curve is local. An end segment has
- * only one parabola through both of its ends and is that parabola; a run of
- * two values is a straight line. The curve is not a polynomial, so it is
- * drawn with several cubics per segment (`SMOOTHER_PIECES`).
- */
-export function smootherJet(
-  t: number[],
-  v: number[],
-  i: number,
-  u: number
-): [value: number, velocity: number, acceleration: number] {
-  const n = t.length;
-  const h = t[i + 1] - t[i];
-  if (n === 2) return [v[0] + u * (v[1] - v[0]), (v[1] - v[0]) / h, 0];
-  // At u = 1 the knot itself, which `t_i + h` can miss by rounding.
-  const x = u === 1 ? t[i + 1] : t[i] + u * h;
-  /** The parabola through knots j − 1, j and j + 1, with its slope and its
-   *  (constant) acceleration, at x. */
-  const parabola = (j: number): [number, number, number] => {
-    const a = t[j - 1];
-    const b = t[j];
-    const c = t[j + 1];
-    const la = v[j - 1] / ((a - b) * (a - c));
-    const lb = v[j] / ((b - a) * (b - c));
-    const lc = v[j + 1] / ((c - a) * (c - b));
-    return [
-      la * (x - b) * (x - c) + lb * (x - a) * (x - c) + lc * (x - a) * (x - b),
-      la * (2 * x - b - c) + lb * (2 * x - a - c) + lc * (2 * x - a - b),
-      2 * (la + lb + lc),
-    ];
-  };
-  if (i === 0) return parabola(1);
-  if (i === n - 2) return parabola(n - 2);
-  const [left, leftSlope, leftBend] = parabola(i);
-  const [right, rightSlope, rightBend] = parabola(i + 1);
-  // w = cos²θ = (1 + cos πu) / 2, and its derivatives per unit of t.
-  const w = Math.cos((Math.PI / 2) * u) ** 2;
-  const wSlope = (-(Math.PI / 2) * Math.sin(Math.PI * u)) / h;
-  const wBend = ((-(Math.PI * Math.PI) / 2) * Math.cos(Math.PI * u)) / (h * h);
-  return [
-    w * left + (1 - w) * right,
-    w * leftSlope + (1 - w) * rightSlope + wSlope * (left - right),
-    w * leftBend +
-      (1 - w) * rightBend +
-      2 * wSlope * (leftSlope - rightSlope) +
-      wBend * (left - right),
-  ];
-}
-
-/**
- * How many cubics draw one interior segment of `smoother`. Each cubic covers
- * an equal share of the segment and matches the curve's value and velocity
- * at both of its ends.
- *
- * The error is known in closed form. On an interior segment the curve is
- * `P_{i+1} + cos²θ · (P_i − P_{i+1})`, and `P_i − P_{i+1}` is a parabola that
- * is 0 at both ends of the segment, so the part a cubic cannot follow is a
- * fixed shape scaled by the gap `D` between the two parabolas at the middle
- * of the segment. With 12 cubics the largest error, measured densely on that
- * shape, is 3.9e-5 · |D|: 0.04px when the two parabolas are 1000px apart. An
- * end segment is a parabola, which one cubic draws exactly.
- */
-export const SMOOTHER_PIECES = 12;
-
 /** The data-space smooth curves, from the least to the most smooth. */
-export type SmoothCurve = "monotone" | "smooth" | "smoother";
+export type SmoothCurve = "monotone" | "smooth";
 
 /** The data-space smooth curves, in the order of `SmoothCurve`. */
-export const SMOOTH_CURVES: readonly SmoothCurve[] = [
-  "monotone",
-  "smooth",
-  "smoother",
-];
+export const SMOOTH_CURVES: readonly SmoothCurve[] = ["monotone", "smooth"];
 
 /**
  * One channel of a run, read over its knots with a smooth curve and prepared
@@ -291,13 +199,12 @@ export type ChannelSpline = {
   at: (i: number, u: number) => number;
   /** The value at local parameter `u` of segment `i`, with its velocity and
    *  acceleration per unit of the knot parameter: exact derivatives of the
-   *  curve. For `monotone` and `smooth` the acceleration jumps at a knot, so
-   *  it belongs to one segment, and the two segments that meet at a knot give
-   *  its two one-sided values; for `smoother` they agree. */
+   *  curve. The acceleration jumps at a knot, so it belongs to one segment,
+   *  and the two segments that meet at a knot give its two one-sided
+   *  values. */
   jet: (i: number, u: number) => [number, number, number];
-  /** Segment `i` in Bézier form, flattened: one or more cubics
-   *  `[b0, b1, b2, b3]` in order, each covering an equal share of `u`, with
-   *  its own parameter linear in `u`. */
+  /** Segment `i` in Bézier form, `[b0, b1, b2, b3]`, with `u` as its own
+   *  parameter. */
   bezier: (i: number) => number[];
 };
 
@@ -308,36 +215,12 @@ export function channelSpline(
   knots: number[],
   values: number[]
 ): ChannelSpline {
-  if (curve !== "smoother") {
-    const slopes = curve === "monotone" ? monotoneSlopes : smoothSlopes;
-    const cubics = hermiteCubics(knots, values, slopes(knots, values));
-    return {
-      at: (i, u) => cubicAt(cubics, i, u),
-      jet: (i, u) => cubicJet(knots, cubics, i, u),
-      bezier: (i) => cubics.slice(4 * i, 4 * i + 4),
-    };
-  }
-  assertAscending(knots, "smoother");
-  const n = knots.length;
+  const slopes = curve === "monotone" ? monotoneSlopes : smoothSlopes;
+  const cubics = hermiteCubics(knots, values, slopes(knots, values));
   return {
-    at: (i, u) => smootherJet(knots, values, i, u)[0],
-    jet: (i, u) => smootherJet(knots, values, i, u),
-    bezier: (i) => {
-      const interior = i > 0 && i < n - 2;
-      const pieces = interior ? SMOOTHER_PIECES : 1;
-      // Each piece is the cubic Hermite through the curve's exact value and
-      // velocity at its two ends, over its share of the segment.
-      const h = (knots[i + 1] - knots[i]) / pieces;
-      const out: number[] = [];
-      let [v0, m0] = smootherJet(knots, values, i, 0);
-      for (let k = 1; k <= pieces; k++) {
-        const [v1, m1] = smootherJet(knots, values, i, k / pieces);
-        out.push(v0, v0 + (h / 3) * m0, v1 - (h / 3) * m1, v1);
-        v0 = v1;
-        m0 = m1;
-      }
-      return out;
-    },
+    at: (i, u) => cubicAt(cubics, i, u),
+    jet: (i, u) => cubicJet(knots, cubics, i, u),
+    bezier: (i) => cubics.slice(4 * i, 4 * i + 4),
   };
 }
 
@@ -467,8 +350,8 @@ function cubicJet(
 
 /** Thread a run of points with a smooth curve over `knots`: each coordinate
  *  is a channel of the same curve. The path comes back as one step per knot
- *  interval, and a step is the cubics that draw that interval
- *  (`ChannelSpline.bezier`), which split its time evenly.
+ *  interval, and a step is the one cubic that draws that interval
+ *  (`ChannelSpline.bezier`).
  *  Fewer than two points thread nothing.
  *
  *  A point at the same knot as the one before it repeats that point, as d3
@@ -511,20 +394,9 @@ export function threadPath(
     }
     const bx = xs.bezier(keptAt[i]);
     const by = ys.bezier(keptAt[i]);
-    const step: BezierCurve[] = [];
-    for (let k = 0; k < bx.length; k += 4) {
-      // The step's ends are the input points themselves, which a repeat can
-      // differ from by rounding.
-      step.push(
-        curve(
-          k === 0 ? start : [bx[k], by[k]],
-          [bx[k + 1], by[k + 1]],
-          [bx[k + 2], by[k + 2]],
-          k + 4 === bx.length ? end : [bx[k + 3], by[k + 3]]
-        )
-      );
-    }
-    steps.push(evenStep(step));
+    // The step's ends are the input points themselves, which a repeat can
+    // differ from by rounding.
+    steps.push(evenStep([curve(start, [bx[1], by[1]], [bx[2], by[2]], end)]));
   }
   return steps;
 }

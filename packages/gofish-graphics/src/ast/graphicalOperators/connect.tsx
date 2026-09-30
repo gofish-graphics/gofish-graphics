@@ -524,7 +524,7 @@ export const connect = createNodeOperator(
             }
           }
 
-          // A *sequence* curve (`monotone`, `smooth`, `smoother`,
+          // A *sequence* curve (`monotone`, `smooth`,
           // `catmullRom`) threads the whole
           // run of points as one spline, bypassing the pairwise router loop.
           // A line (center) threads its centers; a ribbon (edge) threads BOTH

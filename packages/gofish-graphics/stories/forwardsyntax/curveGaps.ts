@@ -11,7 +11,7 @@
  */
 import { channelSpline } from "../../src/spline";
 
-export type LadderCurve = "step" | "linear" | "monotone" | "smooth" | "smoother";
+export type LadderCurve = "step" | "linear" | "monotone" | "smooth";
 
 /** A point of a sampled path: its year and its position. */
 export type PathPoint = { t: number; x: number; y: number };

@@ -45,27 +45,26 @@ Otherwise it draws a straight polyline.
 
 ## Curves through data
 
-Five curve names read a run of values over the field that orders it, such as
+Four curve names read a run of values over the field that orders it, such as
 the years of a line chart. From the least to the most smooth, they are `step`,
-`linear`, `monotone`, `smooth` and `smoother`. The same names work in
+`linear`, `monotone` and `smooth`. The same names work in
 [`time.transition()`](/js/animation), `animation.tween()` and
 [`interpolate()`](/js/animation#interpolate-rows-options), so a moving mark and a line
 through the same points can follow the same curve.
 
-A few terms help compare them. A curve is **C0** when it has no breaks, **C1**
-when its direction also never changes suddenly (it has no corners), and **C2**
-when its curvature never changes suddenly either. A curve **overshoots** when,
+A few terms help compare them. A curve is **C0** when it has no breaks, and
+**C1** when its direction also never changes suddenly (it has no corners). A
+curve **overshoots** when,
 between two neighboring points, it goes above the higher one or below the
 lower one. A curve is **local** when changing one value changes the curve only
 near that point.
 
-| Name       | What you see                                                                        | Algorithm                                                                           | Continuity     | Local | Never overshoots |
-| ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------- | ----- | ---------------- |
-| `step`     | Each value holds until the next point, and then jumps.                              | step-after, like d3's `curveStepAfter`                                              | not continuous | yes   | yes              |
-| `linear`   | Straight segments from point to point.                                              | straight lines                                                                      | C0             | yes   | yes              |
-| `monotone` | A smooth curve that turns exactly on the points.                                    | Steffen (1990), the same curve as d3's `curveMonotoneX`                             | C1             | yes   | yes              |
-| `smooth`   | Rounder peaks that can pass a little beyond their points. Long flat runs stay flat. | modified Akima, also called makima (Moler 2019), as in MATLAB and SciPy             | C1             | yes   | no               |
-| `smoother` | The smoothest curve, with no sudden change in curvature. It can dip next to a jump. | Yuksel (2020), "A Class of C2 Interpolating Curves", applied to one value at a time | C2             | yes   | no               |
+| Name       | What you see                                                                        | Algorithm                                                               | Continuity     | Local | Never overshoots |
+| ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------- | ----- | ---------------- |
+| `step`     | Each value holds until the next point, and then jumps.                              | step-after, like d3's `curveStepAfter`                                  | not continuous | yes   | yes              |
+| `linear`   | Straight segments from point to point.                                              | straight lines                                                          | C0             | yes   | yes              |
+| `monotone` | A smooth curve that turns exactly on the points.                                    | Steffen (1990), the same curve as d3's `curveMonotoneX`                 | C1             | yes   | yes              |
+| `smooth`   | Rounder peaks that can pass a little beyond their points. Long flat runs stay flat. | modified Akima, also called makima (Moler 2019), as in MATLAB and SciPy | C1             | yes   | no               |
 
 `step` holds every value that depends on the field that orders the line until
 the next point's value of that field, and then jumps. It never holds the field
@@ -91,12 +90,6 @@ Vega-Lite's `interpolate: "monotone"`.
 `"smooth"` lets a peak round off a little past its point. A run of three or
 more equal values stays exactly flat. A single flat step between a rise and a
 fall, such as two equal peak values, can bow a little.
-
-`"smoother"` has no sudden change in curvature anywhere, so it looks the most
-even. Next to a sudden jump in the data it can dip a little past the points on
-either side. It is not a cubic curve, so GoFish draws each stretch between two
-points with 12 short cubic pieces. At usual chart sizes the drawn line is
-within a few thousandths of a pixel of the exact curve.
 
 A line drawn with one of these curves takes the knots of its curve from the
 data when the data has a value that orders the line. (The knots are the
@@ -126,7 +119,7 @@ overshoot between two points. It is not used when values are read over time: a
 its moving mark can sit slightly off a Catmull-Rom line.
 
 `curve` accepts the strings `"linear"`, `"bezier"`, `"step"`, `"monotone"`,
-`"smooth"`, `"smoother"` or `"catmullRom"`, or a `CurveSpec` factory:
+`"smooth"` or `"catmullRom"`, or a `CurveSpec` factory:
 `bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`, or
 `perfectArrows({ bow })`. `"linear"` has no factory, because
 [`linear()`](/js/api/coords/linear) is the coordinate transform. The `orthogonal`

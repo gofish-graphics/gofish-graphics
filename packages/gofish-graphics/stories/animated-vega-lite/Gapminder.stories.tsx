@@ -16,11 +16,11 @@
  * time, so the chart holds a frame and then jumps, which is already an
  * animation. CURVES and CURVES PAUSED put that reading beside the three a
  * transition offers, four charts on one clock. CURVES KINEMATICS shows the
- * whole curve ladder (step, linear, monotone, smooth, smoother) and puts one
- * country's position, velocity and acceleration under each reading, on the
- * same clock, which is where the jerkiness of a straight reading, and the
- * difference between a curve that is C1 and one that is C2, become something
- * you can point at.
+ * whole curve ladder (step, linear, monotone, smooth) and puts one country's
+ * position, velocity and acceleration under each reading, on the same clock,
+ * which is where the jerkiness of a straight reading, and the jumps in
+ * acceleration of a curve that is only C1, become something you can point
+ * at.
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
@@ -227,7 +227,7 @@ const PANEL_GAP = 16;
 
 /** How a panel reads the run. `null` is the sequence with nothing layered over
  *  it, which is what the step curve coincides with. */
-type Reading = "step" | "linear" | "monotone" | "smooth" | "smoother" | null;
+type Reading = "step" | "linear" | "monotone" | "smooth" | null;
 
 /** A reading that moves the marks: every reading but the sequence alone. */
 type Curve = Exclude<Reading, null>;
@@ -355,29 +355,26 @@ export const CurvesThree: StoryObj<Args> = {
   },
 };
 
-/** The five readings of the curve ladder, left to right, each captioned with
+/** The four readings of the curve ladder, left to right, each captioned with
  *  what it guarantees. The kinematics stories read these. */
 const LADDER: { caption: string; curve: Curve }[] = [
   { caption: "step: hold, then jump", curve: "step" },
   { caption: "linear: C0, velocity jumps", curve: "linear" },
   { caption: "monotone: C1, no overshoot", curve: "monotone" },
   { caption: "smooth: C1, rounds peaks", curve: "smooth" },
-  { caption: "smoother: C2, curvature never jumps", curve: "smoother" },
 ];
-/** The kinematics stories' panels are narrower than the other rows', so five
- *  of them fit across. */
-const LADDER_PANEL_W = 170;
+/** The kinematics stories' panels are narrower than the other rows', so four
+ *  of them fit across beside the column of sparkline labels. */
+const LADDER_PANEL_W = 200;
 
 /** The country the sparklines read, and the channel they read. Jamaica's life
  *  expectancy changes direction several times over the run, by amounts of the
  *  same order, so every keyframe leaves a mark of comparable size, and the
  *  turns are where the curves differ: `smooth` rounds the 1980 and 1990 peaks a
- *  little past the data, and `smoother` swings furthest past its points just
- *  after the sharp 1985 to 1990 rise, while the knots of the other candidates
- *  tell the curves apart less. Rwanda's 1990s crash is
- *  one smooth fall and recovery that every curve follows closely (the two
- *  smooth curves pass its points by 0.4% and 0.3% of its range, against
- *  Jamaica's 0.5% and 1.3%). China has one huge event in it (1960), which
+ *  little past the data, while the knots of the other candidates tell the
+ *  curves apart less. Rwanda's 1990s crash is one smooth fall and recovery
+ *  that every curve follows closely (`smooth` passes its points by 0.4% of
+ *  its range, against Jamaica's 0.5%). China has one huge event in it (1960), which
  *  puts one spike on each chart and leaves the rest of the run looking
  *  flat. */
 const SPARK_COUNTRY = "Jamaica";
@@ -443,14 +440,13 @@ type Sample = { t: number; method: string; value: number };
  * segments, its velocity a staircase of plateaus joined by risers, and its
  * acceleration a comb of impulses whose weights are the jumps in velocity.
  *
- * Under the three smooth readings all three quantities are functions, and
+ * Under the two smooth readings all three quantities are functions, and
  * they come from `channelSpline(...).jet`: exact derivatives of the very
  * curve the transition above is following. The velocity is continuous for
- * all three. The acceleration of `monotone` and `smooth` is finite but jumps
- * at the knots (they are only C1), so each interval is sampled just inside
- * its own ends and the intervals are joined by risers, which is what makes
- * the jumps read as jumps rather than as a steep ramp. For `smoother` the two
- * one-sided values agree (it is C2), so its risers have no height.
+ * both. The acceleration of `monotone` and `smooth` is finite but jumps at
+ * the knots (they are only C1), so each interval is sampled just inside its
+ * own ends and the intervals are joined by risers, which is what makes the
+ * jumps read as jumps rather than as a steep ramp.
  */
 const kinematics = (rows: any[]): Record<Quantity, Sample[]> => {
   const run = rows
@@ -717,18 +713,16 @@ const highlightPanel = (rows: any[], clock: any, curve: Curve) => {
 };
 
 /**
- * The curve ladder with the reason underneath it: step, linear, monotone,
- * smooth and smoother, and under each one country's position, velocity and
- * acceleration.
+ * The curve ladder with the reason underneath it: step, linear, monotone and
+ * smooth, and under each one country's position, velocity and acceleration.
  *
  * The panels say what the readings look like; the sparklines say why. Read
  * across the velocity row: it is a comb of impulses under step and a
  * staircase that changes value instantly at each keyframe under linear, and
- * a continuous curve under the other three. Read across the acceleration
- * row: doublets under step and impulses under linear, a curve that jumps at
- * each keyframe under monotone and smooth, and a continuous curve only under
- * smoother. A spike or a jump in acceleration is what the eye reads as a
- * jolt.
+ * a continuous curve under the other two. Read across the acceleration
+ * row: doublets under step, impulses under linear, and a curve that jumps at
+ * each keyframe under monotone and smooth. A spike or a jump in acceleration
+ * is what the eye reads as a jolt.
  *
  * Everything moves on one clock, the dots on the sparklines included, so at
  * any moment the dots mark the state the panels above them are drawing.

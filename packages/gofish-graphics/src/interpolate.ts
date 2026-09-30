@@ -246,7 +246,7 @@ export type InterpolateOptions = {
   /** Where to read the run, in `along`'s units. */
   at: number;
   /** How a run is read between its keyframes: `"step"`, `"linear"`,
-   *  `"monotone"`, `"smooth"` or `"smoother"`. Default `"monotone"`, the
+   *  `"monotone"` or `"smooth"`. Default `"monotone"`, the
    *  same default `time.transition()` takes for the same reason (the field is
    *  numeric, so the run is a sample of something continuous). `"step"` does
    *  not blend at all: each keyframe's values hold until the next one's time

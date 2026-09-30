@@ -39,7 +39,7 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x",
 :::
 
 `curve` accepts the strings `"linear"`, `"bezier"`, `"step"`, `"monotone"`,
-`"smooth"`, `"smoother"` or `"catmullRom"`, or a `CurveSpec` factory: `bezier()`, `orthogonal()`,
+`"smooth"` or `"catmullRom"`, or a `CurveSpec` factory: `bezier()`, `orthogonal()`,
 `arc({ direction: "up" | "down" })`, or `perfectArrows({ bow })`. `"linear"`
 has no factory, because [`linear()`](/js/api/coords/linear) is the coordinate
 transform. The default `"auto"` inspects the connection axis: over a
@@ -49,7 +49,7 @@ continuous variable) it smooths the band edges with `"monotone"` — matching it
 (the band equivalent of a straight line: the honest connector between discrete
 regions, as in a sankey or a categorical ribbon).
 
-A ribbon drawn with `"monotone"`, `"smooth"` or `"smoother"` takes the knots
+A ribbon drawn with `"monotone"` or `"smooth"` takes the knots
 of its curve the same way a [`line`](/js/api/marks/line) does. It uses the values of the field it runs
 along when they are numbers in order along the band. If they are not, it uses
 the positions on a continuous connection axis, and otherwise the distances
@@ -59,9 +59,8 @@ between the points on the screen. Both edges of the band use the same knots.
 only rises or only falls, so it never goes past either point. It does not make
 the whole edge monotone: the band still turns where the data turns, and the
 peak sits exactly on the data point. It is the same curve as d3's
-`curveMonotoneX` and Vega-Lite's `interpolate: "monotone"`. `"smooth"` and
-`"smoother"` are smoother curves over the same knots, and can go a little past
-a point. `"step"` steps both edges, as Vega-Lite's stepped area does. The
+`curveMonotoneX` and Vega-Lite's `interpolate: "monotone"`. `"smooth"` is a
+rounder curve over the same knots, and can go a little past a point. `"step"` steps both edges, as Vega-Lite's stepped area does. The
 [curves table on the `line` page](/js/api/marks/line#curves-through-data)
 compares them. `"catmullRom"` is a
 centripetal Catmull-Rom spline through the edge points on the screen. Its knots

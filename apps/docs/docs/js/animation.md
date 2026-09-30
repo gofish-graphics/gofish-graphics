@@ -268,10 +268,10 @@ same keyframes also uses the time values as its knots, so the moving mark
 travels exactly along that line. `"linear"`
 moves straight from each keyframe to the next. `"step"` does not move at all:
 the mark holds one keyframe's value until the next keyframe's own time arrives,
-and then jumps. `"smooth"` and `"smoother"` move along rounder curves that can
+and then jumps. `"smooth"` moves along a rounder curve that can
 carry the mark a little past a keyframe before it turns. The
 [curves table on the `line` page](/js/api/marks/line#curves-through-data)
-compares all five.
+compares all four.
 
 Numbers interpolate; paint does not. A dot's position and size move between
 keyframes, and its fill is read off the keyframe it is nearest, because a
@@ -567,16 +567,16 @@ yet.
 
 ### `time.transition(options?)`
 
-| Option        | Type                                                                   | Default    | Meaning                                                         |
-| ------------- | ---------------------------------------------------------------------- | ---------- | --------------------------------------------------------------- |
-| `along`       | `string`                                                               | inferred   | The field the keyframes are keyed by in time.                   |
-| `at`          | `(() => number) \| number`                                             | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
-| `curve`       | `"auto" \| "step" \| "linear" \| "monotone" \| "smooth" \| "smoother"` | `"auto"`   | How the run is read between keyframes.                          |
-| `ease`        | `(u: number) => number`                                                | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
-| `fill`        | `string`                                                               | keyframe's | Paint for the moving mark.                                      |
-| `stroke`      | `string`                                                               | keyframe's | Outline color.                                                  |
-| `strokeWidth` | `number`                                                               | keyframe's | Outline width.                                                  |
-| `opacity`     | `number`                                                               | keyframe's | Opacity of the moving mark.                                     |
+| Option        | Type                                                     | Default    | Meaning                                                         |
+| ------------- | -------------------------------------------------------- | ---------- | --------------------------------------------------------------- |
+| `along`       | `string`                                                 | inferred   | The field the keyframes are keyed by in time.                   |
+| `at`          | `(() => number) \| number`                               | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
+| `curve`       | `"auto" \| "step" \| "linear" \| "monotone" \| "smooth"` | `"auto"`   | How the run is read between keyframes.                          |
+| `ease`        | `(u: number) => number`                                  | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
+| `fill`        | `string`                                                 | keyframe's | Paint for the moving mark.                                      |
+| `stroke`      | `string`                                                 | keyframe's | Outline color.                                                  |
+| `strokeWidth` | `number`                                                 | keyframe's | Outline width.                                                  |
+| `opacity`     | `number`                                                 | keyframe's | Opacity of the moving mark.                                     |
 
 ### `interpolate(rows, options)`
 
@@ -585,13 +585,13 @@ numeric fields evaluated at that moment and `along` set to it. Fields that are
 not numbers are copied from the nearest keyframe, for the same reason a
 transition does not blend paint.
 
-| Option   | Type                                                         | Default      | Meaning                                                        |
-| -------- | ------------------------------------------------------------ | ------------ | -------------------------------------------------------------- |
-| `along`  | `string`                                                     | none         | The field the rows are keyed by in time.                       |
-| `key`    | `string`                                                     | none         | The field saying which rows are the same thing at other times. |
-| `at`     | `number`                                                     | none         | Where to read the run, in `along`'s units.                     |
-| `method` | `"step" \| "linear" \| "monotone" \| "smooth" \| "smoother"` | `"monotone"` | How a run is read between its keyframes.                       |
-| `fields` | `string[]`                                                   | every number | Which fields to interpolate.                                   |
+| Option   | Type                                           | Default      | Meaning                                                        |
+| -------- | ---------------------------------------------- | ------------ | -------------------------------------------------------------- |
+| `along`  | `string`                                       | none         | The field the rows are keyed by in time.                       |
+| `key`    | `string`                                       | none         | The field saying which rows are the same thing at other times. |
+| `at`     | `number`                                       | none         | Where to read the run, in `along`'s units.                     |
+| `method` | `"step" \| "linear" \| "monotone" \| "smooth"` | `"monotone"` | How a run is read between its keyframes.                       |
+| `fields` | `string[]`                                     | every number | Which fields to interpolate.                                   |
 
 ## What is not built yet
 
@@ -604,7 +604,7 @@ next.
 
 A threaded line can be cut only when each step from one keyframe to the next
 says how its time runs along it. The curves `"linear"`, `"bezier"`, `"step"`,
-`"monotone"`, `"smooth"`, `"smoother"` and `"catmullRom"` work. A `"step"` line
+`"monotone"`, `"smooth"` and `"catmullRom"` work. A `"step"` line
 spends all of a step's time at the earlier keyframe and draws the jump to the
 next one the moment its time arrives, which is where a mark moving with
 `curve: "step"` is. The routing curves `orthogonal()`, `arc()` and

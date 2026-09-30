@@ -24,8 +24,8 @@ import {
 
 /**
  * The data-space curve ladder, from the least to the most smooth: the same
- * data drawn with each of `step`, `linear`, `monotone`, `smooth` and
- * `smoother`. Each row is one curve: gas price by year on the left, and the
+ * data drawn with each of `step`, `linear`, `monotone` and `smooth`. Each
+ * row is one curve: gas price by year on the left, and the
  * connected scatter plot of miles driven against gas price on the right.
  *
  * `step` holds every value that depends on the year until the next year,
@@ -37,15 +37,14 @@ import {
  *
  * What to look for: `monotone` turns exactly on the points and never goes
  * past them; `smooth` rounds a peak a little past its point but keeps a run
- * of equal prices flat; `smoother` has no visible corners in its curvature,
- * with small dips next to a jump.
+ * of equal prices flat.
  */
 const meta: Meta = {
   title: "Forward Syntax/Curve Ladder",
 };
 export default meta;
 
-const CURVES = ["step", "linear", "monotone", "smooth", "smoother"] as const;
+const CURVES = ["step", "linear", "monotone", "smooth"] as const;
 
 export const Ladder: StoryObj = {
   render: () => {
@@ -221,7 +220,7 @@ const caption = (curve: LadderCurve): string => {
 };
 
 /**
- * The ladder as a wrapping grid of large panels, one per curve, each the
+ * The ladder as a two-by-two grid of large panels, one per curve, each the
  * driving connected scatter plot. Every panel's dot moves on one clock, and
  * the year is written once above the grid. Gaps are distances in pixels on
  * a 560 × 420 panel, with the data's extents spread over the panel.
@@ -242,7 +241,7 @@ const animatedLadder = (clock: any) => {
 
   const grid = document.createElement("div");
   grid.style.display = "grid";
-  grid.style.gridTemplateColumns = `repeat(auto-fill, ${PANEL.w + 40}px)`;
+  grid.style.gridTemplateColumns = `repeat(2, ${PANEL.w + 40}px)`;
   grid.style.gap = "24px 8px";
   container.appendChild(grid);
   for (const curve of CURVES) {
@@ -271,8 +270,9 @@ export const LadderAnimated: StoryObj = {
   render: () => animatedLadder(timer({ domain: YEARS, duration: 20000 })),
 };
 
-/** The animated ladder held at 1986.3, where `smooth` and `smoother` are
- *  furthest apart: the 1986 fall in gas prices, which `smoother` overshoots. */
-export const LadderAnimatedPaused1986: StoryObj = {
-  render: () => animatedLadder(pausedClock(YEARS, 20000, 1986.3)),
+/** The animated ladder held at 1980.5, inside the year where `smooth` and
+ *  `monotone` are furthest apart: 1980 to 1981, where gas peaks and miles
+ *  turn back, and `smooth` rounds the peak past its point. */
+export const LadderAnimatedPaused1980: StoryObj = {
+  render: () => animatedLadder(pausedClock(YEARS, 20000, 1980.5)),
 };

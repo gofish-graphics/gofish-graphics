@@ -9,7 +9,7 @@
  *
  * Built-ins below are the *routing* curves (linear / bezier / orthogonal /
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
- * pairwise, and the *sequence* curves (step, monotone, smooth, smoother,
+ * pairwise, and the *sequence* curves (step, monotone, smooth,
  * catmullRom), which thread the whole point run (`sequenceCurve`).
  *
  * Register a new router with `registerRoute(name, fn)`; look one up with
@@ -64,7 +64,7 @@ export type Router = (
  *
  * `curve` is the single screen-space path-shaping key on `line`/`ribbon` — it
  * holds both interpolating curves that thread the point sequence (linear,
- * bezier, step, monotone, smooth, smoother, catmullRom) and routing curves that shape the stroke between two
+ * bezier, step, monotone, smooth, catmullRom) and routing curves that shape the stroke between two
  * anchors (orthogonal, arc, perfectArrows). A curve resolves to a `Router`.
  */
 export type CurveSpec = { type: string; options?: Record<string, any> };
@@ -329,7 +329,7 @@ sequenceCurves.set("catmullRom", {
 // Builder-object idiom (like `polar({…})` / axis / label specs): each returns a
 // serializable `CurveSpec` carrying its own options, so call sites read
 // `line({ curve: orthogonal() })`, `line({ curve: arc({ direction: "down" }) })`.
-// The option-less `"linear"`, `"step"`, `"monotone"`, `"smooth"`, `"smoother"` and
+// The option-less `"linear"`, `"step"`, `"monotone"`, `"smooth"` and
 // `"catmullRom"` have no factory; pass the bare name. (`linear()` is
 // already the Cartesian coordinate transform.)
 
