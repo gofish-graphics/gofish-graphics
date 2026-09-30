@@ -417,8 +417,18 @@ out either way, and has to be: that is what makes the axes hold still. So the
 clock decides nothing but which already-placed group is PAINTED, and the hold is
 a live opacity installed on each group's subtree
 (`GoFishNode.INTERNAL_visibleWhile`), with the band rule (`[t_i, t_{i+1})`,
-unchanged) evaluated inside the thunk. A jump costs one opacity write per
-keyframe item; the chart is laid out once however long it plays.
+unchanged) evaluated inside the thunk. The chart is laid out once however long
+it plays.
+
+The rule is read by every item under its keyframe, so paint asks it once per
+tick and shares the answer: each rule becomes one decision for the paint
+(`sharedDecision` in `live.ts`), a computation that re-reads the clock and
+writes a signal only when its answer changes, and the items' opacity slots read
+that signal. A tick then costs one evaluation per rule plus a patch for each
+item whose keyframe changed its answer, however many rows the chart has. The
+decision writes a signal rather than being a `createMemo` because Solid marks
+everything downstream of a memo as pending on every input change, before it
+knows the value held; that visit alone was one step per item per tick.
 
 The two compose with nothing to coordinate. The keyframe marks a transition
 moves emit nothing at all, since the moving mark is their drawing, and the
@@ -434,9 +444,10 @@ The price is the live channels' standing one: what the display list carries, and
 therefore what serialization and the runtime's hit-test frame see, is the value
 lowered at resolve. A keyframe hidden at paint is still in the frame, so it
 still answers to a pointer, and a headless `toDisplayList` shows every keyframe
-with the shown ones at their own opacity and the rest at 0. It is also why a
-sequence over tens of thousands of rows is slow to play: every one of its marks
-re-reads the clock on every tick (#848).
+with the shown ones at their own opacity and the rest at 0. And every keyframe
+is still in the DOM: a sequence over tens of thousands of rows keeps that many
+elements, hidden ones at opacity 0, so the browser's own paint of them is what a
+tick costs once the script work is gone.
 
 ## Incremental outlook
 
