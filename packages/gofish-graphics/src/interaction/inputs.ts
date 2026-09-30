@@ -15,28 +15,49 @@
  * Reads outside resolve (an external readout) just read.
  */
 import { createSignal, getListener, onCleanup, untrack } from "solid-js";
-import type { Hit, InputPrimitive, SvgBox, SvgPoint } from "./types";
+import type {
+  Hit,
+  InputPrimitive,
+  SpecInvalidator,
+  SvgBox,
+  SvgPoint,
+} from "./types";
 import type { InteractionRuntime } from "./runtime";
 import { ambientRegistrar, inLiveEval } from "./resolveContext";
 import { clamp } from "../util";
 
-/** Build the read-time registration hook shared by every input accessor. */
-function makeTrack(input: InputPrimitive): () => void {
-  return () => {
-    const reg = ambientRegistrar();
-    if (!reg) return;
-    reg.registerInput(input);
-    // A read outside a `live()` channel makes the input a pipeline dependency
-    // OF THIS CHART. The registrar is the chart's runtime (a SpecInvalidator),
-    // so add it to the input's set — an input read in two charts' specs
-    // accumulates both, and a write invalidates both.
-    if (!inLiveEval()) input.specRuntimes.add(reg);
+/**
+ * One READABLE of an input — a piece of its state that changes on its own
+ * schedule — as a pipeline dependency: `track` is the read-time hook its
+ * accessors call, `invalidate` is what a write to that state calls.
+ *
+ * A read registers the input with the ambient runtime either way. A read
+ * outside a `live()` channel also makes this readable a pipeline dependency OF
+ * THAT CHART: the registrar is the chart's runtime (a SpecInvalidator), so it
+ * joins this readable's reader set (one of `input.specReaders`); a readable
+ * read in two charts' specs accumulates both, and a write invalidates both.
+ *
+ * The edge is per readable, not per input, because an input's readables change
+ * at different rates: a spec that reads only a timer's play state (a
+ * play/pause caption) must not re-run on every tick of its value.
+ */
+function dependency(input: InputPrimitive): {
+  track: () => void;
+  invalidate: () => void;
+} {
+  const readers = new Set<SpecInvalidator>();
+  input.specReaders.push(readers);
+  return {
+    track() {
+      const reg = ambientRegistrar();
+      if (!reg) return;
+      reg.registerInput(input);
+      if (!inLiveEval()) readers.add(reg);
+    },
+    invalidate() {
+      for (const rt of readers) rt.invalidate();
+    },
   };
-}
-
-/** Invalidate every chart that reads `input` in its spec (its `specRuntimes`). */
-function invalidateSpecReaders(input: InputPrimitive): void {
-  for (const rt of input.specRuntimes) rt.invalidate();
 }
 
 /**
@@ -100,7 +121,7 @@ export function pointer(): Pointer {
   let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
-    specRuntimes: new Set(),
+    specReaders: [],
     events: ["pointermove", "pointerdown", "pointerup", "pointerleave"],
     needsFrame: true,
     attach(rt) {
@@ -127,10 +148,10 @@ export function pointer(): Pointer {
       } else {
         return;
       }
-      invalidateSpecReaders(input);
+      invalidate();
     },
   };
-  const track = makeTrack(input);
+  const { track, invalidate } = dependency(input);
 
   return {
     pos() {
@@ -214,7 +235,7 @@ export function drag(options: DragOptions = {}): Drag {
   let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
-    specRuntimes: new Set(),
+    specReaders: [],
     events: ["pointerdown", "pointermove", "pointerup"],
     needsFrame: true,
     attach(rt) {
@@ -246,10 +267,10 @@ export function drag(options: DragOptions = {}): Drag {
       } else {
         return;
       }
-      invalidateSpecReaders(input);
+      invalidate();
     },
   };
-  const track = makeTrack(input);
+  const { track, invalidate } = dependency(input);
 
   const toData = (
     p: SvgPoint | undefined
@@ -325,7 +346,7 @@ export function click(options: ClickOptions = {}): Click {
   let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
-    specRuntimes: new Set(),
+    specReaders: [],
     events: ["pointerdown", "pointerup", "pointerleave"],
     needsFrame: true,
     attach(rt) {
@@ -335,7 +356,7 @@ export function click(options: ClickOptions = {}): Click {
       if (type === "pointerleave") {
         if (armed() !== undefined) {
           setArmed(undefined);
-          invalidateSpecReaders(input);
+          invalidate();
         }
         return;
       }
@@ -351,7 +372,7 @@ export function click(options: ClickOptions = {}): Click {
         // (the pointerleave branch above has always worked this way).
         if (next !== armed()) {
           setArmed(next);
-          invalidateSpecReaders(input);
+          invalidate();
         }
         return;
       }
@@ -369,16 +390,16 @@ export function click(options: ClickOptions = {}): Click {
       if (!accepted) {
         if (press !== undefined) {
           setArmed(undefined);
-          invalidateSpecReaders(input);
+          invalidate();
         }
         return;
       }
       setArmed(undefined);
       setCount((prev) => prev + 1);
-      invalidateSpecReaders(input);
+      invalidate();
     },
   };
-  const track = makeTrack(input);
+  const { track, invalidate } = dependency(input);
 
   return {
     count() {
@@ -439,7 +460,7 @@ export function wheel(options: WheelOptions): Wheel {
   let accum = invert(value());
 
   const input: InputPrimitive = {
-    specRuntimes: new Set(),
+    specReaders: [],
     events: ["wheel"],
     onEvent(type, event) {
       if (type !== "wheel") return;
@@ -449,11 +470,11 @@ export function wheel(options: WheelOptions): Wheel {
       const next = scale(accum);
       if (next !== value()) {
         setValue(next);
-        invalidateSpecReaders(input);
+        invalidate();
       }
     },
   };
-  const track = makeTrack(input);
+  const { track, invalidate } = dependency(input);
 
   const acc = (() => {
     track();
@@ -464,7 +485,7 @@ export function wheel(options: WheelOptions): Wheel {
     accum = invert(nv);
     if (nv !== value()) {
       setValue(nv);
-      invalidateSpecReaders(input);
+      invalidate();
     }
   };
   return acc;
@@ -641,7 +662,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   const setPlayingTracked = (next: boolean): void => {
     if (untrack(playing) === next) return;
     setPlaying(next);
-    invalidateSpecReaders(input);
+    playState.invalidate();
   };
 
   const rawElapsed = (): number => base + (isRunning() ? now() - since : 0);
@@ -663,22 +684,26 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   let autoStarted = false;
 
   const input: InputPrimitive = {
-    specRuntimes: new Set(),
+    specReaders: [],
   };
-  const track = makeTrack(input);
+  // Two readables, two dependency edges: the value ticks while the clock
+  // runs, the play state changes only on play/pause, and a spec that reads
+  // only the second (a play/pause caption) re-runs only when it changes.
+  const valueState = dependency(input);
+  const playState = dependency(input);
 
   // The interval runs only while something reads the clock (reference
   // counting, like MobX's onBecomeUnobserved or RxJS's refCount). The readers
-  // are the charts that read it in their spec (`specRuntimes`, which a chart
-  // leaves when it unmounts) and the reactive computations that read it at
-  // paint, counted here: a read under a Solid listener counts once, and the
-  // listener's cleanup (its next run, or its root's disposal on unmount)
-  // uncounts it. Stopping is invisible: the value is derived from elapsed wall
+  // are the charts that read it in their spec (its two `specReaders` sets,
+  // which a chart leaves when it re-resolves or unmounts) and the reactive
+  // computations that read it at paint, counted here: a read under a Solid
+  // listener counts once, and the listener's cleanup (its next run, or its
+  // root's disposal on unmount) uncounts it. Stopping is invisible: the value is derived from elapsed wall
   // time, so a restarted clock reads exactly what a clock that kept ticking
   // would, and a read while stopped catches the value up first.
   let paintReaders = 0;
   const isWatched = (): boolean =>
-    paintReaders > 0 || input.specRuntimes.size > 0;
+    paintReaders > 0 || input.specReaders.some((readers) => readers.size > 0);
 
   /** Count the current reader, and tick if the clock is running. Invariant:
    *  a running, watched clock is ticking. */
@@ -728,7 +753,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
     const next = invert(elapsed());
     if (next !== untrack(value)) {
       setValue(() => next);
-      invalidateSpecReaders(input);
+      valueState.invalidate();
     }
   };
 
@@ -751,7 +776,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
 
   const acc = (() => {
     catchUp();
-    track();
+    valueState.track();
     // Lazy-start ONCE on the first read, as before: an explicit pause() then
     // stays paused until an explicit play() (a read must not resurrect a
     // paused clock), and `playing: false` starts paused for the same reason.
@@ -774,7 +799,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
     // A non-looping clock ends itself on a tick, so reading its play state
     // is reading the clock: it catches up and counts as a reader too.
     catchUp();
-    track();
+    playState.track();
     watch();
     return playing();
   };
@@ -799,9 +824,9 @@ export function signal<T>(init: T): Signal<T> {
   const [value, setValue] = createSignal<T>(init);
 
   const input: InputPrimitive = {
-    specRuntimes: new Set(),
+    specReaders: [],
   };
-  const track = makeTrack(input);
+  const { track, invalidate } = dependency(input);
 
   const acc = (() => {
     track();
@@ -809,7 +834,7 @@ export function signal<T>(init: T): Signal<T> {
   }) as Signal<T>;
   acc.set = (v: T) => {
     setValue(() => v);
-    invalidateSpecReaders(input);
+    invalidate();
   };
   return acc;
 }

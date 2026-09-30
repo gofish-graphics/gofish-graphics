@@ -292,10 +292,11 @@ export const E_Controls: StoryObj<Args> = {
       onClick: () => (day.isPlaying() ? day.pause() : day.play()),
     });
 
-    // The THUNK form of the low-level terminal: the clock and the handle both
-    // change the SPEC (which day shows, a placement), so the whole picture has to be
-    // re-evaluable — which is what a thunk gives a composition with no
-    // `chart()` builder at its root.
+    // The THUNK form of the low-level terminal: the button's caption changes
+    // the SPEC (a new caption measures differently), so the whole picture has
+    // to be re-evaluable — which is what a thunk gives a composition with no
+    // `chart()` builder at its root. The clock itself does not: the trails and
+    // the slider's handle and readout follow it at paint.
     // `legend: false` and the map's size are options of the ROOT render here,
     // not of the chart: the chart is no longer the root, so it is the enclosing
     // composition that decides how big the map box is and whether the canvas

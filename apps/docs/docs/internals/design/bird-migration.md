@@ -477,9 +477,12 @@ What it needed from the library, and what each turned into:
    too, through the builder's OWN `resolve()` (which is where a root `coord` is
    hoisted over every tier). So `spreadY([map, controls])` works for a layered
    chart, the mirror of `.layer(node)`.
-4. **Handle geometry is a pipeline-tier read** of `value()` (geometry cannot be
-   `live()` - paint patches attributes, it does not move a node), so the control
-   relays out with the map.
+4. **Handle geometry was a pipeline-tier read** of `value()`, so the control
+   relaid out with the map on every tick. Superseded: the slider now reads the
+   value at paint (the handle's `cx` is a live slot, the readout is live text),
+   and a timer's play state is a dependency separate from its value, so a
+   playing clock re-renders nothing. See
+   [Reactivity](/internals/frontend/reactivity#controls-are-marks-not-nodes).
 5. **`drag({ hitTest })` sees the hit**, not just the point, so a control claims
    exactly the drags that start on the nodes it drew.
 6. **`drag().nodeBox(uid)`** - the on-screen box (svg px) of a node in the frame
@@ -493,8 +496,8 @@ What it needed from the library, and what each turned into:
 Three shape decisions worth recording:
 
 - **A control is a MARK, not a node.** The pipeline is tree-consuming: a node
-  laid out twice keeps its first placement, so a control whose geometry depends
-  on `value()` has to be rebuilt per resolve - which is exactly what a mark is.
+  laid out twice keeps its first placement, so a control has to be rebuilt
+  whenever the spec around it resolves - which is exactly what a mark is.
   The `drag()`/`click()` input and the write effect are created ONCE, when the
   widget is made. So the widget is constructed outside the render thunk and its
   node inside it, and a composition with no `chart()` at its root needs the
