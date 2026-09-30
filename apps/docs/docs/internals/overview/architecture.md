@@ -50,7 +50,10 @@ at all.
 **2 · Layout.** With domains known, each node computes its size. Layout dispatches on
 the continuous space's `origin` state: a `SIZE` (free) dimension resolves through the
 monotonic machinery, a `POSITION` (anchored) dimension through position scales. Bounding boxes
-([the bbox model](/internals/core/bbox)) are the common currency.
+([the bbox model](/internals/core/bbox)) are the common currency. After layout, a node can
+also describe its shape beyond its box through a lazy `geometry()` (today only an
+enclosing circle), which foreign layouts such as `pack` read (see
+[Layout Calculation](/internals/layout/passes#shape-geometry-after-layout)).
 
 **3 · Placement & render.** Final absolute positions are assigned, then the tree is
 turned into pixels in two sub-passes: **lower** — walk the baked scenegraph and emit a

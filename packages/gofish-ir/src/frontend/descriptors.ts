@@ -592,6 +592,23 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
     },
   }),
+
+  pack: operator("pack", {
+    doc: "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
+    fields: {
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.",
+      },
+      method: {
+        type: t.object({
+          kind: { type: t.enum("circles"), required: true },
+        }),
+        default: { kind: "circles" },
+        doc: "The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm.",
+      },
+    },
+  }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1101,6 +1118,11 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       ...resolveFields(OPERATORS.treemap),
       key: { type: t.string, doc: "Internal per-node key override." },
     },
+  }),
+
+  pack: combinatorMark("pack", {
+    doc: "Low-level combinator form of `pack`: packs the given child marks by their enclosing circles.",
+    fields: resolveFields(OPERATORS.pack),
   }),
 
   // Porter-Duff-style compositing quartet + `over`/`mask`. Wire `type` stays
