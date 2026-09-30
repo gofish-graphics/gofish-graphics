@@ -306,7 +306,7 @@ def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         points: Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).
-        fill: Fill color. Default "black".
+        fill: Fill color, or a field name for a color scale. Default "black".
         stroke: Stroke color. Defaults to `fill`.
         strokeWidth: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1, applied to both fill and stroke. Default 1.

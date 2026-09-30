@@ -2193,12 +2193,12 @@ for the API.
           "description": "Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap)."
         },
         "fill": {
-          "type": "string",
-          "description": "Fill color.",
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale.",
           "default": "black"
         },
         "stroke": {
-          "type": "string",
+          "$ref": "#/$defs/ChannelValue",
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
