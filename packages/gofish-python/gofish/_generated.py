@@ -701,6 +701,24 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
             opts[_k] = _v
     return opts
 
+def _pack_opts(*, by: Optional[Any] = None, method: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).
+
+    Args:
+        by: Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.
+        method: The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm. Default {"kind":"circles"}.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("by", by),
+        ("method", method),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
 def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
 

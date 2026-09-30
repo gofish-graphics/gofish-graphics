@@ -142,6 +142,8 @@ export {
   type CurveSpec,
 } from "./ast/graphicalOperators/routers";
 export { treemap } from "./ast/graphicalOperators/treemap";
+export { pack, circles } from "./ast/graphicalOperators/pack";
+export type { PackMethod, PackOptions } from "./ast/graphicalOperators/pack";
 export {
   enclose,
   enclose as background,

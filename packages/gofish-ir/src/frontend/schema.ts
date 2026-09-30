@@ -174,7 +174,8 @@ export type OperatorIR =
   | ScatterOperator
   | TableOperator
   | LogOperator
-  | TreemapOperator;
+  | TreemapOperator
+  | PackOperator;
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
@@ -414,6 +415,28 @@ export interface TreemapOperator
   dims?: AxisDims;
 }
 
+/** A `pack` strategy, made by a function call (`circles()`). */
+export type PackMethodIR = { kind: "circles" };
+
+/**
+ * `pack({...})` — circle packing: children are placed so their enclosing
+ * circles touch without overlapping. Dual-form like `treemap`: also a
+ * low-level combinator mark (`CombinatorMarkType`'s `"pack"`). Mirrors JS's
+ * `PackOptions` (`graphicalOperators/pack.tsx`).
+ */
+export interface PackOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "pack";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
+  /** Field to partition rows by. Without `by`, one child per row. */
+  by?: string | FieldAccessor;
+  /** The packing strategy. Default `{ kind: "circles" }`. */
+  method?: PackMethodIR;
+}
+
 // ---------------------------------------------------------------------------
 // Marks
 // ---------------------------------------------------------------------------
@@ -456,6 +479,7 @@ export type CombinatorMarkType =
   | "line"
   | "ribbon"
   | "treemap"
+  | "pack"
   | "over"
   | "inside"
   | "xor"
@@ -788,6 +812,7 @@ export const OPERATOR_TYPES = [
   "table",
   "log",
   "treemap",
+  "pack",
 ] as const;
 
 /** The set of leaf-mark type discriminators recognized in v0. */
@@ -819,6 +844,7 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "line",
   "ribbon",
   "treemap",
+  "pack",
   "over",
   "inside",
   "xor",
