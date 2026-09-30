@@ -14,7 +14,7 @@
  *     schedule a full, rAF-coalesced re-render.
  * Reads outside resolve (an external readout) just read.
  */
-import { createSignal, untrack } from "solid-js";
+import { createSignal, getListener, onCleanup, untrack } from "solid-js";
 import type { Hit, InputPrimitive, SvgBox, SvgPoint } from "./types";
 import type { InteractionRuntime } from "./runtime";
 import { ambientRegistrar, inLiveEval } from "./resolveContext";
@@ -667,6 +667,35 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   };
   const track = makeTrack(input);
 
+  // The interval runs only while something reads the clock (reference
+  // counting, like MobX's onBecomeUnobserved or RxJS's refCount). The readers
+  // are the charts that read it in their spec (`specRuntimes`, which a chart
+  // leaves when it unmounts) and the reactive computations that read it at
+  // paint, counted here: a read under a Solid listener counts once, and the
+  // listener's cleanup (its next run, or its root's disposal on unmount)
+  // uncounts it. Stopping is invisible: the value is derived from elapsed wall
+  // time, so a restarted clock reads exactly what a clock that kept ticking
+  // would, and a read while stopped catches the value up first.
+  let paintReaders = 0;
+  const isWatched = (): boolean =>
+    paintReaders > 0 || input.specRuntimes.size > 0;
+
+  /** Count the current reader, and tick if the clock is running. Invariant:
+   *  a running, watched clock is ticking. */
+  const watch = (): void => {
+    if (getListener() !== null) {
+      paintReaders++;
+      onCleanup(() => void paintReaders--);
+    }
+    if (isRunning() && isWatched()) startTicking();
+  };
+
+  /** A running clock that is not ticking has no reader but the one reading
+   *  now (see `watch`), so bring its value up to date before that read. */
+  const catchUp = (): void => {
+    if (handle === undefined && isRunning()) sample();
+  };
+
   const startTicking = (): void => {
     if (handle !== undefined) return;
     handle = setInterval(() => sample(), SAMPLE_MS);
@@ -678,8 +707,15 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
     }
   };
 
-  /** Publish the current domain value; end a non-looping sweep at `duration`. */
+  /** Publish the current domain value; end a non-looping sweep at `duration`.
+   *  A tick that finds no reader left stops the interval instead: the stop is
+   *  lazy, one tick after the last reader leaves, so a re-render that drops and
+   *  re-adds its read in one go does not restart the interval. */
   const sample = (): void => {
+    if (handle !== undefined && !isWatched()) {
+      stopTicking();
+      return;
+    }
     if (!loop && isRunning() && rawElapsed() >= duration) {
       base = duration;
       stopTicking();
@@ -690,7 +726,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
 
   const publish = (): void => {
     const next = invert(elapsed());
-    if (next !== value()) {
+    if (next !== untrack(value)) {
       setValue(() => next);
       invalidateSpecReaders(input);
     }
@@ -703,7 +739,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
     if (!loop && base >= duration) base = 0;
     since = now();
     setPlayingTracked(true);
-    startTicking();
+    if (isWatched()) startTicking();
     publish();
   };
   const pause = (): void => {
@@ -714,6 +750,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   };
 
   const acc = (() => {
+    catchUp();
     track();
     // Lazy-start ONCE on the first read, as before: an explicit pause() then
     // stays paused until an explicit play() (a read must not resurrect a
@@ -722,6 +759,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
       autoStarted = true;
       if (options.playing !== false) play();
     }
+    watch();
     return value();
   }) as Timer<T>;
 
@@ -733,7 +771,11 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   acc.play = play;
   acc.pause = pause;
   acc.isPlaying = () => {
+    // A non-looping clock ends itself on a tick, so reading its play state
+    // is reading the clock: it catches up and counts as a reader too.
+    catchUp();
     track();
+    watch();
     return playing();
   };
   (acc as { domain: Timer<T>["domain"] }).domain = values ?? [lo, hi];

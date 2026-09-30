@@ -5,7 +5,7 @@
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
 import { GoFishNode } from "./_node";
-import type { AxesOptions } from "./gofish";
+import type { AxesOptions, View } from "./gofish";
 import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
 import { ChartBuilder, LayerBuilder } from "./marks/chart";
@@ -87,10 +87,7 @@ type GoFishChildrenInputWithThunks =
 /** A Promise-like object that also carries GoFishNode's chainable methods, so
  *  `.render()` / `.name()` / … work on the promises withGoFish returns. */
 export interface PromiseWithRender<T> extends Promise<T> {
-  render(
-    container: HTMLElement,
-    options: RenderOptions
-  ): HTMLElement | Promise<HTMLElement>;
+  render(container: HTMLElement, options: RenderOptions): Promise<View>;
   toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
   toSVGElement(
     options?: Parameters<GoFishNode["toSVGElement"]>[0]

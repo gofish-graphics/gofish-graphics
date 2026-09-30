@@ -58,7 +58,11 @@ export {
   saveSVGString,
   gofishSave,
 } from "./ast/gofish";
-export type { GoFishRenderOptions, GoFishExportOptions } from "./ast/gofish";
+export type {
+  GoFishRenderOptions,
+  GoFishExportOptions,
+  View,
+} from "./ast/gofish";
 
 // Display-list (render-IR) export
 export { toDisplayList } from "./ast/displayList/toDisplayList";

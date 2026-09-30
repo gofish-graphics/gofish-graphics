@@ -348,15 +348,24 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
     };
   }
 
+  private disposed = false;
+
+  /** True once {@link dispose} ran: the chart this runtime served is gone. */
+  isDisposed(): boolean {
+    return this.disposed;
+  }
+
   /**
-   * Tear down this runtime when its container is taken over by a DIFFERENT
-   * chart (gofish.tsx compares the incoming runtime against the stored one).
-   * Detaches DOM listeners, drops this runtime from every input's
-   * `specRuntimes` set (so a still-live input — e.g. a running `timer()` a user
-   * never `.stop()`ed — no longer invalidates this dead chart), and clears the
-   * rerender thunk so any stray `invalidate()` that still races in no-ops.
+   * Tear down this runtime when its chart goes away: `View.unmount()`, or a
+   * DIFFERENT chart taking over its container (gofish.tsx compares the
+   * incoming runtime against the stored one). Detaches DOM listeners, drops
+   * this runtime from every input's `specRuntimes` set (so a still-live input
+   * no longer invalidates this dead chart, and a `timer()` it was the last
+   * reader of stops ticking), and clears the rerender thunk so any stray
+   * `invalidate()` that still races in no-ops.
    */
   dispose(): void {
+    this.disposed = true;
     this.detach?.();
     // Remove ourselves as a dependency of any still-live shared input.
     for (const input of this.inputs) input.specRuntimes.delete(this);
