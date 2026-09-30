@@ -788,8 +788,9 @@ together because the difference is which tier decides. `INTERNAL_emitNothing` is
 for a node that must never draw, and it answers at resolve. `INTERNAL_visibleWhile`
 is for a node whose drawing comes and goes with a signal — a `time.sequence`'s
 keyframe groups, where the clock picks which band is showing — and it answers at
-paint: the items are lowered either way and their opacity is patched per frame
-through the live-slot side table (see
+paint: the items are lowered either way and their opacity is patched through
+the live-slot side table, each rule read once per tick as one decision the items
+under it share, so only the items whose rule changed its answer are patched (see
 [Reactivity](/internals/frontend/reactivity)). A resolve-time answer there would
 make the clock a pipeline dependency and put the whole chart through layout on
 every tick, for a change that alters nothing above the marks themselves.

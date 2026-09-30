@@ -27,7 +27,12 @@
  *     --quick: tiny sweeps / few examples for a local smoke test
  */
 
-import { chromium, type Browser, type Page } from "playwright";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from "playwright";
 import { spawn, type ChildProcess } from "child_process";
 import {
   writeFileSync,
@@ -115,14 +120,19 @@ const MEASURE_BUDGET_MS = QUICK ? 300 : 1500;
 const MEASURE_MIN = QUICK ? 2 : 4;
 const MEASURE_MAX = 20;
 
-// Synthetic sweep. Capped to keep the DOM/paint from OOMing; the per-point
-// ceiling stops a family early once a single render blows past the budget so
-// we still capture the asymptote leading up to it.
+// Synthetic sweep. Capped to keep the DOM/paint from OOMing.
 const COUNT_NS = QUICK
   ? [10, 100, 1000]
   : [10, 30, 100, 300, 1000, 3000, 10000, 30000];
 const NEST_DEPTHS = QUICK ? [2, 8] : [1, 2, 4, 8, 16, 32, 64, 128];
+// A measured render slower than this ends its synthetic family: the point is
+// healthy but too slow to sample further, and the asymptote is already caught.
 const PER_RENDER_CEILING_MS = 20_000;
+
+// Timeout for any one `page.evaluate` (a render, a gc): past it the page is
+// stuck, not slow. The slowest healthy render (a bird-migration panel) is ~10s.
+// A timeout ends its leg's unit of work, never the run (see `orTimeout`).
+const RENDER_BUDGET_MS = 60_000;
 
 type Labels = Record<string, number>;
 type Stat = { median: number; min: number; p95: number; n: number };
@@ -165,11 +175,72 @@ const sumPasses = (labels: Labels): number =>
 
 type Counts = { nodes: number; displayItems: number };
 
+/** A render past RENDER_BUDGET_MS: its page is stuck, not slow. */
+class RenderTimeout extends Error {}
+
+/** `work`, or throw RenderTimeout if it hasn't settled within RENDER_BUDGET_MS.
+ *  The abandoned `work` is left to reject when its page closes. */
+async function withinBudget<T>(work: Promise<T>): Promise<T> {
+  work.catch(() => {});
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new RenderTimeout()), RENDER_BUDGET_MS);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const TIMED_OUT = Symbol("timed out");
+
+/**
+ * `work()`, or TIMED_OUT if one of its renders went over RENDER_BUDGET_MS. Every
+ * leg handles a timeout the same way: it ends that leg's unit of work (a story,
+ * a synthetic family), never the run. `reopen` replaces the stuck page(s) first,
+ * so the abandoned render can't bleed into the next unit.
+ */
+async function orTimeout<T>(
+  work: () => Promise<T>,
+  reopen: () => Promise<void>
+): Promise<T | typeof TIMED_OUT> {
+  try {
+    return await work();
+  } catch (err) {
+    if (!(err instanceof RenderTimeout)) throw err;
+    await reopen();
+    return TIMED_OUT;
+  }
+}
+
+/** Log a page's uncaught errors under DEBUG. */
+function logPageErrors(page: Page, tag = "pageerror"): void {
+  page.on("pageerror", (e) => {
+    if (process.env.DEBUG) console.error(`[${tag}] ${e.message}`);
+  });
+}
+
+/** A fresh page at `url`, once `ready()` holds in it. */
+async function openPage(
+  context: BrowserContext,
+  url: string,
+  ready: () => boolean,
+  tag?: string
+): Promise<Page> {
+  const page = await context.newPage();
+  logPageErrors(page, tag);
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(ready, undefined, { timeout: 30_000 });
+  return page;
+}
+
 /** Ask Chromium to GC between samples (needs --js-flags=--expose-gc); no-op if absent. */
 const gc = async (page: Page): Promise<void> => {
   try {
-    await page.evaluate(() => (globalThis as any).gc?.());
-  } catch {
+    await withinBudget(page.evaluate(() => (globalThis as any).gc?.()));
+  } catch (err) {
+    if (err instanceof RenderTimeout) throw err;
     /* expose-gc not available */
   }
 };
@@ -329,14 +400,31 @@ type JsStoryInfo = {
   moduleKey: string;
 };
 
-async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
-  await page.goto(`http://localhost:${HARNESS_PORT}/stories-runner.html`, {
-    waitUntil: "domcontentloaded",
-  });
-  await page.waitForFunction(
-    () => (window as any).__STORIES_RUNNER_READY__ === true,
-    { timeout: 30_000 }
-  );
+/** An example story that produced no measurement, and why. */
+export type SkippedExample = {
+  id: string;
+  title: string;
+  name: string;
+  // `timeout`: a render went over RENDER_BUDGET_MS. `error`: it failed.
+  reason: "timeout" | "error";
+};
+
+/** A synthetic point or ruler point whose render went over RENDER_BUDGET_MS. */
+export type SkippedPoint = { family: string; n: number; reason: "timeout" };
+
+/** A Python story whose render went over RENDER_BUDGET_MS. */
+type SkippedPyExample = { path: string; reason: "timeout" };
+
+async function benchExamplesJs(
+  context: BrowserContext
+): Promise<{ results: ExampleResult[]; skipped: SkippedExample[] }> {
+  const open = () =>
+    openPage(
+      context,
+      `http://localhost:${HARNESS_PORT}/stories-runner.html`,
+      () => (window as any).__STORIES_RUNNER_READY__ === true
+    );
+  let page = await open();
 
   let stories = (await page.evaluate(() =>
     (window as any).__listStories__()
@@ -353,37 +441,59 @@ async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
 
   console.log(`\n[examples-js] ${stories.length} stories\n`);
   const results: ExampleResult[] = [];
+  const skipped: SkippedExample[] = [];
 
   for (const story of stories) {
     process.stdout.write(`  ${story.title}/${story.name} ... `);
+    const storyStart = performance.now();
+    const elapsed = () =>
+      `(${((performance.now() - storyStart) / 1000).toFixed(1)}s)`;
     type Sample = { labels: Labels; wallMs: number; counts?: Counts };
-    const samples = await sampleLoop<Sample>(page, async () => {
-      const r = await page.evaluate(async (id) => {
-        const w = window as any;
-        w.__GOFISH_PERF__ = { enabled: true, current: null };
-        w.__STORY_RENDER_WALL_MS__ = 0;
-        const success = await w.__renderStory__(id);
-        if (!success)
+    const samples = await orTimeout(
+      () =>
+        sampleLoop<Sample>(page, async () => {
+          const r = await withinBudget(
+            page.evaluate(async (id) => {
+              const w = window as any;
+              w.__GOFISH_PERF__ = { enabled: true, current: null };
+              w.__STORY_RENDER_WALL_MS__ = 0;
+              const success = await w.__renderStory__(id);
+              if (!success)
+                return {
+                  ok: false as const,
+                  labels: {} as Record<string, number>,
+                  wallMs: 0,
+                };
+              return {
+                ok: true as const,
+                labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
+                wallMs: (w.__STORY_RENDER_WALL_MS__ as number) ?? 0,
+                counts: w.__GOFISH_PERF__?.current?.counts as
+                  | Counts
+                  | undefined,
+              };
+            }, story.id)
+          );
+          if (!r.ok) return { ok: false };
           return {
-            ok: false as const,
-            labels: {} as Record<string, number>,
-            wallMs: 0,
+            ok: true,
+            value: { labels: r.labels, wallMs: r.wallMs, counts: r.counts },
           };
-        return {
-          ok: true as const,
-          labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
-          wallMs: (w.__STORY_RENDER_WALL_MS__ as number) ?? 0,
-          counts: w.__GOFISH_PERF__?.current?.counts as Counts | undefined,
-        };
-      }, story.id);
-      if (!r.ok) return { ok: false };
-      return {
-        ok: true,
-        value: { labels: r.labels, wallMs: r.wallMs, counts: r.counts },
-      };
-    });
-    if (!samples || samples.length === 0) {
-      console.log("SKIP");
+        }),
+      async () => {
+        await page.close();
+        page = await open();
+      }
+    );
+    if (samples === TIMED_OUT || !samples || samples.length === 0) {
+      const reason = samples === TIMED_OUT ? "timeout" : "error";
+      console.log(`${reason === "timeout" ? "TIMEOUT" : "SKIP"} ${elapsed()}`);
+      skipped.push({
+        id: story.id,
+        title: story.title,
+        name: story.name,
+        reason,
+      });
       continue;
     }
     // moduleKey is relative to tests/harness; resolve to hash the source file.
@@ -398,9 +508,12 @@ async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
       wallMs: stat(samples.map((s) => s.wallMs)),
       counts: samples[samples.length - 1].counts,
     });
-    console.log(`${results[results.length - 1].totalMs.median.toFixed(2)}ms`);
+    console.log(
+      `${results[results.length - 1].totalMs.median.toFixed(2)}ms ${elapsed()}`
+    );
   }
-  return results;
+  await page.close();
+  return { results, skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -462,7 +575,9 @@ type PythonResult = {
   counts?: Counts;
 };
 
-async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
+async function benchExamplesPy(
+  context: BrowserContext
+): Promise<{ results: PythonResult[]; skipped: SkippedPyExample[] }> {
   let stories = discoverPythonStories();
   if (FILTER_LC)
     stories = stories.filter((s) => s.path.toLowerCase().includes(FILTER_LC));
@@ -472,15 +587,13 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
 
   // The Python path renders deserialized IR via the harness index page, which
   // defines `__renderChart__` (the stories-runner / bench-runner pages don't).
-  await page.goto(`http://localhost:${HARNESS_PORT}/`, {
-    waitUntil: "networkidle",
-  });
-  await page.waitForFunction(
-    () => typeof (window as any).__renderChart__ === "function",
-    {
-      timeout: 30_000,
-    }
-  );
+  const open = () =>
+    openPage(
+      context,
+      `http://localhost:${HARNESS_PORT}/`,
+      () => typeof (window as any).__renderChart__ === "function"
+    );
+  let page = await open();
 
   // Global interpreter warmup: the first /load of the whole run pays a one-time
   // ~1s cost to import pandas / vega_datasets / gofish into the derive-server
@@ -509,6 +622,7 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
   // loads/caches its dataset; subsequent ones reuse the cache. That is what
   // makes loadMs the steady-state per-call cost rather than a cold first hit.
   const results: PythonResult[] = [];
+  const skipped: SkippedPyExample[] = [];
 
   type PySample = {
     labels: Labels;
@@ -519,91 +633,110 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
 
   for (const story of stories) {
     process.stdout.write(`  ${story.path} ... `);
-    const samples = await sampleLoop<PySample>(page, async () => {
-      // /load: import the story + serialize IR + register derives (Python work).
-      // perf.now() (µs resolution) — the ~6ms quantity is lost under Date.now().
-      const tLoad = performance.now();
-      let ir: any;
-      try {
-        const resp = await fetch(
-          `http://localhost:${DERIVE_SERVER_PORT}/load`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              storyFile: join(TESTS_DIR, story.file),
-              function: story.function,
-              pythonStoriesDir: PYTHON_STORIES_DIR,
-            }),
+    const samples = await orTimeout(
+      () =>
+        sampleLoop<PySample>(page, async () => {
+          // /load: import the story + serialize IR + register derives (Python work).
+          // perf.now() (µs resolution) — the ~6ms quantity is lost under Date.now().
+          const tLoad = performance.now();
+          let ir: any;
+          try {
+            const resp = await fetch(
+              `http://localhost:${DERIVE_SERVER_PORT}/load`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  storyFile: join(TESTS_DIR, story.file),
+                  function: story.function,
+                  pythonStoriesDir: PYTHON_STORIES_DIR,
+                }),
+              }
+            );
+            if (!resp.ok) return { ok: false };
+            ir = await resp.json();
+          } catch {
+            return { ok: false };
           }
-        );
-        if (!resp.ok) return { ok: false };
-        ir = await resp.json();
-      } catch {
-        return { ok: false };
+          const loadDelta = performance.now() - tLoad;
+
+          // Only the single-chart path is benchmarked here; layer/raw-mark/unsupported
+          // are skipped (they don't represent the common per-example case).
+          if (
+            ir?._kind === "layer" ||
+            ir?._kind === "raw-mark" ||
+            ir?._kind === "layer-unsupported"
+          ) {
+            return { ok: false };
+          }
+
+          const deriveServerUrl =
+            ir.deriveIds?.length > 0
+              ? `http://localhost:${DERIVE_SERVER_PORT}`
+              : undefined;
+          const spec = {
+            data: ir.data,
+            operators: ir.operators,
+            mark: ir.mark,
+            options: ir.options,
+            connect: ir.connect ?? null,
+            deriveServerUrl,
+          };
+
+          const r = await withinBudget(
+            page.evaluate(async (s) => {
+              const w = window as any;
+              w.__GOFISH_PERF__ = { enabled: true, current: null };
+              const root = document.getElementById("gofish-harness-root");
+              if (root) root.innerHTML = "";
+              w.__GOFISH_RENDER_COMPLETE__ = false;
+              w.__GOFISH_RENDER_ERROR__ = null;
+              const t0 = performance.now();
+              w.__renderChart__(s);
+              // Poll with setTimeout(0), not a fixed 5ms tick — the old quantization
+              // added 0–5ms of slop, the same order as the Python tax being measured.
+              const deadline = performance.now() + 30000;
+              while (
+                !w.__GOFISH_RENDER_COMPLETE__ &&
+                performance.now() < deadline
+              ) {
+                await new Promise((res) => setTimeout(res, 0));
+                if (w.__GOFISH_RENDER_ERROR__) break;
+              }
+              const wallMs = performance.now() - t0;
+              return {
+                err: w.__GOFISH_RENDER_ERROR__ as string | null,
+                wallMs,
+                labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
+                counts: w.__GOFISH_PERF__?.current?.counts as
+                  | Counts
+                  | undefined,
+              };
+            }, spec)
+          );
+
+          if (r.err) return { ok: false };
+          return {
+            ok: true,
+            value: {
+              labels: r.labels,
+              loadMs: loadDelta,
+              e2eMs: r.wallMs,
+              counts: r.counts,
+            },
+          };
+        }),
+      async () => {
+        await page.close();
+        page = await open();
       }
-      const loadDelta = performance.now() - tLoad;
+    );
 
-      // Only the single-chart path is benchmarked here; layer/raw-mark/unsupported
-      // are skipped (they don't represent the common per-example case).
-      if (
-        ir?._kind === "layer" ||
-        ir?._kind === "raw-mark" ||
-        ir?._kind === "layer-unsupported"
-      ) {
-        return { ok: false };
-      }
-
-      const deriveServerUrl =
-        ir.deriveIds?.length > 0
-          ? `http://localhost:${DERIVE_SERVER_PORT}`
-          : undefined;
-      const spec = {
-        data: ir.data,
-        operators: ir.operators,
-        mark: ir.mark,
-        options: ir.options,
-        connect: ir.connect ?? null,
-        deriveServerUrl,
-      };
-
-      const r = await page.evaluate(async (s) => {
-        const w = window as any;
-        w.__GOFISH_PERF__ = { enabled: true, current: null };
-        const root = document.getElementById("gofish-harness-root");
-        if (root) root.innerHTML = "";
-        w.__GOFISH_RENDER_COMPLETE__ = false;
-        w.__GOFISH_RENDER_ERROR__ = null;
-        const t0 = performance.now();
-        w.__renderChart__(s);
-        // Poll with setTimeout(0), not a fixed 5ms tick — the old quantization
-        // added 0–5ms of slop, the same order as the Python tax being measured.
-        const deadline = performance.now() + 30000;
-        while (!w.__GOFISH_RENDER_COMPLETE__ && performance.now() < deadline) {
-          await new Promise((res) => setTimeout(res, 0));
-          if (w.__GOFISH_RENDER_ERROR__) break;
-        }
-        const wallMs = performance.now() - t0;
-        return {
-          err: w.__GOFISH_RENDER_ERROR__ as string | null,
-          wallMs,
-          labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
-          counts: w.__GOFISH_PERF__?.current?.counts as Counts | undefined,
-        };
-      }, spec);
-
-      if (r.err) return { ok: false };
-      return {
-        ok: true,
-        value: {
-          labels: r.labels,
-          loadMs: loadDelta,
-          e2eMs: r.wallMs,
-          counts: r.counts,
-        },
-      };
-    });
-
+    if (samples === TIMED_OUT) {
+      console.log("TIMEOUT");
+      skipped.push({ path: story.path, reason: "timeout" });
+      continue;
+    }
     if (!samples || samples.length === 0) {
       console.log("SKIP");
       continue;
@@ -626,7 +759,8 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
       `engine ${last.totalMs.median.toFixed(2)}ms · py-overhead ${last.overheadMs.median.toFixed(2)}ms`
     );
   }
-  return results;
+  await page.close();
+  return { results, skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -665,11 +799,14 @@ async function evalSyntheticSample(
   n: number
 ): Promise<SyntheticSample | null> {
   try {
-    return (await page.evaluate(
-      ([f, k]) => (window as any).__runSyntheticBench__(f, k),
-      [family, n] as [string, number]
+    return (await withinBudget(
+      page.evaluate(([f, k]) => (window as any).__runSyntheticBench__(f, k), [
+        family,
+        n,
+      ] as [string, number])
     )) as SyntheticSample;
-  } catch {
+  } catch (err) {
+    if (err instanceof RenderTimeout) throw err;
     return null;
   }
 }
@@ -743,13 +880,13 @@ async function runSyntheticPointAB(
   return { head: toSyntheticMeasure(headS), base: toSyntheticMeasure(baseS) };
 }
 
-async function openBenchRunner(page: Page, port: number): Promise<void> {
-  await page.goto(`http://localhost:${port}/bench-runner.html`, {
-    waitUntil: "domcontentloaded",
-  });
-  await page.waitForFunction(
+/** A fresh page on the synthetic bench runner served at `port`. */
+function openBenchRunner(context: BrowserContext, port: number, tag?: string) {
+  return openPage(
+    context,
+    `http://localhost:${port}/bench-runner.html`,
     () => (window as any).__BENCH_RUNNER_READY__ === true,
-    { timeout: 30_000 }
+    tag
   );
 }
 
@@ -769,77 +906,88 @@ function syntheticSweep(families: { count: string[]; nest: boolean }): {
   return out;
 }
 
-async function benchSynthetic(page: Page): Promise<SyntheticPoint[]> {
-  await openBenchRunner(page, HARNESS_PORT);
+type SyntheticRun = { points: SyntheticPoint[]; skipped: SkippedPoint[] };
+
+/**
+ * The synthetic sweep. A family ends at its first point that errors, goes over
+ * PER_RENDER_CEILING_MS (measured, then too slow to sample further), or times
+ * out (recorded in `skipped`).
+ */
+async function benchSynthetic(context: BrowserContext): Promise<SyntheticRun> {
+  const open = () => openBenchRunner(context, HARNESS_PORT);
+  let page = await open();
   const families = (await page.evaluate(() =>
     (window as any).__listSyntheticFamilies__()
   )) as { count: string[]; nest: boolean };
 
   const points: SyntheticPoint[] = [];
-
-  const countFamilies = FILTER_LC
-    ? families.count.filter((f) => f.includes(FILTER_LC))
-    : families.count;
-
-  for (const family of countFamilies) {
-    console.log(`\n[synthetic] family "${family}"`);
-    for (const n of COUNT_NS) {
-      process.stdout.write(`  n=${n} ... `);
-      const r = await runSyntheticPoint(page, family, n);
-      if (!r) {
-        console.log("ERROR (stopping family)");
-        break;
+  const skipped: SkippedPoint[] = [];
+  const stopped = new Set<string>();
+  let curFamily = "";
+  for (const { family, n } of syntheticSweep(families)) {
+    if (stopped.has(family)) continue;
+    if (family !== curFamily) {
+      curFamily = family;
+      console.log(`\n[synthetic] family "${family}"`);
+    }
+    process.stdout.write(`  n=${n} ... `);
+    const r = await orTimeout(
+      () => runSyntheticPoint(page, family, n),
+      async () => {
+        await page.close();
+        page = await open();
       }
-      points.push({ family, n, ...r });
+    );
+    if (r === TIMED_OUT) {
+      console.log("TIMEOUT (stopping family)");
+      skipped.push({ family, n, reason: "timeout" });
+      stopped.add(family);
+      continue;
+    }
+    if (!r) {
+      console.log("ERROR (stopping family)");
+      stopped.add(family);
+      continue;
+    }
+    points.push({ family, n, ...r });
+    console.log(
+      `engine ${r.totalMs.median.toFixed(2)}ms · wall ${r.wallMs.median.toFixed(2)}ms`
+    );
+    if (r.wallMs.median > PER_RENDER_CEILING_MS) {
       console.log(
-        `engine ${r.totalMs.median.toFixed(2)}ms · wall ${r.wallMs.median.toFixed(2)}ms`
+        `  (n=${n} exceeded ${PER_RENDER_CEILING_MS}ms ceiling — stopping family)`
       );
-      if (r.wallMs.median > PER_RENDER_CEILING_MS) {
-        console.log(
-          `  (n=${n} exceeded ${PER_RENDER_CEILING_MS}ms ceiling — stopping family)`
-        );
-        break;
-      }
+      stopped.add(family);
     }
   }
-
-  if (families.nest && (!FILTER_LC || "nest".includes(FILTER_LC))) {
-    console.log(`\n[synthetic] family "nest" (depth sweep)`);
-    for (const depth of NEST_DEPTHS) {
-      process.stdout.write(`  depth=${depth} ... `);
-      const r = await runSyntheticPoint(page, "nest", depth);
-      if (!r) {
-        console.log("ERROR (stopping family)");
-        break;
-      }
-      points.push({ family: "nest", n: depth, ...r });
-      console.log(
-        `engine ${r.totalMs.median.toFixed(2)}ms · wall ${r.wallMs.median.toFixed(2)}ms`
-      );
-      if (r.wallMs.median > PER_RENDER_CEILING_MS) break;
-    }
-  }
-  return points;
+  await page.close();
+  return { points, skipped };
 }
 
 /**
- * Interleaved same-runner A/B synthetic sweep: HEAD on `headPage` (HARNESS_PORT)
- * vs base on `basePage` (AB_HARNESS_PORT), alternating one sample each per point.
- * Both engines see identical specs and identical sampling; the delta is free of
- * cross-machine variance AND of the thermal drift of benching them minutes apart.
+ * Interleaved same-runner A/B synthetic sweep: HEAD on HARNESS_PORT vs base on
+ * AB_HARNESS_PORT, alternating one sample each per point. Both engines see
+ * identical specs and identical sampling; the delta is free of cross-machine
+ * variance AND of the thermal drift of benching them minutes apart. Families
+ * end as in `benchSynthetic`; a timed-out point is skipped for both sides.
  */
-async function benchSyntheticAB(
-  headPage: Page,
-  basePage: Page
-): Promise<{ head: SyntheticPoint[]; base: SyntheticPoint[] }> {
-  await openBenchRunner(headPage, HARNESS_PORT);
-  await openBenchRunner(basePage, AB_HARNESS_PORT);
+async function benchSyntheticAB(context: BrowserContext): Promise<{
+  head: SyntheticPoint[];
+  base: SyntheticPoint[];
+  skipped: SkippedPoint[];
+}> {
+  const openHead = () => openBenchRunner(context, HARNESS_PORT);
+  const openBase = () =>
+    openBenchRunner(context, AB_HARNESS_PORT, "base pageerror");
+  let headPage = await openHead();
+  let basePage = await openBase();
   const families = (await headPage.evaluate(() =>
     (window as any).__listSyntheticFamilies__()
   )) as { count: string[]; nest: boolean };
 
   const head: SyntheticPoint[] = [];
   const base: SyntheticPoint[] = [];
+  const skipped: SkippedPoint[] = [];
   const stopped = new Set<string>();
   let curFamily = "";
   for (const { family, n } of syntheticSweep(families)) {
@@ -849,7 +997,22 @@ async function benchSyntheticAB(
       console.log(`\n[synthetic A/B] family "${family}"`);
     }
     process.stdout.write(`  n=${n} ... `);
-    const r = await runSyntheticPointAB(headPage, basePage, family, n);
+    const r = await orTimeout(
+      () => runSyntheticPointAB(headPage, basePage, family, n),
+      // Either page may be the stuck one; both are cheap to replace.
+      async () => {
+        await headPage.close();
+        await basePage.close();
+        headPage = await openHead();
+        basePage = await openBase();
+      }
+    );
+    if (r === TIMED_OUT) {
+      console.log("TIMEOUT (stopping family)");
+      skipped.push({ family, n, reason: "timeout" });
+      stopped.add(family);
+      continue;
+    }
     if (!r) {
       console.log("ERROR (stopping family)");
       stopped.add(family);
@@ -866,7 +1029,9 @@ async function benchSyntheticAB(
     )
       stopped.add(family);
   }
-  return { head, base };
+  await headPage.close();
+  await basePage.close();
+  return { head, base, skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -878,6 +1043,8 @@ type RulerMeta = {
   // Geomean of the point medians — the run's normalization divisor.
   factorMs: number;
   points: { family: string; n: number; wallMs: Stat }[];
+  // Points whose render timed out; left out of `points` and `factorMs`.
+  skipped?: SkippedPoint[];
 };
 
 async function benchRuler(
@@ -896,30 +1063,46 @@ async function benchRuler(
     const context = await browser.newContext({
       viewport: { width: 1280, height: 720 },
     });
-    const page = await context.newPage();
-    await page.goto(`http://localhost:${srv.port}/`, {
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForFunction(() => (window as any).__RULER_READY__ === true, {
-      timeout: 30_000,
-    });
+    const open = () =>
+      openPage(
+        context,
+        `http://localhost:${srv.port}/`,
+        () => (window as any).__RULER_READY__ === true
+      );
+    let page = await open();
     console.log(
       `\n[ruler] v${manifest.version} (${manifest.points.length} points)`
     );
     const points: RulerMeta["points"] = [];
+    const skipped: SkippedPoint[] = [];
     for (const pt of manifest.points) {
       process.stdout.write(`  ${pt.family} n=${pt.n} ... `);
-      const samples = await sampleLoop<number>(page, async () => {
-        try {
-          const r = (await page.evaluate(
-            ([f, n]) => (window as any).__runRulerPoint__(f, n),
-            [pt.family, pt.n] as [string, number]
-          )) as { wallMs: number };
-          return { ok: true, value: r.wallMs };
-        } catch {
-          return { ok: false };
+      const samples = await orTimeout(
+        () =>
+          sampleLoop<number>(page, async () => {
+            try {
+              const r = (await withinBudget(
+                page.evaluate(
+                  ([f, n]) => (window as any).__runRulerPoint__(f, n),
+                  [pt.family, pt.n] as [string, number]
+                )
+              )) as { wallMs: number };
+              return { ok: true, value: r.wallMs };
+            } catch (err) {
+              if (err instanceof RenderTimeout) throw err;
+              return { ok: false };
+            }
+          }),
+        async () => {
+          await page.close();
+          page = await open();
         }
-      });
+      );
+      if (samples === TIMED_OUT) {
+        console.log("TIMEOUT");
+        skipped.push({ family: pt.family, n: pt.n, reason: "timeout" });
+        continue;
+      }
       if (!samples || samples.length === 0) {
         console.log("SKIP");
         continue;
@@ -931,7 +1114,12 @@ async function benchRuler(
     await context.close();
     const factorMs = geomean(points.map((p) => p.wallMs.median));
     console.log(`  → ruler factor ${factorMs.toFixed(2)}ms`);
-    return { version: manifest.version, factorMs, points };
+    return {
+      version: manifest.version,
+      factorMs,
+      points,
+      ...(skipped.length ? { skipped } : {}),
+    };
   } finally {
     await srv.close();
   }
@@ -1028,8 +1216,16 @@ type BenchResults = {
     ruler: RulerMeta | null;
   };
   examplesJs: ExampleResult[];
+  // Stories the examples-js leg ran but could not measure. Kept out of
+  // `examplesJs` so every entry there has real stats; a skipped story simply
+  // has no match in cross-run comparisons. Absent in older results files.
+  examplesJsSkipped?: SkippedExample[];
   examplesPy: PythonResult[];
+  // Likewise for the Python leg's timeouts (unsupported IR kinds are not listed).
+  examplesPySkipped?: SkippedPyExample[];
   synthetic: SyntheticPoint[];
+  // Synthetic points that timed out; each one ended its family.
+  syntheticSkipped?: SkippedPoint[];
 };
 
 function gitSha(): string {
@@ -1180,20 +1376,12 @@ async function main() {
     const context = await browser.newContext({
       viewport: { width: 1280, height: 720 },
     });
-    const page = await context.newPage();
-    page.on("pageerror", (e) => {
-      if (process.env.DEBUG) console.error(`[pageerror] ${e.message}`);
-    });
 
     if (wantSyn) {
       if (abActive && abBase) {
-        const basePage = await context.newPage();
-        basePage.on("pageerror", (e) => {
-          if (process.env.DEBUG) console.error(`[base pageerror] ${e.message}`);
-        });
-        const { head, base } = await benchSyntheticAB(page, basePage);
+        const { head, base, skipped } = await benchSyntheticAB(context);
         results.synthetic = head;
-        await basePage.close();
+        results.syntheticSkipped = skipped;
         baseResults = {
           meta: {
             ...results.meta,
@@ -1204,13 +1392,24 @@ async function main() {
           examplesJs: [],
           examplesPy: [],
           synthetic: base,
+          syntheticSkipped: skipped,
         };
       } else {
-        results.synthetic = await benchSynthetic(page);
+        const syn = await benchSynthetic(context);
+        results.synthetic = syn.points;
+        results.syntheticSkipped = syn.skipped;
       }
     }
-    if (wantJs) results.examplesJs = await benchExamplesJs(page);
-    if (wantPy) results.examplesPy = await benchExamplesPy(page);
+    if (wantJs) {
+      const js = await benchExamplesJs(context);
+      results.examplesJs = js.results;
+      results.examplesJsSkipped = js.skipped;
+    }
+    if (wantPy) {
+      const py = await benchExamplesPy(context);
+      results.examplesPy = py.results;
+      results.examplesPySkipped = py.skipped;
+    }
 
     // Ruler leg (any mode): measure the hermetic reference workload in this same
     // browser session so the run's factorMs cancels the CI hardware lottery.
@@ -1241,12 +1440,21 @@ async function main() {
     `  engine: ${prodBuild ? "prod (dist-bench)" : "dev-mode source alias"}`
   );
   console.log(`  examples-js: ${results.examplesJs.length}`);
+  for (const s of results.examplesJsSkipped ?? [])
+    console.log(`    skipped (${s.reason}): ${s.title}/${s.name}`);
   console.log(`  examples-py: ${results.examplesPy.length}`);
+  for (const s of results.examplesPySkipped ?? [])
+    console.log(`    skipped (${s.reason}): ${s.path}`);
   console.log(`  synthetic points: ${results.synthetic.length}`);
-  if (results.meta.ruler)
+  for (const s of results.syntheticSkipped ?? [])
+    console.log(`    skipped (${s.reason}): ${s.family} n=${s.n}`);
+  if (results.meta.ruler) {
     console.log(
       `  ruler: v${results.meta.ruler.version} factor ${results.meta.ruler.factorMs.toFixed(2)}ms`
     );
+    for (const s of results.meta.ruler.skipped ?? [])
+      console.log(`    skipped (${s.reason}): ${s.family} n=${s.n}`);
+  }
   if (baseResults) console.log(`  interleaved base → ${resolvePath(AB_OUT)}`);
   console.log(`  → ${join(OUT_DIR, "results.json")}`);
 }
