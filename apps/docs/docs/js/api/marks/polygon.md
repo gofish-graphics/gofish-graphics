@@ -110,6 +110,18 @@ Under a curved coordinate space the edges are adaptively resampled, so an
 outline follows the projection rather than joining its vertices with straight
 pixels.
 
+## Data-driven fill
+
+`fill` and `stroke` work as they do on [`rect`](./rect). A field name reads
+that field off each row and sends it through the chart's color scale. Any other
+string is a literal color. When `stroke` is omitted it follows the fill.
+
+```ts
+chart(counties, { color: gradient(["#fff5eb", "#7f2704"]) }).mark(
+  polygon({ points: "ring", fill: "rate" })
+);
+```
+
 ## Notes
 
 - The polygon is always closed — the last point connects back to the first

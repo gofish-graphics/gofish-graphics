@@ -787,8 +787,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         required: true,
         doc: "Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).",
       },
-      fill: { type: t.string, default: "black", doc: "Fill color." },
-      stroke: { type: t.string, doc: "Stroke color. Defaults to `fill`." },
+      fill: {
+        ...ch.color("Fill color, or a field name for a color scale."),
+        default: "black",
+      },
+      stroke: ch.color("Stroke color. Defaults to `fill`."),
       strokeWidth: {
         type: t.number,
         default: 0,
