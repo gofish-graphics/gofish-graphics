@@ -13,6 +13,7 @@ import {
   elaborateDirection,
 } from "../dims";
 import type { UnderlyingSpace } from "../underlyingSpace";
+import type { Geometry } from "../geometry";
 
 /**
  * A constraint operand that lives INSIDE one of the layer's direct children
@@ -58,6 +59,12 @@ export class NestedOperand implements Placeable {
 
   localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
     return this.node.localAnchor(axis, anchor);
+  }
+
+  /** The operand's own geometry: its local frame is the node's (see
+   *  `localAnchor`). */
+  geometry(): Geometry {
+    return this.node.geometry();
   }
 
   projectedTranslate(dir: Direction): number | undefined {

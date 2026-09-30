@@ -1,0 +1,157 @@
+# Commits the baselines a reviewer accepted on the visual review site, then
+# re-runs the failed jobs of the Visual Tests run they came from.
+#
+# The review site's Accept button POSTs the branch, run id and story paths to
+# its Pages Function (tests/scripts/cf-functions/api/commit.ts), which sends a
+# `visual-baselines-accept` repository_dispatch. The `accept` job runs
+# tests/scripts/accept-baselines.ts: it copies the accepted stories from the
+# run's `js-dom-capture` artifact onto `snapshots/<branch>` (a new branch
+# inherits snapshots/main) and pushes one commit. Once the request checks
+# out, it keeps the PR's `Visual Diff Review` status up to date: pending,
+# then success or failure. A request that fails the check touches no status.
+#
+# The `rerun` job waits for the run to finish, because GitHub rejects
+# rerun-failed-jobs with 403 while any job of the run is still in progress
+# (people usually accept while `python-parity` is still running), then
+# re-runs its failed jobs. That re-runs only the cheap `visual-test` compare
+# job against the new baselines; it reuses the capture artifact. When several
+# accepts arrive for one run, the latest one's rerun wins.
+#
+# repository_dispatch only runs workflow files from the default branch.
+#
+# client_payload:
+#   branch    code branch of the run (the snapshot branch is snapshots/<branch>)
+#   run_id    Visual Tests run whose capture to accept
+#   paths     story paths to accept, e.g. "forward-syntax/bar--basic.html"
+#   removals  story paths whose baselines to delete
+name: Accept Visual Baselines
+
+on:
+  repository_dispatch:
+    types: [visual-baselines-accept]
+
+env:
+  GH_REPO: ${{ github.repository }}
+  BRANCH: ${{ github.event.client_payload.branch }}
+  RUN_ID: ${{ github.event.client_payload.run_id }}
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # push to snapshots/<branch>
+      statuses: write # Visual Diff Review commit status
+      actions: read # download the run's artifacts
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Git LFS
+        run: git lfs install
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Only the tests package (tsx and the scripts' imports), not the whole
+      # workspace.
+      - name: Install Node dependencies
+        run: pnpm install --filter @gofish/tests
+
+      # Checks the run (a Visual Tests run of this branch of this repository)
+      # and the path lists before anything touches the PR's status, so an
+      # invalid request fails this job without marking anyone's PR.
+      - name: Check the request
+        id: check
+        run: |
+          jq -r '.client_payload.paths // [] | .[]' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/accept.txt"
+          jq -r '.client_payload.removals // [] | .[]' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/remove.txt"
+          pnpm --filter @gofish/tests accept-baselines "$RUN_ID" "$BRANCH" \
+            --accept-file "$RUNNER_TEMP/accept.txt" \
+            --remove-file "$RUNNER_TEMP/remove.txt" \
+            --check
+
+      - name: Mark the visual review as pending
+        env:
+          HEAD_SHA: ${{ steps.check.outputs.head-sha }}
+        run: |
+          gh api "repos/$GH_REPO/statuses/$HEAD_SHA" \
+            -f state=pending \
+            -f context="Visual Diff Review" \
+            -f description="Committing accepted baselines" \
+            -f target_url="$RUN_URL" > /dev/null
+
+      - name: Commit the accepted baselines
+        id: accept
+        run: |
+          pnpm --filter @gofish/tests accept-baselines "$RUN_ID" "$BRANCH" \
+            --accept-file "$RUNNER_TEMP/accept.txt" \
+            --remove-file "$RUNNER_TEMP/remove.txt"
+
+      - name: Mark the visual review as done
+        env:
+          HEAD_SHA: ${{ steps.check.outputs.head-sha }}
+          ACCEPTED: ${{ steps.accept.outputs.accepted }}
+          REMOVED: ${{ steps.accept.outputs.removed }}
+        run: |
+          description="Accepted $ACCEPTED diff(s)"
+          if [ "$REMOVED" -gt 0 ]; then description="$description, removed $REMOVED"; fi
+          gh api "repos/$GH_REPO/statuses/$HEAD_SHA" \
+            -f state=success \
+            -f context="Visual Diff Review" \
+            -f description="$description; re-running tests" \
+            -f target_url="https://github.com/$GH_REPO/tree/snapshots/$BRANCH" > /dev/null
+
+      # Only after the request checked out: the status belongs to that run.
+      - name: Report a failed accept on the PR
+        if: failure() && steps.check.outcome == 'success'
+        env:
+          HEAD_SHA: ${{ steps.check.outputs.head-sha }}
+        run: |
+          gh api "repos/$GH_REPO/statuses/$HEAD_SHA" \
+            -f state=failure \
+            -f context="Visual Diff Review" \
+            -f description="Accepting baselines failed; click Details for the log" \
+            -f target_url="$RUN_URL" > /dev/null
+
+  rerun:
+    needs: accept
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: write # rerun the run's failed jobs
+    concurrency:
+      group: rerun-visual-tests-${{ github.event.client_payload.run_id }}
+      cancel-in-progress: true
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Wait for the run to finish, then rerun its failed jobs
+        run: |
+          # Returns right away if the run has already completed. A failed run
+          # is the expected case here, so its exit status is ignored.
+          gh run watch "$RUN_ID" --interval 10 --exit-status > /dev/null || true
+
+          conclusion=$(gh run view "$RUN_ID" --json conclusion --jq .conclusion)
+          echo "Run $RUN_ID finished with conclusion: $conclusion"
+
+          # gh errors when there is nothing to rerun (for example, the run
+          # passed). That is not a failure of this workflow.
+          if gh run rerun "$RUN_ID" --failed; then
+            echo "Re-running failed jobs of run $RUN_ID."
+          else
+            echo "::notice::Nothing was re-run for run $RUN_ID (conclusion: $conclusion)."
+          fi

@@ -53,7 +53,8 @@ resolves a child. The async map over a collection, once the capitalized
 namespace) is the only capitalized function-like export left. The fluent
 surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
-`derive`, `resolve`, and `join` (`resolve` dereferences reference columns into
+`treemap`, `pack`, `derive`, `resolve`, and `join` (`pack` takes a strategy
+object such as `circles()` as its `method`, never a string; `resolve` dereferences reference columns into
 drawn node refs, driving the ribbon / node-link / labeling patterns via
 `.layer()` + `resolve`; `join` is a one-to-many equi-join relating two data
 tables on a shared key).

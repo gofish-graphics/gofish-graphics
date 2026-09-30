@@ -1460,6 +1460,56 @@ for the API.
         }
       }
     },
+    "PackOperator": {
+      "description": "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "pack"
+        },
+        "by": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldAccessor"
+            }
+          ],
+          "description": "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row."
+        },
+        "method": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": ["circles"]
+            }
+          },
+          "required": ["kind"],
+          "description": "The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm.",
+          "default": {
+            "kind": "circles"
+          }
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
     "OperatorIR": {
       "description": "A pipeline operator — a discriminated union, one member per operator type. See validate.ts and schema.ts for the same field shapes.",
       "oneOf": [
@@ -1492,6 +1542,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/TreemapOperator"
+        },
+        {
+          "$ref": "#/$defs/PackOperator"
         }
       ]
     },
@@ -2140,12 +2193,12 @@ for the API.
           "description": "Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap)."
         },
         "fill": {
-          "type": "string",
-          "description": "Fill color.",
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale.",
           "default": "black"
         },
         "stroke": {
-          "type": "string",
+          "$ref": "#/$defs/ChannelValue",
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {

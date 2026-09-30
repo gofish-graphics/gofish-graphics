@@ -1111,14 +1111,84 @@ function renderLayout(
   );
 }
 
-export const gofish = (
+/** What `gofish()` stashes on a container it rendered into: the chart's
+ *  current Solid root teardown, and its interaction runtime when it has one.
+ *  One object per CHART, not per paint: a re-render of the same chart (same
+ *  runtime) swaps `disposeRoot` in place, so a {@link View} recognizes its own
+ *  chart by this object's identity across re-renders. */
+type ChartState = {
+  disposeRoot: () => void;
+  runtime?: InteractionRuntime;
+};
+type ChartHost = HTMLElement & { __gofishState?: ChartState };
+
+/**
+ * The handle `render` returns for a chart mounted in the page. `unmount()`
+ * removes the chart's DOM and detaches it from every input it read, so a
+ * `timer()` it was the last reader of stops ticking. It is idempotent, and it
+ * never touches a NEWER chart that has since been rendered into the same
+ * container.
+ */
+export interface View {
+  /** The element the chart was rendered into. */
+  readonly container: HTMLElement;
+  /** Tear the chart down: its DOM, its Solid root, its interaction runtime. */
+  unmount(): void;
+}
+
+/** Tear down the chart `gofish()` rendered into `container`, if any: its Solid
+ *  root and its interaction runtime. A no-op on an element no chart rendered
+ *  into. Internal: `View.unmount` is the public form, and a host that holds
+ *  only the DOM (the story harness) calls this directly. See "Frame
+ *  publication" in the Rendering essay. */
+export function disposeChart(container: HTMLElement): void {
+  const host = container as ChartHost;
+  const state = host.__gofishState;
+  if (!state) return;
+  host.__gofishState = undefined;
+  state.disposeRoot();
+  state.runtime?.dispose();
+}
+
+/** The {@link View} of the chart whose state is `state`. It unmounts only while
+ *  that chart still owns `container`: a newer chart there has its own state. */
+const viewOf = (container: HTMLElement, state: ChartState): View => ({
+  container,
+  unmount() {
+    if ((container as ChartHost).__gofishState === state)
+      disposeChart(container);
+  },
+});
+
+/** A chart child `gofish()` renders synchronously: a node or a promise of one
+ *  (the layout awaits it inside the mounted root). */
+type GoFishChild = GoFishNode | Promise<GoFishNode>;
+
+/**
+ * Render `child` into `container`. A node renders synchronously and returns its
+ * {@link View}; a component thunk (`() => node`) first resolves under the
+ * interaction runtime, so it returns a `Promise<View>`.
+ */
+export function gofish(
   container: HTMLElement,
   options: GoFishRenderOptions,
-  child:
-    | GoFishNode
-    | Promise<GoFishNode>
-    | (() => GoFishNode | Promise<GoFishNode>)
-): HTMLElement | Promise<HTMLElement> => {
+  child: GoFishChild
+): View;
+export function gofish(
+  container: HTMLElement,
+  options: GoFishRenderOptions,
+  child: () => GoFishChild
+): Promise<View>;
+export function gofish(
+  container: HTMLElement,
+  options: GoFishRenderOptions,
+  child: GoFishChild | (() => GoFishChild)
+): View | Promise<View>;
+export function gofish(
+  container: HTMLElement,
+  options: GoFishRenderOptions,
+  child: GoFishChild | (() => GoFishChild)
+): View | Promise<View> {
   // Component thunk (`() => node`): a raw shape/operator composition — no
   // `chart()` builder, no data binding — that we give the full reactive
   // treatment. A raw node is built once and can't re-evaluate its spec, so
@@ -1131,7 +1201,7 @@ export const gofish = (
   // static behavior below (a `live()` channel on a plain node still patches at
   // paint — that's runtime-independent — it just gets no runtime/hit-testing).
   if (typeof child === "function") {
-    const thunk = child as () => GoFishNode | Promise<GoFishNode>;
+    const thunk = child;
     return renderWithInteraction(async () => {
       const node = await thunk();
       // A thunk can build the chart again, which `labelAngle: "auto"` needs
@@ -1143,28 +1213,26 @@ export const gofish = (
 
   const svgPadding = options.padding ?? PADDING;
 
-  type GofishState = {
-    dispose: () => void;
-    runtime?: InteractionRuntime;
-  };
-  const stateHost = container as HTMLElement & { __gofishState?: GofishState };
+  const stateHost = container as ChartHost;
 
   // Re-rendering into the same container must always dispose the previous Solid
   // root, or roots and DOM accumulate. TWO cases enter here with a prior state:
   //  1. A Tier-2 re-render of the SAME chart (the interaction scheduler, per
-  //     spec change) — SAME runtime. Dispose only the old Solid root; the
-  //     runtime is reused and must survive (disposing it would clear its
-  //     rerenderFn/inputs and kill interactivity after one frame).
-  //  2. A DIFFERENT chart taking over this container — dispose the old Solid
-  //     root AND the old runtime, so a still-live input (e.g. a running timer
-  //     the previous chart never stopped) stops zombie-invalidating a dead
-  //     chart whose container is now someone else's.
+  //     spec change) — SAME runtime. Dispose only the old Solid root and keep
+  //     the chart's state: the runtime is reused and must survive (disposing
+  //     it would clear its rerenderFn/inputs and kill interactivity after one
+  //     frame), and the chart's View must still recognize the chart as its own.
+  //  2. A DIFFERENT chart taking over this container — dispose the old chart
+  //     entirely, Solid root AND runtime, so an input it read (e.g. a timer)
+  //     stops invalidating a dead chart whose container is now someone else's.
   const prev = stateHost.__gofishState;
-  if (prev) {
-    prev.dispose();
-    if (prev.runtime && prev.runtime !== options.interaction) {
-      prev.runtime.dispose();
-    }
+  let state: ChartState;
+  if (prev?.runtime !== undefined && prev.runtime === options.interaction) {
+    prev.disposeRoot();
+    state = prev;
+  } else {
+    disposeChart(container);
+    state = { disposeRoot: () => {}, runtime: options.interaction };
   }
 
   const [layoutData] = createResource(() => runLayout(options, child));
@@ -1186,15 +1254,13 @@ export const gofish = (
       </Suspense>
     );
   }, container);
-  stateHost.__gofishState = {
-    dispose: () => {
-      dispose();
-      container.innerHTML = "";
-    },
-    runtime: options.interaction,
+  state.disposeRoot = () => {
+    dispose();
+    container.innerHTML = "";
   };
-  return container;
-};
+  stateHost.__gofishState = state;
+  return viewOf(container, state);
+}
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const XLINK_NS = "http://www.w3.org/1999/xlink";

@@ -6,7 +6,14 @@ instead, see [export](/js/api/core/export).
 ## Signature
 
 ```ts
-.render(container, options)
+.render(container, options): Promise<View>
+```
+
+The low-level terminal for a bare node has the same result:
+
+```ts
+gofish(container, options, node): View                 // a node renders synchronously
+gofish(container, options, () => node): Promise<View>  // a component thunk resolves first
 ```
 
 ## Parameters
@@ -18,6 +25,40 @@ instead, see [export](/js/api/core/export).
 | `options.h`      | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                |
 | `options.axes`   | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                |
 | `options.legend` | `boolean?`    | Whether to draw the color-scale legend. Default `true`; see [chart › Legend](/js/api/core/chart#legend). A `chart()` option of the same name wins over this one. |
+
+## Returns
+
+A `View`, the handle to the chart now mounted in `container`:
+
+| Member      | Type          | Description                                                                                            |
+| ----------- | ------------- | ------------------------------------------------------------------------------------------------------ |
+| `container` | `HTMLElement` | The element the chart was rendered into.                                                               |
+| `unmount()` | `() => void`  | Removes the chart's DOM and detaches it from every input it read. See [Unmounting](#unmounting) below. |
+
+`.render()` on a chart, a mark, or a combinator returns a `Promise<View>`, which
+settles once the chart's first resolve is done.
+
+## Unmounting
+
+`view.unmount()` removes the chart from its container and detaches it from every
+input it read (`pointer()`, `signal()`, `timer()`, …), so those inputs stop
+re-rendering it. A `timer()` that no other chart reads stops sampling.
+
+```ts
+const view = await chart(data)
+  .flow(spread({ by: "category", dir: "x" }))
+  .mark(rect({ h: "value" }))
+  .render(container, { w: 400, h: 300 });
+
+// Later, when the chart goes away:
+view.unmount();
+```
+
+`unmount()` is safe to call more than once. It only removes the chart it was
+returned for: if another chart has since been rendered into the same container,
+the old view's `unmount()` leaves the new chart alone. Rendering a new chart into
+a container also unmounts the chart that was there, so you only need `unmount()`
+when the chart goes away without a replacement.
 
 ## Inferred size
 

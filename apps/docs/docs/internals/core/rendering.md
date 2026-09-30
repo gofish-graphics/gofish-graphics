@@ -384,9 +384,35 @@ signal during resolve), three things change; when it is absent — the common ca
 - **Frame publication.** Before painting, `render()` publishes the lowered
   `items`, the root `posScales`, and `toPixel` to the runtime as an
   `InteractionFrame`, so hit-testing and data↔px conversions see the current
-  frame. Re-rendering into the same container first calls a stashed
-  `__gofishDispose` to tear down the previous reactive root (the interaction
-  scheduler re-renders into the same container on every spec change).
+  frame. `gofish()` stashes the chart's state on the container
+  (`__gofishState`: the current Solid root's dispose and the runtime). There
+  is one state object per chart, not per paint. A re-render of the same chart
+  (the interaction scheduler re-renders into the same container on every spec
+  change, with the same runtime) disposes the previous reactive root and swaps
+  the new one into that same object. When a different chart takes the
+  container over, the old chart is torn down entirely: its root and its
+  runtime, which detaches its listeners and drops it from every input it read.
+- **The `View` handle.** `gofish()` returns a `View` for the chart it mounted:
+  `{ container, unmount() }`. Every public `render` returns one, synchronously
+  for a node and as a `Promise<View>` wherever a resolve comes first (a chart
+  builder, a mark or combinator surface, a component thunk). `unmount()` runs
+  the full teardown, `disposeChart(container)`, but only while the container's
+  state is still the object the view was made with. That identity check is
+  what makes `unmount()` idempotent (the first call clears the state) and
+  keeps an old view from tearing down a newer chart in the same container,
+  while staying valid across the chart's own re-renders. A re-render that was
+  still resolving when its chart was unmounted checks `runtime.isDisposed()`
+  and does not mount. `disposeChart` stays internal. Besides `unmount`, its
+  one caller is the story harness, which renders stories that hand back only
+  their DOM, so before each story it walks the page and disposes every chart
+  it finds, then removes what the previous story left. It finds charts by
+  their `__gofishState` rather than through a registry in the engine, because
+  in the prod bench the stories run the `dist-bench` bundle while the harness
+  imports engine source, and the two share no module state. An input the
+  chart read, such as a looping `timer()`, is not owned by the chart, but it
+  only ticks while something reads it (see the timer section of
+  [Reactivity](/internals/frontend/reactivity)), so a timer whose last reader
+  was the unmounted chart stops.
 
 The mechanism is: `data-gf-id` is the hit-test hook; the side table + JSX
 attribute calls are the paint reactivity; the runtime carries neither — it owns

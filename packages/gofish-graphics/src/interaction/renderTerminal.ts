@@ -38,6 +38,7 @@
 import { InteractionRuntime } from "./runtime";
 import { withInteractiveResolve } from "./resolveContext";
 import type { GoFishNode } from "../ast/_node";
+import type { View } from "../ast/gofish";
 
 /** What the render loop tells a resolve about the render it is for. */
 export type RenderPass = {
@@ -54,11 +55,11 @@ export async function renderWithInteraction<O extends Record<string, unknown>>(
     options: O;
   }>,
   container: HTMLElement
-): Promise<HTMLElement> {
+): Promise<View> {
   const runtime = new InteractionRuntime();
   let rerender = false;
   let cleanups: (() => void)[] = [];
-  const doRender = async (): Promise<HTMLElement> => {
+  const doRender = async (): Promise<View | undefined> => {
     for (const fn of cleanups) fn();
     cleanups = [];
     const pass: RenderPass = {
@@ -71,11 +72,16 @@ export async function renderWithInteraction<O extends Record<string, unknown>>(
     const { node, options } = await withInteractiveResolve(runtime, () =>
       resolveForRender(pass)
     );
+    // A re-render that was still resolving when its chart was unmounted must
+    // not mount the chart again.
+    if (runtime.isDisposed()) return undefined;
     if (runtime.hasWork()) {
       (options as Record<string, unknown>).interaction = runtime;
     }
-    return node.render(container, options) as HTMLElement;
+    return node.render(container, options);
   };
   runtime.setRerender(doRender);
-  return doRender();
+  // The first render always mounts: only unmounting a chart disposes its
+  // runtime, and no chart holds this runtime until this render returns.
+  return (await doRender())!;
 }

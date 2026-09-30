@@ -46,8 +46,10 @@ function fastCharDiff(a: string, b: string): CharChange[] {
 }
 
 export const ROOT = join(import.meta.dirname, "../..");
-export const BASELINE_DOM = join(ROOT, "__snapshots__/dom");
-export const BASELINE_SCREENSHOTS = join(ROOT, "__snapshots__/screenshots");
+/** Local baseline cache, laid out like the snapshot branch. */
+export const BASELINE_DIR = join(ROOT, "__snapshots__");
+export const BASELINE_DOM = join(BASELINE_DIR, "dom");
+export const BASELINE_SCREENSHOTS = join(BASELINE_DIR, "screenshots");
 export const JS_DIR = join(import.meta.dirname, "../tmp/js");
 export const PYTHON_DIR = join(import.meta.dirname, "../tmp/python");
 
@@ -184,6 +186,15 @@ export function collectRemovedStories(): DiffEntry[] {
   });
 }
 
+/**
+ * Every diff a review lists: `collectDiffs()` followed by the removed
+ * stories. The diff report (with its machine-readable `diff-list.json`), the
+ * review site and the local review server all show this one list.
+ */
+export function collectReviewDiffs(): DiffEntry[] {
+  return [...collectDiffs(), ...collectRemovedStories()];
+}
+
 // ---------------------------------------------------------------------------
 // Collect parity diffs: Python output vs the JS capture
 // ---------------------------------------------------------------------------
@@ -260,15 +271,22 @@ export function loadExportExemptParityPaths(): Set<string> {
 // Accept a story (copy tmp → baselines)
 // ---------------------------------------------------------------------------
 
-export function acceptStory(path: string): void {
-  const htmlSrc = join(JS_DIR, path);
-  const htmlDest = join(BASELINE_DOM, path);
+/**
+ * Copies a story's captured DOM and screenshot into a baseline directory
+ * laid out like the snapshot branch (`dom/` and `screenshots/`). Defaults to
+ * the local capture and the local `__snapshots__/` cache.
+ */
+export function acceptStory(
+  path: string,
+  { captureDir = JS_DIR, baselineDir = BASELINE_DIR } = {}
+): void {
+  const htmlDest = join(baselineDir, "dom", path);
   mkdirSync(dirname(htmlDest), { recursive: true });
-  writeFileSync(htmlDest, readFileSync(htmlSrc));
+  writeFileSync(htmlDest, readFileSync(join(captureDir, path)));
 
   const pngFile = path.replace(/\.html$/, ".png");
-  const pngSrc = join(JS_DIR, pngFile);
-  const pngDest = join(BASELINE_SCREENSHOTS, pngFile);
+  const pngSrc = join(captureDir, pngFile);
+  const pngDest = join(baselineDir, "screenshots", pngFile);
   if (existsSync(pngSrc)) {
     mkdirSync(dirname(pngDest), { recursive: true });
     cpSync(pngSrc, pngDest);
@@ -285,12 +303,14 @@ export function acceptStory(path: string): void {
  * the auto-prune in update-baselines.ts (which does the same thing in bulk
  * on every main push).
  */
-export function removeBaselineStory(path: string): void {
-  const htmlPath = join(BASELINE_DOM, path);
-  if (existsSync(htmlPath)) rmSync(htmlPath, { force: true });
-
-  const pngPath = join(BASELINE_SCREENSHOTS, path.replace(/\.html$/, ".png"));
-  if (existsSync(pngPath)) rmSync(pngPath, { force: true });
+export function removeBaselineStory(
+  path: string,
+  baselineDir = BASELINE_DIR
+): void {
+  rmSync(join(baselineDir, "dom", path), { force: true });
+  rmSync(join(baselineDir, "screenshots", path.replace(/\.html$/, ".png")), {
+    force: true,
+  });
 }
 
 // ---------------------------------------------------------------------------

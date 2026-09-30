@@ -112,6 +112,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "flipY",
     "leafIntrinsicRadiusField",
   ],
+  pack: ["by", "method"],
 };
 
 console.log("\n# Descriptor fields agree with schema.ts operator interfaces");

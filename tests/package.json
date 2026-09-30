@@ -14,6 +14,7 @@
     "capture-pixels": "tsx scripts/capture-pixels.ts",
     "capture-sweep": "tsx scripts/capture-sweep.ts",
     "update-baselines": "tsx scripts/update-baselines.ts",
+    "accept-baselines": "tsx scripts/accept-baselines.ts",
     "check-sync": "tsx scripts/check-python-sync.ts",
     "check-python-sync": "tsx scripts/check-python-sync.ts",
     "check-python-sync-all": "tsx scripts/check-python-sync.ts --all",
