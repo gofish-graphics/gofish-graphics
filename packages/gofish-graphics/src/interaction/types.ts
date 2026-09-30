@@ -88,14 +88,15 @@ export interface SpecInvalidator {
  * `usedInSpec` decides the execution regime (see resolveContext.ts).
  */
 export interface InputPrimitive {
-  /** The set of runtimes for which this input is a pipeline dependency — i.e.
-   *  the charts that read it during resolve OUTSIDE a `live()` channel. A write
-   *  must invalidate every one (an input read in two charts' specs invalidates
-   *  BOTH). Each runtime deletes itself from this set at the start of its own
-   *  resolve (so a chart's re-resolve doesn't drop another chart's dependency)
-   *  and re-adds itself if the read recurs; a disposed runtime removes itself.
-   *  Replaces the former single-runtime `usedInSpec` boolean. */
-  specRuntimes: Set<SpecInvalidator>;
+  /** One reader set per READABLE of this input (a timer has two: its value
+   *  and its play state). Each set holds the runtimes for which that readable
+   *  is a pipeline dependency — the charts that read it during resolve OUTSIDE
+   *  a `live()` channel — and a write to that readable invalidates every one
+   *  (a readable read in two charts' specs invalidates BOTH). Each runtime
+   *  deletes itself from every set at the start of its own resolve (so a
+   *  chart's re-resolve doesn't drop another chart's dependency) and re-adds
+   *  itself where the read recurs; a disposed runtime removes itself. */
+  specReaders: Set<SpecInvalidator>[];
   /** The delegated DOM event types this input consumes. The runtime attaches
    *  only the union of these across registered inputs, so a wheel/timer/signal-
    *  only chart never pays pointer-move hit-testing. Omitted/empty = no DOM

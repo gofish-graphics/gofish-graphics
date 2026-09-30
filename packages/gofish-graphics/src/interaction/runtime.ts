@@ -17,7 +17,7 @@
  *
  * Inputs register themselves during resolve (via the ambient context). At the
  * start of each resolve the runtime drops itself from every registered input's
- * `specRuntimes` set, so an input read in one resolve but not the next stops
+ * `specReaders` sets, so an input read in one resolve but not the next stops
  * invalidating this chart (a shared input keeps its edges to OTHER charts).
  */
 import type { DisplayList } from "gofish-ir";
@@ -171,11 +171,17 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
 
   /** Reset THIS runtime's dependency edges. Called at the start of every
    *  resolve: it removes only ITSELF from each registered input's
-   *  `specRuntimes` set, so a re-resolve of this chart doesn't drop another
+   *  `specReaders` sets, so a re-resolve of this chart doesn't drop another
    *  chart's dependency on a shared input. Reads during the coming resolve
    *  re-add this runtime if the input is still read outside `live()`. */
   beginResolve(): void {
-    for (const input of this.inputs) input.specRuntimes.delete(this);
+    this.dropSpecEdges();
+  }
+
+  /** Remove this runtime from every reader set of every registered input. */
+  private dropSpecEdges(): void {
+    for (const input of this.inputs)
+      for (const readers of input.specReaders) readers.delete(this);
   }
 
   /* ---- scheduler: re-resolve + re-render on spec changes ---- */
@@ -359,7 +365,7 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
    * Tear down this runtime when its chart goes away: `View.unmount()`, or a
    * DIFFERENT chart taking over its container (gofish.tsx compares the
    * incoming runtime against the stored one). Detaches DOM listeners, drops
-   * this runtime from every input's `specRuntimes` set (so a still-live input
+   * this runtime from every input's `specReaders` sets (so a still-live input
    * no longer invalidates this dead chart, and a `timer()` it was the last
    * reader of stops ticking), and clears the rerender thunk so any stray
    * `invalidate()` that still races in no-ops.
@@ -368,7 +374,7 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
     this.disposed = true;
     this.detach?.();
     // Remove ourselves as a dependency of any still-live shared input.
-    for (const input of this.inputs) input.specRuntimes.delete(this);
+    this.dropSpecEdges();
     this.rerenderFn = undefined;
     this.inputs = [];
     this.registered.clear();

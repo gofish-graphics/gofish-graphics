@@ -39,8 +39,9 @@ import {
 /** What lowering knows about where a node was drawn. */
 type LowerFrame = { transform?: Transform; toPixel: ToPixel };
 
-/** A node's paint-time animation: its effects, played from their start on
- *  the build clock. */
+/** A node's paint-time animation. `makeRule` builds the build-in's (its
+ *  effects, played from their start on the build clock); the slider's handle
+ *  has its own (`widgets.ts`), which moves the handle with the value. */
 export type AnimationRule = {
   /** Rewrite `items` (lowered at rest) to the playhead's current state and
    *  register the per-frame patches. `role` is "host" for the animated
