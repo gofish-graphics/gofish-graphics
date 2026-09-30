@@ -1004,6 +1004,26 @@ function renderLayout(
   );
 }
 
+/** What `gofish()` stashes on a container it rendered into: the Solid root's
+ *  teardown, and the interaction runtime when the chart has one. */
+type ChartState = {
+  dispose: () => void;
+  runtime?: InteractionRuntime;
+};
+type ChartHost = HTMLElement & { __gofishState?: ChartState };
+
+/** Tear down the chart `gofish()` rendered into `container`, if any: its Solid
+ *  root and its interaction runtime. A no-op on an element no chart rendered
+ *  into. Internal (see "Frame publication" in the Rendering essay). */
+export function disposeChart(container: HTMLElement): void {
+  const host = container as ChartHost;
+  const state = host.__gofishState;
+  if (!state) return;
+  host.__gofishState = undefined;
+  state.dispose();
+  state.runtime?.dispose();
+}
+
 export const gofish = (
   container: HTMLElement,
   options: GoFishRenderOptions,
@@ -1033,11 +1053,7 @@ export const gofish = (
 
   const svgPadding = options.padding ?? PADDING;
 
-  type GofishState = {
-    dispose: () => void;
-    runtime?: InteractionRuntime;
-  };
-  const stateHost = container as HTMLElement & { __gofishState?: GofishState };
+  const stateHost = container as ChartHost;
 
   // Re-rendering into the same container must always dispose the previous Solid
   // root, or roots and DOM accumulate. TWO cases enter here with a prior state:

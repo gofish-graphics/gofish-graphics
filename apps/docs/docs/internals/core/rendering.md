@@ -384,9 +384,21 @@ signal during resolve), three things change; when it is absent — the common ca
 - **Frame publication.** Before painting, `render()` publishes the lowered
   `items`, the root `posScales`, and `toPixel` to the runtime as an
   `InteractionFrame`, so hit-testing and data↔px conversions see the current
-  frame. Re-rendering into the same container first calls a stashed
-  `__gofishDispose` to tear down the previous reactive root (the interaction
-  scheduler re-renders into the same container on every spec change).
+  frame. `gofish()` stashes the chart's teardown on the container
+  (`__gofishState`: the Solid root's dispose and the runtime). Re-rendering
+  into the same container first disposes the previous reactive root (the
+  interaction scheduler re-renders into the same container on every spec
+  change). When a different chart takes the container over, it also disposes
+  the old runtime, which detaches its listeners and drops it from every input
+  it read. `disposeChart(container)` does that full teardown on its own. It is
+  not exported from `lib.ts` yet; its one caller is the story harness, which
+  before each story walks the page and disposes every chart it finds, then
+  removes what the previous story left. It finds charts by their
+  `__gofishState` rather than through a registry in the engine, because in the
+  prod bench the stories run the `dist-bench` bundle while the harness imports
+  engine source, and the two share no module state. An input the chart read,
+  such as a looping `timer()`, is not owned by the chart and keeps running
+  after the teardown, but it no longer re-renders the dead chart.
 
 The mechanism is: `data-gf-id` is the hit-test hook; the side table + JSX
 attribute calls are the paint reactivity; the runtime carries neither — it owns
