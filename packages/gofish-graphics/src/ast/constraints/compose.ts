@@ -57,6 +57,7 @@ import * as Interval from "../../util/interval";
 import type { Measure } from "../data";
 import {
   distributeChildrenInPlacementOrder,
+  distributeOrigin,
   distributeSpaceFold,
   type DistributeConstraint,
 } from "./distribute";
@@ -246,6 +247,7 @@ export function composeConstraintSpaces(
     anchor: AlignAnchor | "edge";
     glue: boolean;
     measure?: string;
+    origin: ReturnType<typeof distributeOrigin>;
   };
   const segments: Seg[] = [];
   for (const d of distributes) {
@@ -260,6 +262,7 @@ export function composeConstraintSpaces(
       anchor: d.anchor,
       glue: d.glue,
       measure: d.measure,
+      origin: distributeOrigin(d, ordered),
     });
   }
 
@@ -323,6 +326,7 @@ export function composeConstraintSpaces(
           glue: s.glue,
           measure: s.measure,
           anonymous: s.idx.length > 0 && s.idx.every(syntheticOf),
+          origin: s.origin,
         }
       );
       if (!isUNDEFINED(fold)) fragments.push(axisSize(fold, axis));

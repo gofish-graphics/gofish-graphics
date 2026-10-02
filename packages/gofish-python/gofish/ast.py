@@ -2049,6 +2049,51 @@ def log(prefix: Optional[str] = None) -> Operator:
     return Operator("log", **kwargs)
 
 
+# Column types
+
+
+class ColumnSchema(dict):
+    """A column type for ``chart(data, schema={...})``: the classes the
+    column has, keyed by class name (the wire form JS reads as is).
+
+    Mirrors JS ``ColumnSchema``. Build one with ``Schema.ordered(levels)``;
+    each method adds one class.
+    """
+
+    def diverging(self) -> "ColumnSchema":
+        """Give the column a center (``HasCenter``): the middle of its order.
+
+        With an odd number of levels the center is the middle level (half of
+        it lies on each side); with an even number it is the boundary between
+        the two middle levels. A stack over the column puts its 0 there.
+        """
+        if "HasOrder" not in self:
+            raise ValueError(
+                "HasCenter needs HasOrder: a center is the middle of an order. "
+                "Declare the order with `Schema.ordered(levels)` before "
+                "`.diverging()`."
+            )
+        return ColumnSchema({**self, "HasCenter": True})
+
+
+class Schema:
+    """Factories for column types, used in ``chart(data, schema={...})``.
+
+    Mirrors JS ``Schema``::
+
+        chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
+    """
+
+    @staticmethod
+    def ordered(levels: List[Any]) -> ColumnSchema:
+        """A column whose values are ``levels``, in this order (``HasOrder``).
+
+        Every ``by`` split over the column lays its groups out in this order,
+        and a value outside the levels is an error.
+        """
+        return ColumnSchema({"HasOrder": {"levels": list(levels)}})
+
+
 # Color configuration
 
 
@@ -3020,11 +3065,15 @@ def chart(
 
         spread(by="species", dir="x", axes={"x": True, "y": False})
 
+    ``schema`` declares column types, keyed by column name (see ``Schema``):
+
+        chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
+
     Args:
         data: Input data, or `ref(name)` / `selectAll(name)` for cross-chart
             layer references
         **options: Chart options as keywords — ``axes``, ``color``, ``coord``,
-            ``padding``, ...
+            ``padding``, ``schema``, ...
 
     Returns:
         ChartBuilder instance

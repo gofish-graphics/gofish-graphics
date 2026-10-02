@@ -99,7 +99,7 @@ export const table = createOperator<any, TableOptions>(Table, {
             (r) => String(r[by.x]) === colKey && String(r[by.y]) === rowKey
           )
         );
-    return { entries, keys: { colKeys, rowKeys } };
+    return { entries, layoutOpts: { colKeys, rowKeys } };
   },
   axisFields: ({ by }) => (by ? { x: by.x, y: by.y } : undefined),
   serialize: { type: "table" },

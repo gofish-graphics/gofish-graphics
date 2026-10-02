@@ -25,6 +25,8 @@ from gofish import (
     text,
     image,
     Constraint,
+    Schema,
+    ColumnSchema,
     datum,
     scatter,
     arrow,
@@ -556,3 +558,29 @@ class TestRelateCallback:
             {"type": "ref", "selection": "b"},
         ]
         assert len(clauses) == 2
+
+
+class TestSchema:
+    """`Schema.ordered(levels).diverging()` builds the column-type record
+    JS reads as is (#984)."""
+
+    def test_ordered_is_has_order(self):
+        assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
+
+    def test_diverging_adds_has_center(self):
+        assert Schema.ordered(["a", "b"]).diverging() == {
+            "HasOrder": {"levels": ["a", "b"]},
+            "HasCenter": True,
+        }
+
+    def test_diverging_needs_has_order(self):
+        with pytest.raises(ValueError, match="HasCenter needs HasOrder"):
+            ColumnSchema({}).diverging()
+
+    def test_schema_rides_chart_options(self):
+        ir = (
+            chart([{"r": "a"}], schema={"r": Schema.ordered(["a"]).diverging()})
+            .mark(rect(w=1))
+            .to_ir()
+        )
+        assert ir["options"]["schema"]["r"]["HasCenter"] is True

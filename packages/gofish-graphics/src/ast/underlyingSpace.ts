@@ -100,6 +100,13 @@ export type CONTINUOUS_TYPE = {
    *  {@link mergeMeasures}. Undefined = "no claim" (permissive). */
   measure?: Measure;
   coordinateTransform?: CoordinateTransform;
+  /** True when both sides of the 0 hold nonnegative amounts measured away from
+   *  it, rather than signed values (#984's "mirrored side": magnitudes with a
+   *  side). A stack centered on a `HasCenter` column builds it: a Likert
+   *  chart's parts left of the center are counts too. An axis over it labels
+   *  each tick with its distance from 0. A union keeps it only when every
+   *  part has it ({@link allMirrored}). */
+  mirrored?: true;
 };
 
 export type ORDINAL_TYPE = {
@@ -226,14 +233,24 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   const iv = continuousInterval(space);
   if (iv === undefined) return space;
   const [niceMin, niceMax] = d3Nice(iv.min, iv.max, 10);
-  return CONTINUOUS(
+  const niced = CONTINUOUS(
     Monotonic.linear(niceMax - niceMin, 0),
     Monotonic.ZERO,
     interval(niceMin, niceMax),
     (space as CONTINUOUS_TYPE).measure,
     (space as CONTINUOUS_TYPE).coordinateTransform
-  ) as T;
+  );
+  return ((space as CONTINUOUS_TYPE).mirrored ? mirrored(niced) : niced) as T;
 };
+
+/** `space` with both sides of its 0 marked as amounts measured away from it
+ *  ({@link CONTINUOUS_TYPE.mirrored}). */
+export const mirrored = (space: UnderlyingSpace): UnderlyingSpace =>
+  isCONTINUOUS(space) ? { ...space, mirrored: true } : space;
+
+/** Whether a union of `spaces` stays mirrored: only when every one is. */
+export const allMirrored = (spaces: CONTINUOUS_TYPE[]): boolean =>
+  spaces.length > 0 && spaces.every((s) => s.mirrored === true);
 
 /** UNANCHORED continuous space (old DIFFERENCE) — delta axis. Keys on the DATA
  *  fact (`dataDomain === "delta"`), NOT on placement, so a future `conflict`

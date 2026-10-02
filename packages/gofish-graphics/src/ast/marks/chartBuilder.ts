@@ -1,6 +1,7 @@
 import { GoFishNode } from "../_node";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
+import { applySchema, type SchemaEntry } from "../schema";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
@@ -86,6 +87,14 @@ export type ChartOptions = {
   legend?: boolean;
   /** Extra padding (px) between the polar circle and the SVG edge. Default 30. */
   padding?: number;
+  /**
+   * Column types, keyed by column name: the classes each column has (#984),
+   * e.g. `{ response: Schema.ordered(LEVELS).diverging() }`. An ordered column
+   * (`HasOrder`) splits in the order of its levels, and a value outside them
+   * is an error; a stack over a column with `HasCenter` puts its 0 at the
+   * center of the order. See schema.ts.
+   */
+  schema?: Record<string, SchemaEntry>;
 };
 
 /**
@@ -973,6 +982,17 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (data instanceof GoFishRef) {
       data = resolveRefData(data, this.state.layerContext) as any;
     }
+    // Type the data with the chart's schema: a copy of the array carrying the
+    // column types, which every operator reads off the data it splits. Rows
+    // that are refs (a `selectAll` bag) have no columns to check.
+    const schema = this.state.options?.schema;
+    if (schema !== undefined && Array.isArray(data)) {
+      data = applySchema(
+        data,
+        schema,
+        (row) => !(row instanceof GoFishRef)
+      ) as any;
+    }
 
     const content = (
       await resolveMarkResult(
@@ -1101,6 +1121,7 @@ const CHART_OPTION_KEYS = new Set([
   "axes",
   "legend",
   "padding",
+  "schema",
 ]);
 
 /** True when `x` is an options-shaped object (used to tell `chart(options)`

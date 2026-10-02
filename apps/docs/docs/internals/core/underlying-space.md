@@ -12,6 +12,7 @@ covers:
   - packages/gofish-graphics/src/ast/data.ts
   - packages/gofish-graphics/src/ast/fieldExpr.ts
   - packages/gofish-graphics/src/ast/datumProjection.ts
+  - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -277,6 +278,17 @@ the consumers that place things about the baseline read the pair:
   spans `[−35, 30]`. Parts that cancel overlap. A diverging stacked bar (all
   positives up from 0, all negatives down from 0) is not a stack option: it is
   spelled by grouping by sign first, so that each stack holds one sign.
+- The 0 of a stack is its **origin**: its first part's tail by default, as
+  above. A stack whose `by` column has `HasCenter` (see
+  [Column types](#column-types-the-chart-schema)) puts its origin at the
+  center of the column's order instead, and the fold shifts the extent so
+  the center sits at 0: the parts before the center (and half of a middle
+  level) lie below 0, the rest above. Parts (5, 10, 20, 40, 25) centered on
+  the middle of the 20 span `[−25, 75]`. The parts of a centered stack must be
+  nonnegative (a negative one is an error naming `HasCenter`), and the space
+  it builds is **mirrored** (`CONTINUOUS_TYPE.mirrored`): both sides of 0 hold
+  amounts measured away from it, so an axis over it labels each tick with its
+  distance from 0. A union stays mirrored only when every part is.
 - A spread along an axis still sums total extents (each child's
   `ascent + descent`) as boxes above the chain's start.
 
@@ -759,11 +771,17 @@ baseline sits at the origin. Free nodes whose baselines differ (an `end` or
 to the sequence or normalized origin as before. A `distribute` chain along the
 axis places its members' baselines itself, so the solver (`solveRank2Axis`)
 does not list them as free. A stack puts each part's tail on the previous
-head, which leaves only its first part's tail unplaced; that tail is the
-stack's baseline, the 0 its running sums start from, and it is listed whether
-or not the part is a baseline magnitude. So a stack seats at the origin like a
-single bar, a negative first part hangs below it, and two stacks of one sign
-each (grouped by sign) meet on the 0 tick. A spread packs boxes from its first
+head, so its one baseline is its origin, the 0 its running sums are measured
+from. The stack's lowering names it: it includes the part that carries the
+origin with how far from that part's tail to its head the origin lies
+(`AnchorParticipantFact.origin`), and the solver lists that point whether or
+not the part is a baseline magnitude. By default it is the first part's tail.
+So a stack seats at the origin like a single bar, a negative first part hangs
+below it, and two stacks of one sign each (grouped by sign) meet on the 0
+tick. A stack over a `HasCenter` column carries its origin at the center of
+the order (the middle of a middle part, or the tail of the first part past
+the center), so every row of a Likert chart seats its center on the 0 tick
+with no other code. A spread packs boxes from its first
 member's start, which is not a baseline, so it lists none and keeps its
 sequence origin, even when its members' baselines happen to coincide. So a bar
 with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
@@ -1431,6 +1449,47 @@ multi-scale, where a single axis can host several measures at once (dual axes).
 That is also the natural place for axis titles to read a measure off the space
 they describe (cf. issues #452, #386).
 
+## Column types: the chart schema
+
+`chart(data, { schema })` (`schema.ts`, #984) declares, per column, the
+classes the column's values have, in the style of typeclasses:
+
+```ts
+chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
+```
+
+A column type is a record keyed by class name (`ColumnType`), and the engine
+reads only the classes, never the builder words. Two classes exist:
+
+- `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
+  order. `splitEntries` groups a `by` over the column in that order instead
+  of first appearance, so every operator that splits (spread, stack, group,
+  scatter, ...) follows it, and `field(...).sort(...)` and `.reverse()` still
+  reorder from there. A value outside the levels is a loud error naming the
+  column and the stray values (`strayLevelsError`), checked when the chart
+  types its data and again at a split (a `derive` can make new values).
+- `HasCenter` (`.diverging()`): the order has a center, the fixed point of
+  reversing it: the middle level when the count is odd, the boundary between
+  the two middle levels when it is even. It carries no data and requires
+  `HasOrder`; the builder's `this` type makes `.diverging()` exist only after
+  `.ordered(...)`, and `columnTypeOf` rejects a wire record that has one
+  without the other. A stack over the column takes the center as its
+  origin (`stackOrigin`, then the stack fold and the free-origin seat above).
+  The center comes from the order, not from the parts present: a row with no
+  responses for some level keeps the same center.
+
+The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
+same way a transform's measure provenance does: `ChartBuilder` copies the
+array and tags it (`applySchema`), `createOperator` copies the tag onto each
+split leaf, and a `derive` keeps it on its result. So the stack's split reads
+its `by` column's type off the data it splits, and a color channel's
+`DatumValueImpl` records the type of the field it read (`fieldType`), which
+lets the categorical color scale list its domain in the column's order. A
+later class (`HasZero`, `HasCycle`, ...) is one more key on the record.
+
+TODO(#984): measure provenance is the unit part of the same per-column record
+and could fold into it; it stays a separate symbol for now.
+
 ## Field expressions: a pipeline orthogonal to channel aggregation
 
 `field(name)` (`fieldExpr.ts`, #700) returns a chainable expression — a
@@ -1460,7 +1519,10 @@ error rather than silently doing the wrong thing:
   the same regardless of where it sits in the chain — every other domain op
   re-derives its grouping from these filtered rows), then it groups the
   remaining rows (`Map.groupBy` via `splitKeyFn`, which reads a `field(...)`'s
-  `.name` exactly like a bare string), then applies each remaining domain op
+  `.name` exactly like a bare string) in order of first appearance, or in the
+  order of the column's levels when the data declares the column ordered
+  (`HasOrder`, see [Column types](#column-types-the-chart-schema)), then
+  applies each remaining domain op
   in pipeline order — `bin` **replaces** the base grouping entirely (re-groups
   the raw rows into numeric bins, dropping empty ones); `sort` reorders the
   resulting entries, either by the group key itself or by the SUM of another

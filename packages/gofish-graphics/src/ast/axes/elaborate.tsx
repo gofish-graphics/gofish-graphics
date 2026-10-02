@@ -446,18 +446,24 @@ function positionAxis(opts: {
  *  `tickMark`, unchanged from before the hanging-point rule; the "baseline"
  *  (oblique) case keeps the tick bare and gives `positionAxis` a separate
  *  `tickLabel` builder instead, so the data-position pin never targets the
- *  (asymmetric, rotated) label's own bbox. */
+ *  (asymmetric, rotated) label's own bbox.
+ *
+ *  Over a `mirrored` space (both sides of 0 hold amounts measured away from
+ *  it, e.g. a stack centered on a `HasCenter` column) each tick is labeled
+ *  with its distance from 0, so a Likert axis reads `40 20 0 20 40`. */
 function elaborateContinuousAxis(
   dim: 0 | 1,
   nice: [number, number],
   prefix: string,
   crossFloor?: number,
   side: "start" | "end" = "start",
-  labelRotation?: LabelRotation
+  labelRotation?: LabelRotation,
+  mirrored = false
 ): AxisElaboration {
   const [niceMin, niceMax] = nice;
   const tickValues = d3Ticks(niceMin, niceMax, TICK_COUNT);
   const oblique = labelRotation?.trackAlign === "baseline";
+  const tickText = (v: number) => fmtNum(mirrored ? Math.abs(v) : v);
   return positionAxis({
     dim,
     prefix,
@@ -467,11 +473,11 @@ function elaborateContinuousAxis(
     tickNode: oblique
       ? (_v, _i, name) => tickRect(dim).name(name)
       : (v, _i, name) =>
-          tickMark(dim, fmtNum(v), name, side, labelRotation?.rotate),
+          tickMark(dim, tickText(v), name, side, labelRotation?.rotate),
     tickLabel: oblique
       ? (v, _i, name) => {
           const label = Text({
-            text: fmtNum(v),
+            text: tickText(v),
             fontSize: LABEL_FONT_SIZE,
             fill: AXIS_COLOR,
             rotate: labelRotation!.rotate,
@@ -779,7 +785,8 @@ function elaborationsFor(
         prefix,
         crossFloor,
         axisSide(dim),
-        resolvedLabelRotation({ dim, kind: "continuous", tier: 0 })
+        resolvedLabelRotation({ dim, kind: "continuous", tier: 0 }),
+        s.mirrored === true
       );
       constrained.push(e);
       anchors[dim] = e.anchor;

@@ -98,6 +98,17 @@ export { GoFishRef } from "./ast/_ref";
 // from ./ast/datumProjection directly.)
 export { pluck, projectPath as project } from "./ast/datumProjection";
 
+// Column types for `chart(data, { schema })` (#984): `Schema` is the
+// capitalized factory namespace, like `Constraint`.
+export { Schema, ColumnSchema } from "./ast/schema";
+export type {
+  ColumnType,
+  HasOrder,
+  HasCenter,
+  Level,
+  SchemaEntry,
+} from "./ast/schema";
+
 // Constraints
 export { Constraint } from "./ast/constraints";
 export type {

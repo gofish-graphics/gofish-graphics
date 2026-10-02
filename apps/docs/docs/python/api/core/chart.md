@@ -34,6 +34,7 @@ tier's marks inside [`.layer(...)`](/python/api/core/layer).
 | `coord`   | keyword                   | Coordinate transform, e.g. `coord=clock()`                                                                                                                                                                                                                     |
 | `color`   | keyword                   | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                                                                                                                                                                           |
 | `padding` | keyword                   | Extra SVG padding (px) — useful for polar charts and overflowing labels                                                                                                                                                                                        |
+| `schema`  | keyword                   | Column types, keyed by column name, e.g. `schema={"response": Schema.ordered(LEVELS).diverging()}`. See [`Schema`](/python/api/core/schema).                                                                                                                   |
 
 Chart-level options are passed as keyword arguments:
 

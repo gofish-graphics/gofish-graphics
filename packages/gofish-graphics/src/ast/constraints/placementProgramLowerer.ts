@@ -85,6 +85,7 @@ export class PlacementProgramLowerer implements PlacementFactEmitter {
       node: request.name,
       axis: request.axis,
       owner: request.owner,
+      ...(request.origin !== undefined ? { origin: request.origin } : {}),
     });
   }
 

@@ -46,6 +46,10 @@ export type AnchorParticipantFact = {
   node: NodeId;
   axis: Axis;
   owner: string;
+  /** Set when this participant carries a stack's origin (#773, #984): the
+   *  origin is this far from the participant's `tail` to its `head` (0 = the
+   *  tail). The solver's free-origin fallback seats that point. */
+  origin?: number;
 };
 
 /** A size-cell equation independent of any anchor (#726, align `"size"`): the
@@ -100,6 +104,8 @@ export type PlacementParticipantRequest = {
   axis: Axis;
   name: NodeId;
   owner: string;
+  /** See {@link AnchorParticipantFact.origin}. */
+  origin?: number;
 };
 
 export type PlacementPinRequest = {

@@ -29,6 +29,7 @@ import {
   type FieldOp,
 } from "./fieldExpr";
 import { binRows } from "./transforms";
+import { columnType, orderByLevels } from "./schema";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
@@ -257,7 +258,9 @@ function sortEntries<T>(
 }
 
 /**
- * Group `d` by `by` (via {@link splitKeyFn}), then apply any pipeline ops
+ * Group `d` by `by` (via {@link splitKeyFn}): in the order of the column's
+ * levels when the data declares the column ordered (`HasOrder`, see
+ * schema.ts), else in order of first appearance. Then apply any pipeline ops
  * carried by a `field(...)` accessor (read via `getFieldOps`) IN ORDER:
  *   - `dropNulls` filters out rows whose value at `by`'s field is
  *     `null`/`undefined`, BEFORE grouping — since grouping always happens
@@ -290,6 +293,15 @@ export function splitEntries<T extends Record<string, any>>(
     });
   }
   let entries: Map<string | number, T[]> = Map.groupBy(rows, splitKeyFn(by));
+  // An ordered column (HasOrder, from the chart's `schema`) groups in the
+  // order of its levels, not in order of first appearance. The ops below
+  // reorder from there.
+  const column = typeof by === "function" ? undefined : fieldNameOf(by);
+  const type = columnType(d, column);
+  if (type?.HasOrder) {
+    const keys = orderByLevels(column!, type.HasOrder, [...entries.keys()]);
+    entries = new Map(keys.map((k) => [k, entries.get(k)!]));
+  }
   for (const op of ops) {
     switch (op.op) {
       case "dropNulls":

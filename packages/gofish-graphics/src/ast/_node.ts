@@ -47,12 +47,14 @@ import { CoordinateTransform } from "./coordinateTransforms/coord";
 import {
   getValue,
   getValueField,
+  getValueFieldType,
   isValue,
   MaybeValue,
   baseEmbedded,
   getMeasure,
 } from "./data";
 import { color6 } from "../color";
+import { orderByLevels, type HasOrder } from "./schema";
 import {
   isCONTINUOUS,
   isDIFFERENCE,
@@ -690,11 +692,15 @@ export class GoFishNode {
   }
 
   /** Collect the distinct color values in this subtree, in first-seen order.
-   *  `seen` is the membership index for `out` (which keeps the order). */
+   *  `seen` is the membership index for `out` (which keeps the order).
+   *  `orders` collects the order of the column each value was read from
+   *  (`HasOrder`, from the chart's `schema`), or `undefined` for a value from
+   *  an unordered column. */
   private collectColorValues(
     out: any[],
     seen: Set<any> = new Set(),
-    fields?: Set<string>
+    fields?: Set<string>,
+    orders?: Set<HasOrder | undefined>
   ): void {
     if (this.color !== undefined && isValue(this.color)) {
       const val = getValue(this.color);
@@ -704,10 +710,11 @@ export class GoFishNode {
       }
       const field = getValueField(this.color);
       if (field !== undefined) fields?.add(field);
+      orders?.add(getValueFieldType(this.color)?.HasOrder);
     }
     this.children.forEach((child) => {
       if (child instanceof GoFishNode)
-        child.collectColorValues(out, seen, fields);
+        child.collectColorValues(out, seen, fields, orders);
     });
   }
 
@@ -799,12 +806,23 @@ export class GoFishNode {
       unit.resolved = true;
       delete unit.color;
     } else {
-      const orderedKeys: any[] = [];
+      const seenKeys: any[] = [];
+      const orders = new Set<HasOrder | undefined>();
       this.collectColorValues(
-        orderedKeys,
+        seenKeys,
         new Set(),
-        (unit.fields ??= new Set())
+        (unit.fields ??= new Set()),
+        orders
       );
+      // The domain lists its values in first-seen order, or in the order of
+      // their column when every value comes from one ordered column, so the
+      // legend follows the order the schema declares.
+      // TODO(#984): a diverging palette driven by HasCenter.
+      const [order] = orders;
+      const orderedKeys =
+        orders.size === 1 && order !== undefined
+          ? orderByLevels([...unit.fields].join(", "), order, seenKeys)
+          : seenKeys;
       if (!(unit.color instanceof Map)) unit.color = new Map();
       const color = unit.color;
       orderedKeys.forEach((key, i) => {

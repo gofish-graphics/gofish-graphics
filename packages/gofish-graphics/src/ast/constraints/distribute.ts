@@ -16,6 +16,7 @@ import {
   forgetAllMeasures,
   isBaselineMagnitude,
   isPOSITION,
+  mirrored,
   spaceMeasure,
 } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
@@ -40,7 +41,25 @@ export interface DistributeOptions {
   /** The measure for an ORDINAL fold — the grouping field (spread's `by`) — so a
    *  category axis names itself off its own space, like a continuous axis does. */
   measure?: string;
+  /** A stack's origin (glue only): see {@link DistributeOrigin}. Omitted, it
+   *  is the tail of the first part laid out. */
+  origin?: DistributeOrigin;
 }
+
+/**
+ * Where a stack's origin lies: its baseline, the 0 its running sums start
+ * from, which the layer seats at the measure's origin (#773). It is the point
+ * `fraction` of the way from the tail of part `child` to its head. The default
+ * is the first part's tail; a stack over a column with `HasCenter` puts it at
+ * the center of the column's order (#984), and then `center` names that
+ * column: the parts must be nonnegative amounts, and the stack's space holds
+ * magnitudes on both sides of its 0 (`CONTINUOUS_TYPE.mirrored`).
+ */
+export type DistributeOrigin = {
+  child: string;
+  fraction: number;
+  center?: string;
+};
 
 export interface DistributeConstraint {
   type: "distribute";
@@ -51,6 +70,7 @@ export interface DistributeConstraint {
   glue: boolean;
   children: ConstraintRef[];
   measure?: string;
+  origin?: DistributeOrigin;
 }
 
 export const createDistributeConstraint = (
@@ -67,7 +87,26 @@ export const createDistributeConstraint = (
   glue: options.glue ?? false,
   children,
   measure: options.measure,
+  ...(options.glue && options.origin !== undefined
+    ? { origin: options.origin }
+    : {}),
 });
+
+/** The origin of a stack over `ordered` (its parts in placement order): the
+ *  declared origin when its part is among them, else the first part's tail. */
+export function distributeOrigin(
+  constraint: Pick<DistributeConstraint, "origin">,
+  ordered: readonly { name: string }[]
+): { index: number; fraction: number; center?: string } {
+  const origin = constraint.origin;
+  const index =
+    origin === undefined
+      ? -1
+      : ordered.findIndex((child) => child.name === origin.child);
+  return index < 0
+    ? { index: 0, fraction: 0 }
+    : { index, fraction: origin!.fraction, center: origin!.center };
+}
 
 /** `children` in placement order — reversed for `order: "reverse"`. The result
  *  is read-only: the forward case is the caller's own array. */
@@ -145,10 +184,20 @@ export function lowerDistributePlacement(
       owner,
     });
   }
+  // A spread's chain starts at its first member. A stack's chain also carries
+  // its origin, which the solver's free-origin fallback seats at the measure's
+  // origin (#773): the first part's tail, or the center of a `HasCenter`
+  // column's order (#984).
+  if (!constraint.glue) {
+    emitter.include({ axis: constraint.dir, name: ordered[0].name, owner });
+    return;
+  }
+  const origin = distributeOrigin(constraint, ordered);
   emitter.include({
     axis: constraint.dir,
-    name: ordered[0].name,
+    name: ordered[origin.index].name,
     owner,
+    origin: origin.fraction,
   });
 }
 
@@ -161,10 +210,11 @@ export function lowerDistributePlacement(
  *
  *  - explicit `opts.size` (a value) → SIZE(linear(value, 0)) — the spread's own
  *    size wins over any children-derived claim.
- *  - glue → POSITION over the parts laid end to end from 0 (each part's
- *    baseline on the previous part's head; `[0, Σ widths]` when no part has a
- *    descent) when all-POSITION or all-SIZE; ORDINAL(keys) when any child is
- *    keyed; else UNDEFINED.
+ *  - glue → POSITION over the parts laid end to end from the stack's origin
+ *    (each part's baseline on the previous part's head; `[0, Σ widths]` when
+ *    no part has a descent and the origin is the first part's tail) when
+ *    all-POSITION or all-SIZE; ORDINAL(keys) when any child is keyed; else
+ *    UNDEFINED.
  *  - non-glue, all-SIZE & data-driven (some non-constant Monotonic) → SIZE
  *    composition (Monotonic.add + spacing·(n−1) for "edge"; the
  *    unknown-Monotonic fixed-pitch form for start/middle/end/baseline), so a
@@ -198,6 +248,9 @@ export function distributeSpaceFold(
     /** True when every contributing child was POSITIONALLY keyed (a `spread`
      *  with no `by`): the folded ORDINAL is anonymous and renders no axis. */
     anonymous?: boolean;
+    /** A stack's origin, by index into `targetSpaces` (see
+     *  {@link distributeOrigin}). Omitted: the first part's tail. */
+    origin?: { index: number; fraction: number; center?: string };
   }
 ): UnderlyingSpace {
   const n = targetSpaces.length;
@@ -236,18 +289,48 @@ export function distributeSpaceFold(
     // `ascent − descent`. With only positive parts this is `[0, Σ widths]`; a
     // negative part goes back, so (30, −25, 10, −50) spans [−35, 30]. A
     // positioned part has descent 0, so it counts as its whole width.
+    //
+    // The stack's 0 is its origin (`opts.origin`): the first part's tail by
+    // default, so the running sums start at 0. A centered origin (a `by`
+    // column with HasCenter, #984) lies inside the run, at `fraction` of the
+    // way from part `index`'s tail to its head, and the extent shifts so it
+    // sits at 0: the parts before the center (and half of a fixed middle
+    // level) lie below 0, the rest above. So (5, 10, 20, 40, 25) centered on
+    // the middle of the 20 spans [−25, 75].
     if (allSize || allPosition) {
+      const origin = opts.origin ?? { index: 0, fraction: 0 };
       let at = 0;
       let lo = 0;
       let hi = 0;
-      for (const s of targetSpaces as CONTINUOUS_TYPE[]) {
+      let zero = 0;
+      (targetSpaces as CONTINUOUS_TYPE[]).forEach((s, i) => {
         const ascent = s.ascent.run(1);
         const descent = s.descent.run(1);
+        if (origin.center !== undefined && descent > 0) {
+          throw new Error(
+            `stack({ by: "${origin.center}" }): a centered stack's parts are ` +
+              `nonnegative amounts, but the part for ` +
+              `${keys[i] !== undefined ? `"${keys[i]}"` : `child ${i + 1}`} ` +
+              `is negative. ` +
+              `"${origin.center}" has HasCenter (declared with ` +
+              `\`.diverging()\`), so the stack's 0 is the center of its ` +
+              `order and each part lies on the side its level is on; a ` +
+              `negative amount has no meaning there.`
+          );
+        }
+        if (i === origin.index)
+          zero = at + origin.fraction * (ascent - descent);
         lo = Math.min(lo, at - descent);
         hi = Math.max(hi, at + ascent);
         at += ascent - descent;
-      }
-      return POSITION(Interval.interval(lo, hi), childMeasure);
+      });
+      const space = POSITION(
+        Interval.interval(lo - zero, hi - zero),
+        childMeasure
+      );
+      // Centered, the parts on both sides of 0 are amounts measured away
+      // from it.
+      return origin.center !== undefined ? mirrored(space) : space;
     }
     if (namedKeys.length > 0)
       return ORDINAL(namedKeys, opts.measure, opts.anonymous);

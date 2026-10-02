@@ -19,6 +19,7 @@ import {
   type Measure,
 } from "./data";
 import { evalFieldValues, type FieldExpr } from "./fieldExpr";
+import { columnType } from "./schema";
 import {
   mapAxisDims,
   type AxisDims,
@@ -344,7 +345,8 @@ export const inferColor = <T extends Record<string, any>>(
         undefined,
         undefined,
         undefined,
-        resolved.field
+        resolved.field,
+        columnType(data, resolved.field)
       );
 };
 

@@ -146,6 +146,24 @@ function freeBaselineOffset(target: Placeable, axis: Axis): number | undefined {
   return anchorOffset(target, axis, "baseline");
 }
 
+/** The offset from its `min` of the point `fraction` of the way from a stack
+ *  part's tail to its head: the stack's origin when the part carries it. The
+ *  tail is the part's baseline (its start when it has no data baseline); the
+ *  head is the tail moved by `ascent − descent`, as far in from the end as the
+ *  tail is from the start. */
+function stackOriginOffset(
+  target: Placeable,
+  axis: Axis,
+  fraction: number
+): number | undefined {
+  const tail = freeBaselineOffset(target, axis) ?? 0;
+  if (fraction === 0) return tail;
+  const end = anchorOffset(target, axis, "end");
+  if (end === undefined) return undefined;
+  const head = end - tail;
+  return tail + fraction * (head - tail);
+}
+
 /** Reduce one axis's anchor facts to a `min`-anchored {@link AxisProblem}, using
  *  the closed sizes to substitute each anchor's offset from `min`. */
 function reduceToAxisProblem(
@@ -247,31 +265,38 @@ function solveRank2Axis(
   // one's baseline offset from its `min` (#773). A free participant (a
   // baseline magnitude) carries its own. A chain along the axis places the
   // baselines of its members instead:
-  //  - a stack puts each part's tail on the previous part's head, so only its
-  //    first part's tail is not placed by the chain. That tail is the stack's
-  //    baseline (the 0 its running sums start from), whether or not the part
-  //    has a data baseline of its own.
+  //  - a stack puts each part's tail on the previous part's head, so the
+  //    stack's one baseline is its origin, the 0 its running sums are measured
+  //    from. The stack's lowering names the part that carries it and how far
+  //    from that part's tail to its head it lies (`AnchorParticipantFact.
+  //    origin`): the first part's tail by default, whether or not the part
+  //    has a data baseline of its own, or the center of a `HasCenter`
+  //    column's order (#984).
   //  - a spread packs boxes edge to edge from its first member's start, which
   //    is not a baseline, so it carries none and keeps its sequence origin.
   const freeBaselines = new Map<NodeId, number>();
   if (freeOrigin !== undefined) {
     const placedByChain = new Set<NodeId>();
-    const stackTails = new Set<NodeId>();
+    const stackOrigins = new Map<NodeId, number>();
     for (const fact of facts) {
-      if (fact.type !== "anchor-relation") continue;
       if (!fact.owner.startsWith("distribute[")) continue;
+      if (fact.type === "anchor-participant" && fact.origin !== undefined)
+        stackOrigins.set(fact.node, fact.origin);
+      if (fact.type !== "anchor-relation") continue;
+      placedByChain.add(fact.from.node);
       placedByChain.add(fact.to.node);
-      if (fact.to.anchor === "tail") stackTails.add(fact.from.node);
-      else placedByChain.add(fact.from.node);
     }
     for (const node of problem.participants) {
       if (sizes.has(node)) continue; // size-strong: an interval, not free
-      if (placedByChain.has(node)) continue;
       const target = targets.get(node);
       if (!target) continue;
+      const origin = stackOrigins.get(node);
       const offset =
-        freeBaselineOffset(target, axis) ??
-        (stackTails.has(node) ? 0 : undefined);
+        origin !== undefined
+          ? stackOriginOffset(target, axis, origin)
+          : placedByChain.has(node)
+            ? undefined
+            : freeBaselineOffset(target, axis);
       if (offset !== undefined) freeBaselines.set(node, offset);
     }
   }

@@ -3,8 +3,9 @@ import type { AxisOptions } from "../gofish";
 import { MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
-import { SplitBy, splitEntries } from "../datumProjection";
+import { SplitBy, fieldNameOf, splitEntries } from "../datumProjection";
 import { isField } from "../data";
+import { columnType, stackOrigin, type StackOrigin } from "../schema";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
@@ -59,6 +60,7 @@ export const Spread = createNodeOperator(
       anchor = "edge",
       reverse = false,
       glue = false,
+      origin,
       size,
       axes,
       axisMeasures,
@@ -80,6 +82,12 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
+      /** A stack's origin (its baseline, the 0 its running sums start from),
+       *  by child index. Omitted: the first part's tail. The `stack`
+       *  operator's split sets it to the center of an ordered column with
+       *  `HasCenter` (see `stackOrigin` in schema.ts). Ignored without
+       *  `glue`: a spread packs boxes and has no origin. */
+      origin?: StackOrigin;
       /** Per-entry stack-axis extent — one value per child, in child order.
        *  Wraps each child in a sized layer on the stack axis before the
        *  align/distribute elaboration. See the doc comment above. */
@@ -179,6 +187,14 @@ export const Spread = createNodeOperator(
               anchor,
               glue,
               order: reverse ? "reverse" : "forward",
+              origin:
+                glue && origin !== undefined
+                  ? {
+                      child: names[origin.part],
+                      fraction: origin.fraction,
+                      center: origin.center,
+                    }
+                  : undefined,
               // The grouping field for this (stack) axis → the ORDINAL
               // space's measure, so a spread-by-category axis titles itself
               // off its space.
@@ -247,8 +263,23 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
   // that override lives in createOperator (it dispatches on the mark's kind),
   // not here, so this split stays kind-agnostic.
-  split: ({ by }, d) =>
-    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+  //
+  // A stack over a column with HasCenter (from the chart's `schema`) puts its
+  // origin at the center of the column's order instead of at its first
+  // part's tail; the split knows the groups present, so it computes it.
+  split: ({ by, glue, reverse }, d) => {
+    if (!by) return new Map(d.map((r, i) => [i, r]));
+    const entries = splitEntries(by, d);
+    if (!glue || typeof by === "function") return entries;
+    const column = fieldNameOf(by);
+    const origin = stackOrigin(
+      column,
+      columnType(d, column),
+      [...entries.keys()],
+      reverse
+    );
+    return origin === undefined ? entries : { entries, layoutOpts: { origin } };
+  },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {
     const name =
