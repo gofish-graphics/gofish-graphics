@@ -5,7 +5,7 @@
 import type { Axis, AlignAnchor, ConstraintRef } from "./shared";
 import type { Placeable } from "../_node";
 import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
-import type { PlacementFactEmitter } from "./placementFacts";
+import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
 import {
   CONTINUOUS_TYPE,
   ORDINAL,
@@ -78,15 +78,21 @@ export function distributeChildrenInPlacementOrder(
   return constraint.order === "reverse" ? [...children].reverse() : children;
 }
 
-export function distributePlacementAnchors(
-  anchor: DistributeConstraint["anchor"]
-): {
-  from: AlignAnchor;
-  to: AlignAnchor;
+export function distributePlacementAnchors({
+  anchor,
+  glue,
+}: Pick<DistributeConstraint, "anchor" | "glue">): {
+  from: RelationAnchor;
+  to: RelationAnchor;
 } {
   // Fixed-pitch anchors (start/middle/end/baseline) relate the SAME anchor on
   // both sides of the chain edge (anchor[i+1] = anchor[i] + spacing); "edge"
-  // relates the facing edges (end of prev → start of cur).
+  // relates the facing edges (end of prev → start of cur). A stack (glue) lays
+  // its parts end to end as vectors (#773): each part's tail (its baseline)
+  // sits on the previous part's head, so a negative part goes back. A part
+  // with no data baseline has tail = start and head = end, so for such parts
+  // and for positive bars this is the facing-edge chain.
+  if (glue) return { from: "head", to: "tail" };
   return anchor === "edge"
     ? { from: "end", to: "start" }
     : { from: anchor, to: anchor };
@@ -110,7 +116,7 @@ export function lowerDistributePlacement(
   );
   const ordered = distributeChildrenInPlacementOrder(constraint, children);
   if (ordered.length === 0) return;
-  const anchors = distributePlacementAnchors(constraint.anchor);
+  const anchors = distributePlacementAnchors(constraint);
   // A fixed-pitch chain on y is an OVERLAY, not a tiling: the targets' allocated
   // y bands are just leftover slices, unrelated to where the chained anchor
   // sits. Stamp the chained anchor on each target so a target that later opens
@@ -155,8 +161,10 @@ export function lowerDistributePlacement(
  *
  *  - explicit `opts.size` (a value) → SIZE(linear(value, 0)) — the spread's own
  *    size wins over any children-derived claim.
- *  - glue → POSITION([0, Σ widths]) when all-POSITION; POSITION([0, Σ run(1)])
- *    when all-SIZE; ORDINAL(keys) when any child is keyed; else UNDEFINED.
+ *  - glue → POSITION over the parts laid end to end from 0 (each part's
+ *    baseline on the previous part's head; `[0, Σ widths]` when no part has a
+ *    descent) when all-POSITION or all-SIZE; ORDINAL(keys) when any child is
+ *    keyed; else UNDEFINED.
  *  - non-glue, all-SIZE & data-driven (some non-constant Monotonic) → SIZE
  *    composition (Monotonic.add + spacing·(n−1) for "edge"; the
  *    unknown-Monotonic fixed-pitch form for start/middle/end/baseline), so a
@@ -220,10 +228,26 @@ export function distributeSpaceFold(
     targetSpaces.map(widthAt1).reduce((a, b) => a + b, 0);
 
   if (opts.glue) {
-    // STACK semantics: collapse children into a single anchored POSITION
-    // [0, Σ extent@σ=1] (same total whether they were magnitudes or positioned).
+    // STACK semantics: the parts lie end to end as vectors (#773), each one's
+    // baseline on the previous one's head, starting from the first part's
+    // baseline at 0. The stack is an anchored POSITION over everything the
+    // parts cover: each part spans `[at − descent, at + ascent]` about the
+    // running sum `at` of the parts before it, then moves `at` by
+    // `ascent − descent`. With only positive parts this is `[0, Σ widths]`; a
+    // negative part goes back, so (30, −25, 10, −50) spans [−35, 30]. A
+    // positioned part has descent 0, so it counts as its whole width.
     if (allSize || allPosition) {
-      return POSITION(Interval.interval(0, sumWidths()), childMeasure);
+      let at = 0;
+      let lo = 0;
+      let hi = 0;
+      for (const s of targetSpaces as CONTINUOUS_TYPE[]) {
+        const ascent = s.ascent.run(1);
+        const descent = s.descent.run(1);
+        lo = Math.min(lo, at - descent);
+        hi = Math.max(hi, at + ascent);
+        at += ascent - descent;
+      }
+      return POSITION(Interval.interval(lo, hi), childMeasure);
     }
     if (namedKeys.length > 0)
       return ORDINAL(namedKeys, opts.measure, opts.anonymous);
@@ -275,10 +299,9 @@ export function distributeSpaceFold(
     });
   };
 
-  // Along the chain each child contributes its total extent (ascent +
-  // descent), and the composed extent sits above the chain's baseline.
-  // TODO(#773 follow-up): a signed stack (diverging bars, Likert) should keep
-  // a descent instead of summing magnitudes.
+  // Along a spread chain each child is a box: it contributes its total extent
+  // (ascent + descent), and the composed extent sits above the chain's start.
+  // (A stack, above, keeps the signs instead.)
   if (dataDriven) return SIZE(composeSize(), childMeasure);
   if (namedKeys.length > 0)
     return ORDINAL(namedKeys, opts.measure, opts.anonymous);

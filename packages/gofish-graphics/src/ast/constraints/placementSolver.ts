@@ -12,7 +12,6 @@ import type { TrackLayout } from "./grid";
 import {
   axisIndex,
   axisName,
-  type AlignAnchor,
   type Axis,
   type ConstraintPosScales,
   type FreeOrigin,
@@ -22,6 +21,7 @@ import {
   participantFact,
   relationFact,
   type AnchorFact,
+  type RelationAnchor,
   type NodeId,
 } from "./placementFacts";
 import { anchorOffset } from "./placementProgramLowerer";
@@ -137,6 +137,15 @@ function closeSizes(
   return { sizes, owners, conflicts };
 }
 
+/** The offset of a free target's baseline from its `min` on `axis`, or
+ *  undefined when the target is not a baseline magnitude there (it has no
+ *  data baseline of its own). */
+function freeBaselineOffset(target: Placeable, axis: Axis): number | undefined {
+  const space = target.spaceOn?.(axisIndex(axis));
+  if (space === undefined || !isBaselineMagnitude(space)) return undefined;
+  return anchorOffset(target, axis, "baseline");
+}
+
 /** Reduce one axis's anchor facts to a `min`-anchored {@link AxisProblem}, using
  *  the closed sizes to substitute each anchor's offset from `min`. */
 function reduceToAxisProblem(
@@ -152,18 +161,28 @@ function reduceToAxisProblem(
 
   const resolveOffset = (
     node: NodeId,
-    anchor: AlignAnchor
+    anchor: RelationAnchor
   ): number | undefined => {
     // A size-strong (interval/span) cell's local frame is `[0, size]`, so its
     // anchor offsets read straight off the closed size — the substitution that
     // was the `spannedSize` branch of `anchorOffset`, now that sizes are known.
+    // It has no data baseline, so its tail is its start and its head its end.
     const strong = strongSizes.get(node);
     if (strong !== undefined) {
-      if (anchor === "start" || anchor === "baseline") return 0;
+      if (anchor === "start" || anchor === "baseline" || anchor === "tail")
+        return 0;
       return anchor === "middle" ? Math.abs(strong) / 2 : Math.abs(strong);
     }
     const target = targets.get(node);
     if (!target) return undefined;
+    if (anchor === "tail" || anchor === "head") {
+      // The tail is the free baseline's offset (0 for a part with no data
+      // baseline), and the head sits that same distance in from the end.
+      const tail = freeBaselineOffset(target, axis) ?? 0;
+      if (anchor === "tail") return tail;
+      const end = anchorOffset(target, axis, "end");
+      return end === undefined ? undefined : end - tail;
+    }
     return anchorOffset(target, axis, anchor);
   };
 
@@ -224,16 +243,35 @@ function solveRank2Axis(
   const { sizes, owners, conflicts: sizeConflicts } = closeSizes(axis, facts);
   const problem = reduceToAxisProblem(axis, facts, sizes, targets);
   const idx = axisIndex(axis);
-  // The free participants (baseline magnitudes) and each one's baseline offset
-  // from its `min`: what the solver's free-origin fallback seats (#773).
+  // The participants that carry a baseline the free origin may seat, and each
+  // one's baseline offset from its `min` (#773). A free participant (a
+  // baseline magnitude) carries its own. A chain along the axis places the
+  // baselines of its members instead:
+  //  - a stack puts each part's tail on the previous part's head, so only its
+  //    first part's tail is not placed by the chain. That tail is the stack's
+  //    baseline (the 0 its running sums start from), whether or not the part
+  //    has a data baseline of its own.
+  //  - a spread packs boxes edge to edge from its first member's start, which
+  //    is not a baseline, so it carries none and keeps its sequence origin.
   const freeBaselines = new Map<NodeId, number>();
   if (freeOrigin !== undefined) {
+    const placedByChain = new Set<NodeId>();
+    const stackTails = new Set<NodeId>();
+    for (const fact of facts) {
+      if (fact.type !== "anchor-relation") continue;
+      if (!fact.owner.startsWith("distribute[")) continue;
+      placedByChain.add(fact.to.node);
+      if (fact.to.anchor === "tail") stackTails.add(fact.from.node);
+      else placedByChain.add(fact.from.node);
+    }
     for (const node of problem.participants) {
       if (sizes.has(node)) continue; // size-strong: an interval, not free
+      if (placedByChain.has(node)) continue;
       const target = targets.get(node);
-      const space = target?.spaceOn?.(idx);
-      if (space === undefined || !isBaselineMagnitude(space)) continue;
-      const offset = anchorOffset(target!, axis, "baseline");
+      if (!target) continue;
+      const offset =
+        freeBaselineOffset(target, axis) ??
+        (stackTails.has(node) ? 0 : undefined);
       if (offset !== undefined) freeBaselines.set(node, offset);
     }
   }

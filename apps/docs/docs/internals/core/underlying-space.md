@@ -269,10 +269,19 @@ the consumers that place things about the baseline read the pair:
   free stash) fits `ascent + descent` to its box and seats the baseline
   `descent·σ` above the box's low edge (`scopeRootBaseline`).
 
+- A stack lays its parts end to end, in order, as vectors. Each part's
+  baseline sits on the previous part's head, where the head is the baseline
+  moved by `ascent − descent`, so a negative part goes back. The stack spans
+  everything its parts cover, starting from its first part's baseline at 0:
+  parts (30, −25, 10, −50) have running sums 0, 30, 5, 15, −35, so the stack
+  spans `[−35, 30]`. Parts that cancel overlap. A diverging stacked bar (all
+  positives up from 0, all negatives down from 0) is not a stack option: it is
+  spelled by grouping by sign first, so that each stack holds one sign.
+- A spread along an axis still sums total extents (each child's
+  `ascent + descent`) as boxes above the chain's start.
+
 With every descent 0, all of this reduces to the single `width` the space
-carried before. A stack along an axis still sums total extents (each child's
-`ascent + descent`) above the chain's baseline; a signed stack (diverging
-bars, Likert) is a follow-up.
+carried before.
 
 The committed coordinate itself (the old `placement.at`) is not a separate
 payload: it is simply the `dataDomain` interval's `min`, read back with
@@ -409,8 +418,10 @@ composes its targets' spaces into the layer's claim on that axis:
 - `Constraint.distribute` contributes the stack fold (`distributeSpaceFold`,
   `constraints/distribute.ts`): data-driven continuous targets compose to
   `SIZE(Monotonic.add(...) + spacing·(n−1))` (a `free` magnitude); with
-  `glue: true` (stack semantics) the extents are committed to an anchored
-  `POSITION([0, Σ])`; constant-sized keyed targets fall back to ORDINAL.
+  `glue: true` (stack semantics) the extents are laid end to end and committed
+  to an anchored `POSITION` over the range of their running sums (`[0, Σ]`
+  when no part has a descent); constant-sized keyed targets fall back to
+  ORDINAL.
   (A former POSITION's pixel extent at σ=1 is `width.run(1) = b−a`, so the
   unified `width`-based sum subsumes the old separate POSITION-sum branch.)
 - `Constraint.align` contributes the alignment fold (`resolveAlignmentSpace`)
@@ -522,7 +533,16 @@ between adjacent children: `"edge"` relates the facing edges
 (`prev.end → cur.start`, spacing = the gap between them, content-dependent);
 the fixed-pitch anchors relate the _same_ anchor on both sides
 (`prev.anchor → cur.anchor`, spacing = anchor-to-anchor pitch,
-content-independent) — `anchor[i+1] = anchor[i] + spacing`. `"middle"` is the
+content-independent) — `anchor[i+1] = anchor[i] + spacing`. A glued chain
+(`glue: true`, i.e. `stack`) relates `prev.head → cur.tail` instead
+(`distributePlacementAnchors`). A part's **tail** is where its baseline sits,
+or its start when it is not a baseline magnitude; its **head** is the point as
+far in from its end as the tail is from its start, which is the baseline moved
+by `ascent − descent`. A positive bar's tail is its start and its head its
+end, so with positive parts (or parts with no data baseline, such as text or
+a nested stack) this is exactly the `"edge"` chain; a negative bar's tail is
+its end and its head its start, so the next part starts where it ends.
+`"middle"` is the
 old `mode: "center"` under its new name; `"start"`/`"end"`/`"baseline"` are new
 fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
 (`constraints/shared.ts`'s `AlignAnchor`). The space fold
@@ -655,9 +675,10 @@ this is where a target's size is determined, with the node's own weak layout
 size the default when no strong equation reaches it. A bbox over-determination
 (two conflicting intervals on one target) is a named-owner conflict naming both
 owners. Then the **difference graph** (`constraints/differenceGraph.ts`): with
-sizes known, every anchor reduces to `min + offset` — `start`/`baseline` at 0,
-`middle` at `size/2`, `end` at `size` for a size-strong cell (read off the
-closed box), else the node's local-frame anchor offset. `position`, `align`,
+sizes known, every anchor reduces to `min + offset` — `start`/`baseline`/`tail`
+at 0, `middle` at `size/2`, `end`/`head` at `size` for a size-strong cell (read
+off the closed box), else the node's local-frame anchor offset (a stack part's
+`tail` is its free baseline's offset, or 0, and its `head` is `size − tail`). `position`, `align`,
 `distribute`, `nest`, and `grid` pins/relations over those reduced `min` values
 go through BFS components + pin offsets + free/distribute/normalized-origin
 fallbacks. Every solved cell writes back through **one path**: a size-strong
@@ -734,10 +755,17 @@ placement, and `placeUnplacedChild` for a child the solve left unplaced on an
 axis), and hands it to the solve as one input: in `solveAxisProblem`, a
 component with no pin whose free nodes share one baseline is offset so that
 baseline sits at the origin. Free nodes whose baselines differ (an `end` or
-`middle` alignment) have no common baseline to seat, and a `distribute` chain
-along the axis has no baseline of its own at all (it composes its members end
-to end, even when their baselines happen to coincide), so those components fall
-to the sequence or normalized origin as before. So a bar
+`middle` alignment) have no common baseline to seat, so that component falls
+to the sequence or normalized origin as before. A `distribute` chain along the
+axis places its members' baselines itself, so the solver (`solveRank2Axis`)
+does not list them as free. A stack puts each part's tail on the previous
+head, which leaves only its first part's tail unplaced; that tail is the
+stack's baseline, the 0 its running sums start from, and it is listed whether
+or not the part is a baseline magnitude. So a stack seats at the origin like a
+single bar, a negative first part hangs below it, and two stacks of one sign
+each (grouped by sign) meet on the 0 tick. A spread packs boxes from its first
+member's start, which is not a baseline, so it lists none and keeps its
+sequence origin, even when its members' baselines happen to coincide. So a bar
 with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
 the rounded −40. A free
 layer is itself seated by its parent at its own baseline, so its free-child
@@ -815,9 +843,10 @@ difference, an absent min is a `free` magnitude.)
 **Compositional operators** (`spread`, `stack`, `layer`, `enclose`)
 combine children's spaces. `spread({ glue: false })` keeps the magnitude
 along the stack direction so a parent can solve for shared scale factors
-via `Monotonic.inverse`. `spread({ glue: true })` (i.e. `stack`) sums
-children's extents into a `POSITION([0, sum])` — the operator commits the
-data-driven magnitudes to an anchored axis. Since the operator/constraint
+via `Monotonic.inverse`. `spread({ glue: true })` (i.e. `stack`) lays
+children's extents end to end into a `POSITION` over their running sums
+(`[0, sum]` for positive parts) — the operator commits the data-driven
+magnitudes to an anchored axis. Since the operator/constraint
 unification, these folds have one home: spread's resolver _is_
 `distributeSpaceFold` on the stack axis and `resolveAlignmentSpace` on the
 cross axis — the same functions the constraint path uses (see

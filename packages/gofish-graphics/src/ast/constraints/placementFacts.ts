@@ -13,7 +13,15 @@ export type NodeId = string;
 // against an already-known size. Consumed by the rank-2 solve in
 // `placementSolver.ts`.
 
-export type AnchorRef = { node: NodeId; anchor: AlignAnchor };
+/** An anchor a relation can tie: a box anchor ({@link AlignAnchor}), or one
+ *  end of a part laid end to end along a stack (#773). A part's `tail` is
+ *  where its baseline sits, or its `start` when it has no data baseline. Its
+ *  `head` is the tail moved by `ascent − descent`, which is the point as far
+ *  from its `end` as the tail is from its `start`. A positive bar's tail is
+ *  its start and its head its end; a negative bar's are the other way round. */
+export type RelationAnchor = AlignAnchor | "tail" | "head";
+
+export type AnchorRef = { node: NodeId; anchor: RelationAnchor };
 
 export type AnchorPinFact = {
   type: "anchor-pin";
@@ -82,8 +90,8 @@ export type PlacementAnchorRef = {
 
 export type PlacementRelationRequest = {
   axis: Axis;
-  from: PlacementAnchorRef;
-  to: PlacementAnchorRef;
+  from: { name: NodeId; anchor: RelationAnchor };
+  to: { name: NodeId; anchor: RelationAnchor };
   gap: number;
   owner: string;
 };
