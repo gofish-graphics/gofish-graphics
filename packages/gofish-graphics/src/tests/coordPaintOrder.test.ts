@@ -116,6 +116,55 @@ console.log("# a constraint that names a plain layer orders what it paints");
   );
 }
 
+console.log(
+  "# a hoisted layer keeps its own z constraints (nested relational layer)"
+);
+{
+  // The shape of a chart that `.layer()`s a relational line (G, under C) and
+  // then a nested chart of dots with its own `.layer(line)` (L, under D). The
+  // outer constraint makes the outer layer hoist through the nested one; the
+  // nested layer's zBelow(L, D) must still put L under D. It used to be
+  // dropped, so L painted over D in array order.
+  const C = rect().name("c");
+  const G = rect().name("g");
+  const D = rect().name("d");
+  const L = rect().name("l");
+  const nested = Layer([D, L]).relate((c: any) => [Constraint.zBelow(c.l, c.d)]);
+  const layerNode = Layer([C, G, nested]).relate((c: any) => [
+    Constraint.zBelow(c.g, c.c),
+  ]);
+  const order = await paintOrder(layerNode);
+  const label = (n: any) =>
+    n === C ? "C" : n === G ? "G" : n === D ? "D" : n === L ? "L" : "?";
+  ok(
+    "outer zBelow(G, C) and nested zBelow(L, D) both hold",
+    order.map(label).join(",") === "G,C,L,D",
+    `order = [${order.map(label).join(", ")}]`
+  );
+}
+
+console.log("# a hoisted layer's z constraint only names its own units");
+{
+  // Both layers have a unit named "x". The nested zAbove(x, y) must order the
+  // nested x over the nested y, and leave the outer x where it was.
+  const X0 = rect().name("x");
+  const Y0 = rect().name("y0");
+  const X1 = rect().name("x");
+  const Y1 = rect().name("y");
+  const nested = Layer([X1, Y1]).relate((c: any) => [Constraint.zAbove(c.x, c.y)]);
+  const layerNode = Layer([X0, Y0, nested]).relate((c: any) => [
+    Constraint.zAbove(c.x, c.y0),
+  ]);
+  const order = await paintOrder(layerNode);
+  const label = (n: any) =>
+    n === X0 ? "X0" : n === Y0 ? "Y0" : n === X1 ? "X1" : n === Y1 ? "Y1" : "?";
+  ok(
+    "nested constraint is scoped to the nested layer's units",
+    order.map(label).join(",") === "Y0,X0,Y1,X1",
+    `order = [${order.map(label).join(", ")}]`
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 declare const process: { exit(code: number): never };
 if (failed > 0) process.exit(1);
