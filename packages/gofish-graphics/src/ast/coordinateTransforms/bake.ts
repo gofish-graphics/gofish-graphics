@@ -131,7 +131,12 @@ export const flattenLayout = (
 //  2. **Draw order.** Each transparent node orders its own children with the
 //     shared rule (`orderChildrenForPaint`) before descending into them, so
 //     `layer` is a *transparent* operator here: it contributes a translate/scale
-//     and its z-order constraints.
+//     and its z-order constraints. A boundary that paints its children in turn
+//     (`coord`, `box`, `enclose`, `offset`, `arrow`) asks the same rule for
+//     their order when it lowers them, so a z constraint that parts inside a
+//     boundary still takes effect. The compositors have no such order (they
+//     paint one combined result) and throw if a z constraint parts at them
+//     (`assertNoPaintOrder`).
 //
 // TODO: like `flattenLayout`, a baked entry still references its source node as the
 // renderer; the end-state (#75) is self-contained primitives (`DisplayItem`).

@@ -100,6 +100,26 @@ between those two children of L, each ordered as a whole. If they lie in the sam
 child, the constraint is pushed down to the node below where they part. A name that
 names a child itself means that whole child.
 
+The node where two operands part can be any node, not only a plain layer: a `coord`,
+an `enclose`, an `arrow`, or a `box` layer. So every place that paints a node's
+children gets their order from `orderChildrenForPaint`, never from the raw children
+array: the bake walks, `coord`'s own lowering, `lowerChildrenOffset` (behind `enclose`,
+`offset` and `arrow`), and `bakeChildren` (behind `box`). A constraint pushed down into
+any of them takes effect there, and a boundary that declares its own constraints (a
+`box` layer's `.relate()`) resolves them when it orders its children. Before
+[#982](https://github.com/gofish-graphics/gofish-graphics/issues/982) settled this, a
+`coord` or `enclose` lowered its children in array order, and a constraint that parted
+inside one did nothing.
+
+The compositors (`over` / `atop` / `in` / `out` / `xor` / `mask`) are the one
+exception, and the operator defines it. A compositor paints one result combined from
+its first child (the source, or the mask) and its second (the destination, or the
+content), so the index of a child names its role, and there is no paint order between
+the two to change. A compositor calls `assertNoPaintOrder` instead, which resolves the
+compositor's own constraints and throws, naming the constraints, if any z constraint
+parts at it. The relational nodes (`connect`, `tween`) paint none of their children
+(their children are refs, which draw nothing), so they never ask for an order.
+
 Names are looked up with the same rule as every other name: through any node that is
 not a component, and never into a `createMark` component (see
 [Names and scoping](/internals/core/names-and-scoping)). So an operand inside a
@@ -176,7 +196,7 @@ which the render entry maps over directly.
 **`bakeChildren` — the same flatten, reused by boundaries.** `bake`'s per-transparent-layer
 children-flatten (the z-order resolution + transform composition) is factored into an
 exported `bakeChildren(node, translate, scale)`. A pure translate-only boundary
-(`box`/`frame`, `offset`, `enclose`) calls it on its _own_ subtree, seeded at the
+(`box`/`frame`) calls it on its _own_ subtree, seeded at the
 boundary's absolute translate, and lowers each returned entry at its baked absolute
 transform. This is stage 6d of [#39](https://github.com/gofish-graphics/gofish-graphics/issues/39):
 a translate-only boundary no longer composes its translate into a `toPixel` closure and

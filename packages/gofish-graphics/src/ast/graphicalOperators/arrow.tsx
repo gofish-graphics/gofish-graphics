@@ -6,6 +6,7 @@ import { lowerStyle, withToPixel } from "../displayList/lowerHelpers";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { axisScale } from "../domain";
 import { createNodeOperator } from "../withGoFish";
+import { orderChildrenForPaint } from "../paintOrder";
 import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
 import { bbox, union } from "../../util/bbox";
 
@@ -195,10 +196,12 @@ export const arrow = createNodeOperator(
             style: lowerStyle({ fill: stroke }),
           });
 
-          // Children lower under the same translate.
+          // Children lower under the same translate, in the shared paint
+          // order (#982). Which child is the source and which the target is
+          // read from `node.children` by index; paint order does not change it.
           items.push(
             ...withToPixel(node, composed, () =>
-              node.children.flatMap((c) =>
+              orderChildrenForPaint(node).flatMap((c) =>
                 c.INTERNAL_lower(coordinateTransform)
               )
             )

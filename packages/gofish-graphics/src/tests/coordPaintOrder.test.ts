@@ -18,6 +18,9 @@ import { flattenLayout } from "../ast/coordinateTransforms/bake";
 import { Rect } from "../ast/shapes/rect";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
+import { enclose } from "../ast/graphicalOperators/enclose";
+import { intersect } from "../ast/graphicalOperators/porterDuff";
+import { toDisplayList } from "../ast/displayList/toDisplayList";
 
 let passed = 0;
 let failed = 0;
@@ -68,6 +71,56 @@ async function expectThrows(
   let message = "";
   try {
     await paintOrder(node);
+  } catch (e) {
+    message = (e as Error).message;
+  }
+  ok(
+    title,
+    message !== "" && substrings.every((s) => message.includes(s)),
+    `message = ${JSON.stringify(message)}`
+  );
+}
+
+// Render `node` to a display list and return the marks of `m`, by key, in the
+// order their items appear. This runs the full lowering, so it reaches the
+// bake boundaries (coord, enclose, the compositors) that `flattenLayout` alone
+// treats as a single entry.
+async function lowerOrder(node: any, m: Record<string, any>): Promise<string> {
+  const { items } = await toDisplayList(node, { w: 400, h: 400 });
+  const byUid = new Map(Object.entries(m).map(([k, n]) => [n.uid, k]));
+  const order: string[] = [];
+  const visit = (item: any): void => {
+    const k = byUid.get(item.id);
+    if (k !== undefined && !order.includes(k)) order.push(k);
+    for (const c of item.children ?? []) visit(c);
+  };
+  items.forEach(visit);
+  return order.join(",");
+}
+
+async function expectLowerOrder(
+  title: string,
+  node: any,
+  m: Record<string, any>,
+  expected: string
+): Promise<void> {
+  let got: string;
+  try {
+    got = await lowerOrder(node, m);
+  } catch (e) {
+    got = `threw ${(e as Error).message}`;
+  }
+  ok(title, got === expected, `order = [${got}]`);
+}
+
+async function expectLowerThrows(
+  title: string,
+  node: any,
+  ...substrings: string[]
+): Promise<void> {
+  let message = "";
+  try {
+    await toDisplayList(node, { w: 400, h: 400 });
   } catch (e) {
     message = (e as Error).message;
   }
@@ -260,6 +313,72 @@ console.log("# interleaving one child between parts of another is a cycle");
     "cycle",
     "zBelow(a, x)",
     "zBelow(x, b)"
+  );
+}
+
+console.log("# a constraint pushed down into a coord orders the coord's children");
+{
+  // a and b both lie in the coord, so zAbove(a, b), declared at the outer
+  // layer, parts at the coord. The coord paints its own children, so it must
+  // paint them in that order.
+  const A = rect().name("a");
+  const B = rect().name("b");
+  await expectLowerOrder(
+    "zAbove(a, b) holds inside a coord child",
+    Layer([coord({ transform: polar() }, [A, B])]).relate((c: any) => [
+      Constraint.zAbove(c.a, c.b),
+    ]),
+    { A, B },
+    "B,A"
+  );
+}
+
+console.log("# a constraint pushed down into an enclose orders its children");
+{
+  const A = Rect({ x: 0, y: 0, w: 40, h: 40 }).name("a");
+  const B = Rect({ x: 20, y: 20, w: 40, h: 40 }).name("b");
+  await expectLowerOrder(
+    "zAbove(a, b) holds inside an enclose child",
+    Layer([enclose({}, [A, B])]).relate((c: any) => [
+      Constraint.zAbove(c.a, c.b),
+    ]),
+    { A, B },
+    "B,A"
+  );
+}
+
+console.log("# a bake boundary resolves its own z constraints");
+{
+  // Only a layer can declare constraints (`.relate()` is a layer method), and
+  // a box layer is a bake boundary: it lowers its own children, so it must
+  // resolve its own zAbove(a, b) when it orders them.
+  const A = Rect({ x: 0, y: 0, w: 40, h: 40 }).name("a");
+  const B = Rect({ x: 20, y: 20, w: 40, h: 40 }).name("b");
+  await expectLowerOrder(
+    "a box layer's own zAbove(a, b) orders its children",
+    Layer([
+      Layer({ box: true }, [A, B]).relate((c: any) => [
+        Constraint.zAbove(c.a, c.b),
+      ]),
+    ]),
+    { A, B },
+    "B,A"
+  );
+}
+
+console.log("# a z constraint between a compositor's operands is an error");
+{
+  // intersect paints one result from its source and destination children, so
+  // there is no paint order between them to change.
+  const A = Rect({ x: 0, y: 0, w: 40, h: 40 }).name("a");
+  const B = Rect({ x: 20, y: 20, w: 40, h: 40 }).name("b");
+  await expectLowerThrows(
+    "zAbove(a, b) across intersect's operands throws",
+    Layer([intersect([A, B])]).relate((c: any) => [
+      Constraint.zAbove(c.a, c.b),
+    ]),
+    "zAbove(a, b)",
+    "composites"
   );
 }
 

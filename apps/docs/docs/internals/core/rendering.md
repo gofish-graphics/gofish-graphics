@@ -229,6 +229,13 @@ How the re-walk lands descendants in absolute coordinates splits by boundary kin
 - A **self-drawer** (`connect`, `arrow`) reads its own baked absolute translate
   (`displayTranslate`) to place the geometry it draws from its children's anchors.
 
+Whatever its kind, a boundary that paints its children in turn (`coord`, `box`,
+`enclose`, `offset`, `arrow`) takes their order from `orderChildrenForPaint`, the same
+rule the bake uses, so a z constraint that parts inside a boundary takes effect there.
+A compositor paints one result from a source and a destination child, so it has no
+order to take: it calls `assertNoPaintOrder`, which throws if a z constraint parts at
+it (see [How a layer orders its children](/internals/layout/coord-flattening#how-a-layer-orders-its-children)).
+
 ## The display list IR
 
 The IR type lives in `gofish-ir` (`packages/gofish-ir/src/display-list/schema.ts`) so

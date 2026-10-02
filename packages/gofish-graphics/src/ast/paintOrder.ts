@@ -11,10 +11,18 @@ import type { ZOrderConstraint } from "./constraints/zorder";
 
 /**
  * Paint-order resolution: the order a node paints its DIRECT children in. The
- * one rule behind every bake walk (the root `bake`, `bakeChildren`, and the
- * coord-local `flattenLayout`), so z-order is honored identically inside and
- * outside a coordinate transform. Each walk recurses one node at a time, so a
- * node's order never reaches past its own children (#982).
+ * one rule behind every place that paints a node's children: the bake walks
+ * (the root `bake`, `bakeChildren`, and the coord-local `flattenLayout`) and
+ * the bake boundaries that lower their own children (`coord`, and `enclose`,
+ * `offset` and `arrow` through `lowerChildrenOffset`), so z-order is honored
+ * identically inside and outside a boundary. Each of them recurses one node at
+ * a time, so a node's order never reaches past its own children (#982).
+ *
+ * The compositors (`over`, `atop`, `in`, `out`, `xor`, `mask`) are the
+ * exception the operator itself defines: they paint ONE result combined from a
+ * source child and a destination child, so their children have no paint order
+ * to change. They call {@link assertNoPaintOrder} instead, which throws if a z
+ * constraint tries to order them.
  *
  * A `zAbove(a, b)` / `zBelow(a, b)` constraint declared at a layer L is
  * resolved once, when L orders its children. Its operand names are looked up
@@ -125,6 +133,13 @@ function resolveZConstraints(layer: GoFishNode): void {
   partedAt.set(layer, written);
 }
 
+/** The edges that order `node`'s children, after resolving `node`'s own z
+ *  constraints (every caller orders a node before descending into it). */
+const edgesFor = (node: GoFishNode): Edge[] => {
+  resolveZConstraints(node);
+  return [...(edgesAt.get(node)?.values() ?? [])].flat();
+};
+
 const zOf = (child: GoFishAST): number =>
   child instanceof GoFishNode ? (child.getZOrder() ?? 0) : 0;
 
@@ -146,12 +161,11 @@ const describe = (c: ZOrderConstraint): string =>
  */
 export function orderChildrenForPaint(node: GoFishAST): GoFishAST[] {
   if (!(node instanceof GoFishNode) || !node.children) return [];
-  resolveZConstraints(node);
+  const edges = edgesFor(node);
   const children: GoFishAST[] = node.children;
   const n = children.length;
   if (n < 2) return children;
 
-  const edges = [...(edgesAt.get(node)?.values() ?? [])].flat();
   const zKey = children.map(zOf);
   if (edges.length === 0 && zKey.every((z) => z === 0)) return children;
 
@@ -229,4 +243,24 @@ export function orderChildrenForPaint(node: GoFishAST): GoFishAST[] {
     );
   }
   return result;
+}
+
+/**
+ * For a node that paints one result combined from its children (a compositor:
+ * `over`, `atop`, `in`, `out`, `xor`, `mask`), where each child's index names
+ * its role rather than its paint order. Resolves the node's own z constraints
+ * like {@link orderChildrenForPaint}, then throws if any z constraint orders
+ * the node's children: there is no paint order between them to change.
+ */
+export function assertNoPaintOrder(node: GoFishNode): void {
+  const edges = edgesFor(node);
+  if (edges.length === 0) return;
+  const named = new Set(edges.map(({ constraint }) => describe(constraint)));
+  throw new Error(
+    `z-order constraints ${[...named].join(", ")} order the children of ` +
+      `${childNameKey(node) ?? `a "${node.type}" node`}, which composites ` +
+      `them into one result rather than painting them in turn. Its children ` +
+      `are its operands (source first, destination second), so they have no ` +
+      `paint order to change. Order the composited node as a whole instead.`
+  );
 }

@@ -9,7 +9,11 @@ import type { ConstraintRef } from "./shared";
  * These do not position; they only constrain paint order. They are resolved
  * by `orderChildrenForPaint` (paintOrder.ts), which orders the layer's direct
  * children that contain `a` and `b`, or pushes the constraint down into the
- * one child that contains both — see
+ * one child that contains both. Any node that paints its children, a bake
+ * boundary such as `coord` or `enclose` included, orders them through the same
+ * function; a compositor's two operands have no paint order, so a constraint
+ * between them throws. See
+ * apps/docs/docs/internals/layout/coord-flattening.md and
  * apps/docs/docs/internals/design/constraint-semantics.md.
  *
  * `zBelow(a, b)` is equivalent to `zAbove(b, a)`; both are provided so the

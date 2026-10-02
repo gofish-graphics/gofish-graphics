@@ -79,7 +79,8 @@ import {
 // A layer's `Constraint.zAbove` / `zBelow` constraints order its direct
 // children (`orderChildrenForPaint` in paintOrder.ts): each operand lifts to
 // the child that contains it, and a constraint whose operands share a child is
-// pushed down into that child's own order.
+// pushed down into that child's own order, whatever kind of node the child is
+// (every node that paints its children orders them through the same function).
 
 /** Find every relational-mark connector node (tagged `__relationalOperands`
  *  by `createRelationalMark`, chart.ts) anywhere in `node`'s subtree that
