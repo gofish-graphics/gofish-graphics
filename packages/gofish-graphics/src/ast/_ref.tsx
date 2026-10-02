@@ -253,6 +253,15 @@ export class GoFishRef {
     );
   }
 
+  /** {@link Placeable.spaceOn}. A ref reports no space for its parent's
+   *  placement: its position is reconciled against its target in `layout`,
+   *  never seated at the parent's free-child origin (#773). Defined, not left
+   *  absent, so the chainable ref proxy passes the probe through instead of
+   *  reading `spaceOn` as a path segment. */
+  public spaceOn(_dir: Direction): UnderlyingSpace | undefined {
+    return undefined;
+  }
+
   public layout(_size: Size, _scales?: Size<AxisScale | undefined>): Placeable {
     if (!this.selectedNode) {
       throw new Error("Selected node not found");

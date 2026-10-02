@@ -19,13 +19,15 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   hasBaseline,
+  isBaselineMagnitude,
   isCONTINUOUS,
+  isPOSITION,
   isUNDEFINED,
 } from "../underlyingSpace";
 import { getMeasure, getValue, isValue } from "../data";
 import * as Monotonic from "../../util/monotonic";
 import { computeSize, foldFinite } from "../../util";
-import { axisScale } from "../domain";
+import { axisScale, measureOrigin, pxOf } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
@@ -548,6 +550,37 @@ export const layer = createNodeOperatorSequential(
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
 
+          // Where a free child's baseline goes on each axis (#773). A free
+          // child (a baseline magnitude, e.g. a rect with a data `h`) has no
+          // position of its own; its baseline stands for the measure's origin,
+          // so a signed extent grows from the axis's 0 on both sides. When
+          // this layer is ANCHORED on the axis (its own space, or the stash it
+          // self-scales, is a POSITION) its local frame is the frame of the
+          // data→pixel map it holds, so the origin's pixel is
+          // `pxOf(map, origin)`. A free layer is itself seated at its parent's
+          // origin, so its children stay at its local 0 (undefined here):
+          // applying the map again would count the offset twice. Children that
+          // are themselves anchored share this layer's frame and stay at 0.
+          const freeOrigin: [number | undefined, number | undefined] = [
+            0 as const,
+            1 as const,
+          ].map((axis) => {
+            const own = selfScaledSpaces[axis] ?? space?.[axis];
+            const map = effectivePosScales[axis];
+            if (own === undefined || map === undefined || !isPOSITION(own))
+              return undefined;
+            return pxOf(map, measureOrigin(own.measure));
+          }) as [number | undefined, number | undefined];
+          const baselineFor = (
+            cp: (typeof childPlaceables)[number],
+            axis: 0 | 1
+          ): number => {
+            const s = cp.spaceOn?.(axis);
+            return s !== undefined && isBaselineMagnitude(s)
+              ? (freeOrigin[axis] ?? 0)
+              : 0;
+          };
+
           const childPlaceables: ReturnType<
             (typeof children)[number]["layout"]
           >[] = new Array(children.length);
@@ -619,8 +652,16 @@ export const layer = createNodeOperatorSequential(
               axisScale(childScaleFactors[1], childMaps[1]),
             ]);
             if (!constrainedChildren.has(i)) {
-              childPlaceable.place("x", 0, "baseline");
-              childPlaceable.place("y", 0, "baseline");
+              childPlaceable.place(
+                "x",
+                baselineFor(childPlaceable, 0),
+                "baseline"
+              );
+              childPlaceable.place(
+                "y",
+                baselineFor(childPlaceable, 1),
+                "baseline"
+              );
             }
             childPlaceables[i] = childPlaceable;
           };
@@ -732,7 +773,8 @@ export const layer = createNodeOperatorSequential(
               effectivePosScales,
               gridTracks,
               dataPositioned,
-              rigid
+              rigid,
+              freeOrigin
             );
 
             // Place any child the constraints left unplaced at the layer's
@@ -741,7 +783,11 @@ export const layer = createNodeOperatorSequential(
             // constrained positions is laid out after this (see
             // `relateOrder`), not by a re-layout pass here.
             for (const cp of childPlaceables) {
-              if (cp) placeUnplacedChild(cp);
+              if (cp)
+                placeUnplacedChild(cp, "baseline", [
+                  baselineFor(cp, 0),
+                  baselineFor(cp, 1),
+                ]);
             }
           } else {
             // Default layer behavior: place all children at (0, 0)

@@ -38,6 +38,12 @@ export type ConstraintRef = { readonly name: string };
  *  single {@link AxisScale} carrier. */
 export type ConstraintPosScales = [AxisMap | undefined, AxisMap | undefined];
 
+/** Per-axis pixel at which a layer seats the baselines of its free (baseline
+ *  magnitude) children: the measure origin under the layer's data→pixel map
+ *  (`pxOf(map, measureOrigin(...))`, #773). `undefined` where the layer is not
+ *  anchored on the axis — free children then stay at the layer's local 0. */
+export type FreeOrigin = [number | undefined, number | undefined];
+
 /** Convert axis name to dimension index (0 = x, 1 = y) */
 export const axisIndex = (axis: Axis): 0 | 1 => (axis === "x" ? 0 : 1);
 

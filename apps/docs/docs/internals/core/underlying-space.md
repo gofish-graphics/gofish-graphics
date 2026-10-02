@@ -678,13 +678,30 @@ the same solver entrypoint. An incompatible same-solve interval + point
 of letting one silently yield to the other.
 
 Placement-time alignment dispatches on the same resolution. `align` emits
-relations between child anchors; it no longer chooses an absolute fallback
-baseline for an otherwise-floating system. If no explicit `position` (point or
-interval), self-placement, or other strong pin fixes a connected component, the
-solver
-normalizes that component so its minimum solved coordinate is `0`. A user who
-needs the aligned system to appear at a particular place must say so explicitly
-with a placement constraint.
+relations between child anchors. It pins a component in one case only: the
+**free-child origin** (#773). A free child (a baseline magnitude, such as a
+rect with a data `h`) has a baseline that stands for the measure's origin, the
+value a signed `h`/`w` grows from. When the owning layer is anchored on the axis
+(its own space, or the stash it self-scales, is a POSITION), its local frame is
+the frame of the data→pixel map it holds, and that origin has a pixel:
+`pxOf(map, measureOrigin(measure))`. The layer computes this per axis
+(`freeOrigin`) and uses it in three places: phase-1 placement of an
+unconstrained free child, `placeUnplacedChild` after the solve, and `align`'s
+no-source branch, which pins the shared `baseline` of a component with a free
+operand there instead of letting it float. So a bar with value −35 on an axis
+niced to `[−40, 50]` grows from the 0 tick, not from the rounded −40. A free
+layer is itself seated at its parent's origin, so it leaves its own children at
+local 0 (applying the map again would count the offset twice). Anchored children
+share the layer's frame and stay at 0, as the next paragraph explains.
+`measureOrigin` (`domain.ts`) returns 0 for every measure for now; the origin is
+the additive identity of the measure's algebraic structure, and measures do not
+carry that structure yet.
+
+Otherwise, if no explicit `position` (point or interval), self-placement, or
+other strong pin fixes a connected component, the solver normalizes that
+component so its minimum solved coordinate is `0`. A user who needs the aligned
+system to appear at a particular place must say so explicitly with a placement
+constraint.
 
 That normalization is also what keeps data-positioned children safe. A faceted
 scatter panel over `[1955, 2010]`, anchored to the shared y data scale, should
