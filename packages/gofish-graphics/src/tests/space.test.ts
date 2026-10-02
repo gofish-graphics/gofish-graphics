@@ -16,6 +16,8 @@ import {
   isBaselineMagnitude,
   anchorAt,
   spacePlacement,
+  continuousExtentInterval,
+  baselineSpan,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
@@ -55,9 +57,7 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   // took these for magnitudes and silently forgot the clash.)
   const dollars0 = POSITION(interval(0, 100), "dollars");
   const units0 = POSITION(interval(0, 50), "units");
-  const msg = throws(() =>
-    unionChildSpaces([onY(dollars0), onY(units0)], 1)
-  );
+  const msg = throws(() => unionChildSpaces([onY(dollars0), onY(units0)], 1));
   ok(
     "overlay of two origin-0 data axes with clashing measures THROWS",
     msg !== null && /different measures/.test(msg),
@@ -161,6 +161,36 @@ console.log("# space: an empty-ORDINAL sibling vetoes SIZE self-scaling");
   ok(
     "SIZE + UNDEFINED overlay stays a free baseline magnitude",
     isBaselineMagnitude(magOnly)
+  );
+}
+
+console.log("# space: a free extent keeps its ascent and descent (#773)");
+{
+  // A group of signed bars (values 30 and −20): the overlay keeps each side of
+  // the baseline, per side, with the σ-affine intercepts intact.
+  const up = SIZE(M.linear(30, 4));
+  const down = SIZE(M.ZERO, undefined, M.linear(20, 6));
+  const u = unionChildSpaces([onY(up), onY(down)], 1) as CONTINUOUS_TYPE;
+  ok("signed overlay stays a free baseline magnitude", isBaselineMagnitude(u));
+  ok(
+    "ascent is the max of the ascents, descent the max of the descents",
+    u.ascent.run(2) === 64 && u.descent.run(2) === 46
+  );
+  ok("width is ascent + descent", u.width.run(2) === 110);
+  ok(
+    "the extent interval spans both sides of the baseline",
+    JSON.stringify(continuousExtentInterval(u)) ===
+      JSON.stringify(interval(-26, 34))
+  );
+  const span = baselineSpan(-20) as CONTINUOUS_TYPE;
+  ok(
+    "baselineSpan of a negative length is all descent",
+    span.ascent.run(1) === 0 && span.descent.run(1) === 20
+  );
+  ok(
+    "anchorAt puts the baseline at the coordinate",
+    JSON.stringify(anchorAt(u, 100).dataDomain) ===
+      JSON.stringify(interval(74, 134))
   );
 }
 

@@ -113,6 +113,10 @@ export function piecewise(pieces: Piece[]): Linear | Piecewise {
   };
 }
 
+/** The zero claim `0σ + 0`: the extent of nothing (e.g. the descent of an
+ *  extent that sits wholly above its baseline). */
+export const ZERO: Linear = linear(0, 0);
+
 export const isLinear = (x: Monotonic): x is Linear => {
   return x.kind === "linear";
 };

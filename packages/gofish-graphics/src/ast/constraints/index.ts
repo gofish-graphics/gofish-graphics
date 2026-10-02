@@ -30,6 +30,7 @@ import {
   childNameKey,
   isPlacedOn,
   type ConstraintPosScales,
+  type FreeOrigin,
   type ConstraintRef,
 } from "./shared";
 import {
@@ -333,7 +334,8 @@ export function applyConstraints(
   posScales?: ConstraintPosScales,
   gridTracks?: [TrackLayout, TrackLayout],
   dataPositioned?: [Set<string>, Set<string>],
-  rigid?: Map<string, RigidAttachment>
+  rigid?: Map<string, RigidAttachment>,
+  freeOrigin?: FreeOrigin
 ): void {
   const placement = constraints.filter(
     (
@@ -368,7 +370,8 @@ export function applyConstraints(
     posScales,
     gridTracks,
     dataPositioned,
-    rigid
+    rigid,
+    freeOrigin
   );
 
   if (prePlaced) {

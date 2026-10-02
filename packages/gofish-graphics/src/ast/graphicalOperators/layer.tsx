@@ -19,13 +19,16 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   hasBaseline,
+  isBaselineMagnitude,
   isCONTINUOUS,
+  isPOSITION,
   isUNDEFINED,
+  scopeRootBaseline,
 } from "../underlyingSpace";
 import { getMeasure, getValue, isValue } from "../data";
 import * as Monotonic from "../../util/monotonic";
 import { computeSize, foldFinite } from "../../util";
-import { axisScale } from "../domain";
+import { axisScale, measureOrigin, posFn } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
@@ -52,6 +55,7 @@ import {
   childNameKey,
   internalName,
   type ConstraintPosScales,
+  type FreeOrigin,
 } from "../constraints/shared";
 import { anchorOffset } from "../constraints/placementProgramLowerer";
 import {
@@ -377,7 +381,11 @@ export const layer = createNodeOperatorSequential(
               // solved by the ancestor scope, its interior is a fresh scope
               // resolved against that box.
               if (hasBaseline(composed)) {
-                selfScaledSpaces[axis] = SIZE(composed.width, composed.measure);
+                selfScaledSpaces[axis] = SIZE(
+                  composed.ascent,
+                  composed.measure,
+                  composed.descent
+                );
               }
               resolved[axis] = SIZE(
                 Monotonic.linear(getValue(dsize)!, 0),
@@ -544,6 +552,49 @@ export const layer = createNodeOperatorSequential(
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
 
+          // Where a free child's baseline goes on each axis (#773). A free
+          // child (a baseline magnitude, e.g. a rect with a data `h`) has no
+          // position of its own; its baseline stands for the measure's origin,
+          // so a signed extent (ascent above, descent below) grows from the
+          // axis's 0 on both sides. Three cases, by this layer's own space:
+          //  - ANCHORED (its space, or the stash it self-scales, is a
+          //    POSITION): its local frame is the frame of the data→pixel map
+          //    it holds, so the origin's pixel is `pxOf(map, origin)`.
+          //  - a self-scaled FREE stash: it roots its own σ-scope like the
+          //    chart root (`scopeRootBaseline`): `descent·σ`.
+          //  - FREE: the layer is itself a baseline magnitude, seated by its
+          //    parent at its own baseline, so its free children share that
+          //    baseline: local 0. Applying a map here would count the offset
+          //    twice.
+          // Otherwise (no continuous space on the axis) there is no origin.
+          // Unconstrained free children are placed here; constrained ones get
+          // it from the solver's free-origin fallback (`solveAxisProblem`).
+          // Children that are themselves anchored share this layer's frame and
+          // stay at 0.
+          const originOn = (axis: 0 | 1): number | undefined => {
+            const stash = selfScaledSpaces[axis];
+            const own = stash ?? space?.[axis];
+            if (own === undefined) return undefined;
+            if (isPOSITION(own))
+              return posFn(effectivePosScales[axis])?.(
+                measureOrigin(own.measure)
+              );
+            if (!isBaselineMagnitude(own)) return undefined;
+            return stash !== undefined
+              ? scopeRootBaseline(stash, childScaleFactors[axis])
+              : 0;
+          };
+          const freeOrigin: FreeOrigin = [originOn(0), originOn(1)];
+          const baselineFor = (
+            cp: (typeof childPlaceables)[number]
+          ): [number, number] =>
+            [0, 1].map((axis) => {
+              const s = cp.spaceOn?.(axis as 0 | 1);
+              return s !== undefined && isBaselineMagnitude(s)
+                ? (freeOrigin[axis] ?? 0)
+                : 0;
+            }) as [number, number];
+
           const childPlaceables: ReturnType<
             (typeof children)[number]["layout"]
           >[] = new Array(children.length);
@@ -615,8 +666,9 @@ export const layer = createNodeOperatorSequential(
               axisScale(childScaleFactors[1], childMaps[1]),
             ]);
             if (!constrainedChildren.has(i)) {
-              childPlaceable.place("x", 0, "baseline");
-              childPlaceable.place("y", 0, "baseline");
+              const [bx, by] = baselineFor(childPlaceable);
+              childPlaceable.place("x", bx, "baseline");
+              childPlaceable.place("y", by, "baseline");
             }
             childPlaceables[i] = childPlaceable;
           };
@@ -728,23 +780,18 @@ export const layer = createNodeOperatorSequential(
               effectivePosScales,
               gridTracks,
               dataPositioned,
-              rigid
+              rigid,
+              freeOrigin
             );
 
-            // Place any child the constraints left unplaced at the layer's
-            // baseline origin — consistent with the phase-1 baseline placement
-            // of unconstrained children. A drawing clause that reads the
+            // Place any child the constraints left unplaced at its baseline
+            // origin (`baselineFor`), the same rule as the phase-1 placement in
+            // `layoutChild`. A layer without constraints needs no step here:
+            // phase 1 already placed every child. A drawing clause that reads the
             // constrained positions is laid out after this (see
             // `relateOrder`), not by a re-layout pass here.
             for (const cp of childPlaceables) {
-              if (cp) placeUnplacedChild(cp);
-            }
-          } else {
-            // Default layer behavior: place all children at (0, 0)
-            for (const cp of childPlaceables) {
-              if (!cp) continue;
-              cp.place("x", 0);
-              cp.place("y", 0);
+              if (cp) placeUnplacedChild(cp, "baseline", baselineFor(cp));
             }
           }
 

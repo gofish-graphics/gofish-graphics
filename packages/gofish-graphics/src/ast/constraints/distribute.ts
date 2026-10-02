@@ -275,6 +275,10 @@ export function distributeSpaceFold(
     });
   };
 
+  // Along the chain each child contributes its total extent (ascent +
+  // descent), and the composed extent sits above the chain's baseline.
+  // TODO(#773 follow-up): a signed stack (diverging bars, Likert) should keep
+  // a descent instead of summing magnitudes.
   if (dataDriven) return SIZE(composeSize(), childMeasure);
   if (namedKeys.length > 0)
     return ORDINAL(namedKeys, opts.measure, opts.anonymous);

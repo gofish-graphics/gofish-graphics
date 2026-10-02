@@ -115,6 +115,10 @@ the same algebra the layout engine composes constraints in (see
 | `adds(f, k)` | add a constant offset | `f` is not `Unknown`          |
 | `max(...fs)` | pointwise maximum     | no argument is `Unknown`      |
 
+`ZERO` is the shared zero claim `0σ + 0`, the default descent of an extent
+that sits wholly above its baseline (see
+[Underlying Space](/internals/core/underlying-space)).
+
 `max` is the structural one: the pointwise max of lines is their envelope, so it simply
 **unions the pieces**. `add` stays closed because the sum of two envelopes is again an
 envelope — `(max_i aᵢ) + (max_j bⱼ) = max_{i,j}(aᵢ + bⱼ)` — i.e. the pairwise sums of the

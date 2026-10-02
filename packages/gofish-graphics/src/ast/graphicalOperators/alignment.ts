@@ -17,6 +17,8 @@ import {
   spaceMeasure,
   spacePlacement,
   continuousExtentInterval,
+  continuousInterval,
+  type CONTINUOUS_TYPE,
   UnderlyingSpace,
 } from "../underlyingSpace";
 import type { Measure } from "../data";
@@ -91,8 +93,9 @@ export function unionChildSpaces(
     conts.every((s) => spacePlacement(s) === "free")
   ) {
     return SIZE(
-      Monotonic.max(...conts.map((s) => s.width)),
-      forgetAllMeasures(conts.map((s) => s.measure))
+      Monotonic.max(...conts.map((s) => s.ascent)),
+      forgetAllMeasures(conts.map((s) => s.measure)),
+      Monotonic.max(...conts.map((s) => s.descent))
     );
   }
 
@@ -143,7 +146,15 @@ export function resolveAlignmentSpace(
     alignment === "middle" ||
     conts.some((s) => spacePlacement(s) === "conflict");
 
-  const union = Interval.unionAll(...conts.map(continuousExtentInterval));
+  // Baseline alignment lines the children up at their baselines, so each
+  // extends `[−descent, ascent]` about the shared one. Any other alignment
+  // lines up a box edge or center, so each child is its whole box `[0, width]`
+  // and the union spans the widest. An anchored child keeps its own interval.
+  const extent = (s: CONTINUOUS_TYPE) =>
+    alignment === "baseline"
+      ? continuousExtentInterval(s)
+      : (continuousInterval(s) ?? Interval.interval(0, s.width.run(1)));
+  const union = Interval.unionAll(...conts.map(extent));
 
   return drop
     ? DIFFERENCE(Interval.width(union), measure)

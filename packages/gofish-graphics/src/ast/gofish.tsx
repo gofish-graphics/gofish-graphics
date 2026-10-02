@@ -28,6 +28,7 @@ import {
   hasBaseline,
   isBaselineMagnitude,
   isCONTINUOUS,
+  scopeRootBaseline,
   niceContinuous,
   spaceMeasure,
   type UnderlyingSpace,
@@ -750,12 +751,30 @@ export async function layout(
   // overhangs the far side, e.g. the pulley diagram). The pin uses `pinAnchor`,
   // not the write-once `place()`, so it lands even when the root self-placed (a
   // diagram with its own root transform) — `place()` short-circuits a placed axis.
-  const placeRoot = (axis: "x" | "y", value: number, shrinkToFit: boolean) =>
-    shrinkToFit
-      ? child.pinAnchor(axis, value, "min")
-      : child.place(axis, value, "baseline");
-  placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
-  placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
+  //
+  // A free (baseline-magnitude) root fits `ascent + descent` to the canvas, so
+  // its baseline sits `descent·σ` above the canvas's low edge (#773,
+  // `scopeRootBaseline`).
+  const placeRoot = (axis: 0 | 1) => {
+    const name = axis === 0 ? "x" : "y";
+    const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
+    // Shrink-to-fit pins the content's `min` edge, which already includes any
+    // descent: adding `descent·σ` there would count it twice (#574).
+    if ((axis === 0 ? w : h) === undefined)
+      child.pinAnchor(name, offset, "min");
+    else
+      child.place(
+        name,
+        offset +
+          scopeRootBaseline(
+            axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY,
+            rootScaleFactors[axis]
+          ),
+        "baseline"
+      );
+  };
+  placeRoot(0);
+  placeRoot(1);
 
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the

@@ -117,7 +117,11 @@ export function scaleBaselineMagnitude(
   scale: number
 ): UnderlyingSpace {
   return isBaselineMagnitude(space) && scale !== 1
-    ? SIZE(Monotonic.smul(scale, space.width), space.measure)
+    ? SIZE(
+        Monotonic.smul(scale, space.ascent),
+        space.measure,
+        Monotonic.smul(scale, space.descent)
+      )
     : space;
 }
 

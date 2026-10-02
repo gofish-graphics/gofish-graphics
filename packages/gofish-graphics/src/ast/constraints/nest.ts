@@ -112,9 +112,11 @@ export function nestedSpace(
   // parent spread's auto-fit solves a scale factor against it); data-positioned
   // or origin-less content keeps `outer`.
   if (isBaselineMagnitude(innerSpace)) {
+    // Padding goes on both sides of the inner extent, about its baseline.
     return SIZE(
-      Monotonic.adds(innerSpace.width, 2 * padding),
-      innerSpace.measure
+      Monotonic.adds(innerSpace.ascent, padding),
+      innerSpace.measure,
+      Monotonic.adds(innerSpace.descent, padding)
     );
   }
   return outerSpace;

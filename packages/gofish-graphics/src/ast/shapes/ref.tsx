@@ -1,5 +1,5 @@
 import { GoFishRef } from "../_ref";
-import { GoFishNode } from "../_node";
+import { GoFishNode, type Placeable } from "../_node";
 import { isToken, Token } from "../createName";
 
 /**
@@ -35,6 +35,16 @@ export type RefProxy = GoFishRef & {
  * before this lookup. Children named "path" need the array form.
  */
 const SAMPLE_REF = new GoFishRef({ selection: ["__sample__"] });
+const PLACEABLE_OPTIONAL_KEYS: readonly (keyof Placeable)[] = [
+  "transform",
+  "projectedTranslate",
+  "localAnchor",
+  "setExtent",
+  "pinAnchor",
+  "setSizeOnly",
+  "spaceOn",
+  "pitchAnchorY",
+];
 const RESERVED_KEYS: ReadonlySet<string> = new Set<string>([
   // Instance fields of GoFishRef (public + private)
   ...(Reflect.ownKeys(SAMPLE_REF).filter(
@@ -55,6 +65,10 @@ const RESERVED_KEYS: ReadonlySet<string> = new Set<string>([
   // Thenable-detection probe — must passthrough to undefined so the proxy
   // is never mistaken for a Promise.
   "then",
+  // Optional Placeable members a ref does not implement. Layout probes them on
+  // whatever a child's `layout()` returns (the proxy, for a chainable ref), so
+  // they must read `undefined`, not a path segment.
+  ...PLACEABLE_OPTIONAL_KEYS,
 ]);
 
 const proxyFor = (selection: (Token | string | number)[]): RefProxy => {

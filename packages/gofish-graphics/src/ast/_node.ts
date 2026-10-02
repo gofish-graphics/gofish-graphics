@@ -185,7 +185,8 @@ export type Placeable = {
   pitchAnchorY?: "start" | "middle" | "end" | "baseline";
 };
 
-/** Place a child at `(0, 0)` on whichever axes it hasn't already resolved a
+/** Place a child at `at` (default `(0, 0)`; layer passes its free-child
+ *  origin, #773) on whichever axes it hasn't already resolved a
  *  position for — the "fresh vs. already-placed" child rule shared by every
  *  operator that lays out already-placed operands (e.g. a `ref` whose
  *  translate was reconciled against its LCA during its own `layout()`)
@@ -201,10 +202,11 @@ export type Placeable = {
  *  reuses it verbatim rather than re-deriving the rule. */
 export function placeUnplacedChild(
   child: Placeable,
-  anchor: Anchor = "baseline"
+  anchor: Anchor = "baseline",
+  at: [number, number] = [0, 0]
 ): void {
-  if (child.dims[0].min === undefined) child.place("x", 0, anchor);
-  if (child.dims[1].min === undefined) child.place("y", 0, anchor);
+  if (child.dims[0].min === undefined) child.place("x", at[0], anchor);
+  if (child.dims[1].min === undefined) child.place("y", at[1], anchor);
 }
 
 // `scales` is the per-axis data→pixel affine scale handed down (the single
