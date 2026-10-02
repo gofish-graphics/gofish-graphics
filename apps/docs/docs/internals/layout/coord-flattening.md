@@ -94,14 +94,15 @@ paints. That holds for a user's `zAbove` / `zBelow` and for the relational-mark
 default (`zBelow(connector, operand)` in `layer.tsx`) when an operand is itself a
 plain layer, e.g. a `layer([...])` mark or a `time.history`.
 
-Hoisting a layer does not drop its own z-order. If a hoisted layer has `zAbove` /
-`zBelow` constraints of its own, the flatten returns them with the range of paint units
-that layer painted (they are contiguous, since the walk is depth-first), and the sort
-adds their edges too, resolving their names only inside that range. The case that needs
-this is a chart that `.layer()`s a relational mark and then a nested chart with its own
-`.layer(line(...))`: the outer `zBelow` makes the outer layer hoist through the nested
-chart, and before this the nested chart's default `zBelow(line, dots)` was lost, so its
-line painted over its dots. The sort repeatedly emits the smallest unit that has
+A hoisted layer keeps its own `zAbove` / `zBelow` constraints. The flatten returns
+them with the range of paint units that layer painted (they are contiguous, since the
+walk is depth-first), and the sort adds their edges too, resolving their names only
+inside that range. This is what keeps a nested chart's relational line under its dots
+when an enclosing layer has z constraints and so hoists through the nested chart. The
+scoping makes up for hoisting; the alternative is to sort each layer among its own
+children ([#982](https://github.com/gofish-graphics/gofish-graphics/issues/982)).
+
+The sort repeatedly emits the smallest unit that has
 no unsatisfied edge left pointing at it, where "smallest" means lowest `(zOrder,
 index)`. Ordering the unconstrained majority by `(zOrder, index)` is what makes the
 result identical to the plain sort when there are no constraints at all.

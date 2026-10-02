@@ -44,7 +44,9 @@ type PaintItem<P = undefined> = {
 /** A layer's `zAbove`/`zBelow` constraints, scoped to the paint units that
  *  layer painted: `[start, end)` indexes the flattened paint list. A hoisted
  *  plain layer's units are contiguous in that list (the walk is depth-first),
- *  so the range is exactly what the layer paints. */
+ *  so the range is exactly what the layer paints. This scoping is a shortcut
+ *  that makes up for hoisting; #982 proposes sorting each layer among its own
+ *  children instead. */
 type ScopedZConstraints = {
   constraints: ZOrderConstraint[];
   start: number;
@@ -74,15 +76,13 @@ const hoistsForZOrder = (node: GoFishNode): boolean =>
  * through hoisted layers so a z-order constraint can never change a subtree's
  * orientation (#629).
  *
- * Hoisting makes a layer transparent, but it keeps the layer's z-order: a
- * hoisted layer's own `zAbove`/`zBelow` constraints come back in `scoped`,
- * each limited to the units that layer painted, so they still order its
- * children. (Without this, a relational mark `.layer()`ed in a nested chart
- * lost its default `zBelow` whenever an enclosing layer had z constraints of
- * its own and so hoisted through the nested chart.)
+ * Returns the paint list with the z constraints of the root layer
+ * (`rootConstraints`) and of each hoisted layer, scoped to the units each one
+ * painted.
  */
 function flattenForZOrder<P = undefined>(
   children: GoFishAST[],
+  rootConstraints: ZOrderConstraint[],
   fold?: {
     /** The payload active at the top level (the parent's own payload). */
     seed: P;
@@ -90,12 +90,19 @@ function flattenForZOrder<P = undefined>(
      *  the payload active above it and the accumulated translate to it. */
     onHoist: (payload: P, layer: GoFishNode, accTx: number, accTy: number) => P;
   }
-): { items: PaintItem<P>[]; scoped: ScopedZConstraints[] } {
+): { items: PaintItem<P>[]; groups: ScopedZConstraints[] } {
   const out: PaintItem<P>[] = [];
-  const scoped: ScopedZConstraints[] = [];
+  const groups: ScopedZConstraints[] = [];
   let order = 0;
   walk(children, 0, 0, fold?.seed as P, []);
-  return { items: out, scoped };
+  addGroup(rootConstraints, 0);
+  return { items: out, groups };
+
+  function addGroup(constraints: ZOrderConstraint[], start: number): void {
+    if (constraints.length > 0) {
+      groups.push({ constraints, start, end: out.length });
+    }
+  }
 
   // NB: only translates are accumulated across transparent ancestors. A
   // non-component nested layer that also carries `options.transform.scale`
@@ -147,11 +154,7 @@ function flattenForZOrder<P = undefined>(
           nextPayload,
           name === undefined ? through : [...through, name]
         );
-        // The layer's own z-order goes with its children, scoped to them.
-        const own = zConstraintsOf(child);
-        if (own.length > 0) {
-          scoped.push({ constraints: own, start, end: out.length });
-        }
+        addGroup(zConstraintsOf(child), start);
       } else {
         out.push({
           node: child,
@@ -207,14 +210,9 @@ export function orderChildrenForPaint<P = undefined>(
   const zConstraints = zConstraintsOf(node);
 
   if (zConstraints.length > 0) {
-    // Resolve z WITHIN this layer over its component-granular flattened
-    // subtree: this layer's constraints over every unit, and each hoisted
-    // layer's constraints over the units it painted.
-    const { items, scoped } = flattenForZOrder<P>(children, fold);
-    return topoSortByZOrder(items, [
-      { constraints: zConstraints, start: 0, end: items.length },
-      ...scoped,
-    ]).map((unit) => ({
+    // Resolve z WITHIN this layer over its component-granular flattened subtree.
+    const { items, groups } = flattenForZOrder<P>(children, zConstraints, fold);
+    return topoSortByZOrder(items, groups).map((unit) => ({
       node: unit.node,
       accTranslate: unit.accTranslate,
       payload: unit.payload,
@@ -291,16 +289,12 @@ function topoSortByZOrder<P>(
     out.add(to);
     inDegree[to]++;
   };
+  const lookup = (name: string, start: number, end: number): number[] =>
+    (nameToIndices.get(name) ?? []).filter((i) => i >= start && i < end);
   for (const { constraints, start, end } of groups) {
-    const lookup = (name: string): number[] => {
-      const all = nameToIndices.get(name) ?? [];
-      return start === 0 && end === n
-        ? all
-        : all.filter((i) => i >= start && i < end);
-    };
     for (const c of constraints) {
-      const aIdx = lookup(c.children[0].name);
-      const bIdx = lookup(c.children[1].name);
+      const aIdx = lookup(c.children[0].name, start, end);
+      const bIdx = lookup(c.children[1].name, start, end);
       for (const ai of aIdx) {
         for (const bi of bIdx) {
           // zAbove(a, b): a paints LATER (over b) → edge b → a.

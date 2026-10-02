@@ -34,6 +34,10 @@ function ok(name: string, cond: boolean, detail?: string): void {
   }
 }
 
+// The names of `order`'s nodes, per `m`, joined by commas.
+const labels = (order: any[], m: Record<string, unknown>) =>
+  order.map((n) => Object.keys(m).find((k) => m[k] === n) ?? "?").join(",");
+
 // Lay a coord(polar) subtree out (same passes as coordConfluence) and return
 // the ordered `.node`s that `flattenLayout` emits for the given layer.
 async function paintOrder(layerNode: any): Promise<any[]> {
@@ -60,7 +64,7 @@ console.log("# coord paint order: .zOrder(-1) is honored inside coord (#676)");
   ok(
     "later child with .zOrder(-1) is emitted before its earlier sibling",
     order.length === 2 && order[0] === B && order[1] === A,
-    `order = [${order.map((n) => (n === A ? "A" : n === B ? "B" : "?")).join(", ")}]`
+    `order = [${labels(order, { A, B })}]`
   );
 }
 
@@ -72,11 +76,13 @@ console.log("# coord paint order: plain layer preserves array order (mirror)");
   ok(
     "without zOrder, array order is preserved",
     order.length === 2 && order[0] === A && order[1] === B,
-    `order = [${order.map((n) => (n === A ? "A" : n === B ? "B" : "?")).join(", ")}]`
+    `order = [${labels(order, { A, B })}]`
   );
 }
 
-console.log("# coord paint order: zAbove/zBelow constraints are honored inside coord");
+console.log(
+  "# coord paint order: zAbove/zBelow constraints are honored inside coord"
+);
 {
   // A is first in the array, but zAbove(A, B) means A paints LATER (over B) →
   // flattened order must be [B, A].
@@ -89,7 +95,7 @@ console.log("# coord paint order: zAbove/zBelow constraints are honored inside c
   ok(
     "zAbove(A, B) puts A after B in the flattened output despite array order",
     order.length === 2 && order[0] === B && order[1] === A,
-    `order = [${order.map((n) => (n === A ? "A" : n === B ? "B" : "?")).join(", ")}]`
+    `order = [${labels(order, { A, B })}]`
   );
 }
 
@@ -104,15 +110,10 @@ console.log("# a constraint that names a plain layer orders what it paints");
     (c: any) => [Constraint.zAbove(c.a, c.pair)]
   );
   const order = await paintOrder(layerNode);
-  const label = (n: any) =>
-    n === A ? "A" : n === P1 ? "P1" : n === P2 ? "P2" : "?";
   ok(
     "zAbove(A, pair) paints A over both of the pair's marks",
-    order.length === 3 &&
-      order[0] === P1 &&
-      order[1] === P2 &&
-      order[2] === A,
-    `order = [${order.map(label).join(", ")}]`
+    order.length === 3 && order[0] === P1 && order[1] === P2 && order[2] === A,
+    `order = [${labels(order, { A, P1, P2 })}]`
   );
 }
 
@@ -129,17 +130,17 @@ console.log(
   const G = rect().name("g");
   const D = rect().name("d");
   const L = rect().name("l");
-  const nested = Layer([D, L]).relate((c: any) => [Constraint.zBelow(c.l, c.d)]);
+  const nested = Layer([D, L]).relate((c: any) => [
+    Constraint.zBelow(c.l, c.d),
+  ]);
   const layerNode = Layer([C, G, nested]).relate((c: any) => [
     Constraint.zBelow(c.g, c.c),
   ]);
   const order = await paintOrder(layerNode);
-  const label = (n: any) =>
-    n === C ? "C" : n === G ? "G" : n === D ? "D" : n === L ? "L" : "?";
   ok(
     "outer zBelow(G, C) and nested zBelow(L, D) both hold",
-    order.map(label).join(",") === "G,C,L,D",
-    `order = [${order.map(label).join(", ")}]`
+    labels(order, { C, G, D, L }) === "G,C,L,D",
+    `order = [${labels(order, { C, G, D, L })}]`
   );
 }
 
@@ -151,17 +152,17 @@ console.log("# a hoisted layer's z constraint only names its own units");
   const Y0 = rect().name("y0");
   const X1 = rect().name("x");
   const Y1 = rect().name("y");
-  const nested = Layer([X1, Y1]).relate((c: any) => [Constraint.zAbove(c.x, c.y)]);
+  const nested = Layer([X1, Y1]).relate((c: any) => [
+    Constraint.zAbove(c.x, c.y),
+  ]);
   const layerNode = Layer([X0, Y0, nested]).relate((c: any) => [
     Constraint.zAbove(c.x, c.y0),
   ]);
   const order = await paintOrder(layerNode);
-  const label = (n: any) =>
-    n === X0 ? "X0" : n === Y0 ? "Y0" : n === X1 ? "X1" : n === Y1 ? "Y1" : "?";
   ok(
     "nested constraint is scoped to the nested layer's units",
-    order.map(label).join(",") === "Y0,X0,Y1,X1",
-    `order = [${order.map(label).join(", ")}]`
+    labels(order, { X0, Y0, X1, Y1 }) === "Y0,X0,Y1,X1",
+    `order = [${labels(order, { X0, Y0, X1, Y1 })}]`
   );
 }
 
