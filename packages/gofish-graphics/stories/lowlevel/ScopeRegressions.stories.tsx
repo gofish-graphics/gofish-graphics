@@ -60,23 +60,22 @@ export const EncloseMixed: StoryObj = {
 };
 
 // Bug #3: the same mixed composition inside a layer that carries a z-order
-// (zAbove/zBelow) constraint — which routes the layer through the z-order hoist.
-// The hoist must CARRY the flip scope through each hoisted-through plain layer,
-// so adding the constraint never changes which orientation a subtree lowers
-// under: the bars still grow up, the heatmap still reads top→bottom.
+// (zAbove/zBelow) constraint. Adding the constraint must never change which
+// orientation a subtree lowers under: the bars still grow up, the heatmap still
+// reads top→bottom. (This once failed when z constraints flattened nested
+// plain layers; each layer now orders only its own children, #982.)
 export const ZOrderedMixed: StoryObj = {
   render: () => {
     const container = initializeContainer();
     layer([
-      // Plain nested layers wrapping each subtree: these are what
-      // flattenForZOrder hoists through — the continuous-y bars' scope must be
-      // carried through the hoist so the z-order constraint never changes it.
+      // Plain nested layers wrapping each subtree: the continuous-y bars'
+      // scope must not change when the enclosing layer has a z constraint.
       layer([bars()]).name("barsWrap"),
       layer([heat()]).name("heatWrap"),
     ])
       .relate((c) => [
-        // Position side by side (layout), and add a z-order relation so the
-        // layer takes the z-order hoist path (`hoistWithScope`) at bake time.
+        // Position side by side (layout), and add a z-order relation between
+        // the two wrappers.
         Constraint.distribute({ dir: "x", spacing: 40, anchor: "edge" }, [
           c.barsWrap,
           c.heatWrap,

@@ -134,8 +134,8 @@ export const Default: StoryObj<Args> = {
       //  - RULES: the same fixed-pitch baseline spread as the ridges, marking
       //    a bare rect per month. The rect sits at its row's baseline anchor,
       //    so it registers exactly on the ribbon's zero line. `.zOrder(-1)`
-      //    paints the rules BEHIND the ribbons — visible only outside the
-      //    silhouettes, the classic look.
+      //    on the tier paints the rules BEHIND the ribbons — visible only
+      //    outside the silhouettes, the classic look.
       //  - LABELS: a datumless annotation overlay (a bare mark tier — no
       //    flow), one text per month at literal frame coordinates. This is
       //    deliberate: a spread-laid row normalizes away any extent above or
@@ -157,7 +157,8 @@ export const Default: StoryObj<Args> = {
               h: args.h,
             })
           )
-          .mark(rect({ h: 1, w: args.w, fill: "#999" }).zOrder(-1))
+          .mark(rect({ h: 1, w: args.w, fill: "#999" }))
+          .zOrder(-1)
       )
       .layer(
         layer(

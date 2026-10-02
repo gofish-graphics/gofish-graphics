@@ -7,8 +7,9 @@ import type { ConstraintRef } from "./shared";
  * `zBelow(a, b)`: a paints behind b (under in z; covered by b).
  *
  * These do not position; they only constrain paint order. They are resolved
- * by `layer.tsx`'s render via a topological sort over the children flattened
- * across non-component nested layers — see
+ * by `orderChildrenForPaint` (paintOrder.ts), which orders the layer's direct
+ * children that contain `a` and `b`, or pushes the constraint down into the
+ * one child that contains both — see
  * apps/docs/docs/internals/design/constraint-semantics.md.
  *
  * `zBelow(a, b)` is equivalent to `zAbove(b, a)`; both are provided so the

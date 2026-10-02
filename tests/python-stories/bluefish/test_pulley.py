@@ -1,10 +1,9 @@
 """Equivalent of bluefish/Pulley.stories.tsx — Bluefish/Pulley.
 
-Port of the Bluefish pulley diagram, structured as nested layer tiers (see
-notes/nested-layer-tiers.md):
-  tier 1 — an inner layer that fully places the shapes;
-  tier 2 — the ropes (`connect`), which read those placed shapes;
-  tier 3 — the dimension labels, placed beside the ropes.
+Port of the Bluefish pulley diagram, structured as two nested layer tiers:
+  tier 1 — an inner layer that places the shapes, then draws the ropes
+           between them as drawing clauses of its own `.relate()`;
+  tier 2 — the dimension labels, placed beside the ropes.
 
 Exercises four features added in this PR's Python wrapper port:
   - `polygon` (the trapezoidal weight glyphs)
@@ -17,13 +16,11 @@ Exercises four features added in this PR's Python wrapper port:
 from gofish import (
     Constraint,
     circle,
-    createName,
     line,
     layer,
     mark,
     polygon,
     rect,
-    ref,
     text,
 )
 
@@ -85,20 +82,10 @@ def weight(width: float, height: float, label: str):
 
 
 def story_pulley():
-    # Cross-tier names: the ropes (outer tier) reference shapes named on the
-    # inner tier. String names are layer-scoped; `createName` tokens register
-    # globally, so `ref(token)` resolves across the layer boundary.
-    ceiling = createName("ceiling")
-    A = createName("A")
-    B = createName("B")
-    C = createName("C")
-    w1 = createName("w1")
-    w2 = createName("w2")
-
     return (
         layer(
             [
-                # ── tier 1: shapes + letter labels — a finished, fully-placed unit ──
+                # ── tier 1: shapes + letter labels + ropes ──────────────────
                 layer(
                     [
                         rect(
@@ -107,13 +94,13 @@ def story_pulley():
                             fill="#C9C9C9",
                             stroke="#000",
                             strokeWidth=2,
-                        ).name(ceiling),
-                        pulley_circle(r=R).name(A),
-                        pulley_circle(r=R).name(B),
-                        pulley_circle(r=R).name(C),
-                        weight(width=30, height=30, label="W1").name(w1),
+                        ).name("ceiling"),
+                        pulley_circle(r=R).name("A"),
+                        pulley_circle(r=R).name("B"),
+                        pulley_circle(r=R).name("C"),
+                        weight(width=30, height=30, label="W1").name("w1"),
                         weight(width=3 * R + W2_JUT, height=30, label="W2").name(
-                            w2
+                            "w2"
                         ),
                         text(text="A", fontSize=12).name("Alabel"),
                         text(text="B", fontSize=12).name("Blabel"),
@@ -167,60 +154,43 @@ def story_pulley():
                             [C, Clabel], dir="x", spacing=1, anchor="edge"
                         ),
                         Constraint.align([C, Clabel], y="end"),
+                        # Rope segments — drawing clauses, drawn between the
+                        # placed shapes. `z_order(-1)` keeps the unmentioned
+                        # ropes behind their circles by default.
+                        line([ceiling, B], target="middle", **ROPE_OPTS)
+                        .name("ropeSupport")
+                        .z_order(-1),
+                        line(
+                            [B, A],
+                            source=["start", "middle"],
+                            target="middle",
+                            **ROPE_OPTS,
+                        )
+                        .name("ropeX")
+                        .z_order(-1),
+                        line(
+                            [B, C],
+                            source=["end", "middle"],
+                            target=["start", "middle"],
+                            **ROPE_OPTS,
+                        )
+                        .name("ropeY")
+                        .z_order(-1),
+                        line([ceiling, C], target=["end", "middle"], **ROPE_OPTS)
+                        .name("ropeZ")
+                        .z_order(-1),
+                        line([A, w1], source=["start", "middle"], **ROPE_OPTS)
+                        .name("ropeP")
+                        .z_order(-1),
+                        line([A, w2], source=["end", "middle"], **ROPE_OPTS)
+                        .name("ropeQ")
+                        .z_order(-1),
+                        line([C, w2], source="middle", **ROPE_OPTS)
+                        .name("ropeS")
+                        .z_order(-1),
                     ]
                 ),
-                # ── tier 2: rope segments — read the placed shapes ──────────
-                # Declared after tier 1 so their ref()s resolve against
-                # placed shapes. `z_order(-1)` keeps the unmentioned ropes
-                # behind their circles by default.
-                line(
-                    [ref(ceiling), ref(B)], target="middle", **ROPE_OPTS
-                )
-                .name("ropeSupport")
-                .z_order(-1),
-                line(
-                    [ref(B), ref(A)],
-                    source=["start", "middle"],
-                    target="middle",
-                    **ROPE_OPTS,
-                )
-                .name("ropeX")
-                .z_order(-1),
-                line(
-                    [ref(B), ref(C)],
-                    source=["end", "middle"],
-                    target=["start", "middle"],
-                    **ROPE_OPTS,
-                )
-                .name("ropeY")
-                .z_order(-1),
-                line(
-                    [ref(ceiling), ref(C)],
-                    target=["end", "middle"],
-                    **ROPE_OPTS,
-                )
-                .name("ropeZ")
-                .z_order(-1),
-                line(
-                    [ref(A), ref(w1)],
-                    source=["start", "middle"],
-                    **ROPE_OPTS,
-                )
-                .name("ropeP")
-                .z_order(-1),
-                line(
-                    [ref(A), ref(w2)],
-                    source=["end", "middle"],
-                    **ROPE_OPTS,
-                )
-                .name("ropeQ")
-                .z_order(-1),
-                line(
-                    [ref(C), ref(w2)], source="middle", **ROPE_OPTS
-                )
-                .name("ropeS")
-                .z_order(-1),
-                # ── tier 3: dimension labels ────────────────────────────────
+                # ── tier 2: dimension labels ────────────────────────────────
                 text(text="x").name("labelX"),
                 text(text="y").name("labelY"),
                 text(text="z").name("labelZ"),
@@ -269,11 +239,11 @@ def story_pulley():
                         Constraint.align([y_anchor, label], y="middle"),
                     ]
                 ],
-                # Granular paint order: relative z-order constraints. Cross-
-                # tier refs (A/B/C) work because `.relate()` descends into
-                # the non-component inner shapes layer. The ropes' default
-                # `.z_order(-1)` keeps the unmentioned ropes (Y/Z/P/Q)
-                # behind their circles; these four carve out the exceptions.
+                # Granular paint order: relative z-order constraints. The
+                # ropes and the shapes all lie in tier 1, so these order them
+                # inside that tier. The ropes' default `.z_order(-1)` keeps
+                # the unmentioned ropes (Y/Z/P/Q) behind their circles; these
+                # four carve out the exceptions.
                 Constraint.z_above(ropeX, A),  # x over A
                 Constraint.z_below(ropeX, B),  # x under B
                 Constraint.z_above(ropeSupport, B),  # ceiling→B over B

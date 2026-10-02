@@ -101,15 +101,9 @@ export const flattenLayout = (
 
   // Resolve draw order the same way the root bake does (z-order LOCAL to this
   // layer), so `.zOrder(-1)` and `zAbove`/`zBelow` are honored inside a
-  // coordinate transform, not silently dropped (#676). `accTranslate` carries
-  // the translate of any transparent nested layers hoisted over a child by the
-  // z-constraint flatten, matching how the root bake composes it.
-  return orderChildrenForPaint(node).flatMap(({ node: child, accTranslate }) =>
-    flattenLayout(
-      child,
-      [newTransform[0] + accTranslate[0], newTransform[1] + accTranslate[1]],
-      newScale
-    )
+  // coordinate transform, not silently dropped (#676).
+  return orderChildrenForPaint(node).flatMap((child) =>
+    flattenLayout(child, newTransform, newScale)
   );
 };
 
@@ -136,10 +130,10 @@ export const flattenLayout = (
 //
 //  2. **Draw order.** Render order previously lived in `layer` (a `(zOrder, index)`
 //     sort, or a `zAbove`/`zBelow` topological sort). Flattening through `layer`
-//     would drop that, so the bake resolves draw order globally over the flattened
-//     list — the same algorithm, lifted out of `layer`. `layer` is consequently a
-//     *transparent* operator here (it only contributes a translate/scale and its
-//     z-order constraints).
+//     would drop that, so the bake orders each transparent node's children with
+//     the same rule (`orderChildrenForPaint`) before descending into them.
+//     `layer` is consequently a *transparent* operator here (it only contributes
+//     a translate/scale and its z-order constraints).
 //
 // TODO: like `flattenLayout`, a baked entry still references its source node as the
 // renderer; the end-state (#75) is self-contained primitives (`DisplayItem`).
@@ -257,10 +251,9 @@ const scopeBox = (node: GoFishAST, composedTy: number): FlipScope => {
  *  `coord`'s BOX in its parent's frame while its own transform keeps the interior
  *  angular sense). A `_scopeTransparent` wrapper never opens (its bbox includes
  *  the chrome — the wrong band); an `_ambientYDown` chrome node never opens (its
- *  interior renders ambient). Extracted so the MAIN flatten and the z-order hoist
- *  run the SAME logic — one walk, not two — so adding a zOrder constraint (or
- *  wrapping in a bake boundary) can never change which scope a subtree lowers
- *  under. */
+ *  interior renders ambient). Extracted so the main walk and a bake boundary's
+ *  re-bake run the SAME logic, so wrapping a subtree in a bake boundary can
+ *  never change which scope it lowers under. */
 /** Would `node` OPEN a y-up flip scope if none were active? The open condition
  *  shared by {@link resolveNodeFlip} (the main walk) and {@link relationalOperandFlip}
  *  (re-running the scope decision along an operand's ancestor path) — the single
@@ -490,29 +483,10 @@ export const bake = (
       return;
     }
 
-    // Resolve this transparent layer's draw order with the shared rule (z-order
-    // LOCAL to the layer, #676), then descend into each unit; `accTranslate`
-    // carries the translate of any transparent ancestors hoisted over a unit.
-    // The fold threads the flip scope through each hoisted-through plain layer
-    // so a unit lowers under the SAME scope it would without the constraint
-    // (issue #629): the z-order hoist must never change orientation. Plain
-    // (un-hoisted) children carry the seed (`nodeFlip`).
-    for (const { node: child, accTranslate, payload } of orderChildrenForPaint<
-      FlipScope | undefined
-    >(node, {
-      seed: nodeFlip,
-      onHoist: (incomingFlip, layer, _accTx, accTy) =>
-        resolveNodeFlip(layer, composedTranslate[1] + accTy, incomingFlip),
-    })) {
-      walk(
-        child,
-        [
-          composedTranslate[0] + accTranslate[0],
-          composedTranslate[1] + accTranslate[1],
-        ],
-        composedScale,
-        payload
-      );
+    // Resolve this transparent node's draw order with the shared rule (z-order
+    // LOCAL to its children, #676, #982), then descend into each child.
+    for (const child of orderChildrenForPaint(node)) {
+      walk(child, composedTranslate, composedScale, nodeFlip);
     }
   };
 
@@ -530,8 +504,7 @@ export const bake = (
  * uses for a plain (non-flip-scope) descent — so a translate-only boundary
  * needs no per-container `toPixel` closure (#39 stage 6d). z-order is
  * resolved identically to {@link bake} via the shared
- * {@link orderChildrenForPaint}, just without a flip payload threaded
- * through the hoist.
+ * {@link orderChildrenForPaint}.
  */
 export const bakeChildren = (
   node: GoFishAST,
@@ -563,15 +536,8 @@ export const bakeChildren = (
       return;
     }
 
-    for (const { node: child, accTranslate } of orderChildrenForPaint(n)) {
-      walkNode(
-        child,
-        [
-          composedTranslate[0] + accTranslate[0],
-          composedTranslate[1] + accTranslate[1],
-        ],
-        composedScale
-      );
+    for (const child of orderChildrenForPaint(n)) {
+      walkNode(child, composedTranslate, composedScale);
     }
   };
 
@@ -583,12 +549,8 @@ export const bakeChildren = (
   // `bakeChildren(node, ...)` again). Iterating `node`'s children up front,
   // exactly like the root `bake`'s own top-level fold, is what makes this a
   // CHILDREN flatten rather than a whole-subtree one.
-  for (const { node: child, accTranslate } of orderChildrenForPaint(node)) {
-    walkNode(
-      child,
-      [translate[0] + accTranslate[0], translate[1] + accTranslate[1]],
-      scale
-    );
+  for (const child of orderChildrenForPaint(node)) {
+    walkNode(child, translate, scale);
   }
   return items;
 };

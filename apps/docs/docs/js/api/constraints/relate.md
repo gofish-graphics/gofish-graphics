@@ -367,11 +367,11 @@ Constraint.zBelow(a, b); // a paints behind b (under in z)
 `zBelow(a, b)` is equivalent to `zAbove(b, a)`; both are provided so the spec
 reads naturally either way.
 
-When a `layer` carries any z-order constraint, the render flattens the
-(non-component) subtree into a single paint list and **topologically sorts**
-it. Within the order constraints don't pin, the existing default order is
-preserved (`.zOrder(n)` hints first, then declaration order). A cycle
-(`zAbove(a, b) + zAbove(b, a)`) throws an error at render time.
+A layer paints only its own children, and the render **topologically sorts**
+them against the z-order constraints. Within the order constraints don't pin,
+the existing default order is preserved (`.zOrder(n)` hints first, then
+declaration order). A cycle (`zAbove(a, b) + zAbove(b, a)`) throws an error at
+render time.
 
 ```ts
 layer([
@@ -390,17 +390,25 @@ layer([
 Z-order refs can reach into the layer's _direct_ children and into any
 **plain (non-component) nested `layer`** below, without crossing a
 `createMark` boundary. Unlike placement operands, a z-order name applies to
-every node it matches there. This makes patterns like
-"rope on the outer layer slots in z between two pulleys in the inner layer"
-expressible without restructuring the AST.
+every node it matches there.
+
+A constraint orders the two children of the layer that contain its operands,
+each child as a whole. When both operands lie in the same child, the
+constraint orders them inside that child instead, one level down. So one child
+cannot paint between two marks of another child: `zAbove(rope, A)` with
+`zBelow(rope, B)`, where `A` and `B` share a child and `rope` does not, is a
+cycle. Make the rope a sibling of the pulleys, for example as a drawing clause
+of their layer, and the constraints can reach it from an outer layer.
 
 ```ts
 layer([
   layer([
-    PulleyCircle({ r: 25 }).name(A),
-    PulleyCircle({ r: 25 }).name(B),
-  ]).relate(/* … */),
-  line({ ... }, [ref(A), ref(B)]).name("rope"),
+    PulleyCircle({ r: 25 }).name("A"),
+    PulleyCircle({ r: 25 }).name("B"),
+  ]).relate((c) => [
+    /* … */
+    line({ ... }, [c.A, c.B]).name("rope"),
+  ]),
 ]).relate((c) => [
   Constraint.zAbove(c.rope, c.A),  // rope paints over A …
   Constraint.zBelow(c.rope, c.B),  // … but is covered by B

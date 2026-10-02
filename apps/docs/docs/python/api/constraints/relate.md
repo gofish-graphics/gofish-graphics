@@ -367,12 +367,11 @@ Constraint.z_below(a, b)  # a paints behind b (under in z)
 ```
 
 `z_below(a, b)` is equivalent to `z_above(b, a)`; both are provided so the spec
-reads naturally either way. When a `layer` carries any z-order constraint, the
-render flattens the (non-component) subtree into a single paint list and
-**topologically sorts** it. Within the order the constraints don't pin, the
-existing default order is preserved (`.z_order(n)` hints first, then declaration
-order); a cycle (`z_above(a, b)` + `z_above(b, a)`) raises an error at render
-time.
+reads naturally either way. A layer paints only its own children, and the
+render **topologically sorts** them against the z-order constraints. Within the
+order the constraints don't pin, the existing default order is preserved
+(`.z_order(n)` hints first, then declaration order); a cycle (`z_above(a, b)` +
+`z_above(b, a)`) raises an error at render time.
 
 ```python
 layer([
@@ -393,9 +392,15 @@ layer([
 Z-order refs can reach into the layer's _direct_ children and into any
 **plain (non-component) nested `layer`** below, without crossing a `@mark`
 boundary. Unlike placement operands, a z-order name applies to every node it
-matches there. This makes patterns like "rope on the outer
-layer slots in z between two pulleys in the inner layer" expressible without
-restructuring the AST.
+matches there.
+
+A constraint orders the two children of the layer that contain its operands,
+each child as a whole. When both operands lie in the same child, the
+constraint orders them inside that child instead, one level down. So one child
+cannot paint between two marks of another child: `z_above(rope, A)` with
+`z_below(rope, B)`, where `A` and `B` share a child and `rope` does not, is a
+cycle. Make the rope a sibling of the pulleys, for example as a drawing clause
+of their layer, and the constraints can reach it from an outer layer.
 
 ### When to use this vs `.z_order(n)`
 

@@ -99,10 +99,9 @@ console.log(
   );
 }
 
-console.log("# a constraint that names a plain layer orders what it paints");
+console.log("# a constraint that names a plain layer orders that whole layer");
 {
-  // The plain layer `pair` is hoisted away, so the units are its two rects;
-  // zAbove(A, pair) must put A after both of them.
+  // zAbove(A, pair) must put A after both of the pair's marks.
   const A = rect().name("a");
   const P1 = rect();
   const P2 = rect();
@@ -117,15 +116,12 @@ console.log("# a constraint that names a plain layer orders what it paints");
   );
 }
 
-console.log(
-  "# a hoisted layer keeps its own z constraints (nested relational layer)"
-);
+console.log("# a nested layer keeps its own z constraints");
 {
   // The shape of a chart that `.layer()`s a relational line (G, under C) and
   // then a nested chart of dots with its own `.layer(line)` (L, under D). The
-  // outer constraint makes the outer layer hoist through the nested one; the
-  // nested layer's zBelow(L, D) must still put L under D. It used to be
-  // dropped, so L painted over D in array order.
+  // outer constraint orders the outer children; the nested layer's
+  // zBelow(L, D) orders the nested children.
   const C = rect().name("c");
   const G = rect().name("g");
   const D = rect().name("d");
@@ -144,7 +140,7 @@ console.log(
   );
 }
 
-console.log("# a hoisted layer's z constraint only names its own units");
+console.log("# a nested layer's z constraint only names its own descendants");
 {
   // Both layers have a unit named "x". The nested zAbove(x, y) must order the
   // nested x over the nested y, and leave the outer x where it was.
@@ -160,9 +156,92 @@ console.log("# a hoisted layer's z constraint only names its own units");
   ]);
   const order = await paintOrder(layerNode);
   ok(
-    "nested constraint is scoped to the nested layer's units",
+    "nested constraint is scoped to the nested layer's children",
     labels(order, { X0, Y0, X1, Y1 }) === "Y0,X0,Y1,X1",
     `order = [${labels(order, { X0, Y0, X1, Y1 })}]`
+  );
+}
+
+console.log("# a nested .zOrder(n) compares only among its siblings (#979)");
+{
+  // The outer constraint used to flatten the nested layer into the outer
+  // sort, so C's zOrder(-1) moved it behind A and E. It stays local now: C
+  // paints behind B, its only sibling, and the nested layer paints last.
+  const A = rect().name("a");
+  const E = rect().name("e");
+  const B = rect();
+  const C = rect().zOrder(-1);
+  const layerNode = Layer([A, E, Layer([B, C])]).relate((c: any) => [
+    Constraint.zBelow(c.e, c.a),
+  ]);
+  const order = await paintOrder(layerNode);
+  ok(
+    "zOrder(-1) inside the nested layer stays inside it",
+    labels(order, { A, E, B, C }) === "E,A,C,B",
+    `order = [${labels(order, { A, E, B, C })}]`
+  );
+}
+
+console.log("# a constraint between descendants of two children orders them");
+{
+  // p1 and q1 lie in different children, so zAbove(p1, q1) orders those two
+  // children as wholes: the q layer paints before the p layer.
+  const P1 = rect().name("p1");
+  const P2 = rect();
+  const Q1 = rect().name("q1");
+  const Q2 = rect();
+  const layerNode = Layer([Layer([P1, P2]), Layer([Q1, Q2])]).relate(
+    (c: any) => [Constraint.zAbove(c.p1, c.q1)]
+  );
+  const order = await paintOrder(layerNode);
+  ok(
+    "the constraint lifts to the children that contain its operands",
+    labels(order, { P1, P2, Q1, Q2 }) === "Q1,Q2,P1,P2",
+    `order = [${labels(order, { P1, P2, Q1, Q2 })}]`
+  );
+}
+
+console.log("# a constraint between descendants of one child is pushed down");
+{
+  // p1 and p2 lie in the same child, so zAbove(p1, p2), declared at the outer
+  // layer, orders them inside that child. The child keeps its place before Q.
+  const P1 = rect().name("p1");
+  const P2 = rect().name("p2");
+  const Q = rect();
+  const layerNode = Layer([Layer([P1, P2]), Q]).relate((c: any) => [
+    Constraint.zAbove(c.p1, c.p2),
+  ]);
+  const order = await paintOrder(layerNode);
+  ok(
+    "the constraint orders the shared child's own children",
+    labels(order, { P1, P2, Q }) === "P2,P1,Q",
+    `order = [${labels(order, { P1, P2, Q })}]`
+  );
+}
+
+console.log("# interleaving one child between parts of another is a cycle");
+{
+  // A < X < B with A and B in one child and X in another: the outer layer
+  // paints each child whole, so the two constraints form a cycle.
+  const A = rect().name("a");
+  const B = rect().name("b");
+  const X = rect().name("x");
+  const layerNode = Layer([Layer([A, B]), X]).relate((c: any) => [
+    Constraint.zBelow(c.a, c.x),
+    Constraint.zBelow(c.x, c.b),
+  ]);
+  let message = "";
+  try {
+    await paintOrder(layerNode);
+  } catch (e) {
+    message = (e as Error).message;
+  }
+  ok(
+    "throws a cycle error naming both constraints",
+    message.includes("cycle") &&
+      message.includes("zBelow(a, x)") &&
+      message.includes("zBelow(x, b)"),
+    `message = ${JSON.stringify(message)}`
   );
 }
 
