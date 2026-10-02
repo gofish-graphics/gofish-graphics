@@ -45,18 +45,18 @@ def story_all_negative():
     )
 
 
-def story_signed_spine():
+def story_signed_group():
     data = [
-        {"country": "A", "gender": "Women", "signed": -33},
-        {"country": "A", "gender": "Men", "signed": 67},
-        {"country": "B", "gender": "Women", "signed": -46},
-        {"country": "B", "gender": "Men", "signed": 54},
-        {"country": "C", "gender": "Women", "signed": -52},
-        {"country": "C", "gender": "Men", "signed": 48},
+        {"quarter": "Q1", "flow": "Inflow", "amount": 67},
+        {"quarter": "Q1", "flow": "Outflow", "amount": -33},
+        {"quarter": "Q2", "flow": "Inflow", "amount": 54},
+        {"quarter": "Q2", "flow": "Outflow", "amount": -46},
+        {"quarter": "Q3", "flow": "Inflow", "amount": 48},
+        {"quarter": "Q3", "flow": "Outflow", "amount": -52},
     ]
     return (
         chart(data)
-        .flow(spread(by="country", dir="y"), group(by="gender"))
-        .mark(rect(w="signed", fill="gender")),
+        .flow(spread(by="quarter", dir="y"), group(by="flow"))
+        .mark(rect(w="amount", fill="flow")),
         {"w": 400, "h": 200, "axes": True},
     )

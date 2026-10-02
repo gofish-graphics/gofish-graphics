@@ -97,27 +97,27 @@ export const AllNegative: StoryObj<Args> = {
   },
 };
 
-// Regression (#773): a spine (back-to-back bars) from a signed `w` inside
-// `group`. The group keeps both sides of its baseline, so the x axis spans
-// both signs, the two bars of a row meet on the 0 tick, and the chart fits its
-// requested width.
-export const SignedSpine: StoryObj<Args> = {
+// Regression (#773): signed data (cash flow, with outflows negative) as a
+// signed `w` inside `group`. The group keeps both sides of its baseline, so the
+// x axis spans both signs, the two bars of a row meet on the 0 tick, and the
+// chart fits its requested width.
+export const SignedGroup: StoryObj<Args> = {
   args: { w: 400, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
     chart(
       [
-        { country: "A", gender: "Women", signed: -33 },
-        { country: "A", gender: "Men", signed: 67 },
-        { country: "B", gender: "Women", signed: -46 },
-        { country: "B", gender: "Men", signed: 54 },
-        { country: "C", gender: "Women", signed: -52 },
-        { country: "C", gender: "Men", signed: 48 },
+        { quarter: "Q1", flow: "Inflow", amount: 67 },
+        { quarter: "Q1", flow: "Outflow", amount: -33 },
+        { quarter: "Q2", flow: "Inflow", amount: 54 },
+        { quarter: "Q2", flow: "Outflow", amount: -46 },
+        { quarter: "Q3", flow: "Inflow", amount: 48 },
+        { quarter: "Q3", flow: "Outflow", amount: -52 },
       ],
       { axes: true }
     )
-      .flow(spread({ by: "country", dir: "y" }), group({ by: "gender" }))
-      .mark(rect({ w: "signed", fill: "gender" }))
+      .flow(spread({ by: "quarter", dir: "y" }), group({ by: "flow" }))
+      .mark(rect({ w: "amount", fill: "flow" }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },
