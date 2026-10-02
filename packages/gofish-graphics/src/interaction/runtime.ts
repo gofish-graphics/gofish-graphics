@@ -226,9 +226,12 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
   }
 
   private async runRerender(): Promise<void> {
+    // A run scheduled before `dispose()` still fires; the chart is gone.
+    const rerender = this.rerenderFn;
+    if (!rerender) return;
     this.running = true;
     try {
-      await this.rerenderFn!();
+      await rerender();
     } finally {
       this.running = false;
       if (this.dirty) {

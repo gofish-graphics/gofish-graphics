@@ -218,6 +218,8 @@ layout pipeline:
    whole tree — through the immutable builder for a chart, or by re-invoking the
    component thunk for a low-level `gofish(container, opts, () => node)` — and
    renders into the _same_ container — hence the container-dispose hook below.
+   `dispose()` clears the thunk, so a run scheduled before the chart unmounted
+   does nothing when it fires.
 2. **Delegated event dispatch.** `attachSVG` puts one listener per event type
    (`pointermove/down/up/leave`, `wheel`) on the root `<svg>` and fans each event
    out to every registered input, with a `data-gf-id` hit-test resolving the
