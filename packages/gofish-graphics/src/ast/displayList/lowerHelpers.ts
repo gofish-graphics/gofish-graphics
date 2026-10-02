@@ -11,12 +11,12 @@
 import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, RenderSession, ToPixel } from "../_node";
 import type { FlipScope } from "../_displayObject";
-import type { GoFishAST } from "../_ast";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
 import { type Path, type Point, pathToSVGPath } from "../../path";
 import { envFlag } from "../../util";
 import { bake } from "../coordinateTransforms/bake";
+import { orderChildrenForPaint } from "../paintOrder";
 
 /**
  * The display-list `role` of a lowered item, derived from whether it is
@@ -237,14 +237,14 @@ export const lowerChildrenOffset = (
     const composed: ToPixel = ([cx, cy]) =>
       outerToPixel([tx + dx + cx, ty + dy + cy]);
     return withToPixel(node, composed, () =>
-      (node.children as GoFishAST[]).flatMap((c) =>
+      orderChildrenForPaint(node).flatMap((c) =>
         c.INTERNAL_lower(coordinateTransform)
       )
     );
   }
   const items: DisplayList.DisplayItem[] = [];
   try {
-    for (const child of node.children as GoFishAST[]) {
+    for (const child of orderChildrenForPaint(node)) {
       for (const d of bake(child, undefined, [tx + dx, ty + dy], outerFlip)) {
         installFlip(session, d.flip);
         items.push(...d.node.INTERNAL_lower(coordinateTransform, d.transform));

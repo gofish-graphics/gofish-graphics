@@ -7,6 +7,7 @@ import { pixelBox } from "../displayList/lowerHelpers";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { unionChildSpaces } from "./alignment";
+import { assertNoPaintOrder } from "../paintOrder";
 
 type BlendMode = "color" | "multiply" | "screen" | "overlay" | "luminosity";
 type CompositeOperator = "over" | "in" | "xor" | "out" | "atop";
@@ -133,6 +134,7 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
               return [ax - bx, ay - by];
             };
 
+            assertNoPaintOrder(node);
             session.toPixel = composed;
             let source: DisplayList.DisplayItem[];
             let dest: DisplayList.DisplayItem[];
@@ -278,6 +280,7 @@ export const mask = createNodeOperator(
           const outer = session.toPixel!;
           const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
 
+          assertNoPaintOrder(node);
           session.toPixel = composed;
           let maskItems: DisplayList.DisplayItem[];
           let content: DisplayList.DisplayItem[];

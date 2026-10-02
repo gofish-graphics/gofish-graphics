@@ -17,6 +17,7 @@ import {
   Size,
 } from "../dims";
 import { flattenLayout } from "./bake";
+import { orderChildrenForPaint } from "../paintOrder";
 import * as IntervalLib from "../../util/interval";
 import { black } from "../../color";
 import {
@@ -639,7 +640,9 @@ export const coord = createNodeOperator(
 
           session.toPixel = contentToPixel;
           try {
-            for (const child of children) {
+            // Children paint in the shared paint order (#982), so a z
+            // constraint that parts at this coord takes effect here.
+            for (const child of orderChildrenForPaint(node)) {
               for (const d of flattenLayout(child)) {
                 if (outsideFrame(d)) continue;
                 items.push(

@@ -76,9 +76,11 @@ import {
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
-// When a layer has `Constraint.zAbove` / `zBelow` constraints, it flattens
-// its (non-component) subtree into a single paint list, topologically sorts
-// it against the constraints, and emits the result in resolved order.
+// A layer's `Constraint.zAbove` / `zBelow` constraints order its direct
+// children (`orderChildrenForPaint` in paintOrder.ts): each operand lifts to
+// the child that contains it, and a constraint whose operands share a child is
+// pushed down into that child's own order, whatever kind of node the child is
+// (every node that paints its children orders them through the same function).
 
 /** Find every relational-mark connector node (tagged `__relationalOperands`
  *  by `createRelationalMark`, chart.ts) anywhere in `node`'s subtree that
@@ -160,23 +162,17 @@ function applyRelationalZBelowDefaults(
       // Only claim an operand that actually lives within `children`'s
       // subtrees at this level (found via an ancestor walk against
       // `children`) — otherwise leave the tag for an outer `layer()` call to
-      // resolve. NB: the constraint targets `target` ITSELF (the operand's
-      // own node), not whichever top-level `children` entry contains it — a
-      // chart tier's resolved root is typically itself a (non-component)
-      // `layer`/`frame` node that `orderChildrenForPaint`'s flatten pass
-      // hoists through transparently, so naming *it* would never match once
-      // hoisted. `target` is exactly what the flatten pass leaves in the
-      // paint list, and for a per-item mark it's already carrying the
-      // tier's auto-assigned name (every instance shares it), so no
-      // synthesis is usually needed.
+      // resolve. The constraint names the operand itself: paint order lifts
+      // it to whichever child holds it, or pushes it down when the connector
+      // shares that child. Names are visible through any non-component node.
       const path = findPathToRoot(target);
       const withinScope = children.some(
         (c) => c !== connector && path.includes(c as GoFishAST)
       );
       if (!withinScope) continue;
       // An operand that is itself a plain layer (a `layer([...])` mark, a
-      // `time.history`) is hoisted away too, and its name goes with what it
-      // paints (`flattenForZOrder`), so the connector goes under those.
+      // `time.history`) names that whole layer, so the connector goes under
+      // everything it paints.
       pairs.push([
         ensureConstraintName(connector),
         ensureConstraintName(target),
