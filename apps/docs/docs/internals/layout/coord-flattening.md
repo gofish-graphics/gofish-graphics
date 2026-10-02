@@ -91,18 +91,20 @@ children when the walk gets there. Without constraints, children paint in `(zOrd
 index)` order, so a numeric `.zOrder(n)` compares a child only with its siblings.
 
 A `zAbove(a, b)` / `zBelow(a, b)` constraint declared at a layer L becomes an edge
-between children of L. The sort finds the child of L that contains `a` and the child
-that contains `b`. If they are different children, the constraint orders those two
-children, each as a whole. If they are the same child, the constraint is pushed down
-into that child's own sort, and the same test repeats one level lower, until `a` and
-`b` land in different children. A name that names a child itself means that whole
-child.
+between two children. It is resolved once, when L orders its own children, and before
+any of L's descendants is ordered. Every node inside L that carries the name `a` or
+`b` is an operand. For each pair of operands, the resolution follows the two paths
+down from L to the node where they part, and records an edge between that node's two
+children that hold them. If the operands lie in different children of L, the edge is
+between those two children of L, each ordered as a whole. If they lie in the same
+child, the constraint is pushed down to the node below where they part. A name that
+names a child itself means that whole child.
 
-Names are looked up through plain (non-component) nested layers only, the same layers
-a constraint operand can see into. A component, or any other operator, is opaque. So
-when a layer sorts its children, the constraints that apply are its own plus those of
-each ancestor it is reached from through plain layers; an ancestor's constraint whose
-operands do not both lie inside this layer finds nothing to order here.
+Names are looked up with the same rule as every other name: through any node that is
+not a component, and never into a `createMark` component (see
+[Names and scoping](/internals/core/names-and-scoping)). So an operand inside a
+`spread` or a `box` layer is found, and a constraint never reaches past the nearest
+component around L.
 
 This holds for a user's `zAbove` / `zBelow` and for the relational-mark default
 (`zBelow(connector, operand)` in `layer.tsx`). The default names the operand itself,
@@ -121,13 +123,9 @@ no unsatisfied edge left pointing at it, where "smallest" means lowest `(zOrder,
 index)`. Ordering the unconstrained majority by `(zOrder, index)` is what makes the
 result identical to the plain sort when there are no constraints at all.
 
-The ready set is a binary min-heap, and that choice matters for large charts. A layer
-can hold tens of thousands of children: the bird-migration map has 26,280 point
-anchors and 72 line connectors under one `geo` coord. An array that is re-sorted and
-`shift`ed on every emission is quadratic in the number of children; an earlier
-version did that, and the one sort took about 7.4 seconds of a 9 second render. The
-heap makes it `O(n log n + edges)`. Adjacency is allocated lazily for the same reason:
-nearly every child in a chart that size has no edges at all.
+The ready set is a binary min-heap, because a layer can hold tens of thousands of
+children, and a re-sorted array would be quadratic in the number of children. The
+heap makes the sort `O(n log n + edges)`.
 
 Two design notes from the source worth knowing:
 

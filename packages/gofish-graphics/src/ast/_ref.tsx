@@ -411,10 +411,10 @@ function isInside(node: GoFishAST, root: GoFishNode): boolean {
  * `ref` stand-ins are visited too (a named ref is a scope member).
  *
  * This is the single home for the bounded walk shared by string-name lookup
- * (`resolveScopedName`, used by `ref(string)` and by `.relate()` operands)
- * and `collectLayerRegistrations` (chartBuilder.ts layer registry), so the
- * component boundary means the same thing for `ref`, `.relate()` and
- * `selectAll`.
+ * (`resolveScopedName`, used by `ref(string)` and by `.relate()` operands),
+ * `collectLayerRegistrations` (chartBuilder.ts layer registry), and z-order
+ * operand lookup (paintOrder.ts), so the component boundary means the same
+ * thing for `ref`, `.relate()`, `selectAll` and `zAbove`/`zBelow`.
  */
 export function* visibleNodes(root: GoFishAST): Generator<GoFishAST> {
   yield root;

@@ -70,9 +70,9 @@ above the nearest component that contains the start, and it never looks inside
 a nested component (the component's own name is visible, its insides are not).
 Without an enclosing component, the whole diagram is the outermost level. The
 walk that enforces the boundary is `visibleNodes`, which the chart layer
-registry (`collectLayerRegistrations` in `chartBuilder.ts`) also uses, so the
-component boundary means the same thing for `ref`, `.relate()`, and
-`selectAll`.
+registry (`collectLayerRegistrations` in `chartBuilder.ts`) and z-order
+resolution (`paintOrder.ts`) also use, so the component boundary means the same
+thing for `ref`, `.relate()`, `selectAll`, and `zAbove` / `zBelow`.
 
 Three results are errors, and each names the problem:
 

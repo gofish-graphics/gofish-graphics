@@ -68,8 +68,7 @@ def story_enclose_mixed():
 
 # Bug #3: the same mixed composition inside a layer that carries a z-order
 # constraint. Adding the constraint must never change which orientation a
-# subtree lowers under. (This once failed when z constraints flattened nested
-# plain layers; each layer now orders only its own children, #982.)
+# subtree lowers under.
 def story_zordered_mixed():
     return (
         layer(

@@ -62,8 +62,7 @@ export const EncloseMixed: StoryObj = {
 // Bug #3: the same mixed composition inside a layer that carries a z-order
 // (zAbove/zBelow) constraint. Adding the constraint must never change which
 // orientation a subtree lowers under: the bars still grow up, the heatmap still
-// reads top→bottom. (This once failed when z constraints flattened nested
-// plain layers; each layer now orders only its own children, #982.)
+// reads top→bottom.
 export const ZOrderedMixed: StoryObj = {
   render: () => {
     const container = initializeContainer();

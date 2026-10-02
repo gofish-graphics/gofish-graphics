@@ -387,10 +387,11 @@ layer([
 
 ### Cross-tier references
 
-Z-order refs can reach into the layer's _direct_ children and into any
-**plain (non-component) nested `layer`** below, without crossing a
-`createMark` boundary. Unlike placement operands, a z-order name applies to
-every node it matches there.
+Z-order refs see the same names as every other operand: any node inside
+the layer, through nested layers and operators but not into a `createMark`
+component (see [Name Resolution & Scoping](/internals/core/names-and-scoping)).
+Unlike placement operands, a z-order name applies to every node it matches
+there.
 
 A constraint orders the two children of the layer that contain its operands,
 each child as a whole. When both operands lie in the same child, the

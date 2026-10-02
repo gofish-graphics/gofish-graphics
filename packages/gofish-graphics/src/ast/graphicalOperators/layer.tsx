@@ -161,15 +161,9 @@ function applyRelationalZBelowDefaults(
       // Only claim an operand that actually lives within `children`'s
       // subtrees at this level (found via an ancestor walk against
       // `children`) — otherwise leave the tag for an outer `layer()` call to
-      // resolve. NB: the constraint names `target` ITSELF (the operand's own
-      // node), not whichever top-level `children` entry contains it. Paint
-      // order lifts a name to the child of this layer that contains it
-      // (`orderChildrenForPaint`), so the connector paints under that whole
-      // child; and when the connector sits in the same child as its target,
-      // the constraint is pushed down to the layer where the two part, which
-      // naming the shared child could not express. For a per-item mark the
-      // target already carries the tier's auto-assigned name (every instance
-      // shares it), so no synthesis is usually needed.
+      // resolve. The constraint names the operand itself: paint order lifts
+      // it to whichever child holds it, or pushes it down when the connector
+      // shares that child. Names are visible through any non-component node.
       const path = findPathToRoot(target);
       const withinScope = children.some(
         (c) => c !== connector && path.includes(c as GoFishAST)

@@ -1,17 +1,14 @@
 /**
- * zOrder inside a coord boundary (#676).
+ * zOrder inside a coord boundary (#676). This file also pins #982's rules: a
+ * z constraint lifts to the children that hold its operands, and is pushed
+ * down when they share a child.
  *
  * `coord` is a bake boundary: it flattens its subtree into screen-space draw
- * entries via `flattenLayout` (the coord-local bake) and warps them. That
- * flatten used to walk `children` in raw ARRAY order, so `.zOrder(-1)` and
- * `zAbove`/`zBelow` constraints were silently dropped inside a coordinate
- * transform — e.g. gotree links (`.zOrder(-1)`, links-under-nodes) painted on
- * top under `coord: polar()`.
- *
- * These tests assert the DISPLAY-LIST ORDER out of `flattenLayout` now honors
- * z-order exactly as the root bake does: a later-in-array `.zOrder(-1)` /
- * `zAbove` child is emitted BEFORE its siblings (painted behind), while a plain
- * layer preserves array order.
+ * entries via `flattenLayout` (the coord-local bake) and warps them. These
+ * tests assert the DISPLAY-LIST ORDER out of `flattenLayout` honors z-order
+ * exactly as the root bake does: a later-in-array `.zOrder(-1)` / `zAbove`
+ * child is emitted BEFORE its siblings (painted behind), while a plain layer
+ * preserves array order.
  *
  * Run via `tsx`.
  */
@@ -34,10 +31,6 @@ function ok(name: string, cond: boolean, detail?: string): void {
   }
 }
 
-// The names of `order`'s nodes, per `m`, joined by commas.
-const labels = (order: any[], m: Record<string, unknown>) =>
-  order.map((n) => Object.keys(m).find((k) => m[k] === n) ?? "?").join(",");
-
 // Lay a coord(polar) subtree out (same passes as coordConfluence) and return
 // the ordered `.node`s that `flattenLayout` emits for the given layer.
 async function paintOrder(layerNode: any): Promise<any[]> {
@@ -52,19 +45,51 @@ async function paintOrder(layerNode: any): Promise<any[]> {
   return flattenLayout(root.children[0]).map((d: any) => d.node);
 }
 
+// Assert `node` paints the marks of `m` in the order `expected`: their keys
+// (or else their `.name`), joined by commas.
+async function expectOrder(
+  title: string,
+  node: any,
+  m: Record<string, unknown>,
+  expected: string
+): Promise<void> {
+  const got = (await paintOrder(node))
+    .map((n) => Object.keys(m).find((k) => m[k] === n) ?? n._name ?? "?")
+    .join(",");
+  ok(title, got === expected, `order = [${got}]`);
+}
+
+// Assert painting `node` throws an error whose message has every substring.
+async function expectThrows(
+  title: string,
+  node: any,
+  ...substrings: string[]
+): Promise<void> {
+  let message = "";
+  try {
+    await paintOrder(node);
+  } catch (e) {
+    message = (e as Error).message;
+  }
+  ok(
+    title,
+    message !== "" && substrings.every((s) => message.includes(s)),
+    `message = ${JSON.stringify(message)}`
+  );
+}
+
 const rect = () => Rect({ w: 40, h: 40, emX: true, emY: true });
 
 console.log("# coord paint order: .zOrder(-1) is honored inside coord (#676)");
 {
-  // A comes first in the array; B is later but `.zOrder(-1)` → must paint FIRST
-  // (behind A) in the flattened output.
+  // B is later in the array, but `.zOrder(-1)` paints it first (behind A).
   const A = rect();
   const B = rect().zOrder(-1);
-  const order = await paintOrder(Layer([A, B]));
-  ok(
+  await expectOrder(
     "later child with .zOrder(-1) is emitted before its earlier sibling",
-    order.length === 2 && order[0] === B && order[1] === A,
-    `order = [${labels(order, { A, B })}]`
+    Layer([A, B]),
+    { A, B },
+    "B,A"
   );
 }
 
@@ -72,11 +97,11 @@ console.log("# coord paint order: plain layer preserves array order (mirror)");
 {
   const A = rect();
   const B = rect();
-  const order = await paintOrder(Layer([A, B]));
-  ok(
+  await expectOrder(
     "without zOrder, array order is preserved",
-    order.length === 2 && order[0] === A && order[1] === B,
-    `order = [${labels(order, { A, B })}]`
+    Layer([A, B]),
+    { A, B },
+    "A,B"
   );
 }
 
@@ -84,35 +109,29 @@ console.log(
   "# coord paint order: zAbove/zBelow constraints are honored inside coord"
 );
 {
-  // A is first in the array, but zAbove(A, B) means A paints LATER (over B) →
-  // flattened order must be [B, A].
+  // zAbove(A, B): A paints later (over B) despite array order.
   const A = rect().name("a");
   const B = rect().name("b");
-  const layerNode = Layer([A, B]).relate((c: any) => [
-    Constraint.zAbove(c.a, c.b),
-  ]);
-  const order = await paintOrder(layerNode);
-  ok(
+  await expectOrder(
     "zAbove(A, B) puts A after B in the flattened output despite array order",
-    order.length === 2 && order[0] === B && order[1] === A,
-    `order = [${labels(order, { A, B })}]`
+    Layer([A, B]).relate((c: any) => [Constraint.zAbove(c.a, c.b)]),
+    { A, B },
+    "B,A"
   );
 }
 
 console.log("# a constraint that names a plain layer orders that whole layer");
 {
-  // zAbove(A, pair) must put A after both of the pair's marks.
   const A = rect().name("a");
   const P1 = rect();
   const P2 = rect();
-  const layerNode = Layer([A, Layer([P1, P2]).name("pair")]).relate(
-    (c: any) => [Constraint.zAbove(c.a, c.pair)]
-  );
-  const order = await paintOrder(layerNode);
-  ok(
+  await expectOrder(
     "zAbove(A, pair) paints A over both of the pair's marks",
-    order.length === 3 && order[0] === P1 && order[1] === P2 && order[2] === A,
-    `order = [${labels(order, { A, P1, P2 })}]`
+    Layer([A, Layer([P1, P2]).name("pair")]).relate((c: any) => [
+      Constraint.zAbove(c.a, c.pair),
+    ]),
+    { A, P1, P2 },
+    "P1,P2,A"
   );
 }
 
@@ -129,14 +148,11 @@ console.log("# a nested layer keeps its own z constraints");
   const nested = Layer([D, L]).relate((c: any) => [
     Constraint.zBelow(c.l, c.d),
   ]);
-  const layerNode = Layer([C, G, nested]).relate((c: any) => [
-    Constraint.zBelow(c.g, c.c),
-  ]);
-  const order = await paintOrder(layerNode);
-  ok(
+  await expectOrder(
     "outer zBelow(G, C) and nested zBelow(L, D) both hold",
-    labels(order, { C, G, D, L }) === "G,C,L,D",
-    `order = [${labels(order, { C, G, D, L })}]`
+    Layer([C, G, nested]).relate((c: any) => [Constraint.zBelow(c.g, c.c)]),
+    { C, G, D, L },
+    "G,C,L,D"
   );
 }
 
@@ -151,34 +167,28 @@ console.log("# a nested layer's z constraint only names its own descendants");
   const nested = Layer([X1, Y1]).relate((c: any) => [
     Constraint.zAbove(c.x, c.y),
   ]);
-  const layerNode = Layer([X0, Y0, nested]).relate((c: any) => [
-    Constraint.zAbove(c.x, c.y0),
-  ]);
-  const order = await paintOrder(layerNode);
-  ok(
+  await expectOrder(
     "nested constraint is scoped to the nested layer's children",
-    labels(order, { X0, Y0, X1, Y1 }) === "Y0,X0,Y1,X1",
-    `order = [${labels(order, { X0, Y0, X1, Y1 })}]`
+    Layer([X0, Y0, nested]).relate((c: any) => [Constraint.zAbove(c.x, c.y0)]),
+    { X0, Y0, X1, Y1 },
+    "Y0,X0,Y1,X1"
   );
 }
 
 console.log("# a nested .zOrder(n) compares only among its siblings (#979)");
 {
-  // The outer constraint used to flatten the nested layer into the outer
-  // sort, so C's zOrder(-1) moved it behind A and E. It stays local now: C
-  // paints behind B, its only sibling, and the nested layer paints last.
+  // C paints behind B, its only sibling, and the nested layer paints last.
   const A = rect().name("a");
   const E = rect().name("e");
   const B = rect();
   const C = rect().zOrder(-1);
-  const layerNode = Layer([A, E, Layer([B, C])]).relate((c: any) => [
-    Constraint.zBelow(c.e, c.a),
-  ]);
-  const order = await paintOrder(layerNode);
-  ok(
+  await expectOrder(
     "zOrder(-1) inside the nested layer stays inside it",
-    labels(order, { A, E, B, C }) === "E,A,C,B",
-    `order = [${labels(order, { A, E, B, C })}]`
+    Layer([A, E, Layer([B, C])]).relate((c: any) => [
+      Constraint.zBelow(c.e, c.a),
+    ]),
+    { A, E, B, C },
+    "E,A,C,B"
   );
 }
 
@@ -190,14 +200,13 @@ console.log("# a constraint between descendants of two children orders them");
   const P2 = rect();
   const Q1 = rect().name("q1");
   const Q2 = rect();
-  const layerNode = Layer([Layer([P1, P2]), Layer([Q1, Q2])]).relate(
-    (c: any) => [Constraint.zAbove(c.p1, c.q1)]
-  );
-  const order = await paintOrder(layerNode);
-  ok(
+  await expectOrder(
     "the constraint lifts to the children that contain its operands",
-    labels(order, { P1, P2, Q1, Q2 }) === "Q1,Q2,P1,P2",
-    `order = [${labels(order, { P1, P2, Q1, Q2 })}]`
+    Layer([Layer([P1, P2]), Layer([Q1, Q2])]).relate((c: any) => [
+      Constraint.zAbove(c.p1, c.q1),
+    ]),
+    { P1, P2, Q1, Q2 },
+    "Q1,Q2,P1,P2"
   );
 }
 
@@ -208,14 +217,30 @@ console.log("# a constraint between descendants of one child is pushed down");
   const P1 = rect().name("p1");
   const P2 = rect().name("p2");
   const Q = rect();
-  const layerNode = Layer([Layer([P1, P2]), Q]).relate((c: any) => [
-    Constraint.zAbove(c.p1, c.p2),
-  ]);
-  const order = await paintOrder(layerNode);
-  ok(
+  await expectOrder(
     "the constraint orders the shared child's own children",
-    labels(order, { P1, P2, Q }) === "P2,P1,Q",
-    `order = [${labels(order, { P1, P2, Q })}]`
+    Layer([Layer([P1, P2]), Q]).relate((c: any) => [
+      Constraint.zAbove(c.p1, c.p2),
+    ]),
+    { P1, P2, Q },
+    "P2,P1,Q"
+  );
+}
+
+console.log("# names inside any non-component node are visible");
+{
+  // p1 lies inside a box layer, not a plain layer. Names are visible through
+  // it, so zAbove(p1, q) paints the whole box over Q. (A box flattens as one
+  // entry, so the order shows the box itself, by its name.)
+  const P1 = rect().name("p1");
+  const Q = rect().name("q");
+  await expectOrder(
+    "a z constraint reaches an operand inside a box layer",
+    Layer([Layer({ box: true }, [P1, rect()]).name("box"), Q]).relate(
+      (c: any) => [Constraint.zAbove(c.p1, c.q)]
+    ),
+    { Q },
+    "Q,box"
   );
 }
 
@@ -226,22 +251,15 @@ console.log("# interleaving one child between parts of another is a cycle");
   const A = rect().name("a");
   const B = rect().name("b");
   const X = rect().name("x");
-  const layerNode = Layer([Layer([A, B]), X]).relate((c: any) => [
-    Constraint.zBelow(c.a, c.x),
-    Constraint.zBelow(c.x, c.b),
-  ]);
-  let message = "";
-  try {
-    await paintOrder(layerNode);
-  } catch (e) {
-    message = (e as Error).message;
-  }
-  ok(
+  await expectThrows(
     "throws a cycle error naming both constraints",
-    message.includes("cycle") &&
-      message.includes("zBelow(a, x)") &&
-      message.includes("zBelow(x, b)"),
-    `message = ${JSON.stringify(message)}`
+    Layer([Layer([A, B]), X]).relate((c: any) => [
+      Constraint.zBelow(c.a, c.x),
+      Constraint.zBelow(c.x, c.b),
+    ]),
+    "cycle",
+    "zBelow(a, x)",
+    "zBelow(x, b)"
   );
 }
 
