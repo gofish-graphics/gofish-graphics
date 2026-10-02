@@ -29,6 +29,8 @@ const {
   ribbon,
   text,
   layer,
+  pack,
+  circles,
   derive,
   join,
   log,
@@ -869,6 +871,44 @@ async function main() {
     check("combinator stack emits", mark.type === "stack");
     check("combinator stack is flagged", mark.__combinator === true);
     check("combinator stack has children", Array.isArray(mark.children));
+  }
+
+  // Combinator-form pack (nested): toJSON flags it `__combinator`, and
+  // fromJSON rebuilds it through pack's `(opts, marks)` overload.
+  {
+    const c = chart([{ a: 1 }]).mark(
+      pack({ method: circles() }, [
+        circle({ r: 10 }),
+        pack({}, [circle({ r: 4 }), circle({ r: 3 })]),
+      ])
+    );
+    const doc = await c.toJSON();
+    validateDoc(doc, "combinator-form pack");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check("combinator pack emits", mark.type === "pack");
+    check("combinator pack is flagged", mark.__combinator === true);
+    check(
+      "combinator pack keeps method",
+      mark.options?.method?.kind === "circles"
+    );
+    check(
+      "nested combinator pack is flagged",
+      mark.children?.[1]?.type === "pack" &&
+        mark.children[1].__combinator === true
+    );
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      [{ a: 1 }],
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    check(
+      "combinator pack round-trips through fromJSON",
+      JSON.stringify((doc2.root as Frontend.ChartIR).mark) ===
+        JSON.stringify(mark),
+      JSON.stringify((doc2.root as Frontend.ChartIR).mark)
+    );
   }
 
   // -------------------------------------------------------------------------

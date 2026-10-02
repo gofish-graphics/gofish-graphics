@@ -682,6 +682,7 @@ from ._generated import (  # noqa: E402
     _table_opts,
     _treemap_opts,
     _treemap_combinator_opts,
+    _pack_opts,
     _line_opts,
     _ribbon_opts,
     _polar_config,
@@ -1951,6 +1952,64 @@ def treemap(
     if by is not None:
         options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))
+
+
+def circles() -> Dict[str, Any]:
+    """
+    The ``circles()`` strategy for :func:`pack`: pack each child's enclosing
+    circle with d3's front-chain algorithm. Takes no options yet.
+
+    Mirrors JS ``circles()``; the strategy is a plain object on the wire,
+    ``{"kind": "circles"}``.
+    """
+    return {"kind": "circles"}
+
+
+def pack(
+    children: Optional[List["Mark"]] = None,
+    *,
+    by: Optional[Union[str, "FieldAccessor"]] = None,
+    **options: Any,
+) -> Union[Operator, "Mark"]:
+    """
+    Pack — polymorphic. Places children so their enclosing circles touch
+    without overlapping.
+
+    Operator form (no positional arg): packs each group (or row, without
+    ``by``). Used inside `.flow(...)`.
+
+        chart(seafood).flow(pack(by="lake"), pack()).mark(circle(r=12))
+
+    Combinator form (positional list of marks): returns a low-level Mark that
+    packs the given child marks. A pack nested in a pack is packed by the
+    circle around its own children.
+
+        pack([circle(r=60), ellipse(w=90, h=44), pack([circle(r=26), circle(r=18)])])
+
+    Children keep their pixel size, and the pack does not yet fit itself to
+    the available space (#967).
+
+    Args:
+        children: When provided, switches to combinator form. List of child
+            Marks to pack.
+        by: Field name to group by, or a ``field(...)`` accessor (operator
+            form only). Omit for one child per row.
+        **options:
+            method: The packing strategy, e.g. ``circles()`` (the default).
+
+    Returns:
+        Operator (no children) or Mark (with children).
+    """
+    if children is not None:
+        if by is not None:
+            raise ValueError(
+                "pack() combinator form (with children) does not accept "
+                "`by` — the layout is over the explicit child list, not data."
+            )
+        return Mark("pack", _children=list(children), **_pack_opts(**options))
+    if by is not None:
+        options["by"] = by
+    return Operator("pack", **_pack_opts(**options))
 
 
 def table(

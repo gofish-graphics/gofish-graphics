@@ -106,10 +106,9 @@ const cityYear = [
   { city: "Chicago", year: "2024", visitors: 51 },
 ];
 
-function renderGroupedBar(
-  args: Args,
-  labelAngle: number | number[]
-): HTMLElement {
+type LabelAngle = Extract<AxisOptions, object>["labelAngle"];
+
+function renderGroupedBar(args: Args, labelAngle: LabelAngle): HTMLElement {
   const container = initializeContainer();
 
   chart(cityYear, { axes: { x: { labelAngle } } })
@@ -143,4 +142,120 @@ export const GroupedLabelAngleInner45: StoryObj<Args> = {
 export const GroupedLabelAngleInner90: StoryObj<Args> = {
   args: { w: 300, h: 210 },
   render: (args: Args) => renderGroupedBar(args, [90]),
+};
+
+// The same grouped bar chart with no labelAngle: the unrotated baseline the
+// rotated and "auto" variants are compared against.
+export const GroupedLabelAngleNone: StoryObj<Args> = {
+  args: { w: 300, h: 210 },
+  render: (args: Args) => renderGroupedBar(args, undefined),
+};
+
+// labelAngle: "auto" (#486) chooses each label row (inner tier, outer tier) on
+// its own: it tries 0°, 45°, then 90° and keeps the first angle at which no two
+// labels in that row collide, counting collisions across the whole chart (a
+// year label under Austin can hit one under Boston). Each story below names
+// the angles it is expected to select for the inner and outer rows.
+
+// Wide enough for upright years: inner 0°, outer 0°.
+export const GroupedLabelAngleAuto0: StoryObj<Args> = {
+  args: { w: 400, h: 210 },
+  render: (args: Args) => renderGroupedBar(args, "auto"),
+};
+
+// Narrower than GroupedLabelAngleNone, so upright years would overlap, while
+// the city names still fit: inner (year) 45°, outer (city) 0°.
+export const GroupedLabelAngleAutoInner45Outer0: StoryObj<Args> = {
+  args: { w: 250, h: 210 },
+  render: (args: Args) => renderGroupedBar(args, "auto"),
+};
+
+// "Inner labels are often too long": product names under region groups.
+const regionProduct = ["Laptops", "Smartphones", "Accessories", "Wearables"]
+  .flatMap((product, i) =>
+    ["North", "South", "West"].map((region, j) => ({
+      region,
+      product,
+      sales: 30 + ((i * 17 + j * 11) % 40),
+    }))
+  );
+
+function renderGroupedProducts(args: Args, labelAngle: LabelAngle) {
+  const container = initializeContainer();
+
+  chart(regionProduct, { axes: { x: { labelAngle } } })
+    .flow(
+      spread({ by: "region", dir: "x", spacing: 24 }),
+      spread({ by: "product", dir: "x", spacing: 0 })
+    )
+    .mark(rect({ h: "sales", fill: "product" }))
+    .render(container, { w: args.w, h: args.h });
+
+  return container;
+}
+
+// Wide: the product names fit upright: inner 0°, outer 0°.
+export const GroupedLabelAngleAutoLong0: StoryObj<Args> = {
+  args: { w: 900, h: 210 },
+  render: (args: Args) => renderGroupedProducts(args, "auto"),
+};
+
+// Medium: upright product names collide, slanted ones clear each other, and
+// the region names have plenty of room: inner (product) 45°, outer (region) 0°.
+export const GroupedLabelAngleAutoLongInner45Outer0: StoryObj<Args> = {
+  args: { w: 400, h: 210 },
+  render: (args: Args) => renderGroupedProducts(args, "auto"),
+};
+
+// Narrow: only vertical product names clear each other: inner 90°, outer 0°.
+export const GroupedLabelAngleAutoLongInner90Outer0: StoryObj<Args> = {
+  args: { w: 220, h: 210 },
+  render: (args: Args) => renderGroupedProducts(args, "auto"),
+};
+
+// Extremely narrow: the product names collide at every angle, so that row is
+// hidden and takes no space; the color legend still names each product. The
+// region names fit upright: inner hidden, outer 0°.
+export const GroupedLabelAngleAutoInnerHiddenOuter0: StoryObj<Args> = {
+  args: { w: 90, h: 210 },
+  render: (args: Args) => renderGroupedProducts(args, "auto"),
+};
+
+// The same, but colored by region: the legend shows "region", so nothing names
+// the products. Inner hidden, outer 0°, and it logs a console warning that
+// the "product" categories are not labeled.
+export const GroupedLabelAngleAutoInnerHiddenNoLegend: StoryObj<Args> = {
+  args: { w: 90, h: 210 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(regionProduct, { axes: { x: { labelAngle: "auto" } } })
+      .flow(
+        spread({ by: "region", dir: "x", spacing: 24 }),
+        spread({ by: "product", dir: "x", spacing: 0 })
+      )
+      .mark(rect({ h: "sales", fill: "region" }))
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
+// Horizontal grouped bars: an ordinal y axis with "auto". Tall bands leave room
+// for upright names: inner 0°, outer 0°.
+export const GroupedHorizontalLabelAngleAuto0: StoryObj<Args> = {
+  args: { w: 300, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(regionProduct, { axes: { y: { labelAngle: "auto" } } })
+      .flow(
+        spread({ by: "region", dir: "y", spacing: 16 }),
+        spread({ by: "product", dir: "y", spacing: 0 })
+      )
+      .mark(rect({ w: "sales", fill: "product" }))
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
 };

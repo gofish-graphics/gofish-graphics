@@ -9,6 +9,8 @@ covers:
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
+  - packages/gofish-graphics/src/ast/geometry/index.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
 ---
 
 # Layout and Render Passes in GoFish Graphics
@@ -526,6 +528,36 @@ For a bar chart rectangle, the layout function:
 
 The `intrinsicDims` represent the element's size in its local coordinate system (with min typically at 0), while `transform.translate` positions it in the parent's coordinate system.
 
+#### Shape geometry after layout
+
+Once a node is laid out, `node.geometry()` describes its shape in the same
+local frame as `intrinsicDims`, with no translate applied (`src/ast/geometry/`).
+The result always has a `box`, which is `intrinsicDims` as a plain box. It may
+also answer optional queries. The only query today is `enclosingCircle`. A
+consumer calls the helper `enclosingCircle(g)`, which falls back to the circle
+through the box corners when the node does not answer.
+
+- A node definition may pass a `geometry` function next to `lower`. `ellipse`
+  answers with the circle of its larger radius, and `polygon` answers with the
+  smallest circle through its ring.
+- A node with children and no `geometry` function answers `enclosingCircle`
+  lazily. It takes the smallest circle around its children's circles, each
+  moved by the child's translate into the node's frame.
+- `GoFishNode` computes `geometry()` on the first call and keeps the result.
+  `layout()`, and any later write to the local box (`place` recording a local
+  `min`, `setExtent`, `setSizeOnly`), clears it. Calling `geometry()` before
+  layout throws.
+- A `ref` and a nested constraint operand return their target's geometry,
+  because they share its local frame.
+
+The `pack` operator (`graphicalOperators/pack.tsx`) is the first consumer. It
+lays out each child, reads `enclosingCircle(child.geometry())`, runs d3's
+`packSiblings`, and places each child so its circle lands where d3 put it.
+Geometry exists only after layout, so a parent cannot yet read it while sizing.
+That is why `pack` keeps its children at their pixel size and does not fit
+itself to the space it is given (#967). The design note is
+`internals/design/shape-geometry.md` on the geometry-representations branch.
+
 ### Pass 10: Placement
 
 **Location**: `src/ast/gofish.tsx`
@@ -788,8 +820,9 @@ together because the difference is which tier decides. `INTERNAL_emitNothing` is
 for a node that must never draw, and it answers at resolve. `INTERNAL_visibleWhile`
 is for a node whose drawing comes and goes with a signal — a `time.sequence`'s
 keyframe groups, where the clock picks which band is showing — and it answers at
-paint: the items are lowered either way and their opacity is patched per frame
-through the live-slot side table (see
+paint: the items are lowered either way and their opacity is patched through
+the live-slot side table, each rule read once per tick as one decision the items
+under it share, so only the items whose rule changed its answer are patched (see
 [Reactivity](/internals/frontend/reactivity)). A resolve-time answer there would
 make the clock a pipeline dependency and put the whole chart through layout on
 every tick, for a change that alters nothing above the marks themselves.

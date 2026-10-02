@@ -389,10 +389,11 @@ overlaps `[T - 20, T]`, which is 21 days counting the current one. Both are
 fine for this picture.
 
 The filter was kept at first because of speed. Played, each of the 52,560
-circles (365 days x 72 species x 2 layers) reads the clock on every tick to
-decide whether it shows. In the Node DOM test harness that measured about 460 ms
-a tick. In a real browser it plays smoothly, so panels D and E now use
-`time.history`. The per-frame cost is tracked in #848.
+circles (365 days x 72 species x 2 layers) read the clock on every tick to
+decide whether it shows. Panels D and E now use `time.history`, and the
+decision is made once per keyframe rule per tick and shared by the circles
+under it, so a tick touches only the circles whose day entered or left the
+window (#848).
 
 ### Step 5: panel E, controls at the low-level tier
 
@@ -476,9 +477,12 @@ What it needed from the library, and what each turned into:
    too, through the builder's OWN `resolve()` (which is where a root `coord` is
    hoisted over every tier). So `spreadY([map, controls])` works for a layered
    chart, the mirror of `.layer(node)`.
-4. **Handle geometry is a pipeline-tier read** of `value()` (geometry cannot be
-   `live()` - paint patches attributes, it does not move a node), so the control
-   relays out with the map.
+4. **Handle geometry was a pipeline-tier read** of `value()`, so the control
+   relaid out with the map on every tick. Superseded: the slider now reads the
+   value at paint (the handle's `cx` is a live slot, the readout is live text),
+   and a timer's play state is a dependency separate from its value, so a
+   playing clock re-renders nothing. See
+   [Reactivity](/internals/frontend/reactivity#controls-are-marks-not-nodes).
 5. **`drag({ hitTest })` sees the hit**, not just the point, so a control claims
    exactly the drags that start on the nodes it drew.
 6. **`drag().nodeBox(uid)`** - the on-screen box (svg px) of a node in the frame
@@ -492,8 +496,8 @@ What it needed from the library, and what each turned into:
 Three shape decisions worth recording:
 
 - **A control is a MARK, not a node.** The pipeline is tree-consuming: a node
-  laid out twice keeps its first placement, so a control whose geometry depends
-  on `value()` has to be rebuilt per resolve - which is exactly what a mark is.
+  laid out twice keeps its first placement, so a control has to be rebuilt
+  whenever the spec around it resolves - which is exactly what a mark is.
   The `drag()`/`click()` input and the write effect are created ONCE, when the
   widget is made. So the widget is constructed outside the render thunk and its
   node inside it, and a composition with no `chart()` at its root needs the

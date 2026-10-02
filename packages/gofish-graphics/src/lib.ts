@@ -58,7 +58,11 @@ export {
   saveSVGString,
   gofishSave,
 } from "./ast/gofish";
-export type { GoFishRenderOptions, GoFishExportOptions } from "./ast/gofish";
+export type {
+  GoFishRenderOptions,
+  GoFishExportOptions,
+  View,
+} from "./ast/gofish";
 
 // Display-list (render-IR) export
 export { toDisplayList } from "./ast/displayList/toDisplayList";
@@ -138,6 +142,8 @@ export {
   type CurveSpec,
 } from "./ast/graphicalOperators/routers";
 export { treemap } from "./ast/graphicalOperators/treemap";
+export { pack, circles } from "./ast/graphicalOperators/pack";
+export type { PackMethod, PackOptions } from "./ast/graphicalOperators/pack";
 export {
   enclose,
   enclose as background,

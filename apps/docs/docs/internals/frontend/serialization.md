@@ -129,13 +129,16 @@ the auto-naming + `selectAll` wiring at resolve time — the producer's
 auto-minted layer name never appears in the IR (mirroring how a relational
 mark's zBelow-by-default paint order stays a resolve-time constraint rather
 than a serialized field). Operators are a flat list (`derive`, `resolve`,
-`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`) — note `join`
+`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
+`pack`). `pack`'s `method` is a strategy object made by a function call
+(`circles()` in both languages), so on the wire it is plain data,
+`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
-`arrow`, `position`, `line`, `ribbon`, `treemap`, and the Porter-Duff family),
+`arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, and the Porter-Duff family),
 refs, or the two self-discriminating wrapper marks `offset` and `cut` (below).
 `position` is `enclose`'s undecorated sibling: it sets a single child's
 min-corner `(x, y)` in the parent's coordinates and draws nothing of its own
@@ -324,7 +327,7 @@ chart(data).mark(
 
 The `__combinator: true` flag tells the deserializer to dispatch this
 node through the combinator factory registry (`layer`, `spread`,
-`arrow`, `position`, `line`, `ribbon`, `treemap`, Porter-Duff) rather than the
+`arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, Porter-Duff) rather than the
 leaf-mark registry — same `type` discriminator namespace, different code path.
 
 ## The descriptor table — one authored source for construct field lists
@@ -492,7 +495,7 @@ generated Python" norm Altair and Plotly.py both follow. It emits:
   killing four previously hand-copied wire-name tables.
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
-  `layer`, the polar coord family) — just the kwargs→dict half. The
+  `layer`, `pack`, the polar coord family) — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 

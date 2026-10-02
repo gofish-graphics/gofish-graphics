@@ -306,7 +306,7 @@ def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         points: Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).
-        fill: Fill color. Default "black".
+        fill: Fill color, or a field name for a color scale. Default "black".
         stroke: Stroke color. Defaults to `fill`.
         strokeWidth: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1, applied to both fill and stroke. Default 1.
@@ -695,6 +695,24 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
         ("size", size),
         ("flipY", flipY),
         ("leafIntrinsicRadiusField", leafIntrinsicRadiusField),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _pack_opts(*, by: Optional[Any] = None, method: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).
+
+    Args:
+        by: Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.
+        method: The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm. Default {"kind":"circles"}.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("by", by),
+        ("method", method),
         ("debug", debug),
     ]:
         if _v is not None:

@@ -448,7 +448,10 @@ calling itself with `undefined` and installs the build-in its own
 `.transition({ enter })` asks for, reading the clock's `playing`/`at`.
 `ChartBuilder` and `LayerBuilder` merge in the chart-level `axes`/`color` config,
 read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to
-their options type), and drive `render` through `renderWithInteraction`. So the
+their options type), and drive `render` through `renderWithInteraction`. Every
+resolve also sets `node.rebuild` on the resolved root (the same resolve, for the
+same render pass), so a layout that must run once per candidate, such as
+`labelAngle: "auto"`, can get a fresh tree for each run. So the
 set of
 terminals is defined once — adding one (as `toDisplayList` was) touches a single
 list and lands on every surface at once, instead of being hand-rolled per

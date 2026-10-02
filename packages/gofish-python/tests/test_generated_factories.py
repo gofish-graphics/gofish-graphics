@@ -14,7 +14,9 @@ import pytest
 
 from gofish import (
     circle,
+    circles,
     group,
+    pack,
     polygon,
     spread,
     stack,
@@ -72,6 +74,27 @@ def test_operators_accept_universal_debug_flag():
 def test_stack_operator_accepts_spread_parity_options():
     d = stack(by="a", dir="x", spacing=2).to_dict()
     assert d["spacing"] == 2
+
+
+def test_pack_serializes_by_and_method():
+    d = pack(by="lake", method=circles()).to_dict()
+    assert d["type"] == "pack"
+    assert d["by"] == "lake"
+    assert d["method"] == {"kind": "circles"}
+    assert pack().to_dict()["type"] == "pack"
+    assert "method" not in pack().to_dict()
+
+
+def test_pack_combinator_form():
+    d = pack([circle(r=10), pack([circle(r=4)])], method=circles()).to_dict()
+    assert d["type"] == "pack"
+    assert d["__combinator"] is True
+    assert d["options"] == {"method": {"kind": "circles"}}
+    assert [c["type"] for c in d["children"]] == ["circle", "pack"]
+    assert d["children"][1]["__combinator"] is True
+    assert pack([circle(r=1)]).to_dict()["options"] == {}
+    with pytest.raises(ValueError):
+        pack([circle(r=1)], by="lake")
 
 
 def test_treemap_combinator_accepts_key():

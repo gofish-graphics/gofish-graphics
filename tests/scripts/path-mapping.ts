@@ -21,10 +21,16 @@ const ROOT_DIR = dirname(TESTS_DIR);
  * the Python capture's snake→kebab rule (capture-python-dom.ts) agrees. Without
  * this fold, resolving a `.python-sync-exempt` `file::Export` line through
  * `storyToPath` kept the underscore (`spread-x_center-to-center`) and the
- * parity-skip set never matched the captured DOM path. */
+ * parity-skip set never matched the captured DOM path.
+ *
+ * A digit before a capitalized word is a word break too (`Inner45Outer0` →
+ * `inner45-outer0`), matching the export → Python name rule in
+ * check-python-sync.ts (`story_…_inner45_outer0`). A digit before an acronym
+ * stays joined, so the title `1D Strip Plot` is still `1d-strip-plot`. */
 export const toKebab = (s: string) =>
   s
     .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/([0-9])([A-Z][a-z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
     .toLowerCase();
 

@@ -297,9 +297,12 @@ are the same angle, so `hi` is approached at the instant before the wrap rather
 than emitted. Give the domain a `step` if you need the high end as a value of its
 own.
 
-A `timer()` is **not** tied to any chart's lifetime: it runs until you call
-`.pause()`. Re-rendering a chart (or replacing it in its container) does not stop
-a timer you started, so pause it yourself when you no longer need it.
+A `timer()` is **not** tied to any chart's lifetime, but it only does work while
+something reads it. Once the last chart that reads it is unmounted
+(`view.unmount()`, see [render](/js/api/core/render#unmounting)) or replaced in
+its container, the clock stops sampling; it keeps time all the same, so a later
+read, or a new chart that reads it, sees the value it would have had if it had
+never stopped. Only `.pause()` stops the clock itself.
 
 ::: tip Naming
 Methods that do something are verbs (`play`, `pause`, `set`); boolean readables

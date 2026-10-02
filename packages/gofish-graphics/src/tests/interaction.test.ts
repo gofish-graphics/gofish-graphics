@@ -957,6 +957,16 @@ async function main() {
       playResolves === afterPause,
       `resolves=${playResolves} (after pause ${afterPause})`
     );
+    // The dependency is on the READABLE, not the whole timer: a spec that
+    // reads only the play state does not re-run when the value moves.
+    tPlay.set(10);
+    tPlay.set(20);
+    await settle();
+    ok(
+      "a value change does not re-run a spec that reads only isPlaying()",
+      playResolves === afterPause,
+      `resolves=${playResolves} (after pause ${afterPause})`
+    );
   }
 
   /* ----------------------- click arming ---------------------------- */
@@ -1223,6 +1233,193 @@ async function main() {
     );
   }
 
+  /* ------------------------- view.unmount() ------------------------ */
+  console.log("\nview.unmount()");
+  {
+    const container = makeContainer();
+    let runs = 0;
+    const a = signal(1);
+    const view = await chart(data, { axes: false })
+      .flow(
+        derive((rows: any) => {
+          runs++;
+          a(); // spec dependency
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count", fill: "#00f" }))
+      .render(container, { w: 200, h: 120 });
+    await settle();
+    ok("render returns a View on the container", view.container === container);
+    // A re-render of the same chart (its signal changed) keeps its View valid.
+    a.set(2);
+    await settle();
+    const runsBefore = runs;
+    ok("the signal re-rendered the chart", runsBefore >= 2, `runs=${runs}`);
+    view.unmount();
+    ok(
+      "unmount removes the chart's DOM",
+      container.querySelector("svg") === null && container.innerHTML === "",
+      container.innerHTML.slice(0, 80)
+    );
+    a.set(3);
+    await settle();
+    ok(
+      "unmount detaches the chart from the inputs it read",
+      runs === runsBefore,
+      `runs=${runs}`
+    );
+    let threw = false;
+    try {
+      view.unmount();
+    } catch {
+      threw = true;
+    }
+    ok("unmounting twice is safe", !threw);
+
+    // A stale view must not tear down a newer chart in the same container.
+    const b = signal(1);
+    let newerRuns = 0;
+    const older = await chart(data, { axes: false })
+      .flow(spread({ by: "cat", dir: "x" }))
+      .mark(rect({ h: "count", fill: "#00f" }))
+      .render(container, { w: 200, h: 120 });
+    await settle();
+    await chart(data, { axes: false })
+      .flow(
+        derive((rows: any) => {
+          newerRuns++;
+          b();
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count", fill: "#0a0" }))
+      .render(container, { w: 200, h: 120 });
+    await settle();
+    older.unmount();
+    ok(
+      "a stale view leaves the newer chart's DOM",
+      container.querySelectorAll("svg").length === 1 &&
+        container.querySelector('rect[fill="#0a0"]') !== null
+    );
+    const newerBefore = newerRuns;
+    b.set(2);
+    await settle();
+    ok(
+      "a stale view leaves the newer chart's inputs attached",
+      newerRuns > newerBefore,
+      `runs=${newerRuns}`
+    );
+
+    // A node (here a promise of one, as spreadX returns) renders synchronously,
+    // so `gofish` hands back the View itself, not a promise.
+    const plain = gofish(
+      makeContainer(),
+      { w: 100, h: 60 },
+      spreadX({ spacing: 0 }, [rect({ w: 20, h: 30, fill: "#00f" })])
+    );
+    ok(
+      "gofish(node) returns a View synchronously",
+      typeof plain.unmount === "function" && !(plain instanceof Promise)
+    );
+    plain.unmount();
+  }
+
+  /* ------------- a timer ticks only while something reads it ------------ */
+  console.log("\ntimer ticks only while read");
+  {
+    // Count the intervals alive right now. Only `timer()` sets intervals in
+    // the library, and every earlier timer in this file is paused or unread.
+    const alive = new Set<unknown>();
+    const g = globalThis as any;
+    const realSet = g.setInterval;
+    const realClear = g.clearInterval;
+    g.setInterval = (...args: any[]) => {
+      const h = realSet(...args);
+      alive.add(h);
+      return h;
+    };
+    g.clearInterval = (h: unknown) => {
+      alive.delete(h);
+      realClear(h);
+    };
+    // One domain unit per ms and no wrap within the test, so the value is
+    // elapsed time and continuity is checkable to the millisecond.
+    const t = timer({ domain: [0, 1e6], duration: 1e6 });
+    const liveChart = (container: HTMLElement) =>
+      chart(data, { axes: false })
+        .flow(spread({ by: "cat", dir: "x" }))
+        .mark(
+          rect({
+            h: "count",
+            fill: live(() => (t() % 2 < 1 ? "#f00" : "#00f")),
+          })
+        )
+        .render(container, { w: 200, h: 120 });
+    const specChart = (container: HTMLElement) =>
+      chart(data, { axes: false })
+        .flow(
+          derive((rows: any) => {
+            t();
+            return rows;
+          }),
+          spread({ by: "cat", dir: "x" })
+        )
+        .mark(rect({ h: "count", fill: "#00f" }))
+        .render(container, { w: 200, h: 120 });
+
+    const first = await liveChart(makeContainer());
+    await settle();
+    ok("a chart reading the timer at paint ticks it", alive.size === 1, `${alive.size}`);
+    first.unmount();
+    await realDelay(40);
+    ok(
+      "the interval stops after the last reader unmounts",
+      alive.size === 0,
+      `${alive.size}`
+    );
+    const v0 = t();
+    const t0 = performance.now();
+    await realDelay(100);
+    const v1 = t();
+    const waited = performance.now() - t0;
+    ok(
+      "an unread clock keeps time: a direct read is the current value",
+      Math.abs(v1 - v0 - waited) < 5,
+      `advanced ${v1 - v0} over ${waited.toFixed(1)}ms`
+    );
+    ok("a direct read does not restart the interval", alive.size === 0);
+
+    const second = await liveChart(makeContainer());
+    await settle();
+    ok("a new reader restarts the interval", alive.size === 1, `${alive.size}`);
+    const v2 = t();
+    ok(
+      "the restarted clock continues from where time says it is",
+      v2 >= v1 && v2 - v1 < performance.now() - t0,
+      `${v1} → ${v2}`
+    );
+
+    // Two charts share the clock: one reads it at paint, one in its spec.
+    const third = await specChart(makeContainer());
+    await settle();
+    second.unmount();
+    await realDelay(40);
+    ok(
+      "a clock shared by two charts ticks until both unmount",
+      alive.size === 1,
+      `${alive.size}`
+    );
+    third.unmount();
+    await realDelay(40);
+    ok("…and stops when the last one does", alive.size === 0, `${alive.size}`);
+    t.pause();
+    g.setInterval = realSet;
+    g.clearInterval = realClear;
+  }
+
   /* ------- geo coord: hover a path, live channels on a connector ------- */
   console.log("\ngeo coord + live() on a line connector");
   {
@@ -1450,6 +1647,21 @@ async function main() {
       readout()
     );
 
+    // The value is read at PAINT: a write moves the handle and the readout in
+    // the svg already on screen, without a re-render (which would replace it).
+    const painted = svg();
+    level.set(42);
+    await settle();
+    ok(
+      "a value change repaints the slider without re-rendering",
+      svg() === painted &&
+        Math.abs(Number(handle().getAttribute("cx")) - xFor(42)) < 1e-6 &&
+        readout() === "0|v=42",
+      `same svg=${svg() === painted} cx=${handle().getAttribute("cx")} ${readout()}`
+    );
+    level.set(50);
+    await settle();
+
     // A press on the BARE TRACK at a quarter of the travel lands the handle
     // there: 0 + 0.25 · 100 = 25.
     track().dispatchEvent(
@@ -1460,6 +1672,11 @@ async function main() {
       "a press on the track jumps to the pointed-at value",
       inputs.length === 1 && inputs[0] === 25 && level() === 25,
       `${inputs.join(",")} / ${level()}`
+    );
+    ok(
+      "a press shades the handle and scrubs without re-rendering",
+      svg() === painted && handle().getAttribute("fill") === "#111",
+      `same svg=${svg() === painted} fill=${handle().getAttribute("fill")}`
     );
     ok(
       "the handle is under the pointer that pressed the track",
