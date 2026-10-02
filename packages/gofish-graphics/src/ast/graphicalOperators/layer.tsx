@@ -788,20 +788,14 @@ export const layer = createNodeOperatorSequential(
               freeOrigin
             );
 
-            // Place any child the constraints left unplaced at the layer's
-            // baseline origin — consistent with the phase-1 baseline placement
-            // of unconstrained children. A drawing clause that reads the
+            // Place any child the constraints left unplaced at its baseline
+            // origin (`baselineFor`), the same rule as the phase-1 placement in
+            // `layoutChild`. A layer without constraints needs no step here:
+            // phase 1 already placed every child. A drawing clause that reads the
             // constrained positions is laid out after this (see
             // `relateOrder`), not by a re-layout pass here.
             for (const cp of childPlaceables) {
               if (cp) placeUnplacedChild(cp, "baseline", baselineFor(cp));
-            }
-          } else {
-            // Default layer behavior: place all children at (0, 0)
-            for (const cp of childPlaceables) {
-              if (!cp) continue;
-              cp.place("x", 0);
-              cp.place("y", 0);
             }
           }
 

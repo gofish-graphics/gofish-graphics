@@ -758,14 +758,20 @@ export async function layout(
   const placeRoot = (axis: 0 | 1) => {
     const name = axis === 0 ? "x" : "y";
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
-    const value =
-      offset +
-      scopeRootBaseline(
-        axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY,
-        rootScaleFactors[axis]
+    // Shrink-to-fit pins the content's `min` edge, which already includes any
+    // descent: adding `descent·σ` there would count it twice (#574).
+    if ((axis === 0 ? w : h) === undefined)
+      child.pinAnchor(name, offset, "min");
+    else
+      child.place(
+        name,
+        offset +
+          scopeRootBaseline(
+            axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY,
+            rootScaleFactors[axis]
+          ),
+        "baseline"
       );
-    if ((axis === 0 ? w : h) === undefined) child.pinAnchor(name, value, "min");
-    else child.place(name, value, "baseline");
   };
   placeRoot(0);
   placeRoot(1);

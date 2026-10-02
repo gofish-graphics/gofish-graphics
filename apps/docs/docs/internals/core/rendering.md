@@ -84,7 +84,10 @@ baseline magnitude, `layout()` solves σ so `ascent + descent` (the total
 above the canvas's low edge (`scopeRootBaseline`, the rule a layer's
 self-scaled free stash uses too), so a signed area or bar chart under `scatter`
 keeps its negative side on the canvas. An anchored root has no root σ and
-places through its posScale; every other root has descent 0. See
+places through its posScale; every other root has descent 0. This applies only
+to a given dimension: a shrink-to-fit root pins its content's `min` edge, which
+already includes the descent, so adding it there would count it twice (#574).
+See
 [Underlying Space](/internals/core/underlying-space).
 
 The rule is decided by the **underlying-space tree** — the σ-scope that establishes a

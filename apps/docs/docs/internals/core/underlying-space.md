@@ -248,16 +248,21 @@ their baseline and never spell the descent. `width` is `ascent + descent`,
 computed once by the `CONTINUOUS` constructor, and it is what a scope solves σ
 against. An anchored or difference extent sits
 wholly above its low edge, so its descent is 0. Every consumer that only needs
-the total (σ solves, distribute sums, nest padding, grid claims) reads `width`;
+the total (σ solves, distribute sums, grid claims) reads `width`;
 the consumers that place things about the baseline read the pair:
 
 - `unionChildSpaces`' all-free branch combines children per side:
   `SIZE(max of ascents, max of descents)`. This keeps both the σ-affine
   intercepts and the negative side, so a `group` of signed bars keeps both.
 - `continuousExtentInterval` collapses a free extent to
-  `[−descent.run(1), ascent.run(1)]`, so `resolveAlignmentSpace` (spread's
-  cross axis) anchors a signed bar chart over a domain that includes its
-  negative values.
+  `[−descent.run(1), ascent.run(1)]`. Under `baseline` alignment,
+  `resolveAlignmentSpace` (spread's cross axis) unions these, so a signed bar
+  chart is anchored over a domain that includes its negative values. Under
+  `start`, `end`, or `middle` alignment the children line up at a box edge or
+  center instead, so each child counts as its whole box `[0, width]` and the
+  union spans the widest.
+- `nestedSpace` pads each side of the inner extent: ascent + padding and
+  descent + padding.
 - `anchorAt` puts the baseline at the given coordinate:
   `[origin − descent, origin + ascent]`.
 - A scope root over a free extent (the chart root, or a layer's self-scaled
@@ -725,9 +730,11 @@ frame of the data→pixel map it holds, and that origin has a pixel:
 placement, and `placeUnplacedChild` for a child the solve left unplaced on an
 axis), and hands it to the solve as one input: in `solveAxisProblem`, a
 component with no pin whose free nodes share one baseline is offset so that
-baseline sits at the origin. Free nodes whose baselines differ (a chain along
-the axis, an `end` or `middle` alignment) have no common baseline to seat, so
-that component falls to the sequence or normalized origin as before. So a bar
+baseline sits at the origin. Free nodes whose baselines differ (an `end` or
+`middle` alignment) have no common baseline to seat, and a `distribute` chain
+along the axis has no baseline of its own at all (it composes its members end
+to end, even when their baselines happen to coincide), so those components fall
+to the sequence or normalized origin as before. So a bar
 with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
 the rounded −40. A free
 layer is itself seated by its parent at its own baseline, so its free-child

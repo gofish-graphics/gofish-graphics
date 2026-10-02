@@ -1,5 +1,5 @@
 import { GoFishRef } from "../_ref";
-import { GoFishNode } from "../_node";
+import { GoFishNode, type Placeable } from "../_node";
 import { isToken, Token } from "../createName";
 
 /**
@@ -35,6 +35,16 @@ export type RefProxy = GoFishRef & {
  * before this lookup. Children named "path" need the array form.
  */
 const SAMPLE_REF = new GoFishRef({ selection: ["__sample__"] });
+const PLACEABLE_OPTIONAL_KEYS: readonly (keyof Placeable)[] = [
+  "transform",
+  "projectedTranslate",
+  "localAnchor",
+  "setExtent",
+  "pinAnchor",
+  "setSizeOnly",
+  "spaceOn",
+  "pitchAnchorY",
+];
 const RESERVED_KEYS: ReadonlySet<string> = new Set<string>([
   // Instance fields of GoFishRef (public + private)
   ...(Reflect.ownKeys(SAMPLE_REF).filter(
@@ -55,6 +65,10 @@ const RESERVED_KEYS: ReadonlySet<string> = new Set<string>([
   // Thenable-detection probe — must passthrough to undefined so the proxy
   // is never mistaken for a Promise.
   "then",
+  // Optional Placeable members a ref does not implement. Layout probes them on
+  // whatever a child's `layout()` returns (the proxy, for a chainable ref), so
+  // they must read `undefined`, not a path segment.
+  ...PLACEABLE_OPTIONAL_KEYS,
 ]);
 
 const proxyFor = (selection: (Token | string | number)[]): RefProxy => {
@@ -66,14 +80,7 @@ const proxyFor = (selection: (Token | string | number)[]): RefProxy => {
         return (...segments: (string | number)[]) =>
           proxyFor([...selection, ...segments]);
       }
-      // A reserved member reads off the raw ref, and a method runs bound to
-      // it, so `layout()` hands the unwrapped GoFishRef to the parent: an
-      // optional Placeable probe on it (`spaceOn`, `setExtent`, …) then reads
-      // `undefined` instead of a path segment.
-      if (RESERVED_KEYS.has(prop)) {
-        const value = Reflect.get(t, prop, t);
-        return typeof value === "function" ? value.bind(t) : value;
-      }
+      if (RESERVED_KEYS.has(prop)) return Reflect.get(t, prop, receiver);
       // Numeric-string keys (proxy[2], proxy["3"]) coerce to number so
       // resolveSelection treats them as positional indices, not scope-tags.
       const seg: string | number = /^\d+$/.test(prop) ? Number(prop) : prop;

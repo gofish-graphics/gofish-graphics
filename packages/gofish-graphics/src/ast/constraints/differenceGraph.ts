@@ -140,7 +140,8 @@ function solveRelationComponents(
 /**
  * Solve one axis's {@link AxisProblem} into an absolute `min` per node. Pins fix
  * each relation component's offset; a component with no pin falls back to the
- * distribute sequence-origin (its first `distribute[`-owned source) or a
+ * free origin (its determined free baseline at the layer's origin pixel), the
+ * distribute sequence-origin (its first `distribute[`-owned source), or a
  * normalized origin (its minimum coordinate at 0). This is the general half of
  * the placement solver.
  */
@@ -186,12 +187,16 @@ export function solveAxisProblem(
   };
 
   // The component's baseline, joined over its free nodes: undefined (no free
-  // node) → determined (they all agree) → impossible (two disagree). Only a
+  // node) → determined (they all agree) → impossible (two disagree). A
+  // distribute chain along this axis composes its members end to end, so it
+  // has no baseline of its own: impossible, whatever its members' baselines
+  // happen to be (a one-item chain, or members that coincide). Only a
   // determined baseline is returned; impossible places like undefined.
-  const sharedFreeBaseline = (nodes: NodeId[]): number | undefined => {
+  const sharedFreeBaseline = (component: number): number | undefined => {
     if (freeOrigin === undefined) return undefined;
+    if (distributeOriginFor(component) !== undefined) return undefined;
     let shared: number | undefined;
-    for (const node of nodes) {
+    for (const node of components[component]) {
       const offset = freeOrigin.baselines.get(node);
       if (offset === undefined) continue;
       const at = relative.get(node)! + offset;
@@ -208,7 +213,7 @@ export function solveAxisProblem(
     // An undefined or impossible baseline (e.g. a chain along the axis, or an
     // `end`/`middle` alignment of free nodes) has nothing to seat, so the
     // component uses the sequence or normalized origin below.
-    const baseline = sharedFreeBaseline(components[component]);
+    const baseline = sharedFreeBaseline(component);
     if (freeOrigin !== undefined && baseline !== undefined) {
       offsets.set(component, {
         value: freeOrigin.value - baseline,
