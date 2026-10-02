@@ -30,15 +30,19 @@ import {
   type Keyframe,
   type SequenceWindow,
 } from "../timeWindow";
-import { sourceIndex } from "../interpolate";
+import { interpolateRun, sourceIndex } from "../interpolate";
+import { stepPath, threadPath } from "../spline";
 import {
   curve,
+  evenStep,
   lerpPoint,
   segment,
+  subdivideCurve1,
   type BezierCurve,
   type Path,
   type PathSegment,
   type Point,
+  type Step,
 } from "../path";
 
 let passed = 0;
@@ -78,8 +82,9 @@ const smooth: Path = [
   curve(a, [3, 5], [7, -5], b),
   curve(b, [20, 300], [0, 700], c),
 ];
-/** A path cut into the pieces `windowPath` takes: one per knot interval. */
-const pieces = (path: Path): Path[] => path.map((seg) => [seg]);
+/** A path cut into the pieces `windowPath` takes: one step per knot
+ *  interval, each one segment. */
+const pieces = (path: Path): Step[] => path.map((seg) => evenStep([seg]));
 
 /** The keyframe `times[index]` of a sequence parked at playhead `T`. */
 const keyframeAt = (times: number[], index: number, T: number): Keyframe => ({
@@ -216,6 +221,117 @@ console.log("# the cut: edges of the run");
   ok(
     "until it has passed the run entirely",
     windowPath(pieces(straight), knots, windowAt(2010, 2)).length === 0
+  );
+}
+
+console.log("# the cut: a step drawn with several cubics");
+{
+  // A step can be drawn with several segments that split its time evenly
+  // (a routed step is). Here each `smooth` cubic is cut into four pieces at
+  // even shares of its parameter, which is linear in time, so a cut by time
+  // lands in the right piece, at the right place, and the tip is where a
+  // reading at that time puts the mark.
+  const years = [2000, 2001, 2003, 2004, 2008, 2009];
+  const run: Point[] = [
+    [0, 0],
+    [40, 10],
+    [45, 300],
+    [120, 310],
+    [130, 20],
+    [200, 0],
+  ];
+  const quarters = (c: BezierCurve): BezierCurve[] => {
+    const [a, rest] = subdivideCurve1(c, 0.25);
+    const [b, rest2] = subdivideCurve1(rest, 1 / 3);
+    const [d, e] = subdivideCurve1(rest2, 0.5);
+    return [a, b, d, e];
+  };
+  const steps = threadPath(run, years, "smooth").map(({ segments }) =>
+    evenStep(quarters(segments[0] as BezierCurve))
+  );
+  const xs = run.map((p) => p[0]);
+  const ys = run.map((p) => p[1]);
+  const at = (t: number): Point => [
+    interpolateRun(years, xs, t, "smooth"),
+    interpolateRun(years, ys, t, "smooth"),
+  ];
+  // Up to the rounding of the subdivisions.
+  const nearish = (p: Point, q: Point) =>
+    Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
+  let tipsOk = true;
+  for (const T of [2000.3, 2001.5, 2002.99, 2003.5, 2005.1, 2008.7, 2009]) {
+    const cut = windowPath(steps, years, windowAt(T, Infinity));
+    if (!nearish(endOf(cut[cut.length - 1]), at(T))) tipsOk = false;
+  }
+  ok("the tip is the reading at the playhead, at every playhead", tipsOk);
+  const within = windowPath(steps, years, windowAt(2002.5, 1));
+  const k = steps[1].segments.length;
+  ok(
+    "a window inside one step keeps only the cubics it reaches",
+    within.length === k / 2 &&
+      nearish(startOf(within[0]), at(2001.5)) &&
+      nearish(endOf(within[within.length - 1]), at(2002.5)),
+    `${within.length} of ${k}`
+  );
+  const whole = windowPath(steps, years, windowAt(2009, Infinity));
+  ok(
+    "the whole window keeps every cubic, unchanged",
+    whole.length === steps.flatMap((s) => s.segments).length &&
+      whole.every((seg, i) => seg === steps.flatMap((s) => s.segments)[i])
+  );
+}
+
+console.log("# the cut: a step curve's hold and riser");
+{
+  // A staircase over years 2000, 2001, 2003 (x draws the year): each step is
+  // a hold that takes all of its time and a riser that takes none. Step-after
+  // puts the riser at the next knot's time: a window ending exactly there
+  // draws it, and one ending just before does not.
+  const years = [2000, 2001, 2003];
+  const run: Point[] = [
+    [0, 0],
+    [10, 5],
+    [30, 2],
+  ];
+  const steps = stepPath(run, 0);
+  const tipAt = (T: number): Point => {
+    const cut = windowPath(steps, years, windowAt(T, Infinity));
+    return endOf(cut[cut.length - 1]);
+  };
+  ok(
+    "inside a hold, the tip has moved along x and held y",
+    nearPoint(tipAt(2002), [20, 5]),
+    JSON.stringify(tipAt(2002))
+  );
+  ok(
+    "just before a knot, the riser is not drawn yet",
+    nearPoint(tipAt(2001 - 1e-9), [10 - 1e-8, 0]) &&
+      windowPath(steps, years, windowAt(2001 - 1e-9, Infinity)).length === 1
+  );
+  const atKnot = windowPath(steps, years, windowAt(2001, Infinity));
+  ok(
+    "exactly at a knot, the riser is drawn, whole",
+    atKnot.length === 2 &&
+      atKnot[1] === steps[0].segments[1] &&
+      nearPoint(endOf(atKnot[1]), run[1])
+  );
+  ok("at the last knot, the last riser is drawn", nearPoint(tipAt(2003), run[2]));
+  const window = windowPath(steps, years, windowAt(2002.5, 1));
+  ok(
+    "a window that starts inside a hold and ends inside the next starts on the hold",
+    window.length === 1 &&
+      nearPoint(startOf(window[0]), [15, 5]) &&
+      nearPoint(endOf(window[0]), [25, 5]),
+    JSON.stringify(window)
+  );
+  // With nothing drawing the years, a hold is a point: the tip sits on the
+  // earlier point for the whole step, then jumps.
+  const diagonal = stepPath(run);
+  const cut = (T: number) => windowPath(diagonal, years, windowAt(T, Infinity));
+  ok(
+    "a diagonal step holds its tip on the point, then jumps at the knot",
+    nearPoint(endOf(cut(2000.7)[cut(2000.7).length - 1]), run[0]) &&
+      nearPoint(endOf(cut(2001)[cut(2001).length - 1]), run[1])
   );
 }
 
@@ -465,7 +581,7 @@ console.log("# a cyclic time axis");
   const c: Point = [10, 10];
   const loop = unrollRun([1, 4, 8], cycle);
   const points = loop.index.map((i) => [a, b, c][i]);
-  const steps = points.slice(1).map((p, i) => [segment(points[i], p)]);
+  const steps = points.slice(1).map((p, i) => evenStep([segment(points[i], p)]));
   const drawn = windowPath(steps, loop.knots, windowAt(2.5, 2, cycle));
   ok(
     "a threaded line across the seam runs from the last knot to the first",

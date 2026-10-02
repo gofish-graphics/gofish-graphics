@@ -1,4 +1,11 @@
-import { Path, samePoint, transformPath } from "../../path";
+import {
+  Path,
+  type Step,
+  evenStep,
+  reversePath,
+  samePoint,
+  transformPath,
+} from "../../path";
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, type ToPixel } from "../_node";
@@ -33,6 +40,7 @@ import {
   sequenceCurve,
   sequenceCurveNames,
   type Curve,
+  type RunParameter,
 } from "./routers";
 import { targetOf } from "./layer";
 import { readLive } from "../../interaction/live";
@@ -115,7 +123,7 @@ function underHistory(node: GoFishNode): boolean {
  *  marks it connects, which picks the window. */
 type TimeRun = {
   knots: number[];
-  pieces: Path[];
+  pieces: Step[];
   sequence: SequenceWindow;
   last: number;
 };
@@ -169,6 +177,7 @@ export const connect = createNodeOperator(
       source,
       target,
       along,
+      parameterAxis,
     }: {
       // Optional in anchor mode (source/target), where it is ignored.
       direction?: FancyDirection;
@@ -204,9 +213,16 @@ export const connect = createNodeOperator(
       // threads (`along: "year"` names years). A smooth run reads each
       // operand's value of it as its knots (see `runKnots`), and only then.
       along?: SplitBy;
+      // The axis that draws the connection variable itself, when one does:
+      // the flow tier the connector threads places its groups on that axis
+      // by the same field it groups them by (a line chart over years). Worked
+      // out with the flow (`applyDefaultRelational`); a `step` curve reads it.
+      parameterAxis?: "x" | "y";
     },
     children: GoFishAST[]
   ) => {
+    const drawnAxis: 0 | 1 | undefined =
+      parameterAxis === undefined ? undefined : parameterAxis === "x" ? 0 : 1;
     const resolvedSource =
       source !== undefined ? resolveAnchor(source) : undefined;
     const resolvedTarget =
@@ -476,8 +492,10 @@ export const connect = createNodeOperator(
               renderData: { paths, defaultColor },
             };
           }
-          /** A line's path, one piece per step from a point to the next. */
-          let steps: Path[] = [];
+          /** A line's path, one step from each point to the next: one
+           *  segment, or for a sequence curve the segments that draw one step,
+           *  with their shares of its time (`SequenceCurve.thread`). */
+          let steps: Step[] = [];
 
           // If in center mode, adjust bounding boxes to have zero width/height
           // with min and max equal to the center point
@@ -506,7 +524,8 @@ export const connect = createNodeOperator(
             }
           }
 
-          // A *sequence* curve (`monotone`, `catmullRom`) threads the whole
+          // A *sequence* curve (`monotone`, `smooth`,
+          // `catmullRom`) threads the whole
           // run of points as one spline, bypassing the pairwise router loop.
           // A line (center) threads its centers; a ribbon (edge) threads BOTH
           // facing boundaries of the band — forward along the near edge, a
@@ -524,7 +543,7 @@ export const connect = createNodeOperator(
             const mains = childPlaceables.map(
               (c) => centerPoint(c.dims)[mainAxis]
             );
-            // A curve read over the run's parameter (the monotone cubic)
+            // A curve read over the run's parameter (a data-space curve)
             // takes the run's own parameter when it has one (#635), so the
             // curve follows the data rather than the distances between its
             // points on screen. A line through a sequence's keyframes uses
@@ -541,37 +560,52 @@ export const connect = createNodeOperator(
             // The spline is evaluated here, in layout space, before any
             // coordinate transform. That equals evaluating it in data space
             // and placing the result because every position scale is affine
-            // (see `monotoneSlopes`). A non-affine position scale (log, pow)
+            // and every data-space curve commutes with an affine map of each
+            // channel (see `monotoneSlopes`). A non-affine position scale (log, pow)
             // would need the spline evaluated upstream of the scale instead.
             //
             // A screen-space curve (`catmullRom`) takes no parameter. A
-            // transition along the same run reads the monotone cubic, so its
+            // transition along the same run reads a data-space curve, so its
             // moving mark can sit slightly off a Catmull-Rom line (a known
             // gap, left open on purpose).
-            const knots = !sequence.takesKnots
-              ? undefined
-              : (runKnots(timeKnots) ??
-                (along === undefined
+            //
+            // The parameter is drawn on an axis in two cases: the knots are
+            // the positions on the connection axis themselves, or the flow
+            // tier the run threads places its groups on an axis by the same
+            // field it groups them by (`parameterAxis`, worked out where the
+            // flow is known), such as a line chart over years. `step` reads
+            // it; the smooth curves do not need it.
+            const dataKnots = (): RunParameter | undefined => {
+              const time = runKnots(timeKnots);
+              if (time !== undefined) {
+                return { knots: time, parameterAxis: drawnAxis };
+              }
+              const byAlong =
+                along === undefined
                   ? undefined
-                  : runKnots(children.map((c) => projectBy(c, along)))) ??
-                (continuousConnectionAxis() ? runKnots(mains) : undefined));
-            // `knots` is in operand order; a path drawn back along the run
-            // (a ribbon's far edge) reads them backward and negated.
-            const thread = (
-              points: [number, number][],
-              backward = false
-            ): Path =>
-              sequence.thread(
-                points,
-                knots !== undefined && backward
-                  ? knots.map((k) => -k).reverse()
-                  : knots
-              );
+                  : runKnots(children.map((c) => projectBy(c, along)));
+              if (byAlong !== undefined) {
+                return { knots: byAlong, parameterAxis: drawnAxis };
+              }
+              const byPosition = continuousConnectionAxis()
+                ? runKnots(mains)
+                : undefined;
+              return byPosition === undefined
+                ? undefined
+                : { knots: byPosition, parameterAxis: mainAxis };
+            };
+            const parameter: RunParameter = sequence.takesKnots
+              ? (dataKnots() ?? {})
+              : {};
+            // A path drawn back along the run (a ribbon's far edge) is the
+            // same curve threaded forward, then reversed.
+            const thread = (points: [number, number][]): Step[] =>
+              sequence.thread(points, parameter);
             if (mode === "center") {
               const centers = childPlaceables.map((c) => centerPoint(c.dims));
               const threaded = thread(centers);
-              paths.push(threaded);
-              steps = threaded.map((seg) => [seg]);
+              paths.push(threaded.flatMap((step) => step.segments));
+              steps = threaded;
             } else {
               const near: [number, number][] = [];
               const far: [number, number][] = [];
@@ -580,12 +614,16 @@ export const connect = createNodeOperator(
                 near.push(edgePoint(mains[i], b[1 - mainAxis].min!));
                 far.push(edgePoint(mains[i], b[1 - mainAxis].max!));
               });
-              const farRev = far.slice().reverse();
+              const edge = (points: [number, number][]): Path =>
+                thread(points).flatMap((step) => step.segments);
               paths.push([
-                ...thread(near),
-                { type: "line", points: [near[near.length - 1], farRev[0]] },
-                ...thread(farRev, true),
-                { type: "line", points: [farRev[farRev.length - 1], near[0]] },
+                ...edge(near),
+                {
+                  type: "line",
+                  points: [near[near.length - 1], far[far.length - 1]],
+                },
+                ...reversePath(edge(far)),
+                { type: "line", points: [far[0], near[0]] },
               ]);
             }
           } else if (mode === "center") {
@@ -595,7 +633,7 @@ export const connect = createNodeOperator(
                 router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
               );
             }
-            steps = paths;
+            steps = paths.map(evenStep);
           } else if (dir === 0) {
             // Edge ("ribbon") mode: a filled quad between the facing edges.
             if (!edgeBezier) {
@@ -779,17 +817,23 @@ export const connect = createNodeOperator(
           };
 
           // A threaded line is cut inside one step of its path by data time
-          // (`windowPath`), which needs each step from one keyframe to the
-          // next to be ONE straight or cubic segment from the one keyframe's
-          // center to the next's.
+          // (`windowPath`), which needs each step to run from the one
+          // keyframe's center to the next's, and to say how its time is
+          // shared among its segments. A sequence curve's step says so
+          // (`SequenceCurve.thread`). A pairwise route says nothing about
+          // time, so its step can be cut only when it is ONE straight or
+          // cubic segment, whose own parameter is then the time.
           let timeRun: TimeRun | undefined;
           if (timeKnots !== undefined) {
             const centers = childPlaceables.map((c) => centerPoint(c.dims));
             const ends = (seg: Path[number]): [number, number][] =>
               seg.type === "line" ? seg.points : [seg.start, seg.end];
-            const threads = steps.every((piece, i) => {
-              if (piece.length !== 1) return false;
-              const [start, end] = ends(piece[0]);
+            const threads = steps.every(({ segments }, i) => {
+              if (sequence === undefined && segments.length !== 1) {
+                return false;
+              }
+              const [start] = ends(segments[0]);
+              const [, end] = ends(segments[segments.length - 1]);
               return (
                 samePoint(start, centers[i]) && samePoint(end, centers[i + 1])
               );
@@ -806,8 +850,8 @@ export const connect = createNodeOperator(
                   `threads the keyframes of a time.sequence, so it is drawn ` +
                   `only over the stretch of time the sequence shows, cut at ` +
                   `the exact point in data time. That cut needs each step ` +
-                  `from one keyframe to the next to be ONE straight or cubic ` +
-                  `segment between the keyframes' centers, which ` +
+                  `from one keyframe to the next to run between the keyframes' ` +
+                  `centers and to say how its time runs along it, which ` +
                   `${threadingCurves} draw and "${resolvedCurveName}" does ` +
                   `not. Use one of those, or open an issue for ` +
                   `"${resolvedCurveName}".`

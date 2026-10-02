@@ -41,6 +41,24 @@ type PaintItem<P = undefined> = {
   hoistedThrough: string[];
 };
 
+/** A layer's `zAbove`/`zBelow` constraints, scoped to the paint units that
+ *  layer painted: `[start, end)` indexes the flattened paint list. A hoisted
+ *  plain layer's units are contiguous in that list (the walk is depth-first),
+ *  so the range is exactly what the layer paints. This scoping is a shortcut
+ *  that makes up for hoisting; #982 proposes sorting each layer among its own
+ *  children instead. */
+type ScopedZConstraints = {
+  constraints: ZOrderConstraint[];
+  start: number;
+  end: number;
+};
+
+/** A node's own `zAbove`/`zBelow` constraints. */
+const zConstraintsOf = (node: GoFishAST): ZOrderConstraint[] =>
+  ((node instanceof GoFishNode ? node.constraints : undefined) ?? []).filter(
+    isZOrderConstraint
+  );
+
 /** Whether the z-order flatten hoists through `node`: a plain (non-component)
  *  layer is transparent, and its children are the paint units. */
 const hoistsForZOrder = (node: GoFishNode): boolean =>
@@ -57,9 +75,14 @@ const hoistsForZOrder = (node: GoFishNode): boolean =>
  * each `PaintItem.payload`. The root `bake` uses it to carry the flip scope
  * through hoisted layers so a z-order constraint can never change a subtree's
  * orientation (#629).
+ *
+ * Returns the paint list with the z constraints of the root layer
+ * (`rootConstraints`) and of each hoisted layer, scoped to the units each one
+ * painted.
  */
 function flattenForZOrder<P = undefined>(
   children: GoFishAST[],
+  rootConstraints: ZOrderConstraint[],
   fold?: {
     /** The payload active at the top level (the parent's own payload). */
     seed: P;
@@ -67,11 +90,19 @@ function flattenForZOrder<P = undefined>(
      *  the payload active above it and the accumulated translate to it. */
     onHoist: (payload: P, layer: GoFishNode, accTx: number, accTy: number) => P;
   }
-): PaintItem<P>[] {
+): { items: PaintItem<P>[]; groups: ScopedZConstraints[] } {
   const out: PaintItem<P>[] = [];
+  const groups: ScopedZConstraints[] = [];
   let order = 0;
   walk(children, 0, 0, fold?.seed as P, []);
-  return out;
+  addGroup(rootConstraints, 0);
+  return { items: out, groups };
+
+  function addGroup(constraints: ZOrderConstraint[], start: number): void {
+    if (constraints.length > 0) {
+      groups.push({ constraints, start, end: out.length });
+    }
+  }
 
   // NB: only translates are accumulated across transparent ancestors. A
   // non-component nested layer that also carries `options.transform.scale`
@@ -115,6 +146,7 @@ function flattenForZOrder<P = undefined>(
         // The layer's name goes with its children, so a constraint that
         // names the layer still finds what it paints.
         const name = nodeName(child);
+        const start = out.length;
         walk(
           child.children,
           nextAccTx,
@@ -122,6 +154,7 @@ function flattenForZOrder<P = undefined>(
           nextPayload,
           name === undefined ? through : [...through, name]
         );
+        addGroup(zConstraintsOf(child), start);
       } else {
         out.push({
           node: child,
@@ -174,16 +207,12 @@ export function orderChildrenForPaint<P = undefined>(
 ): PaintChild<P>[] {
   if (!("children" in node) || !node.children) return [];
   const children = node.children;
-  const zConstraints = (
-    (node instanceof GoFishNode ? node.constraints : undefined) ?? []
-  ).filter(isZOrderConstraint);
+  const zConstraints = zConstraintsOf(node);
 
   if (zConstraints.length > 0) {
     // Resolve z WITHIN this layer over its component-granular flattened subtree.
-    return topoSortByZOrder(
-      flattenForZOrder<P>(children, fold),
-      zConstraints
-    ).map((unit) => ({
+    const { items, groups } = flattenForZOrder<P>(children, zConstraints, fold);
+    return topoSortByZOrder(items, groups).map((unit) => ({
       node: unit.node,
       accTranslate: unit.accTranslate,
       payload: unit.payload,
@@ -220,12 +249,13 @@ const nodeName = (node: GoFishAST): string | undefined => {
 /**
  * Stable topological paint order: order `items` so every `zAbove`/`zBelow`
  * constraint is satisfied, breaking ties (and ordering the unconstrained
- * majority) by `(defaultZ, defaultOrder)`. Throws if the constraints form a
- * cycle.
+ * majority) by `(defaultZ, defaultOrder)`. Each constraint group resolves its
+ * names only among the units in its `[start, end)` range, the units painted by
+ * the layer that declared it. Throws if the constraints form a cycle.
  */
 function topoSortByZOrder<P>(
   items: PaintItem<P>[],
-  constraints: ZOrderConstraint[]
+  groups: ScopedZConstraints[]
 ): PaintItem<P>[] {
   const n = items.length;
 
@@ -259,15 +289,19 @@ function topoSortByZOrder<P>(
     out.add(to);
     inDegree[to]++;
   };
-  for (const c of constraints) {
-    const aIdx = nameToIndices.get(c.children[0].name) ?? [];
-    const bIdx = nameToIndices.get(c.children[1].name) ?? [];
-    for (const ai of aIdx) {
-      for (const bi of bIdx) {
-        // zAbove(a, b): a paints LATER (over b) → edge b → a.
-        // zBelow(a, b): a paints EARLIER (under b) → edge a → b.
-        if (c.type === "zAbove") addEdge(bi, ai);
-        else addEdge(ai, bi);
+  const lookup = (name: string, start: number, end: number): number[] =>
+    (nameToIndices.get(name) ?? []).filter((i) => i >= start && i < end);
+  for (const { constraints, start, end } of groups) {
+    for (const c of constraints) {
+      const aIdx = lookup(c.children[0].name, start, end);
+      const bIdx = lookup(c.children[1].name, start, end);
+      for (const ai of aIdx) {
+        for (const bi of bIdx) {
+          // zAbove(a, b): a paints LATER (over b) → edge b → a.
+          // zBelow(a, b): a paints EARLIER (under b) → edge a → b.
+          if (c.type === "zAbove") addEdge(bi, ai);
+          else addEdge(ai, bi);
+        }
       }
     }
   }

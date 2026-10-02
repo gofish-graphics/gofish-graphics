@@ -266,6 +266,9 @@ export type OperatorClass = {
   kind: "arrangement" | "value" | "none";
   positions: { x: boolean; y: boolean };
   by?: SplitBy;
+  /** The field each axis is placed by, as the operator's `axisFields`
+   *  reports it (spread's `by` on its `dir`, scatter's `x`/`y`). */
+  fields?: Record<string, string | undefined>;
 };
 
 function classifyOperator(op: Operator<any, any>): OperatorClass {
@@ -499,6 +502,17 @@ function applyDefaultRelational(
   const pathBy =
     pathTierIndex === undefined ? undefined : classified[pathTierIndex].by;
   if (pathBy !== undefined) fusable.inferred.along = pathBy;
+  // The path tier draws its own `by` when it places its groups on an axis by
+  // that same field: a line chart over years. A `step` curve reads it.
+  const pathField = fieldNameOf(pathBy);
+  const pathFields =
+    pathTierIndex === undefined ? undefined : classified[pathTierIndex].fields;
+  if (pathField !== undefined && pathFields !== undefined) {
+    const drawn = (["x", "y"] as const).find(
+      (axis) => pathFields[axis] === pathField
+    );
+    if (drawn !== undefined) fusable.inferred.parameterAxis = drawn;
+  }
   if (travelAxis !== undefined && fusable.opts.dir === undefined) {
     fusable.inferred.dir = travelAxis;
   }

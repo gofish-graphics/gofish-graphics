@@ -270,7 +270,10 @@ own (the times of the keyframes a line threads, or the path tier's key,
 `inferred.along`, read through `projectBy`). On a continuous connection
 axis, the points' positions along it are the knots when the points are in order
 along it. A run with neither falls back to centripetal knots, which are
-computed from distances on screen (`runKnots` in `connect.tsx`).
+computed from distances on screen (`runKnots` in `connect.tsx`). When the
+knots are the positions on the connection axis, that axis draws the run's
+parameter; the `step` curve reads this (along with `inferred.parameterAxis`
+for a parameter taken from the path tier) to hold every other coordinate.
 
 The guide a space supports keys on **`dataDomain`** (data-space), never on
 placement:

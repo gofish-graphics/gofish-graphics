@@ -50,6 +50,7 @@ const {
   ribbon,
   scatter,
   selectAll,
+  spread,
   field,
   time,
 } = GoFish as any;
@@ -299,7 +300,10 @@ async function main(): Promise<void> {
     /** Each year's mark is a white dot kept once reached (the trail) and a
      *  red dot that glides from year to year (the head), with a line layered
      *  over the year marks. The head is the only red dot. */
-    const trail = (at: number, curve: "linear" | "monotone" | "step") =>
+    const trail = (
+      at: number,
+      curve: "linear" | "monotone" | "smooth" | "step"
+    ) =>
       keyframes(rows, at)
         .mark(
           layer([
@@ -309,9 +313,7 @@ async function main(): Promise<void> {
             }),
           ])
         )
-        .layer(
-          line({ along: "year", curve: curve === "step" ? "linear" : curve })
-        )
+        .layer(line({ along: "year", curve }))
         .toDisplayList(OPTIONS);
     const shownDots = (doc: any, fill: string) =>
       items(doc).filter(
@@ -348,10 +350,22 @@ async function main(): Promise<void> {
       );
       ok(`linear at ${at}: the line is the data-space rung`, !diff, diff);
     }
-    for (const at of [1956.5, 1958.7, 1963, 1966, 1970.25, 1983, 2000.9]) {
+    for (const curve of ["monotone", "smooth"] as const) {
+      for (const at of [1956.5, 1958.7, 1963, 1966, 1970.25, 1983, 2000.9]) {
+        ok(
+          `${curve} at ${at}: one moving dot, on the line's tip`,
+          onTip(await trail(at, curve))
+        );
+      }
+    }
+    // Step-after: inside a hold the dot and the tip sit on the earlier
+    // year; at exactly a year the riser is drawn and both are on it; just
+    // before it neither has jumped. The years never draw on an axis here, so
+    // each hold is a single point and each riser a diagonal.
+    for (const at of [1958.3, 1960, 1959.999, 1966, 1983, 2010]) {
       ok(
-        `monotone at ${at}: one moving dot, on the line's tip`,
-        onTip(await trail(at, "monotone"))
+        `step at ${at}: one moving dot, on the line's tip`,
+        onTip(await trail(at, "step"))
       );
     }
     const stepped = await trail(1979.25, "step");
@@ -873,9 +887,9 @@ async function main(): Promise<void> {
   const notAMethod = [
     [
       "catmullRom",
-      /"catmullRom" is not a way.*"step", "linear" or "monotone".*screen-space path curve/,
+      /"catmullRom" is not a way.*"step", "linear", "monotone" or "smooth".*screen-space path curve/,
     ],
-    ["linaer", /"linaer" is not a way.*"step", "linear" or "monotone"/],
+    ["linaer", /"linaer" is not a way.*"step", "linear", "monotone" or "smooth"/],
   ] as const;
   for (const [curve, pattern] of notAMethod) {
     why = await throws(
@@ -912,8 +926,75 @@ async function main(): Promise<void> {
       !sameTween(animation.tween(), animation.tween({ curve: "linear" }))
   );
 
+  console.log("\n# the step curve");
+  {
+    const rows = drivingShifts.slice(0, 12);
+    /** The one path's vertices, in order, from its path data (straight
+     *  segments only). */
+    const vertices = (doc: any): Point[] => {
+      const d: string = onePath(doc).d;
+      if ((d.match(/[A-Za-z]/g) ?? []).some((c) => !"MLZ".includes(c))) {
+        throw new Error(`not a straight path: ${d.slice(0, 80)}`);
+      }
+      return [...d.matchAll(/[ML]\s*([^,\s]+),([^\s]+?)(?=[MLZ\s]|$)/g)].map(
+        ([, x, y]) => [Number(x), Number(y)] as Point
+      );
+    };
+    /** Whether every segment between `ps` is horizontal or vertical, the
+     *  two alternating from a horizontal hold. */
+    const staircase = (ps: Point[]): boolean =>
+      ps.slice(1).every((p, i) => {
+        const q = ps[i];
+        const flat = Math.abs(p[1] - q[1]) < 1e-3;
+        const upright = Math.abs(p[0] - q[0]) < 1e-3;
+        return i % 2 === 0 ? flat : upright;
+      });
+    // A line chart over years: the years draw the x axis, so x advances
+    // while gas holds, the staircase of d3's curveStepAfter.
+    const overYears = vertices(
+      await chart(rows)
+        .flow(scatter({ by: "year", x: "year", y: "gas" }))
+        .mark(line({ curve: "step" }))
+        .toDisplayList(OPTIONS)
+    );
+    ok(
+      "a line chart over years is a staircase: hold, then riser",
+      overYears.length === 2 * rows.length - 1 && staircase(overYears),
+      JSON.stringify(overYears.slice(0, 5))
+    );
+    // A connected scatter plot over years: nothing draws the years, so the
+    // hold is a point and the riser a diagonal, the same shape as linear.
+    const connected = (curve: string) =>
+      chart(rows)
+        .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+        .mark(line({ curve }))
+        .toDisplayList(OPTIONS);
+    const diff = firstDifference(
+      lineSegments(await connected("step")),
+      lineSegments(await connected("linear"))
+    );
+    ok("a connected scatter plot steps along diagonals", !diff, diff);
+    // A ribbon over years: both edges are staircases, as Vega's stepped area
+    // (`interpolate: "step-after"`) draws them. The path runs along the near
+    // edge, across the end cap, and back along the far edge.
+    const band = vertices(
+      await chart(rows)
+        .flow(spread({ by: "year", dir: "x", spacing: 20 }))
+        .mark(ribbon({ h: "gas", curve: "step" }))
+        .toDisplayList(OPTIONS)
+    );
+    const edge = 2 * rows.length - 1;
+    ok(
+      "a stepped ribbon's two edges are both staircases",
+      band.length >= 2 * edge &&
+        staircase(band.slice(0, edge)) &&
+        staircase(band.slice(edge, 2 * edge).reverse()),
+      `${band.length} vertices`
+    );
+  }
+
   // The sequence curves are built in: a route cannot take their names.
-  for (const name of ["monotone", "catmullRom"]) {
+  for (const name of ["step", "monotone", "catmullRom"]) {
     why = await throws(
       async () => registerRoute(name, () => []),
       new RegExp(

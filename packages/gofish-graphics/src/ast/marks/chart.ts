@@ -761,8 +761,8 @@ export type LineOptions = {
   mixBlendMode?: "normal" | "multiply";
   // Screen-space path shape, as a factory call (`bezier()`, `orthogonal()`,
   // `arc({ direction })`, `perfectArrows({ bow })`, …) or a bare name
-  // (`"linear"` | `"bezier"` | `"monotone"` | `"catmullRom"`). The single
-  // path-shaping key.
+  // (`"linear"` | `"bezier"` | `"step"` | `"monotone"` | `"smooth"` |
+  // `"catmullRom"`). The single path-shaping key.
   curve?: Curve;
   dir?: "x" | "y";
   // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
@@ -812,6 +812,7 @@ export const line = createRelationalMark<LineOptions>(
         source: o.source,
         target: o.target,
         along: inferred.along,
+        parameterAxis: inferred.parameterAxis,
       },
       children
     )
@@ -865,6 +866,7 @@ export const ribbon = createRelationalMark<RibbonOptions>(
         // connection axis, else a bezier band.
         curve: o.curve,
         along: inferred.along,
+        parameterAxis: inferred.parameterAxis,
       },
       children
     )

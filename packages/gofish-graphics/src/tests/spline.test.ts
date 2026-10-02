@@ -11,15 +11,21 @@
  * knots must be strictly ascending. The Catmull-Rom
  * contract: its knots are always centripetal, and it is the Barry-Goldman
  * spline over them.
+ *
+ * The `smooth` contract: it is SciPy's modified Akima (`makima`) cubic, and a
+ * run of equal values stays flat, and a path's cubic at local `u` is the
+ * reading at the matching time `t`.
  */
 
 import {
+  SMOOTH_CURVES,
   catmullRomPath,
   centripetalKnots,
-  monotoneCubics,
-  monotoneJet,
-  monotonePath,
+  channelSpline,
   monotoneSlopes,
+  smoothSlopes,
+  stepPath,
+  threadPath,
 } from "../spline";
 import {
   channelReader,
@@ -27,7 +33,13 @@ import {
   interpolateRun,
   locate,
 } from "../interpolate";
-import { type Point, subdivideCurve1 } from "../path";
+import {
+  type BezierCurve,
+  type Path,
+  type Point,
+  reversePath,
+  subdivideCurve1,
+} from "../path";
 import { drivingShifts } from "../data/drivingShifts";
 
 let passed = 0;
@@ -62,6 +74,14 @@ function randomRun(rand: () => number, n: number) {
   const points: Point[] = knots.map(() => [rand() * 500, rand() * 500]);
   return { knots, points };
 }
+
+/** A run threaded with the monotone cubic, which draws each step with ONE
+ *  cubic, so the path is those cubics in order. */
+const monotonePath = (points: Point[], knots: number[]) =>
+  threadPath(points, knots, "monotone").map(({ segments }) => {
+    if (segments.length !== 1) throw new Error("a monotone step is one cubic");
+    return segments[0] as BezierCurve;
+  });
 
 /** The point de Casteljau cuts a path's segment at, which is how
  *  `windowPath` cuts a threaded line. */
@@ -427,7 +447,7 @@ console.log("# a prepared channel reads what a single read reads");
     const n = 1 + Math.floor(rand() * 8);
     const { knots, points } = randomRun(rand, n);
     const values = points.map((p) => p[0]);
-    for (const method of ["step", "linear", "monotone"] as const) {
+    for (const method of ["step", "linear", ...SMOOTH_CURVES] as const) {
       const read = channelReader(knots, values, method);
       for (let s = -2; s <= 42; s++) {
         const t = knots[0] + (s / 40) * (knots[n - 1] - knots[0] || 1);
@@ -445,7 +465,8 @@ console.log("# the jet's derivatives are the value's");
 {
   const rand = random(2026);
   let worst = 0;
-  for (let trial = 0; trial < 100; trial++) {
+  for (let trial = 0; trial < 300; trial++) {
+    const curve = SMOOTH_CURVES[trial % SMOOTH_CURVES.length];
     const n = 2 + Math.floor(rand() * 7);
     const { knots, points } = randomRun(rand, n);
     const values = points.map((p) => p[1]);
@@ -453,9 +474,9 @@ console.log("# the jet's derivatives are the value's");
     const span = knots[i + 1] - knots[i];
     const u = 0.1 + 0.8 * rand();
     const h = 1e-4;
-    const cubics = monotoneCubics(knots, values);
-    const value = (du: number) => monotoneJet(knots, cubics, i, u + du)[0];
-    const [, velocity, acceleration] = monotoneJet(knots, cubics, i, u);
+    const spline = channelSpline(curve, knots, values);
+    const value = (du: number) => spline.jet(i, u + du)[0];
+    const [, velocity, acceleration] = spline.jet(i, u);
     // Central differences in u, converted to per unit of the knot parameter.
     const dv = (value(h) - value(-h)) / (2 * h) / span;
     const da = (value(h) - 2 * value(0) + value(-h)) / (h * h) / (span * span);
@@ -465,13 +486,12 @@ console.log("# the jet's derivatives are the value's");
       Math.abs(da - acceleration) / (1 + Math.abs(acceleration))
     );
   }
-  ok("velocity and acceleration match differences", worst < 1e-3, `${worst}`);
-  const [, velocity] = monotoneJet(
-    [0, 1, 2],
-    monotoneCubics([0, 1, 2], [0, 5, 1]),
-    0,
-    1
+  ok(
+    "for every smooth curve, velocity and acceleration match differences",
+    worst < 1e-3,
+    `${worst}`
   );
+  const [, velocity] = channelSpline("monotone", [0, 1, 2], [0, 5, 1]).jet(0, 1);
   ok("the velocity at a turn is 0", velocity === 0, `${velocity}`);
 }
 
@@ -580,6 +600,267 @@ console.log("# centripetal knots");
       ([x, y]) => near(x, 10) && near(y, 5)
     )
   );
+}
+
+console.log("# smooth: the same curve as SciPy's makima");
+{
+  // Reference slopes and values from SciPy 1.18's
+  // `Akima1DInterpolator(t, v, method="makima")`, which is not a dependency
+  // of this package: they were recorded once and are hard-coded here. The
+  // values are read at u = 0.25, 0.5 and 0.8 of every segment.
+  const cases = [
+    {
+      name: "Akima's 1970 data",
+      t: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      v: [10, 10, 10, 10, 10, 10, 10.5, 15, 50, 60, 85],
+      slopes: [
+        0, 0, 0, 0, 0, 0, 0.5588235294117647, 8.171296296296296,
+        19.818731117824772, 17.5, 30.131578947368425,
+      ],
+      values: [
+        10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+        10.051930147058822, 10.180147058823529, 10.376470588235293,
+        10.898680044934641, 11.798440904139433, 13.50395642701525,
+        20.688835520518627, 31.044070647308942, 44.0846838983999,
+        53.52919656344411, 55.289841389728096, 57.354199395770394,
+        64.95476973684211, 70.92105263157895, 79.10315789473687,
+      ],
+    },
+    {
+      name: "a step",
+      t: [0, 1, 2, 3, 4, 5, 6, 7],
+      v: [0, 0, 0, 0, 1, 1, 1, 1],
+      slopes: [0, 0, 0, 0, 0, 0, 0, 0],
+      values: [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0.15625, 0.5, 0.8959999999999997, 1, 1, 1,
+        1, 1, 1, 1, 1, 1,
+      ],
+    },
+    {
+      name: "uneven knots",
+      t: [0, 0.5, 2, 2.3, 5, 9, 9.4],
+      v: [1, 3, 2, -1, 4, 4.5, 0],
+      slopes: [
+        5.343434343434343, 2.0000000000000004, -3.3222407099278985,
+        0.0004439117503416412, 1.0150031696837354, -0.8704397940913158,
+        -14.652455849889616,
+      ],
+      values: [
+        1.6413352272727273, 2.208964646464646, 2.749494949494949,
+        3.499220049916805, 3.4979201331114806, 2.8378702163061558,
+        1.391086727540925, 0.3753993266870662, -0.7199105570265196,
+        -0.34704279092039036, 1.1575862504474792, 3.1292532585325303,
+        4.812271744339223, 5.192721481887526, 5.023585580294273,
+        4.022646308767798, 2.9391008027899277, 1.2070641101499804,
+      ],
+    },
+    {
+      name: "three values",
+      t: [0, 1, 3],
+      v: [0, 2, 1],
+      slopes: [2.7065217391304346, 0.5625, -1.3125],
+      values: [
+        0.6667374320652174, 1.2680027173913042, 1.8066086956521739, 2.125,
+        1.96875, 1.4759999999999995,
+      ],
+    },
+  ];
+  const close = (a: number, b: number) =>
+    Math.abs(a - b) <= 1e-12 * (1 + Math.abs(b));
+  for (const { name, t, v, slopes, values } of cases) {
+    const m = smoothSlopes(t, v);
+    const spline = channelSpline("smooth", t, v);
+    const read: number[] = [];
+    for (let i = 0; i + 1 < t.length; i++) {
+      for (const u of [0.25, 0.5, 0.8]) read.push(spline.at(i, u));
+    }
+    ok(
+      `${name}: slopes and values match to 1e-12`,
+      m.every((s, i) => close(s, slopes[i])) &&
+        read.every((x, i) => close(x, values[i])),
+      JSON.stringify({ m, read })
+    );
+  }
+}
+
+console.log("# smooth: a run of three or more equal values stays flat");
+{
+  // Akima's data is flat for its first five segments: the curve must not
+  // move there at all, though it rounds the turn after the flat run.
+  const t = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const v = [10, 10, 10, 10, 10, 10, 10.5, 15, 50, 60, 85];
+  const spline = channelSpline("smooth", t, v);
+  let worst = 0;
+  for (let i = 0; i < 5; i++) {
+    for (let s = 0; s <= 100; s++) {
+      worst = Math.max(worst, Math.abs(spline.at(i, s / 100) - 10));
+    }
+  }
+  ok("Akima's flat run stays at 10", worst < 1e-12, `${worst}`);
+  // Random runs with flat stretches inserted: every flat interval next to
+  // another flat interval has both end slopes exactly 0. (A lone flat
+  // interval between two changes can bow, as it does in SciPy.)
+  const rand = random(2019);
+  let bad = 0;
+  let flats = 0;
+  for (let trial = 0; trial < 200; trial++) {
+    const n = 3 + Math.floor(rand() * 8);
+    const { knots, points } = randomRun(rand, n);
+    const values = points.map((p) => p[1]);
+    for (let i = 1; i < n; i++) if (rand() < 0.4) values[i] = values[i - 1];
+    const m = smoothSlopes(knots, values);
+    const flat = (i: number) =>
+      i >= 0 && i + 1 < n && values[i] === values[i + 1];
+    for (let i = 0; i + 1 < n; i++) {
+      if (!flat(i) || !(flat(i - 1) || flat(i + 1))) continue;
+      flats++;
+      if (m[i] !== 0 || m[i + 1] !== 0) bad++;
+    }
+  }
+  ok(
+    `${flats} flat intervals in runs of equal values, on 200 random runs`,
+    bad === 0,
+    `${bad} moved`
+  );
+}
+
+console.log("# smooth: small runs, and the knots' order");
+{
+  const two = [0, 4];
+  const twoValues = [1, 9];
+  const spline = channelSpline("smooth", two, twoValues);
+  ok(
+    "two values are a straight line",
+    [0, 0.3, 0.5, 1].every((u) => near(spline.at(0, u), 1 + 8 * u, 1e-12))
+  );
+  const throws = (f: () => unknown) => {
+    try {
+      f();
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  for (const [name, knots] of [
+    ["a zero gap", [0, 1, 1, 2]],
+    ["a negative gap", [0, 2, 1, 3]],
+  ] as const) {
+    ok(
+      `smooth throws on ${name}`,
+      throws(() => smoothSlopes([...knots], [0, 1, 2, 3])) &&
+        throws(() => channelSpline("smooth", [...knots], [0, 1, 2, 3]))
+    );
+  }
+}
+
+console.log("# smooth: a path's steps are the readings over time");
+{
+  const rand = random(957);
+  let worst = 0;
+  let shapeOk = true;
+  for (let trial = 0; trial < 100; trial++) {
+    const n = 2 + Math.floor(rand() * 8);
+    const { knots, points } = randomRun(rand, n);
+    const xs = points.map((p) => p[0]);
+    const ys = points.map((p) => p[1]);
+    const threaded = threadPath(points, knots, "smooth");
+    if (threaded.length !== n - 1) shapeOk = false;
+    threaded.forEach(({ segments, spans }, i) => {
+      // One cubic per step, taking all of its time, from its point to the
+      // next.
+      if (segments.length !== 1 || spans[0] !== 1) {
+        shapeOk = false;
+        return;
+      }
+      const cubic = segments[0] as BezierCurve;
+      if (cubic.start !== points[i] || cubic.end !== points[i + 1]) {
+        shapeOk = false;
+      }
+      for (const u of [0.13, 0.5, 0.77]) {
+        const [x, y] = subdivideCurve1(cubic, u)[0].end;
+        const t = knots[i] + u * (knots[i + 1] - knots[i]);
+        worst = Math.max(
+          worst,
+          Math.abs(x - interpolateRun(knots, xs, t, "smooth")),
+          Math.abs(y - interpolateRun(knots, ys, t, "smooth"))
+        );
+      }
+    });
+  }
+  ok("one cubic per interval, each from its point to the next", shapeOk);
+  ok("exactly the reading", worst <= 1e-9, `${worst}`);
+}
+
+console.log("# step: step-after over the run's parameter");
+{
+  // Reference vertices from d3-shape 3.2.0's `curveStepAfter`, recorded once
+  // on the first eight years of the driving-shifts data (gas by year), and
+  // for the lower edge of `area().y0(gas / 2).y1(gas)`, which d3 draws back
+  // from the last year to the first.
+  const rows = drivingShifts.slice(0, 8);
+  const d3Line: Point[] = [
+    [1956, 2.38], [1957, 2.38], [1957, 2.4], [1958, 2.4], [1958, 2.26],
+    [1959, 2.26], [1959, 2.31], [1960, 2.31], [1960, 2.27], [1961, 2.27],
+    [1961, 2.25], [1962, 2.25], [1962, 2.22], [1963, 2.22], [1963, 2.12],
+  ];
+  const d3Lower: Point[] = [
+    [1963, 1.06], [1963, 1.11], [1962, 1.11], [1962, 1.125], [1961, 1.125],
+    [1961, 1.135], [1960, 1.135], [1960, 1.155], [1959, 1.155], [1959, 1.13],
+    [1958, 1.13], [1958, 1.2], [1957, 1.2], [1957, 1.19], [1956, 1.19],
+  ];
+  const verticesOf = (path: Path): Point[] => {
+    const ends = (seg: Path[number]): [Point, Point] =>
+      seg.type === "line" ? seg.points : [seg.start, seg.end];
+    return [ends(path[0])[0], ...path.map((seg) => ends(seg)[1])];
+  };
+  const same = (a: Point[], b: Point[]) =>
+    a.length === b.length &&
+    a.every((p, i) => near(p[0], b[i][0], 1e-12) && near(p[1], b[i][1], 1e-12));
+  const byYear = stepPath(
+    rows.map((d) => [d.year, d.gas] as Point),
+    0
+  );
+  ok(
+    "with x drawing the parameter, the staircase d3's curveStepAfter draws",
+    same(verticesOf(byYear.flatMap((s) => s.segments)), d3Line),
+    JSON.stringify(verticesOf(byYear.flatMap((s) => s.segments)))
+  );
+  const lower = stepPath(
+    rows.map((d) => [d.year, d.gas / 2] as Point),
+    0
+  );
+  ok(
+    "and a band's far edge, drawn back, is the lower edge of d3's stepped area",
+    same(verticesOf(reversePath(lower.flatMap((s) => s.segments))), d3Lower)
+  );
+  ok(
+    "each step holds for all of its time, and its riser is an instant",
+    byYear.every(
+      ({ segments, spans }) =>
+        segments.length === 2 && spans[0] === 1 && spans[1] === 0
+    )
+  );
+  // No coordinate draws the parameter: both hold, so the hold is the point
+  // itself and the riser runs straight to the next point.
+  const points: Point[] = [
+    [0, 0],
+    [40, 10],
+    [20, 30],
+  ];
+  const diagonal = stepPath(points);
+  ok(
+    "with no coordinate drawing it, each hold is a point and each riser a diagonal",
+    diagonal.every(({ segments: [hold, riser] }, i) => {
+      if (hold.type !== "line" || riser.type !== "line") return false;
+      return (
+        hold.points[0] === points[i] &&
+        hold.points[1][0] === points[i][0] &&
+        hold.points[1][1] === points[i][1] &&
+        riser.points[1] === points[i + 1]
+      );
+    })
+  );
+  ok("a single point threads nothing", stepPath([[1, 2]]).length === 0);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
