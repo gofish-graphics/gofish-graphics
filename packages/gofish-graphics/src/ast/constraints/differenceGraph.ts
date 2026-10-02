@@ -185,8 +185,9 @@ export function solveAxisProblem(
     return [...outgoing].filter((node) => !incoming.has(node)).sort()[0];
   };
 
-  // The relative baseline coordinate the component's free nodes share, or
-  // undefined when it has none or they disagree.
+  // The component's baseline, joined over its free nodes: undefined (no free
+  // node) → determined (they all agree) → impossible (two disagree). Only a
+  // determined baseline is returned; impossible places like undefined.
   const sharedFreeBaseline = (nodes: NodeId[]): number | undefined => {
     if (freeOrigin === undefined) return undefined;
     let shared: number | undefined;
@@ -202,12 +203,11 @@ export function solveAxisProblem(
 
   for (let component = 0; component < components.length; component++) {
     if (offsets.has(component)) continue;
-    // Free origin (#773): a component whose free nodes (baseline magnitudes)
-    // share one baseline seats that baseline at the layer's origin pixel, so
-    // a signed extent grows from the axis's 0. Free nodes whose baselines
-    // differ (a chain along the axis, an `end`/`middle` alignment) have no
-    // common baseline to seat, so the component falls back to the sequence or
-    // normalized origin below.
+    // Free origin (#773): a component with a determined baseline seats it at
+    // the layer's origin pixel, so a signed extent grows from the axis's 0.
+    // An undefined or impossible baseline (e.g. a chain along the axis, or an
+    // `end`/`middle` alignment of free nodes) has nothing to seat, so the
+    // component uses the sequence or normalized origin below.
     const baseline = sharedFreeBaseline(components[component]);
     if (freeOrigin !== undefined && baseline !== undefined) {
       offsets.set(component, {
