@@ -91,7 +91,8 @@ export function unionChildSpaces(
     conts.every((s) => spacePlacement(s) === "free")
   ) {
     return SIZE(
-      Monotonic.max(...conts.map((s) => s.width)),
+      Monotonic.max(...conts.map((s) => s.ascent)),
+      Monotonic.max(...conts.map((s) => s.descent)),
       forgetAllMeasures(conts.map((s) => s.measure))
     );
   }

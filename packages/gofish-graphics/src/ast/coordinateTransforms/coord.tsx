@@ -372,7 +372,7 @@ export const coord = createNodeOperator(
               // caught, mirroring shadowCheckScaleRoot at the root. No-op unless
               // GOFISH_SOLVER_CHECK is set.
               shadowCheckScaleRoot(
-                SIZE(width),
+                SIZE(width, Monotonic.linear(0, 0)),
                 budget,
                 sigma ?? undefined,
                 axis

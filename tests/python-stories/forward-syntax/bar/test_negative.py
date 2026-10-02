@@ -1,6 +1,6 @@
 """Equivalent of BarNegative.stories.tsx — Forward Syntax/Bar/Negative."""
 
-from gofish import chart, spread, rect
+from gofish import chart, spread, group, rect
 from python_stories.data import NEGATIVE_BAR_DATA
 
 
@@ -42,4 +42,21 @@ def story_all_negative():
         .flow(spread(by="category", dir="x"))
         .mark(rect(h="value")),
         {"w": 400, "h": 300, "axes": True},
+    )
+
+
+def story_signed_spine():
+    data = [
+        {"country": "A", "gender": "Women", "signed": -33},
+        {"country": "A", "gender": "Men", "signed": 67},
+        {"country": "B", "gender": "Women", "signed": -46},
+        {"country": "B", "gender": "Men", "signed": 54},
+        {"country": "C", "gender": "Women", "signed": -52},
+        {"country": "C", "gender": "Men", "signed": 48},
+    ]
+    return (
+        chart(data)
+        .flow(spread(by="country", dir="y"), group(by="gender"))
+        .mark(rect(w="signed", fill="gender")),
+        {"w": 400, "h": 200, "axes": True},
     )

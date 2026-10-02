@@ -252,7 +252,8 @@ it is wrapped:
 canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. Its
 `fitAxis(axis, budget)` reads the subtree's resolved space on that axis and
 returns a `(scaleFactor, posScale)` to hand each child: a baseline-magnitude
-(data SIZE) axis scales by `width.inverse(budget)` so the children fill the ring;
+(data SIZE) axis scales by `width.inverse(budget)` so the children fill the ring
+(`width` is the sum of the children's total extents, each `ascent + descent`);
 an anchored (data POSITION) axis maps onto `[0, budget]` via a posScale and
 carries **no** size σ (Stage 6c — a POSITION-only axis has no SIZE scope, so it
 never fabricates one; the map's own slope is the scope's σ). Only

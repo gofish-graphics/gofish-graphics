@@ -754,8 +754,24 @@ export async function layout(
     shrinkToFit
       ? child.pinAnchor(axis, value, "min")
       : child.place(axis, value, "baseline");
-  placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
-  placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
+  // A free (baseline-magnitude) root fits `ascent + descent` to the canvas
+  // (its σ solve above inverts the total `width`), so its baseline sits
+  // `descent` above the canvas's low edge (#773). An anchored root has no
+  // root σ and places through its posScale instead.
+  const rootDescent = (space: UnderlyingSpace, sigma: number | undefined) =>
+    sigma !== undefined && isCONTINUOUS(space) ? space.descent.run(sigma) : 0;
+  placeRoot(
+    "x",
+    (x ?? transform?.x ?? 0) +
+      rootDescent(niceUnderlyingSpaceX, rootScaleFactors[0]),
+    w === undefined
+  );
+  placeRoot(
+    "y",
+    (y ?? transform?.y ?? 0) +
+      rootDescent(niceUnderlyingSpaceY, rootScaleFactors[1]),
+    h === undefined
+  );
 
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the

@@ -115,6 +115,13 @@ the same algebra the layout engine composes constraints in (see
 | `adds(f, k)` | add a constant offset | `f` is not `Unknown`          |
 | `max(...fs)` | pointwise maximum     | no argument is `Unknown`      |
 
+Two helpers split a signed `Linear` into the parts on each side of 0, as
+magnitudes: `positivePart(f)` and `negativePart(f)`, with `f = positivePart(f) −
+negativePart(f)`. A rect uses them to turn its signed size `vσ` into the ascent
+and descent of its extent (see [Underlying Space](/internals/core/underlying-space)).
+The split is exact when the slope and intercept do not have opposite signs, which
+holds for a mark's own size.
+
 `max` is the structural one: the pointwise max of lines is their envelope, so it simply
 **unions the pieces**. `add` stays closed because the sum of two envelopes is again an
 envelope — `(max_i aᵢ) + (max_j bⱼ) = max_{i,j}(aᵢ + bⱼ)` — i.e. the pairwise sums of the

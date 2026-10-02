@@ -125,6 +125,7 @@ const Treemap = createNodeOperator(
             isValue(dims[i].size)
               ? SIZE(
                   Monotonic.linear(getValue(dims[i].size!)!, 0),
+                  Monotonic.linear(0, 0),
                   getMeasure(dims[i].size)
                 )
               : POSITION(interval(0, 1));

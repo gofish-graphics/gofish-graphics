@@ -97,7 +97,7 @@ export const Ellipse = ({
           }
           if (isValue(d.size)) {
             // data-driven size only — literals are handled at layout time.
-            return SIZE(axisDomain, getMeasure(d.size));
+            return SIZE(axisDomain, Monotonic.linear(0, 0), getMeasure(d.size));
           }
           return UNDEFINED;
         };

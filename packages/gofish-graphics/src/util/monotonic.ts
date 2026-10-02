@@ -113,6 +113,18 @@ export function piecewise(pieces: Piece[]): Linear | Piecewise {
   };
 }
 
+/** The part of a signed line on the positive side of 0, and the part on the
+ *  negative side (as a magnitude): `x = positivePart(x) − negativePart(x)`.
+ *  A rect of value `v` spans `[0, v]` from its baseline, so its extent above
+ *  the baseline is `positivePart(vσ)` and below it `negativePart(vσ)` (see
+ *  `CONTINUOUS_TYPE.ascent`). Exact whenever slope and intercept do not have
+ *  opposite signs, which holds for a mark's own size (data `vσ + 0` or literal
+ *  `0σ + px`). */
+export const positivePart = (x: Linear): Linear =>
+  linear(Math.max(x.slope, 0), Math.max(x.intercept, 0));
+export const negativePart = (x: Linear): Linear =>
+  linear(Math.max(-x.slope, 0), Math.max(-x.intercept, 0));
+
 export const isLinear = (x: Monotonic): x is Linear => {
   return x.kind === "linear";
 };

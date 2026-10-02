@@ -51,7 +51,7 @@ import {
 
 const computeIntrinsicSize = (
   input: MaybeValue<number> | undefined
-): Monotonic.Monotonic => {
+): Monotonic.Linear => {
   return isValue(input)
     ? Monotonic.linear(getValue(input)!, 0)
     : Monotonic.linear(0, input ?? 0);
@@ -130,7 +130,7 @@ export const Rect = ({
 
         const resolveAxis = (
           axis: 0 | 1,
-          axisDomain: Monotonic.Monotonic
+          axisDomain: Monotonic.Linear
         ): UnderlyingSpace => {
           const d = dims[axis];
           if (isValue(d.min) && isValue(d.max)) {
@@ -149,8 +149,14 @@ export const Rect = ({
             return DIFFERENCE(getValue(d.size)!, getMeasure(d.size));
           }
           if (!isValue(d.min) && isValue(d.size)) {
-            // No data position; data-driven size → SIZE with Monotonic.
-            return SIZE(axisDomain, getMeasure(d.size));
+            // No data position; data-driven size → SIZE. A rect spans
+            // `[0, v]` from its baseline, so a signed value splits into the
+            // extent above the baseline and the extent below it.
+            return SIZE(
+              Monotonic.positivePart(axisDomain),
+              Monotonic.negativePart(axisDomain),
+              getMeasure(d.size)
+            );
           }
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;

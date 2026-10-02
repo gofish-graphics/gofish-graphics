@@ -383,10 +383,15 @@ export const layer = createNodeOperatorSequential(
               // solved by the ancestor scope, its interior is a fresh scope
               // resolved against that box.
               if (hasBaseline(composed)) {
-                selfScaledSpaces[axis] = SIZE(composed.width, composed.measure);
+                selfScaledSpaces[axis] = SIZE(
+                  composed.ascent,
+                  composed.descent,
+                  composed.measure
+                );
               }
               resolved[axis] = SIZE(
                 Monotonic.linear(getValue(dsize)!, 0),
+                Monotonic.linear(0, 0),
                 getMeasure(dsize)
               );
               continue;
@@ -553,23 +558,42 @@ export const layer = createNodeOperatorSequential(
           // Where a free child's baseline goes on each axis (#773). A free
           // child (a baseline magnitude, e.g. a rect with a data `h`) has no
           // position of its own; its baseline stands for the measure's origin,
-          // so a signed extent grows from the axis's 0 on both sides. When
-          // this layer is ANCHORED on the axis (its own space, or the stash it
-          // self-scales, is a POSITION) its local frame is the frame of the
-          // data→pixel map it holds, so the origin's pixel is
-          // `pxOf(map, origin)`. A free layer is itself seated at its parent's
-          // origin, so its children stay at its local 0 (undefined here):
-          // applying the map again would count the offset twice. Children that
-          // are themselves anchored share this layer's frame and stay at 0.
+          // so a signed extent (ascent above, descent below) grows from the
+          // axis's 0 on both sides. Three cases, by this layer's own space:
+          //  - ANCHORED (its space, or the stash it self-scales, is a
+          //    POSITION): its local frame is the frame of the data→pixel map
+          //    it holds, so the origin's pixel is `pxOf(map, origin)`.
+          //  - a self-scaled FREE stash: it roots its own σ-scope like the
+          //    chart root, so its box holds `[−descent, ascent]` and the
+          //    baseline sits `descent·σ` above the box's low edge.
+          //  - FREE: the layer is itself a baseline magnitude, seated by its
+          //    parent at its own baseline, so its free children share that
+          //    baseline: local 0. Applying a map here would count the offset
+          //    twice, and letting the aligned component float would let the
+          //    solver's min-normalization lift a descent off the baseline.
+          // Otherwise (no continuous space on the axis) there is no origin and
+          // the component floats. Children that are themselves anchored share
+          // this layer's frame and stay at 0.
           const freeOrigin: [number | undefined, number | undefined] = [
             0 as const,
             1 as const,
           ].map((axis) => {
-            const own = selfScaledSpaces[axis] ?? space?.[axis];
+            const stash = selfScaledSpaces[axis];
+            const sigma = childScaleFactors[axis];
+            if (
+              stash !== undefined &&
+              isBaselineMagnitude(stash) &&
+              sigma !== undefined
+            )
+              return stash.descent.run(sigma);
+            const own = stash ?? space?.[axis];
+            if (own === undefined) return undefined;
             const map = effectivePosScales[axis];
-            if (own === undefined || map === undefined || !isPOSITION(own))
-              return undefined;
-            return pxOf(map, measureOrigin(own.measure));
+            if (isPOSITION(own))
+              return map === undefined
+                ? undefined
+                : pxOf(map, measureOrigin(own.measure));
+            return isBaselineMagnitude(own) ? 0 : undefined;
           }) as [number | undefined, number | undefined];
           const baselineFor = (
             cp: (typeof childPlaceables)[number],

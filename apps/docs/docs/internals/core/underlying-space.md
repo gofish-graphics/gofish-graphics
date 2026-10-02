@@ -208,9 +208,9 @@ generation.
 ## The three space kinds
 
 Each axis (x and y) of each node carries one of `continuous`, `ordinal`, or
-`undefined`. The continuous kind stores two facts: a **`width`** (a σ-affine
-_size_ Monotonic) and a **`dataDomain`** (a _data-space_ fact: the axis range, if
-any). The **`placement`** (the _layout_ fact: is this extent positioned) is not a
+`undefined`. The continuous kind stores two facts: its σ-affine _size_, as an
+**`ascent`** and a **`descent`** (two Monotonics, see below), and a
+**`dataDomain`** (a _data-space_ fact: the axis range, if any). The **`placement`** (the _layout_ fact: is this extent positioned) is not a
 third stored field — it is a **derived view** of `dataDomain`'s shape, a bare
 determinacy lattice read via `spacePlacement(space)`:
 
@@ -222,7 +222,9 @@ type DataDomain = Interval | "delta" | undefined;
 
 type CONTINUOUS_TYPE = {
   kind: "continuous";
-  width: Monotonic;       // the σ-affine SIZE: slope·σ + intercept
+  ascent: Monotonic;      // σ-affine extent above the baseline (local 0)
+  descent: Monotonic;     // σ-affine extent below the baseline
+  width: Monotonic;       // ascent + descent, computed by CONTINUOUS
   dataDomain: DataDomain; // data-space extent AND the sole placement carrier
   measure?: Measure;
 };
@@ -235,6 +237,34 @@ const spacePlacement = (s: CONTINUOUS_TYPE): Placement =>
     : s.dataDomain === "delta" ? "conflict"  // no absolute position possible (a centered streamgraph band)
       : "determined";                        // committed to a DATA interval (a scatter point's x)
 ```
+
+**Ascent and descent (#773).** A baseline magnitude is measured from its
+baseline on both sides, like a font's ascent and descent. A rect of value 30
+has ascent `30σ` and descent 0; a rect of value −20 has ascent 0 and descent
+`20σ` (`Monotonic.positivePart` / `negativePart` of the rect's signed `vσ`).
+`width` is `ascent + descent`, computed once by the `CONTINUOUS` constructor,
+and it is what a scope solves σ against. An anchored or difference extent sits
+wholly above its low edge, so its descent is 0. Every consumer that only needs
+the total (σ solves, distribute sums, nest padding, grid claims) reads `width`;
+the consumers that place things about the baseline read the pair:
+
+- `unionChildSpaces`' all-free branch combines children per side:
+  `SIZE(max of ascents, max of descents)`. This keeps both the σ-affine
+  intercepts and the negative side, so a `group` of signed bars keeps both.
+- `continuousExtentInterval` collapses a free extent to
+  `[−descent.run(1), ascent.run(1)]`, so `resolveAlignmentSpace` (spread's
+  cross axis) anchors a signed bar chart over a domain that includes its
+  negative values.
+- `anchorAt` puts the baseline at the given coordinate:
+  `[origin − descent, origin + ascent]`.
+- A scope root over a free extent (the chart root, or a layer's self-scaled
+  free stash) fits `ascent + descent` to its box and seats the baseline
+  `descent·σ` above the box's low edge.
+
+With every descent 0, all of this reduces to the single `width` the space
+carried before. A stack along an axis still sums total extents (each child's
+`ascent + descent`) above the chain's baseline; a signed stack (diverging
+bars, Likert) is a follow-up.
 
 The committed coordinate itself (the old `placement.at`) is not a separate
 payload: it is simply the `dataDomain` interval's `min`, read back with
@@ -690,8 +720,12 @@ unconstrained free child, `placeUnplacedChild` after the solve, and `align`'s
 no-source branch, which pins the shared `baseline` of a component with a free
 operand there instead of letting it float. So a bar with value −35 on an axis
 niced to `[−40, 50]` grows from the 0 tick, not from the rounded −40. A free
-layer is itself seated at its parent's origin, so it leaves its own children at
-local 0 (applying the map again would count the offset twice). Anchored children
+layer is itself seated by its parent at its own baseline, so its free-child
+origin is local 0: applying the map again would count the offset twice, and
+letting the component float would let min-normalization lift a descent off the
+baseline. A layer's self-scaled free stash roots its own σ-scope, so its origin
+is `descent·σ`, the same rule as the chart root. A layer with no continuous
+space on the axis has no origin, and its components float. Anchored children
 share the layer's frame and stay at 0, as the next paragraph explains.
 `measureOrigin` (`domain.ts`) returns 0 for every measure for now; the origin is
 the additive identity of the measure's algebraic structure, and measures do not
@@ -747,7 +781,8 @@ Three patterns cover most operators:
 
 **Leaf shapes** (`rect`, `ellipse`, `petal`, `text`, `image`) decide the
 kind from their props. A rect with data-bound `h` emits
-`SIZE(Monotonic.linear(value, 0))` on y (a `free` magnitude); the same
+`SIZE(ascent, descent)` on y (a `free` magnitude: the positive and negative
+parts of `Monotonic.linear(value, 0)`); the same
 rect with literal `y` and `y2` emits `POSITION([y, y2])`. Constants (no
 data-bound dim) emit `UNDEFINED` — the literal pixel value is handled at
 layout time by `computeAesthetic`, not via the underlying-space tree. (The
@@ -766,8 +801,9 @@ unification, these folds have one home: spread's resolver _is_
 `distributeSpaceFold` on the stack axis and `resolveAlignmentSpace` on the
 cross axis — the same functions the constraint path uses (see
 [The contract](#the-contract)). `layer` and overlay-style operators use
-`unionChildSpaces` (`alignment.ts`), which keeps the symbolic Monotonic
-when every child is a baseline magnitude (`placement: free`) and otherwise
+`unionChildSpaces` (`alignment.ts`), which keeps the symbolic Monotonics
+(the per-side max of ascents and of descents) when every child is a baseline
+magnitude (`placement: free`) and otherwise
 unions data intervals. UNDEFINED children carry no opinion and are ignored
 throughout, so a fixed-pixel (UNDEFINED) sibling never vetoes the
 magnitude-preserving path (it would otherwise degrade the union to an
@@ -1234,7 +1270,7 @@ measure**.
 
 ```ts
 // underlyingSpace.ts
-export type CONTINUOUS_TYPE = { kind: "continuous"; width: Monotonic; dataDomain: DataDomain; measure?: Measure; ... };
+export type CONTINUOUS_TYPE = { kind: "continuous"; ascent: Monotonic; descent: Monotonic; width: Monotonic; dataDomain: DataDomain; measure?: Measure; ... };
 ```
 
 **Merging.** Two helpers in `underlyingSpace.ts` decide what happens when two

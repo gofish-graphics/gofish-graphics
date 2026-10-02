@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, rect } from "../../../src/lib";
+import { chart, spread, group, rect } from "../../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax/Bar/Negative",
@@ -92,6 +92,32 @@ export const AllNegative: StoryObj<Args> = {
     )
       .flow(spread({ by: "category", dir: "x" }))
       .mark(rect({ h: "value" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// Regression (#773): a spine (back-to-back bars) from a signed `w` inside
+// `group`. The group keeps both sides of its baseline, so the x axis spans
+// both signs, the two bars of a row meet on the 0 tick, and the chart fits its
+// requested width.
+export const SignedSpine: StoryObj<Args> = {
+  args: { w: 400, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(
+      [
+        { country: "A", gender: "Women", signed: -33 },
+        { country: "A", gender: "Men", signed: 67 },
+        { country: "B", gender: "Women", signed: -46 },
+        { country: "B", gender: "Men", signed: 54 },
+        { country: "C", gender: "Women", signed: -52 },
+        { country: "C", gender: "Men", signed: 48 },
+      ],
+      { axes: true }
+    )
+      .flow(spread({ by: "country", dir: "y" }), group({ by: "gender" }))
+      .mark(rect({ w: "signed", fill: "gender" }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },
