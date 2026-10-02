@@ -563,7 +563,7 @@ console.log("# constraint confluence: nest size dependency planning");
 
   const childSpaces = [
     [UNDEFINED, UNDEFINED],
-    [SIZE(Monotonic.linear(10, 0), Monotonic.linear(0, 0)), SIZE(Monotonic.linear(4, 0), Monotonic.linear(0, 0))],
+    [SIZE(Monotonic.linear(10, 0)), SIZE(Monotonic.linear(4, 0))],
   ] as const;
   const folded = applyNestSpacePlan(childSpaces, {
     order: [1, 0],
@@ -589,7 +589,7 @@ console.log("# constraint confluence: nest size dependency planning");
   );
 
   const resolved = resolveLayerBaseSpaces(
-    [[SIZE(Monotonic.linear(10, 0), Monotonic.linear(0, 0)), POSITION(interval(5, 15), "child")]],
+    [[SIZE(Monotonic.linear(10, 0)), POSITION(interval(5, 15), "child")]],
     [3, 1],
     { y: interval(0, 20), yMeasure: "pin" }
   );
@@ -1182,8 +1182,8 @@ console.log("# constraint confluence: interval vs point compose bail");
     { _name: "B", key: "B" },
   ] as unknown as Parameters<typeof composeConstraintSpaces>[1];
   const childSpaces: Parameters<typeof composeConstraintSpaces>[2] = [
-    [SIZE(Monotonic.linear(10, 0), Monotonic.linear(0, 0)), UNDEFINED],
-    [SIZE(Monotonic.linear(10, 0), Monotonic.linear(0, 0)), UNDEFINED],
+    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
+    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
   ];
   const distAB = distribute(["A", "B"]);
   const pureInterval: PositionConstraint = {
@@ -1224,7 +1224,7 @@ console.log("# constraint confluence: child scale factor planning");
   const inheritedX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
   const inheritedY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
   const positionSpace = POSITION(interval(0, 10));
-  const sizeSpace = SIZE(Monotonic.linear(20, 0), Monotonic.linear(0, 0));
+  const sizeSpace = SIZE(Monotonic.linear(20, 0));
 
   const selfScaled = buildChildScalePlan(
     [positionSpace, sizeSpace],
@@ -1306,7 +1306,7 @@ console.log("# constraint confluence: child scale factor planning");
 
   const shared = buildChildScalePlan(
     [undefined, undefined],
-    [SIZE(Monotonic.linear(25, 0), Monotonic.linear(0, 0)), UNDEFINED],
+    [SIZE(Monotonic.linear(25, 0)), UNDEFINED],
     [100, 80],
     [2, 3],
     [inheritedX, inheritedY],

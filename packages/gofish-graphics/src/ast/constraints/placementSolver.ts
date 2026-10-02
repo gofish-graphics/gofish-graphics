@@ -25,6 +25,7 @@ import {
   type NodeId,
 } from "./placementFacts";
 import { anchorOffset } from "./placementProgramLowerer";
+import { isBaselineMagnitude } from "../underlyingSpace";
 import {
   solveAxisProblem,
   type AxisProblem,
@@ -213,7 +214,8 @@ function reduceToAxisProblem(
 function solveRank2Axis(
   axis: Axis,
   facts: AnchorFact[],
-  targets: Map<string, Placeable>
+  targets: Map<string, Placeable>,
+  freeOrigin: number | undefined
 ): {
   cells: Map<NodeId, SolvedCell>;
   sizeOnly: Map<NodeId, { size: number; owner: string }>;
@@ -221,12 +223,28 @@ function solveRank2Axis(
 } {
   const { sizes, owners, conflicts: sizeConflicts } = closeSizes(axis, facts);
   const problem = reduceToAxisProblem(axis, facts, sizes, targets);
+  const idx = axisIndex(axis);
+  // The free participants (baseline magnitudes) and each one's baseline offset
+  // from its `min`: what the solver's free-origin fallback seats (#773).
+  const freeBaselines = new Map<NodeId, number>();
+  if (freeOrigin !== undefined) {
+    for (const node of problem.participants) {
+      if (sizes.has(node)) continue; // size-strong: an interval, not free
+      const target = targets.get(node);
+      const space = target?.spaceOn?.(idx);
+      if (space === undefined || !isBaselineMagnitude(space)) continue;
+      const offset = anchorOffset(target!, axis, "baseline");
+      if (offset !== undefined) freeBaselines.set(node, offset);
+    }
+  }
   const { positions, conflicts: graphConflicts } = solveAxisProblem(
     axis,
-    problem
+    problem,
+    freeOrigin === undefined
+      ? undefined
+      : { value: freeOrigin, baselines: freeBaselines }
   );
 
-  const idx = axisIndex(axis);
   const cells = new Map<NodeId, SolvedCell>();
   for (const [node, min] of positions) {
     const strong = sizes.get(node);
@@ -270,8 +288,7 @@ export function solvePlacementConstraints(
     sizes,
     posScales,
     gridTracks,
-    dataPositioned,
-    freeOrigin
+    dataPositioned
   );
   // Tie each nested operand to its container on every axis it takes part in,
   // so the solve moves the container with it (one rigid body).
@@ -298,8 +315,18 @@ export function solvePlacementConstraints(
   }
 
   const solved = [
-    solveRank2Axis("x", lowered.anchorProgram.axes[0], targets),
-    solveRank2Axis("y", lowered.anchorProgram.axes[1], targets),
+    solveRank2Axis(
+      "x",
+      lowered.anchorProgram.axes[0],
+      targets,
+      freeOrigin?.[0]
+    ),
+    solveRank2Axis(
+      "y",
+      lowered.anchorProgram.axes[1],
+      targets,
+      freeOrigin?.[1]
+    ),
   ] as const;
   const conflicts = solved.flatMap((result) => result.conflicts);
   if (conflicts.length > 0) {

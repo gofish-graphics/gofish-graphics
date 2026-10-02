@@ -113,10 +113,7 @@ export function nestedSpace(
   // or origin-less content keeps `outer`.
   if (isBaselineMagnitude(innerSpace)) {
     return SIZE(
-      // The padded outer is its own box, drawn up from its own baseline, so
-      // its whole extent is ascent.
       Monotonic.adds(innerSpace.width, 2 * padding),
-      Monotonic.linear(0, 0),
       innerSpace.measure
     );
   }

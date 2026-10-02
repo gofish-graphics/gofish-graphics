@@ -28,6 +28,7 @@ import {
   hasBaseline,
   isBaselineMagnitude,
   isCONTINUOUS,
+  scopeRootBaseline,
   niceContinuous,
   spaceMeasure,
   type UnderlyingSpace,
@@ -750,28 +751,24 @@ export async function layout(
   // overhangs the far side, e.g. the pulley diagram). The pin uses `pinAnchor`,
   // not the write-once `place()`, so it lands even when the root self-placed (a
   // diagram with its own root transform) — `place()` short-circuits a placed axis.
-  const placeRoot = (axis: "x" | "y", value: number, shrinkToFit: boolean) =>
-    shrinkToFit
-      ? child.pinAnchor(axis, value, "min")
-      : child.place(axis, value, "baseline");
-  // A free (baseline-magnitude) root fits `ascent + descent` to the canvas
-  // (its σ solve above inverts the total `width`), so its baseline sits
-  // `descent` above the canvas's low edge (#773). An anchored root has no
-  // root σ and places through its posScale instead.
-  const rootDescent = (space: UnderlyingSpace, sigma: number | undefined) =>
-    sigma !== undefined && isCONTINUOUS(space) ? space.descent.run(sigma) : 0;
-  placeRoot(
-    "x",
-    (x ?? transform?.x ?? 0) +
-      rootDescent(niceUnderlyingSpaceX, rootScaleFactors[0]),
-    w === undefined
-  );
-  placeRoot(
-    "y",
-    (y ?? transform?.y ?? 0) +
-      rootDescent(niceUnderlyingSpaceY, rootScaleFactors[1]),
-    h === undefined
-  );
+  //
+  // A free (baseline-magnitude) root fits `ascent + descent` to the canvas, so
+  // its baseline sits `descent·σ` above the canvas's low edge (#773,
+  // `scopeRootBaseline`).
+  const placeRoot = (axis: 0 | 1) => {
+    const name = axis === 0 ? "x" : "y";
+    const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
+    const value =
+      offset +
+      scopeRootBaseline(
+        axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY,
+        rootScaleFactors[axis]
+      );
+    if ((axis === 0 ? w : h) === undefined) child.pinAnchor(name, value, "min");
+    else child.place(name, value, "baseline");
+  };
+  placeRoot(0);
+  placeRoot(1);
 
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the

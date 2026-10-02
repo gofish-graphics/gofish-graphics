@@ -266,7 +266,6 @@ export const Text = ({
           if (!isValue(pos) && isValue(dims[axis].size)) {
             return SIZE(
               Monotonic.linear(getValue(dims[axis].size)!, 0),
-              Monotonic.linear(0, 0),
               getMeasure(dims[axis].size)
             );
           }

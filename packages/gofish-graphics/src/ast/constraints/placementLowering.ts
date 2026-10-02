@@ -27,7 +27,6 @@ import {
   placementKey,
   type Axis,
   type ConstraintPosScales,
-  type FreeOrigin,
 } from "./shared";
 import { pxOf, type AxisMap } from "../domain";
 import type { AnchorProgram } from "./placementFacts";
@@ -164,8 +163,7 @@ export function lowerPlacementConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales,
   gridTracks?: [TrackLayout, TrackLayout],
-  dataPositioned?: [Set<string>, Set<string>],
-  freeOrigin?: FreeOrigin
+  dataPositioned?: [Set<string>, Set<string>]
 ): LoweredPlacement {
   // A `position` pin on a grid cell overrides that cell's track centering on the
   // pinned axis (the authoritative-pin pattern) — collect which (cell, axis) a
@@ -235,7 +233,6 @@ export function lowerPlacementConstraints(
           posScales,
           isPinned,
           isDataPositioned,
-          freeOrigin,
         });
         return;
       case "distribute":

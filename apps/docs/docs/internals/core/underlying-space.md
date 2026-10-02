@@ -241,9 +241,12 @@ const spacePlacement = (s: CONTINUOUS_TYPE): Placement =>
 **Ascent and descent (#773).** A baseline magnitude is measured from its
 baseline on both sides, like a font's ascent and descent. A rect of value 30
 has ascent `30σ` and descent 0; a rect of value −20 has ascent 0 and descent
-`20σ` (`Monotonic.positivePart` / `negativePart` of the rect's signed `vσ`).
-`width` is `ascent + descent`, computed once by the `CONTINUOUS` constructor,
-and it is what a scope solves σ against. An anchored or difference extent sits
+`20σ` (`baselineSpan(v)`, used only by `rect`: a rect length is signed, while
+a text, image, or treemap size is a nonnegative magnitude). `SIZE(ascent,
+measure, descent = ZERO)` is the one constructor; most extents sit wholly above
+their baseline and never spell the descent. `width` is `ascent + descent`,
+computed once by the `CONTINUOUS` constructor, and it is what a scope solves σ
+against. An anchored or difference extent sits
 wholly above its low edge, so its descent is 0. Every consumer that only needs
 the total (σ solves, distribute sums, nest padding, grid claims) reads `width`;
 the consumers that place things about the baseline read the pair:
@@ -259,7 +262,7 @@ the consumers that place things about the baseline read the pair:
   `[origin − descent, origin + ascent]`.
 - A scope root over a free extent (the chart root, or a layer's self-scaled
   free stash) fits `ascent + descent` to its box and seats the baseline
-  `descent·σ` above the box's low edge.
+  `descent·σ` above the box's low edge (`scopeRootBaseline`).
 
 With every descent 0, all of this reduces to the single `width` the space
 carried before. A stack along an axis still sums total extents (each child's
@@ -648,7 +651,7 @@ sizes known, every anchor reduces to `min + offset` — `start`/`baseline` at 0,
 `middle` at `size/2`, `end` at `size` for a size-strong cell (read off the
 closed box), else the node's local-frame anchor offset. `position`, `align`,
 `distribute`, `nest`, and `grid` pins/relations over those reduced `min` values
-go through BFS components + pin offsets + distribute/normalized-origin
+go through BFS components + pin offsets + free/distribute/normalized-origin
 fallbacks. Every solved cell writes back through **one path**: a size-strong
 cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
 `min` anchor, a rank-1 size-with-no-position cell (align `"size"`, above)
@@ -688,7 +691,9 @@ through the already-solved data→pixel scale plus any post-scale offset. This
 keeps the unified constraint semantics without a generic dense linear solver:
 strong facts win, relation cycles are checked for contradiction, and components
 without an absolute pin are normalized so the minimum solved coordinate in that
-component is `0`. Ordered `distribute` components are the exception: their
+component is `0`. Two kinds of component are the exception. One whose free nodes
+share a baseline seats it at the layer's free-child origin (below). Ordered
+`distribute` components are the other: their
 directed chain source is a deterministic sequence origin, so negative spacing
 remains authored overlap instead of being erased by min-normalization. If a
 graphic needs a floating component to appear at a particular absolute
@@ -708,18 +713,23 @@ the same solver entrypoint. An incompatible same-solve interval + point
 of letting one silently yield to the other.
 
 Placement-time alignment dispatches on the same resolution. `align` emits
-relations between child anchors. It pins a component in one case only: the
-**free-child origin** (#773). A free child (a baseline magnitude, such as a
-rect with a data `h`) has a baseline that stands for the measure's origin, the
-value a signed `h`/`w` grows from. When the owning layer is anchored on the axis
-(its own space, or the stash it self-scales, is a POSITION), its local frame is
-the frame of the data→pixel map it holds, and that origin has a pixel:
+relations between child anchors and never pins. Where a floating component
+lands is the solver's fallback, and its first rule is the **free-child
+origin** (#773). A free child (a baseline magnitude, such as a rect with a data
+`h`) has a baseline that stands for the measure's origin, the value a signed
+`h`/`w` grows from. When the owning layer is anchored on the axis (its own
+space, or the stash it self-scales, is a POSITION), its local frame is the
+frame of the data→pixel map it holds, and that origin has a pixel:
 `pxOf(map, measureOrigin(measure))`. The layer computes this per axis
-(`freeOrigin`) and uses it in three places: phase-1 placement of an
-unconstrained free child, `placeUnplacedChild` after the solve, and `align`'s
-no-source branch, which pins the shared `baseline` of a component with a free
-operand there instead of letting it float. So a bar with value −35 on an axis
-niced to `[−40, 50]` grows from the 0 tick, not from the rounded −40. A free
+(`freeOrigin`). It places unconstrained free children there itself (phase-1
+placement, and `placeUnplacedChild` for a child the solve left unplaced on an
+axis), and hands it to the solve as one input: in `solveAxisProblem`, a
+component with no pin whose free nodes share one baseline is offset so that
+baseline sits at the origin. Free nodes whose baselines differ (a chain along
+the axis, an `end` or `middle` alignment) have no common baseline to seat, so
+that component falls to the sequence or normalized origin as before. So a bar
+with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
+the rounded −40. A free
 layer is itself seated by its parent at its own baseline, so its free-child
 origin is local 0: applying the map again would count the offset twice, and
 letting the component float would let min-normalization lift a descent off the
@@ -732,8 +742,9 @@ the additive identity of the measure's algebraic structure, and measures do not
 carry that structure yet.
 
 Otherwise, if no explicit `position` (point or interval), self-placement, or
-other strong pin fixes a connected component, the solver normalizes that
-component so its minimum solved coordinate is `0`. A user who needs the aligned
+other strong pin fixes a connected component and it has no shared free
+baseline, the solver normalizes that component so its minimum solved
+coordinate is `0`. A user who needs the aligned
 system to appear at a particular place must say so explicitly with a placement
 constraint.
 
@@ -781,8 +792,8 @@ Three patterns cover most operators:
 
 **Leaf shapes** (`rect`, `ellipse`, `petal`, `text`, `image`) decide the
 kind from their props. A rect with data-bound `h` emits
-`SIZE(ascent, descent)` on y (a `free` magnitude: the positive and negative
-parts of `Monotonic.linear(value, 0)`); the same
+`baselineSpan(value)` on y (a `free` magnitude: the value's positive part as
+ascent, its negative part as descent); the same
 rect with literal `y` and `y2` emits `POSITION([y, y2])`. Constants (no
 data-bound dim) emit `UNDEFINED` — the literal pixel value is handled at
 layout time by `computeAesthetic`, not via the underlying-space tree. (The

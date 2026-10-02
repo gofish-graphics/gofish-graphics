@@ -23,11 +23,12 @@ import {
   isCONTINUOUS,
   isPOSITION,
   isUNDEFINED,
+  scopeRootBaseline,
 } from "../underlyingSpace";
 import { getMeasure, getValue, isValue } from "../data";
 import * as Monotonic from "../../util/monotonic";
 import { computeSize, foldFinite } from "../../util";
-import { axisScale, measureOrigin, pxOf } from "../domain";
+import { axisScale, measureOrigin, posFn } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
@@ -54,6 +55,7 @@ import {
   childNameKey,
   internalName,
   type ConstraintPosScales,
+  type FreeOrigin,
 } from "../constraints/shared";
 import { anchorOffset } from "../constraints/placementProgramLowerer";
 import {
@@ -385,13 +387,12 @@ export const layer = createNodeOperatorSequential(
               if (hasBaseline(composed)) {
                 selfScaledSpaces[axis] = SIZE(
                   composed.ascent,
-                  composed.descent,
-                  composed.measure
+                  composed.measure,
+                  composed.descent
                 );
               }
               resolved[axis] = SIZE(
                 Monotonic.linear(getValue(dsize)!, 0),
-                Monotonic.linear(0, 0),
                 getMeasure(dsize)
               );
               continue;
@@ -564,46 +565,39 @@ export const layer = createNodeOperatorSequential(
           //    POSITION): its local frame is the frame of the data→pixel map
           //    it holds, so the origin's pixel is `pxOf(map, origin)`.
           //  - a self-scaled FREE stash: it roots its own σ-scope like the
-          //    chart root, so its box holds `[−descent, ascent]` and the
-          //    baseline sits `descent·σ` above the box's low edge.
+          //    chart root (`scopeRootBaseline`): `descent·σ`.
           //  - FREE: the layer is itself a baseline magnitude, seated by its
           //    parent at its own baseline, so its free children share that
           //    baseline: local 0. Applying a map here would count the offset
-          //    twice, and letting the aligned component float would let the
-          //    solver's min-normalization lift a descent off the baseline.
-          // Otherwise (no continuous space on the axis) there is no origin and
-          // the component floats. Children that are themselves anchored share
-          // this layer's frame and stay at 0.
-          const freeOrigin: [number | undefined, number | undefined] = [
-            0 as const,
-            1 as const,
-          ].map((axis) => {
+          //    twice.
+          // Otherwise (no continuous space on the axis) there is no origin.
+          // Unconstrained free children are placed here; constrained ones get
+          // it from the solver's free-origin fallback (`solveAxisProblem`).
+          // Children that are themselves anchored share this layer's frame and
+          // stay at 0.
+          const originOn = (axis: 0 | 1): number | undefined => {
             const stash = selfScaledSpaces[axis];
-            const sigma = childScaleFactors[axis];
-            if (
-              stash !== undefined &&
-              isBaselineMagnitude(stash) &&
-              sigma !== undefined
-            )
-              return stash.descent.run(sigma);
             const own = stash ?? space?.[axis];
             if (own === undefined) return undefined;
-            const map = effectivePosScales[axis];
             if (isPOSITION(own))
-              return map === undefined
-                ? undefined
-                : pxOf(map, measureOrigin(own.measure));
-            return isBaselineMagnitude(own) ? 0 : undefined;
-          }) as [number | undefined, number | undefined];
-          const baselineFor = (
-            cp: (typeof childPlaceables)[number],
-            axis: 0 | 1
-          ): number => {
-            const s = cp.spaceOn?.(axis);
-            return s !== undefined && isBaselineMagnitude(s)
-              ? (freeOrigin[axis] ?? 0)
+              return posFn(effectivePosScales[axis])?.(
+                measureOrigin(own.measure)
+              );
+            if (!isBaselineMagnitude(own)) return undefined;
+            return stash !== undefined
+              ? scopeRootBaseline(stash, childScaleFactors[axis])
               : 0;
           };
+          const freeOrigin: FreeOrigin = [originOn(0), originOn(1)];
+          const baselineFor = (
+            cp: (typeof childPlaceables)[number]
+          ): [number, number] =>
+            [0, 1].map((axis) => {
+              const s = cp.spaceOn?.(axis as 0 | 1);
+              return s !== undefined && isBaselineMagnitude(s)
+                ? (freeOrigin[axis] ?? 0)
+                : 0;
+            }) as [number, number];
 
           const childPlaceables: ReturnType<
             (typeof children)[number]["layout"]
@@ -676,16 +670,9 @@ export const layer = createNodeOperatorSequential(
               axisScale(childScaleFactors[1], childMaps[1]),
             ]);
             if (!constrainedChildren.has(i)) {
-              childPlaceable.place(
-                "x",
-                baselineFor(childPlaceable, 0),
-                "baseline"
-              );
-              childPlaceable.place(
-                "y",
-                baselineFor(childPlaceable, 1),
-                "baseline"
-              );
+              const [bx, by] = baselineFor(childPlaceable);
+              childPlaceable.place("x", bx, "baseline");
+              childPlaceable.place("y", by, "baseline");
             }
             childPlaceables[i] = childPlaceable;
           };
@@ -807,11 +794,7 @@ export const layer = createNodeOperatorSequential(
             // constrained positions is laid out after this (see
             // `relateOrder`), not by a re-layout pass here.
             for (const cp of childPlaceables) {
-              if (cp)
-                placeUnplacedChild(cp, "baseline", [
-                  baselineFor(cp, 0),
-                  baselineFor(cp, 1),
-                ]);
+              if (cp) placeUnplacedChild(cp, "baseline", baselineFor(cp));
             }
           } else {
             // Default layer behavior: place all children at (0, 0)

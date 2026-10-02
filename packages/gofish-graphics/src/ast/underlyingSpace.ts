@@ -141,7 +141,7 @@ export const CONTINUOUS = (
   kind: "continuous",
   ascent,
   descent,
-  width: Monotonic.add(ascent, descent),
+  width: Monotonic.isZero(descent) ? ascent : Monotonic.add(ascent, descent),
   dataDomain,
   measure,
   coordinateTransform,
@@ -189,7 +189,7 @@ export const POSITION = (
 ): UnderlyingSpace =>
   CONTINUOUS(
     Monotonic.linear(domain.max - domain.min, 0),
-    Monotonic.linear(0, 0),
+    Monotonic.ZERO,
     domain,
     measure,
     coordinateTransform
@@ -228,7 +228,7 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   const [niceMin, niceMax] = d3Nice(iv.min, iv.max, 10);
   return CONTINUOUS(
     Monotonic.linear(niceMax - niceMin, 0),
-    Monotonic.linear(0, 0),
+    Monotonic.ZERO,
     interval(niceMin, niceMax),
     (space as CONTINUOUS_TYPE).measure,
     (space as CONTINUOUS_TYPE).coordinateTransform
@@ -239,24 +239,31 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
  *  fact (`dataDomain === "delta"`), NOT on placement, so a future `conflict`
  *  placement that still has a real data domain doesn't render delta ticks. */
 export const DIFFERENCE = (width: number, measure?: Measure): UnderlyingSpace =>
-  CONTINUOUS(
-    Monotonic.linear(width, 0),
-    Monotonic.linear(0, 0),
-    "delta",
-    measure
-  );
+  CONTINUOUS(Monotonic.linear(width, 0), Monotonic.ZERO, "delta", measure);
 export const isDIFFERENCE = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE =>
   isCONTINUOUS(space) && space.dataDomain === "delta";
 
 /** A sized-but-unpositioned extent (the old `SIZE`): a baseline magnitude,
- *  `ascent` above its baseline and `descent` below it. */
+ *  `ascent` above its baseline and `descent` below it. Most extents sit wholly
+ *  above their baseline, so `descent` defaults to zero; a composition that
+ *  carries a real pair passes it. */
 export const SIZE = (
   ascent: Monotonic.Monotonic,
-  descent: Monotonic.Monotonic,
-  measure?: Measure
+  measure?: Measure,
+  descent: Monotonic.Monotonic = Monotonic.ZERO
 ): UnderlyingSpace => CONTINUOUS(ascent, descent, undefined, measure);
+
+/** The baseline magnitude of a data length `v` drawn from its baseline (a
+ *  rect's `w`/`h`): `[0, v]`, so a positive value is ascent and a negative one
+ *  is descent (#773). */
+export const baselineSpan = (v: number, measure?: Measure): UnderlyingSpace =>
+  SIZE(
+    Monotonic.linear(Math.max(v, 0), 0),
+    measure,
+    Monotonic.linear(Math.max(-v, 0), 0)
+  );
 
 /** Re-anchor a continuous space so its baseline lands at data coordinate
  *  `origin`, preserving its σ-affine `ascent`/`descent`: the result's domain is
@@ -278,6 +285,19 @@ export const anchorAt = (
     measure ?? space.measure,
     space.coordinateTransform
   );
+
+/** Where a σ-scope root (the chart root, or a layer's self-scaled stash)
+ *  seats the baseline of the extent it fits (#773). The scope fits `ascent +
+ *  descent` to its box, so the baseline sits `descent·σ` above the box's low
+ *  edge. Anchored and difference extents have descent 0, and a scope with no
+ *  σ on the axis (an anchored root) places through its map instead: 0. */
+export const scopeRootBaseline = (
+  space: UnderlyingSpace | undefined,
+  sigma: number | undefined
+): number =>
+  space !== undefined && isCONTINUOUS(space) && sigma !== undefined
+    ? space.descent.run(sigma)
+    : 0;
 
 /** Has a baseline (a place it hangs from): a baseline magnitude or an anchored
  *  coordinate, but NOT a difference ({@link spacePlacement} === "conflict"). The

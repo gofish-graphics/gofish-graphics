@@ -9,10 +9,9 @@ import type {
   Axis,
   ConstraintPosScales,
   ConstraintRef,
-  FreeOrigin,
 } from "./shared";
 import { axisIndex } from "./shared";
-import { isBaselineMagnitude, isUNDEFINED } from "../underlyingSpace";
+import { isUNDEFINED } from "../underlyingSpace";
 import type { PlacementFactEmitter } from "./placementFacts";
 
 /**
@@ -96,15 +95,12 @@ export function lowerAlignPlacement(
     posScales,
     isPinned,
     isDataPositioned,
-    freeOrigin,
   }: {
     emitter: PlacementFactEmitter;
     targets: Map<string, Placeable>;
     posScales: ConstraintPosScales | undefined;
     isPinned: (axis: Axis, name: string) => boolean;
     isDataPositioned: (axis: 0 | 1, name: string) => boolean;
-    /** Where the owning layer seats free children's baselines (#773). */
-    freeOrigin?: FreeOrigin;
   }
 ): void {
   /**
@@ -261,26 +257,6 @@ export function lowerAlignPlacement(
         gap: 0,
         owner,
       });
-    }
-    // No placed source. A free operand (a baseline magnitude) aligned at its
-    // baseline has a data origin, and when the owning layer is anchored on
-    // this axis that origin has a pixel (`freeOrigin`, #773): pin the shared
-    // baseline there, so a signed `h`/`w` grows from the axis's 0. Otherwise
-    // the component floats and the solver's normalized origin seats it.
-    const origin = freeOrigin?.[idx];
-    const free = movable.find(({ child, anchor }) => {
-      if (anchor !== "baseline") return false;
-      const space = targets.get(child.name)?.spaceOn?.(idx);
-      return space !== undefined && isBaselineMagnitude(space);
-    });
-    if (origin !== undefined && free !== undefined) {
-      emitter.pin({
-        axis,
-        target: { name: free.child.name, anchor: "baseline" },
-        value: origin,
-        owner,
-      });
-      return;
     }
     emitter.include({
       axis,

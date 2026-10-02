@@ -202,7 +202,6 @@ export function distributeSpaceFold(
   if (opts.size !== undefined && isValue(opts.size)) {
     return SIZE(
       Monotonic.linear(getValue(opts.size)!, 0),
-      Monotonic.linear(0, 0),
       getMeasure(opts.size)
     );
   }
@@ -280,11 +279,10 @@ export function distributeSpaceFold(
   // descent), and the composed extent sits above the chain's baseline.
   // TODO(#773 follow-up): a signed stack (diverging bars, Likert) should keep
   // a descent instead of summing magnitudes.
-  if (dataDriven)
-    return SIZE(composeSize(), Monotonic.linear(0, 0), childMeasure);
+  if (dataDriven) return SIZE(composeSize(), childMeasure);
   if (namedKeys.length > 0)
     return ORDINAL(namedKeys, opts.measure, opts.anonymous);
-  if (allSize) return SIZE(composeSize(), Monotonic.linear(0, 0), childMeasure);
+  if (allSize) return SIZE(composeSize(), childMeasure);
   if (allPosition)
     return POSITION(Interval.interval(0, sumWidths()), childMeasure);
   return UNDEFINED;

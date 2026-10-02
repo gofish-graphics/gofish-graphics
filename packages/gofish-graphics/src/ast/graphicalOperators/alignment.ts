@@ -92,8 +92,8 @@ export function unionChildSpaces(
   ) {
     return SIZE(
       Monotonic.max(...conts.map((s) => s.ascent)),
-      Monotonic.max(...conts.map((s) => s.descent)),
-      forgetAllMeasures(conts.map((s) => s.measure))
+      forgetAllMeasures(conts.map((s) => s.measure)),
+      Monotonic.max(...conts.map((s) => s.descent))
     );
   }
 

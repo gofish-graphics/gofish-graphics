@@ -199,11 +199,7 @@ throw: the target of `"span"` or `"size"` must be a direct child.
 
 A nested operand and a `ref` both share their target's local frame, so each one
 returns its target's `geometry()` (the shape queries described under
-[Layout Calculation](/internals/layout/passes)). A `ref` reports no space of
-its own to the layer that places it (`spaceOn` returns `undefined`), so the
-layer never seats it at its free-child origin; its position comes from its
-target. The method exists, rather than being left out, because the chainable
-ref proxy reads any unknown property as a path segment.
+[Layout Calculation](/internals/layout/passes)).
 
 ## Drawing clauses and their order
 

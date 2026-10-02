@@ -39,9 +39,12 @@ export type ConstraintRef = { readonly name: string };
 export type ConstraintPosScales = [AxisMap | undefined, AxisMap | undefined];
 
 /** Per-axis pixel at which a layer seats the baselines of its free (baseline
- *  magnitude) children: the measure origin under the layer's data→pixel map
- *  (`pxOf(map, measureOrigin(...))`, #773). `undefined` where the layer is not
- *  anchored on the axis — free children then stay at the layer's local 0. */
+ *  magnitude) children (#773): the measure origin under the layer's data→pixel
+ *  map when the layer is anchored, `descent·σ` for a self-scaled free stash, 0
+ *  for a free layer. Layer places unconstrained free children there; the
+ *  solver's free-origin fallback (`solveAxisProblem`) seats a floating
+ *  component's shared free baseline there. `undefined` where the layer has no
+ *  origin on the axis. */
 export type FreeOrigin = [number | undefined, number | undefined];
 
 /** Convert axis name to dimension index (0 = x, 1 = y) */

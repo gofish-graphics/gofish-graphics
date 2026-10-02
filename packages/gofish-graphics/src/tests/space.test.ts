@@ -17,6 +17,7 @@ import {
   anchorAt,
   spacePlacement,
   continuousExtentInterval,
+  baselineSpan,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
@@ -56,9 +57,7 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   // took these for magnitudes and silently forgot the clash.)
   const dollars0 = POSITION(interval(0, 100), "dollars");
   const units0 = POSITION(interval(0, 50), "units");
-  const msg = throws(() =>
-    unionChildSpaces([onY(dollars0), onY(units0)], 1)
-  );
+  const msg = throws(() => unionChildSpaces([onY(dollars0), onY(units0)], 1));
   ok(
     "overlay of two origin-0 data axes with clashing measures THROWS",
     msg !== null && /different measures/.test(msg),
@@ -67,8 +66,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
 
   // Two baseline magnitudes (the old SIZE) in different fields compose into a
   // real extent that carries no single unit — this must NOT throw, just forget.
-  const dollarsMag = SIZE(M.linear(100, 0), M.linear(0, 0), "dollars");
-  const unitsMag = SIZE(M.linear(50, 0), M.linear(0, 0), "units");
+  const dollarsMag = SIZE(M.linear(100, 0), "dollars");
+  const unitsMag = SIZE(M.linear(50, 0), "units");
   let composed: UnderlyingSpace | undefined;
   const magMsg = throws(() => {
     composed = unionChildSpaces([onY(dollarsMag), onY(unitsMag)], 1);
@@ -87,7 +86,7 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
 
 console.log("# space: the three origin states are distinct");
 {
-  const mag = SIZE(M.linear(10, 0), M.linear(0, 0)); // "free"
+  const mag = SIZE(M.linear(10, 0)); // "free"
   const atZero = POSITION(interval(0, 10)); // numeric origin 0
   ok("a baseline magnitude is NOT a POSITION", !isPOSITION(mag));
   ok("a data axis anchored at 0 IS a POSITION", isPOSITION(atZero));
@@ -104,7 +103,7 @@ console.log(
   // The three placement cases ARE the three named constructors; anchorAt
   // re-anchors while preserving the σ-affine width (the position operator's
   // construction — a free width with slope must not collapse to a constant).
-  const freeSlope = SIZE(M.linear(10, 0), M.linear(0, 0)) as CONTINUOUS_TYPE; // width 10·σ
+  const freeSlope = SIZE(M.linear(10, 0)) as CONTINUOUS_TYPE; // width 10·σ
   const anchored = anchorAt(freeSlope, 1955);
   ok(
     "anchorAt(free, 1955) → placement determined",
@@ -122,7 +121,7 @@ console.log(
 
   // Constructors carry dataDomain; placement is derived from its shape.
   const cases: [string, CONTINUOUS_TYPE, string, unknown][] = [
-    ["SIZE", SIZE(M.linear(10, 0), M.linear(0, 0)) as CONTINUOUS_TYPE, "free", undefined],
+    ["SIZE", SIZE(M.linear(10, 0)) as CONTINUOUS_TYPE, "free", undefined],
     [
       "POSITION([5,9])",
       POSITION(interval(5, 9)) as CONTINUOUS_TYPE,
@@ -151,7 +150,7 @@ console.log("# space: an empty-ORDINAL sibling vetoes SIZE self-scaling");
   // unanchored (DIFFERENCE, no baseline → not self-scaled), exactly as before
   // the 3-kind collapse. Filtering to CONTINUOUS-only would silently drop the
   // ORDINAL and wrongly self-scale.
-  const sized = SIZE(M.linear(40, 0), M.linear(0, 0));
+  const sized = SIZE(M.linear(40, 0));
   const composed = unionChildSpaces([onY(sized), onY(ORDINAL([]))], 1);
   ok(
     "SIZE + empty-ORDINAL overlay is a DIFFERENCE (unanchored), not a free magnitude",
@@ -169,8 +168,8 @@ console.log("# space: a free extent keeps its ascent and descent (#773)");
 {
   // A group of signed bars (values 30 and −20): the overlay keeps each side of
   // the baseline, per side, with the σ-affine intercepts intact.
-  const up = SIZE(M.linear(30, 4), M.linear(0, 0));
-  const down = SIZE(M.linear(0, 0), M.linear(20, 6));
+  const up = SIZE(M.linear(30, 4));
+  const down = SIZE(M.ZERO, undefined, M.linear(20, 6));
   const u = unionChildSpaces([onY(up), onY(down)], 1) as CONTINUOUS_TYPE;
   ok("signed overlay stays a free baseline magnitude", isBaselineMagnitude(u));
   ok(
@@ -183,10 +182,10 @@ console.log("# space: a free extent keeps its ascent and descent (#773)");
     JSON.stringify(continuousExtentInterval(u)) ===
       JSON.stringify(interval(-26, 34))
   );
-  const signed = M.linear(-20, 0);
+  const span = baselineSpan(-20) as CONTINUOUS_TYPE;
   ok(
-    "positivePart / negativePart split a signed size",
-    M.positivePart(signed).run(1) === 0 && M.negativePart(signed).run(1) === 20
+    "baselineSpan of a negative length is all descent",
+    span.ascent.run(1) === 0 && span.descent.run(1) === 20
   );
   ok(
     "anchorAt puts the baseline at the coordinate",

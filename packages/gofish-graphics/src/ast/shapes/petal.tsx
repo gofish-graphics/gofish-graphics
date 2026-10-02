@@ -83,11 +83,7 @@ export const Petal = ({
           }
           if (isValue(d.size)) {
             // data-driven size only — literals handled at layout time.
-            return SIZE(
-              sizeDomain(axis),
-              Monotonic.linear(0, 0),
-              getMeasure(d.size)
-            );
+            return SIZE(sizeDomain(axis), getMeasure(d.size));
           }
           return UNDEFINED;
         };

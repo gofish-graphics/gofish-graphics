@@ -56,6 +56,14 @@ type RelationComponents = {
 
 export const TOLERANCE = 1e-6;
 
+/** The owning layer's free-child origin on one axis (#773): the pixel at
+ *  which a free node's baseline sits, and each free participant's baseline
+ *  offset from its `min`. */
+export type FreeOriginInput = {
+  value: number;
+  baselines: Map<NodeId, number>;
+};
+
 function buildRelationGraph(
   relations: PlacementRelation[]
 ): Map<NodeId, RelationEdge[]> {
@@ -138,7 +146,8 @@ function solveRelationComponents(
  */
 export function solveAxisProblem(
   axis: Axis,
-  problem: AxisProblem
+  problem: AxisProblem,
+  freeOrigin?: FreeOriginInput
 ): { positions: Map<NodeId, number>; conflicts: PlacementConflict[] } {
   const { relative, componentOf, components, conflicts } =
     solveRelationComponents(axis, problem);
@@ -176,8 +185,37 @@ export function solveAxisProblem(
     return [...outgoing].filter((node) => !incoming.has(node)).sort()[0];
   };
 
+  // The relative baseline coordinate the component's free nodes share, or
+  // undefined when it has none or they disagree.
+  const sharedFreeBaseline = (nodes: NodeId[]): number | undefined => {
+    if (freeOrigin === undefined) return undefined;
+    let shared: number | undefined;
+    for (const node of nodes) {
+      const offset = freeOrigin.baselines.get(node);
+      if (offset === undefined) continue;
+      const at = relative.get(node)! + offset;
+      if (shared === undefined) shared = at;
+      else if (Math.abs(shared - at) > TOLERANCE) return undefined;
+    }
+    return shared;
+  };
+
   for (let component = 0; component < components.length; component++) {
     if (offsets.has(component)) continue;
+    // Free origin (#773): a component whose free nodes (baseline magnitudes)
+    // share one baseline seats that baseline at the layer's origin pixel, so
+    // a signed extent grows from the axis's 0. Free nodes whose baselines
+    // differ (a chain along the axis, an `end`/`middle` alignment) have no
+    // common baseline to seat, so the component falls back to the sequence or
+    // normalized origin below.
+    const baseline = sharedFreeBaseline(components[component]);
+    if (freeOrigin !== undefined && baseline !== undefined) {
+      offsets.set(component, {
+        value: freeOrigin.value - baseline,
+        owner: "free-origin",
+      });
+      continue;
+    }
     const origin = distributeOriginFor(component);
     if (origin !== undefined) {
       offsets.set(component, {

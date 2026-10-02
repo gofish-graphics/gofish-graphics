@@ -66,7 +66,14 @@ const proxyFor = (selection: (Token | string | number)[]): RefProxy => {
         return (...segments: (string | number)[]) =>
           proxyFor([...selection, ...segments]);
       }
-      if (RESERVED_KEYS.has(prop)) return Reflect.get(t, prop, receiver);
+      // A reserved member reads off the raw ref, and a method runs bound to
+      // it, so `layout()` hands the unwrapped GoFishRef to the parent: an
+      // optional Placeable probe on it (`spaceOn`, `setExtent`, …) then reads
+      // `undefined` instead of a path segment.
+      if (RESERVED_KEYS.has(prop)) {
+        const value = Reflect.get(t, prop, t);
+        return typeof value === "function" ? value.bind(t) : value;
+      }
       // Numeric-string keys (proxy[2], proxy["3"]) coerce to number so
       // resolveSelection treats them as positional indices, not scope-tags.
       const seg: string | number = /^\d+$/.test(prop) ? Number(prop) : prop;

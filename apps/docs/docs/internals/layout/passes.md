@@ -269,9 +269,9 @@ For a vertical bar chart where:
 
 - X-axis: `spread("category")` → `ORDINAL` space
 - Y-axis: `h: "value"` → `SIZE` space (if no min) or `POSITION` space (if min is specified).
-  The `SIZE` space carries the value's positive part as its ascent and its
-  negative part as its descent, so a negative bar extends below its baseline
-  (`Monotonic.positivePart` / `negativePart`).
+  The `SIZE` space is `baselineSpan(value)`: the value's positive part is its
+  ascent and its negative part its descent, so a negative bar extends below
+  its baseline.
 
 The logic in `resolveUnderlyingSpace` checks:
 
@@ -281,11 +281,7 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 } else if (isAesthetic(dims[0].min) && isValue(dims[0].size)) {
   underlyingSpaceX = DIFFERENCE(getValue(dims[0].size)!);
 } else if (!isValue(dims[0].min) && isValue(dims[0].size)) {
-  const signed = Monotonic.linear(getValue(dims[0].size)!, 0);
-  underlyingSpaceX = SIZE(
-    Monotonic.positivePart(signed),
-    Monotonic.negativePart(signed)
-  );
+  underlyingSpaceX = baselineSpan(getValue(dims[0].size)!);
 } else {
   const min = isValue(dims[0].min) ? getValue(dims[0].min) : 0;
   const size = isValue(dims[0].size) ? getValue(dims[0].size) : 0;
