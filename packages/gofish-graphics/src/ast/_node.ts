@@ -46,6 +46,7 @@ import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
 import {
   getValue,
+  getValueField,
   isValue,
   MaybeValue,
   baseEmbedded,
@@ -604,6 +605,25 @@ export class GoFishNode {
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
   public _ordinalKeyMap?: Record<string, GoFishNode>;
+  /** Set on a tick or category label `Text` made by axis elaboration: the
+   *  label row it belongs to — which axis (`dim`), whether it labels
+   *  categories or continuous ticks (`kind`), and which ordinal tier
+   *  (0 = innermost; always 0 on a continuous axis). `labelAngle: "auto"` reads
+   *  these tags after layout to score label collisions per row across the
+   *  whole chart (see axes/autoLabelAngle.ts). */
+  public axisLabel?: {
+    dim: 0 | 1;
+    kind: "ordinal" | "continuous";
+    tier: number;
+    /** The data field a category row labels (its ordinal space's measure). */
+    field?: string;
+  };
+  /** Set on a ROOT node by the surface that built it (a chart builder or a
+   *  component thunk): builds a fresh, unlaid-out copy of the same chart.
+   *  Layout writes each node's box once, so a choice that must lay the chart
+   *  out once per candidate (`labelAngle: "auto"`) needs a new tree for each
+   *  run (see `runLayout` in gofish.tsx). A node built by hand has none. */
+  public rebuild?: () => Promise<GoFishNode>;
   /**
    * Stack direction of the operator that created this node.
    * Used in coord.tsx collectOverrides to route axis: overrides to the
@@ -669,16 +689,23 @@ export class GoFishNode {
 
   /** Collect the distinct color values in this subtree, in first-seen order.
    *  `seen` is the membership index for `out` (which keeps the order). */
-  private collectColorValues(out: any[], seen: Set<any> = new Set()): void {
+  private collectColorValues(
+    out: any[],
+    seen: Set<any> = new Set(),
+    fields?: Set<string>
+  ): void {
     if (this.color !== undefined && isValue(this.color)) {
       const val = getValue(this.color);
       if (!seen.has(val)) {
         seen.add(val);
         out.push(val);
       }
+      const field = getValueField(this.color);
+      if (field !== undefined) fields?.add(field);
     }
     this.children.forEach((child) => {
-      if (child instanceof GoFishNode) child.collectColorValues(out, seen);
+      if (child instanceof GoFishNode)
+        child.collectColorValues(out, seen, fields);
     });
   }
 
@@ -694,6 +721,7 @@ export class GoFishNode {
       scaleFn?: (v: number) => string;
       domain?: [number, number];
       resolved?: boolean;
+      fields?: Set<string>;
     };
 
     // If this node carries its own colorConfig (set by ChartBuilder.resolve()),
@@ -724,6 +752,11 @@ export class GoFishNode {
         if (!isLiteralColor && !unit.color.has(color)) {
           unit.color.set(color, color6[unit.color.size % 6]);
         }
+        // The scale describes which fields it maps, not just which values:
+        // a color read from a named field carries that field (its provenance).
+        const field = getValueField(this.color);
+        if (!isLiteralColor && field !== undefined)
+          (unit.fields ??= new Set()).add(field);
       }
       this.children.forEach((child) => {
         if (child instanceof GoFishNode) child.resolveColorScale();
@@ -737,6 +770,7 @@ export class GoFishNode {
     scaleFn?: (v: number) => string;
     domain?: [number, number];
     resolved?: boolean;
+    fields?: Set<string>;
   }): void {
     const colorConfig = unit.colorConfig!;
 
@@ -747,7 +781,11 @@ export class GoFishNode {
       // from their own subtree and clobber it.
       if (unit.resolved) return;
       const orderedKeys: any[] = [];
-      this.collectColorValues(orderedKeys);
+      this.collectColorValues(
+        orderedKeys,
+        new Set(),
+        (unit.fields ??= new Set())
+      );
       const numericKeys = orderedKeys.filter((k) => typeof k === "number");
       const min = numericKeys.length > 0 ? Math.min(...numericKeys) : 0;
       const max = numericKeys.length > 0 ? Math.max(...numericKeys) : 1;
@@ -760,7 +798,11 @@ export class GoFishNode {
       delete unit.color;
     } else {
       const orderedKeys: any[] = [];
-      this.collectColorValues(orderedKeys);
+      this.collectColorValues(
+        orderedKeys,
+        new Set(),
+        (unit.fields ??= new Set())
+      );
       if (!(unit.color instanceof Map)) unit.color = new Map();
       const color = unit.color;
       orderedKeys.forEach((key, i) => {

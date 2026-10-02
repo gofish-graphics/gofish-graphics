@@ -9,6 +9,7 @@ import {
   MaybeValue,
   Value,
   value,
+  DatumValueImpl,
   isField,
   isLiteral,
   isValue,
@@ -286,7 +287,9 @@ export const inferPos = inferNumeric(meanBy);
  * {@link inferRaw}): resolve an accessor against the FIRST row of `data`.
  * - "literal": pass the accessor's value through unchanged — a `literal(...)`
  *   wrapper, or a string that names no field on the row (e.g. a CSS color).
- * - "row": the value read off the row. The caller wraps it in `value(...)`;
+ * - "row": the value read off the row, with the `field` it was read from when
+ *   the accessor named one (not for a function accessor). The caller wraps it
+ *   in `value(...)`;
  *   `inferRaw` awaits it first, so a function accessor may be async.
  * - "none": there is no usable row to read.
  */
@@ -295,14 +298,14 @@ function firstRowValue<T extends Record<string, any>>(
   data: T[]
 ):
   | { kind: "literal"; value: unknown }
-  | { kind: "row"; value: unknown }
+  | { kind: "row"; value: unknown; field?: string }
   | { kind: "none" } {
   if (isLiteral(accessor)) return { kind: "literal", value: accessor.value };
   const row = data.length > 0 && data[0] != null ? data[0] : undefined;
   if (isField(accessor)) {
     return row === undefined
       ? { kind: "none" }
-      : { kind: "row", value: row[accessor.name] };
+      : { kind: "row", value: row[accessor.name], field: accessor.name };
   }
   if (typeof accessor === "function") {
     return row === undefined
@@ -310,7 +313,7 @@ function firstRowValue<T extends Record<string, any>>(
       : { kind: "row", value: accessor(row) };
   }
   if (row !== undefined && accessor in row) {
-    return { kind: "row", value: row[accessor] };
+    return { kind: "row", value: row[accessor], field: accessor };
   }
   return { kind: "literal", value: accessor };
 }
@@ -318,7 +321,9 @@ function firstRowValue<T extends Record<string, any>>(
 /**
  * Infer a color value from a field name, function accessor, or literal string.
  * A string that names a field on the data becomes that field's value; one that
- * doesn't passes through as a literal color.
+ * doesn't passes through as a literal color. A value read from a named field
+ * (a field-name string or `field(...)`) records that field as its provenance
+ * (`DatumValueImpl.field`), so the color scale knows which field it maps.
  */
 export const inferColor = <T extends Record<string, any>>(
   accessor:
@@ -334,7 +339,13 @@ export const inferColor = <T extends Record<string, any>>(
   if (resolved.kind === "none") return undefined;
   return resolved.kind === "literal"
     ? (resolved.value as string)
-    : value(resolved.value as string);
+    : new DatumValueImpl(
+        resolved.value as string,
+        undefined,
+        undefined,
+        undefined,
+        resolved.field
+      );
 };
 
 /**

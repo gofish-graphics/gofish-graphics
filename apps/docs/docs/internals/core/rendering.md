@@ -418,6 +418,21 @@ The mechanism is: `data-gf-id` is the hit-test hook; the side table + JSX
 attribute calls are the paint reactivity; the runtime carries neither — it owns
 scheduling, event dispatch, and hit-testing only.
 
+## Laying out more than once: `labelAngle: "auto"`
+
+Every render path reaches layout through `runLayout`, which normally runs the
+pipeline once (`layoutOnce`). The one exception is an axis with
+`labelAngle: "auto"`: `runLayout` then hands off to
+`layoutWithAutoLabelAngles` (`axes/autoLabelAngle.ts`), which builds and lays out
+the chart once per candidate angle, scores the finished label geometry per label
+row, and returns the winning `LayoutData` (laying out once more when the rows
+chose different angles). `LayoutData.legendFields` (the fields a rendered
+legend shows) lets it warn when a hidden category row is left unnamed. Paint
+then proceeds from that data
+exactly as above. Because layout writes each node's box once, each run needs a
+fresh tree, which comes from the root's `rebuild` (set by the surface that built
+it). See [Axes](/internals/frontend/axes#automatic-label-angle-labelangle-auto).
+
 ## `toDisplayList`: stopping at the IR
 
 Outside consumers that are not SVG — a Canvas/WebGPU backend, or a foreign host such

@@ -137,8 +137,21 @@ export function attachBuilderTerminals(
   for (const t of TERMINALS) {
     Object.defineProperty(target, t.name, {
       value: function (this: unknown, ...args: any[]) {
-        const resolveHere = (pass?: RenderPass) =>
-          resolve.call(this, args[t.optionsArg] ?? {}, pass);
+        const resolveHere = async (
+          pass?: RenderPass
+        ): Promise<ResolvedSurface> => {
+          const surface = await resolve.call(
+            this,
+            args[t.optionsArg] ?? {},
+            pass
+          );
+          // The surface can build its chart again, which a choice that lays
+          // the chart out once per candidate needs (`labelAngle: "auto"`, see
+          // `GoFishNode.rebuild`). A rebuild is the same resolve for the same
+          // render pass.
+          surface.node.rebuild = async () => (await resolveHere(pass)).node;
+          return surface;
+        };
         return t.viaRenderStrategy
           ? render(resolveHere, args[0])
           : resolveHere().then(({ node, options }) =>

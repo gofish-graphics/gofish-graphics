@@ -112,6 +112,7 @@ axes: { x: { title: false }, y: true }         // suppress the inferred x title
 axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
 axes: { x: { labelAngle: 45 } }                // rotate x tick/category labels 45°
 axes: { x: { labelAngle: [45] } }              // rotate only the innermost tier
+axes: { x: { labelAngle: "auto" } }            // rotate only if labels would collide
 ```
 
 Each per-axis object also accepts `side: "start" | "end"`. By default a
@@ -125,7 +126,7 @@ that with the literal **frame-relative** seating: `"start"` is the near/origin e
 
 ### Rotating tick and category labels
 
-Each per-axis object also accepts `labelAngle: number | number[]` — degrees,
+Each per-axis object also accepts `labelAngle: number | number[] | "auto"` — degrees,
 **clockwise on screen**, matching Vega-Lite's `labelAngle`. It rotates both
 continuous tick labels and ordinal category labels on that axis. This is useful
 when category labels would otherwise overlap at small chart sizes:
@@ -171,9 +172,53 @@ gf.chart(cityYear, { axes: { x: { labelAngle: [45] } } }) // year rotated, city 
   .render(root, { w: 300, h: 210 });
 ```
 
-There is currently no "auto" mode that rotates only when labels would collide —
-`labelAngle` is a manual, always-on rotation (auto-rotation is tracked in
-[#486](https://github.com/gofish-graphics/gofish/issues/486)).
+#### Choosing the angle automatically
+
+`labelAngle: "auto"` rotates only when it has to. Each row of labels gets its
+own angle: GoFish tries 0°, then 45°, then 90°, and keeps the first angle at
+which no two labels in that row overlap or come closer than 2px. If a row of
+category labels collides at every angle, GoFish hides that row instead of
+drawing labels on top of each other, and the rows and title outside it move in
+to take its place. A row of numeric tick labels is never hidden, because
+nothing else would show those values; if it collides at every angle, it keeps
+the angle with the least overlap. A nested axis has one row
+per tier, so in a grouped bar chart the crowded inner row can slant while the
+outer row, which has plenty of room, stays upright. The check covers the whole
+chart, so a year label under one city that runs into a year label under the
+next city counts as a collision.
+
+```js
+gf.chart(sales, { axes: { x: { labelAngle: "auto" } } })
+  .flow(
+    gf.spread({ by: "region", dir: "x", spacing: 24 }),
+    gf.spread({ by: "product", dir: "x", spacing: 0 })
+  )
+  .mark(gf.rect({ h: "sales", fill: "product" }))
+  .render(root, { w: 400, h: 210 });
+```
+
+At `w: 900` the product names fit upright and stay at 0°. At `w: 400` they
+would overlap, so they slant to 45°. At `w: 220` only vertical names clear each
+other, so they turn to 90°. At `w: 90` they collide even vertically, so the
+product row is hidden; the color legend still names each product. The region
+names (North, South, West) stay at 0° at every one of these widths.
+
+A few rules:
+
+- `"auto"` applies to the whole axis and chooses per row. It cannot be an entry
+  of a per-tier array; to fix one row's angle yourself, write the whole array.
+- Each axis is chosen on its own, so `x` and `y` can both be `"auto"`.
+- When a category row is hidden and no legend shows its field, GoFish logs a
+  console warning, because nothing on the chart names those categories any
+  more. That happens when the legend is turned off (`legend: false`), when the
+  marks are colored by a different field, or when the color comes from a
+  function (`fill: (d) => ...`), which does not tell GoFish which field it
+  reads. Coloring by the same field (`fill: "product"`) with the legend on
+  keeps the categories named, so there is no warning.
+- GoFish lays the chart out once for each angle it tries. That needs a chart it
+  can build again, which is what `chart(...)` and a component function passed to
+  `gofish()` are. A node built ahead of time and passed to `gofish()` can be laid
+  out only once, so `"auto"` there is an error.
 
 `axes` is most naturally a `chart()`/`chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
