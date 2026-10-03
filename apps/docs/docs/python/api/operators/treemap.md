@@ -56,7 +56,7 @@ treemap(children, **options) -> Mark
 ::: gofish-ref treemap
 :::
 
-## Tiling strategies
+## Strategies
 
 `tile` holds the tiling strategy. You make a strategy with a function call.
 Each one is a tiling method from d3-hierarchy. On the wire a strategy is a
@@ -85,8 +85,6 @@ module, so you may prefer `import gofish as gf` and `gf.slice()`.
 
 - The tile d3 places first sits at the top left. With the default
   `sort="desc"`, that is the largest tile.
-- `spacing` is the gap between sibling tiles and `padding` is the inset around
-  the treemap's outer edge, both in pixels.
 - A treemap accepts a **flat list of children**; for multi-level treemaps,
   compose by nesting `treemap(...)` calls (or add a higher-level wrapper).
 - In the combinator form, each child is bound to its row with

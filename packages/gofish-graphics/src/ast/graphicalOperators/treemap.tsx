@@ -35,18 +35,14 @@ import * as Monotonic from "../../util/monotonic";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
+import { Frontend } from "gofish-ir";
 
 /**
  * How `treemap` tiles its box. A strategy is a plain object made by a function
  * call (`squarify()`, `slice()`, ...), so it crosses the Python bridge as IR.
  * `kind` names the strategy; each maps to one of d3-hierarchy's tiling methods.
  */
-export type TreemapTile =
-  | { kind: "squarify"; ratio?: number }
-  | { kind: "slice" }
-  | { kind: "dice" }
-  | { kind: "binary" }
-  | { kind: "sliceDice" };
+export type TreemapTile = Frontend.TreemapTileIR;
 
 /**
  * Squarified tiling (d3's `treemapSquarify`): makes tiles as close as it can to
@@ -54,10 +50,10 @@ export type TreemapTile =
  * golden ratio. `ratio: 1` aims for square tiles, which suits one circle per
  * leaf.
  */
-export const squarify = (opts: { ratio?: number } = {}): TreemapTile =>
-  opts.ratio === undefined
-    ? { kind: "squarify" }
-    : { kind: "squarify", ratio: opts.ratio };
+export const squarify = ({ ratio }: { ratio?: number } = {}): TreemapTile => ({
+  kind: "squarify",
+  ratio,
+});
 
 /** Lay the tiles out in one column, stacked along y (d3's `treemapSlice`). */
 export const slice = (): TreemapTile => ({ kind: "slice" });
@@ -72,25 +68,21 @@ export const binary = (): TreemapTile => ({ kind: "binary" });
 /** Alternate slice and dice by depth (d3's `treemapSliceDice`). */
 export const sliceDice = (): TreemapTile => ({ kind: "sliceDice" });
 
+const D3_TILES = {
+  squarify: treemapSquarify,
+  slice: treemapSlice,
+  dice: treemapDice,
+  binary: treemapBinary,
+  sliceDice: treemapSliceDice,
+};
+
 function d3Tile(tile: TreemapTile) {
-  switch (tile.kind) {
-    case "squarify":
-      return tile.ratio === undefined
-        ? treemapSquarify
-        : treemapSquarify.ratio(tile.ratio);
-    case "slice":
-      return treemapSlice;
-    case "dice":
-      return treemapDice;
-    case "binary":
-      return treemapBinary;
-    case "sliceDice":
-      return treemapSliceDice;
-    default:
-      throw new Error(
-        `[gofish] treemap: unknown tile kind "${(tile as { kind: string }).kind}"`
-      );
-  }
+  if (tile.kind === "squarify" && tile.ratio !== undefined)
+    return treemapSquarify.ratio(tile.ratio);
+  const method = D3_TILES[tile.kind];
+  if (!method)
+    throw new Error(`[gofish] treemap: unknown tile kind "${tile.kind}"`);
+  return method;
 }
 
 type TreemapSort = "asc" | "desc" | "none";

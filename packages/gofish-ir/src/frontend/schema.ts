@@ -369,14 +369,6 @@ export interface LogOperator
   prefix?: string;
 }
 
-/**
- * `treemap({...})` — d3-hierarchy treemap layout over the flow's rows,
- * fare/weight-proportional. Dual-form like `spread`/`stack`/`scatter`/
- * `group`/`table`: also usable as a low-level combinator mark
- * (`CombinatorMarkType`'s `"treemap"`, disambiguated by `__combinator`).
- * Mirrors JS's `TreemapProps`/`TreemapOptions` (`graphicalOperators/treemap.tsx`)
- * minus `key`.
- */
 /** A `treemap` tiling strategy, made by a function call (`squarify()`,
  *  `slice()`, `dice()`, `binary()`, `sliceDice()`). */
 export type TreemapTileIR =
@@ -386,6 +378,14 @@ export type TreemapTileIR =
   | { kind: "binary" }
   | { kind: "sliceDice" };
 
+/**
+ * `treemap({...})` — d3-hierarchy treemap layout over the flow's rows,
+ * fare/weight-proportional. Dual-form like `spread`/`stack`/`scatter`/
+ * `group`/`table`: also usable as a low-level combinator mark
+ * (`CombinatorMarkType`'s `"treemap"`, disambiguated by `__combinator`).
+ * Mirrors JS's `TreemapProps`/`TreemapOptions` (`graphicalOperators/treemap.tsx`)
+ * minus `key`.
+ */
 export interface TreemapOperator
   extends BaseIRNode,
     TranslatableIR,
