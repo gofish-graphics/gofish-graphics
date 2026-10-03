@@ -62,6 +62,57 @@ other is an error. Each value in `dims` is read like its top-level
 counterpart: a point like `x`, a `min` like `xMin`. The circle's `r` is its
 radius, not the polar axis: axis names only appear as keys of `dims`.
 
+## Keeping dots apart with `overlap`
+
+When a field places only one axis, every child sits on one line on the other
+axis, at the scatter's `alignment`. Dots with close values then cover each
+other. `overlap` moves each child along that free axis so the children no
+longer overlap. A strategy only ever moves children along the free axis: each
+child keeps the position its field gives it on the data axis, which `scatter`
+alone places. You make the strategy with a function call.
+
+- `swarm(padding=None)` makes a beeswarm. Each dot keeps its position on the
+  data axis. Then, in data order, it moves to the free spot nearest the line.
+  `padding` is the number of pixels kept between neighboring dots. The default
+  is 0. This is the same placement as Observable Plot's `dodge`.
+
+::: gofish example:penguin-mass-beeswarm hidden
+:::
+
+```python
+from gofish import chart, circle, scatter, spread, swarm
+
+weighed = [p for p in penguins if p["Body Mass (g)"] is not None]
+
+chart(weighed, axes=True).flow(
+    spread(by="Species", dir="y", spacing=16),
+    scatter(x="Body Mass (g)", alignment="middle", overlap=swarm(padding=1)),
+).mark(circle(r=3, fill="Species")).render(w=560, h=320)
+```
+
+The swarm grows from the `alignment` line:
+
+- `"middle"` grows on both sides of the line.
+- `"start"` and `"baseline"` grow on the positive side. Each dot's start edge
+  is on the line or past it.
+- `"end"` grows on the negative side.
+
+Shapes other than circles are kept apart by their enclosing circle, the same
+circle [`pack`](/python/api/operators/pack) uses.
+
+The swarm is as tall as its dots need. It does not shrink to fit the space it
+is given, so a dense swarm can grow past it. To make it smaller, use smaller
+dots or less padding.
+
+Some cases are errors:
+
+- `overlap` when both `x` and `y` come from fields, because then no axis is
+  free.
+- `overlap` inside a coordinate space that is not linear, such as `polar()`.
+  The swarm keeps dots apart in the layout frame, and a polar space bends that
+  frame, so dots could still overlap on screen. See
+  [#1002](https://github.com/gofish-graphics/gofish-graphics/issues/1002).
+
 ## Examples
 
 ```python

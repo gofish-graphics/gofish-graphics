@@ -7,6 +7,15 @@ status: speculative
 
 # Shape geometry beyond boxes
 
+> **Update (2026-10-03).** `geometry()` with `enclosingCircle` and `pack` shipped in
+> #968. The swarm (§4.5, "Dodge") shipped as `scatter`'s `overlap: swarm({ padding })`
+> (#969), with the open questions in §6 answered this way: the free-axis size is
+> measured at layout, like text, so a swarm takes the room its dots need; it dodges
+> in screen space and throws under a non-linear coordinate space (#1002); other
+> shapes are dodged by their enclosing circle; the option is named `overlap`, and
+> there is no priority option yet (data order). See
+> [Layout Calculation](/internals/layout/passes).
+>
 > **Status: design proposal (2026-09-29).** Nothing here is implemented. It grew out of the
 > LLM benchmark pilot ([#955](https://github.com/gofish-graphics/gofish-graphics/issues/955)),
 > where GoFish was the only library without a `dodge` (beeswarm) layout, and out of the

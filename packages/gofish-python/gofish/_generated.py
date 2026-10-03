@@ -586,7 +586,7 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
             opts[_k] = _v
     return opts
 
-def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, xMin: Optional[Union[int, float, str]] = None, xMax: Optional[Union[int, float, str]] = None, yMin: Optional[Union[int, float, str]] = None, yMax: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, alignment: Optional[str] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, xMin: Optional[Union[int, float, str]] = None, xMax: Optional[Union[int, float, str]] = None, yMin: Optional[Union[int, float, str]] = None, yMax: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, alignment: Optional[str] = None, overlap: Optional[Any] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Position each child at an explicit (x, y) point or [min, max] span in data space.
 
     Args:
@@ -599,6 +599,7 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
         yMax: Range form: right/top edge, y.
         dims: Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span.
         alignment: Cross-axis alignment for the axis without an explicit position. Default "baseline".
+        overlap: How children keep clear of each other on the axis no field places, made by a function call: swarm({padding}) is a beeswarm (each dot moves to the free spot nearest the alignment line). It grows from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Linear coordinate spaces only.
         w: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
         h: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -614,6 +615,7 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
         ("yMax", yMax),
         ("dims", dims),
         ("alignment", alignment),
+        ("overlap", overlap),
         ("axes", axes),
         ("w", w),
         ("h", h),

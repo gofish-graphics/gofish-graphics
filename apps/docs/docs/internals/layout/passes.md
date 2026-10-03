@@ -11,6 +11,8 @@ covers:
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
+  - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
+  - packages/gofish-graphics/src/ast/constraints/overlap.ts
 ---
 
 # Layout and Render Passes in GoFish Graphics
@@ -560,6 +562,25 @@ Geometry exists only after layout, so a parent cannot yet read it while sizing.
 That is why `pack` keeps its children at their pixel size and does not fit
 itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
+
+The second consumer is `scatter`'s `overlap` option, e.g. `swarm()` (#969).
+`scatter` elaborates to a layer with a `position` constraint per child on each
+axis a field places, and an `align` on every other ("free") axis. With an
+overlap strategy, the free axis gets an `overlap` constraint
+(`constraints/overlap.ts`) in place of the `align`. It is not a difference
+constraint, so the placement solver never sees it: `applyConstraints` runs it
+after the solve, when each child's position on the data axis is known. It reads
+each child's `enclosingCircle`, asks the strategy
+(`graphicalOperators/overlap.ts`) for each circle center's offset from the
+alignment line, and pins each child there. The strategies share one broad
+phase, `NeighborGrid`, a uniform grid over the data axis. The swarm reports no
+size on its free axis in the space pass (a fixed-pixel dot's space is
+`UNDEFINED` there), and its real extent comes from where the children land, in
+the layer's box fold, the way a text label's extent is measured at layout.
+So a swarm takes the room its dots need and does not shrink to fit. It throws
+inside a non-linear coordinate space, where the layout frame is not the screen
+(#1002); `coord` records the transform it opens on its node
+(`coordinateTransform`) so the scatter can tell.
 
 ### Pass 10: Placement
 

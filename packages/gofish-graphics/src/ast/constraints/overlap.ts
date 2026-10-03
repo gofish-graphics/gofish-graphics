@@ -1,0 +1,108 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Overview — /internals/layout/passes
+// </gofish-wiki>
+
+import type { Placeable } from "../_node";
+import { enclosingCircle } from "../geometry";
+import {
+  resolveOverlap,
+  type OverlapSide,
+  type AnyOverlapStrategy,
+} from "../graphicalOperators/overlap";
+import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
+import { axisIndex } from "./shared";
+
+/**
+ * Spread the children out along `axis` so they do not overlap, growing from
+ * the line their `alignment` names (`scatter`'s `overlap` option). The private
+ * elaboration target of `scatter`, like `grid` is for `table`: there is no
+ * `Constraint.overlap`.
+ *
+ * It is not a difference constraint, so the placement solver never sees it.
+ * The layer runs it after the solve (`applyConstraints`), when every child's
+ * position on the other axis, the data axis, is known: where a child may sit
+ * on `axis` depends on how far it is from its neighbors on the data axis.
+ */
+export interface OverlapConstraint {
+  type: "overlap";
+  /** The free axis: the one the children move along. */
+  axis: Axis;
+  /** The line the children grow from (scatter's `alignment`). */
+  alignment: AlignAnchor;
+  strategy: AnyOverlapStrategy;
+  /** The children, in priority order (data order). */
+  children: ConstraintRef[];
+}
+
+export const createOverlapConstraint = (
+  axis: Axis,
+  alignment: AlignAnchor,
+  strategy: AnyOverlapStrategy,
+  children: ConstraintRef[]
+): OverlapConstraint => ({
+  type: "overlap",
+  axis,
+  alignment,
+  strategy,
+  children,
+});
+
+export const isOverlapConstraint = (
+  c: { type: string } | undefined
+): c is OverlapConstraint => c?.type === "overlap";
+
+/** A child's start edge on the line means it grows to the positive side.
+ *  `baseline` is the same: for the dots a swarm places (no data extent), the
+ *  baseline is the start edge. */
+const sideOf = (alignment: AlignAnchor): OverlapSide =>
+  alignment === "middle" ? "middle" : alignment === "end" ? "end" : "start";
+
+/**
+ * Place the children of an overlap constraint on its free axis. Each child is
+ * read through its enclosing circle (`geometry()`), and is moved so that
+ * circle's center lands at the offset its strategy chooses. The line sits at
+ * the layer's local 0; the layer's box is the fold of where the children land,
+ * so where the line is in the layer's frame does not matter.
+ *
+ * Non-overlap holds in the layout frame, which is the screen in a linear
+ * space. `scatter` refuses an overlap strategy inside any other space.
+ */
+export function applyOverlapPlacement(
+  constraint: OverlapConstraint,
+  targets: Map<string, Placeable>
+): void {
+  const free = axisIndex(constraint.axis);
+  const data = (1 - free) as 0 | 1;
+  const placed = constraint.children.map((ref) => {
+    const p = targets.get(ref.name);
+    if (p === undefined)
+      throw new Error(
+        `[gofish] scatter overlap: child "${ref.name}" was not laid out`
+      );
+    const geometry = p.geometry();
+    const circle = enclosingCircle(geometry);
+    const center: [number, number] = [circle.cx, circle.cy];
+    return { p, geometry, circle, center };
+  });
+  const items = placed.map(({ p, geometry, circle, center }, i) => {
+    const min = p.dims[data].min;
+    if (min === undefined)
+      throw new Error(
+        `[gofish] scatter overlap: child ${i} has no position on the data ` +
+          `axis, so it cannot be kept clear of its neighbors`
+      );
+    return { at: min + (center[data] - geometry.box.min[data]), r: circle.r };
+  });
+  const offsets = resolveOverlap(
+    constraint.strategy,
+    items,
+    sideOf(constraint.alignment)
+  );
+  placed.forEach(({ p, geometry, center }, i) => {
+    // Land the circle's center at the offset: place the child's box min at
+    // the offset less the center's distance from that min.
+    const min = offsets[i] - (center[free] - geometry.box.min[free]);
+    if (p.pinAnchor) p.pinAnchor(free, min, "min");
+    else p.place(free, min, "min");
+  });
+}

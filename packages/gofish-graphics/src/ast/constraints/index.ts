@@ -25,6 +25,11 @@ import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, TrackLayout } from "./grid";
+import {
+  applyOverlapPlacement,
+  isOverlapConstraint,
+  type OverlapConstraint,
+} from "./overlap";
 import { resolveScopedName, visibleNodes } from "../_ref";
 import {
   childNameKey,
@@ -64,6 +69,10 @@ export type { NestConstraint, NestOptions } from "./nest";
 // the public authoring surface: it is `table`'s private elaboration target
 // (`createGridConstraint` in ./grid, used by table.tsx). No `Constraint.grid`.
 export type { GridConstraint } from "./grid";
+// Like grid, `overlap` is a private elaboration target (scatter's `overlap`
+// option), not part of the public authoring surface: no `Constraint.overlap`.
+export type { OverlapConstraint } from "./overlap";
+export { createOverlapConstraint, isOverlapConstraint } from "./overlap";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
 export {
@@ -92,7 +101,8 @@ export type ConstraintSpec =
   | ZAboveConstraint
   | ZBelowConstraint
   | NestConstraint
-  | GridConstraint;
+  | GridConstraint
+  | OverlapConstraint;
 
 // --- Factory ---
 
@@ -345,7 +355,8 @@ export function applyConstraints(
       | DistributeConstraint
       | PositionConstraint
       | NestConstraint
-      | GridConstraint => !isZOrderConstraint(constraint)
+      | GridConstraint =>
+      !isZOrderConstraint(constraint) && !isOverlapConstraint(constraint)
   );
 
   // Solver shadow (observe→assert): snapshot each child's
@@ -373,6 +384,13 @@ export function applyConstraints(
     rigid,
     freeOrigin
   );
+
+  // An overlap constraint is not a difference constraint: it reads where the
+  // solve put each child on the data axis, then places the child on the free
+  // axis. So it runs after the solve.
+  for (const constraint of constraints)
+    if (isOverlapConstraint(constraint))
+      applyOverlapPlacement(constraint, nameToPlaceable);
 
   if (prePlaced) {
     for (const constraint of placement) {

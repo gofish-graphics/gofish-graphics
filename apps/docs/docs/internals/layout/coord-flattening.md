@@ -375,6 +375,12 @@ rendering in coordinate space, where a cleaner design would have `connect` emit 
 path mark instead. Treat this page as describing the _intended_ model — expect the
 exact leaf rules to shift as the non-Cartesian coordinate work matures.
 
+A `coord` node records the transform it opens on itself
+(`GoFishNode.coordinateTransform`). A layout that is only correct in some
+spaces reads it from its ancestors before layout: `scatter`'s `overlap` keeps
+children apart in the layout frame, which is the screen only in a linear space,
+so it throws under any other transform (#1002).
+
 See [Layout & Render Passes](/internals/layout/passes) for how `coord` fits into the
 larger pipeline, and [Authoring Coordinate Transforms](/internals/layout/coordinate-transforms)
 for the transform interface itself.

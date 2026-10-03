@@ -1232,6 +1232,19 @@ for the API.
           "description": "Cross-axis alignment for the axis without an explicit position.",
           "default": "baseline"
         },
+        "overlap": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": ["swarm"]
+            },
+            "padding": {
+              "type": "number"
+            }
+          },
+          "required": ["kind"],
+          "description": "How children keep clear of each other on the axis no field places, made by a function call: swarm({padding}) is a beeswarm (each dot moves to the free spot nearest the alignment line). It grows from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Linear coordinate spaces only."
+        },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
         },

@@ -1889,6 +1889,9 @@ def scatter(
                   is the point, {"min", "max"} the span, e.g.
                   ``dims={"theta": "bearing", "r": "distance"}``.
             alignment: "start" | "middle" | "end" | "baseline".
+            overlap: How children keep clear of each other on the axis no
+                     field places, e.g. ``swarm(padding=1)`` for a beeswarm.
+                     It grows from the ``alignment`` line.
 
     Returns:
         Operator object
@@ -1956,6 +1959,27 @@ def treemap(
     if by is not None:
         options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))
+
+
+def swarm(*, padding: Optional[float] = None) -> Dict[str, Any]:
+    """
+    The ``swarm()`` overlap strategy for :func:`scatter`: a beeswarm. Each dot
+    keeps its position on the data axis and moves along the axis no field
+    places, to the free spot nearest the ``alignment`` line.
+
+        chart(penguins).flow(
+            scatter(x="Body Mass (g)", alignment="middle", overlap=swarm(padding=1))
+        ).mark(circle(r=3))
+
+    Mirrors JS ``swarm({ padding })``; the strategy is a plain object on the
+    wire, ``{"kind": "swarm", "padding": ...}``.
+
+    Args:
+        padding: Pixels kept between neighboring dots. Default 0.
+    """
+    if padding is not None and not padding >= 0:
+        raise ValueError(f"swarm: padding must be a non-negative number, got {padding}")
+    return {"kind": "swarm"} if padding is None else {"kind": "swarm", "padding": padding}
 
 
 def circles() -> Dict[str, Any]:

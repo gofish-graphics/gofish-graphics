@@ -26,7 +26,7 @@ gf.chart(locations, { axes: true })
 ## Signature
 
 ```ts
-scatter({ by?, x?, y?, xMin?, xMax?, yMin?, yMax?, dims?, alignment? })
+scatter({ by?, x?, y?, xMin?, xMax?, yMin?, yMax?, dims?, alignment?, overlap? })
 ```
 
 ## Parameters
@@ -59,6 +59,64 @@ spelling (`xMin` with `dims: { x: { max: "hi" } }`), but one end without the
 other is an error. Each value in `dims` is read like its top-level
 counterpart: a point like `x`, a `min` like `xMin`. The circle's `r` above is
 its radius, not the polar axis: axis names only appear as keys of `dims`.
+
+## Keeping dots apart with `overlap`
+
+When a field places only one axis, every child sits on one line on the other
+axis, at the scatter's `alignment`. Dots with close values then cover each
+other. `overlap` moves each child along that free axis so the children no
+longer overlap. A strategy only ever moves children along the free axis: each
+child keeps the position its field gives it on the data axis, which `scatter`
+alone places. You make the strategy with a function call.
+
+- `swarm({ padding? })` makes a beeswarm. Each dot keeps its position on the
+  data axis. Then, in data order, it moves to the free spot nearest the line.
+  `padding` is the number of pixels kept between neighboring dots. The default
+  is 0. This is the same placement as Observable Plot's `dodge`.
+
+::: gofish
+
+```js
+gf.chart(
+  penguins.filter((p) => p["Body Mass (g)"] !== null),
+  { axes: true }
+)
+  .flow(
+    gf.spread({ by: "Species", dir: "y", spacing: 16 }),
+    gf.scatter({
+      x: "Body Mass (g)",
+      alignment: "middle",
+      overlap: gf.swarm({ padding: 1 }),
+    })
+  )
+  .mark(gf.circle({ r: 3, fill: "Species" }))
+  .render(root, { w: 560, h: 320 });
+```
+
+:::
+
+The swarm grows from the `alignment` line:
+
+- `"middle"` grows on both sides of the line.
+- `"start"` and `"baseline"` grow on the positive side. Each dot's start edge
+  is on the line or past it.
+- `"end"` grows on the negative side.
+
+Shapes other than circles are kept apart by their enclosing circle, the same
+circle [`pack`](/js/api/operators/pack) uses.
+
+The swarm is as tall as its dots need. It does not shrink to fit the space it
+is given, so a dense swarm can grow past it. To make it smaller, use smaller
+dots or less padding.
+
+Some cases are errors:
+
+- `overlap` when both `x` and `y` come from fields, because then no axis is
+  free.
+- `overlap` inside a coordinate space that is not linear, such as `polar()`.
+  The swarm keeps dots apart in the layout frame, and a polar space bends that
+  frame, so dots could still overlap on screen. See
+  [#1002](https://github.com/gofish-graphics/gofish-graphics/issues/1002).
 
 ## Example
 

@@ -470,6 +470,13 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         default: "baseline",
         doc: "Cross-axis alignment for the axis without an explicit position.",
       },
+      overlap: {
+        type: t.object({
+          kind: { type: t.enum("swarm"), required: true },
+          padding: { type: t.number },
+        }),
+        doc: 'How children keep clear of each other on the axis no field places, made by a function call: swarm({padding}) is a beeswarm (each dot moves to the free spot nearest the alignment line). It grows from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Linear coordinate spaces only.',
+      },
       axes: { type: t.ref("AxesOptions") },
       w: ch.num(
         "Fixed cross-axis extent, or a field name sizing this operator's own box from data."
