@@ -778,7 +778,8 @@ head, so its one baseline is its origin, the 0 its running sums are measured
 from. The stack's lowering names it: it includes the part that carries the
 origin with how far from that part's tail to its head the origin lies
 (`AnchorParticipantFact.origin`), and the solver lists that point whether or
-not the part is a baseline magnitude. By default it is the first part's tail.
+not the part is a baseline magnitude, and whether or not it is size-strong (a
+size-strong part's tail is its start). By default it is the first part's tail.
 So a stack seats at the origin like a single bar, a negative first part hangs
 below it, and two stacks of one sign each (grouped by sign) meet on the 0
 tick. A stack over a `HasCenter` column carries its origin at the center of
@@ -786,7 +787,10 @@ the order (the middle of a middle part, or the tail of the first part past
 the center), so every row of a Likert chart seats its center on the 0 tick
 with no other code. A spread packs boxes from its first
 member's start, which is not a baseline, so it lists none and keeps its
-sequence origin, even when its members' baselines happen to coincide. So a bar
+sequence origin, even when its members' baselines happen to coincide. Its
+lowering marks its relations `chain: "spread"` (a stack's are `"stack"`), and
+the difference graph gives a component that holds one no baseline at all, so
+a free node aligned to one of its members does not seat it either. So a bar
 with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
 the rounded −40. A free
 layer is itself seated by its parent at its own baseline, so its free-child
@@ -1469,8 +1473,9 @@ reads only the classes, never the builder words. Two classes exist:
   of first appearance, so every operator that splits (spread, stack, group,
   scatter, ...) follows it, and `field(...).sort(...)` and `.reverse()` still
   reorder from there. A value outside the levels is a loud error naming the
-  column and the stray values (`strayLevelsError`), checked when the chart
-  types its data and again at a split (a `derive` can make new values).
+  column and the stray values (`strayLevelsError`), checked where the order
+  is used (`orderByLevels`, at a split or a color scale), not when the chart
+  types its data, so a `filter` in the flow can drop the stray rows first.
 - `HasCenter` (`.diverging()`): the order has a center, the fixed point of
   reversing it: the middle level when the count is odd, the boundary between
   the two middle levels when it is even. It carries no data and requires
@@ -1479,11 +1484,16 @@ reads only the classes, never the builder words. Two classes exist:
   without the other. A stack over the column takes the center as its
   origin (`stackOrigin`, then the stack fold and the free-origin seat above).
   The center comes from the order, not from the parts present: a row with no
-  responses for some level keeps the same center.
+  responses for some level keeps the same center. So does the side of it each
+  level lies on: the split applies its `field(...).sort()` and `.reverse()`
+  to every level of the order (`orderEntries`), and `stackOrigin` reads the
+  stack's direction off that, so a row with one part puts it where a full row
+  does. A split order that is neither the order nor its reverse is an error.
 
 The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
 same way a transform's measure provenance does: `ChartBuilder` copies the
-array and tags it (`applySchema`), `createOperator` copies the tag onto each
+array and tags it (`applySchema`, which keeps the measure provenance the
+array already carries), `createOperator` copies the tag onto each
 split leaf, and a `derive` keeps it on its result. So the stack's split reads
 its `by` column's type off the data it splits, and a color channel's
 `DatumValueImpl` records the type of the field it read (`fieldType`), which

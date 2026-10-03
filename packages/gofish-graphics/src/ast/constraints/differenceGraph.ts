@@ -190,12 +190,21 @@ export function solveAxisProblem(
   // The component's baseline, joined over the nodes listed in
   // `freeOrigin.baselines`: undefined (none) → determined (they all agree) →
   // impossible (two disagree). The caller lists only baselines nothing else
-  // places, so a distribute chain contributes a stack's origin (on whichever
-  // part carries it) or nothing (a spread, whose members' baselines it packs
-  // end to end). Only a determined baseline is returned; impossible places
+  // places, so a stack chain contributes its origin (on whichever part
+  // carries it). A spread chain packs its members' boxes end to end from its
+  // first member's start, so it has no baseline at all: a component holding
+  // one is impossible, whatever else it holds (a free node aligned to one of
+  // its members has a baseline, but seating it would move the whole spread
+  // off its start). Only a determined baseline is returned; impossible places
   // like undefined.
   const sharedFreeBaseline = (component: number): number | undefined => {
     if (freeOrigin === undefined) return undefined;
+    const holdsSpread = problem.relations.some(
+      (relation) =>
+        relation.chain === "spread" &&
+        componentOf.get(relation.from.node) === component
+    );
+    if (holdsSpread) return undefined;
     let shared: number | undefined;
     for (const node of components[component]) {
       const offset = freeOrigin.baselines.get(node);

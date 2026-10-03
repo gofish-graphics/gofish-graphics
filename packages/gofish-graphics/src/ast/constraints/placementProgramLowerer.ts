@@ -59,11 +59,14 @@ export function anchorOffset(
   const localMin = target.localAnchor?.(axis, "min");
   if (local !== undefined && localMin !== undefined) return local - localMin;
 
-  const size = target.dims[axisIndex(axis)].size;
+  // With no local anchor, the box is `[0, size]` from its layout size, as a
+  // size-strong cell's is from its closed size. Unlike that cell, it may
+  // still have a data baseline, which only `localAnchor` knows; and its start
+  // needs no size.
   if (anchor === "baseline") return undefined;
   if (anchor === "start") return 0;
-  if (size === undefined) return undefined;
-  return anchor === "middle" ? Math.abs(size) / 2 : Math.abs(size);
+  const size = target.dims[axisIndex(axis)].size;
+  return size === undefined ? undefined : strongAnchorOffset(size, anchor);
 }
 
 /** {@link anchorOffset} for a size-strong (interval/span) cell, whose local

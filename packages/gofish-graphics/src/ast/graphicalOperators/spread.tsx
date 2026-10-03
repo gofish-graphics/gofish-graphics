@@ -3,7 +3,12 @@ import type { AxisOptions } from "../gofish";
 import { MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
-import { SplitBy, fieldNameOf, splitEntries } from "../datumProjection";
+import {
+  SplitBy,
+  fieldNameOf,
+  orderEntries,
+  splitEntries,
+} from "../datumProjection";
 import { isField } from "../data";
 import { columnType, stackOrigin } from "../schema";
 import type { StackOrigin } from "../constraints/distribute";
@@ -259,15 +264,24 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   //
   // A stack over a column with HasCenter (from the chart's `schema`) puts its
   // origin at the center of the column's order instead of at its first
-  // part's tail; the split knows the groups present, so it computes it.
+  // part's tail; the split knows the groups present, so it computes it. It
+  // reorders every level of the order the way it reorders the groups, so the
+  // stack knows which way it lays the order out even in a row with one part.
   split: ({ by, glue, reverse }, d) => {
     if (!by) return new Map(d.map((r, i) => [i, r]));
     const entries = splitEntries(by, d);
     if (!glue) return entries;
     const column = fieldNameOf(by);
+    const type = columnType(d, column);
+    const levels = (type?.HasOrder?.levels ?? []) as (string | number)[];
+    const split = orderEntries(
+      by,
+      new Map(levels.map((level) => [level, entries.get(level) ?? []]))
+    );
     const origin = stackOrigin(
       column,
-      columnType(d, column),
+      type,
+      [...split.keys()],
       [...entries.keys()],
       reverse
     );

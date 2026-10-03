@@ -2,8 +2,10 @@
  * Column types (#984): `chart(data, { schema })` with `Schema.ordered(levels)`
  * (HasOrder) and `.diverging()` (HasCenter). Covers the center of an order
  * (odd, even, a missing level), the centered stack's extent fold, the
- * stray-level and signed-part errors, the HasOrder prerequisite of
- * HasCenter, and a spread of centered stacks lining up on their centers.
+ * stray-level and signed-part errors (checked where the order is used, so a
+ * `filter` in the flow can drop a stray), the HasOrder prerequisite of
+ * HasCenter, a spread of centered stacks lining up on their centers, and the
+ * schema keeping the measure provenance its data carries.
  *
  * Run: `pnpm build && tsx src/tests/schema.test.ts` (wired as
  * `pnpm test:schema`). The rendering checks import from `dist` for the same
@@ -20,9 +22,13 @@ import * as GoFish from "../../dist/index.js";
 import {
   applySchema,
   columnTypeOf,
+  getColumnTypes,
+  orderByLevels,
   stackOrigin,
   type ColumnType,
 } from "../ast/schema";
+import { getMeasureProvenance } from "../ast/data";
+import { bin } from "../ast/transforms";
 import {
   distributeSpaceFold,
   type StackOrigin,
@@ -33,7 +39,7 @@ import {
   type CONTINUOUS_TYPE,
 } from "../ast/underlyingSpace";
 
-const { chart, spread, stack, rect, Schema } = GoFish as any;
+const { chart, spread, stack, rect, filter, palette, Schema } = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -81,7 +87,9 @@ async function main() {
   console.log("\n# the center of an order");
   {
     const origin = (levels: string[], keys: string[], reverse = false) =>
-      JSON.stringify(stackOrigin("r", centered(levels), keys, reverse));
+      JSON.stringify(
+        stackOrigin("r", centered(levels), levels, keys, reverse)
+      );
     check(
       "odd: the middle of the middle level",
       origin(LEVELS5, LEVELS5) ===
@@ -114,11 +122,16 @@ async function main() {
     );
     check(
       "no HasCenter: the default origin",
-      stackOrigin("r", { HasOrder: { levels: LEVELS5 } }, LEVELS5) ===
+      stackOrigin("r", { HasOrder: { levels: LEVELS5 } }, LEVELS5, LEVELS5) ===
         undefined
     );
     const shuffled = await errorOf(() =>
-      stackOrigin("r", centered(LEVELS5), ["A", "SD", "N"])
+      stackOrigin(
+        "r",
+        centered(LEVELS5),
+        ["A", "SD", "N", "D", "SA"],
+        ["A", "SD", "N"]
+      )
     );
     check(
       "parts out of order are an error",
@@ -202,8 +215,14 @@ async function main() {
       { r: "A" },
       { r: "Refused" },
     ];
+    // Checked where the order is used (a split, a color scale), not when the
+    // chart types its data.
     const message = await errorOf(() =>
-      applySchema(rows, { r: { HasOrder: { levels: LEVELS5 } } })
+      orderByLevels(
+        "r",
+        { levels: LEVELS5 },
+        rows.map((row) => row.r)
+      )
     );
     check(
       "a stray level is an error naming the column and the levels",
@@ -282,6 +301,58 @@ async function main() {
     check(
       "parts follow the schema order within a row",
       byRow.every((row) => row.every((b, i) => i === 0 || b.x > row[i - 1].x))
+    );
+  }
+
+  console.log("\n# a schema keeps what the data array already carries");
+  {
+    const binned = bin([{ x: 1 }, { x: 2 }, { x: 7 }], "x");
+    const typed = applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
+    check(
+      "bin()'s measure provenance survives a schema",
+      getMeasureProvenance(typed)?.start === "x",
+      JSON.stringify(getMeasureProvenance(typed))
+    );
+    check(
+      "applySchema does not tag the caller's array",
+      getColumnTypes(binned) === undefined
+    );
+  }
+
+  console.log("\n# a value outside the order fails where the order is used");
+  {
+    const rows = [
+      { r: "SD", n: 1, q: "q0" },
+      { r: "Refused", n: 1, q: "q1" },
+      { r: "A", n: 1, q: "q2" },
+    ];
+    const filtered = await errorOf(() =>
+      chart(rows, { schema: { r: Schema.ordered(LEVELS5) } })
+        .flow(
+          filter((row: any) => row.r !== "Refused"),
+          stack({ by: "r", dir: "x" })
+        )
+        .mark(rect({ w: "n" }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a filter in the flow can drop a stray level",
+      filtered === undefined,
+      filtered
+    );
+    const colored = await errorOf(() =>
+      chart(rows, {
+        schema: { r: Schema.ordered(LEVELS5) },
+        color: palette(["red", "green", "blue", "cyan", "magenta"]),
+      })
+        .flow(spread({ by: "q", dir: "x" }))
+        .mark(rect({ h: "n", fill: "r" }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a stray level a color scale reads is an error",
+      colored !== undefined && colored.includes(`"Refused"`),
+      colored
     );
   }
 

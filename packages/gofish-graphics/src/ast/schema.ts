@@ -3,6 +3,7 @@
 // </gofish-wiki>
 
 import type { StackOrigin } from "./constraints/distribute";
+import { copyMeasureProvenance } from "./data";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -158,30 +159,22 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
 
 /**
  * Type `rows` with `schema`: a copy of the array carrying the column types
- * (merged over any the array already carries), after checking that every
- * value of an ordered column is one of its levels.
+ * (merged over any the array already carries) and the measure provenance it
+ * carries. The copy leaves the caller's array untagged, so one array can feed
+ * charts with different schemas.
+ *
+ * It does not check the values: a value outside an order is an error where the
+ * order is used (`orderByLevels`), so a `filter` in the flow can drop it first.
  */
 export function applySchema<T>(
   rows: T[],
-  schema: Record<string, SchemaEntry>,
-  checkRow: (row: T) => boolean = () => true
+  schema: Record<string, SchemaEntry>
 ): T[] {
   const types: ColumnTypes = { ...getColumnTypes(rows) };
   for (const [column, entry] of Object.entries(schema)) {
     types[column] = columnTypeOf(column, entry);
   }
-  for (const [column, type] of Object.entries(types)) {
-    if (!type.HasOrder) continue;
-    const levels = new Set<unknown>(type.HasOrder.levels);
-    const strays = new Set<unknown>();
-    for (const row of rows) {
-      if (!checkRow(row)) continue;
-      const v = (row as Record<string, unknown>)?.[column];
-      if (!levels.has(v)) strays.add(v);
-    }
-    if (strays.size > 0) throw strayLevelsError(column, [...strays]);
-  }
-  return setColumnTypes([...rows], types);
+  return setColumnTypes(copyMeasureProvenance([...rows], rows), types);
 }
 
 /** Each level of `order`, mapped to its rank (its index in the order). */
@@ -205,46 +198,53 @@ export function orderByLevels<K>(
  * The {@link StackOrigin} of a stack over `column`, its part a child index,
  * whose children are the groups `keys` (in child order, laid out reversed
  * when `reverse`): the center of the column's order, when the column has
- * {@link HasCenter}; else undefined (the default origin). Every key is a
- * level of the order: `splitEntries` has already checked.
+ * {@link HasCenter}; else undefined (the default origin). `split` is every
+ * level of the order, in the order the split puts groups in (the level order
+ * after any `field(...).sort()` or `.reverse()`), and `keys` are the levels
+ * the data has, in that order.
  *
  * The center is defined by the ORDER, not by the parts present: a group the
  * data lacks moves nothing. With an odd number of levels it is the middle of
  * the middle level when that group is present, and otherwise the boundary
  * where it would be; with an even number it is the boundary between the two
  * middle levels. A boundary is the tail of the first part laid out past it,
- * or the head of the last part when every part lies before it.
+ * or the head of the last part when every part lies before it. The side of
+ * the center a level lands on comes from `split`, not from the parts present,
+ * so a row with one part puts it where a row with every part does.
  */
 export function stackOrigin(
   column: string | undefined,
   type: ColumnType | undefined,
+  split: unknown[],
   keys: unknown[],
   reverse = false
 ): StackOrigin<number> | undefined {
   if (column === undefined || !type?.HasCenter || keys.length === 0)
     return undefined;
-  const { levels } = type.HasOrder!;
   const rank = levelRanks(type.HasOrder!);
-  const center = (levels.length - 1) / 2;
-  // Ranks in layout order.
-  const order = keys.map((_, i) => (reverse ? keys.length - 1 - i : i));
-  const ranks = order.map((i) => rank.get(keys[i])!);
-  // Laid out along the order (+1) or against it (−1). The parts must follow
-  // the order one way or the other, or "before the center" is not a prefix.
-  const dir =
-    ranks.length > 1 ? Math.sign(ranks[1] - ranks[0]) : reverse ? -1 : 1;
-  for (let p = 1; p < ranks.length; p++) {
-    if (Math.sign(ranks[p] - ranks[p - 1]) !== dir) {
+  const center = (type.HasOrder!.levels.length - 1) / 2;
+  // The order's ranks as the stack lays the levels out: along the order (+1)
+  // or against it (−1). It must be one or the other, or "before the center"
+  // is not a prefix.
+  const laidOut = (reverse ? [...split].reverse() : split).map(
+    (level) => rank.get(level)!
+  );
+  const dir = laidOut.length > 1 ? Math.sign(laidOut[1] - laidOut[0]) : 1;
+  for (let p = 1; p < laidOut.length; p++) {
+    if (Math.sign(laidOut[p] - laidOut[p - 1]) !== dir) {
       throw new Error(
         `stack({ by: "${column}" }): a centered stack lays its parts out in ` +
-          `the order of "${column}" (or its reverse), but they are in the ` +
-          `order ${order.map((i) => showLevel(keys[i])).join(", ")}. ` +
+          `the order of "${column}" (or its reverse), but its \`by\` puts ` +
+          `the levels in the order ${split.map(showLevel).join(", ")}. ` +
           `HasCenter (declared with \`.diverging()\`) puts the stack's 0 at ` +
           `the center of that order, which needs the parts on each side of it ` +
           `together. Drop the reordering of "${column}".`
       );
     }
   }
+  // The parts present, in layout order.
+  const order = keys.map((_, i) => (reverse ? keys.length - 1 - i : i));
+  const ranks = order.map((i) => rank.get(keys[i])!);
   const at = (p: number, fraction: number): StackOrigin<number> => ({
     part: order[p],
     fraction,

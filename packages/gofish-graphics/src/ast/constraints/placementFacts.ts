@@ -33,6 +33,9 @@ export type AnchorPinFact = {
   owner: string;
 };
 
+/** Which kind of distribute chain an edge belongs to. */
+export type ChainKind = "stack" | "spread";
+
 export type AnchorRelationFact = {
   type: "anchor-relation";
   axis: Axis;
@@ -40,11 +43,13 @@ export type AnchorRelationFact = {
   to: AnchorRef;
   gap: number;
   owner: string;
-  /** Set on an edge of a distribute chain. The chain places its members'
-   *  baselines along the axis, so the free origin seats none of them but the
-   *  stack's origin, and a chain with no pin starts at its first member (the
-   *  sequence origin). */
-  chain?: boolean;
+  /** Set on an edge of a distribute chain: a stack's (`glue`) or a
+   *  spread's. The chain places its members' baselines along the axis, so the
+   *  free origin seats none of them but a stack's origin, and a chain with no
+   *  pin starts at its first member (the sequence origin). A spread packs
+   *  boxes and has no baseline, so a component holding one is never seated
+   *  by the free origin. */
+  chain?: ChainKind;
 };
 
 export type AnchorParticipantFact = {
@@ -106,7 +111,7 @@ export type PlacementRelationRequest = {
   gap: number;
   owner: string;
   /** See {@link AnchorRelationFact.chain}. */
-  chain?: boolean;
+  chain?: ChainKind;
 };
 
 export type PlacementParticipantRequest = {
@@ -150,7 +155,7 @@ export type PlacementRelation = {
   offset: number;
   owner: string;
   /** See {@link AnchorRelationFact.chain}. */
-  chain?: boolean;
+  chain?: ChainKind;
 };
 
 /** The lowering interface: constraints emit anchor pins, relations, and
@@ -173,7 +178,7 @@ export const relationFact = (
   to: AnchorExpr,
   offset: number,
   owner: string,
-  chain?: boolean
+  chain?: ChainKind
 ): PlacementRelation => ({ type: "relation", from, to, offset, owner, chain });
 
 export const participantFact = (

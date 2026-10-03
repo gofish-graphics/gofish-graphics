@@ -188,7 +188,7 @@ export function lowerDistributePlacement(
       to: { name: ordered[i].name, anchor: anchors.to },
       gap: constraint.spacing,
       owner,
-      chain: true,
+      chain: constraint.glue ? "stack" : "spread",
     });
   }
   // A spread's chain starts at its first member. A stack's chain also carries

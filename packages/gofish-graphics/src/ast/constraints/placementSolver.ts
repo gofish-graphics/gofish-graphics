@@ -140,16 +140,32 @@ function closeSizes(
   return { sizes, owners, conflicts };
 }
 
-/** The offset from its `min` of the point `fraction` of the way from a stack
- *  part's tail to its head: the stack's origin when the part carries it. */
-function stackOriginOffset(
-  target: Placeable,
+/** The offset of `node`'s `anchor` from its `min` on `axis`. A size-strong
+ *  (interval/span) cell's reads straight off its closed size, now that sizes
+ *  are known; any other cell's off its target's layout. */
+function nodeAnchorOffset(
+  node: NodeId,
+  anchor: RelationAnchor,
   axis: Axis,
+  strongSizes: Map<NodeId, number>,
+  targets: Map<string, Placeable>
+): number | undefined {
+  const strong = strongSizes.get(node);
+  if (strong !== undefined) return strongAnchorOffset(strong, anchor);
+  const target = targets.get(node);
+  return target && anchorOffset(target, axis, anchor);
+}
+
+/** The offset from its `min` of the point `fraction` of the way from a stack
+ *  part's tail to its head (`offsetOf` gives each anchor's offset): the
+ *  stack's origin when the part carries it. */
+function stackOriginOffset(
+  offsetOf: (anchor: RelationAnchor) => number | undefined,
   fraction: number
 ): number | undefined {
-  const tail = anchorOffset(target, axis, "tail");
+  const tail = offsetOf("tail");
   if (fraction === 0 || tail === undefined) return tail;
-  const head = anchorOffset(target, axis, "head");
+  const head = offsetOf("head");
   return head === undefined ? undefined : tail + fraction * (head - tail);
 }
 
@@ -166,17 +182,8 @@ function reduceToAxisProblem(
   const participantFacts: AxisProblem["participantFacts"] = [];
   const participants = new Set<NodeId>();
 
-  const resolveOffset = (
-    node: NodeId,
-    anchor: RelationAnchor
-  ): number | undefined => {
-    // A size-strong (interval/span) cell's anchor offsets read straight off
-    // the closed size, now that sizes are known.
-    const strong = strongSizes.get(node);
-    if (strong !== undefined) return strongAnchorOffset(strong, anchor);
-    const target = targets.get(node);
-    return target && anchorOffset(target, axis, anchor);
-  };
+  const resolveOffset = (node: NodeId, anchor: RelationAnchor) =>
+    nodeAnchorOffset(node, anchor, axis, strongSizes, targets);
 
   for (const fact of facts) {
     // A size-pin only feeds `closeSizes`'s box closure (above) — it has no
@@ -240,8 +247,9 @@ function solveRank2Axis(
   // one's baseline offset from its `min` (#773). A free participant (a
   // baseline magnitude) carries its own. A chain along the axis places its
   // members' baselines instead, so it carries one only as a stack: its
-  // origin (`AnchorParticipantFact.origin`). A spread chain carries none and
-  // keeps its sequence origin.
+  // origin (`AnchorParticipantFact.origin`), on whichever part carries it,
+  // a size-strong part included. A spread chain carries none and keeps its
+  // sequence origin.
   const freeBaselines = new Map<NodeId, number>();
   if (freeOrigin !== undefined) {
     const placedByChain = new Set<NodeId>();
@@ -253,17 +261,21 @@ function solveRank2Axis(
       placedByChain.add(fact.from.node);
       placedByChain.add(fact.to.node);
     }
-    for (const node of problem.participants) {
-      if (sizes.has(node)) continue; // size-strong: an interval, not free
-      const target = targets.get(node);
-      if (!target) continue;
+    const baselineOffset = (node: NodeId): number | undefined => {
       const origin = stackOrigins.get(node);
-      const offset =
-        origin !== undefined
-          ? stackOriginOffset(target, axis, origin)
-          : placedByChain.has(node)
-            ? undefined
-            : freeBaselineOffset(target, axis);
+      if (origin !== undefined)
+        return stackOriginOffset(
+          (anchor) => nodeAnchorOffset(node, anchor, axis, sizes, targets),
+          origin
+        );
+      // An interval (size-strong) has no baseline, and a chain places its
+      // other members' baselines.
+      if (sizes.has(node) || placedByChain.has(node)) return undefined;
+      const target = targets.get(node);
+      return target && freeBaselineOffset(target, axis);
+    };
+    for (const node of problem.participants) {
+      const offset = baselineOffset(node);
       if (offset !== undefined) freeBaselines.set(node, offset);
     }
   }

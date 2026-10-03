@@ -105,20 +105,21 @@ async function main() {
     // members of a spread chain (it packs boxes from the first one's start),
     // so the free origin (50) has nothing to seat and the chain keeps its
     // sequence origin.
-    const problem = {
+    const chain = (kind: "stack" | "spread") => ({
       relations: [
         relationFact(
           anchorExpr("a", "y", "start"),
           anchorExpr("b", "y", "start"),
           10,
           "distribute[0]",
-          true
+          kind
         ),
       ],
       pins: [],
       participantFacts: [],
       participants: new Set(["a", "b"]),
-    };
+    });
+    const problem = chain("spread");
     const spreadChain = solveAxisProblem("y", problem, {
       value: 50,
       baselines: new Map(),
@@ -131,7 +132,7 @@ async function main() {
     );
     // A stack lists its first part's baseline only (the others sit on the
     // previous head), and the free origin seats it.
-    const stackChain = solveAxisProblem("y", problem, {
+    const stackChain = solveAxisProblem("y", chain("stack"), {
       value: 50,
       baselines: new Map([["a", 4]]),
     });

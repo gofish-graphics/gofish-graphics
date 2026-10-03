@@ -91,7 +91,7 @@ export type ChartOptions = {
    * Column types, keyed by column name: the classes each column has (#984),
    * e.g. `{ response: Schema.ordered(LEVELS).diverging() }`. An ordered column
    * (`HasOrder`) splits in the order of its levels, and a value outside them
-   * is an error; a stack over a column with `HasCenter` puts its 0 at the
+   * is an error where the order is used; a stack over a column with `HasCenter` puts its 0 at the
    * center of the order. See schema.ts.
    */
   schema?: Record<string, SchemaEntry>;
@@ -983,15 +983,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       data = resolveRefData(data, this.state.layerContext) as any;
     }
     // Type the data with the chart's schema: a copy of the array carrying the
-    // column types, which every operator reads off the data it splits. Rows
-    // that are refs (a `selectAll` bag) have no columns to check.
+    // column types, which every operator reads off the data it splits.
     const schema = this.state.options?.schema;
     if (schema !== undefined && Array.isArray(data)) {
-      data = applySchema(
-        data,
-        schema,
-        (row) => !(row instanceof GoFishRef)
-      ) as any;
+      data = applySchema(data, schema) as any;
     }
 
     const content = (
