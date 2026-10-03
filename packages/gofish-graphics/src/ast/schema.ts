@@ -25,6 +25,8 @@
  * The types ride the chart's data ARRAY under {@link COLUMN_TYPES}, the way a
  * transform's measure provenance does (`MEASURE_PROVENANCE` in data.ts), so an
  * operator reads a column's type off the data it splits.
+ * TODO(#994): measure provenance is the unit part of this record; merge the
+ * two symbols.
  */
 
 /** One level of an ordered column. */
