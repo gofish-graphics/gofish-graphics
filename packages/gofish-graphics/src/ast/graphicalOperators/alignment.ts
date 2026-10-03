@@ -18,6 +18,8 @@ import {
   spacePlacement,
   continuousExtentInterval,
   continuousInterval,
+  allMirrored,
+  mirrored,
   type CONTINUOUS_TYPE,
   UnderlyingSpace,
 } from "../underlyingSpace";
@@ -114,7 +116,7 @@ export function unionChildSpaces(
   }
   const union = Interval.unionAll(...intervals);
   return hasAnchored
-    ? POSITION(union, measure)
+    ? mirrored(POSITION(union, measure), allMirrored(conts))
     : DIFFERENCE(Interval.width(union), measure);
 }
 
@@ -156,7 +158,8 @@ export function resolveAlignmentSpace(
       : (continuousInterval(s) ?? Interval.interval(0, s.width.run(1)));
   const union = Interval.unionAll(...conts.map(extent));
 
+  // Children that all hold amounts on both sides of 0 still do together.
   return drop
     ? DIFFERENCE(Interval.width(union), measure)
-    : POSITION(union, measure);
+    : mirrored(POSITION(union, measure), allMirrored(conts));
 }

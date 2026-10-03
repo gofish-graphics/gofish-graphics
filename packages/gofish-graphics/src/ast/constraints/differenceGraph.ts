@@ -57,8 +57,9 @@ type RelationComponents = {
 export const TOLERANCE = 1e-6;
 
 /** The owning layer's free-child origin on one axis (#773): the pixel at
- *  which a free node's baseline sits, and each free participant's baseline
- *  offset from its `min`. */
+ *  which a free node's baseline sits, and the baseline offset from `min` of
+ *  each participant whose baseline nothing else places (a free participant,
+ *  or the part of a stack that carries its origin). */
 export type FreeOriginInput = {
   value: number;
   baselines: Map<NodeId, number>;
@@ -141,7 +142,7 @@ function solveRelationComponents(
  * Solve one axis's {@link AxisProblem} into an absolute `min` per node. Pins fix
  * each relation component's offset; a component with no pin falls back to the
  * free origin (its determined free baseline at the layer's origin pixel), the
- * distribute sequence-origin (its first `distribute[`-owned source), or a
+ * distribute sequence-origin (the first source of its chain relations), or a
  * normalized origin (its minimum coordinate at 0). This is the general half of
  * the placement solver.
  */
@@ -178,7 +179,7 @@ export function solveAxisProblem(
     const outgoing = new Set<NodeId>();
     const incoming = new Set<NodeId>();
     for (const relation of problem.relations) {
-      if (!relation.owner.startsWith("distribute[")) continue;
+      if (!relation.chain) continue;
       if (componentOf.get(relation.from.node) !== component) continue;
       outgoing.add(relation.from.node);
       incoming.add(relation.to.node);
@@ -186,15 +187,24 @@ export function solveAxisProblem(
     return [...outgoing].filter((node) => !incoming.has(node)).sort()[0];
   };
 
-  // The component's baseline, joined over its free nodes: undefined (no free
-  // node) → determined (they all agree) → impossible (two disagree). A
-  // distribute chain along this axis composes its members end to end, so it
-  // has no baseline of its own: impossible, whatever its members' baselines
-  // happen to be (a one-item chain, or members that coincide). Only a
-  // determined baseline is returned; impossible places like undefined.
+  // The component's baseline, joined over the nodes listed in
+  // `freeOrigin.baselines`: undefined (none) → determined (they all agree) →
+  // impossible (two disagree). The caller lists only baselines nothing else
+  // places, so a stack chain contributes its origin (on whichever part
+  // carries it). A spread chain packs its members' boxes end to end from its
+  // first member's start, so it has no baseline at all: a component holding
+  // one is impossible, whatever else it holds (a free node aligned to one of
+  // its members has a baseline, but seating it would move the whole spread
+  // off its start). Only a determined baseline is returned; impossible places
+  // like undefined.
   const sharedFreeBaseline = (component: number): number | undefined => {
     if (freeOrigin === undefined) return undefined;
-    if (distributeOriginFor(component) !== undefined) return undefined;
+    const holdsSpread = problem.relations.some(
+      (relation) =>
+        relation.chain === "spread" &&
+        componentOf.get(relation.from.node) === component
+    );
+    if (holdsSpread) return undefined;
     let shared: number | undefined;
     for (const node of components[component]) {
       const offset = freeOrigin.baselines.get(node);
@@ -209,10 +219,11 @@ export function solveAxisProblem(
   for (let component = 0; component < components.length; component++) {
     if (offsets.has(component)) continue;
     // Free origin (#773): a component with a determined baseline seats it at
-    // the layer's origin pixel, so a signed extent grows from the axis's 0.
-    // An undefined or impossible baseline (e.g. a chain along the axis, or an
-    // `end`/`middle` alignment of free nodes) has nothing to seat, so the
-    // component uses the sequence or normalized origin below.
+    // the layer's origin pixel, so a signed extent grows from the axis's 0
+    // and a stack's running sums start there. An undefined or impossible
+    // baseline (e.g. a spread chain along the axis, or an `end`/`middle`
+    // alignment of free nodes) has nothing to seat, so the component uses the
+    // sequence or normalized origin below.
     const baseline = sharedFreeBaseline(component);
     if (freeOrigin !== undefined && baseline !== undefined) {
       offsets.set(component, {

@@ -49,8 +49,9 @@ operator works both inside `.flow(...)` and as a combinator over marks, and a
 `createMark` body may return that combinator's mark directly, because
 `createMark` resolves whatever its body returns the same way a combinator
 resolves a child. The async map over a collection, once the capitalized
-`For`, is now the lowercase `map`, so `Constraint` (the constraint factory
-namespace) is the only capitalized function-like export left. The fluent
+`For`, is now the lowercase `map`, so the factory namespaces `Constraint`
+(constraints) and `Schema` (column types for `chart`'s `schema` option) are
+the only capitalized function-like exports left. The fluent
 surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
 `treemap`, `pack`, `derive`, `resolve`, and `join` (`pack` takes a strategy

@@ -13,8 +13,10 @@ import type {
   PlacementPinRequest,
   PlacementRelationRequest,
   PlacementSizePinRequest,
+  RelationAnchor,
 } from "./placementFacts";
 import { emptyAnchorProgram } from "./placementFacts";
+import { isBaselineMagnitude } from "../underlyingSpace";
 
 export const BOX_ANCHOR: Record<AlignAnchor, Anchor> = {
   start: "min",
@@ -23,25 +25,59 @@ export const BOX_ANCHOR: Record<AlignAnchor, Anchor> = {
   baseline: "baseline",
 };
 
+/** The offset of a target's data baseline from its `min` on `axis`, or
+ *  undefined when the target is not a baseline magnitude there (it has no
+ *  data baseline of its own). */
+export function freeBaselineOffset(
+  target: Placeable,
+  axis: Axis
+): number | undefined {
+  const space = target.spaceOn?.(axisIndex(axis));
+  if (space === undefined || !isBaselineMagnitude(space)) return undefined;
+  return anchorOffset(target, axis, "baseline");
+}
+
 /** The offset of a target's `anchor` from its box `min`, in absolute pixels
  *  (the substitution that reduces an anchor equation to a `min` equation), for a
  *  WEAK (layout-frame) cell — it reads the target's `localAnchor`, else its
  *  layout size. A size-strong (interval/span) cell does NOT come through here:
- *  the solver reads its offset from the closed {@link BBox} directly, since its
- *  local frame is `[0, size]` with the size only known post-closure. */
+ *  its local frame is `[0, size]` with the size only known post-closure, so the
+ *  solver uses {@link strongAnchorOffset}. `tail` and `head` are as defined at
+ *  {@link RelationAnchor}. */
 export function anchorOffset(
   target: Placeable,
   axis: Axis,
-  anchor: AlignAnchor
+  anchor: RelationAnchor
 ): number | undefined {
+  if (anchor === "tail" || anchor === "head") {
+    const tail = freeBaselineOffset(target, axis) ?? 0;
+    if (anchor === "tail") return tail;
+    const end = anchorOffset(target, axis, "end");
+    return end === undefined ? undefined : end - tail;
+  }
   const local = target.localAnchor?.(axis, BOX_ANCHOR[anchor]);
   const localMin = target.localAnchor?.(axis, "min");
   if (local !== undefined && localMin !== undefined) return local - localMin;
 
-  const size = target.dims[axisIndex(axis)].size;
+  // With no local anchor, the box is `[0, size]` from its layout size, as a
+  // size-strong cell's is from its closed size. Unlike that cell, it may
+  // still have a data baseline, which only `localAnchor` knows; and its start
+  // needs no size.
   if (anchor === "baseline") return undefined;
   if (anchor === "start") return 0;
-  if (size === undefined) return undefined;
+  const size = target.dims[axisIndex(axis)].size;
+  return size === undefined ? undefined : strongAnchorOffset(size, anchor);
+}
+
+/** {@link anchorOffset} for a size-strong (interval/span) cell, whose local
+ *  frame is `[0, size]` with `size` its closed size. It has no data baseline,
+ *  so its baseline and tail are its start and its head its end. */
+export function strongAnchorOffset(
+  size: number,
+  anchor: RelationAnchor
+): number {
+  if (anchor === "start" || anchor === "baseline" || anchor === "tail")
+    return 0;
   return anchor === "middle" ? Math.abs(size) / 2 : Math.abs(size);
 }
 
@@ -85,6 +121,7 @@ export class PlacementProgramLowerer implements PlacementFactEmitter {
       node: request.name,
       axis: request.axis,
       owner: request.owner,
+      origin: request.origin,
     });
   }
 
@@ -98,6 +135,7 @@ export class PlacementProgramLowerer implements PlacementFactEmitter {
       to: { node: request.to.name, anchor: request.to.anchor },
       gap: request.gap,
       owner: request.owner,
+      chain: request.chain,
     });
   }
 

@@ -22,8 +22,10 @@ const offsetSpace = (
   space: UnderlyingSpace,
   offset: MaybeValue<number> | undefined
 ): UnderlyingSpace => {
-  if (offset === undefined || !isCONTINUOUS(space)) return space;
-  const value = isValue(offset) ? getValue(offset) : offset;
+  // A raw number is a pixel offset (layout below translates by it as is), so
+  // it moves no data: only a datum offset shifts the data space.
+  if (!isValue(offset) || !isCONTINUOUS(space)) return space;
+  const value = getValue(offset);
   if (value === undefined) return space;
 
   // An anchored space offsets from its domain min; a free / difference space

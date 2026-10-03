@@ -53,6 +53,7 @@ import type {
   ChannelType as MarkChannelType,
 } from "../channels";
 import { discretePosition, copyMeasureProvenance } from "../data";
+import { copyColumnTypes } from "../schema";
 import { fieldNameOf } from "../datumProjection";
 import type { MaybeValue, Value } from "../data";
 import {
@@ -527,15 +528,15 @@ export function attachTransformModifiers<M extends object>(
  * `inferSize`/`inferPos`/`inferColor` all normalise via
  * `Array.isArray(d) ? d : [d]`, so both forms work uniformly.
  *
- * If the operator also needs to feed axis labels (e.g. `{colKeys, rowKeys}`
- * for table) into the layout function's opts, return the wrapped
- * `{entries, keys}` form instead of a bare Map.
+ * If the split also computes opts for the layout function (the axis labels
+ * `{colKeys, rowKeys}` for table, a stack's `origin`), return the wrapped
+ * `{entries, layoutOpts}` form instead of a bare Map.
  */
 export type SplitResult<Datum> =
   | Map<string | number, Datum | Datum[]>
   | {
       entries: Map<string | number, Datum | Datum[]>;
-      keys?: Record<string, string[]>;
+      layoutOpts?: Record<string, unknown>;
     };
 
 /**
@@ -1000,12 +1001,12 @@ function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   opts: Options,
   d: Datum | Datum[],
   entries: Map<string | number, Datum | Datum[]> | undefined,
-  keys: Record<string, string[]> | undefined
+  layoutOpts: Record<string, unknown> | undefined
 ): Options {
   const withChannels = applyChannels(opts, channels, d, entries);
   const stripped = stripFactoryKeys(withChannels);
-  // Merge split's axis keys (e.g. colKeys, rowKeys for table) into opts.
-  return keys !== undefined ? ({ ...stripped, ...keys } as Options) : stripped;
+  // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
+  return { ...stripped, ...layoutOpts } as Options;
 }
 
 /**
@@ -1120,15 +1121,21 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           : cfg.split(opts, d);
         const entries =
           splitResult instanceof Map ? splitResult : splitResult.entries;
-        const keys = splitResult instanceof Map ? undefined : splitResult.keys;
+        const splitLayoutOpts =
+          splitResult instanceof Map ? undefined : splitResult.layoutOpts;
         // Split leaves are fresh sub-arrays (groupBy/filter/slice) that don't
         // inherit `d`'s measure-provenance symbol. Re-tag each array leaf so a
         // MARK channel applied per leaf (createMark → inferSize/inferPos with no
         // precomputed measure) reads the source measure off its own data — e.g.
         // a bin's `start`/`end`/`size` resolve to the source field's units, not
         // the literal field name, matching the operator-channel path (#534).
+        // The column types (schema.ts) ride along the same way, so a nested
+        // split or a mark's color channel still sees an ordered column.
         for (const leaf of entries.values()) {
-          if (Array.isArray(leaf)) copyMeasureProvenance(leaf, d);
+          if (Array.isArray(leaf)) {
+            copyMeasureProvenance(leaf, d);
+            copyColumnTypes(leaf, d);
+          }
         }
         // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
         // can return arrays that we flatten across leaves. A per-item mark is
@@ -1195,7 +1202,13 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           })
         );
         const nodes = nodesPerLeaf.flat();
-        const lowOpts = buildLayoutOpts(cfg.channels, opts, d, entries, keys);
+        const lowOpts = buildLayoutOpts(
+          cfg.channels,
+          opts,
+          d,
+          entries,
+          splitLayoutOpts
+        );
         // Carry the grouping field (e.g. spread's `by`) into the node operator
         // so it can stamp the ORDINAL space it builds with a `measure` — the
         // discrete axis names itself off its own space, mirroring how a

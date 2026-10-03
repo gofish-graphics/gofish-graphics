@@ -2,8 +2,9 @@
  * Signed extents (#773): a free extent carries an ascent and a descent about
  * its baseline. Covers the places that read the pair or seat the baseline:
  * the shrink-to-fit root, nest padding, the solver's free-origin fallback
- * against a distribute chain, the alignment union per alignment mode, and the
- * chainable ref proxy that layout probes.
+ * against a distribute chain, the alignment union per alignment mode, a stack
+ * laying signed parts end to end, and the chainable ref proxy that layout
+ * probes.
  *
  * Run: `pnpm build && tsx src/tests/signedExtent.test.ts` (wired as
  * `pnpm test:signed-extent`). The rendering checks import from `dist` for the
@@ -14,6 +15,7 @@
 import * as GoFish from "../../dist/index.js";
 import {
   SIZE,
+  baselineSpan,
   isPOSITION,
   continuousInterval,
   type CONTINUOUS_TYPE,
@@ -21,13 +23,14 @@ import {
 import { nestedSpace } from "../ast/constraints/nest";
 import { resolveAlignmentSpace } from "../ast/graphicalOperators/alignment";
 import { solveAxisProblem } from "../ast/constraints/differenceGraph";
+import { distributeSpaceFold } from "../ast/constraints/distribute";
 import { anchorExpr, relationFact } from "../ast/constraints/placementFacts";
 import { ref } from "../ast/shapes/ref";
 import { createName } from "../ast/createName";
 import { GoFishRef } from "../ast/_ref";
 import * as M from "../util/monotonic";
 
-const { chart, scatter, rect } = GoFish as any;
+const { chart, scatter, stack, spread, rect } = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -96,34 +99,53 @@ async function main() {
     check("width is inner width + 2·padding", outer.width.run(1) === 18);
   }
 
-  console.log("\n# a distribute chain keeps its sequence origin");
+  console.log("\n# a chain seats only the baselines it leaves free");
   {
-    // A chain a → b along the axis whose free members' baselines happen to
-    // coincide. A chain composes along the axis and has no baseline of its
-    // own, so the free origin (50) must not seat it.
-    const problem = {
+    // A chain a → b along the axis. The solver lists no baseline for the
+    // members of a spread chain (it packs boxes from the first one's start),
+    // so the free origin (50) has nothing to seat and the chain keeps its
+    // sequence origin.
+    const chain = (kind: "stack" | "spread") => ({
       relations: [
         relationFact(
           anchorExpr("a", "y", "start"),
           anchorExpr("b", "y", "start"),
           10,
-          "distribute[0]"
+          "distribute[0]",
+          kind
         ),
       ],
       pins: [],
       participantFacts: [],
       participants: new Set(["a", "b"]),
-    };
+    });
+    const problem = chain("spread");
+    const spreadChain = solveAxisProblem("y", problem, {
+      value: 50,
+      baselines: new Map(),
+    });
+    check(
+      "a spread chain's head stays at 0 (sequence origin)",
+      spreadChain.positions.get("a") === 0 &&
+        spreadChain.positions.get("b") === 10,
+      JSON.stringify([...spreadChain.positions])
+    );
+    // A stack lists its first part's baseline only (the others sit on the
+    // previous head), and the free origin seats it.
+    const stackChain = solveAxisProblem("y", chain("stack"), {
+      value: 50,
+      baselines: new Map([["a", 4]]),
+    });
+    check(
+      "a stack's first baseline sits at the origin",
+      stackChain.positions.get("a")! + 4 === 50 &&
+        stackChain.positions.get("b") === stackChain.positions.get("a")! + 10,
+      JSON.stringify([...stackChain.positions])
+    );
     const baselines = new Map([
       ["a", 10],
       ["b", 0],
     ]);
-    const chain = solveAxisProblem("y", problem, { value: 50, baselines });
-    check(
-      "chain head stays at 0 (sequence origin)",
-      chain.positions.get("a") === 0 && chain.positions.get("b") === 10,
-      JSON.stringify([...chain.positions])
-    );
     // The same two nodes tied by an align relation share a determined
     // baseline, which the free origin seats.
     const aligned = solveAxisProblem(
@@ -167,6 +189,73 @@ async function main() {
     check(
       "end: the widest box",
       JSON.stringify(span("end")) === JSON.stringify({ min: 0, max: 20 })
+    );
+  }
+
+  console.log("\n# a stack lays its parts end to end");
+  {
+    // The running sums of (30, −25, 10, −50) are 0, 30, 5, 15, −35, so the
+    // stack spans [−35, 30]. With only positive parts it is [0, Σ].
+    const fold = (values: number[]) => {
+      const s = distributeSpaceFold(values.map((v) => baselineSpan(v)), [], {
+        spacing: 0,
+        anchor: "edge",
+        glue: true,
+        origin: { part: 0, fraction: 0, mirrored: false },
+      });
+      return isPOSITION(s) ? continuousInterval(s) : undefined;
+    };
+    check(
+      "a signed stack spans its running sums",
+      JSON.stringify(fold([30, -25, 10, -50])) ===
+        JSON.stringify({ min: -35, max: 30 })
+    );
+    check(
+      "an all-negative stack hangs below 0",
+      JSON.stringify(fold([-10, -20])) === JSON.stringify({ min: -30, max: 0 })
+    );
+    check(
+      "a positive stack spans [0, Σ]",
+      JSON.stringify(fold([10, 20])) === JSON.stringify({ min: 0, max: 30 })
+    );
+
+    // Rendered: 130px for the 65 units of [−35, 30], so 2px per unit, with
+    // y growing downward. The first bar's zero edge is the stack's 0; each
+    // bar spans its two running sums.
+    const parts = [
+      { k: "a", v: 30 },
+      { k: "b", v: -25 },
+      { k: "c", v: 10 },
+      { k: "d", v: -50 },
+    ];
+    const render = (op: unknown) =>
+      chart(parts)
+        .flow(op)
+        .mark(rect({ w: 10, h: "v" }))
+        .toDisplayList({ w: 100, h: 130 });
+    const stacked = rectsOf(await render(stack({ by: "k", dir: "y" })));
+    const zero = stacked[0].y + stacked[0].h;
+    const sums = [0, 30, 5, 15, -35];
+    check(
+      "each stacked part spans its two running sums",
+      stacked.every((r, i) => {
+        const [lo, hi] = [sums[i], sums[i + 1]].sort((p, q) => p - q);
+        return (
+          Math.abs(r.y - (zero - 2 * hi)) < 1e-9 &&
+          Math.abs(r.y + r.h - (zero - 2 * lo)) < 1e-9
+        );
+      }),
+      JSON.stringify(stacked)
+    );
+    // A spread packs the same bars as boxes, 8px apart, signs aside.
+    const spreadOut = rectsOf(await render(spread({ by: "k", dir: "y" })));
+    check(
+      "a spread still packs boxes edge to edge",
+      spreadOut.every(
+        (r, i) =>
+          i === 0 || Math.abs(r.y + r.h + 8 - spreadOut[i - 1].y) < 1e-9
+      ),
+      JSON.stringify(spreadOut)
     );
   }
 

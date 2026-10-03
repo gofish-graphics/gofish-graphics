@@ -3,8 +3,15 @@ import type { AxisOptions } from "../gofish";
 import { MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
-import { SplitBy, splitEntries } from "../datumProjection";
+import {
+  SplitBy,
+  fieldNameOf,
+  orderEntries,
+  splitEntries,
+} from "../datumProjection";
 import { isField } from "../data";
+import { columnType, stackOrigin } from "../schema";
+import type { StackOrigin } from "../constraints/distribute";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
@@ -59,6 +66,7 @@ export const Spread = createNodeOperator(
       anchor = "edge",
       reverse = false,
       glue = false,
+      origin,
       size,
       axes,
       axisMeasures,
@@ -80,6 +88,11 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
+      /** A stack's {@link StackOrigin}, its part a child index. Omitted: the
+       *  first part's tail. The `stack` operator's split sets it from a
+       *  `HasMidpoint` column (`stackOrigin` in schema.ts). Ignored without
+       *  `glue`: a spread packs boxes and has no origin. */
+      origin?: StackOrigin<number>;
       /** Per-entry stack-axis extent — one value per child, in child order.
        *  Wraps each child in a sized layer on the stack axis before the
        *  align/distribute elaboration. See the doc comment above. */
@@ -179,6 +192,7 @@ export const Spread = createNodeOperator(
               anchor,
               glue,
               order: reverse ? "reverse" : "forward",
+              origin: origin && { ...origin, part: names[origin.part] },
               // The grouping field for this (stack) axis → the ORDINAL
               // space's measure, so a spread-by-category axis titles itself
               // off its space.
@@ -247,8 +261,32 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
   // that override lives in createOperator (it dispatches on the mark's kind),
   // not here, so this split stays kind-agnostic.
-  split: ({ by }, d) =>
-    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+  //
+  // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
+  // origin at the midpoint of the column's order instead of at its first
+  // part's tail; the split knows the groups present, so it computes it. It
+  // reorders every level of the order the way it reorders the groups, so the
+  // stack knows which way it lays the order out even in a row with one part.
+  split: ({ by, glue, reverse }, d) => {
+    if (!by) return new Map(d.map((r, i) => [i, r]));
+    const entries = splitEntries(by, d);
+    if (!glue) return entries;
+    const column = fieldNameOf(by);
+    const type = columnType(d, column);
+    const levels = (type?.HasOrder?.levels ?? []) as (string | number)[];
+    const split = orderEntries(
+      by,
+      new Map(levels.map((level) => [level, entries.get(level) ?? []]))
+    );
+    const origin = stackOrigin(
+      column,
+      type,
+      [...split.keys()],
+      [...entries.keys()],
+      reverse
+    );
+    return origin === undefined ? entries : { entries, layoutOpts: { origin } };
+  },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {
     const name =

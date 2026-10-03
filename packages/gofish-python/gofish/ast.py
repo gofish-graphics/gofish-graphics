@@ -1,7 +1,11 @@
 """AST classes for building GoFish chart specifications."""
 
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+import decimal
 import inspect
+import json
+import math
+import re
 import uuid
 
 T = TypeVar("T")
@@ -2049,6 +2053,94 @@ def log(prefix: Optional[str] = None) -> Operator:
     return Operator("log", **kwargs)
 
 
+# Column types
+
+
+class ColumnSchema(dict):
+    """A column type for ``chart(data, schema={...})``: the classes the
+    column has, keyed by class name (the wire form JS reads as is).
+
+    Mirrors JS ``ColumnSchema``. Build one with ``Schema.ordered(levels)``;
+    each method adds one class.
+    """
+
+    def diverging(self, midpoint: Optional[float] = None) -> "ColumnSchema":
+        """Give the column a midpoint (``HasMidpoint``) along its order.
+
+        ``midpoint`` is in edge coordinates over the order: 0 is the first
+        level's leading edge, ``n`` is the last level's trailing edge (``n``
+        levels), and 2.25 has two levels and a quarter of the third before it.
+        The default is ``n / 2``: the middle of the middle level when ``n`` is
+        odd, the boundary between the two middle levels when it is even. A
+        stack over the column puts its 0 there.
+        """
+        if "HasOrder" not in self:
+            raise ValueError(
+                "HasMidpoint needs HasOrder: a midpoint is a point along an "
+                "order. Declare the order with `Schema.ordered(levels)` before "
+                "`.diverging()`."
+            )
+        levels = self["HasOrder"]["levels"]
+        n = len(levels)
+        at = n / 2 if midpoint is None else midpoint
+        # The same two messages as JS `checkMidpointOnOrder` in schema.ts,
+        # word for word.
+        order = (
+            "the edges of the order ["
+            + ", ".join(
+                json.dumps(level, ensure_ascii=False)
+                if isinstance(level, str)
+                else _js_number(level)
+                for level in levels
+            )
+            + "]"
+        )
+        if (
+            isinstance(at, bool)
+            or not isinstance(at, (int, float))
+            or not math.isfinite(at)
+        ):
+            raise ValueError(
+                f"diverging: midpoint must be a finite number from 0 to {n}, "
+                f"{order}."
+            )
+        if not 0 <= at <= n:
+            raise ValueError(
+                f"diverging: midpoint {_js_number(at)} is outside 0..{n}, {order}."
+            )
+        return ColumnSchema({**self, "HasMidpoint": {"at": at}})
+
+
+def _js_number(x: Union[int, float]) -> str:
+    """``x`` as JS ``String(x)`` writes it (6.0 is "6", 1e-05 is "0.00001"),
+    so an error message reads the same in both languages."""
+    if isinstance(x, int):
+        return str(x)
+    if x.is_integer() and abs(x) < 1e21:
+        return str(int(x))
+    if 1e-7 <= abs(x) < 1e21:
+        return format(decimal.Decimal(repr(x)), "f")
+    return re.sub(r"e([+-])0*(\d)", r"e\1\2", repr(x))
+
+
+class Schema:
+    """Factories for column types, used in ``chart(data, schema={...})``.
+
+    Mirrors JS ``Schema``::
+
+        chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
+    """
+
+    @staticmethod
+    def ordered(levels: List[Any]) -> ColumnSchema:
+        """A column whose values are ``levels``, in this order (``HasOrder``).
+
+        Every ``by`` split over the column lays its groups out in this order,
+        and a value outside the levels is an error.
+        """
+        return ColumnSchema({"HasOrder": {"levels": list(levels)}})
+
+
 # Color configuration
 
 
@@ -3020,11 +3112,15 @@ def chart(
 
         spread(by="species", dir="x", axes={"x": True, "y": False})
 
+    ``schema`` declares column types, keyed by column name (see ``Schema``):
+
+        chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
+
     Args:
         data: Input data, or `ref(name)` / `selectAll(name)` for cross-chart
             layer references
         **options: Chart options as keywords — ``axes``, ``color``, ``coord``,
-            ``padding``, ...
+            ``padding``, ``schema``, ...
 
     Returns:
         ChartBuilder instance

@@ -135,14 +135,18 @@ factory.
 Walking `createOperator.ts:391-415`:
 
 1. **Split** — `cfg.split(opts, d)` partitions the input into a
-   `Map<key, subdata>`. (Some operators, like `table`, also return `keys` —
-   row/column labels that get merged into the layout opts.) Each array leaf is
-   then re-tagged with `d`'s measure provenance (`copyMeasureProvenance`): a
-   leaf is a fresh sub-array that wouldn't otherwise inherit the
-   `MEASURE_PROVENANCE` symbol, so without this a _mark_ channel applied per
-   leaf would lose a transform's measure (e.g. a bin's `start`/`end`/`size`) and
-   fall back to the literal field name — see [underlying
-   space](/internals/core/underlying-space) and #534.
+   `Map<key, subdata>`. (Some operators also return `layoutOpts`, opts the
+   split computed that get merged into the layout opts: `table`'s row/column
+   labels, or a `stack`'s `origin` when its `by` column has `HasMidpoint`.) Each
+   array leaf is then re-tagged with `d`'s measure provenance
+   (`copyMeasureProvenance`): a leaf is a fresh sub-array that wouldn't
+   otherwise inherit the `MEASURE_PROVENANCE` symbol, so without this a _mark_
+   channel applied per leaf would lose a transform's measure (e.g. a bin's
+   `start`/`end`/`size`) and fall back to the literal field name — see
+   [underlying space](/internals/core/underlying-space) and #534. The chart's
+   column types ride along the same way (`copyColumnTypes`, see [Column
+   types](/internals/core/underlying-space#column-types-the-chart-schema)), so
+   a nested split or a color channel still sees an ordered column.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
@@ -295,8 +299,9 @@ If `Wrap` accepts a width-per-child, you'd add `channels: { width: "size" }`
 so consumers can pass a field name there.
 
 If your operator needs to feed extra data (like `colKeys`/`rowKeys`) into
-the layout opts, return the wrapped `{entries, keys}` form from `split`
-instead of a bare Map — see `table.tsx:228` for an example.
+the layout opts, return the wrapped `{entries, layoutOpts}` form from `split`
+instead of a bare Map — see `table.tsx` for an example, and `spread.tsx`'s
+split for a stack's `origin`.
 
 Operators created with `createOperator` automatically support
 `.translate({ x?, y? })`. You do not implement this per operator; the factory

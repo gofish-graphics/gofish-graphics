@@ -29,6 +29,7 @@ import {
   type FieldOp,
 } from "./fieldExpr";
 import { binRows } from "./transforms";
+import { columnType, orderByLevels } from "./schema";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
@@ -256,8 +257,36 @@ function sortEntries<T>(
   return new Map(pairs);
 }
 
+/** `entries` reordered by one `sort` or `reverse` op. */
+function reorderEntries<T>(
+  entries: Map<string | number, T[]>,
+  op: Extract<FieldOp, { op: "sort" | "reverse" }>
+): Map<string | number, T[]> {
+  return op.op === "sort"
+    ? sortEntries(entries, op)
+    : new Map([...entries.entries()].reverse());
+}
+
+/** `entries` reordered by the `sort` and `reverse` ops a `field(...)`
+ *  accessor carries, in order: the reordering {@link splitEntries} applies
+ *  to its groups. A stack over a `HasMidpoint` column runs it over every level
+ *  of the order (spread.tsx), so it knows the order the split lays the
+ *  levels out in even when a row has only some of them. */
+export function orderEntries<T>(
+  by: SplitBy,
+  entries: Map<string | number, T[]>
+): Map<string | number, T[]> {
+  for (const op of getFieldOps(by)) {
+    if (op.op === "sort" || op.op === "reverse")
+      entries = reorderEntries(entries, op);
+  }
+  return entries;
+}
+
 /**
- * Group `d` by `by` (via {@link splitKeyFn}), then apply any pipeline ops
+ * Group `d` by `by` (via {@link splitKeyFn}): in the order of the column's
+ * levels when the data declares the column ordered (`HasOrder`, see
+ * schema.ts), else in order of first appearance. Then apply any pipeline ops
  * carried by a `field(...)` accessor (read via `getFieldOps`) IN ORDER:
  *   - `dropNulls` filters out rows whose value at `by`'s field is
  *     `null`/`undefined`, BEFORE grouping — since grouping always happens
@@ -290,6 +319,15 @@ export function splitEntries<T extends Record<string, any>>(
     });
   }
   let entries: Map<string | number, T[]> = Map.groupBy(rows, splitKeyFn(by));
+  // An ordered column (HasOrder, from the chart's `schema`) groups in the
+  // order of its levels, not in order of first appearance. The ops below
+  // reorder from there.
+  const column = fieldNameOf(by);
+  const type = columnType(d, column);
+  if (type?.HasOrder) {
+    const keys = orderByLevels(column!, type.HasOrder, [...entries.keys()]);
+    entries = new Map(keys.map((k) => [k, entries.get(k)!]));
+  }
   for (const op of ops) {
     switch (op.op) {
       case "dropNulls":
@@ -304,10 +342,8 @@ export function splitEntries<T extends Record<string, any>>(
         break;
       }
       case "sort":
-        entries = sortEntries(entries, op);
-        break;
       case "reverse":
-        entries = new Map([...entries.entries()].reverse());
+        entries = reorderEntries(entries, op);
         break;
       case "sum":
       case "mean":

@@ -25,6 +25,8 @@ from gofish import (
     text,
     image,
     Constraint,
+    Schema,
+    ColumnSchema,
     datum,
     scatter,
     arrow,
@@ -556,3 +558,69 @@ class TestRelateCallback:
             {"type": "ref", "selection": "b"},
         ]
         assert len(clauses) == 2
+
+
+class TestSchema:
+    """`Schema.ordered(levels).diverging(midpoint=...)` builds the column-type record
+    JS reads as is (#984)."""
+
+    def test_ordered_is_has_order(self):
+        assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
+
+    def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
+        assert Schema.ordered(["a", "b"]).diverging() == {
+            "HasOrder": {"levels": ["a", "b"]},
+            "HasMidpoint": {"at": 1},
+        }
+        assert Schema.ordered(["a", "b", "c"]).diverging()["HasMidpoint"] == {
+            "at": 1.5
+        }
+
+    def test_diverging_midpoint(self):
+        levels = ["SD", "D", "N", "A", "SA"]
+        assert Schema.ordered(levels).diverging(midpoint=2) == {
+            "HasOrder": {"levels": levels},
+            "HasMidpoint": {"at": 2},
+        }
+        assert Schema.ordered(levels).diverging(midpoint=2.25)["HasMidpoint"] == {
+            "at": 2.25
+        }
+        assert Schema.ordered(levels).diverging(midpoint=0)["HasMidpoint"] == {"at": 0}
+        assert Schema.ordered(levels).diverging(midpoint=5)["HasMidpoint"] == {"at": 5}
+
+    # The same literals as the JS schema.test.ts: the two languages raise the
+    # same messages, word for word.
+    ORDER = 'the edges of the order ["SD", "D", "N", "A", "SA"]'
+    NOT_A_NUMBER = (
+        f"diverging: midpoint must be a finite number from 0 to 5, {ORDER}."
+    )
+
+    @pytest.mark.parametrize(
+        "midpoint, message",
+        [
+            (-0.5, f"diverging: midpoint -0.5 is outside 0..5, {ORDER}."),
+            (5.5, f"diverging: midpoint 5.5 is outside 0..5, {ORDER}."),
+            (6, f"diverging: midpoint 6 is outside 0..5, {ORDER}."),
+            (6.0, f"diverging: midpoint 6 is outside 0..5, {ORDER}."),
+            (float("nan"), NOT_A_NUMBER),
+            (float("inf"), NOT_A_NUMBER),
+            ("2", NOT_A_NUMBER),
+            (True, NOT_A_NUMBER),
+        ],
+    )
+    def test_diverging_midpoint_off_the_order(self, midpoint, message):
+        with pytest.raises(ValueError) as error:
+            Schema.ordered(["SD", "D", "N", "A", "SA"]).diverging(midpoint=midpoint)
+        assert str(error.value) == message
+
+    def test_diverging_needs_has_order(self):
+        with pytest.raises(ValueError, match="HasMidpoint needs HasOrder"):
+            ColumnSchema({}).diverging()
+
+    def test_schema_rides_chart_options(self):
+        ir = (
+            chart([{"r": "a"}], schema={"r": Schema.ordered(["a"]).diverging()})
+            .mark(rect(w=1))
+            .to_ir()
+        )
+        assert ir["options"]["schema"]["r"]["HasMidpoint"] == {"at": 0.5}

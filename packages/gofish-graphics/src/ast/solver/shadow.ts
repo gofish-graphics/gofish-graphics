@@ -26,7 +26,11 @@ import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
 import type { AlignAnchor } from "../constraints/shared";
 import { distributePlacementAnchors } from "../constraints/distribute";
-import { isCONTINUOUS, type UnderlyingSpace } from "../underlyingSpace";
+import {
+  isBaselineMagnitude,
+  isCONTINUOUS,
+  type UnderlyingSpace,
+} from "../underlyingSpace";
 
 /** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
  *  per-constraint pre-state capture the checks need is only built when set. */
@@ -49,6 +53,7 @@ interface DistributeLike {
   spacing: number;
   anchor: AlignAnchor | "edge";
   order: "forward" | "reverse";
+  glue: boolean;
 }
 
 /**
@@ -87,8 +92,9 @@ function shadowCheckDistribute(
   if (order.length < 2) return;
 
   // The constraint's anchor picks the anchor pair the lowering relates:
-  // edge = prev.max→cur.min, fixed-pitch = prev.<anchor>→cur.<anchor>.
-  const anchors = distributePlacementAnchors(constraint.anchor);
+  // edge = prev.max→cur.min, fixed-pitch = prev.<anchor>→cur.<anchor>, and a
+  // stack (glue) = prev.head→cur.tail.
+  const anchors = distributePlacementAnchors(constraint);
 
   for (let k = 1; k < order.length; k++) {
     const pi = order[k - 1];
@@ -257,6 +263,19 @@ function anchorCoord(
   const min = t.dims[idx].min;
   const size = t.dims[idx].size;
   if (min === undefined || size === undefined) return undefined;
+  if (anchor === "tail" || anchor === "head") {
+    // `tail`/`head` as defined at `RelationAnchor` (placementFacts.ts),
+    // checked independently over box coordinates: the head is the tail
+    // mirrored about the box's center.
+    const space = t.spaceOn?.(idx);
+    const lo = localAnchorPoint("min", min, size);
+    const hi = localAnchorPoint("max", min, size);
+    const tail =
+      (space !== undefined && isBaselineMagnitude(space)
+        ? anchorCoord(t, idx, "baseline")
+        : undefined) ?? lo;
+    return anchor === "tail" ? tail : lo + hi - tail;
+  }
   // start/middle/end are the box keys — the same single derivation every other
   // anchor read uses (negative-size safe).
   const key = anchor === "start" ? "min" : anchor === "end" ? "max" : "center";
