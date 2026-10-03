@@ -71,11 +71,11 @@ alone places. You make the strategy with a function call.
 
 There are two strategies. They differ in what sets the width of the cloud.
 
-- `swarm({ padding? })` makes a beeswarm. In data order, each dot moves to
-  the free spot nearest the line. Dots never overlap, so the counts set the
-  width exactly: where many dots share a value, the swarm grows tall.
-  `padding` is the number of pixels kept between neighboring dots. The default
-  is 0. This is the same placement as Observable Plot's `dodge`.
+- `separate({ padding? })` keeps the dots apart. In data order, each dot
+  moves along the free axis to the nearest free spot, so no two dots overlap.
+  The counts set the width exactly: where many dots share a value, the cloud
+  grows tall. The result is a beeswarm. `padding` is the number of pixels kept
+  between neighboring dots. The default is 0.
 - `jitter({ randomness?, smoothing?, padding?, seed? })` spreads the dots
   inside an outline. The outline is wide where many dots share a part of the
   data axis and narrow where few do, so it shows the shape of the
@@ -93,7 +93,7 @@ gf.chart(
     gf.scatter({
       x: "Body Mass (g)",
       alignment: "middle",
-      overlap: gf.swarm({ padding: 1 }),
+      overlap: gf.separate({ padding: 1 }),
     })
   )
   .mark(gf.circle({ r: 3, fill: "Species" }))
@@ -101,6 +101,13 @@ gf.chart(
 ```
 
 :::
+
+`separate` places the dots the same way as Observable Plot's `dodge`. It is
+not called `dodge` because in ggplot2 and plotnine `position_dodge` means
+grouped bars, which is `spread` in GoFish. It is not called `beeswarm`
+because that word names a family of layouts: greedy ones like this one,
+force-directed ones, and packed ones. The name comes from the separation
+constraints of constraint layout, as in WebCoLa and VPSC.
 
 The same data with `jitter()`:
 
@@ -162,7 +169,7 @@ Shapes other than circles are measured by their enclosing circle, the same
 circle [`pack`](/js/api/operators/pack) uses.
 
 The cloud is as tall as its dots need. It does not shrink to fit the space it
-is given, so a dense swarm can grow past it. To make it smaller, use smaller
+is given, so a dense beeswarm can grow past it. To make it smaller, use smaller
 dots or less padding. `jitter` does not make it smaller: its outline also
 grows with the counts, and it leaves extra room so the dots can spread.
 

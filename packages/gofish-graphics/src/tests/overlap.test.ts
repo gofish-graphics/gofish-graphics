@@ -1,6 +1,6 @@
 /**
- * `scatter`'s `overlap` option and the `swarm()` strategy (#969). The pure
- * placement (`swarmOffsets`) is checked for no pairwise overlap within the
+ * `scatter`'s `overlap` option and the `separate()` strategy (#969). The pure
+ * placement (`separateOffsets`) is checked for no pairwise overlap within the
  * padding, for each dot taking the free spot nearest the line, and for the
  * one-sided anchors. The rendered checks run a real chart and read the
  * ellipses back from its display list, and check the two errors (no free
@@ -14,8 +14,8 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import {
-  swarmOffsets,
-  swarm,
+  separateOffsets,
+  separate,
   jitter,
   jitterOffsets,
   jitterOutline,
@@ -104,7 +104,7 @@ function nearestFree(
   return undefined;
 }
 
-console.log("# swarmOffsets: random dots");
+console.log("# separateOffsets: random dots");
 for (const side of ["middle", "start", "end"] as const) {
   for (const padding of [0, 1.5]) {
     const rand = lcg(7);
@@ -112,7 +112,7 @@ for (const side of ["middle", "start", "end"] as const) {
       at: rand() * 200,
       r: 1 + rand() * 4,
     }));
-    const ys = swarmOffsets(items, side, padding);
+    const ys = separateOffsets(items, side, padding);
     const worst = worstOverlap(items, ys, padding);
     check(
       `${side}, padding ${padding}: no two dots overlap within the padding`,
@@ -135,9 +135,9 @@ for (const side of ["middle", "start", "end"] as const) {
   }
 }
 
-console.log("# swarmOffsets: small cases");
+console.log("# separateOffsets: small cases");
 {
-  const ys = swarmOffsets(
+  const ys = separateOffsets(
     [
       { at: 0, r: 3 },
       { at: 0, r: 3 },
@@ -151,7 +151,7 @@ console.log("# swarmOffsets: small cases");
     ys[0] === 0 && Math.abs(Math.abs(ys[1]) - 6) < EPS && Math.abs(ys[1] + ys[2]) < EPS,
     JSON.stringify(ys)
   );
-  const apart = swarmOffsets(
+  const apart = separateOffsets(
     [
       { at: 0, r: 3 },
       { at: 10, r: 3 },
@@ -160,11 +160,11 @@ console.log("# swarmOffsets: small cases");
     1
   );
   check("dots that do not touch both stay on the line", apart.every((y) => y === 0));
-  const start = swarmOffsets([{ at: 0, r: 4 }], "start", 0);
+  const start = separateOffsets([{ at: 0, r: 4 }], "start", 0);
   check("a lone start dot rests its start edge on the line", start[0] === 4);
   check(
     "zero radius and zero padding: all on the line",
-    swarmOffsets(
+    separateOffsets(
       [
         { at: 1, r: 0 },
         { at: 1, r: 0 },
@@ -175,16 +175,16 @@ console.log("# swarmOffsets: small cases");
   );
 }
 
-console.log("# swarm(): strategy objects");
+console.log("# separate(): strategy objects");
 {
-  check("swarm() is a plain object", JSON.stringify(swarm()) === '{"kind":"swarm"}');
+  check("separate() is a plain object", JSON.stringify(separate()) === '{"kind":"separate"}');
   check(
-    "swarm({ padding }) keeps the padding",
-    JSON.stringify(swarm({ padding: 2 })) === '{"kind":"swarm","padding":2}'
+    "separate({ padding }) keeps the padding",
+    JSON.stringify(separate({ padding: 2 })) === '{"kind":"separate","padding":2}'
   );
   check(
     "a negative padding throws",
-    (await errorOf(() => swarm({ padding: -1 })))?.includes("padding") === true
+    (await errorOf(() => separate({ padding: -1 })))?.includes("padding") === true
   );
   check(
     "an unknown kind throws",
@@ -214,7 +214,7 @@ console.log("# scatter overlap: rendered");
   }));
   const dl = await chart(rows)
     .flow(
-      scatter({ x: "v", alignment: "middle", overlap: swarm({ padding: 1 }) })
+      scatter({ x: "v", alignment: "middle", overlap: separate({ padding: 1 }) })
     )
     .mark(circle({ r: 3 }))
     .toDisplayList({ w: 400, h: 200 });
@@ -230,7 +230,7 @@ console.log("# scatter overlap: rendered");
   check("no two rendered circles overlap within the padding", worst <= 1e-6, `${worst}`);
   const ys = cs.map((c) => c.cy);
   const spreadY = Math.max(...ys) - Math.min(...ys);
-  check("the swarm grows off the line", spreadY > 6, `${spreadY}`);
+  check("the separated dots grow off the line", spreadY > 6, `${spreadY}`);
   // Same value ⇒ same x: the data axis is untouched.
   const byV = new Map<number, Set<number>>();
   rows.forEach((r, i) => {
@@ -246,7 +246,7 @@ console.log("# scatter overlap: rendered");
   const spreadDl = await chart(rows)
     .flow(
       spread({ by: "g", dir: "y", spacing: 10 }),
-      scatter({ x: "v", alignment: "middle", overlap: swarm() })
+      scatter({ x: "v", alignment: "middle", overlap: separate() })
     )
     .mark(circle({ r: 3 }))
     .toDisplayList({ w: 400, h: 300 });
@@ -257,14 +257,14 @@ console.log("# scatter overlap: rendered");
   const maxB = Math.max(...groups.slice(half).map((c) => c.cy + c.r));
   const minA = Math.min(...groups.slice(0, half).map((c) => c.cy - c.r));
   check(
-    "under a spread, the measured swarm rows do not overlap each other",
+    "under a spread, the measured separated rows do not overlap each other",
     maxA <= minB + 1e-6 || maxB <= minA + 1e-6,
     JSON.stringify({ minA, maxA, minB, maxB })
   );
 
   const both = await errorOf(() =>
     chart(rows)
-      .flow(scatter({ x: "v", y: "v", overlap: swarm() }))
+      .flow(scatter({ x: "v", y: "v", overlap: separate() }))
       .mark(circle({ r: 3 }))
       .toDisplayList({ w: 400, h: 200 })
   );
@@ -275,7 +275,7 @@ console.log("# scatter overlap: rendered");
   );
   const inPolar = await errorOf(() =>
     chart(rows, { coord: polar() })
-      .flow(scatter({ x: "v", overlap: swarm() }))
+      .flow(scatter({ x: "v", overlap: separate() }))
       .mark(circle({ r: 3 }))
       .toDisplayList({ w: 400, h: 400 })
   );

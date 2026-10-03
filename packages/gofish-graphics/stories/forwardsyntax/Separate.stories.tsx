@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { penguins } from "../../src/data/penguins";
-import { chart, circle, scatter, spread, swarm } from "../../src/lib";
+import { chart, circle, scatter, spread, separate } from "../../src/lib";
 
-// Beeswarms: `scatter`'s `overlap: swarm()` moves each dot along the axis no
+// Beeswarms: `scatter`'s `overlap: separate()` moves each dot along the axis no
 // field places, to the free spot nearest the alignment line.
 const meta: Meta = {
-  title: "Forward Syntax/Swarm",
+  title: "Forward Syntax/Separate",
 };
 export default meta;
 
@@ -30,7 +30,7 @@ export const PenguinMass: StoryObj = {
         scatter({
           x: "Body Mass (g)",
           alignment: "middle",
-          overlap: swarm({ padding: 1 }),
+          overlap: separate({ padding: 1 }),
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
@@ -40,7 +40,7 @@ export const PenguinMass: StoryObj = {
   },
 };
 
-// One-sided swarm: the dots grow up from the line at `start`.
+// One-sided: the dots grow up from the line at `start`.
 export const OneSided: StoryObj = {
   render: () => {
     const container = initializeContainer();
@@ -50,7 +50,7 @@ export const OneSided: StoryObj = {
         scatter({
           x: "Body Mass (g)",
           alignment: "start",
-          overlap: swarm({ padding: 1 }),
+          overlap: separate({ padding: 1 }),
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
@@ -71,7 +71,7 @@ export const MixedRadii: StoryObj = {
         scatter({
           x: "Flipper Length (mm)",
           alignment: "middle",
-          overlap: swarm({ padding: 1 }),
+          overlap: separate({ padding: 1 }),
         })
       )
       .mark((d: (typeof weighed)[number]) =>

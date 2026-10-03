@@ -56,7 +56,7 @@ surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
 `treemap`, `pack`, `derive`, `resolve`, and `join` (`pack` takes a strategy
 object such as `circles()` as its `method`, never a string, and `scatter`
-takes an overlap strategy such as `swarm()` the same way; `resolve` dereferences reference columns into
+takes an overlap strategy such as `separate()` or `jitter()` the same way; `resolve` dereferences reference columns into
 drawn node refs, driving the ribbon / node-link / labeling patterns via
 `.layer()` + `resolve`; `join` is a one-to-many equi-join relating two data
 tables on a shared key).

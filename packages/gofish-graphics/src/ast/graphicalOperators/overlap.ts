@@ -12,7 +12,7 @@
  * child along the free axis, away from the alignment line, so the children no
  * longer cover each other.
  *
- * A strategy is a plain object made by a function call (`swarm({ padding })`,
+ * A strategy is a plain object made by a function call (`separate({ padding })`,
  * `jitter({ randomness })`), so it crosses the Python bridge as IR. `kind`
  * names the strategy. Every strategy sees the children the same way: as their
  * enclosing circles, one {@link OverlapItem} each, in data order. It answers
@@ -21,8 +21,8 @@
  * are near this one" is {@link NeighborGrid}.
  */
 
-/** `swarm()`: a beeswarm. See {@link swarm}. */
-export type SwarmStrategy = { kind: "swarm"; padding?: number };
+/** `separate()`: a beeswarm. See {@link separate}. */
+export type SeparateStrategy = { kind: "separate"; padding?: number };
 
 /** How `jitter()` draws each dot's offset inside the outline. */
 export type JitterRandomness = "blue" | "quasi" | "uniform";
@@ -37,7 +37,7 @@ export type JitterStrategy = {
 };
 
 /** Every built-in overlap strategy. */
-export type OverlapStrategy = SwarmStrategy | JitterStrategy;
+export type OverlapStrategy = SeparateStrategy | JitterStrategy;
 
 const checkPadding = (name: string, padding: number | undefined) => {
   if (padding !== undefined && !(Number.isFinite(padding) && padding >= 0))
@@ -47,17 +47,25 @@ const checkPadding = (name: string, padding: number | undefined) => {
 };
 
 /**
- * A beeswarm. Each dot keeps its position on the data axis and moves along the
- * free axis to the free spot nearest the alignment line, in data order. This
- * is Observable Plot's `dodge`. Shapes other than circles are placed by their
- * enclosing circle.
+ * Keep dots apart: each dot keeps its position on the data axis and moves
+ * along the free axis to the free spot nearest the alignment line, in data
+ * order, so no two dots overlap. The result is a beeswarm. Shapes other than
+ * circles are placed by their enclosing circle.
+ *
+ * The placement is Observable Plot's `dodge`. It is not named `dodge` because
+ * ggplot2's `position_dodge` means grouped bars (`spread` here), and not
+ * `beeswarm` because that names a family of layouts (greedy, force-directed,
+ * packed). The name follows the separation constraints of constraint layout
+ * (WebCoLa, VPSC).
  *
  * @param padding Pixels kept between neighboring dots. Default 0.
  */
-export function swarm(opts: { padding?: number } = {}): SwarmStrategy {
+export function separate(opts: { padding?: number } = {}): SeparateStrategy {
   const { padding } = opts;
-  checkPadding("swarm", padding);
-  return padding === undefined ? { kind: "swarm" } : { kind: "swarm", padding };
+  checkPadding("separate", padding);
+  return padding === undefined
+    ? { kind: "separate" }
+    : { kind: "separate", padding };
 }
 
 const RANDOMNESS: readonly JitterRandomness[] = ["blue", "quasi", "uniform"];
@@ -65,7 +73,7 @@ const RANDOMNESS: readonly JitterRandomness[] = ["blue", "quasi", "uniform"];
 /**
  * Jitter. Each dot keeps its position on the data axis and gets an offset on
  * the free axis inside an outline that follows how many dots share that part
- * of the data axis (see {@link jitterOutline}). Unlike a swarm, the outline,
+ * of the data axis (see {@link jitterOutline}). Unlike `separate()`, the outline,
  * not the collisions, sets how far the dots spread, so dots may still touch.
  *
  * @param randomness How offsets are drawn inside the outline:
@@ -143,7 +151,8 @@ const RESOLVERS: {
     strategy: Extract<OverlapStrategy, { kind: K }>
   ) => OverlapResolver;
 } = {
-  swarm: (s) => (items, side) => swarmOffsets(items, side, s.padding ?? 0),
+  separate: (s) => (items, side) =>
+    separateOffsets(items, side, s.padding ?? 0),
   jitter: (s) => (items, side, ctx) => {
     let windowPx: number | undefined;
     if (s.smoothing !== undefined) {
@@ -177,7 +186,7 @@ export function resolveOverlap(
   if (make === undefined)
     throw new Error(
       `[gofish] scatter overlap: unknown strategy kind ` +
-        `"${(strategy as { kind?: unknown })?.kind}". Make one with swarm() ` +
+        `"${(strategy as { kind?: unknown })?.kind}". Make one with separate() ` +
         `or jitter().`
     );
   items.forEach(({ at, r }, i) => {
@@ -224,7 +233,7 @@ export class NeighborGrid {
   }
 
   /** Record item `i` as placed. Appended, so a cell is visited in the order
-   *  its items were placed (swarm's tie-breaking depends on it). */
+   *  its items were placed (`separate`'s tie-breaking depends on it). */
   insert(i: number): void {
     const cell = this.cellOf(this.at[i]);
     const last = this.tail.get(cell);
@@ -257,7 +266,7 @@ const EPS = 1e-6;
  *
  * @returns The offset of each item's center from the line, in item order.
  */
-export function swarmOffsets(
+export function separateOffsets(
   items: OverlapItem[],
   side: OverlapSide,
   padding = 0

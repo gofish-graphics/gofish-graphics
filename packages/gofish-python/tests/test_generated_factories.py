@@ -22,7 +22,7 @@ from gofish import (
     spread,
     scatter,
     stack,
-    swarm,
+    separate,
     table,
     text,
     treemap,
@@ -88,14 +88,14 @@ def test_pack_serializes_by_and_method():
     assert "method" not in pack().to_dict()
 
 
-def test_scatter_serializes_swarm_overlap():
-    d = scatter(x="mass", alignment="middle", overlap=swarm(padding=1)).to_dict()
+def test_scatter_serializes_separate_overlap():
+    d = scatter(x="mass", alignment="middle", overlap=separate(padding=1)).to_dict()
     assert d["type"] == "scatter"
-    assert d["overlap"] == {"kind": "swarm", "padding": 1}
-    assert swarm() == {"kind": "swarm"}
+    assert d["overlap"] == {"kind": "separate", "padding": 1}
+    assert separate() == {"kind": "separate"}
     assert "overlap" not in scatter(x="mass").to_dict()
     with pytest.raises(ValueError):
-        swarm(padding=-1)
+        separate(padding=-1)
 
 
 def test_scatter_serializes_jitter_overlap():

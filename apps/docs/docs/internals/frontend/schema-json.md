@@ -1256,7 +1256,7 @@ for the API.
               "type": "object",
               "properties": {
                 "kind": {
-                  "enum": ["swarm"]
+                  "enum": ["separate"]
                 },
                 "padding": {
                   "$ref": "#/$defs/Number"
@@ -1286,7 +1286,7 @@ for the API.
               "required": ["kind"]
             }
           ],
-          "description": "How children keep clear of each other on the axis no field places, made by a function call. swarm({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. jitter({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis; randomness \"blue\" (default), \"quasi\" or \"uniform\"; smoothing is the outline's counting window in data units (default one dot width). Both grow from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only."
+          "description": "How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. jitter({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis; randomness \"blue\" (default), \"quasi\" or \"uniform\"; smoothing is the outline's counting window in data units (default one dot width). Both grow from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only."
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"

@@ -1892,7 +1892,7 @@ def scatter(
                   ``dims={"theta": "bearing", "r": "distance"}``.
             alignment: "start" | "middle" | "end" | "baseline".
             overlap: How children keep clear of each other on the axis no
-                     field places, e.g. ``swarm(padding=1)`` for a beeswarm
+                     field places, e.g. ``separate(padding=1)`` for a beeswarm
                      or ``jitter()`` for dots spread inside a density outline.
                      It grows from the ``alignment`` line.
 
@@ -1964,25 +1964,26 @@ def treemap(
     return Operator("treemap", **_treemap_opts(**options))
 
 
-def swarm(*, padding: Optional[float] = None) -> Dict[str, Any]:
+def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
     """
-    The ``swarm()`` overlap strategy for :func:`scatter`: a beeswarm. Each dot
-    keeps its position on the data axis and moves along the axis no field
-    places, to the free spot nearest the ``alignment`` line.
+    The ``separate()`` overlap strategy for :func:`scatter`: it keeps dots
+    apart, so no two overlap, and the result is a beeswarm. Each dot keeps its
+    position on the data axis and moves along the axis no field places, to the
+    free spot nearest the ``alignment`` line (Observable Plot's ``dodge``).
 
         chart(penguins).flow(
-            scatter(x="Body Mass (g)", alignment="middle", overlap=swarm(padding=1))
+            scatter(x="Body Mass (g)", alignment="middle", overlap=separate(padding=1))
         ).mark(circle(r=3))
 
-    Mirrors JS ``swarm({ padding })``; the strategy is a plain object on the
-    wire, ``{"kind": "swarm", "padding": ...}``.
+    Mirrors JS ``separate({ padding })``; the strategy is a plain object on the
+    wire, ``{"kind": "separate", "padding": ...}``.
 
     Args:
         padding: Pixels kept between neighboring dots. Default 0.
     """
     if padding is not None and not padding >= 0:
-        raise ValueError(f"swarm: padding must be a non-negative number, got {padding}")
-    return {"kind": "swarm"} if padding is None else {"kind": "swarm", "padding": padding}
+        raise ValueError(f"separate: padding must be a non-negative number, got {padding}")
+    return {"kind": "separate"} if padding is None else {"kind": "separate", "padding": padding}
 
 
 def jitter(

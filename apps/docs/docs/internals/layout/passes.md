@@ -563,7 +563,7 @@ That is why `pack` keeps its children at their pixel size and does not fit
 itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
 
-The second consumer is `scatter`'s `overlap` option, `swarm()` (#969) or
+The second consumer is `scatter`'s `overlap` option, `separate()` (#969) or
 `jitter()` (#970).
 `scatter` elaborates to a layer with a `position` constraint per child on each
 axis a field places, and an `align` on every other ("free") axis. With an
@@ -580,11 +580,11 @@ passes the data axis's pixels per data unit (the layer's position-scale
 strategies share one broad phase, `NeighborGrid`, a uniform grid over the data
 axis kept as linked lists in typed arrays. `jitter`'s outline is a box-kernel
 count over a sorted sliding window (`jitterOutline`), and its `"blue"`
-placement buckets placed dots on both axes (`PlaneGrid`). The swarm reports no
+placement buckets placed dots on both axes (`PlaneGrid`). A scatter with an overlap strategy reports no
 size on its free axis in the space pass (a fixed-pixel dot's space is
 `UNDEFINED` there), and its real extent comes from where the children land, in
 the layer's box fold, the way a text label's extent is measured at layout.
-So a swarm takes the room its dots need and does not shrink to fit. It throws
+So a beeswarm takes the room its dots need and does not shrink to fit. It throws
 inside a non-linear coordinate space, where the layout frame is not the screen
 (#1002); `coord` records the transform it opens on its node
 (`coordinateTransform`) so the scatter can tell.

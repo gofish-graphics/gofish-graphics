@@ -57,7 +57,7 @@ export const isOverlapConstraint = (
 ): c is OverlapConstraint => c?.type === "overlap";
 
 /** A child's start edge on the line means it grows to the positive side.
- *  `baseline` is the same: for the dots a swarm places (no data extent), the
+ *  `baseline` is the same: for the dots `separate()` places (no data extent), the
  *  baseline is the start edge. */
 const sideOf = (alignment: AlignAnchor): OverlapSide =>
   alignment === "middle" ? "middle" : alignment === "end" ? "end" : "start";

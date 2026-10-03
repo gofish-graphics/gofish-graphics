@@ -335,11 +335,11 @@ export interface ScatterOperator
   h?: ChannelValue;
 }
 
-/** A `scatter` overlap strategy, made by a function call (`swarm()`,
+/** A `scatter` overlap strategy, made by a function call (`separate()`,
  *  `jitter()`). Mirrors JS's `OverlapStrategy`
  *  (`graphicalOperators/overlap.ts`). */
 export type OverlapStrategyIR =
-  | { kind: "swarm"; padding?: number }
+  | { kind: "separate"; padding?: number }
   | {
       kind: "jitter";
       randomness?: "blue" | "quasi" | "uniform";

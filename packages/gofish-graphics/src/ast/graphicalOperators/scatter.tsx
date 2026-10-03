@@ -134,7 +134,7 @@ const isPlaced = (axes: AxisPlacement[], axis: Direction): boolean => {
  * warping space, layout happens in the data plane, and circles that do not
  * overlap there can overlap once warped (or the reverse). So refuse it there.
  *
- * TODO(#1002): swarm in screen space under a non-linear coordinate transform.
+ * TODO(#1002): separate dots in screen space under a non-linear coordinate transform.
  */
 function assertLinearSpace(node: GoFishNode): void {
   for (let p = node.parent; p !== undefined; p = p.parent) {
@@ -299,7 +299,7 @@ export type ScatterOptions = {
   alignment?: "start" | "middle" | "end" | "baseline";
   /**
    * How children keep clear of each other on the free axis (the axis no field
-   * places), made by a function call: `swarm({ padding })` is a beeswarm,
+   * places), made by a function call: `separate({ padding })` is a beeswarm,
    * `jitter({ randomness, smoothing })` spreads dots inside a density outline.
    * The strategy takes the place of the align on that axis and grows from the
    * `alignment` line: `"middle"` both ways, `"start"`/`"baseline"` to
