@@ -71,12 +71,12 @@ def buildSubtree(node, depth):
                     else leafFill
                 ),
                 stroke="#5a7da6",
-                strokeWidth=1,
+                stroke_width=1,
             ).name("box"),
             text(
                 text=node["name"],
-                fontSize=11,
-                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace",
+                font_size=11,
+                font_family="ui-monospace, SFMono-Regular, Menlo, monospace",
                 fill="#1d3557",
             ).name("label"),
         ],
@@ -99,7 +99,7 @@ def buildSubtree(node, depth):
 
     # Wrap the inner stack in a containing rect.
     return layer([
-        rect(rx=6, fill="#fafbfd", stroke="#9bb1c4", strokeWidth=1.25).name(
+        rect(rx=6, fill="#fafbfd", stroke="#9bb1c4", stroke_width=1.25).name(
             "outer"
         ),
         inner.name("inner"),

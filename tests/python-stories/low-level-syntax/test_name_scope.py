@@ -26,7 +26,7 @@ def story_nested_operand():
                                 r=d["r"],
                                 fill=d["fill"],
                                 stroke=d["stroke"],
-                                strokeWidth=3,
+                                stroke_width=3,
                             ).name(d["name"])
                             for d in PLANETS
                         ],
@@ -41,7 +41,7 @@ def story_nested_operand():
                 rx=16,
                 ry=16,
             ).name("planets"),
-            text(text="Mercury", fill="#E94560", fontSize=14).name("label"),
+            text(text="Mercury", fill="#E94560", font_size=14).name("label"),
         ]).relate(lambda mercury, planets, label: [
             Constraint.align([mercury, label], x="middle"),
             Constraint.distribute([planets, label], dir="y", spacing=20),

@@ -26,12 +26,12 @@ def story_default():
             treemap(
                 h="fare",
                 size="fare",
-                paddingInner=0,
+                padding_inner=0,
                 tile="squarifyCircle",
                 sort="desc",
-                flipY=True,
+                flip_y=True,
             )
         )
-        .mark(circle(fill="survived", stroke="#ccc", strokeWidth=1)),
+        .mark(circle(fill="survived", stroke="#ccc", stroke_width=1)),
         {"w": 1000, "h": 320},
     )

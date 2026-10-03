@@ -60,12 +60,23 @@ export interface FieldSpec {
   doc?: string;
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
-  /** Python kwarg name, when it differs from the field name (keyword
-   *  collisions: `from` → `from_`). */
+  /** Python kwarg name, when it is not the field name in snake_case (see
+   *  `pyKwarg`). Only for Python keyword collisions: `from` → `from_`. */
   py?: string;
 }
 
 export type FieldGroup = Record<string, FieldSpec>;
+
+/** The Python kwarg name for a descriptor field: the field name in snake_case
+ *  (`strokeWidth` → `stroke_width`, `emX` → `em_x`), or the field's `py`
+ *  override when snake_case alone would collide with a Python keyword
+ *  (`from` → `from_`). The wire key is unaffected (`spec.wire ?? fieldName`):
+ *  the Python generator and the docs options tables both call this, so a
+ *  Python user types the snake_case name and the serialized IR keeps the
+ *  camelCase key. */
+export function pyKwarg(fieldName: string, spec: FieldSpec): string {
+  return spec.py ?? fieldName.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+}
 
 /** The small type DSL referenced by the design doc as `t.*`. */
 export const t = {
@@ -376,6 +387,14 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       // (a field accessor with a `normalize` pipeline op) is the
       // space-filling spine (mosaic/marimekko) that replaced the old
       // `normalize: true` layout flag.
+      // `x`/`y` place the operator's box in the parent's space: `Spread`
+      // spreads its `FancyDims` into the box, like treemap's.
+      x: ch.num(
+        "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+      ),
+      y: ch.num(
+        "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+      ),
       w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
       h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
       size: ch.num(
@@ -429,7 +448,14 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Reverse the children's order along dir.",
       },
       axes: { type: t.ref("AxesOptions") },
-      // Data-driven extent + space-filling spine — see `spread` above.
+      // Box position, data-driven extent + space-filling spine — see
+      // `spread` above.
+      x: ch.num(
+        "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+      ),
+      y: ch.num(
+        "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+      ),
       w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
       h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
       size: ch.num(
@@ -957,12 +983,18 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
 export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   spread: combinatorMark("spread", {
-    doc: "Low-level combinator form of `spread`. Its `Spread`/`SpreadOptions` factory carries the same `w`/`h` (FancyDims passthrough to the elaborated layer) the fluent operator now exposes.",
-    fields: resolveFields(OPERATORS.spread),
+    doc: "Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key`.",
+    fields: {
+      ...resolveFields(OPERATORS.spread),
+      key: { type: t.string, doc: "Internal per-node key override." },
+    },
   }),
   stack: combinatorMark("stack", {
-    doc: "Low-level combinator form of `stack`. See `spread`'s note on `w`/`h`.",
-    fields: resolveFields(OPERATORS.stack),
+    doc: "Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key`.",
+    fields: {
+      ...resolveFields(OPERATORS.stack),
+      key: { type: t.string, doc: "Internal per-node key override." },
+    },
   }),
   scatter: combinatorMark("scatter", {
     fields: resolveFields(OPERATORS.scatter),
@@ -1198,28 +1230,24 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 // dispatch; they don't need JSON Schema $defs yet (per the design doc).
 // ---------------------------------------------------------------------------
 
-// The `py` names are the snake_case convention Python's polar()/clock()
-// already used before this table existed; the field names stay the camelCase
-// wire keys. Both the generated `_polar_config` and the docs options table read
-// them from here.
+// The field names are the camelCase wire keys; Python's polar()/clock() spell
+// them in snake_case (inner_radius, ...) like every other generated kwarg (see
+// `pyKwarg`).
 const polarFields: FieldGroup = group({
   innerRadius: {
     type: t.number,
     default: 0,
     doc: "Donut hole as a fraction [0,1) of the outer radius.",
-    py: "inner_radius",
   },
   centralAngle: {
     type: t.number,
     default: 2 * Math.PI,
     doc: "Total angular sweep in radians.",
-    py: "central_angle",
   },
   startAngle: {
     type: t.number,
     default: Math.PI / 2,
     doc: "Angle (radians) of θ=0.",
-    py: "start_angle",
   },
   direction: {
     type: t.number,

@@ -39,6 +39,7 @@ import {
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,
   PY_LEAF_BASE_KWARGS,
+  pyKwarg,
   resolveFields,
   type FieldGroup,
   type FieldSpec,
@@ -108,10 +109,13 @@ function docLine(name: string, f: FieldSpec): string | null {
   return `        ${name}: ${text}`;
 }
 
-/** field entries in a group, as [pyName, wireKey, spec][] preserving order. */
+/** field entries in a group, as [pyName, wireKey, spec][] preserving order.
+ *  This pairing IS the snake→camel table: every generated function lists its
+ *  `(wireKey, pyName)` pairs and builds the IR dict under the wire key, so a
+ *  Python user types `stroke_width=` and the IR still says `strokeWidth`. */
 function entries(fields: FieldGroup): Array<[string, string, FieldSpec]> {
   return Object.entries(fields).map(([fieldName, spec]) => [
-    spec.py ?? fieldName,
+    pyKwarg(fieldName, spec),
     spec.wire ?? fieldName,
     spec,
   ]);
@@ -353,6 +357,20 @@ for (const [opType, fnName] of DUAL_FORM_OPERATOR_CORES) {
   );
 }
 
+// spread/stack combinator forms: their own cores from the COMBINATOR_MARKS
+// entries, so the combinator form maps snake_case kwargs to wire keys the
+// same way the operator form does.
+for (const name of ["spread", "stack"]) {
+  const d = COMBINATOR_MARKS[name];
+  parts.push(
+    renderOptsCore(
+      `_${name}_combinator_opts`,
+      { ...resolveFields(d), debug: OPERATOR_BASE_FIELDS.debug },
+      d.doc
+    ) + "\n"
+  );
+}
+
 // line/ribbon: same field list for bag/pairwise/combinator forms.
 for (const name of ["line", "ribbon"]) {
   const d = LEAF_MARKS[name];
@@ -373,15 +391,13 @@ for (const name of ["line", "ribbon"]) {
 
 // --- Coord transforms --------------------------------------------------------
 // Python's polar()/clock() spell every option in snake_case (inner_radius,
-// central_angle, ...) rather than the descriptor's camelCase field names, which
-// are wire keys only. That convention rides the descriptor's `py` keys, so the
-// docs options table spells them the same way.
+// central_angle, ...), like every generated kwarg (`pyKwarg`); the
+// descriptor's camelCase field names are the wire keys.
 parts.push(
   "\n# --- Coord transforms ---------------------------------------------------------\n"
 );
 {
   const d = COORDS["polar"];
-  // The snake_case kwarg names ride the descriptor's `py` keys.
   const ents = entries(d.fields);
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const docLines = ents

@@ -4,7 +4,7 @@ Port of the DFSCQ write-ahead log pipeline diagram, structured like
 Pulley/QuantumCircuit: tier 1 (`_pipeline_head`) fully places every row via
 nested `spread`s and `.relate()`; tier 2 (funnels, the commit arrow, the
 fan-out arrows, the tick marks/labels beneath DiskLog, and the side labels)
-reads those placed nodes via `createName` tokens + `ref()`. Small
+reads those placed nodes via `create_name` tokens + `ref()`. Small
 self-contained `layer([ref(anchor), fresh_shape]).relate(...)` micro-layers
 mirror the JS file's workaround for `.relate()` destructures only reliably
 reaching one level of nested plain layers deep — do not collapse them.
@@ -13,7 +13,7 @@ reaching one level of nested plain layers deep — do not collapse them.
 from gofish import (
     Constraint,
     arrow,
-    createName,
+    create_name,
     enclose,
     layer,
     line,
@@ -40,7 +40,7 @@ FUNNEL_STUB = 18
 
 def _block(w, color="black"):
     """A single 3px-black-stroked block (Bluefish's <Block>)."""
-    return rect(w=w, h=BLOCK_H, fill=color, stroke="black", strokeWidth=3)
+    return rect(w=w, h=BLOCK_H, fill=color, stroke="black", stroke_width=3)
 
 
 def _blocks(colors, width=18):
@@ -65,7 +65,7 @@ def _big_bracket(side):
 
 
 def _big_comma():
-    return text(text=",", fontFamily="monospace", fontSize=30)
+    return text(text=",", font_family="monospace", font_size=30)
 
 
 def _with_min_width(width, content):
@@ -88,7 +88,7 @@ def _titled_background(title, content):
             spread(
                 [
                     text(
-                        text=title, fontFamily="serif", fontWeight=300, fontSize=20
+                        text=title, font_family="serif", font_weight=300, font_size=20
                     ),
                     _with_min_width(CONTENT_WIDTH, content),
                 ],
@@ -100,7 +100,7 @@ def _titled_background(title, content):
         padding=15,
         fill="white",
         stroke="black",
-        strokeWidth=3,
+        stroke_width=3,
         rx=0,
         ry=0,
     )
@@ -108,7 +108,7 @@ def _titled_background(title, content):
 
 def _action_text(t):
     return text(
-        text=t, fontFamily="monospace", fontWeight=500, fontSize=20, fill=BLUE
+        text=t, font_family="monospace", font_weight=500, font_size=20, fill=BLUE
     )
 
 
@@ -171,7 +171,7 @@ def _label(anchor, label_text):
         [
             ref(anchor).name("a"),
             text(
-                text=label_text, fontFamily="serif", fontWeight=300, fontSize=18
+                text=label_text, font_family="serif", font_weight=300, font_size=18
             ).name("t"),
         ]
     ).relate(
@@ -190,7 +190,7 @@ def _label_lines(anchor, lines):
             ref(anchor).name("a"),
             spread(
                 [
-                    text(text=l, fontFamily="serif", fontWeight=300, fontSize=18)
+                    text(text=l, font_family="serif", font_weight=300, font_size=18)
                     for l in lines
                 ],
                 dir="y",
@@ -211,8 +211,8 @@ def _funnel_side(top_anchor, top_edge, bottom_anchor, bottom_edge, id_prefix):
     invisible "stub" markers placed a fixed offset off each anchor's edge,
     then three dashed `line()` segments — anchor-to-stub, stub-to-stub (the
     diagonal), stub-to-anchor."""
-    top_stub = createName(f"{id_prefix}TopStub")
-    bottom_stub = createName(f"{id_prefix}BottomStub")
+    top_stub = create_name(f"{id_prefix}TopStub")
+    bottom_stub = create_name(f"{id_prefix}BottomStub")
     top_key = top_stub.tag
     bottom_key = bottom_stub.tag
     return [
@@ -248,23 +248,23 @@ def _funnel_side(top_anchor, top_edge, bottom_anchor, bottom_edge, id_prefix):
         line(
             [ref(top_anchor), ref(top_stub)],
             stroke="black",
-            strokeWidth=2,
-            strokeDasharray="5",
+            stroke_width=2,
+            stroke_dasharray="5",
             source={"x": top_edge, "y": "end"},
         ),
         # Segment 2: diagonal, top stub → bottom stub.
         line(
             [ref(top_stub), ref(bottom_stub)],
             stroke="black",
-            strokeWidth=2,
-            strokeDasharray="5",
+            stroke_width=2,
+            stroke_dasharray="5",
         ),
         # Segment 3: vertical, bottom stub → anchor edge.
         line(
             [ref(bottom_stub), ref(bottom_anchor)],
             stroke="black",
-            strokeWidth=2,
-            strokeDasharray="5",
+            stroke_width=2,
+            stroke_dasharray="5",
             target={"x": bottom_edge, "y": "start"},
         ),
     ]
@@ -273,42 +273,42 @@ def _funnel_side(top_anchor, top_edge, bottom_anchor, bottom_edge, id_prefix):
 def story_dfscq():
     # ── Cross-tier names: funnels/arrows (tier 2) read these placed nodes
     # (tier 1), however deep they sit in the nested `spread` tree. ─────────
-    active_txn_block = createName("activeTxnBlock")
-    committed_txns_block = createName("committedTxnsBlock")
-    bigleftbracket = createName("bigleftbracket")
-    bigrightbracket = createName("bigrightbracket")
-    mem = createName("mem")
-    rect1 = createName("rect1")
-    rect2 = createName("rect2")
-    rect4 = createName("rect4")
-    blocks1 = createName("blocks1")
-    blocks2 = createName("blocks2")
-    disklogleft = createName("disklogleft")
-    applierleft = createName("applierleft")
-    diskdata = createName("diskdata")
-    diskdata_stack = createName("diskdataStack")
-    diskdata1 = createName("diskdata1")
-    diskdata2 = createName("diskdata2")
-    diskdata3 = createName("diskdata3")
-    diskdata4 = createName("diskdata4")
-    diskdata5 = createName("diskdata5")
-    fanout_anchor_name = createName("fanoutAnchor")
-    blocks1_arrow_anchor_name = createName("blocks1ArrowAnchor")
-    rect3 = createName("rect3")
-    log_data_anchor = createName("logDataAnchor")
+    active_txn_block = create_name("activeTxnBlock")
+    committed_txns_block = create_name("committedTxnsBlock")
+    bigleftbracket = create_name("bigleftbracket")
+    bigrightbracket = create_name("bigrightbracket")
+    mem = create_name("mem")
+    rect1 = create_name("rect1")
+    rect2 = create_name("rect2")
+    rect4 = create_name("rect4")
+    blocks1 = create_name("blocks1")
+    blocks2 = create_name("blocks2")
+    disklogleft = create_name("disklogleft")
+    applierleft = create_name("applierleft")
+    diskdata = create_name("diskdata")
+    diskdata_stack = create_name("diskdataStack")
+    diskdata1 = create_name("diskdata1")
+    diskdata2 = create_name("diskdata2")
+    diskdata3 = create_name("diskdata3")
+    diskdata4 = create_name("diskdata4")
+    diskdata5 = create_name("diskdata5")
+    fanout_anchor_name = create_name("fanoutAnchor")
+    blocks1_arrow_anchor_name = create_name("blocks1ArrowAnchor")
+    rect3 = create_name("rect3")
+    log_data_anchor = create_name("logDataAnchor")
     # The two tick DIVIDERS beneath the disk-log row — Funnel 2's start
     # anchors (Bluefish's `disklogtick2`/`disklogtick3`).
-    disklogtick2 = createName("disklogtick2")
-    disklogtick3 = createName("disklogtick3")
+    disklogtick2 = create_name("disklogtick2")
+    disklogtick3 = create_name("disklogtick3")
     # Stage-box names + the vertical gap slots reserved for the action
     # labels in the main vertical stack.
-    log_api_box = createName("logAPIBox")
-    group_log_box = createName("groupLogBox")
-    disk_log_box = createName("diskLogBox")
-    applier_box = createName("applierBox")
-    commit_slot = createName("commitSlot")
-    flush_slot = createName("flushSlot")
-    apply_slot = createName("applySlot")
+    log_api_box = create_name("logAPIBox")
+    group_log_box = create_name("groupLogBox")
+    disk_log_box = create_name("diskLogBox")
+    applier_box = create_name("applierBox")
+    commit_slot = create_name("commitSlot")
+    flush_slot = create_name("flushSlot")
+    apply_slot = create_name("applySlot")
 
     # ── Stage 1: LogAPI ──────────────────────────────────────────────────
     log_api_row = spread(
@@ -317,9 +317,9 @@ def story_dfscq():
                 LEFT_COLUMN_WIDTH,
                 text(
                     text="activeTxn:",
-                    fontFamily="monospace",
-                    fontWeight=300,
-                    fontSize=18,
+                    font_family="monospace",
+                    font_weight=300,
+                    font_size=18,
                 ),
             ),
             _blocks([BLUE, BLUE, BLUE], 18).name(active_txn_block),
@@ -336,9 +336,9 @@ def story_dfscq():
                 LEFT_COLUMN_WIDTH,
                 text(
                     text="committedTxns:",
-                    fontFamily="monospace",
-                    fontWeight=300,
-                    fontSize=18,
+                    font_family="monospace",
+                    font_weight=300,
+                    font_size=18,
                 ),
             ),
             _big_bracket("left").name(bigleftbracket),
@@ -463,7 +463,7 @@ def story_dfscq():
     ).name(diskdata_stack)
 
     disk_data_table = enclose(
-        [disk_data_cells], padding=5, fill="white", stroke="black", strokeWidth=3
+        [disk_data_cells], padding=5, fill="white", stroke="black", stroke_width=3
     )
 
     applier_inner = layer(
@@ -511,10 +511,10 @@ def story_dfscq():
     # Side labels ("disk log:"/"disk data:" monospace captions) + the
     # fan-out arrow anchor above the 5-cell table.
     disk_log_label = text(
-        text="disk log:", fontFamily="monospace", fontWeight=300, fontSize=18
+        text="disk log:", font_family="monospace", font_weight=300, font_size=18
     ).name("diskLogLabel")
     disk_data_label = text(
-        text="disk data:", fontFamily="monospace", fontWeight=300, fontSize=18
+        text="disk data:", font_family="monospace", font_weight=300, font_size=18
     ).name("diskDataLabel")
     # Two more small self-contained ref-anchored layers (same pattern as
     # `_tick`/`_label`): a placeholder point above the 5-cell table for the

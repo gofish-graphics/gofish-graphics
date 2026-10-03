@@ -8,4 +8,4 @@ from _components import elm_tuple  # noqa: E402
 
 
 def story_elm_tuple():
-    return elm_tuple(tupleIndex="0", tupleData="12"), {"w": 120, "h": 100}
+    return elm_tuple(tuple_index="0", tuple_data="12"), {"w": 120, "h": 100}

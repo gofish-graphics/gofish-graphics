@@ -1026,6 +1026,14 @@ for the API.
         "axes": {
           "$ref": "#/$defs/AxesOptions"
         },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+        },
         "w": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Data-driven cross-axis extent (field/datum-sized children)."
@@ -1109,6 +1117,14 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",

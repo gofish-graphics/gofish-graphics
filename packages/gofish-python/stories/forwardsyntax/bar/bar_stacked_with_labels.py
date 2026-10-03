@@ -15,7 +15,7 @@ def default(w=400, h=400):
         )
         .mark(
             rect(h="count", fill="species").label(
-                "species", position="center", color="white", fontSize=12
+                "species", position="center", color="white", font_size=12
             )
         )
     )

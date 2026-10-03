@@ -27,14 +27,14 @@ tier's marks inside [`.layer(...)`](/python/api/core/layer).
 
 ## Parameters
 
-| Parameter | Type                      | Description                                                                                                                                                                                                                                                    |
-| --------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`    | `list[dict]` \| dataframe | The dataset to visualize — a list of dict rows, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/) supports (pandas, polars, pyarrow, a DuckDB relation, ...) — or [`selectAll()` / `ref()`](#cross-chart-references) for a layer reference |
-| `axes`    | keyword                   | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                                                                                                              |
-| `coord`   | keyword                   | Coordinate transform, e.g. `coord=clock()`                                                                                                                                                                                                                     |
-| `color`   | keyword                   | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                                                                                                                                                                           |
-| `padding` | keyword                   | Extra SVG padding (px) — useful for polar charts and overflowing labels                                                                                                                                                                                        |
-| `schema`  | keyword                   | Column types, keyed by column name, e.g. `schema={"response": Schema.ordered(LEVELS).diverging()}`. See [`Schema`](/python/api/core/schema).                                                                                                                   |
+| Parameter | Type                      | Description                                                                                                                                                                                                                                                     |
+| --------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`    | `list[dict]` \| dataframe | The dataset to visualize — a list of dict rows, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/) supports (pandas, polars, pyarrow, a DuckDB relation, ...) — or [`select_all()` / `ref()`](#cross-chart-references) for a layer reference |
+| `axes`    | keyword                   | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                                                                                                               |
+| `coord`   | keyword                   | Coordinate transform, e.g. `coord=clock()`                                                                                                                                                                                                                      |
+| `color`   | keyword                   | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                                                                                                                                                                            |
+| `padding` | keyword                   | Extra SVG padding (px) — useful for polar charts and overflowing labels                                                                                                                                                                                         |
+| `schema`  | keyword                   | Column types, keyed by column name, e.g. `schema={"response": Schema.ordered(LEVELS).diverging()}`. See [`Schema`](/python/api/core/schema).                                                                                                                    |
 
 Chart-level options are passed as keyword arguments:
 
@@ -134,7 +134,7 @@ chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
 
 ## Cross-chart references
 
-Pass `selectAll("layerName")` as the data argument to reference a named mark from
+Pass `select_all("layerName")` as the data argument to reference a named mark from
 another chart — it resolves to an **array of refs**, one per named node, which
 connectors like [`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon)
 consume directly. Use `ref("layerName")` as data for the singular case: it returns a
@@ -146,7 +146,7 @@ the bare field name still works — `group(by="species")`; see
 [`mark`](/python/api/core/mark) for `.name()` on a mark.
 
 For the full reference — singular-as-data rules, node-unit selection, hygienic
-scoping, and connector use — see [`ref` / `selectAll`](/python/api/selection/ref).
+scoping, and connector use — see [`ref` / `select_all`](/python/api/selection/ref).
 
 ## Naming a chart: `.name()`
 

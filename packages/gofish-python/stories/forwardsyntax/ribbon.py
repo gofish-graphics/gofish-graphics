@@ -11,7 +11,7 @@ from gofish import (
     group,
     rect,
     scatter,
-    selectAll,
+    select_all,
     spread,
     stack,
 )
@@ -32,7 +32,7 @@ def basic(w=400, h=400):
         .mark(rect(h="count", fill="species").name("bars"))
     )
     overlay = (
-        chart(selectAll("bars"))
+        chart(select_all("bars"))
         .flow(group(by="species"))
         .mark(ribbon(opacity=0.8))
     )
@@ -51,12 +51,12 @@ def polar(w=400, h=400):
                 axes={"x": False, "y": True},
             ).translate(y=50),
             derive(lambda d: sorted(d, key=lambda r: r["count"])),
-            stack(by="species", dir="y", label=False),
+            stack(by="species", dir="y"),
         )
         .mark(rect(w=0.1, h="count", fill="species").name("bars"))
     )
     overlay = (
-        chart(selectAll("bars"))
+        chart(select_all("bars"))
         .flow(group(by="species"))
         .mark(ribbon(opacity=0.8))
     )

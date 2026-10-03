@@ -6,7 +6,7 @@ order: 140
 
 Dereference reference columns into the drawn nodes they name. For each row,
 `resolve` matches the listed columns' values against the keyed nodes of `from_`
-(a [`selectAll(...)`](/python/api/marks/ref) of a prior layer) and replaces each
+(a [`select_all(...)`](/python/api/marks/ref) of a prior layer) and replaces each
 value **in place** with the matching node ref — a many-to-one join that preserves
 the row grain (no fan-out). It's the join that turns an edge or label table into
 something the chart can draw.
@@ -21,7 +21,7 @@ edges) or [`ribbon(from_=, to=)`](/python/api/marks/ribbon).
 :::
 
 ```python
-from gofish import chart, scatter, resolve, selectAll, circle, line
+from gofish import chart, scatter, resolve, select_all, circle, line
 
 nodes = [
     {"id": "a", "grp": 0},
@@ -40,7 +40,7 @@ chart(nodes).flow(scatter(by="id", x="grp", y="id")).mark(
     circle(r=14, fill="#4e79a7").name("nodes")
 ).layer(
     chart(edges)
-    .flow(resolve(["source", "target"], from_=selectAll("nodes")))
+    .flow(resolve(["source", "target"], from_=select_all("nodes")))
     .mark(line(from_="source", to="target", stroke="#888"))
 ).render(w=360, h=360)
 ```

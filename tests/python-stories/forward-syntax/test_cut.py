@@ -106,14 +106,14 @@ def story_image_cut_with_labels():
         for d in data:
             d.name("slice")
             category_label = text(
-                fontSize=18,
-                fontWeight="bold",
+                font_size=18,
+                font_weight="bold",
                 fill="#1c5e20",
                 text=d.datum["category"],
             ).name("label")
             amount_label = text(
-                fontSize=36,
-                fontFamily="Impact",
+                font_size=36,
+                font_family="Impact",
                 fill="#1c5e20",
                 text=str(d.datum["amount"]),
             ).name("amount")
@@ -189,7 +189,7 @@ def story_rect_flush_stack():
         .flow(stack(dir="x"))
         .mark(
             rect(
-                w=400, h=80, fill="tomato", stroke="#333", strokeWidth=3
+                w=400, h=80, fill="tomato", stroke="#333", stroke_width=3
             ).cut(dir="x")
         ),
         {"w": 600, "h": 200, "axes": False},
@@ -263,7 +263,7 @@ def story_mixed_sizes():
                         h=80,
                         fill="mediumpurple",
                         stroke="#2e1065",
-                        strokeWidth=3,
+                        stroke_width=3,
                     ),
                     dir="x",
                     size=[100, datum(1), datum(2), 50],
@@ -377,7 +377,7 @@ def story_croissant_stack():
             [
                 rect(w=W, h=1.5, fill="#999").name("axisLine"),
                 *[
-                    text(text=t["label"], fontSize=12, fill="#555").name(
+                    text(text=t["label"], font_size=12, fill="#555").name(
                         f"lab{i}"
                     )
                     for i, t in enumerate(axis_ticks)

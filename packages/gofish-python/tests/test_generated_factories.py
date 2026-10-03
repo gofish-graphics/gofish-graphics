@@ -50,7 +50,7 @@ def test_repeated_label_calls_append():
     mark = (
         text(text="hi")
         .label("name", position="center", color="white", font_weight="bold")
-        .label("count", position="outset-top", fontSize=9)
+        .label("count", position="outset-top", font_size=9)
     )
     d = mark.to_dict()
     assert d["label"] == [
@@ -118,3 +118,30 @@ def test_open_kwargs_channels_wrap_callables():
     d = circle(r=3, cx=lambda row: row["x"]).to_dict()
     assert isinstance(d["cx"], dict)
     assert "__gofish_lambda" in d["cx"]
+
+
+def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():
+    # Python kwargs are snake_case; the IR keeps the camelCase wire keys.
+    assert text(text="hi", font_size=12, text_anchor="start").to_dict() == {
+        "type": "text",
+        "text": "hi",
+        "fontSize": 12,
+        "textAnchor": "start",
+    }
+    assert spread(by="a", dir="x", shared_scale=True).to_dict()["sharedScale"] is True
+    assert stack([], dir="x", shared_scale=True, key="k").to_dict()["options"] == {
+        "dir": "x",
+        "sharedScale": True,
+        "key": "k",
+    }
+    assert treemap(by="g", padding_inner=2).to_dict()["paddingInner"] == 2
+    assert text(text="hi").label("n", font_size=9).to_dict()["label"] == [
+        {"accessor": "n", "fontSize": 9}
+    ]
+
+
+def test_camel_case_kwargs_are_rejected():
+    with pytest.raises(TypeError):
+        text(text="hi", fontSize=12)
+    with pytest.raises(TypeError):
+        spread(by="a", dir="x", sharedScale=True)

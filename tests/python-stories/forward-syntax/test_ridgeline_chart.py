@@ -81,9 +81,9 @@ def story_default():
                 h="count",
                 fill="steelblue",
                 stroke="white",
-                strokeWidth=1,
+                stroke_width=1,
                 opacity=0.85,
-                mixBlendMode="normal",
+                mix_blend_mode="normal",
             )
         )
         # Per-row baseline labeling, in the style of a ggridges ridgeline: a
@@ -94,7 +94,7 @@ def story_default():
         #
         #  - RULES: the same fixed-pitch baseline spread as the ridges, marking
         #    a bare rect per month. The rect sits at its row's baseline anchor,
-        #    so it registers exactly on the ribbon's zero line. `.zOrder(-1)`
+        #    so it registers exactly on the ribbon's zero line. `.z_order(-1)`
         #    on the tier paints the rules BEHIND the ribbons — visible only
         #    outside the silhouettes, the classic look.
         #  - LABELS: a datumless annotation overlay (a bare mark tier — no
@@ -120,7 +120,7 @@ def story_default():
                 )
             )
             .mark(rect(h=1, w=w, fill="#999"))
-            .zOrder(-1)
+            .z_order(-1)
         )
         .layer(
             layer(
@@ -133,7 +133,7 @@ def story_default():
                         ),
                         text(
                             text=month,
-                            fontSize=11,
+                            font_size=11,
                             fill="#666",
                             y=ROW_PITCH * k - 9,
                         ).name(f"label{k}"),

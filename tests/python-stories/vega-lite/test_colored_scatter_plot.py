@@ -37,7 +37,7 @@ def story_default():
                 r=4,
                 stroke="Species",
                 fill="Species",
-                strokeWidth=3,
+                stroke_width=3,
             )
         )
         for species in species_list

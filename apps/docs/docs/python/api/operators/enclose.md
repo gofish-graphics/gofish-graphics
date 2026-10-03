@@ -26,7 +26,7 @@ enclose(
 
 ```python
 enclose(children, *, padding=None, rx=None, ry=None, fill=None,
-        stroke=None, strokeWidth=None, strokeDasharray=None,
+        stroke=None, stroke_width=None, stroke_dasharray=None,
         opacity=None) -> Mark
 ```
 

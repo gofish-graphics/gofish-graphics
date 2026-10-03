@@ -407,7 +407,8 @@ unknown`) even though they aren't really open on the JS side (a mark's
   `::: gofish-ref rect` under its `## Parameters` heading, and the
   container (`docs/.vitepress/markdown-it-gofish-ref.ts`) renders the
   construct's `doc` line plus an Option/Type/Default/Description table —
-  JS field names and a TS-ish type on a JS page, `py` kwarg names and a
+  JS field names and a TS-ish type on a JS page, snake case kwarg names
+  (from `pyKwarg`, see § Generating the Python factory layer) and a
   Python type on a Python page, with the shared groups (`boxDims`,
   `paint`) folded into a collapsed block. So an option's one-line
   description lives in its `doc` string and reaches the reader and the
@@ -484,7 +485,23 @@ package export, so it needs `pnpm --filter gofish-ir build` to have run
 first) and emits `gofish/_generated.py` — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
 --exit-code`) rather than a build-time step, matching the "commit the
-generated Python" norm Altair and Plotly.py both follow. It emits:
+generated Python" norm Altair and Plotly.py both follow.
+
+Python kwargs are in snake case, while the wire stays in camel case. One
+function in `descriptors.ts`, `pyKwarg(fieldName, spec)`, gives each field's
+Python name: the field name in snake case (`strokeWidth` becomes
+`stroke_width`, `emX` becomes `em_x`), or the field's `py` name when the
+snake case name would collide with a Python keyword (`from` becomes
+`from_`). Every generated function lists its `(wireKey, pyName)` pairs and
+builds its IR dict under the wire key, so `rect(stroke_width=2)` serializes
+as `{"strokeWidth": 2}`, and `rect(strokeWidth=2)` is a `TypeError`. The
+docs options tables call the same function. Python code that builds IR
+outside the generated layer (`.label(font_size=...)`, the `line` and
+`ribbon` signatures) renames at its construction site. A nested dict that a
+user passes whole, such as `axes={"x": {"labelAngle": 45}}`, is not
+converted: its keys are wire keys.
+
+It emits:
 
 - Closed-signature **leaf mark** factories (`rect`, `circle`, `ellipse`,
   `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
@@ -495,12 +512,14 @@ generated Python" norm Altair and Plotly.py both follow. It emits:
   killing four previously hand-copied wire-name tables.
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
-  `layer`, `pack`, the polar coord family) — just the kwargs→dict half. The
+  `layer`, `pack`, the polar coord family), with separate combinator-form
+  cores for `spread`, `stack`, and `treemap` (their combinator entries add
+  `key`) — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 
 `derive`/`resolve`/`join` (real RPC-bridge/ref-shape/DataFrame logic) and
-`palette`/`gradient`/`field`/`datum`/`normalize`/`repeat`/`ref`/`selectAll`
+`palette`/`gradient`/`field`/`datum`/`normalize`/`repeat`/`ref`/`select_all`
 (not in the descriptor table at all) stay fully hand-written in `ast.py`,
 alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
 widget/RPC layer — see

@@ -9,11 +9,11 @@ through scatterplot points or filling the area between stacked bars. It works in
 two steps:
 
 1. **Name a mark** using `.name("layerName")` to register its nodes
-2. **Reference those nodes** using `selectAll("layerName")` (an array of
+2. **Reference those nodes** using `select_all("layerName")` (an array of
    [`ref`](/python/api/selection/ref)s) or `ref("layerName")` (a single ref) as
    data for another chart
 
-`selectAll` is the `querySelectorAll` of GoFish — one ref per named node, never
+`select_all` is the `querySelectorAll` of GoFish — one ref per named node, never
 flattened. `ref(name)` as data is the singular `querySelector`: it returns one
 ref and raises if the layer matched zero or more than one node.
 
@@ -26,8 +26,8 @@ layer([
         .flow(spread(by="category", dir="x"))
         .mark(rect(h="value").name("bars")),
 
-    # Chart 2: selectAll those marks as data for a connector
-    chart(selectAll("bars")).mark(line()),
+    # Chart 2: select_all those marks as data for a connector
+    chart(select_all("bars")).mark(line()),
 ])
 ```
 
@@ -39,7 +39,7 @@ For the common case of threading a connector through a chart's **own** marks,
 chaining [`.layer()`](/python/api/core/layer) with a bare connector mark is
 shorter sugar for this two-layer recipe. Reach for the explicit `layer([...])`
 
-- `selectAll` form when connecting a _different_ chart's marks or when you
+- `select_all` form when connecting a _different_ chart's marks or when you
   need a custom paint order.
   :::
 
@@ -47,19 +47,19 @@ shorter sugar for this two-layer recipe. Reach for the explicit `layer([...])`
 
 [`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon) take an
 array of refs directly and read placed geometry off them, so feed them
-`selectAll`:
+`select_all`:
 
 ::: gofish example:connected-scatter-plot hidden
 :::
 
 ```python
-from gofish import layer, chart, scatter, circle, line, selectAll
+from gofish import layer, chart, scatter, circle, line, select_all
 
 layer([
     chart(driving_shifts)
         .flow(scatter(by="year", x="miles", y="gas"))
-        .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2).name("points")),
-    chart(selectAll("points")).mark(line(stroke="black", strokeWidth=2)),
+        .mark(circle(r=4, fill="white", stroke="black", stroke_width=2).name("points")),
+    chart(select_all("points")).mark(line(stroke="black", stroke_width=2)),
 ]).render(w=400, h=250, axes=True)
 ```
 
@@ -74,13 +74,13 @@ Sometimes you want a connecting line without visible points. Use
 :::
 
 ```python
-from gofish import layer, chart, scatter, blank, line, selectAll
+from gofish import layer, chart, scatter, blank, line, select_all
 
 layer([
     chart(catch_locations)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(blank().name("points")),
-    chart(selectAll("points")).mark(line(stroke="steelblue", strokeWidth=2)),
+    chart(select_all("points")).mark(line(stroke="steelblue", stroke_width=2)),
 ]).render(w=400, h=250, axes=True)
 ```
 
@@ -95,17 +95,17 @@ the bare field name: `group(by="species")`, not `group(by="datum.species")`.
 :::
 
 ```python
-from gofish import layer, chart, spread, stack, derive, group, rect, ribbon, selectAll
+from gofish import layer, chart, spread, stack, derive, group, rect, ribbon, select_all
 
 layer([
     chart(seafood)
         .flow(
             spread(by="lake", dir="x", spacing=64),
             derive(lambda d: sorted(d, key=lambda r: r["count"], reverse=True)),
-            stack(by="species", dir="y", label=False),
+            stack(by="species", dir="y"),
         )
         .mark(rect(h="count", fill="species").name("bars")),
-    chart(selectAll("bars"))
+    chart(select_all("bars"))
         .flow(group(by="species"))
         .mark(ribbon(opacity=0.8)),
 ]).render(w=500, h=300, axes=True)
@@ -118,7 +118,7 @@ agrees on that field (homogeneity collapse); if it is multi-valued the result is
 [path-aware `by`](/python/api/operators/spread#path-aware-by).
 
 When the chart being re-partitioned is the first chart's own marks, skip this
-manual `group()` + `selectAll` wiring entirely: chain `.layer(ribbon(opacity=
+manual `group()` + `select_all` wiring entirely: chain `.layer(ribbon(opacity=
 0.8))` straight onto the producing chart, with no split option at all — the
 `stack(by="species")` tier already told the flow how to group, so the fused
 ribbon splits by species by default. If you need a _different_ path tier than
@@ -133,7 +133,7 @@ one ref — handy for diagrammatic annotations. It raises if the layer matched
 more than one node, which catches mistakes early:
 
 ```python
-from gofish import layer, chart, scatter, blank, text, ref, selectAll
+from gofish import layer, chart, scatter, blank, text, ref, select_all
 
 layer([
     chart(data).flow(scatter(by="id", x="x", y="y")).mark(blank().name("origin")),
@@ -145,7 +145,7 @@ layer([
 ## How it works
 
 When you call `.name("layerName")` on a mark, each node it produces is registered
-in a shared layer context during rendering. `selectAll("layerName")` returns a
+in a shared layer context during rendering. `select_all("layerName")` returns a
 lazy selector that resolves, when the second chart renders, to one
 [`ref`](/python/api/selection/ref) per registered node; `ref("layerName")` as
 data resolves to the single ref (erroring otherwise).
@@ -159,9 +159,9 @@ Each ref:
 
 ## Common use cases
 
-| Goal                | Pattern                                                                          |
-| ------------------- | -------------------------------------------------------------------------------- |
-| Line through points | `circle().name("points")` → `selectAll("points")` + `line()`                     |
-| Area under line     | `blank().name("points")` → `selectAll("points")` + `ribbon()`                    |
-| Ribbon / stream     | `rect().name("bars")` → `selectAll("bars")` + `group(by="species")` + `ribbon()` |
-| Single annotation   | Name one mark → `chart(ref("name"))` borrows that one node                       |
+| Goal                | Pattern                                                                           |
+| ------------------- | --------------------------------------------------------------------------------- |
+| Line through points | `circle().name("points")` → `select_all("points")` + `line()`                     |
+| Area under line     | `blank().name("points")` → `select_all("points")` + `ribbon()`                    |
+| Ribbon / stream     | `rect().name("bars")` → `select_all("bars")` + `group(by="species")` + `ribbon()` |
+| Single annotation   | Name one mark → `chart(ref("name"))` borrows that one node                        |

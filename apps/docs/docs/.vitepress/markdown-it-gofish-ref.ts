@@ -15,7 +15,7 @@
  *
  * and gets the construct's `doc` line plus an `Option | Type | Default |
  * Description` table. JS pages (`docs/js/**`) show the JS field names and a
- * TS-ish type; Python pages (`docs/python/**`) show the `py` kwarg names and a
+ * TS-ish type; Python pages (`docs/python/**`) show the snake_case kwarg names and a
  * Python type — the language is detected from `env.relativePath`.
  *
  * Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
@@ -39,6 +39,7 @@ import {
   LEAF_MARKS,
   OPERATORS,
   SHARED_FIELD_GROUPS,
+  pyKwarg,
   resolveFields,
   type ConstructDescriptor,
   type FieldSpec,
@@ -215,8 +216,11 @@ function sharedGroupOf(spec: FieldSpec): string | null {
   return null;
 }
 
+/** The option's name as a user types it: the camelCase field name in JS, the
+ *  snake_case kwarg (`pyKwarg`, the same mapping the Python generator uses) in
+ *  Python. */
 function fieldName(name: string, spec: FieldSpec, lang: Lang): string {
-  return lang === "python" ? (spec.py ?? name) : name;
+  return lang === "python" ? pyKwarg(name, spec) : name;
 }
 
 function optionsTable(

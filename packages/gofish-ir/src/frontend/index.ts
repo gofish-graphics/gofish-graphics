@@ -21,6 +21,7 @@ export {
   ch,
   group,
   resolveFields,
+  pyKwarg,
   OPERATORS,
   LEAF_MARKS,
   COMBINATOR_MARKS,

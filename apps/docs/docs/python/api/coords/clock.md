@@ -77,7 +77,7 @@ chart(data, coord=clock(inner_radius=0.6)) \
 # Rose chart (radial bar chart)
 chart(data, coord=clock()) \
     .flow(stack(by="month", dir="x")) \
-    .mark(rect(w=(math.pi * 2) / 12, emX=True, h="value"))
+    .mark(rect(w=(math.pi * 2) / 12, em_x=True, h="value"))
 ```
 
 ## See Also

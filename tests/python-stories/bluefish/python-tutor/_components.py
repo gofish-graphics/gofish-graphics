@@ -7,7 +7,7 @@ Mirrors:
 - heap.ts
 - globalFrame.ts
 
-Each component is a `@mark` decorator (so internal `createName(...)`
+Each component is a `@mark` decorator (so internal `create_name(...)`
 names get a `node.scope()` post-pass on the JS side). The helpers are
 authored in one file to sidestep the `python_stories.bluefish.python-tutor.*`
 import-path issue — the storybook title resolves to a dashed dir, which
@@ -17,7 +17,7 @@ Python can't address via `from` imports.
 from gofish import (
     Constraint,
     arrow,
-    createName,
+    create_name,
     layer,
     mark,
     rect,
@@ -32,19 +32,19 @@ FONT_FAMILY = "verdana, arial, helvetica, sans-serif"
 @mark
 def stack_slot(variable: str, value=None):
     """One row in a stack frame — variable name + boxed value."""
-    box_tag = createName("box")
-    value_tag = createName("value")
+    box_tag = create_name("box")
+    value_tag = create_name("value")
     if isinstance(value, str):
-        val_text = text(text=value, fontSize=24, fontFamily=FONT_FAMILY).name(
+        val_text = text(text=value, font_size=24, font_family=FONT_FAMILY).name(
             value_tag
         )
     else:
         val_text = text(
-            text="", fontSize=24, fontFamily=FONT_FAMILY, fill="none"
+            text="", font_size=24, font_family=FONT_FAMILY, fill="none"
         ).name(value_tag)
     return spread(
         [
-            text(text=variable, fontSize=24, fontFamily=FONT_FAMILY).name(
+            text(text=variable, font_size=24, font_family=FONT_FAMILY).name(
                 "variable"
             ),
             layer(
@@ -73,16 +73,16 @@ def stack_slot(variable: str, value=None):
 
 
 @mark
-def elm_tuple(tupleIndex: str, tupleData=None):
+def elm_tuple(tuple_index: str, tuple_data=None):
     """One boxed cell in a heap-object row."""
-    val_tag = createName("val")
-    if isinstance(tupleData, str):
+    val_tag = create_name("val")
+    if isinstance(tuple_data, str):
         val_text = text(
-            text=tupleData, fontSize=24, fontFamily=FONT_FAMILY, fill="black"
+            text=tuple_data, font_size=24, font_family=FONT_FAMILY, fill="black"
         ).name(val_tag)
     else:
         val_text = text(
-            text="", fontSize=24, fontFamily=FONT_FAMILY, fill="none"
+            text="", font_size=24, font_family=FONT_FAMILY, fill="none"
         ).name(val_tag)
     return layer(
         [
@@ -91,12 +91,12 @@ def elm_tuple(tupleIndex: str, tupleData=None):
                 w=70,
                 fill="#ffffc6",
                 stroke="gray",
-                strokeWidth=1,
+                stroke_width=1,
             ).name("box"),
             text(
-                text=tupleIndex,
-                fontSize=16,
-                fontFamily=FONT_FAMILY,
+                text=tuple_index,
+                font_size=16,
+                font_family=FONT_FAMILY,
                 fill="gray",
             ).name("label"),
             val_text,
@@ -110,26 +110,26 @@ def elm_tuple(tupleIndex: str, tupleData=None):
 
 
 @mark
-def heap_object(objectType: str, objectValues: list):
+def heap_object(object_type: str, object_values: list):
     """A heap-side object — type label + horizontal row of `elm_tuple` cells."""
-    elm_tuples_tag = createName("elmTuples")
+    elm_tuples_tag = create_name("elmTuples")
     return spread(
         [
             text(
-                text=objectType,
-                fontFamily=FONT_FAMILY,
-                fontSize=16,
+                text=object_type,
+                font_family=FONT_FAMILY,
+                font_size=16,
                 fill="grey",
             ),
             spread(
                 [
                     elm_tuple(
-                        tupleIndex=str(i),
-                        tupleData=(
+                        tuple_index=str(i),
+                        tuple_data=(
                             elt["value"] if elt["type"] == "string" else None
                         ),
                     )
-                    for i, elt in enumerate(objectValues)
+                    for i, elt in enumerate(object_values)
                 ],
                 dir="x",
                 spacing=0,
@@ -142,7 +142,7 @@ def heap_object(objectType: str, objectValues: list):
 
 
 @mark
-def heap(heap: list, heapArrangement: list):
+def heap(heap: list, heap_arrangement: list):
     """2D grid of `heap_object`s laid out by an arrangement matrix."""
     return spread(
         [
@@ -152,8 +152,8 @@ def heap(heap: list, heapArrangement: list):
                         rect(h=60, w=140, fill="none", stroke="none")
                         if address is None
                         else heap_object(
-                            objectType=heap[address]["type"],
-                            objectValues=[
+                            object_type=heap[address]["type"],
+                            object_values=[
                                 {
                                     "type": (
                                         "string"
@@ -176,7 +176,7 @@ def heap(heap: list, heapArrangement: list):
                 alignment="end",
                 spacing=75,
             )
-            for row in heapArrangement
+            for row in heap_arrangement
         ],
         dir="y",
         alignment="start",
@@ -187,7 +187,7 @@ def heap(heap: list, heapArrangement: list):
 @mark
 def global_frame(stack: list):
     """Frame with a label, side border, and a column of `stack_slot`s."""
-    variables_tag = createName("variables")
+    variables_tag = create_name("variables")
 
     def _slot(b):
         # Python equivalent of `isPointer(slot.value) ? undefined : formatValue(slot.value)`
@@ -202,8 +202,8 @@ def global_frame(stack: list):
             rect(h=300, w=5, fill="#a6b3b6").name("frameBorder"),
             text(
                 text="Global Frame",
-                fontSize=24,
-                fontFamily="Andale Mono, monospace",
+                font_size=24,
+                font_family="Andale Mono, monospace",
                 fill="black",
             ).name("label"),
             spread(

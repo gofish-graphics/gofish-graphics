@@ -49,23 +49,23 @@ def _build_children():
 
 
 def story_union():
-    return over(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
+    return over(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_intersect():
-    return intersect(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
+    return intersect(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_exclude():
-    return exclude(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
+    return exclude(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_subtract():
-    return subtract(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
+    return subtract(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_paint():
-    return paint(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
+    return paint(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_mask():

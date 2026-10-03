@@ -275,24 +275,25 @@ mark("inside", {
 
 `ch.num(doc?)` / `ch.color(doc?)` are shorthand for
 `{ type: t.channel(number|color) }` — a `ChannelValue` slot accepting a
-literal, a field name, or a `datum()` wrapper. Python-keyword collisions
-declare `pyName` per _field_ the same way (`{ pyName: "from_", wire: "from" }`
-on `line`'s `from` field).
+literal, a field name, or a `datum()` wrapper. The Python kwarg for a field
+is its name in snake case (`strokeWidth` becomes `stroke_width`), computed by
+one function, `pyKwarg`; a field declares a `py` name only for a
+Python-keyword collision (`{ py: "from_" }` on `line`'s `from` field).
 
 From the `rect` entry the generator emits, mechanically:
 
 ```python
-def rect(*, x=None, cx=None, x2=None, w=None, emX=None,
-         y=None, cy=None, y2=None, h=None, emY=None,
+def rect(*, x=None, cx=None, x2=None, w=None, em_x=None,
+         y=None, cy=None, y2=None, h=None, em_y=None,
          dims=None,
-         fill=None, stroke=None, strokeWidth=None, opacity=None, filter=None,
-         rx=None, ry=None, aspectRatio=None,
+         fill=None, stroke=None, stroke_width=None, opacity=None, filter=None,
+         rx=None, ry=None, aspect_ratio=None,
          key=None, label=None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
         rx: Corner radius, x. Default 0.
-        aspectRatio: w/h ratio to enforce; ...
+        aspect_ratio: w/h ratio to enforce; ...
         ...
     """
     return _leaf("rect", locals())
@@ -374,6 +375,26 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   JS counterparts. A latent pyarrow-22 crash on the empty-placeholder
   Arrow path was fixed in passing (deduped into one
   `empty_placeholder_arrow_bytes()` helper using `schema.empty_table()`).
+
+- **Snake case Python names.** Every option a Python user types is in
+  snake case, as PEP 8 expects (`stroke_width`, `font_size`,
+  `padding_inner`), and the two camel case functions became `select_all`
+  and `create_name`. The wire format did not change: it stays in camel
+  case, so the Python IR is byte-identical to before. The mapping is one
+  function, `pyKwarg(fieldName, spec)` in `descriptors.ts`: a field's
+  Python name is its name in snake case, unless the field declares a `py`
+  name for a Python-keyword collision (`from` becomes `from_`). The
+  generator emits each generated function's `(wireKey, pyName)` pairs, so
+  each function builds its IR dict under the camel case wire key, and a
+  camel case kwarg is a `TypeError`. The docs options tables call the same
+  `pyKwarg`, so a Python page shows the names a user types. Hand-written
+  signatures that build IR outside the generated layer
+  (`.label(font_size=...)`, `line`, `ribbon`) rename at the construction
+  site. To route the `spread` combinator and the `stack` operator and
+  combinator through generated cores (before, they passed their kwargs to
+  the wire unchecked), `OPERATORS.spread` and `OPERATORS.stack` now declare
+  the box position `x`/`y` (as `treemap` does), and their combinator
+  entries declare `key`.
 
 **Deliberately deferred**, not follow-up bugs:
 

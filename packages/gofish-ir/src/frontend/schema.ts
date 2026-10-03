@@ -257,6 +257,10 @@ export interface SpreadOperator
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
+  /** Position of this operator's box in the parent's space (pixels): the JS
+   *  `Spread` spreads its `FancyDims` into the box, as treemap's does. */
+  x?: ChannelValue;
+  y?: ChannelValue;
   /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
    *  this operator's box, reported as a SIZE claim to the enclosing scale. */
   w?: ChannelValue;
@@ -290,6 +294,10 @@ export interface StackOperator
   sharedScale?: boolean;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
+  /** Position of this operator's box in the parent's space (pixels): the JS
+   *  `Spread` spreads its `FancyDims` into the box, as treemap's does. */
+  x?: ChannelValue;
+  y?: ChannelValue;
   /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
    *  this operator's box, reported as a SIZE claim to the enclosing scale. */
   w?: ChannelValue;

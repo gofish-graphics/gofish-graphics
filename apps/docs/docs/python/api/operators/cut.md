@@ -84,7 +84,7 @@ The modifier's `size` additionally accepts a **field-name string** (resolved
 per row, treated as datum-provenance — `size="amount"` is exactly
 `[datum(d["amount"]) for d in bottle_data]`) and `None` (equal slices, N taken
 from the data length). Each slice carries its source row, so a second sub-chart
-can [`selectAll(...)`](/python/api/core/chart#cross-chart-references) the named
+can [`select_all(...)`](/python/api/core/chart#cross-chart-references) the named
 slices and annotate them.
 
 ### Combining with `by`-grouping
