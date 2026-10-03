@@ -1,0 +1,5 @@
+[
+  { "source": "Email", "target": "Postal", "count": 10 },
+  { "source": "Email", "target": "Air", "count": 1 },
+  { "source": "Postal", "target": "Air", "count": 2 }
+]

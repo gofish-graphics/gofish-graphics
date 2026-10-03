@@ -1,0 +1,6 @@
+[
+  { "region": "South", "sales": 391722 },
+  { "region": "Central", "sales": 501240 },
+  { "region": "East", "sales": 678781 },
+  { "region": "West", "sales": 725458 }
+]

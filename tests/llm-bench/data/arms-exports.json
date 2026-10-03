@@ -1,0 +1,12 @@
+[
+  { "country": "United States", "exports": 12394 },
+  { "country": "Russia", "exports": 6148 },
+  { "country": "France", "exports": 2162 },
+  { "country": "Germany (FRG)", "exports": 1653 },
+  { "country": "Israel", "exports": 1263 },
+  { "country": "United Kingdom", "exports": 1214 },
+  { "country": "Netherlands", "exports": 1167 },
+  { "country": "China", "exports": 1131 },
+  { "country": "Spain", "exports": 814 },
+  { "country": "Italy", "exports": 660 }
+]

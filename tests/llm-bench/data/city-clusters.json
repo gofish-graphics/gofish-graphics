@@ -1,0 +1,17 @@
+[
+  { "name": "Berlin", "parent": "n2", "height": 0 },
+  { "name": "London", "parent": "n1", "height": 0 },
+  { "name": "Paris", "parent": "n1", "height": 0 },
+  { "name": "Moscow", "parent": "n5", "height": 0 },
+  { "name": "New York", "parent": "n3", "height": 0 },
+  { "name": "Chicago", "parent": "n3", "height": 0 },
+  { "name": "Tokyo", "parent": "n4", "height": 0 },
+  { "name": "Shanghai", "parent": "n4", "height": 0 },
+  { "name": "n1", "parent": "n2", "height": 213 },
+  { "name": "n2", "parent": "n5", "height": 562 },
+  { "name": "n3", "parent": "n6", "height": 713 },
+  { "name": "n4", "parent": "n7", "height": 1097 },
+  { "name": "n5", "parent": "n6", "height": 1368 },
+  { "name": "n6", "parent": "n7", "height": 4147 },
+  { "name": "n7", "parent": "", "height": 5880 }
+]

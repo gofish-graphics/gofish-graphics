@@ -1,0 +1,112 @@
+[
+  { "age_range": "18-24", "savings": "$10,000 or more", "response_rate": 7.5 },
+  { "age_range": "25-34", "savings": "$10,000 or more", "response_rate": 12.1 },
+  { "age_range": "35-44", "savings": "$10,000 or more", "response_rate": 16.0 },
+  { "age_range": "45-54", "savings": "$10,000 or more", "response_rate": 16.2 },
+  { "age_range": "55-64", "savings": "$10,000 or more", "response_rate": 16.8 },
+  { "age_range": "65+", "savings": "$10,000 or more", "response_rate": 20.0 },
+  { "age_range": "18-24", "savings": "$5,000-$9,999", "response_rate": 4.7 },
+  { "age_range": "25-34", "savings": "$5,000-$9,999", "response_rate": 5.4 },
+  { "age_range": "35-44", "savings": "$5,000-$9,999", "response_rate": 5.6 },
+  { "age_range": "45-54", "savings": "$5,000-$9,999", "response_rate": 5.2 },
+  { "age_range": "55-64", "savings": "$5,000-$9,999", "response_rate": 4.8 },
+  { "age_range": "65+", "savings": "$5,000-$9,999", "response_rate": 4.7 },
+  { "age_range": "18-24", "savings": "$1,000-$4,999", "response_rate": 14.7 },
+  { "age_range": "25-34", "savings": "$1,000-$4,999", "response_rate": 12.5 },
+  { "age_range": "35-44", "savings": "$1,000-$4,999", "response_rate": 9.8 },
+  { "age_range": "45-54", "savings": "$1,000-$4,999", "response_rate": 7.5 },
+  { "age_range": "55-64", "savings": "$1,000-$4,999", "response_rate": 8.0 },
+  { "age_range": "65+", "savings": "$1,000-$4,999", "response_rate": 7.2 },
+  {
+    "age_range": "18-24",
+    "savings": "Less than $1,000",
+    "response_rate": 19.1
+  },
+  {
+    "age_range": "25-34",
+    "savings": "Less than $1,000",
+    "response_rate": 15.2
+  },
+  {
+    "age_range": "35-44",
+    "savings": "Less than $1,000",
+    "response_rate": 11.6
+  },
+  {
+    "age_range": "45-54",
+    "savings": "Less than $1,000",
+    "response_rate": 10.9
+  },
+  {
+    "age_range": "55-64",
+    "savings": "Less than $1,000",
+    "response_rate": 10.7
+  },
+  { "age_range": "65+", "savings": "Less than $1,000", "response_rate": 8.2 },
+  {
+    "age_range": "18-24",
+    "savings": "Just the minimum balance requirement",
+    "response_rate": 9.7
+  },
+  {
+    "age_range": "25-34",
+    "savings": "Just the minimum balance requirement",
+    "response_rate": 10.6
+  },
+  {
+    "age_range": "35-44",
+    "savings": "Just the minimum balance requirement",
+    "response_rate": 6.6
+  },
+  {
+    "age_range": "45-54",
+    "savings": "Just the minimum balance requirement",
+    "response_rate": 7.7
+  },
+  {
+    "age_range": "55-64",
+    "savings": "Just the minimum balance requirement",
+    "response_rate": 8.4
+  },
+  {
+    "age_range": "65+",
+    "savings": "Just the minimum balance requirement",
+    "response_rate": 10.7
+  },
+  { "age_range": "18-24", "savings": "$0", "response_rate": 21.8 },
+  { "age_range": "25-34", "savings": "$0", "response_rate": 26.3 },
+  { "age_range": "35-44", "savings": "$0", "response_rate": 31.6 },
+  { "age_range": "45-54", "savings": "$0", "response_rate": 30.8 },
+  { "age_range": "55-64", "savings": "$0", "response_rate": 28.4 },
+  { "age_range": "65+", "savings": "$0", "response_rate": 27.6 },
+  {
+    "age_range": "18-24",
+    "savings": "I don't have a savings account",
+    "response_rate": 22.4
+  },
+  {
+    "age_range": "25-34",
+    "savings": "I don't have a savings account",
+    "response_rate": 18.0
+  },
+  {
+    "age_range": "35-44",
+    "savings": "I don't have a savings account",
+    "response_rate": 18.9
+  },
+  {
+    "age_range": "45-54",
+    "savings": "I don't have a savings account",
+    "response_rate": 21.6
+  },
+  {
+    "age_range": "55-64",
+    "savings": "I don't have a savings account",
+    "response_rate": 22.8
+  },
+  {
+    "age_range": "65+",
+    "savings": "I don't have a savings account",
+    "response_rate": 21.6
+  }
+]

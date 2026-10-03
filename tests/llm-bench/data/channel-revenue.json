@@ -1,0 +1,22 @@
+[
+  { "year": "2019", "channel": "Retail", "revenue": 40 },
+  { "year": "2019", "channel": "Online", "revenue": 18 },
+  { "year": "2019", "channel": "Wholesale", "revenue": 25 },
+  { "year": "2019", "channel": "Partner", "revenue": 10 },
+  { "year": "2020", "channel": "Retail", "revenue": 28 },
+  { "year": "2020", "channel": "Online", "revenue": 34 },
+  { "year": "2020", "channel": "Wholesale", "revenue": 22 },
+  { "year": "2020", "channel": "Partner", "revenue": 12 },
+  { "year": "2021", "channel": "Retail", "revenue": 30 },
+  { "year": "2021", "channel": "Online", "revenue": 42 },
+  { "year": "2021", "channel": "Wholesale", "revenue": 24 },
+  { "year": "2021", "channel": "Partner", "revenue": 16 },
+  { "year": "2022", "channel": "Retail", "revenue": 32 },
+  { "year": "2022", "channel": "Online", "revenue": 48 },
+  { "year": "2022", "channel": "Wholesale", "revenue": 20 },
+  { "year": "2022", "channel": "Partner", "revenue": 22 },
+  { "year": "2023", "channel": "Retail", "revenue": 30 },
+  { "year": "2023", "channel": "Online", "revenue": 55 },
+  { "year": "2023", "channel": "Wholesale", "revenue": 18 },
+  { "year": "2023", "channel": "Partner", "revenue": 26 }
+]

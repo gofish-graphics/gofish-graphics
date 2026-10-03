@@ -24,6 +24,8 @@
     "test:visual:js": "pnpm --filter @gofish/tests test:js",
     "capture-one": "pnpm --filter @gofish/tests capture-one",
     "capture-diff": "pnpm --filter @gofish/tests capture-diff",
+    "llm-bench": "pnpm --filter @gofish/tests llm-bench",
+    "llm-bench:contexts": "pnpm --filter @gofish/tests llm-bench:contexts",
     "capture-sweep": "pnpm --filter @gofish/tests capture-sweep",
     "test:visual:review": "pnpm --filter @gofish/tests review",
     "test:visual:check-sync": "pnpm --filter @gofish/tests check-sync",

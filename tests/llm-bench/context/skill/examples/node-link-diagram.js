@@ -1,0 +1,100 @@
+// Node-Link Diagram
+// A small directed graph of labeled boxes connected by named edges, laying out nodes and relationships as a node-link diagram.
+
+import {
+  Constraint,
+  createMark,
+  createName,
+  layer,
+  line,
+  rect,
+  ref,
+  text,
+} from "gofish-graphics";
+const Node = createMark(({ label }) =>
+  layer({ w: 76, h: 40 }, [
+    rect({
+      w: 76,
+      h: 40,
+      rx: 6,
+      fill: "#e2ebf6",
+      stroke: "#457b9d",
+      strokeWidth: 2,
+    }).name("box"),
+    text({ text: label, fontSize: 14, fill: "#1d3557" }).name("label"),
+  ]).relate(({ box, label }) => [
+    Constraint.align({ x: "middle", y: "middle" }, [box, label]),
+  ]),
+);
+const edge = { stroke: "#90a4ae", strokeWidth: 2 };
+const container = document.getElementById("app");
+// Cross-tier names: the edges (outer layer) reference the nodes (inner
+// layer), so the node names must be globally-scoped `createName` tokens.
+const A = createName("A");
+const B = createName("B");
+const C = createName("C");
+const D = createName("D");
+layer({ x: 20, y: 20 }, [
+  // ── tier 1: nodes — placed by constraints, a finished unit ──────────
+  layer([
+    Node({ label: "A" }).name(A),
+    Node({ label: "B" }).name(B),
+    Node({ label: "C" }).name(C),
+    Node({ label: "D" }).name(D),
+  ]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 60, anchor: "edge" }, [
+      c.A,
+      c.B,
+      c.C,
+    ]),
+    Constraint.align({ y: "middle" }, [c.A, c.B, c.C]),
+    Constraint.distribute({ dir: "y", spacing: 60, anchor: "edge" }, [
+      c.D,
+      c.B,
+    ]),
+    Constraint.align({ x: "middle" }, [c.B, c.D]),
+  ]),
+  // ── tier 2: edges — read the placed nodes; painted behind them ──────
+  line({ ...edge, source: ["end", "middle"], target: ["start", "middle"] }, [
+    ref(A),
+    ref(B),
+  ])
+    .name("e1")
+    .zOrder(-1),
+  line({ ...edge, source: ["end", "middle"], target: ["start", "middle"] }, [
+    ref(B),
+    ref(C),
+  ])
+    .name("e2")
+    .zOrder(-1),
+  line({ ...edge, source: ["middle", "start"], target: ["middle", "end"] }, [
+    ref(B),
+    ref(D),
+  ])
+    .name("e3")
+    .zOrder(-1),
+  // ── tier 3: edge labels ─────────────────────────────────────────────
+  text({ text: "open", fontSize: 11, fill: "#607d8b" }).name("t1"),
+  text({ text: "run", fontSize: 11, fill: "#607d8b" }).name("t2"),
+  text({ text: "drop", fontSize: 11, fill: "#607d8b" }).name("t3"),
+])
+  .relate((c) => [
+    // horizontal edges: label centered just above the edge
+    Constraint.align({ x: "middle" }, [c.e1, c.t1]),
+    Constraint.distribute({ dir: "y", spacing: 3, anchor: "edge" }, [
+      c.e1,
+      c.t1,
+    ]),
+    Constraint.align({ x: "middle" }, [c.e2, c.t2]),
+    Constraint.distribute({ dir: "y", spacing: 3, anchor: "edge" }, [
+      c.e2,
+      c.t2,
+    ]),
+    // vertical edge: label centered just to the right
+    Constraint.align({ y: "middle" }, [c.e3, c.t3]),
+    Constraint.distribute({ dir: "x", spacing: 4, anchor: "edge" }, [
+      c.e3,
+      c.t3,
+    ]),
+  ])
+  .render(container, { w: 420, h: 220 });

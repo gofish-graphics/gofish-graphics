@@ -1,0 +1,7 @@
+[
+  { "category": "Housing", "amount": 1450 },
+  { "category": "Food", "amount": 620 },
+  { "category": "Transport", "amount": 380 },
+  { "category": "Savings", "amount": 310 },
+  { "category": "Health", "amount": 240 }
+]

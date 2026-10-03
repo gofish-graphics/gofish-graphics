@@ -1,0 +1,26 @@
+[
+  {
+    "category": "Technology",
+    "sales": 836154,
+    "target": 600000,
+    "poor": 300000,
+    "average": 500000,
+    "good": 900000
+  },
+  {
+    "category": "Furniture",
+    "sales": 741999,
+    "target": 800000,
+    "poor": 500000,
+    "average": 650000,
+    "good": 900000
+  },
+  {
+    "category": "Office Supplies",
+    "sales": 719047,
+    "target": 550000,
+    "poor": 350000,
+    "average": 450000,
+    "good": 900000
+  }
+]

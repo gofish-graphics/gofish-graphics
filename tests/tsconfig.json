@@ -10,6 +10,6 @@
     "rootDir": ".",
     "resolveJsonModule": true
   },
-  "include": ["scripts/**/*.ts", "playwright.config.ts"],
+  "include": ["scripts/**/*.ts", "llm-bench/**/*.ts", "playwright.config.ts"],
   "exclude": ["node_modules", "dist", "tmp"]
 }

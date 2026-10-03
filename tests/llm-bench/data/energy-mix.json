@@ -1,0 +1,7 @@
+[
+  { "source": "Gas", "percent": 30 },
+  { "source": "Wind", "percent": 23 },
+  { "source": "Hydro", "percent": 18 },
+  { "source": "Coal", "percent": 17 },
+  { "source": "Solar", "percent": 12 }
+]

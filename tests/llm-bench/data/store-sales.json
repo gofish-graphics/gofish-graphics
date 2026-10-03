@@ -1,0 +1,8 @@
+[
+  { "store": "North", "sales": 1240 },
+  { "store": "South", "sales": 865 },
+  { "store": "East", "sales": 2015 },
+  { "store": "West", "sales": 1580 },
+  { "store": "Central", "sales": 730 },
+  { "store": "Online", "sales": 2460 }
+]
