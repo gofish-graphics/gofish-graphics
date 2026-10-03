@@ -15,7 +15,7 @@
  *
  * and gets the construct's `doc` line plus an `Option | Type | Default |
  * Description` table. JS pages (`docs/js/**`) show the JS field names and a
- * TS-ish type; Python pages (`docs/python/**`) show the `py` kwarg names and a
+ * TS-ish type; Python pages (`docs/python/**`) show the snake_case kwarg names and a
  * Python type — the language is detected from `env.relativePath`.
  *
  * Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
@@ -39,6 +39,7 @@ import {
   LEAF_MARKS,
   OPERATORS,
   SHARED_FIELD_GROUPS,
+  pyKwarg,
   resolveFields,
   type ConstructDescriptor,
   type FieldSpec,
@@ -97,6 +98,8 @@ function tsType(f: FieldType): string {
       return "any";
     case "enum":
       return f.values.map((v) => `"${v}"`).join(" | ");
+    case "literal":
+      return JSON.stringify(f.value);
     case "channel":
       switch (f.inner) {
         case "number":
@@ -130,6 +133,13 @@ function pyType(f: FieldType): string {
       return "float";
     case "boolean":
       return "bool";
+    case "literal":
+      // Python spelling of the one value: False/True, or a repr.
+      return typeof f.value === "boolean"
+        ? f.value
+          ? "True"
+          : "False"
+        : JSON.stringify(f.value);
     case "channel":
       switch (f.inner) {
         case "number":
@@ -215,8 +225,11 @@ function sharedGroupOf(spec: FieldSpec): string | null {
   return null;
 }
 
-function fieldName(name: string, spec: FieldSpec, lang: Lang): string {
-  return lang === "python" ? (spec.py ?? name) : name;
+/** The option's name as a user types it: the camelCase field name in JS, the
+ *  snake_case kwarg (`pyKwarg`, the same mapping the Python generator uses) in
+ *  Python. */
+function fieldName(name: string, lang: Lang): string {
+  return lang === "python" ? pyKwarg(name) : name;
 }
 
 function optionsTable(
@@ -232,7 +245,7 @@ function optionsTable(
     const type = lang === "python" ? pyType(spec.type) : tsType(spec.type);
     const required = spec.required ? "**Required.** " : "";
     const doc = spec.doc ? cell(spec.doc) : "";
-    return `| ${code(fieldName(name, spec, lang))} | ${code(type)} | ${code(
+    return `| ${code(fieldName(name, lang))} | ${code(type)} | ${code(
       formatDefault(spec.default, lang)
     )} | ${required}${doc} |`;
   });

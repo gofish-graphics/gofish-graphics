@@ -12,7 +12,7 @@ from gofish import chart, spread, stack, rect
 
 chart(seafood, axes=True).flow(
     spread(by="lake", dir="x"),
-    stack(by="species", dir="y", label=False),
+    stack(by="species", dir="y"),
 ).mark(rect(h="count", fill="species")).render(w=500, h=300)
 ```
 

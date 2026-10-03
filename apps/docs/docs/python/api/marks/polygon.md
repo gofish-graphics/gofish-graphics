@@ -27,7 +27,7 @@ chart([{}]).mark(
 ## Signature
 
 ```python
-polygon(*, points=None, fill=None, stroke=None, strokeWidth=None, opacity=None,
+polygon(*, points=None, fill=None, stroke=None, stroke_width=None, opacity=None,
         debug=None) -> Mark
 ```
 
@@ -41,7 +41,7 @@ Keyword-only (matches every existing call site, which already passes
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark). Call
 [`.name()`](/python/api/core/mark) on the result to make it referenceable via
-[`ref`](/python/api/marks/ref) / [`selectAll`](/python/api/selection/ref) or a
+[`ref`](/python/api/marks/ref) / [`select_all`](/python/api/selection/ref) or a
 constraint.
 
 ## Coordinates
@@ -88,7 +88,7 @@ polygon(
     ],
     fill="transparent",
     stroke="black",
-    strokeWidth=2,
+    stroke_width=2,
 )
 ```
 

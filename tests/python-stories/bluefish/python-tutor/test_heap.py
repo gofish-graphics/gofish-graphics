@@ -15,7 +15,7 @@ def story_heap():
                 {"type": "list", "values": ["x", "y", "z"]},
                 {"type": "tuple", "values": ["hello", "world"]},
             ],
-            heapArrangement=[[0, 1], [None, 2]],
+            heap_arrangement=[[0, 1], [None, 2]],
         ),
         {"w": 800, "h": 500},
     )

@@ -44,7 +44,7 @@ def story_default():
         scene.append(
             layer(
                 [
-                    rect(x=0, y=0, w=1, h=loc["y"], emY=True, fill=_BLACK),
+                    rect(x=0, y=0, w=1, h=loc["y"], em_y=True, fill=_BLACK),
                     _balloon(0, loc["y"], palette),
                 ],
                 x=loc["x"],

@@ -35,8 +35,8 @@ chart(movies_raw).flow(
         round=True,
     )
 ).mark(
-    circle(fill="Major Genre", stroke="gray", strokeWidth=1).label(
-        "Major Genre", position="center", color="white", fontSize=12
+    circle(fill="Major Genre", stroke="gray", stroke_width=1).label(
+        "Major Genre", position="center", color="white", font_size=12
     )
 ).render(w=700, h=420)
 ```

@@ -667,7 +667,7 @@ export default defineConfig({
               collapsed: true,
               items: [
                 {
-                  text: "ref / selectAll",
+                  text: "ref / select_all",
                   link: "/python/api/selection/ref",
                 },
               ],

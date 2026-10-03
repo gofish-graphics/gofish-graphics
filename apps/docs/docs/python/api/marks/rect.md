@@ -21,11 +21,11 @@ chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count")).render(
 ## Signature
 
 ```python
-rect(*, x=None, cx=None, x2=None, w=None, emX=None,
-     y=None, cy=None, y2=None, h=None, emY=None,
+rect(*, x=None, cx=None, x2=None, w=None, em_x=None,
+     y=None, cy=None, y2=None, h=None, em_y=None,
      dims=None,
-     fill=None, stroke=None, strokeWidth=None, opacity=None, filter=None,
-     rx=None, ry=None, aspectRatio=None, key=None) -> Mark
+     fill=None, stroke=None, stroke_width=None, opacity=None, filter=None,
+     rx=None, ry=None, aspect_ratio=None, key=None) -> Mark
 ```
 
 Closed signature — no catch-all `**kwargs`. An unrecognized keyword raises a
@@ -85,5 +85,5 @@ chart(seafood).flow(
 ).mark(rect(h="count", fill="species"))
 
 # Rounded, outlined tiles
-chart(data).mark(rect(h="count", rx=4, stroke="white", strokeWidth=2))
+chart(data).mark(rect(h="count", rx=4, stroke="white", stroke_width=2))
 ```

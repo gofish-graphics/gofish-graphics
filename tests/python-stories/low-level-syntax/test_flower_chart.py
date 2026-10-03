@@ -3,7 +3,7 @@
 The same shape as a labeled bar chart — but the bars are stems and the labels
 are flowers. The stems are a real bar chart (one chart, so their heights
 share a scale, growing with each lake's total catch); each flower is the
-stem's "label", placed on top via the `selectAll` + `group` + mark-fn pattern
+stem's "label", placed on top via the `select_all` + `group` + mark-fn pattern
 (issue #591): the mark-fn receives one `_InputRef` per lake (its `.datum` is
 that lake's species-row bag) and embeds the ref directly in the combinator
 mark it returns, mirroring JS `spread([d[0], <petal fan>], ...)`.
@@ -20,7 +20,7 @@ from gofish import (
     petal,
     polar,
     datum,
-    selectAll,
+    select_all,
 )
 from python_stories.data import SEAFOOD, CATCH_LOCATIONS, COLORS
 
@@ -52,7 +52,7 @@ def story_default():
                             h=_FLOWER_RADIUS,
                             spacing=0,
                             alignment="start",
-                            sharedScale=True,
+                            shared_scale=True,
                         ),
                     ],
                     coord=polar(),
@@ -69,7 +69,7 @@ def story_default():
         .mark(rect(w=4, h="count", fill=_GREEN_5).name("stems"))
     )
     flowers = (
-        chart(selectAll("stems"))
+        chart(select_all("stems"))
         .flow(group(by="lake"))
         .mark(label_mark)
     )

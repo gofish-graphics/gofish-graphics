@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from _components import global_frame, heap  # noqa: E402
 from _types import binding, is_pointer, pointer, tuple_  # noqa: E402
 
-from gofish import arrow, createName, layer, ref, spread  # noqa: E402
+from gofish import arrow, create_name, layer, ref, spread  # noqa: E402
 
 
 def story_python_tutor():
@@ -33,8 +33,8 @@ def story_python_tutor():
         ],
     }
 
-    global_frame_name = createName("globalFrame")
-    heap_name = createName("heap")
+    global_frame_name = create_name("globalFrame")
+    heap_name = create_name("heap")
 
     # Address → (row, col) in the arrangement grid
     addr_pos = {}
@@ -56,7 +56,7 @@ def story_python_tutor():
                     bow=0,
                     stretch=0,
                     flip=True,
-                    padStart=0,
+                    pad_start=0,
                     stroke="#1A5683",
                     start=True,
                 )
@@ -75,8 +75,8 @@ def story_python_tutor():
                             ref(heap_name).path(*dst_pos).elmTuples[0],
                         ],
                         bow=0,
-                        padEnd=25,
-                        padStart=0,
+                        pad_end=25,
+                        pad_start=0,
                         stroke="#1A5683",
                         start=True,
                     )
@@ -90,7 +90,7 @@ def story_python_tutor():
                         global_frame(stack=data["stack"]).name(global_frame_name),
                         heap(
                             heap=data["heap"],
-                            heapArrangement=data["heapArrangement"],
+                            heap_arrangement=data["heapArrangement"],
                         ).name(heap_name),
                     ],
                     dir="x",

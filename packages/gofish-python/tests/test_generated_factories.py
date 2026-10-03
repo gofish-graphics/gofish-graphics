@@ -14,14 +14,20 @@ import pytest
 
 from gofish import (
     binary,
+    Schema,
+    chart,
     circle,
     circles,
     dice,
     group,
+    join,
+    layer,
     pack,
+    palette,
     polygon,
     slice,
     slice_dice,
+    rect,
     spread,
     squarify,
     stack,
@@ -55,7 +61,7 @@ def test_repeated_label_calls_append():
     mark = (
         text(text="hi")
         .label("name", position="center", color="white", font_weight="bold")
-        .label("count", position="outset-top", fontSize=9)
+        .label("count", position="outset-top", font_size=9)
     )
     d = mark.to_dict()
     assert d["label"] == [
@@ -117,6 +123,24 @@ def test_treemap_serializes_tile_strategy_and_gaps():
     assert "tile" not in treemap().to_dict()
 
 
+def test_treemap_tile_is_a_tagged_union():
+    # `tile` is a union of dict shapes told apart by `kind`; `_to_wire` picks
+    # the branch by the dict's `kind` and checks its keys against that branch.
+    assert treemap(by="g", tile=squarify(ratio=1)).to_dict()["tile"] == {
+        "kind": "squarify",
+        "ratio": 1,
+    }
+    assert treemap(by="g", tile=slice_dice()).to_dict()["tile"] == {
+        "kind": "sliceDice"
+    }
+    with pytest.raises(TypeError, match="ratio"):
+        treemap(by="g", tile={"kind": "slice", "ratio": 2})
+    with pytest.raises(TypeError, match="'nope'"):
+        treemap(by="g", tile={"kind": "nope"})
+    with pytest.raises(TypeError, match="missing"):
+        treemap(by="g", tile={"ratio": 2})
+
+
 def test_treemap_combinator_accepts_key():
     node = treemap([], size="gross", key="genre")
     d = node.to_dict()
@@ -138,3 +162,126 @@ def test_open_kwargs_channels_wrap_callables():
     d = circle(r=3, cx=lambda row: row["x"]).to_dict()
     assert isinstance(d["cx"], dict)
     assert "__gofish_lambda" in d["cx"]
+
+
+def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():
+    # Python kwargs are snake_case; the IR keeps the camelCase wire keys.
+    assert text(text="hi", font_size=12, text_anchor="start").to_dict() == {
+        "type": "text",
+        "text": "hi",
+        "fontSize": 12,
+        "textAnchor": "start",
+    }
+    assert spread(by="a", dir="x", shared_scale=True).to_dict()["sharedScale"] is True
+    assert stack([], dir="x", shared_scale=True, key="k").to_dict()["options"] == {
+        "dir": "x",
+        "sharedScale": True,
+        "key": "k",
+    }
+    assert text(text="hi").label("n", font_size=9).to_dict()["label"] == [
+        {"accessor": "n", "fontSize": 9}
+    ]
+
+
+def test_camel_case_kwargs_are_rejected():
+    with pytest.raises(TypeError):
+        text(text="hi", fontSize=12)
+    with pytest.raises(TypeError):
+        spread(by="a", dir="x", sharedScale=True)
+
+
+# --- Nested option dicts ------------------------------------------------------
+# Keys inside a nested option dict follow the same snake_case rule as the
+# top-level kwargs, by the declared type of the field (OPTION_TYPES in
+# descriptors.ts). Dicts whose keys are data pass through untouched.
+
+
+def test_nested_axes_keys_serialize_to_camel_case_wire_keys():
+    ir = (
+        chart(
+            [{"a": "x", "v": 1}],
+            axes={"x": {"label_angle": 45, "side": "end"}, "y": True},
+        )
+        .flow(
+            spread(
+                by="a",
+                dir="x",
+                axes={"y": {"label_angle": [90], "title": False}},
+            )
+        )
+        .mark(rect(h="v"))
+        .to_ir()
+    )
+    assert ir["options"]["axes"] == {
+        "x": {"labelAngle": 45, "side": "end"},
+        "y": True,
+    }
+    assert ir["operators"][0]["axes"] == {"y": {"labelAngle": [90], "title": False}}
+    # The boolean forms pass through at both levels.
+    assert chart([], axes=False).mark(rect()).to_ir()["options"]["axes"] is False
+    assert stack([], dir="x", axes={"x": False}).to_dict()["options"]["axes"] == {
+        "x": False
+    }
+
+
+def test_nested_camel_case_key_is_rejected():
+    with pytest.raises(TypeError, match="did you mean 'label_angle'"):
+        chart([], axes={"x": {"labelAngle": 45}})
+    with pytest.raises(TypeError, match="unexpected key 'z'"):
+        spread(by="a", dir="x", axes={"z": True})
+    with pytest.raises(TypeError, match="unexpected key 'colour'"):
+        table(by={"x": "a", "y": "b", "colour": "c"})
+
+
+def test_unknown_chart_option_is_rejected():
+    with pytest.raises(TypeError):
+        chart([], labelAngle=45)
+
+
+def test_data_keyed_dicts_are_untouched():
+    # A palette keyed by category, a schema keyed by column, join rows, and
+    # inline data rows keep their keys exactly, camelCase or not.
+    colors = {"fooBar": "#f00", "baz_qux": "#00f"}
+    ir = (
+        chart(
+            [{"myCategory": "fooBar", "v": 1}],
+            color=palette(colors),
+            schema={"myCategory": Schema.ordered(["fooBar", "baz_qux"])},
+        )
+        .flow(
+            join([{"myCategory": "fooBar", "otherCol": 2}], on="myCategory"),
+            spread(by="myCategory", dir="x"),
+        )
+        .mark(rect(h="v", fill="myCategory"))
+        .to_ir()
+    )
+    assert ir["options"]["color"]["values"] == colors
+    assert list(ir["options"]["schema"]) == ["myCategory"]
+    assert ir["operators"][0]["right"] == [{"myCategory": "fooBar", "otherCol": 2}]
+
+
+def test_layer_of_charts_options_spell_like_chart():
+    # The chart-tier `layer([...], **options)` takes chart()'s option set, so
+    # nested keys are snake_case in Python and camelCase on the wire.
+    c1 = chart([{"v": 1}]).mark(rect(h="v"))
+    c2 = chart([{"v": 2}]).mark(rect(h="v"))
+    ir = layer([c1, c2], axes={"x": {"label_angle": 45}}).to_ir()
+    assert ir["options"] == {"axes": {"x": {"labelAngle": 45}}}
+    with pytest.raises(TypeError, match="did you mean 'label_angle'"):
+        layer([c1, c2], axes={"x": {"labelAngle": 45}})
+    with pytest.raises(TypeError):
+        layer([c1, c2], labelAngle=45)
+
+
+# --- Combinator box dims ------------------------------------------------------
+# The spread/stack combinators take the full FancyDims box group, like JS
+# `Spread`, which spreads `...fancyDims` into its box.
+
+
+def test_spread_combinator_takes_box_dims():
+    children = [rect(w=10, h=10), rect(w=10, h=20)]
+    opts = spread(children, dir="x", cx=200, em_x=True).to_dict()["options"]
+    assert opts["cx"] == 200
+    assert opts["emX"] is True
+    opts = stack(children, dir="y", dims={"y": {"min": 0}}).to_dict()["options"]
+    assert opts["dims"] == {"y": {"min": 0}}

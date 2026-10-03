@@ -24,10 +24,10 @@ chart(seafood, coord=polar()) \
 ## Signature
 
 ```python
-petal(*, x=None, cx=None, x2=None, w=None, emX=None,
-      y=None, cy=None, y2=None, h=None, emY=None,
+petal(*, x=None, cx=None, x2=None, w=None, em_x=None,
+      y=None, cy=None, y2=None, h=None, em_y=None,
       dims=None,
-      fill=None, stroke=None, strokeWidth=None) -> Mark
+      fill=None, stroke=None, stroke_width=None) -> Mark
 ```
 
 Use it inside a [`polar()`](/python/api/coords/polar) or

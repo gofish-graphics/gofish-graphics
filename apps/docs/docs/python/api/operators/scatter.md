@@ -45,7 +45,7 @@ Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 `x` and `y` mean the first and second axis in any coordinate space. To use the
 names the enclosing coordinate space declares, pass them in the `dims` dict: a
 plain value is the point, like `x`, and `{"min": ..., "max": ...}` is the span,
-like `xMin`/`xMax`.
+like `x_min`/`x_max`.
 
 ```python
 # Under polar(): the same as scatter(by="id", x="bearing", y="distance")
@@ -57,9 +57,9 @@ chart(trips, coord=polar()) \
 A scatter only places its children, so a `"size"` inside `dims` is an error;
 size the mark instead. Placing an axis twice, such as `x` together with
 `dims["theta"]`, is an error too. The two ends of a span may come from either
-spelling (`xMin` with `dims={"x": {"max": "hi"}}`), but one end without the
+spelling (`x_min` with `dims={"x": {"max": "hi"}}`), but one end without the
 other is an error. Each value in `dims` is read like its top-level
-counterpart: a point like `x`, a `min` like `xMin`. The circle's `r` is its
+counterpart: a point like `x`, a `min` like `x_min`. The circle's `r` is its
 radius, not the polar axis: axis names only appear as keys of `dims`.
 
 ## Examples
@@ -76,5 +76,5 @@ chart(data).flow(scatter(by="lake", x="x", y="y")).mark(circle(r=8))
 
 - With `by`, each group is positioned at the mean of its members' `x`/`y`.
   Without `by`, every row is positioned individually.
-- Use the range accessors (`xMin`/`xMax`/`yMin`/`yMax`) when a group should span
+- Use the range accessors (`x_min`/`x_max`/`y_min`/`y_max`) when a group should span
   an interval rather than sit at a point.

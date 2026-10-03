@@ -201,7 +201,7 @@ def story_default():
             # so it resolves to straight segments between each year's rank.
             [ref(_dot_name(d)) for d in color_rows],
             dir="y",
-            strokeWidth=2,
+            stroke_width=2,
         )
         for color_rows in group_by(NEW_CAR_COLORS, "Color").values()
     ]

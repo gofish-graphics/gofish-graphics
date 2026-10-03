@@ -31,6 +31,6 @@ def story_default():
                 sort="desc",
             )
         )
-        .mark(circle(fill="survived", stroke="#ccc", strokeWidth=1)),
+        .mark(circle(fill="survived", stroke="#ccc", stroke_width=1)),
         {"w": 1000, "h": 320},
     )

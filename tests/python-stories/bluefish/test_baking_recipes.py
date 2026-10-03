@@ -31,7 +31,7 @@ def union(names: list, name: str):
 # are forced onto it by two `align(x="span")`/`align(y="span")` constraints
 # declared by the caller (the rect itself has no w/h).
 def border(name: str):
-    return rect(fill="transparent", stroke=GREEN, strokeWidth=1).name(name)
+    return rect(fill="transparent", stroke=GREEN, stroke_width=1).name(name)
 
 
 def story_baking_recipes():
@@ -223,7 +223,7 @@ def story_baking_recipes():
     )
 
     table_bg = enclose(
-        [tier8], padding=0, fill="#FFFFFF", stroke=GREEN, strokeWidth=3
+        [tier8], padding=0, fill="#FFFFFF", stroke=GREEN, stroke_width=3
     )
 
     # Bluefish's `Background` wraps the TITLE and the TABLE together (10px
