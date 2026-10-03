@@ -60,6 +60,7 @@ import {
   distributeOrigin,
   distributeSpaceFold,
   type DistributeConstraint,
+  type StackOrigin,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
 import { isPositionInterval, type PositionConstraint } from "./position";
@@ -247,7 +248,7 @@ export function composeConstraintSpaces(
     anchor: AlignAnchor | "edge";
     glue: boolean;
     measure?: string;
-    origin: ReturnType<typeof distributeOrigin>;
+    origin: StackOrigin<number>;
   };
   const segments: Seg[] = [];
   for (const d of distributes) {

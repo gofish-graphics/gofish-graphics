@@ -115,9 +115,9 @@ export function unionChildSpaces(
     measure = mergeMeasures(measure, s.measure, "overlay union");
   }
   const union = Interval.unionAll(...intervals);
-  if (!hasAnchored) return DIFFERENCE(Interval.width(union), measure);
-  const position = POSITION(union, measure);
-  return allMirrored(conts) ? mirrored(position) : position;
+  return hasAnchored
+    ? mirrored(POSITION(union, measure), allMirrored(conts))
+    : DIFFERENCE(Interval.width(union), measure);
 }
 
 /**
@@ -158,9 +158,8 @@ export function resolveAlignmentSpace(
       : (continuousInterval(s) ?? Interval.interval(0, s.width.run(1)));
   const union = Interval.unionAll(...conts.map(extent));
 
-  if (drop) return DIFFERENCE(Interval.width(union), measure);
-  // Children that all hold amounts on both sides of 0 (anchored, so each
-  // keeps its interval) still do together.
-  const position = POSITION(union, measure);
-  return allMirrored(conts) ? mirrored(position) : position;
+  // Children that all hold amounts on both sides of 0 still do together.
+  return drop
+    ? DIFFERENCE(Interval.width(union), measure)
+    : mirrored(POSITION(union, measure), allMirrored(conts));
 }

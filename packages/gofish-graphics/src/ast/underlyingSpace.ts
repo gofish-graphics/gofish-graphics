@@ -241,13 +241,16 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
     (space as CONTINUOUS_TYPE).measure,
     (space as CONTINUOUS_TYPE).coordinateTransform
   );
-  return ((space as CONTINUOUS_TYPE).mirrored ? mirrored(niced) : niced) as T;
+  return mirrored(niced, (space as CONTINUOUS_TYPE).mirrored === true) as T;
 };
 
 /** `space` with both sides of its 0 marked as amounts measured away from it
- *  ({@link CONTINUOUS_TYPE.mirrored}). */
-export const mirrored = (space: UnderlyingSpace): UnderlyingSpace =>
-  isCONTINUOUS(space) ? { ...space, mirrored: true } : space;
+ *  ({@link CONTINUOUS_TYPE.mirrored}), when `when` holds; else `space`. */
+export const mirrored = (
+  space: UnderlyingSpace,
+  when = true
+): UnderlyingSpace =>
+  when && isCONTINUOUS(space) ? { ...space, mirrored: true } : space;
 
 /** Whether a union of `spaces` stays mirrored: only when every one is. */
 export const allMirrored = (spaces: CONTINUOUS_TYPE[]): boolean =>

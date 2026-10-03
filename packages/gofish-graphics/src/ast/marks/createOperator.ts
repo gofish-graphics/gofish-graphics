@@ -1006,9 +1006,7 @@ function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   const withChannels = applyChannels(opts, channels, d, entries);
   const stripped = stripFactoryKeys(withChannels);
   // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
-  return layoutOpts !== undefined
-    ? ({ ...stripped, ...layoutOpts } as Options)
-    : stripped;
+  return { ...stripped, ...layoutOpts } as Options;
 }
 
 /**

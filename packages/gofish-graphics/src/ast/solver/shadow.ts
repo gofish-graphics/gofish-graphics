@@ -264,8 +264,9 @@ function anchorCoord(
   const size = t.dims[idx].size;
   if (min === undefined || size === undefined) return undefined;
   if (anchor === "tail" || anchor === "head") {
-    // A stack part's tail is its baseline when it is a baseline magnitude,
-    // else its start; its head is the tail mirrored about the box's center.
+    // `tail`/`head` as defined at `RelationAnchor` (placementFacts.ts),
+    // checked independently over box coordinates: the head is the tail
+    // mirrored about the box's center.
     const space = t.spaceOn?.(idx);
     const lo = localAnchorPoint("min", min, size);
     const hi = localAnchorPoint("max", min, size);

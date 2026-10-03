@@ -18,7 +18,8 @@ export type NodeId = string;
  *  where its baseline sits, or its `start` when it has no data baseline. Its
  *  `head` is the tail moved by `ascent − descent`, which is the point as far
  *  from its `end` as the tail is from its `start`. A positive bar's tail is
- *  its start and its head its end; a negative bar's are the other way round. */
+ *  its start and its head its end; a negative bar's are the other way round.
+ *  The offsets are `anchorOffset` (placementProgramLowerer.ts). */
 export type RelationAnchor = AlignAnchor | "tail" | "head";
 
 export type AnchorRef = { node: NodeId; anchor: RelationAnchor };
@@ -39,6 +40,11 @@ export type AnchorRelationFact = {
   to: AnchorRef;
   gap: number;
   owner: string;
+  /** Set on an edge of a distribute chain. The chain places its members'
+   *  baselines along the axis, so the free origin seats none of them but the
+   *  stack's origin, and a chain with no pin starts at its first member (the
+   *  sequence origin). */
+  chain?: boolean;
 };
 
 export type AnchorParticipantFact = {
@@ -47,8 +53,9 @@ export type AnchorParticipantFact = {
   axis: Axis;
   owner: string;
   /** Set when this participant carries a stack's origin (#773, #984): the
-   *  origin is this far from the participant's `tail` to its `head` (0 = the
-   *  tail). The solver's free-origin fallback seats that point. */
+   *  `fraction` of its `StackOrigin` (distribute.ts; 0 = the participant's
+   *  `tail`).
+   *  The solver's free-origin fallback seats that point. */
   origin?: number;
 };
 
@@ -98,6 +105,8 @@ export type PlacementRelationRequest = {
   to: { name: NodeId; anchor: RelationAnchor };
   gap: number;
   owner: string;
+  /** See {@link AnchorRelationFact.chain}. */
+  chain?: boolean;
 };
 
 export type PlacementParticipantRequest = {
@@ -140,6 +149,8 @@ export type PlacementRelation = {
   to: AnchorExpr;
   offset: number;
   owner: string;
+  /** See {@link AnchorRelationFact.chain}. */
+  chain?: boolean;
 };
 
 /** The lowering interface: constraints emit anchor pins, relations, and
@@ -161,8 +172,9 @@ export const relationFact = (
   from: AnchorExpr,
   to: AnchorExpr,
   offset: number,
-  owner: string
-): PlacementRelation => ({ type: "relation", from, to, offset, owner });
+  owner: string,
+  chain?: boolean
+): PlacementRelation => ({ type: "relation", from, to, offset, owner, chain });
 
 export const participantFact = (
   name: NodeId,

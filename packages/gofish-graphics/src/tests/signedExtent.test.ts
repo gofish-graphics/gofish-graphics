@@ -111,7 +111,8 @@ async function main() {
           anchorExpr("a", "y", "start"),
           anchorExpr("b", "y", "start"),
           10,
-          "distribute[0]"
+          "distribute[0]",
+          true
         ),
       ],
       pins: [],
@@ -199,6 +200,7 @@ async function main() {
         spacing: 0,
         anchor: "edge",
         glue: true,
+        origin: { part: 0, fraction: 0, mirrored: false },
       });
       return isPOSITION(s) ? continuousInterval(s) : undefined;
     };

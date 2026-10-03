@@ -59,7 +59,7 @@ export const TOLERANCE = 1e-6;
 /** The owning layer's free-child origin on one axis (#773): the pixel at
  *  which a free node's baseline sits, and the baseline offset from `min` of
  *  each participant whose baseline nothing else places (a free participant,
- *  or the first part of a stack). */
+ *  or the part of a stack that carries its origin). */
 export type FreeOriginInput = {
   value: number;
   baselines: Map<NodeId, number>;
@@ -142,7 +142,7 @@ function solveRelationComponents(
  * Solve one axis's {@link AxisProblem} into an absolute `min` per node. Pins fix
  * each relation component's offset; a component with no pin falls back to the
  * free origin (its determined free baseline at the layer's origin pixel), the
- * distribute sequence-origin (its first `distribute[`-owned source), or a
+ * distribute sequence-origin (the first source of its chain relations), or a
  * normalized origin (its minimum coordinate at 0). This is the general half of
  * the placement solver.
  */
@@ -179,7 +179,7 @@ export function solveAxisProblem(
     const outgoing = new Set<NodeId>();
     const incoming = new Set<NodeId>();
     for (const relation of problem.relations) {
-      if (!relation.owner.startsWith("distribute[")) continue;
+      if (!relation.chain) continue;
       if (componentOf.get(relation.from.node) !== component) continue;
       outgoing.add(relation.from.node);
       incoming.add(relation.to.node);
@@ -190,10 +190,10 @@ export function solveAxisProblem(
   // The component's baseline, joined over the nodes listed in
   // `freeOrigin.baselines`: undefined (none) → determined (they all agree) →
   // impossible (two disagree). The caller lists only baselines nothing else
-  // places, so a distribute chain contributes its stack baseline (a stack's
-  // first part) or nothing (a spread, whose members' baselines it packs end
-  // to end). Only a determined baseline is returned; impossible places like
-  // undefined.
+  // places, so a distribute chain contributes a stack's origin (on whichever
+  // part carries it) or nothing (a spread, whose members' baselines it packs
+  // end to end). Only a determined baseline is returned; impossible places
+  // like undefined.
   const sharedFreeBaseline = (component: number): number | undefined => {
     if (freeOrigin === undefined) return undefined;
     let shared: number | undefined;

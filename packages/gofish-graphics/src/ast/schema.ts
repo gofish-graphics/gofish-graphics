@@ -2,6 +2,8 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
+import type { StackOrigin } from "./constraints/distribute";
+
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
  * classes (capabilities) its values have, in the style of typeclasses. The
@@ -182,6 +184,10 @@ export function applySchema<T>(
   return setColumnTypes([...rows], types);
 }
 
+/** Each level of `order`, mapped to its rank (its index in the order). */
+const levelRanks = (order: HasOrder): Map<unknown, number> =>
+  new Map(order.levels.map((level, i) => [level, i]));
+
 /** `keys` in the order of `order`'s levels. A key the order does not list is
  *  a stray level (a loud error). */
 export function orderByLevels<K>(
@@ -189,29 +195,18 @@ export function orderByLevels<K>(
   order: HasOrder,
   keys: K[]
 ): K[] {
-  const rank = new Map<unknown, number>(
-    order.levels.map((level, i) => [level, i])
-  );
+  const rank = levelRanks(order);
   const strays = keys.filter((k) => !rank.has(k));
   if (strays.length > 0) throw strayLevelsError(column, strays);
   return [...keys].sort((a, b) => rank.get(a)! - rank.get(b)!);
 }
 
 /**
- * Where a stack's origin (its baseline, the 0 its running sums start from)
- * lies: `fraction` of the way from part `part`'s tail to its head, with
- * `part` an index into the stack's children. With no origin given, a stack's
- * origin is its first part's tail. `center` names the column whose
- * {@link HasCenter} put the origin at the center of its order; a centered
- * stack's parts must be nonnegative amounts.
- */
-export type StackOrigin = { part: number; fraction: number; center?: string };
-
-/**
- * The origin of a stack over `column`, whose children are the groups `keys`
- * (in child order, laid out reversed when `reverse`): the center of the
- * column's order, when the column has {@link HasCenter}; else undefined (the
- * default origin).
+ * The {@link StackOrigin} of a stack over `column`, its part a child index,
+ * whose children are the groups `keys` (in child order, laid out reversed
+ * when `reverse`): the center of the column's order, when the column has
+ * {@link HasCenter}; else undefined (the default origin). Every key is a
+ * level of the order: `splitEntries` has already checked.
  *
  * The center is defined by the ORDER, not by the parts present: a group the
  * data lacks moves nothing. With an odd number of levels it is the middle of
@@ -225,16 +220,15 @@ export function stackOrigin(
   type: ColumnType | undefined,
   keys: unknown[],
   reverse = false
-): StackOrigin | undefined {
+): StackOrigin<number> | undefined {
   if (column === undefined || !type?.HasCenter || keys.length === 0)
     return undefined;
   const { levels } = type.HasOrder!;
+  const rank = levelRanks(type.HasOrder!);
   const center = (levels.length - 1) / 2;
   // Ranks in layout order.
   const order = keys.map((_, i) => (reverse ? keys.length - 1 - i : i));
-  const ranks = order.map((i) => levels.indexOf(keys[i] as Level));
-  const strays = order.filter((_, p) => ranks[p] < 0).map((i) => keys[i]);
-  if (strays.length > 0) throw strayLevelsError(column, strays);
+  const ranks = order.map((i) => rank.get(keys[i])!);
   // Laid out along the order (+1) or against it (−1). The parts must follow
   // the order one way or the other, or "before the center" is not a prefix.
   const dir =
@@ -251,10 +245,10 @@ export function stackOrigin(
       );
     }
   }
-  const at = (p: number, fraction: number): StackOrigin => ({
+  const at = (p: number, fraction: number): StackOrigin<number> => ({
     part: order[p],
     fraction,
-    center: column,
+    mirrored: true,
   });
   for (let p = 0; p < ranks.length; p++) {
     if (ranks[p] === center) return at(p, 0.5);

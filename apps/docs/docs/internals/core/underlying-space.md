@@ -286,7 +286,8 @@ the consumers that place things about the baseline read the pair:
   level) lie below 0, the rest above. Parts (5, 10, 20, 40, 25) centered on
   the middle of the 20 span `[−25, 75]`. The parts of a centered stack must be
   nonnegative (a negative one is an error naming `HasCenter`), and the space
-  it builds is **mirrored** (`CONTINUOUS_TYPE.mirrored`): both sides of 0 hold
+  it builds is **mirrored** (the origin's `mirrored` flag, then
+  `CONTINUOUS_TYPE.mirrored`; see `StackOrigin`): both sides of 0 hold
   amounts measured away from it, so an axis over it labels each tick with its
   distance from 0. A union stays mirrored only when every part is.
 - A spread along an axis still sums total extents (each child's
@@ -689,8 +690,9 @@ size the default when no strong equation reaches it. A bbox over-determination
 owners. Then the **difference graph** (`constraints/differenceGraph.ts`): with
 sizes known, every anchor reduces to `min + offset` — `start`/`baseline`/`tail`
 at 0, `middle` at `size/2`, `end`/`head` at `size` for a size-strong cell (read
-off the closed box), else the node's local-frame anchor offset (a stack part's
-`tail` is its free baseline's offset, or 0, and its `head` is `size − tail`). `position`, `align`,
+off the closed box, `strongAnchorOffset`), else the node's local-frame anchor
+offset (`anchorOffset`; a stack part's `tail` is its free baseline's offset,
+or 0, and its `head` is `size − tail`). `position`, `align`,
 `distribute`, `nest`, and `grid` pins/relations over those reduced `min` values
 go through BFS components + pin offsets + free/distribute/normalized-origin
 fallbacks. Every solved cell writes back through **one path**: a size-strong
@@ -769,7 +771,8 @@ component with no pin whose free nodes share one baseline is offset so that
 baseline sits at the origin. Free nodes whose baselines differ (an `end` or
 `middle` alignment) have no common baseline to seat, so that component falls
 to the sequence or normalized origin as before. A `distribute` chain along the
-axis places its members' baselines itself, so the solver (`solveRank2Axis`)
+axis places its members' baselines itself (its lowering marks those relations
+`chain`), so the solver (`solveRank2Axis`)
 does not list them as free. A stack puts each part's tail on the previous
 head, so its one baseline is its origin, the 0 its running sums are measured
 from. The stack's lowering names it: it includes the part that carries the

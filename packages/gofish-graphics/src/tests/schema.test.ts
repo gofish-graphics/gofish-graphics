@@ -23,7 +23,10 @@ import {
   stackOrigin,
   type ColumnType,
 } from "../ast/schema";
-import { distributeSpaceFold } from "../ast/constraints/distribute";
+import {
+  distributeSpaceFold,
+  type StackOrigin,
+} from "../ast/constraints/distribute";
 import {
   baselineSpan,
   continuousInterval,
@@ -82,32 +85,32 @@ async function main() {
     check(
       "odd: the middle of the middle level",
       origin(LEVELS5, LEVELS5) ===
-        JSON.stringify({ part: 2, fraction: 0.5, center: "r" })
+        JSON.stringify({ part: 2, fraction: 0.5, mirrored: true })
     );
     check(
       "even: the boundary between the two middle levels",
       origin(LEVELS4, LEVELS4) ===
-        JSON.stringify({ part: 2, fraction: 0, center: "r" })
+        JSON.stringify({ part: 2, fraction: 0, mirrored: true })
     );
     check(
       "a missing first level does not move the center",
       origin(LEVELS5, ["D", "N", "A", "SA"]) ===
-        JSON.stringify({ part: 1, fraction: 0.5, center: "r" })
+        JSON.stringify({ part: 1, fraction: 0.5, mirrored: true })
     );
     check(
       "a missing middle level leaves the center on its boundary",
       origin(LEVELS5, ["SD", "D", "A", "SA"]) ===
-        JSON.stringify({ part: 2, fraction: 0, center: "r" })
+        JSON.stringify({ part: 2, fraction: 0, mirrored: true })
     );
     check(
       "parts all before the center: the last part's head",
       origin(LEVELS5, ["SD", "D"]) ===
-        JSON.stringify({ part: 1, fraction: 1, center: "r" })
+        JSON.stringify({ part: 1, fraction: 1, mirrored: true })
     );
     check(
       "a reversed stack keeps the center on the same level",
       origin(LEVELS4, LEVELS4, true) ===
-        JSON.stringify({ part: 1, fraction: 0, center: "r" })
+        JSON.stringify({ part: 1, fraction: 0, mirrored: true })
     );
     check(
       "no HasCenter: the default origin",
@@ -128,17 +131,17 @@ async function main() {
   {
     const fold = (
       values: number[],
-      origin?: { index: number; fraction: number; center?: string }
+      origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false }
     ) =>
       distributeSpaceFold(
         values.map((v) => baselineSpan(v)),
         values.map((_, i) => `k${i}`),
-        { spacing: 0, anchor: "edge", glue: true, origin }
+        { spacing: 0, anchor: "edge", glue: true, measure: "r", origin }
       ) as CONTINUOUS_TYPE;
     const odd = fold([5, 10, 20, 40, 25], {
-      index: 2,
+      part: 2,
       fraction: 0.5,
-      center: "r",
+      mirrored: true,
     });
     check(
       "odd: the parts before the center and half the middle lie below 0",
@@ -147,7 +150,7 @@ async function main() {
       JSON.stringify(continuousInterval(odd))
     );
     check("a centered stack's space is mirrored", odd.mirrored === true);
-    const even = fold([10, 20, 30, 40], { index: 2, fraction: 0, center: "r" });
+    const even = fold([10, 20, 30, 40], { part: 2, fraction: 0, mirrored: true });
     check(
       "even: the two middle levels meet at 0",
       JSON.stringify(continuousInterval(even)) ===
@@ -160,7 +163,7 @@ async function main() {
         JSON.stringify({ min: 0, max: 30 }) && plain.mirrored === undefined
     );
     const signed = await errorOf(() =>
-      fold([10, -5, 20], { index: 1, fraction: 0.5, center: "r" })
+      fold([10, -5, 20], { part: 1, fraction: 0.5, mirrored: true })
     );
     check(
       "a negative part in a centered stack is an error naming HasCenter",

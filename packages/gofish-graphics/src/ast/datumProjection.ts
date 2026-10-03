@@ -296,7 +296,7 @@ export function splitEntries<T extends Record<string, any>>(
   // An ordered column (HasOrder, from the chart's `schema`) groups in the
   // order of its levels, not in order of first appearance. The ops below
   // reorder from there.
-  const column = typeof by === "function" ? undefined : fieldNameOf(by);
+  const column = fieldNameOf(by);
   const type = columnType(d, column);
   if (type?.HasOrder) {
     const keys = orderByLevels(column!, type.HasOrder, [...entries.keys()]);
