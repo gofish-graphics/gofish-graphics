@@ -77,11 +77,9 @@ and ends with a full before and after table and a few open questions.
 
 The search covered `packages/gofish-graphics/src`, `packages/gofish-python/gofish`, and
 the descriptor table in `packages/gofish-ir/src/frontend/descriptors.ts`. Two families are
-still on unmerged branches, and one rename is newer than its branch:
+still on unmerged branches:
 
-- **`overlap`** is in draft PR #1003 (branch `swarm-overlap`). The pushed branch still
-  spells the beeswarm `swarm()`. A newer local commit renames it to `separate()`, with IR
-  kind `"separate"`. This note uses `separate`.
+- **`overlap`** is in draft PR #1003, with `separate()` and `jitter()`.
 - **`tile`** is in draft PR #1005. On `main`, `tile` is still a string (`"squarify"`,
   `"slicedice"`, `"squarifyCircle"`, ...). This note uses the PR's spelling.
 - Python names follow draft PR #1008 (snake_case everywhere), which turns the treemap's
