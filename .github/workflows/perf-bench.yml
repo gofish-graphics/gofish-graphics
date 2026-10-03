@@ -36,6 +36,10 @@ on:
 jobs:
   bench:
     runs-on: ubuntu-latest
+    # Good full runs on main take 100-125 min and PR runs about 10 min; a hung
+    # run otherwise sits until the 6h default. 180 min leaves headroom for a
+    # slow runner without letting a hang burn the whole day.
+    timeout-minutes: 180
     permissions:
       contents: write # push to the benchmarks data branch on main
       pull-requests: write # post the delta comment

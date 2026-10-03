@@ -78,6 +78,18 @@ continuous-y node**, so a vertical bar chart flips (continuous value axis) while
 horizontal bar chart does not (ordinal category axis), and a box-and-whisker built from
 primitives flips with no opt-in. `options.yUp` still forces a **global** y-up ambient.
 
+**Root placement of a free root (#773).** When the root's space on an axis is a
+baseline magnitude, `layout()` solves σ so `ascent + descent` (the total
+`width`) fills the given canvas, and places the root's baseline `descent·σ`
+above the canvas's low edge (`scopeRootBaseline`, the rule a layer's
+self-scaled free stash uses too), so a signed area or bar chart under `scatter`
+keeps its negative side on the canvas. An anchored root has no root σ and
+places through its posScale; every other root has descent 0. This applies only
+to a given dimension: a shrink-to-fit root pins its content's `min` edge, which
+already includes the descent, so adding it there would count it twice (#574).
+See
+[Underlying Space](/internals/core/underlying-space).
+
 The rule is decided by the **underlying-space tree** — the σ-scope that establishes a
 continuous y position scale — never by wrapper geometry. Three things fall out of that:
 
@@ -228,6 +240,13 @@ How the re-walk lands descendants in absolute coordinates splits by boundary kin
   `path`), so the backend never sees the polar mapping — just absolute pixel paths.
 - A **self-drawer** (`connect`, `arrow`) reads its own baked absolute translate
   (`displayTranslate`) to place the geometry it draws from its children's anchors.
+
+Whatever its kind, a boundary that paints its children in turn (`coord`, `box`,
+`enclose`, `offset`, `arrow`) takes their order from `orderChildrenForPaint`, the same
+rule the bake uses, so a z constraint that parts inside a boundary takes effect there.
+A compositor paints one result from a source and a destination child, so it has no
+order to take: it calls `assertNoPaintOrder`, which throws if a z constraint parts at
+it (see [How a layer orders its children](/internals/layout/coord-flattening#how-a-layer-orders-its-children)).
 
 ## The display list IR
 
@@ -384,13 +403,54 @@ signal during resolve), three things change; when it is absent — the common ca
 - **Frame publication.** Before painting, `render()` publishes the lowered
   `items`, the root `posScales`, and `toPixel` to the runtime as an
   `InteractionFrame`, so hit-testing and data↔px conversions see the current
-  frame. Re-rendering into the same container first calls a stashed
-  `__gofishDispose` to tear down the previous reactive root (the interaction
-  scheduler re-renders into the same container on every spec change).
+  frame. `gofish()` stashes the chart's state on the container
+  (`__gofishState`: the current Solid root's dispose and the runtime). There
+  is one state object per chart, not per paint. A re-render of the same chart
+  (the interaction scheduler re-renders into the same container on every spec
+  change, with the same runtime) disposes the previous reactive root and swaps
+  the new one into that same object. When a different chart takes the
+  container over, the old chart is torn down entirely: its root and its
+  runtime, which detaches its listeners and drops it from every input it read.
+- **The `View` handle.** `gofish()` returns a `View` for the chart it mounted:
+  `{ container, unmount() }`. Every public `render` returns one, synchronously
+  for a node and as a `Promise<View>` wherever a resolve comes first (a chart
+  builder, a mark or combinator surface, a component thunk). `unmount()` runs
+  the full teardown, `disposeChart(container)`, but only while the container's
+  state is still the object the view was made with. That identity check is
+  what makes `unmount()` idempotent (the first call clears the state) and
+  keeps an old view from tearing down a newer chart in the same container,
+  while staying valid across the chart's own re-renders. A re-render that was
+  still resolving when its chart was unmounted checks `runtime.isDisposed()`
+  and does not mount. `disposeChart` stays internal. Besides `unmount`, its
+  one caller is the story harness, which renders stories that hand back only
+  their DOM, so before each story it walks the page and disposes every chart
+  it finds, then removes what the previous story left. It finds charts by
+  their `__gofishState` rather than through a registry in the engine, because
+  in the prod bench the stories run the `dist-bench` bundle while the harness
+  imports engine source, and the two share no module state. An input the
+  chart read, such as a looping `timer()`, is not owned by the chart, but it
+  only ticks while something reads it (see the timer section of
+  [Reactivity](/internals/frontend/reactivity)), so a timer whose last reader
+  was the unmounted chart stops.
 
 The mechanism is: `data-gf-id` is the hit-test hook; the side table + JSX
 attribute calls are the paint reactivity; the runtime carries neither — it owns
 scheduling, event dispatch, and hit-testing only.
+
+## Laying out more than once: `labelAngle: "auto"`
+
+Every render path reaches layout through `runLayout`, which normally runs the
+pipeline once (`layoutOnce`). The one exception is an axis with
+`labelAngle: "auto"`: `runLayout` then hands off to
+`layoutWithAutoLabelAngles` (`axes/autoLabelAngle.ts`), which builds and lays out
+the chart once per candidate angle, scores the finished label geometry per label
+row, and returns the winning `LayoutData` (laying out once more when the rows
+chose different angles). `LayoutData.legendFields` (the fields a rendered
+legend shows) lets it warn when a hidden category row is left unnamed. Paint
+then proceeds from that data
+exactly as above. Because layout writes each node's box once, each run needs a
+fresh tree, which comes from the root's `rebuild` (set by the surface that built
+it). See [Axes](/internals/frontend/axes#automatic-label-angle-labelangle-auto).
 
 ## `toDisplayList`: stopping at the IR
 

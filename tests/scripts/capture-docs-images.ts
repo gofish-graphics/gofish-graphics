@@ -17,10 +17,22 @@
  * this (`docs:images`) before `vitepress build`, which copies public/ into the
  * deployed site.
  *
- * It reuses the same headless harness as capture-one.ts / capture-js-dom.ts:
+ * It renders each story exactly the way capture-one.ts / capture-js-dom.ts do
+ * (capture-core.ts), then screenshots the <svg>:
  *   1. Start a Vite dev server serving the stories-runner page
- *   2. Navigate Playwright to that page ONCE (deviceScaleFactor 2 → retina PNGs)
- *   3. Render each story by its harness story id and screenshot the <svg>
+ *   2. Per story, open a FRESH browser context on that page (deviceScaleFactor
+ *      2 → retina PNGs) with Playwright's fake clock installed and paused
+ *   3. Render the story by its harness story id, hand it capture-core's fixed
+ *      virtual time budget, screenshot, and close the context
+ *
+ * Both halves of step 2 matter for animated stories. The fake clock means an
+ * animated story is pictured at the same frame on every build, and the
+ * screenshot reads a still page. The fresh context means a story's running
+ * `timer()` dies with it: in one shared page nothing disposes a story when the
+ * next one renders, so every animated story kept re-rendering in the
+ * background for the rest of the run and starved every story after it. With
+ * the heavy bird-migration trails panels this stretched the run from about a
+ * minute to hours.
  *
  * Both lists come from the SAME sources the docs use, so the file names line up
  * with what the pages load by construction (no re-derived id to drift out of
@@ -36,10 +48,15 @@
  *   apps/docs/docs/public/previews/<storyId>.png  (story image, for <GoFishImage>)
  */
 
-import { chromium, type Browser, type Page } from "playwright";
+import { type Page } from "playwright";
 import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from "fs";
 import { join } from "path";
-import { startViteServer, waitForVite } from "./capture-core";
+import {
+  printLine,
+  renderStoryOnFakeClock,
+  withHarness,
+  type OpenRunnerPage,
+} from "./capture-core";
 
 // The docs package is `type: commonjs` while this one is `type: module`, so a
 // static named import of this .ts trips Node's CJS↔ESM named-export interop under
@@ -135,22 +152,35 @@ html,body{width:1200px;height:630px}
 const dataUrl = (png: Buffer) =>
   "data:image/png;base64," + png.toString("base64");
 
-/** Render one story into the runner page; throws when it fails. */
-async function renderStory(page: Page, storyId: string): Promise<void> {
-  const ok = await page.evaluate(
-    async (sid) => (window as any).__renderStory__(sid),
-    storyId
-  );
-  if (!ok) {
-    throw new Error(
-      await page.evaluate(() => (window as any).__STORY_RENDER_ERROR__)
+/**
+ * Render one story in a fresh runner page (its own context, on the fake clock;
+ * see the header comment), run `shoot` on the drawn page, then close the
+ * context, which also stops any timer the story started. Throws when the story
+ * fails to render.
+ */
+async function withStoryPage<T>(
+  open: OpenRunnerPage,
+  storyId: string,
+  shoot: (page: Page) => Promise<T>
+): Promise<T> {
+  // deviceScaleFactor 2 → screenshots are 2× PNGs (retina-sharp at the CSS
+  // w/h recorded in the manifest).
+  const { context, page } = await open(printLine, { deviceScaleFactor: 2 });
+  try {
+    const error = await renderStoryOnFakeClock(
+      page,
+      storyId,
+      storyId,
+      printLine
     );
+    if (error) throw new Error(error);
+    return await shoot(page);
+  } finally {
+    await context.close();
   }
-  await page.waitForFunction(
-    () => (window as any).__STORY_RENDER_DONE__ === true,
-    { timeout: 15_000 }
-  );
 }
+
+type Shot = { png: Buffer; width: number; height: number } | { skip: string };
 
 async function main() {
   const examples = await loadGalleryExamples();
@@ -160,53 +190,13 @@ async function main() {
   const imageStoryIds = findImageStoryIds();
   console.log(`Found ${imageStoryIds.length} story image(s) in the docs.\n`);
 
-  const viteProc = startViteServer(HARNESS_DIR, VITE_PORT);
-  viteProc.stdout?.on("data", (d) => {
-    if (process.env.DEBUG) process.stdout.write(d.toString());
-  });
-  viteProc.stderr?.on("data", (d) => process.stderr.write(d.toString()));
-
-  let browser: Browser | undefined;
   const manifest: Record<string, { w: number; h: number }> = {};
   // Keep each thumbnail's bytes in memory so the OG-card pass can reuse them
   // without reading every PNG back off disk.
   const captured: { id: string; title: string; png: Buffer }[] = [];
   const failed: string[] = [];
 
-  try {
-    await waitForVite(VITE_PORT);
-
-    browser = await chromium.launch({ headless: true });
-    // deviceScaleFactor 2 → element.screenshot writes a 2× PNG (retina-sharp at
-    // the CSS w/h recorded in the manifest).
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-      deviceScaleFactor: 2,
-    });
-    const page = await context.newPage();
-
-    page.on("console", (msg) => {
-      if (msg.type() === "error") console.error(`[browser] ${msg.text()}`);
-      else if (process.env.DEBUG)
-        console.log(`[browser:${msg.type()}] ${msg.text()}`);
-    });
-    page.on("pageerror", (err) =>
-      console.error(`[browser pageerror] ${err.message}`)
-    );
-
-    await page.goto(`http://localhost:${VITE_PORT}/stories-runner.html`, {
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForFunction(
-      () => (window as any).__STORIES_RUNNER_READY__ === true,
-      { timeout: 30_000 }
-    );
-    const runnerError = await page.evaluate(
-      () => (window as any).__STORIES_RUNNER_ERROR__
-    );
-    if (runnerError)
-      throw new Error(`Stories runner failed to initialize: ${runnerError}`);
-
+  await withHarness(HARNESS_DIR, VITE_PORT, async (open, browser) => {
     // Fresh output dir each run so a removed gallery story doesn't leave a stale PNG.
     if (existsSync(PUBLIC_DIR)) rmSync(PUBLIC_DIR, { recursive: true });
     mkdirSync(PUBLIC_DIR, { recursive: true });
@@ -214,41 +204,42 @@ async function main() {
     for (const ex of examples) {
       process.stdout.write(`  ${ex.title} (${ex.id}) ... `);
       try {
-        await renderStory(page, ex.storyId);
-
-        // Measure the svg in one evaluate and screenshot the page clipped to
-        // that box, rather than holding an element handle: an animated story
-        // replaces its svg every frame, so a handle taken before the
-        // screenshot is detached by the time it is used.
-        const box = await page.evaluate(() => {
-          const svg = document.querySelector("#stories-root svg");
-          if (!svg) return null;
-          const r = svg.getBoundingClientRect();
-          return { x: r.x, y: r.y, width: r.width, height: r.height };
-        });
-        if (!box) {
-          console.log("SKIP (no svg)");
+        const shot = await withStoryPage(
+          open,
+          ex.storyId,
+          async (page): Promise<Shot> => {
+            // Measure the svg in one evaluate and screenshot the page
+            // clipped to that box.
+            const box = await page.evaluate(() => {
+              const svg = document.querySelector("#stories-root svg");
+              if (!svg) return null;
+              const r = svg.getBoundingClientRect();
+              return { x: r.x, y: r.y, width: r.width, height: r.height };
+            });
+            if (!box) return { skip: "no svg" };
+            if (box.width <= 0 || box.height <= 0) return { skip: "empty box" };
+            const png = await page.screenshot({
+              type: "png",
+              omitBackground: true,
+              clip: box,
+            });
+            return { png, width: box.width, height: box.height };
+          }
+        );
+        if ("skip" in shot) {
+          console.log(`SKIP (${shot.skip})`);
           failed.push(ex.id);
           continue;
         }
-        if (box.width <= 0 || box.height <= 0) {
-          console.log("SKIP (empty box)");
-          failed.push(ex.id);
-          continue;
-        }
-
-        const png = await page.screenshot({
-          type: "png",
-          omitBackground: true,
-          clip: box,
-        });
-        writeFileSync(join(PUBLIC_DIR, `${ex.id}.png`), png);
+        writeFileSync(join(PUBLIC_DIR, `${ex.id}.png`), shot.png);
         manifest[ex.id] = {
-          w: Math.round(box.width),
-          h: Math.round(box.height),
+          w: Math.round(shot.width),
+          h: Math.round(shot.height),
         };
-        captured.push({ id: ex.id, title: ex.title, png });
-        console.log(`OK (${Math.round(box.width)}×${Math.round(box.height)})`);
+        captured.push({ id: ex.id, title: ex.title, png: shot.png });
+        console.log(
+          `OK (${Math.round(shot.width)}×${Math.round(shot.height)})`
+        );
       } catch (err) {
         console.log(`FAILED: ${err instanceof Error ? err.message : err}`);
         failed.push(ex.id);
@@ -278,57 +269,68 @@ async function main() {
     for (const storyId of imageStoryIds) {
       process.stdout.write(`  ${storyId} ... `);
       try {
-        await renderStory(page, storyId);
-
-        // Crop to the drawing, not the story's own canvas (its margins would
-        // only shrink the drawing inside a small preview cell): give the svg a
-        // viewBox of its getBBox() plus 2% of the longer side (slack so strokes
-        // on the outermost marks are not clipped), drawn at one CSS px per
-        // user unit, and screenshot that. The viewBox also brings in any
-        // marks that overflow the story's own canvas.
-        const box = await page.evaluate(() => {
-          const svg =
-            document.querySelector<SVGSVGElement>("#stories-root svg");
-          if (!svg) return null;
-          const b = svg.getBBox();
-          if (!(b.width > 0 && b.height > 0)) return null;
-          const pad = 0.02 * Math.max(b.width, b.height);
-          const w = b.width + 2 * pad;
-          const h = b.height + 2 * pad;
-          svg.setAttribute("viewBox", `${b.x - pad} ${b.y - pad} ${w} ${h}`);
-          svg.style.width = `${w}px`;
-          svg.style.height = `${h}px`;
-          const r = svg.getBoundingClientRect();
-          return {
-            x: r.x + window.scrollX,
-            y: r.y + window.scrollY,
-            width: r.width,
-            height: r.height,
-          };
-        });
-        if (!box) {
-          console.log("SKIP (no svg, or an empty drawing)");
+        const shot = await withStoryPage(
+          open,
+          storyId,
+          async (page): Promise<Shot> => {
+            // Crop to the drawing, not the story's own canvas (its margins
+            // would only shrink the drawing inside a small preview cell):
+            // give the svg a viewBox of its getBBox() plus 2% of the longer
+            // side (slack so strokes on the outermost marks are not clipped),
+            // drawn at one CSS px per user unit, and screenshot that. The
+            // viewBox also brings in any marks that overflow the story's own
+            // canvas.
+            const box = await page.evaluate(() => {
+              const svg =
+                document.querySelector<SVGSVGElement>("#stories-root svg");
+              if (!svg) return null;
+              const b = svg.getBBox();
+              if (!(b.width > 0 && b.height > 0)) return null;
+              const pad = 0.02 * Math.max(b.width, b.height);
+              const w = b.width + 2 * pad;
+              const h = b.height + 2 * pad;
+              svg.setAttribute(
+                "viewBox",
+                `${b.x - pad} ${b.y - pad} ${w} ${h}`
+              );
+              svg.style.width = `${w}px`;
+              svg.style.height = `${h}px`;
+              const r = svg.getBoundingClientRect();
+              return {
+                x: r.x + window.scrollX,
+                y: r.y + window.scrollY,
+                width: r.width,
+                height: r.height,
+              };
+            });
+            if (!box) return { skip: "no svg, or an empty drawing" };
+            // fullPage so a drawing wider or taller than the viewport is not
+            // trimmed to it; `clip` is then in page coordinates.
+            const png = await page.screenshot({
+              type: "png",
+              omitBackground: true,
+              fullPage: true,
+              clip: box,
+            });
+            return { png, width: box.width, height: box.height };
+          }
+        );
+        if ("skip" in shot) {
+          console.log(`SKIP (${shot.skip})`);
           failed.push(storyId);
           continue;
         }
-        // fullPage so a drawing wider or taller than the viewport is not
-        // trimmed to it; `clip` is then in page coordinates.
-        const png = await page.screenshot({
-          type: "png",
-          omitBackground: true,
-          fullPage: true,
-          clip: box,
-        });
-        writeFileSync(join(DOCS_PUBLIC_DIR, storyImagePath(storyId)), png);
+        writeFileSync(join(DOCS_PUBLIC_DIR, storyImagePath(storyId)), shot.png);
         imageCount++;
-        console.log(`OK (${Math.round(box.width)}×${Math.round(box.height)})`);
+        console.log(
+          `OK (${Math.round(shot.width)}×${Math.round(shot.height)})`
+        );
       } catch (err) {
         console.log(`FAILED: ${err instanceof Error ? err.message : err}`);
         failed.push(storyId);
       }
     }
     console.log(`Wrote ${imageCount} story image(s) to ${imagesDir}`);
-    await context.close();
 
     // ---- Branded OG cards (1200×630, deviceScaleFactor 1 for exact dimensions).
     console.log(`\nBuilding ${captured.length} branded OG card(s)...`);
@@ -357,15 +359,12 @@ async function main() {
     }
     await cardCtx.close();
     console.log(`Wrote ${captured.length} OG card(s) to ${OG_DIR}`);
+  });
 
-    if (failed.length) {
-      console.error(`\n${failed.length} image(s) failed to capture:`);
-      for (const id of failed) console.error(`  ${id}`);
-      process.exitCode = 1;
-    }
-  } finally {
-    await browser?.close();
-    viteProc.kill();
+  if (failed.length) {
+    console.error(`\n${failed.length} image(s) failed to capture:`);
+    for (const id of failed) console.error(`  ${id}`);
+    process.exitCode = 1;
   }
 }
 

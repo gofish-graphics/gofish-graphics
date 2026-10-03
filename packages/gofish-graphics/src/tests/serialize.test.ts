@@ -29,6 +29,8 @@ const {
   ribbon,
   text,
   layer,
+  pack,
+  circles,
   derive,
   join,
   log,
@@ -233,6 +235,63 @@ async function main() {
     check("scatter operator", ops[0].type === "scatter");
     check("scatter carries x", (ops[0] as any).x === "hp");
     check("scatter carries y", (ops[0] as any).y === "mpg");
+  }
+
+  // -------------------------------------------------------------------------
+  // Axis-name `dims` (#838): carried verbatim on scatter and on a leaf mark,
+  // validated against the value-or-interval schema, and round-tripped.
+  // -------------------------------------------------------------------------
+  {
+    const c = chart([
+      { bearing: 1, distance: 3 },
+      { bearing: 2, distance: 5 },
+    ])
+      .flow(
+        scatter({ dims: { theta: "bearing", r: "distance" } }),
+        spread({ dir: "theta" })
+      )
+      .mark(rect({ dims: { theta: { size: datum(1) }, r: 4 } }));
+    const doc = await c.toJSON();
+    validateDoc(doc, "dims chart");
+    const root = doc.root as Frontend.ChartIR;
+    const ops = root.operators!;
+    check(
+      "scatter carries dims verbatim",
+      JSON.stringify((ops[0] as any).dims) ===
+        JSON.stringify({ theta: "bearing", r: "distance" })
+    );
+    check("spread carries dir: theta", (ops[1] as any).dir === "theta");
+    check(
+      "rect carries dims with a datum size",
+      JSON.stringify((root.mark as any).dims) ===
+        JSON.stringify({ theta: { size: { type: "datum", datum: 1 } }, r: 4 })
+    );
+    const rebuilt = Serialize.buildChart(
+      root,
+      [],
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    check(
+      "round-trip preserves dims",
+      JSON.stringify(doc2.root) === JSON.stringify(doc.root)
+    );
+    const bad = Frontend.validate(
+      {
+        ...doc,
+        root: {
+          ...root,
+          mark: { type: "rect", dims: { theta: { width: 2 } } },
+        },
+      },
+      { strict: true }
+    );
+    // Leaf marks only warn during the descriptor rollout (validate.ts).
+    check(
+      "an interval with a non-anchor key is flagged",
+      bad.warnings.some((w: any) => w.message.includes('"width"'))
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -812,6 +871,44 @@ async function main() {
     check("combinator stack emits", mark.type === "stack");
     check("combinator stack is flagged", mark.__combinator === true);
     check("combinator stack has children", Array.isArray(mark.children));
+  }
+
+  // Combinator-form pack (nested): toJSON flags it `__combinator`, and
+  // fromJSON rebuilds it through pack's `(opts, marks)` overload.
+  {
+    const c = chart([{ a: 1 }]).mark(
+      pack({ method: circles() }, [
+        circle({ r: 10 }),
+        pack({}, [circle({ r: 4 }), circle({ r: 3 })]),
+      ])
+    );
+    const doc = await c.toJSON();
+    validateDoc(doc, "combinator-form pack");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check("combinator pack emits", mark.type === "pack");
+    check("combinator pack is flagged", mark.__combinator === true);
+    check(
+      "combinator pack keeps method",
+      mark.options?.method?.kind === "circles"
+    );
+    check(
+      "nested combinator pack is flagged",
+      mark.children?.[1]?.type === "pack" &&
+        mark.children[1].__combinator === true
+    );
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      [{ a: 1 }],
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    check(
+      "combinator pack round-trips through fromJSON",
+      JSON.stringify((doc2.root as Frontend.ChartIR).mark) ===
+        JSON.stringify(mark),
+      JSON.stringify((doc2.root as Frontend.ChartIR).mark)
+    );
   }
 
   // -------------------------------------------------------------------------

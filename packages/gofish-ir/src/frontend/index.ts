@@ -1,6 +1,8 @@
 export * from "./schema.js";
 export {
   validate,
+  AXIS_INTERVAL_KEYS,
+  isAxisInterval,
   type ValidationResult,
   type ValidationError,
   type ValidationWarning,

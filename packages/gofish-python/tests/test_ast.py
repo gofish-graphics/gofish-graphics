@@ -25,6 +25,10 @@ from gofish import (
     text,
     image,
     Constraint,
+    Schema,
+    ColumnSchema,
+    datum,
+    scatter,
     arrow,
 )
 from gofish.ast import _RefProxy
@@ -300,6 +304,39 @@ class TestNewMarks:
         assert d["w"] == 100
         assert d["href"] == "url"
 
+    def test_rect_dims_escape_hatch(self):
+        """`dims` names axes the way the coordinate space does, verbatim."""
+        m = rect(dims={"theta": {"size": datum(1)}, "r": "value"}, h=4)
+        d = m.to_dict()
+        assert d["dims"] == {
+            "theta": {"size": {"type": "datum", "datum": 1}},
+            "r": "value",
+        }
+        assert d["h"] == 4
+
+    def test_top_level_alias_kwargs_are_gone(self):
+        """theta/thetaSize/r/rSize are not rect kwargs; they go in `dims`."""
+        for kwarg in ["theta", "thetaSize", "r", "rSize"]:
+            with pytest.raises(TypeError):
+                rect(**{kwarg: 1})
+
+    def test_scatter_dims_and_theta_dir(self):
+        """scatter takes `dims`; spread's `dir` passes a coord name through."""
+        ir = (
+            chart([{"b": 1, "d": 2}], coord=clock())
+            .flow(
+                scatter(dims={"theta": "b", "r": {"min": "d", "max": "d"}}),
+                spread(dir="theta"),
+            )
+            .mark(circle(r=3))
+            .to_ir()
+        )
+        assert ir["operators"][0]["dims"] == {
+            "theta": "b",
+            "r": {"min": "d", "max": "d"},
+        }
+        assert ir["operators"][1]["dir"] == "theta"
+
     def test_marks_support_name(self):
         """Test all marks support .name()."""
         for mark_fn in [
@@ -521,3 +558,69 @@ class TestRelateCallback:
             {"type": "ref", "selection": "b"},
         ]
         assert len(clauses) == 2
+
+
+class TestSchema:
+    """`Schema.ordered(levels).diverging(midpoint=...)` builds the column-type record
+    JS reads as is (#984)."""
+
+    def test_ordered_is_has_order(self):
+        assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
+
+    def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
+        assert Schema.ordered(["a", "b"]).diverging() == {
+            "HasOrder": {"levels": ["a", "b"]},
+            "HasMidpoint": {"at": 1},
+        }
+        assert Schema.ordered(["a", "b", "c"]).diverging()["HasMidpoint"] == {
+            "at": 1.5
+        }
+
+    def test_diverging_midpoint(self):
+        levels = ["SD", "D", "N", "A", "SA"]
+        assert Schema.ordered(levels).diverging(midpoint=2) == {
+            "HasOrder": {"levels": levels},
+            "HasMidpoint": {"at": 2},
+        }
+        assert Schema.ordered(levels).diverging(midpoint=2.25)["HasMidpoint"] == {
+            "at": 2.25
+        }
+        assert Schema.ordered(levels).diverging(midpoint=0)["HasMidpoint"] == {"at": 0}
+        assert Schema.ordered(levels).diverging(midpoint=5)["HasMidpoint"] == {"at": 5}
+
+    # The same literals as the JS schema.test.ts: the two languages raise the
+    # same messages, word for word.
+    ORDER = 'the edges of the order ["SD", "D", "N", "A", "SA"]'
+    NOT_A_NUMBER = (
+        f"diverging: midpoint must be a finite number from 0 to 5, {ORDER}."
+    )
+
+    @pytest.mark.parametrize(
+        "midpoint, message",
+        [
+            (-0.5, f"diverging: midpoint -0.5 is outside 0..5, {ORDER}."),
+            (5.5, f"diverging: midpoint 5.5 is outside 0..5, {ORDER}."),
+            (6, f"diverging: midpoint 6 is outside 0..5, {ORDER}."),
+            (6.0, f"diverging: midpoint 6 is outside 0..5, {ORDER}."),
+            (float("nan"), NOT_A_NUMBER),
+            (float("inf"), NOT_A_NUMBER),
+            ("2", NOT_A_NUMBER),
+            (True, NOT_A_NUMBER),
+        ],
+    )
+    def test_diverging_midpoint_off_the_order(self, midpoint, message):
+        with pytest.raises(ValueError) as error:
+            Schema.ordered(["SD", "D", "N", "A", "SA"]).diverging(midpoint=midpoint)
+        assert str(error.value) == message
+
+    def test_diverging_needs_has_order(self):
+        with pytest.raises(ValueError, match="HasMidpoint needs HasOrder"):
+            ColumnSchema({}).diverging()
+
+    def test_schema_rides_chart_options(self):
+        ir = (
+            chart([{"r": "a"}], schema={"r": Schema.ordered(["a"]).diverging()})
+            .mark(rect(w=1))
+            .to_ir()
+        )
+        assert ir["options"]["schema"]["r"]["HasMidpoint"] == {"at": 0.5}

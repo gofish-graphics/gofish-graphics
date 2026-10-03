@@ -45,6 +45,23 @@ spread({ dir, ... }, [m1, m2, ...])
 spread({ dir: "x" }, [rect({ h: "v" }), text({ text: "n" })])
 ```
 
+## Naming the axis with `dir`
+
+`dir: "x"` and `dir: "y"` mean the first and second axis in any coordinate
+space. `dir` also takes the names the enclosing coordinate space declares, so
+under [`polar`](/js/api/coords/polar) you can write `dir: "theta"` or
+`dir: "r"`, and under [`geo`](/js/api/coords/geo) `dir: "lon"` or `dir: "lat"`:
+
+```ts
+chart(data, { coord: polar() })
+  .flow(spread({ by: "month", dir: "theta", spacing: 0 }))
+  .mark(rect({ w: 0.5, h: "value" }));
+```
+
+`dir: "theta"` lays the months out exactly as `dir: "x"` does. A name the
+enclosing space does not declare throws an error that lists the names it does.
+[`stack`](./stack) takes the same `dir`.
+
 ## Path-aware `by` {#path-aware-by}
 
 `by` accepts a **field name**, a **lodash path string**, a **function**, or a

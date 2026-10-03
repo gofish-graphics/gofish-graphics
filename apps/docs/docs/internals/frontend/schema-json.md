@@ -820,6 +820,39 @@ for the API.
         }
       ]
     },
+    "AxisInterval": {
+      "description": "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "center": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "max": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "size": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "embedded": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AxisDimsValue": {
+      "description": "A `dims` entry: a bare channel value (a position) or an AxisInterval.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        {
+          "$ref": "#/$defs/AxisInterval"
+        }
+      ]
+    },
     "DeriveOperator": {
       "description": "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
       "type": "object",
@@ -957,8 +990,8 @@ for the API.
           "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
         },
         "dir": {
-          "enum": ["x", "y"],
-          "description": "Direction to spread along."
+          "type": "string",
+          "description": "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
           "type": "number",
@@ -1043,8 +1076,8 @@ for the API.
           "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
         },
         "dir": {
-          "enum": ["x", "y"],
-          "description": "Direction to stack along."
+          "type": "string",
+          "description": "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
           "type": "number",
@@ -1186,6 +1219,13 @@ for the API.
         "yMax": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Range form: right/top edge, y."
+        },
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span."
         },
         "alignment": {
           "type": "string",
@@ -1340,6 +1380,13 @@ for the API.
           "$ref": "#/$defs/ChannelValue",
           "description": "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
         },
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        },
         "by": {
           "oneOf": [
             {
@@ -1413,6 +1460,56 @@ for the API.
         }
       }
     },
+    "PackOperator": {
+      "description": "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "pack"
+        },
+        "by": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldAccessor"
+            }
+          ],
+          "description": "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row."
+        },
+        "method": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": ["circles"]
+            }
+          },
+          "required": ["kind"],
+          "description": "The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm.",
+          "default": {
+            "kind": "circles"
+          }
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
     "OperatorIR": {
       "description": "A pipeline operator — a discriminated union, one member per operator type. See validate.ts and schema.ts for the same field shapes.",
       "oneOf": [
@@ -1445,6 +1542,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/TreemapOperator"
+        },
+        {
+          "$ref": "#/$defs/PackOperator"
         }
       ]
     },
@@ -1497,21 +1597,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -1679,21 +1770,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -1789,21 +1871,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -1890,21 +1963,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "key": {
           "type": "string",
@@ -2044,21 +2108,12 @@ for the API.
           "type": "boolean",
           "description": "Embed y in the parent's y space."
         },
-        "theta": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular position alias (polar coord's x)."
-        },
-        "thetaSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Angular extent alias (polar coord's w)."
-        },
-        "r": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial position alias (polar coord's y)."
-        },
-        "rSize": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Radial extent alias (polar coord's h)."
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "key": {
           "type": "string",
@@ -2138,12 +2193,12 @@ for the API.
           "description": "Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap)."
         },
         "fill": {
-          "type": "string",
-          "description": "Fill color.",
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale.",
           "default": "black"
         },
         "stroke": {
-          "type": "string",
+          "$ref": "#/$defs/ChannelValue",
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
@@ -2268,7 +2323,7 @@ for the API.
           "description": "Blend mode where connectors overlap."
         },
         "curve": {
-          "description": "Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = \"auto\" (catmullRom on a homogeneous continuous connection axis, else straight)."
+          "description": "Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name (\"linear\"/\"bezier\"/\"step\"/\"monotone\"/\"smooth\"/\"catmullRom\"). \"step\", \"linear\", \"monotone\" and \"smooth\" are read over the parameter of the run, from the least to the most smooth. \"step\" holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). \"monotone\" is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate \"monotone\". \"smooth\" rounds a peak a little past its point, but keeps a run of equal values flat. \"catmullRom\" is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted = \"auto\" (monotone on a homogeneous continuous connection axis, else linear)."
         },
         "dir": {
           "enum": ["x", "y"],
@@ -2367,7 +2422,7 @@ for the API.
           "description": "Connection axis."
         },
         "curve": {
-          "description": "Screen-space band-edge shape (straight() | bezier()). Omitted = \"auto\" (bezier)."
+          "description": "Screen-space band-edge shape (\"linear\" | bezier() | \"step\" | \"monotone\" | \"smooth\" | \"catmullRom\"). \"step\" steps both edges, as a stepped area does. \"monotone\" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate \"monotone\"); \"smooth\" is a rounder reading over the same parameter, and can go a little past a point; \"catmullRom\" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = \"auto\" (monotone on a homogeneous continuous connection axis, else a bezier band)."
         },
         "from": {
           "type": "string"

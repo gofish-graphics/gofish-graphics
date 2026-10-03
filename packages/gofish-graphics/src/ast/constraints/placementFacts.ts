@@ -13,7 +13,16 @@ export type NodeId = string;
 // against an already-known size. Consumed by the rank-2 solve in
 // `placementSolver.ts`.
 
-export type AnchorRef = { node: NodeId; anchor: AlignAnchor };
+/** An anchor a relation can tie: a box anchor ({@link AlignAnchor}), or one
+ *  end of a part laid end to end along a stack (#773). A part's `tail` is
+ *  where its baseline sits, or its `start` when it has no data baseline. Its
+ *  `head` is the tail moved by `ascent − descent`, which is the point as far
+ *  from its `end` as the tail is from its `start`. A positive bar's tail is
+ *  its start and its head its end; a negative bar's are the other way round.
+ *  The offsets are `anchorOffset` (placementProgramLowerer.ts). */
+export type RelationAnchor = AlignAnchor | "tail" | "head";
+
+export type AnchorRef = { node: NodeId; anchor: RelationAnchor };
 
 export type AnchorPinFact = {
   type: "anchor-pin";
@@ -24,6 +33,9 @@ export type AnchorPinFact = {
   owner: string;
 };
 
+/** Which kind of distribute chain an edge belongs to. */
+export type ChainKind = "stack" | "spread";
+
 export type AnchorRelationFact = {
   type: "anchor-relation";
   axis: Axis;
@@ -31,6 +43,13 @@ export type AnchorRelationFact = {
   to: AnchorRef;
   gap: number;
   owner: string;
+  /** Set on an edge of a distribute chain: a stack's (`glue`) or a
+   *  spread's. The chain places its members' baselines along the axis, so the
+   *  free origin seats none of them but a stack's origin, and a chain with no
+   *  pin starts at its first member (the sequence origin). A spread packs
+   *  boxes and has no baseline, so a component holding one is never seated
+   *  by the free origin. */
+  chain?: ChainKind;
 };
 
 export type AnchorParticipantFact = {
@@ -38,6 +57,11 @@ export type AnchorParticipantFact = {
   node: NodeId;
   axis: Axis;
   owner: string;
+  /** Set when this participant carries a stack's origin (#773, #984): the
+   *  `fraction` of its `StackOrigin` (distribute.ts; 0 = the participant's
+   *  `tail`).
+   *  The solver's free-origin fallback seats that point. */
+  origin?: number;
 };
 
 /** A size-cell equation independent of any anchor (#726, align `"size"`): the
@@ -82,16 +106,20 @@ export type PlacementAnchorRef = {
 
 export type PlacementRelationRequest = {
   axis: Axis;
-  from: PlacementAnchorRef;
-  to: PlacementAnchorRef;
+  from: { name: NodeId; anchor: RelationAnchor };
+  to: { name: NodeId; anchor: RelationAnchor };
   gap: number;
   owner: string;
+  /** See {@link AnchorRelationFact.chain}. */
+  chain?: ChainKind;
 };
 
 export type PlacementParticipantRequest = {
   axis: Axis;
   name: NodeId;
   owner: string;
+  /** See {@link AnchorParticipantFact.origin}. */
+  origin?: number;
 };
 
 export type PlacementPinRequest = {
@@ -126,6 +154,8 @@ export type PlacementRelation = {
   to: AnchorExpr;
   offset: number;
   owner: string;
+  /** See {@link AnchorRelationFact.chain}. */
+  chain?: ChainKind;
 };
 
 /** The lowering interface: constraints emit anchor pins, relations, and
@@ -147,8 +177,9 @@ export const relationFact = (
   from: AnchorExpr,
   to: AnchorExpr,
   offset: number,
-  owner: string
-): PlacementRelation => ({ type: "relation", from, to, offset, owner });
+  owner: string,
+  chain?: ChainKind
+): PlacementRelation => ({ type: "relation", from, to, offset, owner, chain });
 
 export const participantFact = (
   name: NodeId,

@@ -151,17 +151,127 @@ Several charts on one clock play in lockstep the same way. The clock owns its
 domain, its duration and whether it is running, so `duration`, `loop`,
 `playing` and `at` are errors alongside `on`.
 
+## Keeping the past on screen
+
+A sequence shows one keyframe at a time. `time.history` keeps marks on screen
+after their own keyframe. `last` is a length of time in the field's own units,
+and the default is `Infinity`. At a playhead of `T`, a mark under
+`time.history({ last })` shows while its keyframe's band of time overlaps the
+window from `T - last` to `T`. The keyframe the playhead is in is always
+inside that window. With the default, every year the playhead has reached
+stays on screen.
+
+`time.history` is an operator, so it has the two forms every operator has. In
+the flow, after the sequence, it keeps everything below it:
+
+```ts
+.flow(time.sequence({ by: "year" }), time.history({ last: 10 }), scatter(...))
+```
+
+Around marks, it keeps those marks only:
+
+```ts
+.mark(time.history({ last: 10 }, [circle({ r: 4 })]))
+```
+
+The two draw the same picture. `time.history([circle({ r: 4 })])` takes the
+default `last`.
+
+A `line` threaded through the keyframes is drawn over the window of the marks
+it connects. This is how the Animated Vega-Lite connected scatterplot draws its
+line in, one year at a time.
+
+```ts
+const year = timer({ domain: [1956, 2010], duration: 54 * 200 });
+
+chart(drivingShifts)
+  .flow(
+    time.sequence({ by: "year", on: year }),
+    time.history(),
+    scatter({ x: "miles", y: "gas" })
+  )
+  .mark(line({ along: "year", curve: "linear" }))
+  .render(container, { w: 500, h: 500, axes: true });
+```
+
+The line ends at the playhead. Between two years, the line is cut partway
+along the segment that joins them, so halfway through 1979 it ends halfway from
+the 1979 point to the 1980 point. That is where a moving dot would be at the
+same moment. The cut is placed by time and not by distance on the page, so the
+tip takes 200 ms to cross each year, however far apart the two points are.
+
+With `last: 10`, the line keeps only the last ten years, so it is cut at both
+ends. Without a `time.history`, each mark shows only during its own keyframe,
+so the window is a single moment and a threaded line draws nothing.
+
+When the marks a line connects are made of several parts, e.g., a
+`layer([...])` with a `time.history` around one of them, the line uses the
+window of the part that stays longest, the way the mark's box holds all of its
+parts. In the same way, when the marks it connects stay for different spans of
+time, the line uses the longest one. A `time.history` around the line itself is an error, because the line
+takes its window from the marks it connects.
+
+A line is threaded through the keyframes when its points belong to different
+keyframes of one sequence. A line whose points all sit inside one keyframe,
+e.g., a line through one year's countries, is not cut. It shows and hides with
+the marks it connects.
+
+The axes hold still here too. The chart makes room for the whole line when it
+is laid out, so drawing the line in moves nothing else.
+
+## Time that repeats
+
+Some fields are cycles: a day of the year, an hour of the day. `cyclic` says
+so. `cyclic: true` infers the period as the last keyframe minus the first plus
+one step between keyframes, so days 1 to 365 give a period of 365. It needs
+evenly spaced keyframes. `cyclic: 366` gives the period directly. The
+keyframes must fit in one period, and a field that spans more is an error; to
+fold several years onto one, derive the day of the year first.
+
+```ts
+chart(birds)
+  .flow(
+    time.sequence({ by: "day", on: day, cyclic: true }),
+    scatter({ x: "lon", y: "lat" })
+  )
+  .mark(
+    layer([
+      time.history({ last: 20 }, [
+        circle({ r: 3, fill: "species", opacity: 0.1 }),
+      ]),
+      circle({ r: 3, fill: "species" }),
+    ])
+  );
+```
+
+Everything that reads the time axis reads it around the cycle, with no option
+of its own. The last keyframe's band runs up to the next cycle's first
+keyframe. `time.history` measures back across the new year, so on day 5 this
+trail reaches back into December. A head chained with
+`.transition({ update })` glides from the last keyframe to the first instead
+of flying back, and a threaded `line` joins the last keyframe to the first.
+A sequence that builds its own clock plays one period and loops. A clock given
+with `on` is left as it is.
+
 ## Between the keyframes
 
 The knots of the interpolation are the data's own time values. Years five apart
 take five years' worth of the clock, and years ten apart take ten, so an uneven
 run plays at an even speed. Every keyframe is passed through exactly.
 
-`curve` says how the run is read between them. The default, `"auto"`, smooths
-the whole run with a Catmull-Rom spline, which is the same curve the spatial
-twin's `line` draws through the same points. `"linear"` moves straight from each
-keyframe to the next. `"step"` does not move at all: the mark holds one
-keyframe's value until the next keyframe's own time arrives, and then jumps.
+`curve` says how the run is read between them. The default, `"auto"`, is
+`"monotone"`: it smooths the whole run with a monotone cubic whose knots are the
+time values. Between two keyframes each value only rises or only falls, so the
+mark never goes past either keyframe. It still turns where the data turns, and
+the turn happens exactly at a keyframe. A monotone `line` threaded through the
+same keyframes also uses the time values as its knots, so the moving mark
+travels exactly along that line. `"linear"`
+moves straight from each keyframe to the next. `"step"` does not move at all:
+the mark holds one keyframe's value until the next keyframe's own time arrives,
+and then jumps. `"smooth"` moves along a rounder curve that can
+carry the mark a little past a keyframe before it turns. The
+[curves table on the `line` page](/js/api/marks/line#curves-through-data)
+compares all four.
 
 Numbers interpolate; paint does not. A dot's position and size move between
 keyframes, and its fill is read off the keyframe it is nearest, because a
@@ -194,14 +304,14 @@ gofish(container, { w: 1160, h: 400, legend: false, axes: true }, () =>
   spreadX({ spacing: 16 }, [
     frame({ w: 240, h: 280 }, [panel("step")]),
     frame({ w: 240, h: 280 }, [panel("linear")]),
-    frame({ w: 240, h: 280 }, [panel("catmullRom")]),
+    frame({ w: 240, h: 280 }, [panel("monotone")]),
   ])
 );
 ```
 
 Held halfway between the 1955 and 1960 keyframes, a country's dot sits at its
 1955 position under `"step"`, exactly halfway between the two under `"linear"`,
-and a little off that straight line under `"catmullRom"`, where the spline is
+and a little off that straight line under `"monotone"`, where the curve is
 already bending toward 1965.
 
 `"step"` therefore draws the same picture as no transition at all. A sequence
@@ -209,6 +319,49 @@ already holds each keyframe until the next one's time arrives, and a step curve
 asks the transition to do exactly that, so the transition has nothing left to
 add. It is worth having as a curve anyway, because it is the reading the other
 two are measured against.
+
+## A moving mark with a trail
+
+A moving mark and the trail it leaves are two layers of one mark. The trail is
+a `time.history` of the keyframe marks. The moving mark, the head, is the mark
+itself: on its own it shows during its own keyframe, and with
+`.transition({ update })` it glides from keyframe to keyframe instead.
+
+```ts
+const year = timer({ domain: [1955, 2005], duration: 10000 });
+const countries = ["China", "India", "United States", "Rwanda", "South Africa"];
+
+chart(gapminder.filter((d) => countries.includes(d.country)))
+  .flow(
+    time.sequence({ by: "year", on: year }),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(
+    layer([
+      time.history([circle({ r: 4, fill: "country", opacity: 0.3 })]),
+      circle({ r: 4, fill: "country" }).transition({
+        update: animation.tween(),
+      }),
+    ])
+  )
+  .layer(line({ along: "year", stroke: "country", strokeWidth: 1.5 }))
+  .render(container, { w: 500, h: 400, axes: true });
+```
+
+Each country is a moving dot that leaves behind a faint dot for each year it
+has reached, with a line threaded through them. The trail includes the year the
+playhead is in, and the head is drawn on top of it. The line is drawn over the
+window of the year marks, and a year mark stays as long as its trail does, so
+the line runs up to the playhead.
+
+The head is painted as the mark it moves is, so it is solid while the trail is
+faint. Its `.transition({ update })` is the chained spelling of a
+`time.transition()` over the year marks, and it moves only the mark it is
+chained on.
+
+The line and the head here both use the default curve, so both are smooth,
+with the years as their knots. They follow the same curve, and each moving dot
+stays on the tip of its line.
 
 ## What a frame costs
 
@@ -218,10 +371,10 @@ both constructs.
 Everything that depends on the year is settled while the chart is being laid
 out: every keyframe is placed, so the run a transition walks is known, and so is
 where each frame's dots sit. The clock is read afterward, while the chart is
-being painted. A new value from it moves the dots a transition draws and changes
-which keyframe a sequence shows, and both of those are changes to attributes of
-marks that are already on the page. Nothing is measured again and nothing is
-placed again.
+being painted. A new value from it moves the dots a transition draws, changes
+which keyframes a sequence shows, and moves the end of a threaded line. All of
+those are changes to attributes of marks that are already on the page. Nothing
+is measured again and nothing is placed again.
 
 The one cost worth knowing is what a sequence keeps: it draws every keyframe,
 and hides all but the one it is holding, so a chart of fifty years of data has
@@ -396,27 +549,34 @@ yet.
 
 ### `time.sequence(options)`
 
-| Option     | Type      | Default | Meaning                                                    |
-| ---------- | --------- | ------- | ---------------------------------------------------------- |
-| `by`       | `string`  | none    | The field whose values are the keyframes. Must be numeric. |
-| `duration` | `number`  | `5000`  | Milliseconds one pass through the field takes.             |
-| `loop`     | `boolean` | `true`  | Start over at the end.                                     |
-| `playing`  | `boolean` | `true`  | Start the clock. `false` holds the chart still.            |
-| `at`       | `number`  | none    | Where the playhead starts, in the field's units.           |
-| `on`       | `Timer`   | own     | A clock to play on. Rules out the four options above.      |
+| Option     | Type                | Default | Meaning                                                              |
+| ---------- | ------------------- | ------- | -------------------------------------------------------------------- |
+| `by`       | `string`            | none    | The field whose values are the keyframes. Must be numeric.           |
+| `duration` | `number`            | `5000`  | Milliseconds one pass through the field takes.                       |
+| `loop`     | `boolean`           | `true`  | Start over at the end.                                               |
+| `playing`  | `boolean`           | `true`  | Start the clock. `false` holds the chart still.                      |
+| `at`       | `number`            | none    | Where the playhead starts, in the field's units.                     |
+| `on`       | `Timer`             | own     | A clock to play on. Rules out the four options above.                |
+| `cyclic`   | `boolean \| number` | none    | The field repeats. `true` infers the period; a number is the period. |
+
+### `time.history(options?, marks?)`
+
+| Option | Type     | Default    | Meaning                                                          |
+| ------ | -------- | ---------- | ---------------------------------------------------------------- |
+| `last` | `number` | `Infinity` | How far back from the playhead marks stay, in the field's units. |
 
 ### `time.transition(options?)`
 
-| Option        | Type                                           | Default    | Meaning                                                         |
-| ------------- | ---------------------------------------------- | ---------- | --------------------------------------------------------------- |
-| `along`       | `string`                                       | inferred   | The field the keyframes are keyed by in time.                   |
-| `at`          | `(() => number) \| number`                     | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
-| `curve`       | `"auto" \| "step" \| "linear" \| "catmullRom"` | `"auto"`   | How the run is read between keyframes.                          |
-| `ease`        | `(u: number) => number`                        | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
-| `fill`        | `string`                                       | keyframe's | Paint for the moving mark.                                      |
-| `stroke`      | `string`                                       | `fill`     | Outline color.                                                  |
-| `strokeWidth` | `number`                                       | `0`        | Outline width.                                                  |
-| `opacity`     | `number`                                       | `1`        | Opacity of the moving mark.                                     |
+| Option        | Type                                                     | Default    | Meaning                                                         |
+| ------------- | -------------------------------------------------------- | ---------- | --------------------------------------------------------------- |
+| `along`       | `string`                                                 | inferred   | The field the keyframes are keyed by in time.                   |
+| `at`          | `(() => number) \| number`                               | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
+| `curve`       | `"auto" \| "step" \| "linear" \| "monotone" \| "smooth"` | `"auto"`   | How the run is read between keyframes.                          |
+| `ease`        | `(u: number) => number`                                  | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
+| `fill`        | `string`                                                 | keyframe's | Paint for the moving mark.                                      |
+| `stroke`      | `string`                                                 | keyframe's | Outline color.                                                  |
+| `strokeWidth` | `number`                                                 | keyframe's | Outline width.                                                  |
+| `opacity`     | `number`                                                 | keyframe's | Opacity of the moving mark.                                     |
 
 ### `interpolate(rows, options)`
 
@@ -425,13 +585,13 @@ numeric fields evaluated at that moment and `along` set to it. Fields that are
 not numbers are copied from the nearest keyframe, for the same reason a
 transition does not blend paint.
 
-| Option   | Type                                 | Default        | Meaning                                                        |
-| -------- | ------------------------------------ | -------------- | -------------------------------------------------------------- |
-| `along`  | `string`                             | none           | The field the rows are keyed by in time.                       |
-| `key`    | `string`                             | none           | The field saying which rows are the same thing at other times. |
-| `at`     | `number`                             | none           | Where to read the run, in `along`'s units.                     |
-| `method` | `"step" \| "linear" \| "catmullRom"` | `"catmullRom"` | How a run is read between its keyframes.                       |
-| `fields` | `string[]`                           | every number   | Which fields to interpolate.                                   |
+| Option   | Type                                           | Default      | Meaning                                                        |
+| -------- | ---------------------------------------------- | ------------ | -------------------------------------------------------------- |
+| `along`  | `string`                                       | none         | The field the rows are keyed by in time.                       |
+| `key`    | `string`                                       | none         | The field saying which rows are the same thing at other times. |
+| `at`     | `number`                                       | none         | Where to read the run, in `along`'s units.                     |
+| `method` | `"step" \| "linear" \| "monotone" \| "smooth"` | `"monotone"` | How a run is read between its keyframes.                       |
+| `fields` | `string[]`                                     | every number | Which fields to interpolate.                                   |
 
 ## What is not built yet
 
@@ -442,8 +602,20 @@ another, or several at once), no staggering, and no options to restyle how
 marks enter and exit. The value axis cannot rescale from one keyframe to the
 next.
 
+A threaded line can be cut only when each step from one keyframe to the next
+says how its time runs along it. The curves `"linear"`, `"bezier"`, `"step"`,
+`"monotone"`, `"smooth"` and `"catmullRom"` work. A `"step"` line
+spends all of a step's time at the earlier keyframe and draws the jump to the
+next one the moment its time arrives, which is where a mark moving with
+`curve: "step"` is. The routing curves `orthogonal()`, `arc()` and
+`perfectArrows()` throw an error, and so do a threaded `ribbon` and a threaded
+line pinned with `source` or `target`.
+
 The chart is laid out once. The playhead is read while the chart is painted, so
 each tick of the clock changes attributes of marks already on the page and
 does not lay the chart out again. What does grow with the data is the number of
 marks on the page, because a sequence without a transition keeps every
-keyframe's marks there, even the hidden ones.
+keyframe's marks there, even the hidden ones. Each of those marks reads the
+playhead on every tick to decide whether it shows, so a sequence over tens of
+thousands of rows costs more per tick than a filter that keeps only the rows
+on screen (#848).

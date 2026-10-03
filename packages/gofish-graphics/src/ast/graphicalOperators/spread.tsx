@@ -1,21 +1,27 @@
 import { GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
 import { MaybeValue } from "../data";
-import {
-  Direction,
-  elaborateDirection,
-  FancyDims,
-  FancyDirection,
-} from "../dims";
+import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
-import { SplitBy, splitEntries } from "../datumProjection";
+import {
+  SplitBy,
+  fieldNameOf,
+  orderEntries,
+  splitEntries,
+} from "../datumProjection";
 import { isField } from "../data";
+import { columnType, stackOrigin } from "../schema";
+import type { StackOrigin } from "../constraints/distribute";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
 import { layer } from "./layer";
 import { Constraint } from "../constraints";
-import { ensureChildNames, type AlignAnchor } from "../constraints/shared";
+import {
+  axisName,
+  ensureChildNames,
+  type AlignAnchor,
+} from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
@@ -60,13 +66,16 @@ export const Spread = createNodeOperator(
       anchor = "edge",
       reverse = false,
       glue = false,
+      origin,
       size,
       axes,
       axisMeasures,
       ...fancyDims
     }: {
       key?: string;
-      dir: FancyDirection;
+      /** The axis to spread along: `x`/`y`, a name the enclosing coordinate
+       *  space declares (`theta`, `lon`, ...), or an axis index. */
+      dir: AxisName | Direction;
       spacing?: number;
       alignment?: Alignment;
       sharedScale?: boolean;
@@ -79,6 +88,11 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
+      /** A stack's {@link StackOrigin}, its part a child index. Omitted: the
+       *  first part's tail. The `stack` operator's split sets it from a
+       *  `HasMidpoint` column (`stackOrigin` in schema.ts). Ignored without
+       *  `glue`: a spread packs boxes and has no origin. */
+      origin?: StackOrigin<number>;
       /** Per-entry stack-axis extent — one value per child, in child order.
        *  Wraps each child in a sized layer on the stack axis before the
        *  align/distribute elaboration. See the doc comment above. */
@@ -86,10 +100,11 @@ export const Spread = createNodeOperator(
       /** Override axis rendering for this node. true/false applies to both
        * dims; object form controls x/y independently. */
       axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
-      /** Resolved grouping field per axis, injected by createOperator (the `by`
-       *  field, e.g. `{ x: "lake" }`). Stamped onto the ORDINAL space the stack
-       *  distribute builds so a category axis names itself off its own space. */
-      axisMeasures?: { x?: string; y?: string };
+      /** Resolved grouping field per axis name, injected by createOperator (the
+       *  `by` field keyed by `dir`, e.g. `{ x: "lake" }`). Stamped onto the
+       *  ORDINAL space the stack distribute builds so a category axis names
+       *  itself off its own space. */
+      axisMeasures?: Record<string, string | undefined>;
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
@@ -101,11 +116,9 @@ export const Spread = createNodeOperator(
     }
 
     children = unwrapLodashArray(children);
-
-    const stackDir = elaborateDirection(dir);
-    const alignDir = (1 - stackDir) as Direction;
-    const alignAxis = alignDir === 0 ? "x" : "y";
-    const stackAxis = stackDir === 0 ? "x" : "y";
+    // An axis index is the same axis as its scope-free name (0 is `x`), so
+    // every use below can key by name.
+    const dirName: AxisName = typeof dir === "number" ? axisName(dir) : dir;
 
     // Give each child a unique constraint name so the align/distribute can
     // reference it (shared with scatter — see `ensureChildNames`).
@@ -118,12 +131,14 @@ export const Spread = createNodeOperator(
             `${childList.length} children — one size value is required per child.`
         );
       }
-      const sizeKey = stackAxis === "x" ? "w" : "h";
+      // The wrapper's size is on the `dir` axis, named the same way `dir`
+      // names it, so it resolves in the same scope pass as `dir` itself.
       childList = await Promise.all(
         childList.map(async (child, i) => {
-          const wrapped = (await layer({ [sizeKey]: size[i] } as any, [
-            child,
-          ])) as GoFishNode;
+          const wrapped = (await layer(
+            { dims: { [dirName]: { size: size[i] } } } as any,
+            [child]
+          )) as GoFishNode;
           // Copy split identity onto the wrapper so downstream ordinal-axis
           // labeling / resolve()-by-key see the same key/datum the unwrapped
           // child would have — the wrapper is purely a sizing shim.
@@ -150,36 +165,51 @@ export const Spread = createNodeOperator(
       } as any,
       childList
     )) as GoFishNode;
-    await node.relate((g) => {
-      const refs = names.map((name) => g[name]);
-      // The cross-axis align: it shares the frame (unions the children's domain)
-      // and, for free children (bars), commits a baseline. A self-positioned
-      // child (a scatter facet) is left alone by `align` automatically — the
-      // placement solver reads the child's abstract placement, so no guard flag.
-      return [
-        Constraint.align({ [alignAxis]: alignment }, refs),
-        Constraint.distribute(
-          {
-            dir: stackAxis,
-            spacing: glue ? 0 : spacing,
-            anchor,
-            glue,
-            order: reverse ? "reverse" : "forward",
-            // The grouping field for this (stack) axis → the ORDINAL space's
-            // measure, so a spread-by-category axis titles itself off its space.
-            measure: axisMeasures?.[stackAxis],
-          },
-          refs
-        ),
-      ];
-    });
+    // `dir` names an axis in the scope of the spread's children: `x`/`y`, or a
+    // name the enclosing coordinate space declares (`theta`, `lon`, ...). The
+    // spread is built before that space exists, so the constraints, which need
+    // the axis, are installed by the resolveAliases pass, after the layer's
+    // own `dims` hook (if the spread was given `dims`).
+    const layerDims = node._elaborateInAxisScope;
+    node._elaborateInAxisScope = async (outer, inner) => {
+      await layerDims?.(outer, inner);
+      const stackDir = resolveAxisName(inner, dirName, `spread({ dir })`);
+      const alignAxis = axisName((1 - stackDir) as Direction);
+      const stackAxis = axisName(stackDir);
+      await node.relate((g) => {
+        const refs = names.map((name) => g[name]);
+        // The cross-axis align: it shares the frame (unions the children's
+        // domain) and, for free children (bars), commits a baseline. A
+        // self-positioned child (a scatter facet) is left alone by `align`
+        // automatically — the placement solver reads the child's abstract
+        // placement, so no guard flag.
+        return [
+          Constraint.align({ [alignAxis]: alignment }, refs),
+          Constraint.distribute(
+            {
+              dir: stackAxis,
+              spacing: glue ? 0 : spacing,
+              anchor,
+              glue,
+              order: reverse ? "reverse" : "forward",
+              origin: origin && { ...origin, part: names[origin.part] },
+              // The grouping field for this (stack) axis → the ORDINAL
+              // space's measure, so a spread-by-category axis titles itself
+              // off its space.
+              measure: axisMeasures?.[dirName],
+            },
+            refs
+          ),
+        ];
+      });
+      // Tag with stack direction so coord can map axis overrides to polar dims.
+      node.axisDir = stackDir;
+    };
 
     // `sharedScale` is a scale-scope annotation (claim hoisting, #549): the node
     // solves σ locally and shares it with descendants. The layer honors this in
     // `layout` (it self-solves per axis when `shared`, into a fresh array).
     node.shared = [sharedScale, sharedScale];
-    // Tag with stack direction so coord can map axis overrides to polar dims.
-    node.axisDir = stackDir;
     if (axes !== undefined) {
       const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
         opt === undefined ? undefined : opt === false ? false : true;
@@ -194,7 +224,10 @@ export const Spread = createNodeOperator(
 
 export type SpreadOptions<T = any> = {
   by?: SplitBy;
-  dir: "x" | "y";
+  /** The axis to spread along: `x`/`y` (axis 0/1 in any coordinate space), or
+   *  a name the enclosing coordinate space declares (`theta`/`r` in polar,
+   *  `lon`/`lat` in geo). */
+  dir: AxisName;
   spacing?: number;
   alignment?: "start" | "middle" | "end" | "baseline";
   sharedScale?: boolean;
@@ -228,20 +261,43 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
   // that override lives in createOperator (it dispatches on the mark's kind),
   // not here, so this split stays kind-agnostic.
-  split: ({ by }, d) =>
-    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+  //
+  // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
+  // origin at the midpoint of the column's order instead of at its first
+  // part's tail; the split knows the groups present, so it computes it. It
+  // reorders every level of the order the way it reorders the groups, so the
+  // stack knows which way it lays the order out even in a row with one part.
+  split: ({ by, glue, reverse }, d) => {
+    if (!by) return new Map(d.map((r, i) => [i, r]));
+    const entries = splitEntries(by, d);
+    if (!glue) return entries;
+    const column = fieldNameOf(by);
+    const type = columnType(d, column);
+    const levels = (type?.HasOrder?.levels ?? []) as (string | number)[];
+    const split = orderEntries(
+      by,
+      new Map(levels.map((level) => [level, entries.get(level) ?? []]))
+    );
+    const origin = stackOrigin(
+      column,
+      type,
+      [...split.keys()],
+      [...entries.keys()],
+      reverse
+    );
+    return origin === undefined ? entries : { entries, layoutOpts: { origin } };
+  },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {
     const name =
       typeof by === "string" ? by : isField(by) ? by.name : undefined;
-    return name === undefined
-      ? undefined
-      : dir === "x"
-        ? { x: name }
-        : { y: name };
+    return name === undefined ? undefined : { [dir]: name };
   },
   // `dir` is the axis this operator lays its groups out along (`stack` is
-  // `spread({glue: true})`, so it inherits this).
+  // `spread({glue: true})`, so it inherits this). The travel-axis rule reads
+  // this at build time, before the enclosing coordinate space is known, so a
+  // coord-declared `dir` (`theta`, `lon`, ...) positions neither axis here.
+  // TODO(#838 follow-up): resolve the travel axis by name too.
   arrangement: {
     kind: "arrangement",
     positions: ({ dir }) => ({ x: dir === "x", y: dir === "y" }),

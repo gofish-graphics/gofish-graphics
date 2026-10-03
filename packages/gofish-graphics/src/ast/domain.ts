@@ -61,6 +61,18 @@ export type AxisScale = { sigma?: number; map?: AxisMap };
 export const pxOf = (map: AxisMap, d: number): number =>
   map.pxMin + map.sigma * (d - map.domainMin);
 
+/** The data value a baseline magnitude's baseline stands for on an anchored
+ *  axis: the zero a signed `h`/`w` grows from. A layer that owns a data→pixel
+ *  map seats its free children's baselines at `pxOf(map, measureOrigin(...))`
+ *  (#773).
+ *
+ *  TODO(#773 follow-up): the origin is the additive identity of the measure's
+ *  algebraic structure (an ordered additive group's 0). Measures don't carry
+ *  their structure yet, so every measure is treated as a group with identity
+ *  0. A torsor-valued measure (e.g. dates, temperatures) has no identity and
+ *  should reject bars. */
+export const measureOrigin = (_measure: Measure | undefined): number => 0;
+
 /** Function view of an anchored map, for consumers that take a `(d)=>px`
  *  callback (`computeAesthetic`). A local derivation at the consumption site —
  *  never threaded between nodes. Undefined when the axis is unanchored. */

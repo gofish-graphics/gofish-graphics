@@ -20,20 +20,19 @@ import {
   Dimensions,
   displayDims as displayDimsOf,
   elaborateDims,
-  extractAliasCandidates,
+  deferAxisDims,
   FancyDims,
   FancySize,
   Size,
   Transform,
 } from "../dims";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
-import * as Monotonic from "../../util/monotonic";
 import { computeAesthetic, computeSize } from "../../util";
 import {
   DIFFERENCE,
   ORDINAL,
   POSITION,
-  SIZE,
+  baselineSpan,
   UNDEFINED,
   UnderlyingSpace,
   forgetOnConflict,
@@ -48,14 +47,6 @@ import {
   rectItemFromBox,
   roleFor,
 } from "../displayList/lowerHelpers";
-
-const computeIntrinsicSize = (
-  input: MaybeValue<number> | undefined
-): Monotonic.Monotonic => {
-  return isValue(input)
-    ? Monotonic.linear(getValue(input)!, 0)
-    : Monotonic.linear(0, input ?? 0);
-};
 
 const DEFAULT_RECT_SIZE = 16;
 
@@ -108,30 +99,7 @@ export const Rect = ({
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
       ) => {
-        // Compute per-axis SIZE Monotonic (used when the axis ends up SIZE).
-        // These are the same Monotonics formerly produced by inferSizeDomains.
-        let wDomain = computeIntrinsicSize(dims[0].size);
-        let hDomain = computeIntrinsicSize(dims[1].size);
-        if (aspectRatio !== undefined && aspectRatio > 0) {
-          const wIsData = isValue(dims[0].size);
-          const hIsData = isValue(dims[1].size);
-          if (wIsData && !hIsData) {
-            hDomain = Monotonic.linear(
-              (wDomain as Monotonic.Linear).slope / aspectRatio,
-              0
-            );
-          } else if (hIsData && !wIsData) {
-            wDomain = Monotonic.linear(
-              (hDomain as Monotonic.Linear).slope * aspectRatio,
-              0
-            );
-          }
-        }
-
-        const resolveAxis = (
-          axis: 0 | 1,
-          axisDomain: Monotonic.Monotonic
-        ): UnderlyingSpace => {
+        const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
           if (isValue(d.min) && isValue(d.max)) {
             return POSITION(
@@ -149,8 +117,9 @@ export const Rect = ({
             return DIFFERENCE(getValue(d.size)!, getMeasure(d.size));
           }
           if (!isValue(d.min) && isValue(d.size)) {
-            // No data position; data-driven size → SIZE with Monotonic.
-            return SIZE(axisDomain, getMeasure(d.size));
+            // No data position; data-driven size → a span from the baseline,
+            // signed: a negative value extends below it (#773).
+            return baselineSpan(getValue(d.size)!, getMeasure(d.size));
           }
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
@@ -158,7 +127,7 @@ export const Rect = ({
           return POSITION(interval(min, min + size), getMeasure(d.min));
         };
 
-        return [resolveAxis(0, wDomain), resolveAxis(1, hDomain)];
+        return [resolveAxis(0), resolveAxis(1)];
       },
       layout: (shared, size, scales, children) => {
         let x = computeAesthetic(
@@ -274,23 +243,21 @@ export const Rect = ({
 
         return {
           intrinsicDims: {
-            dims: [
-              {
-                // Store the box canonically: true min + unsigned extent. A
-                // negative bar grows downward, so its min is the negative
-                // endpoint and its size is the magnitude. Every derivation site
-                // (`localAnchorPoint`, `displayDims`, the `dims` getters) then
-                // reads a non-negative `size` and never needs `Math.abs`.
-                min: Math.min(0, w),
-                size: Math.abs(w),
-                embedded: dims[0].embedded,
-              },
-              {
-                min: Math.min(0, h),
-                size: Math.abs(h),
-                embedded: dims[1].embedded,
-              },
-            ],
+            0: {
+              // Store the box canonically: true min + unsigned extent. A
+              // negative bar grows downward, so its min is the negative
+              // endpoint and its size is the magnitude. Every derivation site
+              // (`localAnchorPoint`, `displayDims`, the `dims` getters) then
+              // reads a non-negative `size` and never needs `Math.abs`.
+              min: Math.min(0, w),
+              size: Math.abs(w),
+              embedded: dims[0].embedded,
+            },
+            1: {
+              min: Math.min(0, h),
+              size: Math.abs(h),
+              embedded: dims[1].embedded,
+            },
           },
           transform: {
             translate: [x, y],
@@ -448,8 +415,8 @@ export const Rect = ({
     },
     []
   );
-  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-  node._pendingAliases = extractAliasCandidates(fancyDims);
+  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;
 };
 
@@ -464,6 +431,7 @@ const RECT_CHANNELS = {
   b: "pos",
   cx: "pos",
   cy: "pos",
+  dims: "dims",
   fill: "color",
   stroke: "color",
 } as const;

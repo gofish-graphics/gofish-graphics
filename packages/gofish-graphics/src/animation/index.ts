@@ -8,6 +8,7 @@
  * PROTOTYPE (draft PR #901): JS-only, like the rest of the animation surface.
  */
 import { time, type TransitionOptions } from "../ast/marks/time";
+import { resolveMethod } from "../interpolate";
 import {
   appear,
   fadeIn,
@@ -34,10 +35,16 @@ export type TweenOptions = {
  *  })` is `.layer(time.transition({ curve: "linear" }))`. */
 const tween = (opts: TweenOptions = {}): TweenEffect => {
   const ease = opts.ease === undefined ? undefined : resolveEase(opts.ease);
-  return {
+  // An unknown curve fails here, where it was written, and the resolved one
+  // is what tells two tweens apart (`sameTween`).
+  const curve = resolveMethod(opts.curve, "animation.tween({ curve })");
+  const effect: TweenEffect = {
     __tween: true,
-    layer: () => time.transition({ curve: opts.curve, ease }),
+    curve,
+    ease,
+    layer: () => time.transition({ curve, ease, moves: effect }),
   };
+  return effect;
 };
 
 export const animation = {

@@ -24,7 +24,7 @@ import { combine, byDepth, mount } from "./_shared";
 //  - Orthogonal links: the dsl's Link is "orthogonal" (right-angle elbow
 //    connectors — in the reference, a radial spoke from the parent meeting a
 //    short tangential stub at each child). The link renderer has no orthogonal
-//    mode, so links fall back to {curve:"straight"} (straight segments;
+//    mode, so links fall back to {curve:"linear"} (straight segments;
 //    the route→curve link API lands in draft PR #637). Under polar() even those
 //    straight segments bow along arcs, so the crisp grid look of the reference
 //    is lost.
@@ -32,7 +32,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    constant; it does NOT shrink with the number of nodes at a depth. GoTree
 //    allocates θ by subtree leaf-count, so deep/wide trees there stay within 2π;
 //    here a wide level overflows the 2π budget and wedges wrap. Wedge (rect)
-//    nodes now auto-fit via thetaSize since #622; this point/circle-node gap is
+//    nodes now auto-fit via a data-sized θ extent since #622; this point/circle-node gap is
 //    tracked in #627 (data-position workaround shown in RadialDeep.stories.tsx).
 //    Spacing is hand-tuned for the small sampleTree.
 //  - polar() now takes options — { innerRadius, centralAngle, startAngle,
@@ -51,7 +51,7 @@ export const OrthogonalGridEmbedding: StoryObj = {
       {
         node,
         // Orthogonal links unsupported → linear fallback (see NOTES).
-        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: parent centered over its subtree's angular span.
           x: { kind: "align", alignment: "middle" },

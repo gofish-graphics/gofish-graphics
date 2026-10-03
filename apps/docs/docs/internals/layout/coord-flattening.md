@@ -75,33 +75,77 @@ children, so the whole tree bottoms out into a single flat array.
 
 The recursion does **not** visit children in raw array order — it orders them first
 with the very same paint-order rule the root bake uses (`orderChildrenForPaint` in
-`paintOrder.ts`): a `(zOrder, index)` sort, or a `topoSortByZOrder` over the layer's
-`zAbove` / `zBelow` constraints. This is what makes `zOrder(-1)` (and z constraints)
-take effect **inside** a coordinate transform. It was left out for a long time — the
-coord-local flatten walked children in array order, so a gotree link's `.zOrder(-1)`
+`paintOrder.ts`). This is what makes `zOrder(-1)` (and z constraints) take effect
+**inside** a coordinate transform. It was left out for a long time — the coord-local
+flatten walked children in array order, so a gotree link's `.zOrder(-1)`
 (links-under-nodes) was silently a no-op under `coord: polar()`
 ([#676](https://github.com/gofish-graphics/gofish-graphics/issues/676)). Ordering is
 LOCAL to each layer, exactly as in the root bake (below); only the leaf/boundary rules
 differ between the two flatteners.
 
-### How the topological order is computed
+### How a layer orders its children
 
-`topoSortByZOrder` is Kahn's algorithm. Each `zAbove` / `zBelow` constraint becomes an
-edge between two paint units, and the sort repeatedly emits the smallest unit that has
+`orderChildrenForPaint` orders only a node's **direct** children. It never reaches into
+a grandchild: each walk recurses one node at a time, and the child orders its own
+children when the walk gets there. Without constraints, children paint in `(zOrder,
+index)` order, so a numeric `.zOrder(n)` compares a child only with its siblings.
+
+A `zAbove(a, b)` / `zBelow(a, b)` constraint declared at a layer L becomes an edge
+between two children. It is resolved once, when L orders its own children, and before
+any of L's descendants is ordered. Every node inside L that carries the name `a` or
+`b` is an operand. For each pair of operands, the resolution follows the two paths
+down from L to the node where they part, and records an edge between that node's two
+children that hold them. If the operands lie in different children of L, the edge is
+between those two children of L, each ordered as a whole. If they lie in the same
+child, the constraint is pushed down to the node below where they part. A name that
+names a child itself means that whole child.
+
+The node where two operands part can be any node, not only a plain layer: a `coord`,
+an `enclose`, an `arrow`, or a `box` layer. So every place that paints a node's
+children gets their order from `orderChildrenForPaint`, never from the raw children
+array: the bake walks, `coord`'s own lowering, `lowerChildrenOffset` (behind `enclose`,
+`offset` and `arrow`), and `bakeChildren` (behind `box`). A constraint pushed down into
+any of them takes effect there, and a boundary that declares its own constraints (a
+`box` layer's `.relate()`) resolves them when it orders its children. Before
+[#982](https://github.com/gofish-graphics/gofish-graphics/issues/982) settled this, a
+`coord` or `enclose` lowered its children in array order, and a constraint that parted
+inside one did nothing.
+
+The compositors (`over` / `atop` / `in` / `out` / `xor` / `mask`) are the one
+exception, and the operator defines it. A compositor paints one result combined from
+its first child (the source, or the mask) and its second (the destination, or the
+content), so the index of a child names its role, and there is no paint order between
+the two to change. A compositor calls `assertNoPaintOrder` instead, which resolves the
+compositor's own constraints and throws, naming the constraints, if any z constraint
+parts at it. The relational nodes (`connect`, `tween`) paint none of their children
+(their children are refs, which draw nothing), so they never ask for an order.
+
+Names are looked up with the same rule as every other name: through any node that is
+not a component, and never into a `createMark` component (see
+[Names and scoping](/internals/core/names-and-scoping)). So an operand inside a
+`spread` or a `box` layer is found, and a constraint never reaches past the nearest
+component around L.
+
+This holds for a user's `zAbove` / `zBelow` and for the relational-mark default
+(`zBelow(connector, operand)` in `layer.tsx`). The default names the operand itself,
+so the connector paints under whichever child of the layer holds the operand, and a
+nested chart's own relational line stays under its own dots, since that constraint is
+declared on the nested chart and orders only its children.
+
+Because a child paints as a whole, one child can no longer paint between two marks of
+another. Asking for that, for example `zBelow(a, x)` and `zBelow(x, b)` with `a` and
+`b` in one child and `x` in another, gives two edges in opposite directions, and the
+sort throws an error that names both constraints. The fix is to make the marks that
+interleave siblings, as the pulley diagram does with its ropes and wheels.
+
+The sort itself is Kahn's algorithm. It repeatedly emits the smallest child that has
 no unsatisfied edge left pointing at it, where "smallest" means lowest `(zOrder,
 index)`. Ordering the unconstrained majority by `(zOrder, index)` is what makes the
 result identical to the plain sort when there are no constraints at all.
 
-The ready set is a binary min-heap, and that choice matters for large charts. A layer
-can hold tens of thousands of paint units: the bird-migration map has 26,280 point
-anchors and 72 line connectors under one `geo` coord, and each connector contributes a
-`zBelow` constraint per anchor. An earlier version kept the ready set as an array that
-was re-sorted and `shift`ed on every emission, which is quadratic in the number of
-units — that one sort took about 7.4 seconds of a 9 second render. The heap makes it
-`O(n log n + edges)`, about 140 ms for the same chart, and picks exactly the same unit
-at every step, so nothing about what is drawn over what changed. Adjacency sets are
-allocated lazily for the same reason: nearly every unit in a chart that size has no
-edges at all.
+The ready set is a binary min-heap, because a layer can hold tens of thousands of
+children, and a re-sorted array would be quadratic in the number of children. The
+heap makes the sort `O(n log n + edges)`.
 
 Two design notes from the source worth knowing:
 
@@ -141,12 +185,10 @@ which the render entry maps over directly.
   behind the whole chart. A global flatten would regroup, e.g., all connectors before
   all marks across sibling layers (the pulley diagram and the connected-scatter line
   both broke this way, [#607](https://github.com/gofish-graphics/gofish-graphics/issues/607)).
-  So at each transparent layer `bake` orders its children with the
-  `paintOrder.ts` helpers — `flattenForZOrder` (which keeps components
-  whole and hoists only plain nested layers) then a `(zOrder, index)` sort or a
-  `topoSortByZOrder` over its own `zAbove` / `zBelow` constraints — and only then
-  descends into each unit, so a component keeps its internal order. Transforms still
-  compose all the way to the leaves; only the _ordering_ is per-layer. This ordering
+  So at each transparent node `bake` orders its direct children with
+  `orderChildrenForPaint` (described above) and only then descends into each child,
+  which orders its own children in turn. Transforms still compose all the way to the
+  leaves; only the _ordering_ is per-layer. This ordering
   is the shared `orderChildrenForPaint` helper — the coord-local `flattenLayout` calls
   the exact same function, so draw order is resolved identically inside and outside a
   coordinate transform (one rule, not two copies).
@@ -154,7 +196,7 @@ which the render entry maps over directly.
 **`bakeChildren` — the same flatten, reused by boundaries.** `bake`'s per-transparent-layer
 children-flatten (the z-order resolution + transform composition) is factored into an
 exported `bakeChildren(node, translate, scale)`. A pure translate-only boundary
-(`box`/`frame`, `offset`, `enclose`) calls it on its _own_ subtree, seeded at the
+(`box`/`frame`) calls it on its _own_ subtree, seeded at the
 boundary's absolute translate, and lowers each returned entry at its baked absolute
 transform. This is stage 6d of [#39](https://github.com/gofish-graphics/gofish-graphics/issues/39):
 a translate-only boundary no longer composes its translate into a `toPixel` closure and
@@ -212,13 +254,13 @@ The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
   padding is needed. See [Underlying Space](/internals/core/underlying-space) for the
   per-anchor allowance formulas.
 
-Two places had to run this **same** rule so a subtree's orientation is stable no matter how
-it is wrapped:
+The walk visits every node on the way down, including each plain layer, so every node
+decides its scope with this one rule. Adding a `zAbove` / `zBelow` constraint only
+reorders a layer's children; it cannot change which scope a subtree lowers under.
 
-- **The z-order hoist.** The z-order flatten is `flattenForZOrder` with a `fold` payload that
-  _carries the flip scope through each hoisted-through plain layer_, so adding a `zAbove` /
-  `zBelow` constraint can never change which scope a subtree lowers under. (One walk, not a
-  forked copy — the fold is threaded through the single `paintOrder.ts` helper.)
+Two other places have to run the **same** rule so a subtree's orientation is stable no
+matter how it is wrapped:
+
 - **Bake boundaries.** A boundary whose own y space is UNDEFINED (`enclose` / `arrow` /
   `connect`) would otherwise lower its whole subtree under a single (y-down) map. Instead its
   child descent (`lowerChildrenOffset`) **re-runs `bake`** on each child — seeded with the
@@ -247,13 +289,14 @@ it is wrapped:
 canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. Its
 `fitAxis(axis, budget)` reads the subtree's resolved space on that axis and
 returns a `(scaleFactor, posScale)` to hand each child: a baseline-magnitude
-(data SIZE) axis scales by `width.inverse(budget)` so the children fill the ring;
+(data SIZE) axis scales by `width.inverse(budget)` so the children fill the ring
+(`width` is the sum of the children's total extents, each `ascent + descent`);
 an anchored (data POSITION) axis maps onto `[0, budget]` via a posScale and
 carries **no** size σ (Stage 6c — a POSITION-only axis has no SIZE scope, so it
 never fabricates one; the map's own slope is the scope's σ). Only
 DATA-bound channels consume these — a plain number bypasses both (see
 `computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
-mark that says `thetaSize: datum(count)` auto-fits. Because the coord is the
+mark that says `w: datum(count)` (the θ extent) auto-fits. Because the coord is the
 single σ-scale-root, an intermediate `distribute`/`nest` under it must NOT
 re-root (it propagates the inherited σ — see the scale-root scoping gate in
 `buildChildScalePlan`); this is what makes a flat distribute confluent with any

@@ -25,7 +25,7 @@
  * same reason `interaction.test.ts` does both: the clock is a live signal and
  * rendering goes through the solid-compiled backend.
  */
-import "./interactionDomSetup";
+import { items, pausedClock as clockAt } from "./animationTestHelpers";
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import data from "vega-datasets";
@@ -40,7 +40,6 @@ const {
   scatter,
   selectAll,
   time,
-  timer,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -64,11 +63,7 @@ const EPS = 1e-6;
 
 /** A paused clock parked at `at` — the deterministic playhead levels 2 and 3
  *  use in place of the one a sequence owns. */
-function pausedClock(at: number) {
-  const clock = timer({ domain: YEARS, duration: 5000, playing: false });
-  clock.set(at);
-  return clock;
-}
+const pausedClock = (at: number) => clockAt(YEARS, 5000, at);
 
 type Circle = {
   cx: number;
@@ -89,24 +84,16 @@ type Circle = {
  *  `GoFishNode.INTERNAL_visibleWhile`). So a sequence alone lowers every year
  *  and draws one, and this is where "draws one" is decided. */
 function circles(doc: any): Circle[] {
-  const out: Circle[] = [];
-  const walk = (n: any): void => {
-    if (Array.isArray(n)) return n.forEach(walk);
-    if (n === null || typeof n !== "object") return;
-    if (n.kind === "ellipse" && n.style?.opacity !== 0) {
-      out.push({
-        cx: n.cx,
-        cy: n.cy,
-        rx: n.rx,
-        ry: n.ry,
-        fill: String(n.style?.fill ?? ""),
-      });
-    }
-    if (n.items) walk(n.items);
-    if (n.children) walk(n.children);
-  };
-  walk(doc.items ?? doc);
-  return out.sort((a, b) => a.fill.localeCompare(b.fill) || a.cx - b.cx);
+  return items(doc)
+    .filter((n) => n.kind === "ellipse" && n.style?.opacity !== 0)
+    .map((n) => ({
+      cx: n.cx,
+      cy: n.cy,
+      rx: n.rx,
+      ry: n.ry,
+      fill: String(n.style?.fill ?? ""),
+    }))
+    .sort((a, b) => a.fill.localeCompare(b.fill) || a.cx - b.cx);
 }
 
 /** Report the first place two geometries part company, or `undefined`. */

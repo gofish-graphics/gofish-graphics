@@ -5,11 +5,8 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, isRelateClause } from "../_node";
 import { GoFishRef } from "../_ref";
-import {
-  resolveMarkResult,
-  type ChartBuilder,
-  type LayerBuilder,
-} from "../marks/chartBuilder";
+import type { ChartBuilder, LayerBuilder } from "../marks/chartBuilder";
+import { resolveMarkResult } from "../marks/markResult";
 import { flattenAndAwaitPromises } from "../withGoFish";
 import {
   validateOperands,

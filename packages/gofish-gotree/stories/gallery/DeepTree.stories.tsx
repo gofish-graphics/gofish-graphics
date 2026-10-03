@@ -23,7 +23,7 @@ import { combine, byDepth, mount } from "./_shared";
 // NOTES — polar limitations (no hacks; flagged for follow-up):
 //  - Links: the dsl asks for "curve" links with depth-driven width
 //    (LinkWidth=depth). Curved link interpolation isn't wired through the coord
-//    transform yet, so this falls back to fixed-width {curve:"straight"}
+//    transform yet, so this falls back to fixed-width {curve:"linear"}
 //    (the route→curve link API lands in draft PR #637). Under polar() the
 //    straight segments still bow into arcs through the coord transform, but they
 //    are NOT the dsl's authored curves and ignore LinkWidth/Thickness=depth.
@@ -33,7 +33,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    sibling-subtree *centers* a fixed angle apart regardless of how wide each
 //    subtree is, so a genuinely deep/wide tree overflows the 2π budget —
 //    subtrees overlap and the outer rings wrap. Wedge (rect) nodes now auto-fit
-//    angularly via thetaSize since #622; the gap for point/circle nodes like
+//    angularly via a data-sized θ extent since #622; the gap for point/circle nodes like
 //    these is tracked in #627, and its data-position workaround (leaf-slot box
 //    packing in the data pass) is demonstrated in RadialDeep.stories.tsx. The
 //    tree below is kept modest so the structure stays legible.
@@ -75,7 +75,7 @@ export const DeepTree: StoryObj = {
       {
         node,
         // NOTE: dsl wants curve links (LinkWidth=depth); falling back to linear.
-        link: { curve: "straight", stroke: "#5f6b7a", strokeWidth: 1.5 },
+        link: { curve: "linear", stroke: "#5f6b7a", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: nest centers the parent circle over its subtree's angular span.
           x: { kind: "nest", pad: 0 },

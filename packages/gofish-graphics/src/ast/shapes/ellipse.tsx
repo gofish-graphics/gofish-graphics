@@ -10,7 +10,7 @@ import {
   Dimensions,
   displayDims as displayDimsOf,
   elaborateDims,
-  extractAliasCandidates,
+  deferAxisDims,
   FancyDims,
   FancySize,
   Size,
@@ -26,6 +26,7 @@ import {
   UnderlyingSpace,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import { boxOfDims } from "../geometry";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -312,11 +313,24 @@ export const Ellipse = ({
           },
         ];
       },
+      // The smallest circle enclosing an ellipse is the circle of its larger
+      // radius, centered on it.
+      geometry: ({ intrinsicDims }, _children, node) => {
+        const box = boxOfDims(intrinsicDims, node.type);
+        return {
+          box,
+          enclosingCircle: () => ({
+            cx: (box.min[0] + box.max[0]) / 2,
+            cy: (box.min[1] + box.max[1]) / 2,
+            r: Math.max(box.max[0] - box.min[0], box.max[1] - box.min[1]) / 2,
+          }),
+        };
+      },
     },
     []
   );
-  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-  node._pendingAliases = extractAliasCandidates(fancyDims);
+  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;
 };
 
@@ -325,6 +339,7 @@ export const ellipse = createMark(
   {
     w: "size",
     h: "size",
+    dims: "dims",
     fill: "color",
   },
   "ellipse"

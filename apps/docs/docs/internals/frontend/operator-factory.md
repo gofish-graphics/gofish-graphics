@@ -135,14 +135,18 @@ factory.
 Walking `createOperator.ts:391-415`:
 
 1. **Split** — `cfg.split(opts, d)` partitions the input into a
-   `Map<key, subdata>`. (Some operators, like `table`, also return `keys` —
-   row/column labels that get merged into the layout opts.) Each array leaf is
-   then re-tagged with `d`'s measure provenance (`copyMeasureProvenance`): a
-   leaf is a fresh sub-array that wouldn't otherwise inherit the
-   `MEASURE_PROVENANCE` symbol, so without this a _mark_ channel applied per
-   leaf would lose a transform's measure (e.g. a bin's `start`/`end`/`size`) and
-   fall back to the literal field name — see [underlying
-   space](/internals/core/underlying-space) and #534.
+   `Map<key, subdata>`. (Some operators also return `layoutOpts`, opts the
+   split computed that get merged into the layout opts: `table`'s row/column
+   labels, or a `stack`'s `origin` when its `by` column has `HasMidpoint`.) Each
+   array leaf is then re-tagged with `d`'s measure provenance
+   (`copyMeasureProvenance`): a leaf is a fresh sub-array that wouldn't
+   otherwise inherit the `MEASURE_PROVENANCE` symbol, so without this a _mark_
+   channel applied per leaf would lose a transform's measure (e.g. a bin's
+   `start`/`end`/`size`) and fall back to the literal field name — see
+   [underlying space](/internals/core/underlying-space) and #534. The chart's
+   column types ride along the same way (`copyColumnTypes`, see [Column
+   types](/internals/core/underlying-space#column-types-the-chart-schema)), so
+   a nested split or a color channel still sees an ordered column.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
@@ -216,6 +220,28 @@ field name like `x: "miles"` becomes a per-group mean position
 `discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
 slot coordinate instead of an invalid numeric mean.
 
+A `{ type: "dims", form }` channel is an axis-name-keyed bag
+(`scatter({ dims: { theta: "bearing", r: "distance" } })`). `form` is the
+same `AxisDimsForm` the operator later merges the bag with, and its
+`topLevel` table names the top-level option each anchor stands for. For each
+slot, `applyChannels` looks up that option's own channel spec and applies it,
+so a slot infers exactly as its counterpart: scatter's bare value and
+`center` as `x` (per entry, discrete for a nonnumeric field), its `min` as
+`xMin` (per entry, never discrete). A counterpart with no channel leaves the
+slot as given (treemap's `min` stands for its unannotated `x`), and the
+counterparts on the two axes must share one spec. Which axis `theta` means is
+not known here: the scatter defers the constraints that need it to the
+[axis-name pass](/internals/layout/passes#pass-5-5-axis-name-resolution).
+
+`axisFields` returns its grouping fields keyed by axis **name**, the way the
+operator names the axis (`spread({ by, dir: "theta" })` reports
+`{ theta: by }`), and the node builder looks its own measure up by that same
+name, so the measure needs no axis index at build time. The factory also
+copies these fields onto the operator's `__arrangement` tag as `fields`, which
+the relational-mark pass reads to tell whether a path tier draws its own `by`
+on an axis (`inferred.parameterAxis`; see
+[the mark factory](/internals/frontend/mark-factory)).
+
 **Windowed `normalize()` on an entry-flagged `size` channel.** `spread`/
 `stack` declare `size: { type: "size", entry: true }` (#700 Phase 2) — a
 per-entry stack-axis extent, one value per split entry, that `Spread` wraps
@@ -273,8 +299,9 @@ If `Wrap` accepts a width-per-child, you'd add `channels: { width: "size" }`
 so consumers can pass a field name there.
 
 If your operator needs to feed extra data (like `colKeys`/`rowKeys`) into
-the layout opts, return the wrapped `{entries, keys}` form from `split`
-instead of a bare Map — see `table.tsx:228` for an example.
+the layout opts, return the wrapped `{entries, layoutOpts}` form from `split`
+instead of a bare Map — see `table.tsx` for an example, and `spread.tsx`'s
+split for a stack's `origin`.
 
 Operators created with `createOperator` automatically support
 `.translate({ x?, y? })`. You do not implement this per operator; the factory
@@ -368,7 +395,7 @@ the **modifier factory** that also lives in this file — `ModifierConfig` +
 (combinator marks), `createMark` (leaf marks), and `makeRelatableMark`
 (layer / Porter-Duff marks, which add `.relate()`). `.name(...)` also
 stashes the passed name on the returned mark function via `stashLayerName`
-(defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
+(defined in `markResult.ts`, called by the `name` modifier's `tag` hook), so
 [`.layer()`](/js/api/core/layer)'s producer-tier auto-naming can detect a
 user-chained name without parsing the `__serialize` tag. (An earlier
 `ChartBuilder.connect()` method used this same stashed name; it was deleted
@@ -382,12 +409,17 @@ by-split-form relational marks (see
 [The Mark Factory](/internals/frontend/mark-factory#blank-fusion-mark-r-opts-sugar)).
 Without this, `ribbon(opts).name("area")` would lose the tag the moment
 `.name(...)` wraps it in a new function, and `.mark(ribbon(opts).name("area"))`
-would silently stop fusing.
-It propagates a chained `.transition(...)` spec (`__transition`) the same way,
-for the same reason: the chart builder reads it off the final mark whatever was
-chained after it. The `transition` modifier itself (`transitionModifier`, in
-`nameableMark`'s set) records the mark's effects on each produced node, where
-the build-in reads them.
+would silently stop fusing. It carries the stashed `.name(...)` forward the same
+way, so `.name("dots").transition(...)` or `.name("bars").label(...)` still
+reads as named; without it, a tier that names its mark when the mark has no
+name (`ensureNamedMark`, for a later `.layer()` tier or a `time.sequence`'s
+transitions) would rename the mark and break `selectAll("dots")`.
+The `transition` modifier (`transitionModifier`, in `nameableMark`'s set)
+tags nothing on the mark. It records the mark's effects on each produced node,
+and every reader finds them there: the build-in, and under a `time.sequence`
+the chart builder (`chainedUpdates`). So a spec chained on a mark inside
+`time.history({ last }, [...])`, `spread({...}, [...])` or a `createMark`
+component reaches them with no combinator having to pass it up.
 
 A modifier's `apply` may return a promise, and the wrapped mark awaits it:
 `relateModifier` does, because `.relate()` reifies its drawing clauses (marks
@@ -421,7 +453,10 @@ calling itself with `undefined` and installs the build-in its own
 `.transition({ enter })` asks for, reading the clock's `playing`/`at`.
 `ChartBuilder` and `LayerBuilder` merge in the chart-level `axes`/`color` config,
 read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to
-their options type), and drive `render` through `renderWithInteraction`. So the
+their options type), and drive `render` through `renderWithInteraction`. Every
+resolve also sets `node.rebuild` on the resolved root (the same resolve, for the
+same render pass), so a layout that must run once per candidate, such as
+`labelAngle: "auto"`, can get a fresh tree for each run. So the
 set of
 terminals is defined once — adding one (as `toDisplayList` was) touches a single
 list and lands on every surface at once, instead of being hand-rolled per

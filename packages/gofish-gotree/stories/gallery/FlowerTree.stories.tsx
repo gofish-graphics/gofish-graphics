@@ -29,14 +29,14 @@ import { combine, byDepth, mount, sampleTree } from "./_shared";
 //  - No angular auto-fit for POINT nodes. Sibling θ spacing is a fixed per-level
 //    constant; it does not shrink with node count, so wide groups can overflow
 //    the 2π budget and wrap. GoTree allocates θ by subtree leaf-count. Wedge
-//    (rect) nodes now auto-fit via thetaSize since #622; this point/circle-node
+//    (rect) nodes now auto-fit via a data-sized θ extent since #622; this point/circle-node
 //    gap is tracked in #627 (data-position workaround shown in
 //    RadialDeep.stories.tsx).
 //  - `nest` on θ (an embedded/periodic dimension) is geometrically odd: nest's
 //    padding is a flat radian pad, not a true wedge inset, and enclosure is
 //    only "visible" because parents are hand-sized bigger than children. With
 //    a uniform-size node the nest would not read as a petal at all.
-//  - Link "straight" maps to curve:"straight", but with parentChild
+//  - Link "straight" maps to curve:"linear", but with parentChild
 //    aligned on r the parent/child radii coincide, so links are short chords
 //    inside each petal rather than radial spokes.
 const meta: Meta = { title: "GoTree / Gallery / FlowerTree" };
@@ -57,7 +57,7 @@ export const FlowerTree: StoryObj = {
     mount(
       {
         node,
-        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: parent wedge encloses (nests) the child group's angular span.
           x: { kind: "nest", pad: 0.04 },

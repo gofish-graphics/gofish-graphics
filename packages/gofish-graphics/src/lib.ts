@@ -58,7 +58,11 @@ export {
   saveSVGString,
   gofishSave,
 } from "./ast/gofish";
-export type { GoFishRenderOptions, GoFishExportOptions } from "./ast/gofish";
+export type {
+  GoFishRenderOptions,
+  GoFishExportOptions,
+  View,
+} from "./ast/gofish";
 
 // Display-list (render-IR) export
 export { toDisplayList } from "./ast/displayList/toDisplayList";
@@ -94,6 +98,17 @@ export { GoFishRef } from "./ast/_ref";
 // from ./ast/datumProjection directly.)
 export { pluck, projectPath as project } from "./ast/datumProjection";
 
+// Column types for `chart(data, { schema })` (#984): `Schema` is the
+// capitalized factory namespace, like `Constraint`.
+export { Schema, ColumnSchema } from "./ast/schema";
+export type {
+  ColumnType,
+  HasOrder,
+  HasMidpoint,
+  Level,
+  SchemaEntry,
+} from "./ast/schema";
+
 // Constraints
 export { Constraint } from "./ast/constraints";
 export type {
@@ -128,7 +143,6 @@ export {
   getRoute,
   hasRoute,
   resolveCurve,
-  straight,
   bezier,
   orthogonal,
   arc,
@@ -139,6 +153,8 @@ export {
   type CurveSpec,
 } from "./ast/graphicalOperators/routers";
 export { treemap } from "./ast/graphicalOperators/treemap";
+export { pack, circles } from "./ast/graphicalOperators/pack";
+export type { PackMethod, PackOptions } from "./ast/graphicalOperators/pack";
 export {
   enclose,
   enclose as background,
@@ -200,7 +216,11 @@ export { compose } from "./ast/marks/compose";
 // own surface — `time.sequence` / `time.transition` — rather than as two more
 // bare names beside the spatial operators.
 export { time } from "./ast/marks/time";
-export type { SequenceOptions, TransitionOptions } from "./ast/marks/time";
+export type {
+  SequenceOptions,
+  HistoryOptions,
+  TransitionOptions,
+} from "./ast/marks/time";
 // `animation.*` — WHAT changes as a mark enters (grow, fadeIn, wipe, …), the
 // partner of `time.*` (WHEN: stagger, parallel, sequence, transition). The
 // build-in prototype (draft PR #901); JS-only like the rest of `time`.

@@ -184,7 +184,7 @@ const links = placed
       parent.depth === 0 ? [p.theta, 0] : [parent.theta, parent.r];
     return line(
       {
-        curve: "straight",
+        curve: "linear",
         fill: "none",
         stroke: "#57606b",
         strokeWidth: LINK_WIDTH,

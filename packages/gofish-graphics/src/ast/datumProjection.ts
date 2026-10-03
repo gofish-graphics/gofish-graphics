@@ -29,6 +29,8 @@ import {
   type FieldOp,
 } from "./fieldExpr";
 import { binRows } from "./transforms";
+import { columnType, orderByLevels } from "./schema";
+import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
 function eqKey(v: unknown): string {
@@ -36,9 +38,14 @@ function eqKey(v: unknown): string {
 }
 
 /** Distinct values produced by walking `segments` from `obj`, projecting over
- *  any array encountered (mapping the remaining walk across its elements).
+ *  any array encountered (mapping the remaining walk across its elements), and
+ *  reading each value the walk reaches with `read` when one is given.
  *  Returns the de-duplicated values in first-seen order. */
-function projectValues(obj: unknown, segments: string[]): unknown[] {
+function projectValues(
+  obj: unknown,
+  segments: string[],
+  read?: (row: any) => unknown
+): unknown[] {
   const out: unknown[] = [];
   const seen = new Set<string>();
   const push = (v: unknown) => {
@@ -64,7 +71,7 @@ function projectValues(obj: unknown, segments: string[]): unknown[] {
       return;
     }
     if (i === segments.length) {
-      push(current);
+      push(read === undefined ? current : read(current));
       return;
     }
     walk((current as Record<string, unknown>)[segments[i]], i + 1);
@@ -83,6 +90,19 @@ function projectValues(obj: unknown, segments: string[]): unknown[] {
 export function projectPath(obj: unknown, path: string): unknown {
   const segments = toPath(path);
   const values = projectValues(obj, segments);
+  return values.length === 1 ? values[0] : undefined;
+}
+
+/** The key a `by`-style selector gives `obj` (a row, a bag of rows, or a ref
+ *  standing in for one), with projection and homogeneity collapse as
+ *  `projectPath` does for a field path. A key function is applied to each ROW
+ *  the walk reaches, never to the ref or the bag, so it reads the same data
+ *  it grouped the rows by. */
+export function projectBy(obj: unknown, by: SplitBy): unknown {
+  const values =
+    typeof by === "function"
+      ? projectValues(obj, [], by)
+      : projectValues(obj, toPath(fieldNameOf(by)!));
   return values.length === 1 ? values[0] : undefined;
 }
 
@@ -116,6 +136,16 @@ export function fieldNameOf(by: unknown): string | undefined {
 export type InferredRelational = {
   by?: SplitBy;
   dir?: "x" | "y";
+  /** The path tier's own `by`: the connection variable the connector
+   *  threads its operands along, whether `along` named the tier or it was
+   *  inferred. A smooth `line` or `ribbon` uses each operand's value of it as
+   *  the knots of its curve (see `runKnots` in `connect.tsx`). */
+  along?: SplitBy;
+  /** The axis the path tier places its groups on by its own `by` field, when
+   *  it does: the x of `scatter({ by: "year", x: "year" })`. That axis draws
+   *  the connection variable itself, so a `step` curve lets it advance while
+   *  every other coordinate holds (`stepPath` in `spline.ts`). */
+  parameterAxis?: "x" | "y";
   resolved?: boolean;
   /** The flow's temporal tier, for a TEMPORAL relational mark
    *  (`time.transition()`). A spatial connector threads a tier of the flow
@@ -140,6 +170,9 @@ export type TimeTier = {
    *  split on. A transition reads it to tell a gap in one mark's run (two of
    *  its knots that are NOT neighbors here) from a step between neighbors. */
   knots: () => number[];
+  /** The cycle of the time axis when the sequence is cyclic: every reader of
+   *  time reads it around the seam (see `src/timeWindow.ts`). */
+  cycle: () => Cycle | undefined;
   /** Wall-clock milliseconds per unit of `by` on the clock (ms per year, say),
    *  so a timing written in ms (a stagger's `lag`) can be read against a
    *  stretch between two keyframes. */
@@ -224,8 +257,36 @@ function sortEntries<T>(
   return new Map(pairs);
 }
 
+/** `entries` reordered by one `sort` or `reverse` op. */
+function reorderEntries<T>(
+  entries: Map<string | number, T[]>,
+  op: Extract<FieldOp, { op: "sort" | "reverse" }>
+): Map<string | number, T[]> {
+  return op.op === "sort"
+    ? sortEntries(entries, op)
+    : new Map([...entries.entries()].reverse());
+}
+
+/** `entries` reordered by the `sort` and `reverse` ops a `field(...)`
+ *  accessor carries, in order: the reordering {@link splitEntries} applies
+ *  to its groups. A stack over a `HasMidpoint` column runs it over every level
+ *  of the order (spread.tsx), so it knows the order the split lays the
+ *  levels out in even when a row has only some of them. */
+export function orderEntries<T>(
+  by: SplitBy,
+  entries: Map<string | number, T[]>
+): Map<string | number, T[]> {
+  for (const op of getFieldOps(by)) {
+    if (op.op === "sort" || op.op === "reverse")
+      entries = reorderEntries(entries, op);
+  }
+  return entries;
+}
+
 /**
- * Group `d` by `by` (via {@link splitKeyFn}), then apply any pipeline ops
+ * Group `d` by `by` (via {@link splitKeyFn}): in the order of the column's
+ * levels when the data declares the column ordered (`HasOrder`, see
+ * schema.ts), else in order of first appearance. Then apply any pipeline ops
  * carried by a `field(...)` accessor (read via `getFieldOps`) IN ORDER:
  *   - `dropNulls` filters out rows whose value at `by`'s field is
  *     `null`/`undefined`, BEFORE grouping — since grouping always happens
@@ -258,6 +319,15 @@ export function splitEntries<T extends Record<string, any>>(
     });
   }
   let entries: Map<string | number, T[]> = Map.groupBy(rows, splitKeyFn(by));
+  // An ordered column (HasOrder, from the chart's `schema`) groups in the
+  // order of its levels, not in order of first appearance. The ops below
+  // reorder from there.
+  const column = fieldNameOf(by);
+  const type = columnType(d, column);
+  if (type?.HasOrder) {
+    const keys = orderByLevels(column!, type.HasOrder, [...entries.keys()]);
+    entries = new Map(keys.map((k) => [k, entries.get(k)!]));
+  }
   for (const op of ops) {
     switch (op.op) {
       case "dropNulls":
@@ -272,10 +342,8 @@ export function splitEntries<T extends Record<string, any>>(
         break;
       }
       case "sort":
-        entries = sortEntries(entries, op);
-        break;
       case "reverse":
-        entries = new Map([...entries.entries()].reverse());
+        entries = reorderEntries(entries, op);
         break;
       case "sum":
       case "mean":
@@ -294,9 +362,9 @@ export function splitEntries<T extends Record<string, any>>(
 
 /** Which axes a scatter-family opts object positions: `x`/`y` true when a
  *  plain point value or a full range (`Min`+`Max`) is given for that axis.
- *  Shared by `Scatter`'s own `hasX`/`hasY` guard and the `arrangement`
- *  declaration the scatter operator hands `createOperator` (both in
- *  `graphicalOperators/scatter.tsx`) so the two don't drift. */
+ *  Shared by `Scatter`'s `isPlaced` (over the axes merged with `dims`) and
+ *  the `arrangement` declaration the scatter operator hands `createOperator`
+ *  (both in `graphicalOperators/scatter.tsx`) so the two don't drift. */
 export function scatterPositions(opts: {
   x?: unknown;
   xMin?: unknown;

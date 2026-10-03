@@ -4,6 +4,8 @@
  * in the same page (no navigation between stories).
  */
 
+import { disposeChart } from "../../packages/gofish-graphics/src/ast/gofish";
+
 // Import all story modules eagerly so they're available synchronously after page
 // load. Both workspace packages with stories are scanned: gofish-graphics and the
 // gofish-gotree tree-DSL package (the latter compiles its SolidJS source directly
@@ -86,6 +88,32 @@ declare global {
 
 window.__listStories__ = () => allStories;
 
+/** The children `<body>` had at load; anything else there a story appended. */
+const bodyAtLoad = new Set<Node>(document.body.childNodes);
+
+/**
+ * Tear down whatever the previous story rendered before the next one renders
+ * into this same page. Clearing the DOM is not enough: a chart that read an
+ * input (a `timer()`, a slider) keeps an interaction runtime, and a live input
+ * keeps re-rendering that chart into its detached container forever. So every
+ * chart is disposed first, then the root is cleared and the containers the
+ * stories' `initializeContainer()` appended to `<body>` are removed.
+ *
+ * Charts are found by the `__gofishState` they leave on their containers,
+ * not through a registry in the engine, which this page's engine source and
+ * the prod bench's `dist-bench` bundle would not share (see "Frame
+ * publication" in the Rendering essay).
+ */
+function disposePreviousStory(root: HTMLElement): void {
+  for (const el of document.body.querySelectorAll<HTMLElement>("*")) {
+    disposeChart(el);
+  }
+  root.innerHTML = "";
+  for (const child of [...document.body.childNodes]) {
+    if (!bodyAtLoad.has(child)) child.remove();
+  }
+}
+
 /**
  * Render a single story into #stories-root.
  * Returns true on success, false on error (check __STORY_RENDER_ERROR__).
@@ -95,7 +123,7 @@ window.__renderStory__ = async (id: string): Promise<boolean> => {
   window.__STORY_RENDER_ERROR__ = null;
 
   const root = document.getElementById("stories-root")!;
-  root.innerHTML = "";
+  disposePreviousStory(root);
 
   const info = allStories.find((s) => s.id === id);
   if (!info) {

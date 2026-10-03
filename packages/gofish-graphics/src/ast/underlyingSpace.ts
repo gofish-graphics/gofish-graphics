@@ -79,7 +79,18 @@ export const spacePlacement = (space: CONTINUOUS_TYPE): Placement =>
  */
 export type CONTINUOUS_TYPE = {
   kind: "continuous";
-  /** Abstract SIZE: the σ-affine extent `slope·σ + intercept`. */
+  /** The σ-affine extent on the positive side of the baseline (the local 0).
+   *  A baseline magnitude's extent is measured from its baseline on both
+   *  sides, like a font's ascent and descent: a bar of value 30 has ascent
+   *  30σ, a bar of value −20 has descent 20σ. An anchored or difference
+   *  extent sits wholly above its low edge, so its descent is 0. */
+  ascent: Monotonic.Monotonic;
+  /** The σ-affine extent on the negative side of the baseline. See
+   *  {@link CONTINUOUS_TYPE.ascent}. */
+  descent: Monotonic.Monotonic;
+  /** The total σ-affine extent `ascent + descent`, the size a scope solves σ
+   *  against. Computed once by {@link CONTINUOUS} from the pair; never set on
+   *  its own. */
   width: Monotonic.Monotonic;
   /** Data-space extent for scales/axes/nicing/measures, AND the sole carrier of
    *  the abstract placement (read via {@link spacePlacement}). See
@@ -89,6 +100,14 @@ export type CONTINUOUS_TYPE = {
    *  {@link mergeMeasures}. Undefined = "no claim" (permissive). */
   measure?: Measure;
   coordinateTransform?: CoordinateTransform;
+  /** True when both sides of the 0 hold nonnegative amounts measured away from
+   *  it, rather than signed values (#984's "mirrored side": magnitudes with a
+   *  side). A stack centered on a `HasMidpoint` column builds it: a Likert
+   *  chart's parts left of the center are counts too. An axis over it labels
+   *  each tick with its distance from 0. A union keeps it only when every
+   *  part has it ({@link allMirrored}).
+   *  TODO(#995): layer axis merging, coord, and anchorAt drop it. */
+  mirrored?: true;
 };
 
 export type ORDINAL_TYPE = {
@@ -121,13 +140,16 @@ export type UnderlyingSpace = CONTINUOUS_TYPE | ORDINAL_TYPE | UNDEFINED_TYPE;
  *  {@link DIFFERENCE} conflict), plus {@link anchorAt} for re-anchoring an
  *  existing space at a data coordinate. */
 export const CONTINUOUS = (
-  width: Monotonic.Monotonic,
+  ascent: Monotonic.Monotonic,
+  descent: Monotonic.Monotonic,
   dataDomain: DataDomain,
   measure?: Measure,
   coordinateTransform?: CoordinateTransform
 ): CONTINUOUS_TYPE => ({
   kind: "continuous",
-  width,
+  ascent,
+  descent,
+  width: Monotonic.isZero(descent) ? ascent : Monotonic.add(ascent, descent),
   dataDomain,
   measure,
   coordinateTransform,
@@ -149,12 +171,13 @@ export const continuousInterval = (
     : undefined;
 
 /** The extent interval of a CONTINUOUS space, treating a non-anchored extent as
- *  starting at 0 — `[min, min + width.run(1)]`. The fold variant of
- *  {@link continuousInterval}: where the latter reports "no anchor" as
- *  `undefined`, this collapses it to `[0, extent]` so an extent can be unioned
- *  regardless of anchoring (overlay / alignment). */
+ *  measured from a baseline at 0 — `[−descent.run(1), ascent.run(1)]`. The
+ *  fold variant of {@link continuousInterval}: where the latter reports "no
+ *  anchor" as `undefined`, this collapses it to the extent about 0 so an extent
+ *  can be unioned regardless of anchoring (overlay / alignment). */
 export const continuousExtentInterval = (space: CONTINUOUS_TYPE): Interval =>
-  continuousInterval(space) ?? interval(0, space.width.run(1));
+  continuousInterval(space) ??
+  interval(-space.descent.run(1), space.ascent.run(1));
 
 /** A baseline magnitude — a sized-but-unplaced extent (the old `SIZE`): no
  *  committed position. Distinct from a data-positioned anchored extent
@@ -174,6 +197,7 @@ export const POSITION = (
 ): UnderlyingSpace =>
   CONTINUOUS(
     Monotonic.linear(domain.max - domain.min, 0),
+    Monotonic.ZERO,
     domain,
     measure,
     coordinateTransform
@@ -210,47 +234,91 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   const iv = continuousInterval(space);
   if (iv === undefined) return space;
   const [niceMin, niceMax] = d3Nice(iv.min, iv.max, 10);
-  return CONTINUOUS(
+  const niced = CONTINUOUS(
     Monotonic.linear(niceMax - niceMin, 0),
+    Monotonic.ZERO,
     interval(niceMin, niceMax),
     (space as CONTINUOUS_TYPE).measure,
     (space as CONTINUOUS_TYPE).coordinateTransform
-  ) as T;
+  );
+  return mirrored(niced, (space as CONTINUOUS_TYPE).mirrored === true) as T;
 };
+
+/** `space` with both sides of its 0 marked as amounts measured away from it
+ *  ({@link CONTINUOUS_TYPE.mirrored}), when `when` holds; else `space`. */
+export const mirrored = (
+  space: UnderlyingSpace,
+  when = true
+): UnderlyingSpace =>
+  when && isCONTINUOUS(space) ? { ...space, mirrored: true } : space;
+
+/** Whether a union of `spaces` stays mirrored: only when every one is. */
+export const allMirrored = (spaces: CONTINUOUS_TYPE[]): boolean =>
+  spaces.length > 0 && spaces.every((s) => s.mirrored === true);
 
 /** UNANCHORED continuous space (old DIFFERENCE) — delta axis. Keys on the DATA
  *  fact (`dataDomain === "delta"`), NOT on placement, so a future `conflict`
  *  placement that still has a real data domain doesn't render delta ticks. */
 export const DIFFERENCE = (width: number, measure?: Measure): UnderlyingSpace =>
-  CONTINUOUS(Monotonic.linear(width, 0), "delta", measure);
+  CONTINUOUS(Monotonic.linear(width, 0), Monotonic.ZERO, "delta", measure);
 export const isDIFFERENCE = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE =>
   isCONTINUOUS(space) && space.dataDomain === "delta";
 
-/** A sized-but-unpositioned extent (the old `SIZE`): a baseline magnitude. */
+/** A sized-but-unpositioned extent (the old `SIZE`): a baseline magnitude,
+ *  `ascent` above its baseline and `descent` below it. Most extents sit wholly
+ *  above their baseline, so `descent` defaults to zero; a composition that
+ *  carries a real pair passes it. */
 export const SIZE = (
-  domain: Monotonic.Monotonic,
-  measure?: Measure
-): UnderlyingSpace => CONTINUOUS(domain, undefined, measure);
+  ascent: Monotonic.Monotonic,
+  measure?: Measure,
+  descent: Monotonic.Monotonic = Monotonic.ZERO
+): UnderlyingSpace => CONTINUOUS(ascent, descent, undefined, measure);
 
-/** Re-anchor a continuous space at data coordinate `min`, preserving its
- *  σ-affine `width`: the result's domain is `[min, min + width.run(1)]`. This
+/** The baseline magnitude of a data length `v` drawn from its baseline (a
+ *  rect's `w`/`h`): `[0, v]`, so a positive value is ascent and a negative one
+ *  is descent (#773). */
+export const baselineSpan = (v: number, measure?: Measure): UnderlyingSpace =>
+  SIZE(
+    Monotonic.linear(Math.max(v, 0), 0),
+    measure,
+    Monotonic.linear(Math.max(-v, 0), 0)
+  );
+
+/** Re-anchor a continuous space so its baseline lands at data coordinate
+ *  `origin`, preserving its σ-affine `ascent`/`descent`: the result's domain is
+ *  `[origin − descent.run(1), origin + ascent.run(1)]`. An anchored or
+ *  difference space has descent 0, so its low edge lands at `origin`. This
  *  is the one construction the named constructors can't express — anchoring a
  *  free (or difference) extent without flattening its width to a constant, or
  *  shifting an anchored one (the `position` operator does both). `measure`
  *  defaults to the space's own. */
 export const anchorAt = (
   space: CONTINUOUS_TYPE,
-  min: number,
+  origin: number,
   measure?: Measure
 ): CONTINUOUS_TYPE =>
   CONTINUOUS(
-    space.width,
-    interval(min, min + space.width.run(1)),
+    space.ascent,
+    space.descent,
+    interval(origin - space.descent.run(1), origin + space.ascent.run(1)),
     measure ?? space.measure,
     space.coordinateTransform
   );
+
+/** Where a σ-scope root (the chart root, or a layer's self-scaled stash)
+ *  seats the baseline of the extent it fits (#773). The scope fits `ascent +
+ *  descent` to its box, so the baseline sits `descent·σ` above the box's low
+ *  edge. Anchored and difference extents have descent 0, and a scope with no
+ *  σ on the axis (an anchored root) places through its map instead: 0. */
+export const scopeRootBaseline = (
+  space: UnderlyingSpace | undefined,
+  sigma: number | undefined
+): number =>
+  space !== undefined && isCONTINUOUS(space) && sigma !== undefined
+    ? space.descent.run(sigma)
+    : 0;
 
 /** Has a baseline (a place it hangs from): a baseline magnitude or an anchored
  *  coordinate, but NOT a difference ({@link spacePlacement} === "conflict"). The

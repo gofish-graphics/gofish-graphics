@@ -78,11 +78,25 @@ gradient(stops); // constructor
 
 ### Two-pass color resolution (`_node.ts` `resolveColorScale()`)
 
-1. `collectColorValues()` walks subtree, collects unique fill values in encounter order
+1. `collectColorValues()` walks subtree, collects unique fill values in encounter order. When every value was read from one column the chart's `schema` declares ordered (`HasOrder`, carried on the value as `DatumValueImpl.fieldType`), the palette branch lists them in the column's order instead, so the legend follows the declared order even when the first row lacks a level (see [Column types](/internals/core/underlying-space#column-types-the-chart-schema)). TODO(#984): a diverging palette driven by `HasMidpoint`.
 2. Dispatch on `_tag`:
    - `"gradient"` → compute numeric min/max, build one continuous scale via `createGradientScale(config, [min, max])` and store it (with the domain) on `scaleContext.unit` as a `ContinuousColorScale`. First writer wins: the root resolves the full-subtree domain, and deeper re-entries are skipped (a `resolved` flag) so they can't shrink it. No per-value color map is enumerated for gradients.
    - `"palette"` → assign `assignPaletteColor(config, key, index)` per value into the `color` map (`CategoricalScale`)
 3. Falls back to `color6` cycling when no `colorConfig` is set
+
+The scale also records which data fields it maps, not only which values: every
+branch reads the field off each colored node's color value (`getValueField`)
+into `unit.fields` (a set, since one scale can be shared by several layers).
+The field is the value's provenance, `DatumValueImpl.field`: `inferColor` sets
+it when a color channel named a field (`fill: "product"`,
+`fill: field("product")`), and `offset`/`lighten`/`darken` keep it. A function
+accessor, a literal, or a hand-made `datum(...)` has none, so the scale knows
+no field for it. It is not a measure and plays no part in unit checking. A legend draws the
+scale, so `layout()` reports the fields a rendered legend shows as
+`LayoutData.legendFields` (empty when the legend is suppressed). No legend
+title reads it yet; `labelAngle: "auto"` uses it to decide whether a hidden
+category row is still named somewhere (see
+[Axes](/internals/frontend/axes#automatic-label-angle-labelangle-auto)).
 
 ### Literal hex passthrough
 

@@ -21,6 +21,7 @@ import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
 import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
 import type { Placeable, RenderSession } from "./_node";
+import type { Geometry } from "./geometry";
 import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
@@ -307,6 +308,15 @@ export class GoFishRef {
     return combineDims(this.intrinsicDims, this.transform);
   }
 
+  /** The target's geometry. A ref shares its target's local frame (it copies
+   *  the target's `intrinsicDims` in `layout`), and its own `translate` maps
+   *  that frame into the ref's parent, so the target's answer is the ref's. */
+  public geometry(): Geometry {
+    if (!this.selectedNode)
+      throw new Error("[gofish] geometry() called on an unresolved ref");
+    return this.selectedNode.geometry();
+  }
+
   /** The ref's origin as a `Placeable.projectedTranslate`. A ref has no
    *  ledger, so the projection IS its computed `transform.translate` — exposing
    *  it lets every translate reader (the coord bake, `_ref` accumulation,
@@ -401,10 +411,10 @@ function isInside(node: GoFishAST, root: GoFishNode): boolean {
  * `ref` stand-ins are visited too (a named ref is a scope member).
  *
  * This is the single home for the bounded walk shared by string-name lookup
- * (`resolveScopedName`, used by `ref(string)` and by `.relate()` operands)
- * and `collectLayerRegistrations` (chartBuilder.ts layer registry), so the
- * component boundary means the same thing for `ref`, `.relate()` and
- * `selectAll`.
+ * (`resolveScopedName`, used by `ref(string)` and by `.relate()` operands),
+ * `collectLayerRegistrations` (chartBuilder.ts layer registry), and z-order
+ * operand lookup (paintOrder.ts), so the component boundary means the same
+ * thing for `ref`, `.relate()`, `selectAll` and `zAbove`/`zBelow`.
  */
 export function* visibleNodes(root: GoFishAST): Generator<GoFishAST> {
   yield root;

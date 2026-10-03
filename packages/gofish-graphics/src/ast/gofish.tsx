@@ -28,6 +28,7 @@ import {
   hasBaseline,
   isBaselineMagnitude,
   isCONTINUOUS,
+  scopeRootBaseline,
   niceContinuous,
   spaceMeasure,
   type UnderlyingSpace,
@@ -40,7 +41,13 @@ import {
   perfEnabled,
   perfSetCount,
 } from "./perf";
-import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
+import {
+  elaborateAxes,
+  elaborateAxisTitles,
+  labelRowSettingsFromAngles,
+  type LabelRowSettings,
+} from "./axes/elaborate";
+import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import { getScopeRegistry, type EqualMeasureAxis } from "./solver/scopes";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
@@ -48,6 +55,12 @@ import { elaborateLabels } from "./labels/elaborate";
 export type CategoricalScale = {
   color: Map<any, string>;
   colorConfig?: ColorConfig;
+  /** The data fields the scale maps from: the `field` each mark's color value
+   *  was read from, when its color channel named one (see
+   *  `DatumValueImpl.field`). A scale shared by several layers can
+   *  map several fields. Empty or absent when every color came from a
+   *  function accessor or a hand-made value. */
+  fields?: Set<string>;
 };
 
 export type ContinuousScale = {
@@ -66,6 +79,8 @@ export type ContinuousColorScale = {
   scaleFn: (value: number) => string;
   domain: [number, number];
   colorConfig: GradientScale;
+  /** The data fields the scale maps from (see `CategoricalScale.fields`). */
+  fields?: Set<string>;
   /**
    * Internal: set once the gradient domain has been resolved over the full
    * subtree (first writer wins), so deeper nodes don't recompute a narrower one.
@@ -101,8 +116,20 @@ export type AxisOptions =
       side?: "start" | "end";
       /** Rotate tick/category labels by this many degrees, clockwise on screen
        *  — matches Vega-Lite's `labelAngle` (e.g. `45` slants a label down to
-       *  the right, `90` reads top-to-bottom). Manual only: there is no
-       *  "auto" collision-avoidance mode (deferred, see #486).
+       *  the right, `90` reads top-to-bottom).
+       *
+       *  **`"auto"`** picks the angle for you, separately for each label row
+       *  (each tier of a nested ordinal axis): the first of 0°, 45°, 90° at
+       *  which no two labels in that row collide (at least 2px apart). A
+       *  category row that collides at every angle is hidden and takes no
+       *  space; a continuous tick row cannot be hidden and keeps the angle
+       *  with the least overlap. So a grouped bar chart's crowded inner row
+       *  can slant (or disappear) while its roomy outer row stays upright.
+       *  Collisions are counted across the whole chart. The chart is
+       *  laid out once per angle tried, so it must be rebuildable: a chart
+       *  builder or a component thunk, not a prebuilt node (see
+       *  axes/autoLabelAngle.ts). "auto" cannot be an entry of a per-tier
+       *  array.
        *
        *  A plain **number** applies to every tier of a nested ordinal axis
        *  (e.g. both the city and year rows of a grouped bar chart). An
@@ -113,7 +140,7 @@ export type AxisOptions =
        *  beyond the array's length means unrotated/undefined. A continuous
        *  axis has a single tier: it uses the number, or `array[0]` for the
        *  array form. */
-      labelAngle?: number | number[];
+      labelAngle?: number | number[] | "auto";
     };
 
 /** Read one `AxisOptions` field per dim, AS AUTHORED — `undefined` wherever the
@@ -135,12 +162,51 @@ export const resolveAxisSides = (
 ): ["start" | "end" | undefined, "start" | "end" | undefined] =>
   perDimAxisOption(axes, "side");
 
-/** A `number` applies to every tier; a `number[]` is per-tier, innermost first
- *  (see `AxisOptions.labelAngle`). */
+type LabelAngleOption = number | number[] | "auto" | undefined;
+
+/** Reject a malformed `labelAngle` (see `AxisOptions.labelAngle`). The type
+ *  already forbids these; this catches untyped callers (Python, plain JS). */
+function checkLabelAngle(v: unknown, axis: "x" | "y"): LabelAngleOption {
+  if (v === undefined || v === "auto" || typeof v === "number") return v;
+  if (Array.isArray(v)) {
+    if (v.includes("auto"))
+      throw new Error(
+        `axes.${axis}.labelAngle: "auto" applies to the whole axis, so it ` +
+          `cannot be one entry of a per-tier array; use labelAngle: "auto".`
+      );
+    if (v.every((a) => typeof a === "number")) return v as number[];
+  }
+  throw new Error(
+    `axes.${axis}.labelAngle: unknown value ${JSON.stringify(v)} ` +
+      `(expected a number, an array of numbers, or "auto").`
+  );
+}
+
+/** A `number` applies to every tier; a `number[]` is per-tier, innermost first;
+ *  `"auto"` is chosen per axis by `runLayout` (see `AxisOptions.labelAngle`). */
 export const resolveAxisLabelAngles = (
   axes: AxesOptions | undefined
-): [number | number[] | undefined, number | number[] | undefined] =>
-  perDimAxisOption(axes, "labelAngle");
+): [LabelAngleOption, LabelAngleOption] => {
+  const [x, y] = perDimAxisOption(axes, "labelAngle");
+  return [checkLabelAngle(x, "x"), checkLabelAngle(y, "y")];
+};
+
+/** The label-row settings a manual `labelAngle` describes. "auto" has none of
+ *  its own: `runLayout` chooses them and hands them to `layout()` directly. */
+function manualLabelRowSettings(
+  axes: AxesOptions | undefined
+): LabelRowSettings {
+  const angles = resolveAxisLabelAngles(axes);
+  if (angles[0] === "auto" || angles[1] === "auto") {
+    throw new Error(
+      'labelAngle: "auto" must be resolved before layout(); render through ' +
+        "gofish(), a chart builder, or runLayout()."
+    );
+  }
+  return labelRowSettingsFromAngles(
+    angles as [number | number[] | undefined, number | number[] | undefined]
+  );
+}
 
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
 // which needs a concrete canvas to scale data into (see the per-axis comment in
@@ -199,6 +265,7 @@ export async function layout(
     axes = false,
     legend = true,
     yUp = false,
+    labelRowSettings,
   }: {
     w?: number;
     h?: number;
@@ -209,6 +276,9 @@ export async function layout(
     axes?: AxesOptions;
     legend?: boolean;
     yUp?: boolean;
+    /** Internal: how each axis label row is drawn, as chosen by
+     *  `labelAngle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
+    labelRowSettings?: LabelRowSettings;
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts?: {
@@ -228,6 +298,7 @@ export async function layout(
   topOverhang: number;
   leftOverhang: number;
   bottomOverhang: number;
+  legendFields: ReadonlySet<string>;
 }> {
   child = await child;
   if (contexts?.session) {
@@ -245,9 +316,10 @@ export async function layout(
   const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
-  // Resolve coordinate-space axis aliases (polar theta/r/…) into x/y/w/h BEFORE
-  // space inference reads the dims. Top-down + scope-bounded (see resolveAliases).
-  child.resolveAliases();
+  // Resolve axis names (polar theta/r, geo lon/lat, …) BEFORE space inference
+  // reads the dims: run each node's deferred axis-scope work (a mark's `dims`,
+  // spread's `dir`, scatter's `dims`). Top-down + scope-bounded (see resolveAliases).
+  await child.resolveAliases();
   child.resolveUnderlyingSpace();
   perfAdd("resolve", perfNow() - __tResolve);
 
@@ -288,10 +360,13 @@ export async function layout(
   // before the legend pass consumes it, and the later passes insert chrome with
   // non-literal fills ("gray" titles, swatches) that would otherwise be folded
   // into the palette as if they were data values.
-  const reresolve = (n: GoFishNode, withColorScale = false) => {
+  const reresolve = async (n: GoFishNode, withColorScale = false) => {
     if (contexts?.session) n.setRenderSession(contexts.session);
     if (withColorScale) n.resolveColorScale();
     n.resolveNames();
+    // The inserted chrome is built from operators (Spread) whose constraints
+    // install in this pass; nodes resolved before are consumed and untouched.
+    await n.resolveAliases();
     n.clearUnderlyingSpace();
     n.resolveUnderlyingSpace();
   };
@@ -323,12 +398,12 @@ export async function layout(
       resolveAxisSides(axes),
       yUp,
       false,
-      resolveAxisLabelAngles(axes)
+      labelRowSettings ?? manualLabelRowSettings(axes)
     );
     titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
       child = elaborated.node;
-      reresolve(child, true);
+      await reresolve(child, true);
     }
   }
 
@@ -340,7 +415,7 @@ export async function layout(
   const labelRes = await elaborateLabels(child, { yUp });
   if (labelRes.changed) {
     child = labelRes.node;
-    reresolve(child);
+    await reresolve(child);
   }
 
   // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
@@ -476,7 +551,7 @@ export async function layout(
     });
     child = titled.node;
     xTitleNode = titled.xTitleNode;
-    reresolve(child);
+    await reresolve(child);
   }
 
   // Legend elaboration: turn the color scale into an ordinary subtree seated
@@ -511,7 +586,7 @@ export async function layout(
       chromeFlipsY
     );
     legendAdded = true;
-    reresolve(child);
+    await reresolve(child);
   }
   perfAdd("axes", perfNow() - __tAxes);
 
@@ -676,12 +751,30 @@ export async function layout(
   // overhangs the far side, e.g. the pulley diagram). The pin uses `pinAnchor`,
   // not the write-once `place()`, so it lands even when the root self-placed (a
   // diagram with its own root transform) — `place()` short-circuits a placed axis.
-  const placeRoot = (axis: "x" | "y", value: number, shrinkToFit: boolean) =>
-    shrinkToFit
-      ? child.pinAnchor(axis, value, "min")
-      : child.place(axis, value, "baseline");
-  placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
-  placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
+  //
+  // A free (baseline-magnitude) root fits `ascent + descent` to the canvas, so
+  // its baseline sits `descent·σ` above the canvas's low edge (#773,
+  // `scopeRootBaseline`).
+  const placeRoot = (axis: 0 | 1) => {
+    const name = axis === 0 ? "x" : "y";
+    const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
+    // Shrink-to-fit pins the content's `min` edge, which already includes any
+    // descent: adding `descent·σ` there would count it twice (#574).
+    if ((axis === 0 ? w : h) === undefined)
+      child.pinAnchor(name, offset, "min");
+    else
+      child.place(
+        name,
+        offset +
+          scopeRootBaseline(
+            axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY,
+            rootScaleFactors[axis]
+          ),
+        "baseline"
+      );
+  };
+  placeRoot(0);
+  placeRoot(1);
 
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
@@ -808,6 +901,13 @@ export async function layout(
     topOverhang,
     leftOverhang,
     bottomOverhang,
+    // The fields a rendered legend shows: the color scale's fields when the
+    // legend was drawn, none when it was suppressed or had nothing to show.
+    legendFields: legendAdded
+      ? new Set(
+          (unitScale as { fields?: Set<string> } | undefined)?.fields ?? []
+        )
+      : new Set<string>(),
   };
 }
 
@@ -879,16 +979,35 @@ type LayoutData = {
   topOverhang: number;
   leftOverhang: number;
   bottomOverhang: number;
+  /** The data fields the rendered legend shows (empty without a legend). */
+  legendFields: ReadonlySet<string>;
 };
 
 /**
  * Run the domain-inference + layout passes for `child` and return the
  * measured layout data. The single place the pipeline is driven — shared by
  * the live `gofish()` render path and the `gofishToSVG*` export paths.
+ *
+ * An axis with `labelAngle: "auto"` is the one case that lays out more than
+ * once: the chart is rebuilt and laid out once per candidate angle, and the
+ * winning run's layout is returned as is (see axes/autoLabelAngle.ts). A chart
+ * without "auto" takes the single `layoutOnce` below, unchanged.
  */
 export async function runLayout(
   options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>
+): Promise<LayoutData> {
+  const angles = resolveAxisLabelAngles(options.axes);
+  if (angles[0] !== "auto" && angles[1] !== "auto")
+    return layoutOnce(options, child);
+  return layoutWithAutoLabelAngles(options, child, angles, layoutOnce);
+}
+
+/** One pass of the pipeline over `child`, which it lays out in place. */
+async function layoutOnce(
+  options: GoFishRenderOptions,
+  child: GoFishNode | Promise<GoFishNode>,
+  labelRowSettings?: LabelRowSettings
 ): Promise<LayoutData> {
   const {
     w,
@@ -942,7 +1061,18 @@ export async function runLayout(
     }
 
     return await layout(
-      { w, h, x, y, transform, debug, axes, legend, yUp: options.yUp },
+      {
+        w,
+        h,
+        x,
+        y,
+        transform,
+        debug,
+        axes,
+        legend,
+        yUp: options.yUp,
+        labelRowSettings,
+      },
       child,
       contexts
     );
@@ -1000,14 +1130,84 @@ function renderLayout(
   );
 }
 
-export const gofish = (
+/** What `gofish()` stashes on a container it rendered into: the chart's
+ *  current Solid root teardown, and its interaction runtime when it has one.
+ *  One object per CHART, not per paint: a re-render of the same chart (same
+ *  runtime) swaps `disposeRoot` in place, so a {@link View} recognizes its own
+ *  chart by this object's identity across re-renders. */
+type ChartState = {
+  disposeRoot: () => void;
+  runtime?: InteractionRuntime;
+};
+type ChartHost = HTMLElement & { __gofishState?: ChartState };
+
+/**
+ * The handle `render` returns for a chart mounted in the page. `unmount()`
+ * removes the chart's DOM and detaches it from every input it read, so a
+ * `timer()` it was the last reader of stops ticking. It is idempotent, and it
+ * never touches a NEWER chart that has since been rendered into the same
+ * container.
+ */
+export interface View {
+  /** The element the chart was rendered into. */
+  readonly container: HTMLElement;
+  /** Tear the chart down: its DOM, its Solid root, its interaction runtime. */
+  unmount(): void;
+}
+
+/** Tear down the chart `gofish()` rendered into `container`, if any: its Solid
+ *  root and its interaction runtime. A no-op on an element no chart rendered
+ *  into. Internal: `View.unmount` is the public form, and a host that holds
+ *  only the DOM (the story harness) calls this directly. See "Frame
+ *  publication" in the Rendering essay. */
+export function disposeChart(container: HTMLElement): void {
+  const host = container as ChartHost;
+  const state = host.__gofishState;
+  if (!state) return;
+  host.__gofishState = undefined;
+  state.disposeRoot();
+  state.runtime?.dispose();
+}
+
+/** The {@link View} of the chart whose state is `state`. It unmounts only while
+ *  that chart still owns `container`: a newer chart there has its own state. */
+const viewOf = (container: HTMLElement, state: ChartState): View => ({
+  container,
+  unmount() {
+    if ((container as ChartHost).__gofishState === state)
+      disposeChart(container);
+  },
+});
+
+/** A chart child `gofish()` renders synchronously: a node or a promise of one
+ *  (the layout awaits it inside the mounted root). */
+type GoFishChild = GoFishNode | Promise<GoFishNode>;
+
+/**
+ * Render `child` into `container`. A node renders synchronously and returns its
+ * {@link View}; a component thunk (`() => node`) first resolves under the
+ * interaction runtime, so it returns a `Promise<View>`.
+ */
+export function gofish(
   container: HTMLElement,
   options: GoFishRenderOptions,
-  child:
-    | GoFishNode
-    | Promise<GoFishNode>
-    | (() => GoFishNode | Promise<GoFishNode>)
-): HTMLElement | Promise<HTMLElement> => {
+  child: GoFishChild
+): View;
+export function gofish(
+  container: HTMLElement,
+  options: GoFishRenderOptions,
+  child: () => GoFishChild
+): Promise<View>;
+export function gofish(
+  container: HTMLElement,
+  options: GoFishRenderOptions,
+  child: GoFishChild | (() => GoFishChild)
+): View | Promise<View>;
+export function gofish(
+  container: HTMLElement,
+  options: GoFishRenderOptions,
+  child: GoFishChild | (() => GoFishChild)
+): View | Promise<View> {
   // Component thunk (`() => node`): a raw shape/operator composition — no
   // `chart()` builder, no data binding — that we give the full reactive
   // treatment. A raw node is built once and can't re-evaluate its spec, so
@@ -1020,37 +1220,38 @@ export const gofish = (
   // static behavior below (a `live()` channel on a plain node still patches at
   // paint — that's runtime-independent — it just gets no runtime/hit-testing).
   if (typeof child === "function") {
-    const thunk = child as () => GoFishNode | Promise<GoFishNode>;
-    return renderWithInteraction(
-      async () => ({ node: await thunk(), options: { ...options } }),
-      container
-    );
+    const thunk = child;
+    return renderWithInteraction(async () => {
+      const node = await thunk();
+      // A thunk can build the chart again, which `labelAngle: "auto"` needs
+      // (see `GoFishNode.rebuild`).
+      node.rebuild = async () => thunk();
+      return { node, options: { ...options } };
+    }, container);
   }
 
   const svgPadding = options.padding ?? PADDING;
 
-  type GofishState = {
-    dispose: () => void;
-    runtime?: InteractionRuntime;
-  };
-  const stateHost = container as HTMLElement & { __gofishState?: GofishState };
+  const stateHost = container as ChartHost;
 
   // Re-rendering into the same container must always dispose the previous Solid
   // root, or roots and DOM accumulate. TWO cases enter here with a prior state:
   //  1. A Tier-2 re-render of the SAME chart (the interaction scheduler, per
-  //     spec change) — SAME runtime. Dispose only the old Solid root; the
-  //     runtime is reused and must survive (disposing it would clear its
-  //     rerenderFn/inputs and kill interactivity after one frame).
-  //  2. A DIFFERENT chart taking over this container — dispose the old Solid
-  //     root AND the old runtime, so a still-live input (e.g. a running timer
-  //     the previous chart never stopped) stops zombie-invalidating a dead
-  //     chart whose container is now someone else's.
+  //     spec change) — SAME runtime. Dispose only the old Solid root and keep
+  //     the chart's state: the runtime is reused and must survive (disposing
+  //     it would clear its rerenderFn/inputs and kill interactivity after one
+  //     frame), and the chart's View must still recognize the chart as its own.
+  //  2. A DIFFERENT chart taking over this container — dispose the old chart
+  //     entirely, Solid root AND runtime, so an input it read (e.g. a timer)
+  //     stops invalidating a dead chart whose container is now someone else's.
   const prev = stateHost.__gofishState;
-  if (prev) {
-    prev.dispose();
-    if (prev.runtime && prev.runtime !== options.interaction) {
-      prev.runtime.dispose();
-    }
+  let state: ChartState;
+  if (prev?.runtime !== undefined && prev.runtime === options.interaction) {
+    prev.disposeRoot();
+    state = prev;
+  } else {
+    disposeChart(container);
+    state = { disposeRoot: () => {}, runtime: options.interaction };
   }
 
   const [layoutData] = createResource(() => runLayout(options, child));
@@ -1072,15 +1273,13 @@ export const gofish = (
       </Suspense>
     );
   }, container);
-  stateHost.__gofishState = {
-    dispose: () => {
-      dispose();
-      container.innerHTML = "";
-    },
-    runtime: options.interaction,
+  state.disposeRoot = () => {
+    dispose();
+    container.innerHTML = "";
   };
-  return container;
-};
+  stateHost.__gofishState = state;
+  return viewOf(container, state);
+}
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const XLINK_NS = "http://www.w3.org/1999/xlink";

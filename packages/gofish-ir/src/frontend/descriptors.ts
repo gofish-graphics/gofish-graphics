@@ -213,8 +213,18 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
 // Shared field groups
 // ---------------------------------------------------------------------------
 
-/** The 14 `FancyDims`/coord-alias channels (`dims.ts` XYWHDims +
- *  KNOWN_ALIAS_KEYS). Included wholesale by marks whose factory spreads a
+/** A `dims` option: axis name → value or interval (`AxisDims` in schema.ts).
+ *  The names are `x`/`y` plus whatever the enclosing coordinate space
+ *  declares, known only at render time, so the key set is open — the one named
+ *  escape hatch for axis names, next to the closed x/y/w/h keys. */
+const axisDims = (doc: string): FieldSpec => ({
+  type: t.record(t.ref("AxisDimsValue")),
+  doc,
+});
+
+/** The `FancyDims` channels (`dims.ts` XYWHDims): the closed x/y/w/h keys,
+ *  which mean axis 0/1 in every coordinate space, plus the open `dims` bag
+ *  keyed by axis name. Included wholesale by marks whose factory spreads a
  *  bare `...fancyDims: FancyDims<MaybeValue<number>>` (rect, ellipse, petal,
  *  text, image, treemap, layer's `Layer(dims, children)` form). Marks that
  *  destructure a fixed subset (blank, circle) declare their own fields
@@ -230,13 +240,9 @@ export const boxDims: FieldGroup = group({
   y2: ch.num("Other y edge position."),
   h: ch.num("Height."),
   emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
-  // Coordinate-space aliases (KNOWN_ALIAS_KEYS) — resolved to x/y/w/h by
-  // resolveAliases once the enclosing coord's declared aliases are known
-  // (polar: theta→x position, r→y position).
-  theta: ch.num("Angular position alias (polar coord's x)."),
-  thetaSize: ch.num("Angular extent alias (polar coord's w)."),
-  r: ch.num("Radial position alias (polar coord's y)."),
-  rSize: ch.num("Radial extent alias (polar coord's h)."),
+  dims: axisDims(
+    "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+  ),
 });
 
 /** `rect`'s full paint group (the only leaf mark that supports all five —
@@ -327,7 +333,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
       // IR truth: optional here even though Python's spread() requires dir —
       // matches validate.ts's optionalField("dir", ...) today.
-      dir: { type: t.enum("x", "y"), doc: "Direction to spread along." },
+      dir: {
+        type: t.string,
+        doc: "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
+      },
       spacing: {
         type: t.number,
         default: 8,
@@ -382,7 +391,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.union(t.string, t.ref("FieldAccessor")),
         doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
       },
-      dir: { type: t.enum("x", "y"), doc: "Direction to stack along." },
+      dir: {
+        type: t.string,
+        doc: "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
+      },
       // Real producers pass spread's options through (the JS `stack` is a
       // literal `Spread({...props, glue: true})` forward, and stories emit
       // `stack(spacing=2)`), so the wire accepts them and the validator
@@ -450,6 +462,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       xMax: ch.num("Range form: right/top edge, x."),
       yMin: ch.num("Range form: left/bottom edge, y."),
       yMax: ch.num("Range form: right/top edge, y."),
+      dims: axisDims(
+        "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span."
+      ),
       alignment: {
         type: t.string,
         default: "baseline",
@@ -509,8 +524,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       // position (`x`/`y`) and size (`w`/`h`) are both real options. Only
       // `w`/`h` carry channel annotations (`createOperator`'s `channels`), so
       // those two resolve data-driven values; `x`/`y` pass through as literals.
-      // The polar aliases (theta/r/...) are deliberately NOT here: `Treemap`
-      // never calls `extractAliasCandidates`, so they would not resolve.
+      // `dims` names the same box by axis name and is written onto it by the
+      // resolveAliases pass (`deferAxisDims`); each slot infers as its
+      // top-level counterpart.
       x: ch.num(
         "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
       ),
@@ -522,6 +538,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       ),
       h: ch.num(
         "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+      ),
+      dims: axisDims(
+        "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
       ),
       by: {
         type: t.union(t.string, t.ref("FieldAccessor")),
@@ -570,6 +589,23 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       leafIntrinsicRadiusField: {
         type: t.string,
         doc: "When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).",
+      },
+    },
+  }),
+
+  pack: operator("pack", {
+    doc: "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
+    fields: {
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.",
+      },
+      method: {
+        type: t.object({
+          kind: { type: t.enum("circles"), required: true },
+        }),
+        default: { kind: "circles" },
+        doc: "The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm.",
       },
     },
   }),
@@ -751,8 +787,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         required: true,
         doc: "Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).",
       },
-      fill: { type: t.string, default: "black", doc: "Fill color." },
-      stroke: { type: t.string, doc: "Stroke color. Defaults to `fill`." },
+      fill: {
+        ...ch.color("Fill color, or a field name for a color scale."),
+        default: "black",
+      },
+      stroke: ch.color("Stroke color. Defaults to `fill`."),
       strokeWidth: {
         type: t.number,
         default: 0,
@@ -814,7 +853,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       curve: {
         type: t.any,
-        doc: 'Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = "auto" (catmullRom on a homogeneous continuous connection axis, else straight).',
+        doc: 'Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name ("linear"/"bezier"/"step"/"monotone"/"smooth"/"catmullRom"). "step", "linear", "monotone" and "smooth" are read over the parameter of the run, from the least to the most smooth. "step" holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). "monotone" is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". "smooth" rounds a peak a little past its point, but keeps a run of equal values flat. "catmullRom" is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted = "auto" (monotone on a homogeneous continuous connection axis, else linear).',
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       source: {
@@ -875,7 +914,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
         type: t.any,
-        doc: 'Screen-space band-edge shape (straight() | bezier()). Omitted = "auto" (bezier).',
+        doc: 'Screen-space band-edge shape ("linear" | bezier() | "step" | "monotone" | "smooth" | "catmullRom"). "step" steps both edges, as a stepped area does. "monotone" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); "smooth" is a rounder reading over the same parameter, and can go a little past a point; "catmullRom" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = "auto" (monotone on a homogeneous continuous connection axis, else a bezier band).',
       },
       from: { type: t.string, py: "from_" },
       to: { type: t.string },
@@ -1084,6 +1123,11 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     },
   }),
 
+  pack: combinatorMark("pack", {
+    doc: "Low-level combinator form of `pack`: packs the given child marks by their enclosing circles.",
+    fields: resolveFields(OPERATORS.pack),
+  }),
+
   // Porter-Duff-style compositing quartet + `over`/`mask`. Wire `type` stays
   // the original Porter-Duff string; `pyName` carries the Figma-inspired
   // JS/Python-facing rename (#196/#202).
@@ -1191,7 +1235,7 @@ const polarFields: FieldGroup = group({
 
 export const COORDS: Record<string, ConstructDescriptor> = {
   polar: coordTransform("polar", {
-    doc: "Maps (θ, r) → screen. θ is the x-axis (alias theta/thetaSize), r is the y-axis (alias r/rSize).",
+    doc: "Maps (θ, r) → screen. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.",
     fields: polarFields,
   }),
   clock: coordTransform("clock", {

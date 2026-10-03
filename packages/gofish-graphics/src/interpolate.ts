@@ -1,24 +1,66 @@
 /**
  * Interpolation over a run of keyframes, with knots at DATA parameter values.
  *
- * This is the temporal reading of what `adaptive-resampling.ts` does in space:
- * `convertPointsToBezierCurves` threads a run of points with a *centripetal*
- * (chord-length) Catmull-Rom, because pixel space has a canonical metric and a
- * path only has to look right. A transition instead evaluates the run at one
- * parameter value — the clock's — and the parameter is the data's own time
- * field (`year`), not an accumulated distance. So the knots here are the data
- * values, and nothing is reparameterized: two keyframes ten years apart take
- * ten years' worth of the clock, whatever the distance between them on screen.
+ * A transition evaluates a run at one parameter value — the clock's — and the
+ * parameter is the data's own time field (`year`), not a distance on screen.
+ * So the knots here are the data values, and nothing is reparameterized: two
+ * keyframes ten years apart take ten years' worth of the clock, whatever the
+ * distance between them on screen. A smooth `line` threaded through the same
+ * keyframes with the same `curve` draws the same curve (`spline.ts`) over the
+ * same knots.
  *
- * Both methods are pure functions of `(knots, values, t)`. `knots` must be
+ * Every method is a pure function of `(knots, values, t)`. `knots` must be
  * sorted ascending and the same length as `values`; the caller sorts once and
  * reuses the ordering for every channel it interpolates (x, y, width, height).
+ * A keyed run of rows has one row per knot: `interpolate()` and
+ * `time.transition()` check it (`assertOneRowPerKnot`), since a run with two
+ * rows at one moment has no one value there.
  */
 
+import { SMOOTH_CURVES, type SmoothCurve, channelSpline } from "./spline";
 import { lerp } from "./util";
 
-/** How a run is read between its knots. */
-export type InterpolationMethod = "step" | "linear" | "catmullRom";
+/** How a run is read between its knots, from the least to the most smooth.
+ *  These are readings of values over a parameter; the screen-space
+ *  Catmull-Rom a `line` can draw is not one. The three smooth ones are
+ *  `spline.ts`'s data-space curves. */
+export type InterpolationMethod = "step" | "linear" | SmoothCurve;
+
+const METHODS: readonly InterpolationMethod[] = [
+  "step",
+  "linear",
+  ...SMOOTH_CURVES,
+];
+
+/**
+ * The method a `curve` (or `method`) option names. Unset and `"auto"` are
+ * `"monotone"`: the field is numeric, so the run is a sample of a continuous
+ * variable and smooths — the same conclusion `connect`'s auto rule reaches for
+ * a continuous connection axis, and the reason a transition traces the curve
+ * a smooth threaded line draws. Anything else that is not a method throws,
+ * naming `where` the option was written.
+ */
+export function resolveMethod(
+  curve: unknown,
+  where: string
+): InterpolationMethod {
+  if (curve === undefined || curve === "auto") return "monotone";
+  if (METHODS.includes(curve as InterpolationMethod)) {
+    return curve as InterpolationMethod;
+  }
+  const screenOnly =
+    curve === "catmullRom"
+      ? ` Catmull-Rom is a screen-space path curve: a line's or a ribbon's ` +
+        `\`curve\` can draw it, but nothing reads it over time.`
+      : "";
+  throw new Error(
+    `[gofish] ${where}: ${typeof curve === "string" ? JSON.stringify(curve) : String(curve)} is not a way to read a run ` +
+      `between its keyframes. Use ${METHODS.slice(0, -1)
+        .map((m) => JSON.stringify(m))
+        .join(", ")} or ${JSON.stringify(METHODS[METHODS.length - 1])}.` +
+      screenOnly
+  );
+}
 
 /** Where `t` falls in a run: the segment index and the local fraction in it. */
 export type KnotLocation = { i: number; u: number };
@@ -40,6 +82,37 @@ export function locate(knots: number[], t: number): KnotLocation {
   // Two keyframes at the SAME time value (duplicate rows for one year) would
   // divide by zero; treat the pair as an instantaneous jump to the later one.
   return { i, u: span === 0 ? 1 : (t - knots[i]) / span };
+}
+
+/**
+ * Check that a run of one key's rows has one row per moment: none of its
+ * `knots` repeated, in whatever order they come. Two rows of one key at one
+ * value of the ordering field leave no answer to "where is it at that
+ * moment?", so this throws, naming the key and the value. `where` names the
+ * caller, `field` the ordering field and `key` the key's value (undefined when
+ * the run is the whole chart's).
+ */
+export function assertOneRowPerKnot(
+  knots: number[],
+  where: string,
+  field: string,
+  key: unknown
+): void {
+  const seen = new Set<number>();
+  for (const knot of knots) {
+    if (!seen.has(knot)) {
+      seen.add(knot);
+      continue;
+    }
+    const who =
+      key === undefined ? "the run" : `the run for ${JSON.stringify(key)}`;
+    throw new Error(
+      `[gofish] ${where}: ${who} has two rows at ${field} = ${knot}, so ` +
+        `there is no one place it is at that moment. Aggregate to one row ` +
+        `per ${field} first; for example, scatter({ by, x, y }) places each ` +
+        `group at the mean of its rows.`
+    );
+  }
 }
 
 /** Piecewise-linear evaluation: the value moves at a constant rate between
@@ -71,91 +144,65 @@ export function interpolateStep(
 }
 
 /**
- * Non-uniform Catmull-Rom evaluation, by the Barry-Goldman pyramid: the value
- * follows a C¹ spline that passes through every keyframe, with each segment
- * parameterized by the knots themselves rather than by a uniform 0..1. That is
- * what makes an uneven run of years (1952, 1957, 1962, …, 2007 with a gap)
- * play at an even speed instead of racing through the short intervals.
+ * Monotone cubic evaluation: the value follows a smooth curve that passes
+ * through every keyframe, with each segment parameterized by the knots
+ * themselves rather than by a uniform 0..1. That is what makes an uneven run
+ * of years (1952, 1957, 1962, …, 2007 with a gap) play at an even speed
+ * instead of racing through the short intervals.
  *
- * The two end segments have no outside neighbor, so a phantom knot is
- * reflected outward (`t₀ = t₁ - (t₂ - t₁)`) with the endpoint's own value. A
- * duplicated knot VALUE with a duplicated knot PARAMETER would divide by zero,
- * so the parameter is offset while the value repeats.
+ * The curve is `spline.ts`'s monotone cubic, the one a smooth `line` draws.
+ * Between two keyframes it only rises or only falls, so it never goes past
+ * either of them, and where the run turns it turns on the keyframe. A run of
+ * two keyframes is a straight line.
  */
-export function interpolateCatmullRom(
+export function interpolateMonotone(
   knots: number[],
   values: number[],
   t: number
 ): number {
-  return interpolateRun(knots, values, t, "catmullRom");
+  return interpolateRun(knots, values, t, "monotone");
 }
 
-/** The Barry-Goldman pyramid for segment `i` at local fraction `u`, on a run
- *  of at least three knots. */
-function catmullRomAt(
-  knots: number[],
-  values: number[],
-  i: number,
-  u: number
-): number {
-  const n = knots.length;
-  const t1 = knots[i];
-  const t2 = knots[i + 1];
-  const p1 = values[i];
-  const p2 = values[i + 1];
-  // Reflected phantom neighbors at the ends.
-  const t0 = i > 0 ? knots[i - 1] : t1 - (t2 - t1);
-  const p0 = i > 0 ? values[i - 1] : p1;
-  const t3 = i + 2 < n ? knots[i + 2] : t2 + (t2 - t1);
-  const p3 = i + 2 < n ? values[i + 2] : p2;
-
-  const tt = t1 + u * (t2 - t1);
-  // Guard every denominator: a degenerate span collapses that blend onto its
-  // later endpoint, the same rule `locate` uses.
-  const blend = (a: number, b: number, ta: number, tb: number): number =>
-    tb === ta ? b : ((tb - tt) * a + (tt - ta) * b) / (tb - ta);
-
-  const a1 = blend(p0, p1, t0, t1);
-  const a2 = blend(p1, p2, t1, t2);
-  const a3 = blend(p2, p3, t2, t3);
-  const b1 = blend(a1, a2, t0, t2);
-  const b2 = blend(a2, a3, t1, t3);
-  return blend(b1, b2, t1, t2);
-}
-
-/** Evaluate one channel of a keyframe run at `t`. */
+/** Evaluate one channel of a keyframe run at `t`. A caller reading several
+ *  channels, or one channel at many `t`, prepares each with `channelReader`
+ *  and locates `t` once instead. */
 export function interpolateRun(
   knots: number[],
   values: number[],
   t: number,
   method: InterpolationMethod
 ): number {
-  if (knots.length < 2) return knots.length === 0 ? NaN : values[0];
-  return interpolateAt(knots, values, locate(knots, t), method);
+  const read = channelReader(knots, values, method);
+  return knots.length < 2 ? read({ i: 0, u: 0 }) : read(locate(knots, t));
 }
 
 /**
- * Evaluate one channel of a keyframe run at an already-located parameter, so
- * a caller reading several channels of the same run at the same `t` locates
- * it once. `knots` must have at least two entries (a shorter run has no
- * segment to locate in).
+ * One channel of a keyframe run, prepared once for reading at many located
+ * parameters, with a smooth run's curve worked out here rather than on every
+ * read. A transition reads every channel of its run on every frame, so it
+ * builds these at layout. A run of fewer than two knots holds its one value
+ * (or is NaN when empty), wherever it is read.
  */
-export function interpolateAt(
+export function channelReader(
   knots: number[],
   values: number[],
-  { i, u }: KnotLocation,
   method: InterpolationMethod
-): number {
+): (at: KnotLocation) => number {
+  if (knots.length < 2) {
+    const held = knots.length === 0 ? NaN : values[0];
+    return () => held;
+  }
   if (method === "step") {
     // `locate` only reports `u === 1` past the end of the run; inside a
     // segment the fraction is strictly below 1, so the previous keyframe's
     // value holds.
-    return u >= 1 ? values[i + 1] : values[i];
+    return ({ i, u }) => (u >= 1 ? values[i + 1] : values[i]);
   }
-  if (method === "linear" || knots.length === 2) {
-    return lerp(values[i], values[i + 1], u);
+  if (method === "linear") {
+    return ({ i, u }) => lerp(values[i], values[i + 1], u);
   }
-  return catmullRomAt(knots, values, i, u);
+  const spline = channelSpline(method, knots, values);
+  return ({ i, u }) => spline.at(i, u);
 }
 
 /**
@@ -198,7 +245,8 @@ export type InterpolateOptions = {
   key: string;
   /** Where to read the run, in `along`'s units. */
   at: number;
-  /** How a run is read between its keyframes. Default `"catmullRom"`, the
+  /** How a run is read between its keyframes: `"step"`, `"linear"`,
+   *  `"monotone"` or `"smooth"`. Default `"monotone"`, the
    *  same default `time.transition()` takes for the same reason (the field is
    *  numeric, so the run is a sample of something continuous). `"step"` does
    *  not blend at all: each keyframe's values hold until the next one's time
@@ -230,8 +278,9 @@ export type InterpolateOptions = {
  */
 export function interpolate<T extends Record<string, unknown>>(
   rows: readonly T[],
-  { along, key, at, method = "catmullRom", fields }: InterpolateOptions
+  { along, key, at, method: written, fields }: InterpolateOptions
 ): Record<string, unknown>[] {
+  const method = resolveMethod(written, "interpolate({ method })");
   // Key order is first appearance, so the output is a deterministic function
   // of the input rather than of a hash's iteration order.
   const runs = Map.groupBy(rows, (row) => row[key]);
@@ -247,6 +296,7 @@ export function interpolate<T extends Record<string, unknown>>(
           `whose "${along}" is not one.`
       );
     }
+    assertOneRowPerKnot(knots, "interpolate()", along, k);
 
     // Which fields get blended. Every field of the run is considered so a
     // column that only some rows carry still comes out.
@@ -272,15 +322,12 @@ export function interpolate<T extends Record<string, unknown>>(
     // copied — comes from the keyframe the step method is holding.
     const source = sourceIndex(knots, at, method);
 
+    const where = knots.length < 2 ? { i: 0, u: 0 } : locate(knots, at);
     const row: Record<string, unknown> = { ...sorted[source] };
     for (const f of names) {
       if (!blended.has(f)) continue;
-      row[f] = interpolateRun(
-        knots,
-        sorted.map((r) => Number(r[f])),
-        at,
-        method
-      );
+      const values = sorted.map((r) => Number(r[f]));
+      row[f] = channelReader(knots, values, method)(where);
     }
     row[along] = at;
     row[key] = k;

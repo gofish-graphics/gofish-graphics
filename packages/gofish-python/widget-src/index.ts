@@ -21,6 +21,7 @@ import {
   Serialize,
   serializeSVG,
   type ChartBuilder,
+  type View,
 } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
@@ -285,7 +286,7 @@ function renderLayer(
   model: WidgetModel,
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
-): void {
+): Promise<View> {
   const debug = model.get("debug");
   const log = debug
     ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
@@ -343,23 +344,22 @@ function renderLayer(
     const layerBuilder = childTiers
       .slice(1)
       .reduce((acc: any, c) => acc.layer(c), childTiers[0] as any);
-    layerBuilder.render(container, renderOptions);
-  } else if (Object.keys(resolvedLayerOptions).length > 0) {
-    (layer as any)(resolvedLayerOptions, childTiers).render(
+    return layerBuilder.render(container, renderOptions);
+  }
+  if (Object.keys(resolvedLayerOptions).length > 0) {
+    return (layer as any)(resolvedLayerOptions, childTiers).render(
       container,
       renderOptions
     );
-  } else {
-    (layer as any)(childTiers).render(container, renderOptions);
   }
-  log("Layer rendered successfully!");
+  return (layer as any)(childTiers).render(container, renderOptions);
 }
 
 function renderRawMark(
   model: WidgetModel,
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
-): void {
+): Promise<View> {
   const spec = model.get("spec") as unknown as RawMarkSpec;
   const debug = model.get("debug");
   const log = debug
@@ -376,23 +376,23 @@ function renderRawMark(
     debug,
   };
   log("Rendering raw mark with options:", renderOptions);
-  mark.render(container, renderOptions);
-  log("Raw mark rendered successfully!");
+  return mark.render(container, renderOptions);
 }
 
+/** Render the widget's spec into `container`. Building the chart throws
+ *  synchronously on a bad spec; the returned promise settles with the chart's
+ *  {@link View} once it has resolved. */
 function renderChart(
   model: WidgetModel,
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
-): void {
+): Promise<View> {
   const spec = model.get("spec");
   if ((spec as any).type === "layer") {
-    renderLayer(model, container, bridge);
-    return;
+    return renderLayer(model, container, bridge);
   }
   if ((spec as any).type === "raw-mark") {
-    renderRawMark(model, container, bridge);
-    return;
+    return renderRawMark(model, container, bridge);
   }
 
   const chartSpec = spec as ChartSpec;
@@ -420,8 +420,7 @@ function renderChart(
     debug,
   };
   log("Rendering with options:", renderOptions);
-  node.render(container, renderOptions);
-  log("Chart rendered successfully!");
+  return node.render(container, renderOptions);
 }
 
 // ---------------------------------------------------------------------------
@@ -490,7 +489,8 @@ async function captureSVG(
 /**
  * `initialize` runs once per widget on mount: that's where we wire up
  * the derive bridge so its listener and pending map are scoped to this
- * widget instance. `render` paints the chart into the cell DOM.
+ * widget instance. `render` paints the chart into the cell DOM and returns
+ * the cleanup anywidget runs when that DOM goes away.
  */
 export default {
   initialize({ model }: { model: WidgetModel }) {
@@ -522,7 +522,7 @@ export default {
     }
 
     try {
-      renderChart(model, container, bridge);
+      const view = renderChart(model, container, bridge);
       try {
         model.set("render_result", { value: true });
         model.save_changes();
@@ -533,6 +533,10 @@ export default {
       // Fire-and-forget: it waits for the async mount, independent of the
       // synchronous render_result above.
       void captureSVG(model, container, log);
+      // anywidget calls the function `render` returns when the cell's view is
+      // removed (the output cleared, the cell re-run): the chart goes with it,
+      // detaching it from every input it read.
+      return () => void view.then((v) => v.unmount());
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       log("Error in render():", err);
@@ -543,6 +547,7 @@ export default {
       } catch {
         /* ignore */
       }
+      return undefined;
     }
   },
 };

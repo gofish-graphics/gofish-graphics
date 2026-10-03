@@ -7,12 +7,19 @@ export const lerpPoint = (point1: Point, point2: Point, t: number): Point => {
 };
 
 export type Point = [number, number];
+
+/** Whether two points are the same, allowing for rounding. */
+export const samePoint = (p: Point, q: Point): boolean =>
+  Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9;
 export type LineSegment = {
   type: "line";
   points: [Point, Point];
 };
 
-export const segment = (point1: Point, point2: Point): LineSegment => ({ type: "line", points: [point1, point2] });
+export const segment = (point1: Point, point2: Point): LineSegment => ({
+  type: "line",
+  points: [point1, point2],
+});
 
 export type BezierCurve = {
   type: "bezier";
@@ -22,7 +29,12 @@ export type BezierCurve = {
   end: Point;
 };
 
-export const curve = (start: Point, control1: Point, control2: Point, end: Point): BezierCurve => ({
+export const curve = (
+  start: Point,
+  control1: Point,
+  control2: Point,
+  end: Point
+): BezierCurve => ({
   type: "bezier",
   start,
   control1,
@@ -33,6 +45,33 @@ export const curve = (start: Point, control1: Point, control2: Point, end: Point
 export type PathSegment = LineSegment | BezierCurve;
 
 export type Path = PathSegment[];
+
+/**
+ * One step of a threaded run: the segments drawn from one point to the next,
+ * and how the step's time is shared out among them. `spans[j]` is the share
+ * of the step's time segment `j` takes, a fraction of the step, and the
+ * shares add up to 1. Inside a segment with a nonzero share, time moves
+ * linearly with the segment's own parameter. A segment with a share of 0 is
+ * an instant: it is drawn all at once, at the moment the shares before it add
+ * up to (`windowPath` in `timeWindow.ts`).
+ */
+export type Step = { segments: PathSegment[]; spans: number[] };
+
+/** A step whose segments split its time evenly. */
+export const evenStep = (segments: PathSegment[]): Step => ({
+  segments,
+  spans: segments.map(() => 1 / segments.length),
+});
+
+/** A segment traversed from its end to its start: the same points. */
+export const reverseSegment = (seg: PathSegment): PathSegment =>
+  seg.type === "line"
+    ? segment(seg.points[1], seg.points[0])
+    : curve(seg.end, seg.control2, seg.control1, seg.start);
+
+/** A path traversed from its end to its start: the same points. */
+export const reversePath = (path: Path): Path =>
+  path.map(reverseSegment).reverse();
 
 export const segmentToSVG = (segment: PathSegment): string => {
   if (segment.type === "line") {
@@ -45,8 +84,12 @@ export const segmentToSVG = (segment: PathSegment): string => {
 };
 
 export const pathToSVGPath = (path: Path): string => {
+  // An empty path draws nothing, which is empty path data (a line cut to a
+  // window it does not reach is one — see `windowPath` in `timeWindow.ts`).
+  if (path.length === 0) return "";
   const firstSegment = path[0];
-  const startPoint = firstSegment.type === "line" ? firstSegment.points[0] : firstSegment.start;
+  const startPoint =
+    firstSegment.type === "line" ? firstSegment.points[0] : firstSegment.start;
   return `M${startPoint[0]},${startPoint[1]} ${path.map(segmentToSVG).join(" ")}`;
 };
 
@@ -63,7 +106,13 @@ export const transformPath = (
   // Default behavior: direct transformation without resampling
   return path.map((segment): PathSegment => {
     if (segment.type === "line") {
-      return { type: "line", points: [space.transform(segment.points[0]), space.transform(segment.points[1])] as [Point, Point] };
+      return {
+        type: "line",
+        points: [
+          space.transform(segment.points[0]),
+          space.transform(segment.points[1]),
+        ] as [Point, Point],
+      };
     } else {
       return {
         type: "bezier",
@@ -76,7 +125,10 @@ export const transformPath = (
   });
 };
 
-const subdivideSegment = (lineSegment: LineSegment, n: number): LineSegment[] => {
+const subdivideSegment = (
+  lineSegment: LineSegment,
+  n: number
+): LineSegment[] => {
   const points: Point[] = [];
   for (let i = 0; i <= n; i++) {
     points.push(lerpPoint(lineSegment.points[0], lineSegment.points[1], i / n));
@@ -91,7 +143,10 @@ const subdivideSegment = (lineSegment: LineSegment, n: number): LineSegment[] =>
   return segments;
 };
 
-export const subdivideCurve1 = (c: BezierCurve, t: number = 0.5): [BezierCurve, BezierCurve] => {
+export const subdivideCurve1 = (
+  c: BezierCurve,
+  t: number = 0.5
+): [BezierCurve, BezierCurve] => {
   // Apply de Casteljau's algorithm to find points on the curve
 
   // First level of interpolation
@@ -113,7 +168,10 @@ export const subdivideCurve1 = (c: BezierCurve, t: number = 0.5): [BezierCurve, 
   return [leftCurve, rightCurve];
 };
 
-const subdivideCurve = (curve: BezierCurve, numSegments: number): BezierCurve[] => {
+const subdivideCurve = (
+  curve: BezierCurve,
+  numSegments: number
+): BezierCurve[] => {
   if (numSegments <= 0) {
     throw new Error("Number of segments must be positive");
   }
@@ -166,7 +224,11 @@ export const path = (
     subdivision = 0,
     closed = false,
     interpolation = "linear",
-  }: { subdivision?: number; closed?: boolean; interpolation?: "linear" | "bezierX" | "bezierY" }
+  }: {
+    subdivision?: number;
+    closed?: boolean;
+    interpolation?: "linear" | "bezierX" | "bezierY";
+  }
 ): Path => {
   let segments: PathSegment[] = [];
   if (closed === true) {
@@ -186,7 +248,12 @@ export const path = (
         interpolation === "bezierX"
           ? [(points[i][0] + points[i + 1][0]) / 2, points[i + 1][1]]
           : [points[i + 1][0], (points[i][1] + points[i + 1][1]) / 2];
-      segments.push(...subdivideCurve(curve(points[i], control1, control2, points[i + 1]), subdivision));
+      segments.push(
+        ...subdivideCurve(
+          curve(points[i], control1, control2, points[i + 1]),
+          subdivision
+        )
+      );
     }
   }
   return subdivision > 0 ? subdividePath(segments, subdivision) : segments;

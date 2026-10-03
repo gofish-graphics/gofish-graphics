@@ -10,7 +10,7 @@ import { isToken } from "../createName";
 import {
   Size,
   elaborateDims,
-  extractAliasCandidates,
+  deferAxisDims,
   FancyDims,
   displayTranslate,
 } from "../dims";
@@ -19,13 +19,16 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   hasBaseline,
+  isBaselineMagnitude,
   isCONTINUOUS,
+  isPOSITION,
   isUNDEFINED,
+  scopeRootBaseline,
 } from "../underlyingSpace";
 import { getMeasure, getValue, isValue } from "../data";
 import * as Monotonic from "../../util/monotonic";
 import { computeSize, foldFinite } from "../../util";
-import { axisScale } from "../domain";
+import { axisScale, measureOrigin, posFn } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
@@ -52,6 +55,7 @@ import {
   childNameKey,
   internalName,
   type ConstraintPosScales,
+  type FreeOrigin,
 } from "../constraints/shared";
 import { anchorOffset } from "../constraints/placementProgramLowerer";
 import {
@@ -76,9 +80,11 @@ import {
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
-// When a layer has `Constraint.zAbove` / `zBelow` constraints, it flattens
-// its (non-component) subtree into a single paint list, topologically sorts
-// it against the constraints, and emits the result in resolved order.
+// A layer's `Constraint.zAbove` / `zBelow` constraints order its direct
+// children (`orderChildrenForPaint` in paintOrder.ts): each operand lifts to
+// the child that contains it, and a constraint whose operands share a child is
+// pushed down into that child's own order, whatever kind of node the child is
+// (every node that paints its children orders them through the same function).
 
 /** Find every relational-mark connector node (tagged `__relationalOperands`
  *  by `createRelationalMark`, chart.ts) anywhere in `node`'s subtree that
@@ -160,23 +166,21 @@ function applyRelationalZBelowDefaults(
       // Only claim an operand that actually lives within `children`'s
       // subtrees at this level (found via an ancestor walk against
       // `children`) — otherwise leave the tag for an outer `layer()` call to
-      // resolve. NB: the constraint targets `target` ITSELF (the operand's
-      // own node), not whichever top-level `children` entry contains it — a
-      // chart tier's resolved root is typically itself a (non-component)
-      // `layer`/`frame` node that `orderChildrenForPaint`'s flatten pass
-      // hoists through transparently, so naming *it* would never match once
-      // hoisted. `target` is exactly what the flatten pass leaves in the
-      // paint list, and for a per-item mark it's already carrying the
-      // tier's auto-assigned name (every instance shares it), so no
-      // synthesis is usually needed.
+      // resolve. The constraint names the operand itself: paint order lifts
+      // it to whichever child holds it, or pushes it down when the connector
+      // shares that child. Names are visible through any non-component node.
       const path = findPathToRoot(target);
       const withinScope = children.some(
         (c) => c !== connector && path.includes(c as GoFishAST)
       );
       if (!withinScope) continue;
-      const connectorName = ensureConstraintName(connector);
-      const targetName = ensureConstraintName(target);
-      pairs.push([connectorName, targetName]);
+      // An operand that is itself a plain layer (a `layer([...])` mark, a
+      // `time.history`) names that whole layer, so the connector goes under
+      // everything it paints.
+      pairs.push([
+        ensureConstraintName(connector),
+        ensureConstraintName(target),
+      ]);
       claimedAny = true;
     }
     // Consumed (fully or partially) at this level — don't let an outer layer
@@ -234,7 +238,6 @@ export const layer = createNodeOperatorSequential(
     }
 
     const dims = elaborateDims(options);
-    const pendingAliases = extractAliasCandidates(options);
 
     // SELF-SCALING REGIONS. When this layer is given an explicit pixel size on
     // a dim, it becomes a self-contained scaling region on that dim: its scales
@@ -378,7 +381,11 @@ export const layer = createNodeOperatorSequential(
               // solved by the ancestor scope, its interior is a fresh scope
               // resolved against that box.
               if (hasBaseline(composed)) {
-                selfScaledSpaces[axis] = SIZE(composed.width, composed.measure);
+                selfScaledSpaces[axis] = SIZE(
+                  composed.ascent,
+                  composed.measure,
+                  composed.descent
+                );
               }
               resolved[axis] = SIZE(
                 Monotonic.linear(getValue(dsize)!, 0),
@@ -464,11 +471,12 @@ export const layer = createNodeOperatorSequential(
           // Demand-driven nicing (issue #659): any scope this layer roots
           // (self-scaled stash, shared-scale, datum-position) nices its
           // POSITION domain only if some node in the scope renders an axis on
-          // that dim — read off the persistent axis-demand stamps.
-          const axisDemand: Size<boolean> = [
-            node.scopeRendersAxis(0),
-            node.scopeRendersAxis(1),
-          ];
+          // that dim — read off the persistent axis-demand stamps. Read only
+          // when this layer roots such a scope, and kept per region
+          // (`scopeRendersAxis`), so a region is scanned once however many
+          // layers in it ask.
+          const axisDemand = (axis: 0 | 1): boolean =>
+            node.scopeRendersAxis(axis);
           const childScalePlan = buildChildScalePlan(
             selfScaledSpaces,
             node._underlyingSpace,
@@ -544,6 +552,49 @@ export const layer = createNodeOperatorSequential(
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
 
+          // Where a free child's baseline goes on each axis (#773). A free
+          // child (a baseline magnitude, e.g. a rect with a data `h`) has no
+          // position of its own; its baseline stands for the measure's origin,
+          // so a signed extent (ascent above, descent below) grows from the
+          // axis's 0 on both sides. Three cases, by this layer's own space:
+          //  - ANCHORED (its space, or the stash it self-scales, is a
+          //    POSITION): its local frame is the frame of the data→pixel map
+          //    it holds, so the origin's pixel is `pxOf(map, origin)`.
+          //  - a self-scaled FREE stash: it roots its own σ-scope like the
+          //    chart root (`scopeRootBaseline`): `descent·σ`.
+          //  - FREE: the layer is itself a baseline magnitude, seated by its
+          //    parent at its own baseline, so its free children share that
+          //    baseline: local 0. Applying a map here would count the offset
+          //    twice.
+          // Otherwise (no continuous space on the axis) there is no origin.
+          // Unconstrained free children are placed here; constrained ones get
+          // it from the solver's free-origin fallback (`solveAxisProblem`).
+          // Children that are themselves anchored share this layer's frame and
+          // stay at 0.
+          const originOn = (axis: 0 | 1): number | undefined => {
+            const stash = selfScaledSpaces[axis];
+            const own = stash ?? space?.[axis];
+            if (own === undefined) return undefined;
+            if (isPOSITION(own))
+              return posFn(effectivePosScales[axis])?.(
+                measureOrigin(own.measure)
+              );
+            if (!isBaselineMagnitude(own)) return undefined;
+            return stash !== undefined
+              ? scopeRootBaseline(stash, childScaleFactors[axis])
+              : 0;
+          };
+          const freeOrigin: FreeOrigin = [originOn(0), originOn(1)];
+          const baselineFor = (
+            cp: (typeof childPlaceables)[number]
+          ): [number, number] =>
+            [0, 1].map((axis) => {
+              const s = cp.spaceOn?.(axis as 0 | 1);
+              return s !== undefined && isBaselineMagnitude(s)
+                ? (freeOrigin[axis] ?? 0)
+                : 0;
+            }) as [number, number];
+
           const childPlaceables: ReturnType<
             (typeof children)[number]["layout"]
           >[] = new Array(children.length);
@@ -615,8 +666,9 @@ export const layer = createNodeOperatorSequential(
               axisScale(childScaleFactors[1], childMaps[1]),
             ]);
             if (!constrainedChildren.has(i)) {
-              childPlaceable.place("x", 0, "baseline");
-              childPlaceable.place("y", 0, "baseline");
+              const [bx, by] = baselineFor(childPlaceable);
+              childPlaceable.place("x", bx, "baseline");
+              childPlaceable.place("y", by, "baseline");
             }
             childPlaceables[i] = childPlaceable;
           };
@@ -728,23 +780,18 @@ export const layer = createNodeOperatorSequential(
               effectivePosScales,
               gridTracks,
               dataPositioned,
-              rigid
+              rigid,
+              freeOrigin
             );
 
-            // Place any child the constraints left unplaced at the layer's
-            // baseline origin — consistent with the phase-1 baseline placement
-            // of unconstrained children. A drawing clause that reads the
+            // Place any child the constraints left unplaced at its baseline
+            // origin (`baselineFor`), the same rule as the phase-1 placement in
+            // `layoutChild`. A layer without constraints needs no step here:
+            // phase 1 already placed every child. A drawing clause that reads the
             // constrained positions is laid out after this (see
             // `relateOrder`), not by a re-layout pass here.
             for (const cp of childPlaceables) {
-              if (cp) placeUnplacedChild(cp);
-            }
-          } else {
-            // Default layer behavior: place all children at (0, 0)
-            for (const cp of childPlaceables) {
-              if (!cp) continue;
-              cp.place("x", 0);
-              cp.place("y", 0);
+              if (cp) placeUnplacedChild(cp, "baseline", baselineFor(cp));
             }
           }
 
@@ -875,8 +922,8 @@ export const layer = createNodeOperatorSequential(
       },
       children
     );
-    // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-    node._pendingAliases = pendingAliases;
+    // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+    node._elaborateInAxisScope = deferAxisDims(options, dims);
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)
     // found anywhere in this layer's subtree — see the doc comment above.
     applyRelationalZBelowDefaults(node, children);

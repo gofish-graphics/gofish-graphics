@@ -71,6 +71,7 @@ import {
 } from "./chartBuilder";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
+import { copyColumnTypes } from "../schema";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -80,14 +81,22 @@ export type { ChartOptions };
  * The shape every data-transformation operator shares: map the incoming data
  * with `fn`, hand the result to the mark, and carry an IR-serialization tag.
  * `fn` receives the layer context so it can resolve refs (see `resolve`).
+ *
+ * The result keeps the input's column types (the chart's `schema`, see
+ * schema.ts) unless it declares its own: a `filter` or a `derive` that adds a
+ * column leaves the other columns' types as they were.
  */
 function mapOperator<T, U>(
   fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
   serialize: { type: string; opts: Record<string, unknown> }
 ): Operator<T, U> {
   const op: Operator<T, U> = async (mark: Mark<U>) =>
-    (async (d: T, key?: string | number, layerContext?: LayerContext) =>
-      mark(await fn(d, layerContext), key, layerContext)) as Mark<T>;
+    (async (d: T, key?: string | number, layerContext?: LayerContext) => {
+      const out = await fn(d, layerContext);
+      if (Array.isArray(out) && Object.isExtensible(out))
+        copyColumnTypes(out, d);
+      return mark(out, key, layerContext);
+    }) as Mark<T>;
   (op as any).__serialize = serialize;
   return op;
 }
@@ -759,9 +768,10 @@ export type LineOptions = {
   strokeDasharray?: string;
   opacity?: number | LiveValue;
   mixBlendMode?: "normal" | "multiply";
-  // Screen-space path shape, as a factory call (`straight()`, `bezier()`,
-  // `catmullRom()`, `orthogonal()`, `arc({ direction })`, `perfectArrows({ bow })`,
-  // …) or a bare name (`"straight"` | `"bezier"`). The single path-shaping key.
+  // Screen-space path shape, as a factory call (`bezier()`, `orthogonal()`,
+  // `arc({ direction })`, `perfectArrows({ bow })`, …) or a bare name
+  // (`"linear"` | `"bezier"` | `"step"` | `"monotone"` | `"smooth"` |
+  // `"catmullRom"`). The single path-shaping key.
   curve?: Curve;
   dir?: "x" | "y";
   // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
@@ -790,27 +800,31 @@ export type LineOptions = {
 };
 
 // `line` — a center-mode connector (the "line" component): the path between the
-// centers of consecutive marks. `route` picks the shape (straight | bezier |
+// centers of consecutive marks. `route` picks the shape (linear | bezier |
 // orthogonal | arc | perfectArrows | …).
-export const line = createRelationalMark<LineOptions>("line", (o, children) =>
-  Connect(
-    {
-      direction: o.dir ?? "x",
-      mode: "center",
-      fill: o.fill,
-      stroke: o.stroke,
-      strokeWidth: o.strokeWidth ?? 1,
-      strokeDasharray: o.strokeDasharray,
-      opacity: o.opacity,
-      mixBlendMode: o.mixBlendMode,
-      // Omitted ⇒ "auto": connect smooths (catmullRom) when the connected
-      // points share a continuous connection axis, else a straight line.
-      curve: o.curve,
-      source: o.source,
-      target: o.target,
-    },
-    children
-  )
+export const line = createRelationalMark<LineOptions>(
+  "line",
+  (o, children, inferred) =>
+    Connect(
+      {
+        direction: o.dir ?? "x",
+        mode: "center",
+        fill: o.fill,
+        stroke: o.stroke,
+        strokeWidth: o.strokeWidth ?? 1,
+        strokeDasharray: o.strokeDasharray,
+        opacity: o.opacity,
+        mixBlendMode: o.mixBlendMode,
+        // Omitted ⇒ "auto": connect smooths (monotone) when the connected
+        // points share a continuous connection axis, else a straight line.
+        curve: o.curve,
+        source: o.source,
+        target: o.target,
+        along: inferred.along,
+        parameterAxis: inferred.parameterAxis,
+      },
+      children
+    )
 );
 
 export type RibbonOptions = {
@@ -820,8 +834,8 @@ export type RibbonOptions = {
   opacity?: number | LiveValue;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
-  // Screen-space path shape for the band edges (`straight()` | `bezier()`).
-  // Edge mode honors straight (linear band) vs bezier (S-curve band).
+  // Screen-space path shape for the band edges (`"linear"` | `bezier()`).
+  // Edge mode honors linear (linear band) vs bezier (S-curve band).
   curve?: Curve;
   from?: string;
   to?: string;
@@ -847,7 +861,7 @@ export type RibbonOptions = {
 // consecutive marks (areas, streamgraphs, sankey ribbons).
 export const ribbon = createRelationalMark<RibbonOptions>(
   "ribbon",
-  (o, children) =>
+  (o, children, inferred) =>
     Connect(
       {
         direction: o.dir ?? "x",
@@ -857,9 +871,11 @@ export const ribbon = createRelationalMark<RibbonOptions>(
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
         opacity: o.opacity,
-        // Omitted ⇒ "auto": edge mode currently resolves to a bezier band
-        // (continuous-ribbon Catmull-Rom is a follow-on).
+        // Omitted ⇒ "auto": a smooth (monotone) band over a continuous
+        // connection axis, else a bezier band.
         curve: o.curve,
+        along: inferred.along,
+        parameterAxis: inferred.parameterAxis,
       },
       children
     )

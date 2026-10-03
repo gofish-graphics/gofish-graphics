@@ -39,15 +39,93 @@ line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve = "auto", alo
 ::: gofish-ref line
 :::
 
-When `curve` is omitted (`"auto"`), `line` inspects the connected points: if they
-share a continuous connection axis it smooths them with a centripetal Catmull-Rom
-spline, otherwise it draws a straight polyline.
+When `curve` is omitted (`"auto"`), `line` inspects the connected points. If they
+share a continuous connection axis, it smooths them with `"monotone"`.
+Otherwise it draws a straight polyline.
 
-`curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
-`straight()`, `bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`,
-or `perfectArrows({ bow })`. The `orthogonal` elbow bends at the midpoint of the
-connector's `dir` axis; pass `orthogonal({ bend: "auto" })` to infer the bend axis
-from the endpoint geometry instead (for layouts with no single growth axis).
+## Curves through data
+
+Four curve names read a run of values over the field that orders it, such as
+the years of a line chart. From the least to the most smooth, they are `step`,
+`linear`, `monotone` and `smooth`. The same names work in
+[`time.transition()`](/js/animation), `animation.tween()` and
+[`interpolate()`](/js/animation#interpolate-rows-options), so a moving mark and a line
+through the same points can follow the same curve.
+
+A few terms help compare them. A curve is **C0** when it has no breaks, and
+**C1** when its direction also never changes suddenly (it has no corners). A
+curve **overshoots** when,
+between two neighboring points, it goes above the higher one or below the
+lower one. A curve is **local** when changing one value changes the curve only
+near that point.
+
+| Name       | What you see                                                                        | Algorithm                                                               | Continuity     | Local | Never overshoots |
+| ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------- | ----- | ---------------- |
+| `step`     | Each value holds until the next point, and then jumps.                              | step-after, like d3's `curveStepAfter`                                  | not continuous | yes   | yes              |
+| `linear`   | Straight segments from point to point.                                              | straight lines                                                          | C0             | yes   | yes              |
+| `monotone` | A smooth curve that turns exactly on the points.                                    | Steffen (1990), the same curve as d3's `curveMonotoneX`                 | C1             | yes   | yes              |
+| `smooth`   | Rounder peaks that can pass a little beyond their points. Long flat runs stay flat. | modified Akima, also called makima (Moler 2019), as in MATLAB and SciPy | C1             | yes   | no               |
+
+`step` holds every value that depends on the field that orders the line until
+the next point's value of that field, and then jumps. It never holds the field
+itself. On a line chart over years, the year is the x axis, so the line moves
+along x while y holds, and the jump is a vertical riser: the staircase of d3's
+`curveStepAfter` and Vega-Lite's `interpolate: "step-after"`. On a connected
+scatterplot over years, x and y both depend on the year, so both hold, and
+the jump is a straight line from one point to the next. It looks like
+`linear`, but all of the time is spent at the points, so a line drawn in over
+time jumps from one point to the next at the moment the next year arrives.
+This differs on purpose from d3's step curves, which always draw a
+horizontal step and then a vertical one on the screen, whatever the axes
+mean.
+
+`"monotone"` is **piecewise** monotone. Between two neighboring points, each
+coordinate only rises or only falls, so the curve never goes past either point.
+It does not make the whole line monotone. The line still turns where the data
+turns, and the peak sits exactly on the data point. For a path in x and y, such
+as a connected scatterplot, this holds for x and y separately, over the field
+that orders the line. It is the same curve as d3's `curveMonotoneX` and
+Vega-Lite's `interpolate: "monotone"`.
+
+`"smooth"` lets a peak round off a little past its point. A run of three or
+more equal values stays exactly flat. A single flat step between a rise and a
+fall, such as two equal peak values, can bow a little.
+
+A line drawn with one of these curves takes the knots of its curve from the
+data when the data has a value that orders the line. (The knots are the
+positions along the curve where it passes through each point.) `line` uses the
+first of these that it finds:
+
+- The values of the field the line runs along, when they are numbers that only
+  go up or only go down along the line. This is the field `along` names, or the
+  field of the tier the line was inferred to run along, e.g., the years of a
+  connected scatterplot. A line through the keyframes of a
+  [`time.sequence`](/js/animation) uses the keyframes' time values.
+- The points' positions on the connection axis, when that axis is continuous
+  and the points are in order along it, e.g., a line chart over x.
+- The distances between the points on the screen, when neither of the above
+  applies. These are centripetal knots. Two points at the same spot, up to
+  rounding, are one point: the curve drops the repeat, as d3 does.
+
+Because the knots come from the data, a line and a
+[`time.transition()`](/js/animation) through the same points follow the same
+curve when they use the same curve name.
+
+`"catmullRom"` draws a centripetal Catmull-Rom spline through the points on the
+screen, as d3's `curveCatmullRom` does. Its knots are always the distances
+between the points on the screen, whatever field orders the line. It can
+overshoot between two points. It is not used when values are read over time: a
+`time.transition()` along the same points follows one of the curves above, so
+its moving mark can sit slightly off a Catmull-Rom line.
+
+`curve` accepts the strings `"linear"`, `"bezier"`, `"step"`, `"monotone"`,
+`"smooth"` or `"catmullRom"`, or a `CurveSpec` factory:
+`bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`, or
+`perfectArrows({ bow })`. `"linear"` has no factory, because
+[`linear()`](/js/api/coords/linear) is the coordinate transform. The `orthogonal`
+elbow bends at the midpoint of the connector's `dir` axis; pass
+`orthogonal({ bend: "auto" })` to infer the bend axis from the endpoint geometry
+instead (for layouts with no single growth axis).
 
 ## Two forms
 

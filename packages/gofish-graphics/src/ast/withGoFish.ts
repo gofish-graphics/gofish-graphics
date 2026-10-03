@@ -5,14 +5,14 @@
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
 import { GoFishNode } from "./_node";
-import type { AxesOptions } from "./gofish";
+import type { AxesOptions, View } from "./gofish";
 import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
 import { ChartBuilder, LayerBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
-// Direct from chartBuilder (not the `chart` barrel): the one-way dependency
-// rule is createOperator/withGoFish → chartBuilder, never the reverse.
-import { resolveMarkResult } from "./marks/chartBuilder";
+// From markResult, which imports neither chartBuilder nor createOperator, so
+// the dependency between those modules keeps running one way.
+import { resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
   ChannelAnnotations,
@@ -29,7 +29,6 @@ import {
 } from "./marks/createOperator";
 import { isValue } from "./data";
 import { splitLiveChannels } from "../interaction/live";
-import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark, MarkChild } from "./types";
 import type { RelateFn } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
@@ -88,10 +87,7 @@ type GoFishChildrenInputWithThunks =
 /** A Promise-like object that also carries GoFishNode's chainable methods, so
  *  `.render()` / `.name()` / … work on the promises withGoFish returns. */
 export interface PromiseWithRender<T> extends Promise<T> {
-  render(
-    container: HTMLElement,
-    options: RenderOptions
-  ): HTMLElement | Promise<HTMLElement>;
+  render(container: HTMLElement, options: RenderOptions): Promise<View>;
   toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
   toSVGElement(
     options?: Parameters<GoFishNode["toSVGElement"]>[0]
@@ -511,16 +507,8 @@ function buildCreatedMark(
       const channelSpec = channels[propName];
       const markValue = resolvedOpts[propName];
 
-      let channelType: ChannelType | undefined =
+      const channelType: ChannelType | undefined =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
-      // Coordinate-space axis aliases aren't declared channels, but they carry
-      // the same value semantics as the canonical dims they resolve to: a
-      // `<name>Size` alias is a SIZE channel, a position alias (theta/r) a POS
-      // channel. Infer that here so `rSize: "field"` aggregates like `h: "field"`
-      // before the resolveAliases pass moves the value onto the dims.
-      if (channelType === undefined && KNOWN_ALIAS_KEYS.has(propName)) {
-        channelType = propName.endsWith("Size") ? "size" : "pos";
-      }
       const isEntry =
         typeof channelSpec === "object" && channelSpec?.entry === true;
 

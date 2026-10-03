@@ -9,6 +9,8 @@ covers:
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
+  - packages/gofish-graphics/src/ast/geometry/index.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
 ---
 
 # Layout and Render Passes in GoFish Graphics
@@ -157,24 +159,65 @@ inferSizeDomains: (shared, children) => {
 
 The `computeIntrinsicSize()` function returns a `Monotonic` function that maps from data values to pixel sizes. This is used later during layout to determine how much space each element needs.
 
-### Pass 5.5: Coordinate-Space Alias Resolution
+### Pass 5.5: Axis-Name Resolution
 
 **Location**: `src/ast/gofish.tsx` (`child.resolveAliases()`), `src/ast/_node.ts`
 (`resolveAliases`)
 
-A coordinate transform may declare **axis-name aliases** for the marks inside it —
-`polar()`/`clock()` expose `{ x: "theta", y: "r" }`, so a mark can be authored with
-`theta`/`r` (positions) and `thetaSize`/`rSize` (extents) instead of `x`/`y`/`w`/`h`.
+`x`/`y`/`w`/`h` mean axis 0 and axis 1 in every coordinate space. A coordinate
+transform may also declare **names** for its two axes in its `aliases` field:
+`polar()`/`clock()` declare `{ x: "theta", y: "r" }` and `geo()` declares
+`{ x: "lon", y: "lat" }`. That declaration is the only source of the names. They are
+used in two places, and in both the meaning of a name depends on where the node sits,
+which a factory does not know when it runs:
+
+- a box-dims mark's `dims` option, keyed by axis name (`rect({ dims: { theta: { size:
+0.4 } } })`), and a treemap's `dims` for its own box. Channel inference has already
+  run on it at build time: a mark gives each slot a kind by its structure (`size` is
+  a size channel; a bare value, `min`, `center`, `max` are positions), and an
+  operator gives each slot the channel of its top-level counterpart. Neither depends
+  on the axis, so `mapAxisDims` applies it before the axis is known.
+- an operator's `dir` (spread, stack) and a scatter's `dims`. Everything in these
+  operators that needs the axis (the align/distribute or position constraints and
+  `axisDir`) waits for the axis, and so do the constraints `.relate()` installs.
+  Spread's per-entry `size` wrapper uses a `dims` option keyed by `dir`, so it
+  resolves in the same pass.
+
+Both kinds of work are deferred the same way: the factory sets one hook on the
+node, `_elaborateInAxisScope(outer, inner)`. `outer` is the scope the node's own box
+lives in (its parent's scope, even on a coord) and `inner` is the scope of its
+children. A mark's hook (`deferAxisDims` in `dims.ts`) writes its `dims` bag onto its
+per-axis dims array against `outer` with `applyAxisDims`. An operator's hook resolves
+its names against `inner` and calls `.relate()`, which is async. A spread given its
+own `dims` runs the layer's dims hook first, then its own.
+
 `resolveAliases` is a top-down pass (run before underlying space, which reads the
-resolved dims) that walks the tree carrying the **active alias scope**: it rebinds the
-scope at every `coord` node that declares aliases (a nested coord rebinds for its
-subtree), resolves each mark's stashed `_pendingAliases` into the canonical `x/y/w/h`
-facets of its `dims`, and **throws** if an alias is used outside any declaring coord or
-names an alias the enclosing coord doesn't declare (hygiene). Like the later embedding
-pass it mutates the shared `args.dims` element in place so the captured layout/space
-closures observe the resolution. The operator `dir` accepts the angular/radial aliases
-too (`elaborateDirection` maps `theta`→0, `r`→1 generically, since `dir` is baked at
-operator construction before its coord exists). See
+dims and the constraints) that carries the **axis scope**, a map from name to axis
+starting at `{ x: 0, y: 1 }`. Every `coord` replaces the scope for its subtree with
+`x`, `y`, and the names its transform declares. Most transforms (`linear`, `wavy`,
+`bipolar`, `arcLengthPolar`) declare none, so inside them only `x`/`y` are visible:
+a name has a meaning only inside the space that declares it, and the innermost coord
+wins. The walk is synchronous: it queues each node's hook with its two scopes, in
+pre-order. The pass then runs the queue one hook at a time, in
+that order. It does not run them concurrently, because an operator's `.relate()`
+walks the subtree to build its environment and must not interleave with a
+descendant's hook. The walk sees the tree before any hook runs; that is enough,
+because spread's and scatter's `.relate()` return constraints only and add no nodes.
+A name the scope does not declare **throws**, listing the names it does; so does
+setting one (axis, anchor) slot twice, across the top-level keys and `dims` or within
+`dims`. Scatter merges its top-level `x`/`xMin`/`xMax` (and `y` ones) with its `dims`
+through the same `mergeAxisDims` as the marks, with its own rules: a bare value is
+the point (`center`), and `size` is not a key. A span is checked on the merged axis,
+so `xMin` with `dims.x.max` is a span, and one end without the other throws, from
+either spelling. Like the later embedding pass it
+mutates the per-axis dims array by reassigning its elements, so the captured
+layout/space closures observe the result.
+
+A hook is cleared once it has run to completion, so the pass is idempotent. A hook
+that throws stays, and so do the hooks queued after it, so a rerun reports the same
+error instead of skipping work. That lets `gofish.tsx` rerun it
+after axis, title, and legend elaboration, whose chrome is built from `Spread` nodes
+that install their constraints in this pass. See
 [Authoring Coordinate Transforms](/internals/layout/coordinate-transforms).
 
 ### Pass 6: Underlying Space Resolution
@@ -225,7 +268,10 @@ those constraints at layout time. See
 For a vertical bar chart where:
 
 - X-axis: `spread("category")` → `ORDINAL` space
-- Y-axis: `h: "value"` → `SIZE` space (if no min) or `POSITION` space (if min is specified)
+- Y-axis: `h: "value"` → `SIZE` space (if no min) or `POSITION` space (if min is specified).
+  The `SIZE` space is `baselineSpan(value)`: the value's positive part is its
+  ascent and its negative part its descent, so a negative bar extends below
+  its baseline.
 
 The logic in `resolveUnderlyingSpace` checks:
 
@@ -235,7 +281,7 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 } else if (isAesthetic(dims[0].min) && isValue(dims[0].size)) {
   underlyingSpaceX = DIFFERENCE(getValue(dims[0].size)!);
 } else if (!isValue(dims[0].min) && isValue(dims[0].size)) {
-  underlyingSpaceX = SIZE(getValue(dims[0].size)!);
+  underlyingSpaceX = baselineSpan(getValue(dims[0].size)!);
 } else {
   const min = isValue(dims[0].min) ? getValue(dims[0].min) : 0;
   const size = isValue(dims[0].size) ? getValue(dims[0].size) : 0;
@@ -484,6 +530,36 @@ For a bar chart rectangle, the layout function:
    ```
 
 The `intrinsicDims` represent the element's size in its local coordinate system (with min typically at 0), while `transform.translate` positions it in the parent's coordinate system.
+
+#### Shape geometry after layout
+
+Once a node is laid out, `node.geometry()` describes its shape in the same
+local frame as `intrinsicDims`, with no translate applied (`src/ast/geometry/`).
+The result always has a `box`, which is `intrinsicDims` as a plain box. It may
+also answer optional queries. The only query today is `enclosingCircle`. A
+consumer calls the helper `enclosingCircle(g)`, which falls back to the circle
+through the box corners when the node does not answer.
+
+- A node definition may pass a `geometry` function next to `lower`. `ellipse`
+  answers with the circle of its larger radius, and `polygon` answers with the
+  smallest circle through its ring.
+- A node with children and no `geometry` function answers `enclosingCircle`
+  lazily. It takes the smallest circle around its children's circles, each
+  moved by the child's translate into the node's frame.
+- `GoFishNode` computes `geometry()` on the first call and keeps the result.
+  `layout()`, and any later write to the local box (`place` recording a local
+  `min`, `setExtent`, `setSizeOnly`), clears it. Calling `geometry()` before
+  layout throws.
+- A `ref` and a nested constraint operand return their target's geometry,
+  because they share its local frame.
+
+The `pack` operator (`graphicalOperators/pack.tsx`) is the first consumer. It
+lays out each child, reads `enclosingCircle(child.geometry())`, runs d3's
+`packSiblings`, and places each child so its circle lands where d3 put it.
+Geometry exists only after layout, so a parent cannot yet read it while sizing.
+That is why `pack` keeps its children at their pixel size and does not fit
+itself to the space it is given (#967). The design note is
+`internals/design/shape-geometry.md` on the geometry-representations branch.
 
 ### Pass 10: Placement
 
@@ -742,36 +818,45 @@ rewrite](/internals/frontend/mark-factory) synthesizes one anchor `blank` per ro
 26,000-row line chart used to emit 26,000 zero-size `<rect>` elements (and 26,000
 entries in the interaction hit-test map) that nobody could see or click.
 
-Its sibling is **`INTERNAL_visibleWhile(visible)`**, and the pair is worth reading
+Its sibling is **`INTERNAL_visibleWhile(owner, visible)`**, and the pair is worth reading
 together because the difference is which tier decides. `INTERNAL_emitNothing` is
 for a node that must never draw, and it answers at resolve. `INTERNAL_visibleWhile`
 is for a node whose drawing comes and goes with a signal — a `time.sequence`'s
 keyframe groups, where the clock picks which band is showing — and it answers at
-paint: the items are lowered either way and their opacity is patched per frame
-through the live-slot side table (see
+paint: the items are lowered either way and their opacity is patched through
+the live-slot side table, each rule read once per tick as one decision the items
+under it share, so only the items whose rule changed its answer are patched (see
 [Reactivity](/internals/frontend/reactivity)). A resolve-time answer there would
 make the clock a pipeline dependency and put the whole chart through layout on
 every tick, for a change that alters nothing above the marks themselves.
 Emitting nothing wins over being visible: a node with no items has nothing to
 patch, so the two compose with no coordination.
 
-A visibility rule covers the node's whole subtree. `INTERNAL_lower` paints a node
-only while its own rule and every ancestor's hold, so a sequence sets the rule once
-on each keyframe group, and marks that a later elaboration pass adds under the group
-hide with it. The label pass is the case that needs this: it wraps a keyframe group
+A visibility rule is set under an owner (a sequence, for its keyframes) and covers
+the node's whole subtree. `INTERNAL_lower` paints a node only while every owner's
+rule holds, each owner's being the one set nearest the node, so a sequence sets the
+rule once on each keyframe group, and marks that a later elaboration pass adds under
+the group hide with it. Setting a rule again from the same owner replaces it, so a
+second layout does not pile rules up. The label pass is the case that needs this: it wraps a keyframe group
 in a new layer that holds the group beside its label `Text`s, after the sequence has
 set its rule. `wrapPreservingIdentity` (`src/ast/elaborationUtils.ts`) moves the rule
 onto the wrapper along with the group's name and key, so the labels are inside the
-rule's subtree and show only with the year they label.
+rule's subtree, show only with the year they label, and belong to that year's
+keyframe (`keyframeOf` in `src/timeWindow.ts` reads the key of the node under the
+sequence's Frame).
 
-A transition takes a keyframe over for good, labels included: it silences every
-leaf it moves. A box leaf gets `INTERNAL_emitNothing`; a text leaf gets
-`INTERNAL_takeOverLowering`, which silences it the same way and hands its own
-drawing to the transition, so the transition can draw that text where the
-playhead has taken it. The handed-over drawing lowers through the same body as
-`INTERNAL_lower`, so its items keep their ids and live channels, but it skips
-the visibility rule: once the transition owns the text, the transition decides
-when it shows.
+A `time.history({ last })` inside a keyframe gets a rule of its own from the
+sequence, set under the same owner, so for the marks under it it stands in for the
+keyframe group's rule: they show while the group's band overlaps `[T − last, T]`
+(`lifetimeRule` in `src/timeWindow.ts`). A transition hides the marks it moves,
+labels included, with `INTERNAL_emitNothing`: the moving mark is their drawing, and a
+trail behind it is a `time.history` of another mark in the same keyframe. Each leaf
+it moves also lends the transition its drawing,
+`INTERNAL_lendDrawing`: the transition draws a text where the playhead has taken
+it, and paints a box as the mark it moves is painted. A node keeps the lowering it was built with, so it lends its real drawing
+even after it has been silenced. The lent drawing lowers through the same body as
+`INTERNAL_lower`, so its items keep their ids and live channels, but it skips the
+visibility rule: the transition decides when the moving copy shows.
 
 A build-in (`src/animation/`) uses a third hook, `INTERNAL_animate(rule)`, which
 also answers at paint. The node lowers at rest. The rule then rewrites the items

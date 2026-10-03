@@ -70,9 +70,9 @@ above the nearest component that contains the start, and it never looks inside
 a nested component (the component's own name is visible, its insides are not).
 Without an enclosing component, the whole diagram is the outermost level. The
 walk that enforces the boundary is `visibleNodes`, which the chart layer
-registry (`collectLayerRegistrations` in `chartBuilder.ts`) also uses, so the
-component boundary means the same thing for `ref`, `.relate()`, and
-`selectAll`.
+registry (`collectLayerRegistrations` in `chartBuilder.ts`) and z-order
+resolution (`paintOrder.ts`) also use, so the component boundary means the same
+thing for `ref`, `.relate()`, `selectAll`, and `zAbove` / `zBelow`.
 
 Three results are errors, and each names the problem:
 
@@ -196,6 +196,10 @@ What happens next depends on whether the container is itself an operand:
 The container carries the write-back; the stand-in's own placement writes do
 nothing. A nested operand cannot be resized from outside, so its size hooks
 throw: the target of `"span"` or `"size"` must be a direct child.
+
+A nested operand and a `ref` both share their target's local frame, so each one
+returns its target's `geometry()` (the shape queries described under
+[Layout Calculation](/internals/layout/passes)).
 
 ## Drawing clauses and their order
 

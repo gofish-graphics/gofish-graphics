@@ -11,9 +11,14 @@
  * regime, controlled one-way inputs, why a control is a MARK and not a node).
  * Two invariants are local to this file:
  *
- *  - a control's GEOMETRY cannot be `live()`: paint patches attributes, it does
- *    not move a node, so `value()` is read during resolve and the widget is
- *    rebuilt per resolve;
+ *  - a control's BOX does not depend on the state it shows. What follows the
+ *    value or the pointer (the slider's handle and readout, the pressed
+ *    shading) is read at PAINT, through live slots, so it patches attributes
+ *    and never makes the input a pipeline dependency: a clock driving a slider
+ *    does not re-lay-out the chart around it. That is sound only because
+ *    nothing it moves changes the box (the handle's travel is inset, the
+ *    readout is right-aligned in a reserved slot). What does change the box
+ *    (a button's caption) is read at resolve, and re-measures;
  *  - the input and its write effect are created ONCE, when the widget is made,
  *    so a re-resolve neither leaks inputs nor loses a drag in flight.
  *
@@ -23,16 +28,19 @@
  */
 import { createEffect, createRoot, untrack } from "solid-js";
 import { GoFishNode } from "../ast/_node";
+import type { AnimationRule } from "../animation/paint";
 import { rect } from "../ast/shapes/rect";
 import { ellipse } from "../ast/shapes/ellipse";
 import { text } from "../ast/shapes/text";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { nameableMark, type NameableMark } from "../ast/marks/createOperator";
-import { resolveMarkResult } from "../ast/marks/chartBuilder";
+import { resolveMarkResult } from "../ast/marks/markResult";
 import type { Mark } from "../ast/types";
-import { clamp } from "../util";
+import { clamp, mod } from "../util";
 import { click, drag } from "./inputs";
+import { live, readLive } from "./live";
+import { setLiveSlots } from "./liveSlots";
 import type { Hit, SvgPoint } from "./types";
 
 /* ------------------------------- scaffold -------------------------------- */
@@ -45,7 +53,7 @@ export type Control = NameableMark<unknown> & { dispose(): void };
 /**
  * The scaffold both controls are: an input that accepts hits only on the nodes
  * this control itself built, ONE write effect created once outside any spec, and
- * a mark that rebuilds the picture per resolve.
+ * a mark that builds the picture whenever the spec around it resolves.
  *
  * `build` returns the finished node plus the control's two own hit targets, in
  * order; the FIRST is the one a write maps the pointer onto (the slider's
@@ -90,8 +98,9 @@ const leaf = (mark: unknown): Promise<GoFishNode> =>
 /* -------------------------------- slider -------------------------------- */
 
 export interface SliderOptions {
-  /** The displayed value, in domain units. Read during resolve, so the handle
-   *  moves whenever the underlying input changes (a clock tick, a `.set`). */
+  /** The displayed value, in domain units. Read at PAINT, so the handle and
+   *  the readout follow the underlying input (a clock tick, a `.set`) without
+   *  the chart being resolved or laid out again. */
   value: () => number;
   /** Called with the pointed-at value, in domain units, already quantized by
    *  `step` and either clamped to `domain` or wrapped around it (`wrap`). */
@@ -134,9 +143,6 @@ const READOUT_FONT = 12;
  *  inside the text node. */
 const READOUT_SLOT_W = 0.62 * READOUT_FONT;
 
-/** Euclidean modulo — `a % n` with the sign of `n`, so a negative drag wraps. */
-const mod = (a: number, n: number): number => (n === 0 ? 0 : ((a % n) + n) % n);
-
 /**
  * `slider({ value, onInput, domain, step, w, wrap, format })` — a track with a
  * handle and a value readout.
@@ -146,6 +152,11 @@ const mod = (a: number, n: number): number => (n === 0 ? 0 : ((a % n) + n) % n);
  * The readout is right-aligned against a reserved slot for the same reason: the
  * glyphs grow leftward from a fixed edge, so nothing laid out beside the slider
  * moves when the value changes.
+ *
+ * Because the box is value-independent, the value is a PAINT-time fact: the
+ * slider lays out once at the value it was built with, and the handle's `cx`,
+ * the readout's text and the handle's pressed shading are live slots that
+ * re-read `value()` and the drag state per frame.
  *
  * The pointer position IS the value: the write maps `current.x` onto the
  * fraction of the handle's travel it fell at, asking the frame — through
@@ -206,13 +217,13 @@ export function slider(opts: SliderOptions): Control {
         if (next !== untrack(readValue)) onInput(next);
       }),
     build: async (scrub) => {
-      // Both reads happen during resolve, so they are pipeline dependencies: the
-      // handle is re-placed (a relayout) whenever the value or the drag state
-      // changes. The readout reads the value the same way, so it re-measures its
-      // text instead of keeping the first label's box.
-      const value = readValue();
-      const active = scrub.isActive();
-      const frac = span === 0 ? 0 : clamp((value - lo) / span, 0, 1);
+      // Every read of the value or the drag state is a PAINT-time read. This
+      // one is the value the handle is laid out at: `readLive` reads it without
+      // making the input a pipeline dependency, and still registers it with
+      // the runtime so its writes reach the live slots below.
+      const frac = (v: number): number =>
+        span === 0 ? 0 : clamp((v - lo) / span, 0, 1);
+      const frac0 = frac(readLive(readValue));
 
       const track = (
         await leaf(
@@ -228,12 +239,19 @@ export function slider(opts: SliderOptions): Control {
       ).name("track");
       const handle = await leaf(
         ellipse({
-          cx: HANDLE_R + frac * travel,
+          cx: HANDLE_R + frac0 * travel,
           cy: HANDLE_R,
           w: 2 * HANDLE_R,
           h: 2 * HANDLE_R,
-          fill: active ? "#111" : "#333",
+          fill: live(() => (scrub.isActive() ? "#111" : "#333")),
         })
+      );
+      // The handle follows the value at paint. Lowered items are in pixels, so
+      // the slot moves the lowered `cx` by the value's change of fraction times
+      // the travel in pixels; the handle keeps the layout box of `frac0`, which
+      // is sound because the travel is inside the widget's box either way.
+      handle.INTERNAL_animate(
+        followValue(travel, frac0, () => frac(readValue()))
       );
       // `textAnchor: "end"` at the slot's right edge: for text, `x` is the
       // ANCHOR, and the node's box runs leftward from it — which is the whole
@@ -243,7 +261,7 @@ export function slider(opts: SliderOptions): Control {
           text({
             x: w + READOUT_GAP + slotW,
             textAnchor: "end",
-            text: format(value),
+            text: live(() => format(readValue())),
             fontSize: READOUT_FONT,
             fill: "#333",
           })
@@ -260,6 +278,30 @@ export function slider(opts: SliderOptions): Control {
     },
   });
 }
+
+/**
+ * The slider handle's paint tier: each ellipse item's `cx` follows `frac()`,
+ * offset from the `cx` it was lowered at (`frac0`) by the handle's `travel`
+ * mapped to PIXELS through `toPixel` (translate plus a y flip, so today the
+ * same length). The static value is written into the item too, so a
+ * headless lowering shows the value as it stands.
+ */
+const followValue = (
+  travel: number,
+  frac0: number,
+  frac: () => number
+): AnimationRule => ({
+  paint(items, { toPixel }) {
+    const travelPx = toPixel([travel, 0])[0] - toPixel([0, 0])[0];
+    for (const item of items) {
+      if (item.kind !== "ellipse") continue;
+      const cx0 = item.cx;
+      const cx = (): number => cx0 + (frac() - frac0) * travelPx;
+      item.cx = readLive(cx);
+      setLiveSlots(item, { cx });
+    }
+  },
+});
 
 /* -------------------------------- button -------------------------------- */
 
@@ -296,18 +338,18 @@ export function button(opts: ButtonOptions): Control {
       });
     },
     build: async (press) => {
+      // The caption changes the text's box, so it is read at resolve and
+      // re-measures. The pressed shading changes no box, so it is a paint-time
+      // read; evaluating that `live()` channel at resolve is also what
+      // registers the click input with the runtime.
       const label = typeof caption === "function" ? caption() : caption;
-      // Reading the input during resolve is ALSO what registers it with the
-      // runtime (the read location is the whole registration mechanism), so the
-      // pressed state and the wiring are the same line.
-      const held = press.isArmed();
       const box = (
         await leaf(
           rect({
             w,
             h,
             rx: 4,
-            fill: held ? "#e0e0e0" : "#f2f2f2",
+            fill: live(() => (press.isArmed() ? "#e0e0e0" : "#f2f2f2")),
             stroke: "#ccc",
             strokeWidth: 1,
           })

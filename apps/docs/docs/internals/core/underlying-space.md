@@ -12,6 +12,7 @@ covers:
   - packages/gofish-graphics/src/ast/data.ts
   - packages/gofish-graphics/src/ast/fieldExpr.ts
   - packages/gofish-graphics/src/ast/datumProjection.ts
+  - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -208,9 +209,9 @@ generation.
 ## The three space kinds
 
 Each axis (x and y) of each node carries one of `continuous`, `ordinal`, or
-`undefined`. The continuous kind stores two facts: a **`width`** (a σ-affine
-_size_ Monotonic) and a **`dataDomain`** (a _data-space_ fact: the axis range, if
-any). The **`placement`** (the _layout_ fact: is this extent positioned) is not a
+`undefined`. The continuous kind stores two facts: its σ-affine _size_, as an
+**`ascent`** and a **`descent`** (two Monotonics, see below), and a
+**`dataDomain`** (a _data-space_ fact: the axis range, if any). The **`placement`** (the _layout_ fact: is this extent positioned) is not a
 third stored field — it is a **derived view** of `dataDomain`'s shape, a bare
 determinacy lattice read via `spacePlacement(space)`:
 
@@ -222,7 +223,9 @@ type DataDomain = Interval | "delta" | undefined;
 
 type CONTINUOUS_TYPE = {
   kind: "continuous";
-  width: Monotonic;       // the σ-affine SIZE: slope·σ + intercept
+  ascent: Monotonic;      // σ-affine extent above the baseline (local 0)
+  descent: Monotonic;     // σ-affine extent below the baseline
+  width: Monotonic;       // ascent + descent, computed by CONTINUOUS
   dataDomain: DataDomain; // data-space extent AND the sole placement carrier
   measure?: Measure;
 };
@@ -235,6 +238,64 @@ const spacePlacement = (s: CONTINUOUS_TYPE): Placement =>
     : s.dataDomain === "delta" ? "conflict"  // no absolute position possible (a centered streamgraph band)
       : "determined";                        // committed to a DATA interval (a scatter point's x)
 ```
+
+**Ascent and descent (#773).** A baseline magnitude is measured from its
+baseline on both sides, like a font's ascent and descent. A rect of value 30
+has ascent `30σ` and descent 0; a rect of value −20 has ascent 0 and descent
+`20σ` (`baselineSpan(v)`, used only by `rect`: a rect length is signed, while
+a text, image, or treemap size is a nonnegative magnitude). `SIZE(ascent,
+measure, descent = ZERO)` is the one constructor; most extents sit wholly above
+their baseline and never spell the descent. `width` is `ascent + descent`,
+computed once by the `CONTINUOUS` constructor, and it is what a scope solves σ
+against. An anchored or difference extent sits
+wholly above its low edge, so its descent is 0. Every consumer that only needs
+the total (σ solves, distribute sums, grid claims) reads `width`;
+the consumers that place things about the baseline read the pair:
+
+- `unionChildSpaces`' all-free branch combines children per side:
+  `SIZE(max of ascents, max of descents)`. This keeps both the σ-affine
+  intercepts and the negative side, so a `group` of signed bars keeps both.
+- `continuousExtentInterval` collapses a free extent to
+  `[−descent.run(1), ascent.run(1)]`. Under `baseline` alignment,
+  `resolveAlignmentSpace` (spread's cross axis) unions these, so a signed bar
+  chart is anchored over a domain that includes its negative values. Under
+  `start`, `end`, or `middle` alignment the children line up at a box edge or
+  center instead, so each child counts as its whole box `[0, width]` and the
+  union spans the widest.
+- `nestedSpace` pads each side of the inner extent: ascent + padding and
+  descent + padding.
+- `anchorAt` puts the baseline at the given coordinate:
+  `[origin − descent, origin + ascent]`.
+- A scope root over a free extent (the chart root, or a layer's self-scaled
+  free stash) fits `ascent + descent` to its box and seats the baseline
+  `descent·σ` above the box's low edge (`scopeRootBaseline`).
+
+- A stack lays its parts end to end, in order, as vectors. Each part's
+  baseline sits on the previous part's head, where the head is the baseline
+  moved by `ascent − descent`, so a negative part goes back. The stack spans
+  everything its parts cover, starting from its first part's baseline at 0:
+  parts (30, −25, 10, −50) have running sums 0, 30, 5, 15, −35, so the stack
+  spans `[−35, 30]`. Parts that cancel overlap. A diverging stacked bar (all
+  positives up from 0, all negatives down from 0) is not a stack option: it is
+  spelled by grouping by sign first, so that each stack holds one sign.
+- The 0 of a stack is its **origin**: its first part's tail by default, as
+  above. A stack whose `by` column has `HasMidpoint` (see
+  [Column types](#column-types-the-chart-schema)) puts its origin at the
+  midpoint of the column's order instead, and the fold shifts the extent so
+  the midpoint sits at 0: the parts before the midpoint (and the share of the
+  level it falls in that lies before it) lie below 0, the rest above. Parts
+  (5, 10, 20, 40, 25) centered on the middle of the 20 span `[−25, 75]`. The
+  parts of a centered stack must be nonnegative (a negative one is an error
+  naming `HasMidpoint`), and the space
+  it builds is **mirrored** (the origin's `mirrored` flag, then
+  `CONTINUOUS_TYPE.mirrored`; see `StackOrigin`): both sides of 0 hold
+  amounts measured away from it, so an axis over it labels each tick with its
+  distance from 0. A union stays mirrored only when every part is.
+- A spread along an axis still sums total extents (each child's
+  `ascent + descent`) as boxes above the chain's start.
+
+With every descent 0, all of this reduces to the single `width` the space
+carried before.
 
 The committed coordinate itself (the old `placement.at`) is not a separate
 payload: it is simply the `dataDomain` interval's `min`, read back with
@@ -250,6 +311,11 @@ discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
 own resolved space — a continuous axis by its unit, an ordinal axis by its
 grouping field (see [the layout passes](/internals/layout/passes)).
 
+A datum value can also carry a `field`: the data field it was read from, set
+by `inferColor` when a color channel names one. That is provenance, not a
+measure: it never enters `resolveMeasure` or unit unification, and only the
+color scale reads it (see [Color Scale Resolution](/internals/layout/color-scales)).
+
 A companion predicate, **`isPositioningSpace`**, folds the two axis-bearing
 kinds together: it holds for `POSITION` (a data axis) and `ORDINAL` (a category
 axis) but not for `SIZE` (a mark's own extent) or `UNDEFINED`. In other words it
@@ -258,8 +324,17 @@ when you want the axis a set of siblings is arranged on rather than each
 sibling's own size. Its first consumer is the connector's `curve: "auto"`: a
 `line` / `ribbon` reads the underlying space its endpoints resolved to and, when
 that space is a _positioning_ one whose measure is continuous, smooths the path
-(centripetal Catmull–Rom) instead of drawing straight segments — so a line over
+(the monotone cubic) instead of drawing straight segments — so a line over
 a continuous x auto-curves while one over discrete categories stays polylinear.
+The same test picks the spline's knots when the run has no parameter of its
+own (the times of the keyframes a line threads, or the path tier's key,
+`inferred.along`, read through `projectBy`). On a continuous connection
+axis, the points' positions along it are the knots when the points are in order
+along it. A run with neither falls back to centripetal knots, which are
+computed from distances on screen (`runKnots` in `connect.tsx`). When the
+knots are the positions on the connection axis, that axis draws the run's
+parameter; the `step` curve reads this (along with `inferred.parameterAxis`
+for a parameter taken from the path tier) to hold every other coordinate.
 
 The guide a space supports keys on **`dataDomain`** (data-space), never on
 placement:
@@ -357,8 +432,10 @@ composes its targets' spaces into the layer's claim on that axis:
 - `Constraint.distribute` contributes the stack fold (`distributeSpaceFold`,
   `constraints/distribute.ts`): data-driven continuous targets compose to
   `SIZE(Monotonic.add(...) + spacing·(n−1))` (a `free` magnitude); with
-  `glue: true` (stack semantics) the extents are committed to an anchored
-  `POSITION([0, Σ])`; constant-sized keyed targets fall back to ORDINAL.
+  `glue: true` (stack semantics) the extents are laid end to end and committed
+  to an anchored `POSITION` over the range of their running sums (`[0, Σ]`
+  when no part has a descent); constant-sized keyed targets fall back to
+  ORDINAL.
   (A former POSITION's pixel extent at σ=1 is `width.run(1) = b−a`, so the
   unified `width`-based sum subsumes the old separate POSITION-sum branch.)
 - `Constraint.align` contributes the alignment fold (`resolveAlignmentSpace`)
@@ -470,7 +547,16 @@ between adjacent children: `"edge"` relates the facing edges
 (`prev.end → cur.start`, spacing = the gap between them, content-dependent);
 the fixed-pitch anchors relate the _same_ anchor on both sides
 (`prev.anchor → cur.anchor`, spacing = anchor-to-anchor pitch,
-content-independent) — `anchor[i+1] = anchor[i] + spacing`. `"middle"` is the
+content-independent) — `anchor[i+1] = anchor[i] + spacing`. A glued chain
+(`glue: true`, i.e. `stack`) relates `prev.head → cur.tail` instead
+(`distributePlacementAnchors`). A part's **tail** is where its baseline sits,
+or its start when it is not a baseline magnitude; its **head** is the point as
+far in from its end as the tail is from its start, which is the baseline moved
+by `ascent − descent`. A positive bar's tail is its start and its head its
+end, so with positive parts (or parts with no data baseline, such as text or
+a nested stack) this is exactly the `"edge"` chain; a negative bar's tail is
+its end and its head its start, so the next part starts where it ends.
+`"middle"` is the
 old `mode: "center"` under its new name; `"start"`/`"end"`/`"baseline"` are new
 fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
 (`constraints/shared.ts`'s `AlignAnchor`). The space fold
@@ -603,11 +689,13 @@ this is where a target's size is determined, with the node's own weak layout
 size the default when no strong equation reaches it. A bbox over-determination
 (two conflicting intervals on one target) is a named-owner conflict naming both
 owners. Then the **difference graph** (`constraints/differenceGraph.ts`): with
-sizes known, every anchor reduces to `min + offset` — `start`/`baseline` at 0,
-`middle` at `size/2`, `end` at `size` for a size-strong cell (read off the
-closed box), else the node's local-frame anchor offset. `position`, `align`,
+sizes known, every anchor reduces to `min + offset` — `start`/`baseline`/`tail`
+at 0, `middle` at `size/2`, `end`/`head` at `size` for a size-strong cell (read
+off the closed box, `strongAnchorOffset`), else the node's local-frame anchor
+offset (`anchorOffset`; a stack part's `tail` is its free baseline's offset,
+or 0, and its `head` is `size − tail`). `position`, `align`,
 `distribute`, `nest`, and `grid` pins/relations over those reduced `min` values
-go through BFS components + pin offsets + distribute/normalized-origin
+go through BFS components + pin offsets + free/distribute/normalized-origin
 fallbacks. Every solved cell writes back through **one path**: a size-strong
 cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
 `min` anchor, a rank-1 size-with-no-position cell (align `"size"`, above)
@@ -647,7 +735,9 @@ through the already-solved data→pixel scale plus any post-scale offset. This
 keeps the unified constraint semantics without a generic dense linear solver:
 strong facts win, relation cycles are checked for contradiction, and components
 without an absolute pin are normalized so the minimum solved coordinate in that
-component is `0`. Ordered `distribute` components are the exception: their
+component is `0`. Two kinds of component are the exception. One whose free nodes
+share a baseline seats it at the layer's free-child origin (below). Ordered
+`distribute` components are the other: their
 directed chain source is a deterministic sequence origin, so negative spacing
 remains authored overlap instead of being erased by min-normalization. If a
 graphic needs a floating component to appear at a particular absolute
@@ -667,13 +757,61 @@ the same solver entrypoint. An incompatible same-solve interval + point
 of letting one silently yield to the other.
 
 Placement-time alignment dispatches on the same resolution. `align` emits
-relations between child anchors; it no longer chooses an absolute fallback
-baseline for an otherwise-floating system. If no explicit `position` (point or
-interval), self-placement, or other strong pin fixes a connected component, the
-solver
-normalizes that component so its minimum solved coordinate is `0`. A user who
-needs the aligned system to appear at a particular place must say so explicitly
-with a placement constraint.
+relations between child anchors and never pins. Where a floating component
+lands is the solver's fallback, and its first rule is the **free-child
+origin** (#773). A free child (a baseline magnitude, such as a rect with a data
+`h`) has a baseline that stands for the measure's origin, the value a signed
+`h`/`w` grows from. When the owning layer is anchored on the axis (its own
+space, or the stash it self-scales, is a POSITION), its local frame is the
+frame of the data→pixel map it holds, and that origin has a pixel:
+`pxOf(map, measureOrigin(measure))`. The layer computes this per axis
+(`freeOrigin`). It places unconstrained free children there itself (phase-1
+placement, and `placeUnplacedChild` for a child the solve left unplaced on an
+axis), and hands it to the solve as one input: in `solveAxisProblem`, a
+component with no pin whose free nodes share one baseline is offset so that
+baseline sits at the origin. Free nodes whose baselines differ (an `end` or
+`middle` alignment) have no common baseline to seat, so that component falls
+to the sequence or normalized origin as before. A `distribute` chain along the
+axis places its members' baselines itself (its lowering marks those relations
+`chain`), so the solver (`solveRank2Axis`)
+does not list them as free. A stack puts each part's tail on the previous
+head, so its one baseline is its origin, the 0 its running sums are measured
+from. The stack's lowering names it: it includes the part that carries the
+origin with how far from that part's tail to its head the origin lies
+(`AnchorParticipantFact.origin`), and the solver lists that point whether or
+not the part is a baseline magnitude, and whether or not it is size-strong (a
+size-strong part's tail is its start). By default it is the first part's tail.
+So a stack seats at the origin like a single bar, a negative first part hangs
+below it, and two stacks of one sign each (grouped by sign) meet on the 0
+tick. A stack over a `HasMidpoint` column carries its origin at the midpoint
+of the order (a fraction of the way through the part it falls in, or the
+tail of the first part past it), so every row of a Likert chart seats its
+midpoint on the 0 tick
+with no other code. A spread packs boxes from its first
+member's start, which is not a baseline, so it lists none and keeps its
+sequence origin, even when its members' baselines happen to coincide. Its
+lowering marks its relations `chain: "spread"` (a stack's are `"stack"`), and
+the difference graph gives a component that holds one no baseline at all, so
+a free node aligned to one of its members does not seat it either. So a bar
+with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
+the rounded −40. A free
+layer is itself seated by its parent at its own baseline, so its free-child
+origin is local 0: applying the map again would count the offset twice, and
+letting the component float would let min-normalization lift a descent off the
+baseline. A layer's self-scaled free stash roots its own σ-scope, so its origin
+is `descent·σ`, the same rule as the chart root. A layer with no continuous
+space on the axis has no origin, and its components float. Anchored children
+share the layer's frame and stay at 0, as the next paragraph explains.
+`measureOrigin` (`domain.ts`) returns 0 for every measure for now; the origin is
+the additive identity of the measure's algebraic structure, and measures do not
+carry that structure yet.
+
+Otherwise, if no explicit `position` (point or interval), self-placement, or
+other strong pin fixes a connected component and it has no shared free
+baseline, the solver normalizes that component so its minimum solved
+coordinate is `0`. A user who needs the aligned
+system to appear at a particular place must say so explicitly with a placement
+constraint.
 
 That normalization is also what keeps data-positioned children safe. A faceted
 scatter panel over `[1955, 2010]`, anchored to the shared y data scale, should
@@ -719,7 +857,8 @@ Three patterns cover most operators:
 
 **Leaf shapes** (`rect`, `ellipse`, `petal`, `text`, `image`) decide the
 kind from their props. A rect with data-bound `h` emits
-`SIZE(Monotonic.linear(value, 0))` on y (a `free` magnitude); the same
+`baselineSpan(value)` on y (a `free` magnitude: the value's positive part as
+ascent, its negative part as descent); the same
 rect with literal `y` and `y2` emits `POSITION([y, y2])`. Constants (no
 data-bound dim) emit `UNDEFINED` — the literal pixel value is handled at
 layout time by `computeAesthetic`, not via the underlying-space tree. (The
@@ -731,15 +870,17 @@ difference, an absent min is a `free` magnitude.)
 **Compositional operators** (`spread`, `stack`, `layer`, `enclose`)
 combine children's spaces. `spread({ glue: false })` keeps the magnitude
 along the stack direction so a parent can solve for shared scale factors
-via `Monotonic.inverse`. `spread({ glue: true })` (i.e. `stack`) sums
-children's extents into a `POSITION([0, sum])` — the operator commits the
-data-driven magnitudes to an anchored axis. Since the operator/constraint
+via `Monotonic.inverse`. `spread({ glue: true })` (i.e. `stack`) lays
+children's extents end to end into a `POSITION` over their running sums
+(`[0, sum]` for positive parts) — the operator commits the data-driven
+magnitudes to an anchored axis. Since the operator/constraint
 unification, these folds have one home: spread's resolver _is_
 `distributeSpaceFold` on the stack axis and `resolveAlignmentSpace` on the
 cross axis — the same functions the constraint path uses (see
 [The contract](#the-contract)). `layer` and overlay-style operators use
-`unionChildSpaces` (`alignment.ts`), which keeps the symbolic Monotonic
-when every child is a baseline magnitude (`placement: free`) and otherwise
+`unionChildSpaces` (`alignment.ts`), which keeps the symbolic Monotonics
+(the per-side max of ascents and of descents) when every child is a baseline
+magnitude (`placement: free`) and otherwise
 unions data intervals. UNDEFINED children carry no opinion and are ignored
 throughout, so a fixed-pixel (UNDEFINED) sibling never vetoes the
 magnitude-preserving path (it would otherwise degrade the union to an
@@ -972,7 +1113,13 @@ stashes and coords. The region is exactly the neighborhood whose axes all view
 the same underlying domain (an inner shared scope under an axis-drawing root
 inherits the root's demand, because its space is what bubbled up into the
 domain that axis draws; a stashed panel does not, because its space never
-reached the ancestor's axis). Tick elaboration nices node-locally with the same
+reached the ancestor's axis). The walk scans the whole region, so the answer is
+kept on the render session, per dim, keyed by the region's root: every scope in
+a region shares it, and the region is scanned once per render however many
+scopes ask. A layer asks only when it roots a scope the answer changes (most
+layers, e.g. one per keyframe mark under a `time.sequence`, root none), so the
+solve takes the demand as a per-axis read, `axisDemand(dim)`.
+Tick elaboration nices node-locally with the same
 `d3.nice`, applied to the axis-owning node's domain — the same union domain
 that bubbled to the scope root — so elaboration and the solve cannot disagree.
 
@@ -1200,7 +1347,7 @@ measure**.
 
 ```ts
 // underlyingSpace.ts
-export type CONTINUOUS_TYPE = { kind: "continuous"; width: Monotonic; dataDomain: DataDomain; measure?: Measure; ... };
+export type CONTINUOUS_TYPE = { kind: "continuous"; ascent: Monotonic; descent: Monotonic; width: Monotonic; dataDomain: DataDomain; measure?: Measure; ... };
 ```
 
 **Merging.** Two helpers in `underlyingSpace.ts` decide what happens when two
@@ -1311,6 +1458,65 @@ multi-scale, where a single axis can host several measures at once (dual axes).
 That is also the natural place for axis titles to read a measure off the space
 they describe (cf. issues #452, #386).
 
+## Column types: the chart schema
+
+`chart(data, { schema })` (`schema.ts`, #984) declares, per column, the
+classes the column's values have, in the style of typeclasses:
+
+```ts
+chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
+```
+
+A column type is a record keyed by class name (`ColumnType`), and the engine
+reads only the classes, never the builder words. Two classes exist:
+
+- `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
+  order. `splitEntries` groups a `by` over the column in that order instead
+  of first appearance, so every operator that splits (spread, stack, group,
+  scatter, ...) follows it, and `field(...).sort(...)` and `.reverse()` still
+  reorder from there. A value outside the levels is a loud error naming the
+  column and the stray values (`strayLevelsError`), checked where the order
+  is used (`orderByLevels`, at a split or a color scale), not when the chart
+  types its data, so a `filter` in the flow can drop the stray rows first.
+- `HasMidpoint` (`.diverging({ midpoint })`): the order has a midpoint, the
+  point `{ at }` along it in edge coordinates. Level `i` spans `[i, i + 1]`,
+  so 0 is the first level's leading edge, `n` the last level's trailing
+  edge, and 2.25 a quarter of the way into the third level (the `cutoff` of
+  ggstats' `gglikert`). `.diverging()` writes the default `n / 2` into the
+  record, so the wire form always carries a number: the middle of the
+  middle level when the count is odd, the boundary between the two middle
+  levels when it is even. It requires `HasOrder`; the builder's `this` type
+  makes `.diverging()` exist only after `.ordered(...)`, and `columnTypeOf`
+  rejects a wire record that has one without the other. A midpoint that is
+  not a finite number in `[0, n]` is an error from `checkMidpointOnOrder`,
+  which `.diverging()` calls at once and `columnTypeOf` calls on a wire
+  record; Python's `.diverging()` raises the same messages, word for word. A stack over the column takes the
+  midpoint as its origin (`stackOrigin`, then the stack fold and the
+  free-origin seat above): inside a present level, that fraction of its
+  part; on a boundary, or inside a level the row lacks, the tail of the
+  first part past it (or the last part's head). A stack laid out against the
+  order measures the fraction from the other end, so the midpoint `at` sits
+  at `n − at` along the layout. The midpoint comes from the order, not from
+  the parts present: a row with no responses for some level keeps the same
+  midpoint. So does the side of it each level lies on: the split applies its
+  `field(...).sort()` and `.reverse()` to every level of the order
+  (`orderEntries`), and `stackOrigin` reads the stack's direction off that,
+  so a row with one part puts it where a full row does. A split order that
+  is neither the order nor its reverse is an error.
+
+The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
+same way a transform's measure provenance does: `ChartBuilder` copies the
+array and tags it (`applySchema`, which keeps the measure provenance the
+array already carries), `createOperator` copies the tag onto each
+split leaf, and a `derive` keeps it on its result. So the stack's split reads
+its `by` column's type off the data it splits, and a color channel's
+`DatumValueImpl` records the type of the field it read (`fieldType`), which
+lets the categorical color scale list its domain in the column's order. A
+later class (`HasZero`, `HasCycle`, ...) is one more key on the record.
+
+TODO(#984): measure provenance is the unit part of the same per-column record
+and could fold into it; it stays a separate symbol for now.
+
 ## Field expressions: a pipeline orthogonal to channel aggregation
 
 `field(name)` (`fieldExpr.ts`, #700) returns a chainable expression — a
@@ -1332,14 +1538,18 @@ error rather than silently doing the wrong thing:
   frame, so the space they occupy is the space of the whole dataset, which is
   what keeps a playing chart's axes still; the `TimeTier` it hands a
   `time.transition()` is declared in the same module and carries the clock,
-  the keyframes, and the clock's milliseconds per unit of the field). A
+  the keyframes, the cycle of the time axis when the sequence is `cyclic`, and
+  the clock's milliseconds per unit of the field). A
   build-in stagger's `by` reuses `splitEntries` for the order of its groups
   (`src/animation/grouping.ts`). `dropNulls` filters out
   rows whose value at the field is `null`/`undefined` FIRST (so it composes
   the same regardless of where it sits in the chain — every other domain op
   re-derives its grouping from these filtered rows), then it groups the
   remaining rows (`Map.groupBy` via `splitKeyFn`, which reads a `field(...)`'s
-  `.name` exactly like a bare string), then applies each remaining domain op
+  `.name` exactly like a bare string) in order of first appearance, or in the
+  order of the column's levels when the data declares the column ordered
+  (`HasOrder`, see [Column types](#column-types-the-chart-schema)), then
+  applies each remaining domain op
   in pipeline order — `bin` **replaces** the base grouping entirely (re-groups
   the raw rows into numeric bins, dropping empty ones); `sort` reorders the
   resulting entries, either by the group key itself or by the SUM of another

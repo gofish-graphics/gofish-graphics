@@ -17,7 +17,7 @@ from .ast import Mark, _channel
 
 # --- Leaf marks -------------------------------------------------------------
 
-def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspectRatio: Optional[float] = None) -> Mark:
+def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspectRatio: Optional[float] = None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
@@ -32,10 +32,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         y2: Other y edge position.
         h: Height.
         emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         strokeWidth: Stroke width in pixels. Default 0.
@@ -59,10 +56,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         ("y2", y2),
         ("h", h),
         ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
+        ("dims", dims),
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
@@ -104,7 +98,7 @@ def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] 
             _kw[_k] = _channel(_v)
     return Mark("circle", **_kw)
 
-def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, aspectRatio: Optional[float] = None, **kwargs: Any) -> Mark:
+def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, aspectRatio: Optional[float] = None, **kwargs: Any) -> Mark:
     """An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).
 
     Args:
@@ -119,10 +113,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]]
         y2: Other y edge position.
         h: Height.
         emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         strokeWidth: Stroke width in pixels. Default 0.
@@ -142,10 +133,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]]
         ("y2", y2),
         ("h", h),
         ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
+        ("dims", dims),
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
@@ -159,7 +147,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]]
             _kw[_k] = _channel(_v)
     return Mark("ellipse", **_kw)
 
-def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
+def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
     """A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.
 
     Args:
@@ -174,10 +162,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         y2: Other y edge position.
         h: Height.
         emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         strokeWidth: Stroke width in pixels. Default 0.
@@ -195,10 +180,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         ("y2", y2),
         ("h", h),
         ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
+        ("dims", dims),
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
@@ -210,7 +192,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
             _kw[_k] = _channel(_v)
     return Mark("petal", **_kw)
 
-def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None, textAnchor: Optional[str] = None) -> Mark:
+def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, dims: Optional[Any] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None, textAnchor: Optional[str] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
@@ -225,10 +207,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         y2: Other y edge position.
         h: Height.
         emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         key: Internal per-node key override.
         text: Text content (raw channel — a literal, field name, or accessor).
         fill: Fill color, or a field name for a color scale. Default "black".
@@ -256,10 +235,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         ("y2", y2),
         ("h", h),
         ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
+        ("dims", dims),
         ("key", key),
         ("text", text),
         ("fill", fill),
@@ -278,7 +254,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
             _kw[_k] = _channel(_v)
     return Mark("text", **_kw)
 
-def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserveAspectRatio: Optional[str] = None) -> Mark:
+def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, dims: Optional[Any] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserveAspectRatio: Optional[str] = None) -> Mark:
     """An embedded raster/SVG image. Box geometry via the shared dims channels.
 
     Args:
@@ -293,10 +269,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         y2: Other y edge position.
         h: Height.
         emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         key: Internal per-node key override.
         href: Image URL or data URI.
         filter: Raw SVG filter attribute.
@@ -316,10 +289,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         ("y2", y2),
         ("h", h),
         ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
+        ("dims", dims),
         ("key", key),
         ("href", href),
         ("filter", filter),
@@ -336,7 +306,7 @@ def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         points: Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).
-        fill: Fill color. Default "black".
+        fill: Fill color, or a field name for a color scale. Default "black".
         stroke: Stroke color. Defaults to `fill`.
         strokeWidth: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1, applied to both fill and stroke. Default 1.
@@ -547,7 +517,7 @@ def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
-        dir: Direction to spread along.
+        dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Gap between children, px. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         sharedScale: Share one scale across all children. Default false.
@@ -584,7 +554,7 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
-        dir: Direction to stack along.
+        dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
         glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
@@ -616,7 +586,7 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
             opts[_k] = _v
     return opts
 
-def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, xMin: Optional[Union[int, float, str]] = None, xMax: Optional[Union[int, float, str]] = None, yMin: Optional[Union[int, float, str]] = None, yMax: Optional[Union[int, float, str]] = None, alignment: Optional[str] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, xMin: Optional[Union[int, float, str]] = None, xMax: Optional[Union[int, float, str]] = None, yMin: Optional[Union[int, float, str]] = None, yMax: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, alignment: Optional[str] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Position each child at an explicit (x, y) point or [min, max] span in data space.
 
     Args:
@@ -627,6 +597,7 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
         xMax: Range form: right/top edge, x.
         yMin: Range form: left/bottom edge, y.
         yMax: Range form: right/top edge, y.
+        dims: Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span.
         alignment: Cross-axis alignment for the axis without an explicit position. Default "baseline".
         w: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
         h: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
@@ -641,6 +612,7 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
         ("xMax", xMax),
         ("yMin", yMin),
         ("yMax", yMax),
+        ("dims", dims),
         ("alignment", alignment),
         ("axes", axes),
         ("w", w),
@@ -687,7 +659,7 @@ def _table_opts(*, by: Any, spacing: Optional[Any] = None, numCols: Optional[flo
             opts[_k] = _v
     return opts
 
-def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.
 
     Args:
@@ -695,6 +667,7 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
         y: Top/bottom edge (y-up: bottom) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
         w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
+        dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
         paddingInner: Padding between sibling rectangles. Default 0.
         paddingOuter: Padding around the outer edge of the treemap. Default 0.
@@ -712,6 +685,7 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
         ("y", y),
         ("w", w),
         ("h", h),
+        ("dims", dims),
         ("by", by),
         ("paddingInner", paddingInner),
         ("paddingOuter", paddingOuter),
@@ -727,7 +701,25 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
             opts[_k] = _v
     return opts
 
-def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _pack_opts(*, by: Optional[Any] = None, method: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).
+
+    Args:
+        by: Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.
+        method: The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm. Default {"kind":"circles"}.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("by", by),
+        ("method", method),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
 
     Args:
@@ -735,6 +727,7 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
         y: Top/bottom edge (y-up: bottom) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
         w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
+        dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
         paddingInner: Padding between sibling rectangles. Default 0.
         paddingOuter: Padding around the outer edge of the treemap. Default 0.
@@ -753,6 +746,7 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
         ("y", y),
         ("w", w),
         ("h", h),
+        ("dims", dims),
         ("by", by),
         ("paddingInner", paddingInner),
         ("paddingOuter", paddingOuter),
@@ -779,7 +773,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         strokeDasharray: Raw SVG stroke-dasharray (e.g. "12") for a dashed line.
         opacity: Opacity, 0 to 1.
         mixBlendMode: Blend mode where connectors overlap.
-        curve: Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = "auto" (catmullRom on a homogeneous continuous connection axis, else straight).
+        curve: Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name ("linear"/"bezier"/"step"/"monotone"/"smooth"/"catmullRom"). "step", "linear", "monotone" and "smooth" are read over the parameter of the run, from the least to the most smooth. "step" holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). "monotone" is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". "smooth" rounds a peak a little past its point, but keeps a run of equal values flat. "catmullRom" is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted = "auto" (monotone on a homogeneous continuous connection axis, else linear).
         dir: Connection axis.
         source: Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword.
         target: Anchor-mode end point; see `source`.
@@ -827,7 +821,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         opacity: Opacity, 0 to 1.
         mixBlendMode: Blend mode where bands overlap. Default "normal".
         dir: Connection axis.
-        curve: Screen-space band-edge shape (straight() | bezier()). Omitted = "auto" (bezier).
+        curve: Screen-space band-edge shape ("linear" | bezier() | "step" | "monotone" | "smooth" | "catmullRom"). "step" steps both edges, as a stepped area does. "monotone" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); "smooth" is a rounder reading over the same parameter, and can go a little past a point; "catmullRom" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = "auto" (monotone on a homogeneous continuous connection axis, else a bezier band).
         along: Names a flow tier by its `by` field: that tier becomes the path tier (threading its groups in order) and every OTHER grouping tier splits. Omitted: the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` where the mark doesn't fuse over this chart's own flow (a refs bag, or the pairwise from/to form), is an error.
         emX: Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself.
         emY: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
@@ -857,7 +851,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
             opts[_k] = _v
     return opts
 
-def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[Any] = None, transform: Optional[Any] = None, box: Optional[bool] = None) -> Dict[str, Any]:
+def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, dims: Optional[Any] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[Any] = None, transform: Optional[Any] = None, box: Optional[bool] = None) -> Dict[str, Any]:
     """Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.
 
     Args:
@@ -871,10 +865,7 @@ def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Unio
         y2: Other y edge position.
         h: Height.
         emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         key: Internal per-node key override.
         coord: Coordinate transform (`polar()`, `clock()`, `wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.
         axes: Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.
@@ -893,10 +884,7 @@ def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Unio
         ("y2", y2),
         ("h", h),
         ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
+        ("dims", dims),
         ("key", key),
         ("coord", coord),
         ("axes", axes),

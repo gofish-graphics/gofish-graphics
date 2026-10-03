@@ -324,6 +324,7 @@ const DUAL_FORM_OPERATOR_CORES: Array<[string, string]> = [
   ["group", "_group_opts"],
   ["table", "_table_opts"],
   ["treemap", "_treemap_opts"],
+  ["pack", "_pack_opts"],
 ];
 for (const [opType, fnName] of DUAL_FORM_OPERATOR_CORES) {
   const d = OPERATORS[opType];

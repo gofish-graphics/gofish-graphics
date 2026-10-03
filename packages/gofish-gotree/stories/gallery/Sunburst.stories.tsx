@@ -50,10 +50,10 @@ import { initializeContainer } from "../helper";
 //    drawn the disc starts at the same angle and the budget is the full 2π.
 //  - PolarAxis: y-axis (the θ/r axis swap from the dsl) is not expressible.
 //  - Link:curve — links are not drawn for a filled-wedge sunburst (link:"none"
-//    is correct here); polar links only support {curve:"straight"|"none"},
+//    is correct here); polar links only support {curve:"linear"|"none"},
 //    never curved arcs (draft PR #637's route→curve registry is where curved
 //    links land).
-//  - Angular AUTO-FIT (#618): leaves carry a unit `thetaSize` weight; the coord
+//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight; the coord
 //    fits the summed weights to the budget and nest grows each parent to its
 //    children's combined arc — so the disc closes for any tree with no hand-set
 //    leafTheta. (This nest-θ case composes with the coord fit-frame.)
@@ -82,14 +82,14 @@ const deepBalancedTree = (() => {
 
 const bandHeight = 42; // radial thickness of one ring
 
-// Wedge node: leaves carry a unit angular WEIGHT (thetaSize) that the coord sums
+// Wedge node: leaves carry a unit angular WEIGHT (`w`, the θ extent) that the coord sums
 // and fits to the budget; internal nodes leave θ unsized so nest grows them to
 // their children's combined arc. emX/emY make θ sweep an arc and r the ring
 // thickness. No hand-set 2π/N — the ring auto-fits.
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        thetaSize: datum(1),
+        w: datum(1),
         h: bandHeight,
         emX: true,
         emY: true,

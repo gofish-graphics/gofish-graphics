@@ -81,6 +81,29 @@ function angleForTier(opt: LabelAngleOpt, tier: number): number | undefined {
   return Array.isArray(opt) ? opt[tier] : opt;
 }
 
+/** One row of axis labels: an axis, what kind of labels it carries, and its
+ *  tier (0 = innermost ordinal tier; a continuous axis has only tier 0). */
+export type LabelRow = {
+  dim: 0 | 1;
+  kind: "ordinal" | "continuous";
+  tier: number;
+};
+
+/** How one label row is drawn: rotated by this many degrees (screen-
+ *  clockwise, `undefined` = upright), or `"hidden"`: not drawn at all and
+ *  taking no space. Only an ordinal row can be hidden. */
+export type LabelRowSetting = number | "hidden" | undefined;
+
+/** The setting of every label row. Axis elaboration asks it once per row. */
+export type LabelRowSettings = (row: LabelRow) => LabelRowSetting;
+
+/** The row settings a manual `labelAngle` per axis describes (see
+ *  `AxisOptions.labelAngle`): a number for every tier, or per tier. */
+export const labelRowSettingsFromAngles =
+  (angles: [LabelAngleOpt, LabelAngleOpt]): LabelRowSettings =>
+  (row) =>
+    angleForTier(angles[row.dim], row.tier);
+
 /**
  * How a `labelAngle`-rotated label is anchored to its tick/key — the
  * "hanging point" rule: the point of the rotated label nearest the axis line
@@ -189,6 +212,8 @@ function tickMark(
     fill: AXIS_COLOR,
     rotate: labelAngle,
   });
+  // A continuous axis has one tier (see `AxisOptions.labelAngle`).
+  text.axisLabel = { dim, kind: "continuous", tier: 0 };
   const tick = tickRect(dim);
   return (Spread as any)(
     {
@@ -421,18 +446,24 @@ function positionAxis(opts: {
  *  `tickMark`, unchanged from before the hanging-point rule; the "baseline"
  *  (oblique) case keeps the tick bare and gives `positionAxis` a separate
  *  `tickLabel` builder instead, so the data-position pin never targets the
- *  (asymmetric, rotated) label's own bbox. */
+ *  (asymmetric, rotated) label's own bbox.
+ *
+ *  Over a `mirrored` space (both sides of 0 hold amounts measured away from
+ *  it, e.g. a stack centered on a `HasMidpoint` column) each tick is labeled
+ *  with its distance from 0, so a Likert axis reads `40 20 0 20 40`. */
 function elaborateContinuousAxis(
   dim: 0 | 1,
   nice: [number, number],
   prefix: string,
   crossFloor?: number,
   side: "start" | "end" = "start",
-  labelRotation?: LabelRotation
+  labelRotation?: LabelRotation,
+  mirrored = false
 ): AxisElaboration {
   const [niceMin, niceMax] = nice;
   const tickValues = d3Ticks(niceMin, niceMax, TICK_COUNT);
   const oblique = labelRotation?.trackAlign === "baseline";
+  const tickText = (v: number) => fmtNum(mirrored ? Math.abs(v) : v);
   return positionAxis({
     dim,
     prefix,
@@ -442,16 +473,19 @@ function elaborateContinuousAxis(
     tickNode: oblique
       ? (_v, _i, name) => tickRect(dim).name(name)
       : (v, _i, name) =>
-          tickMark(dim, fmtNum(v), name, side, labelRotation?.rotate),
+          tickMark(dim, tickText(v), name, side, labelRotation?.rotate),
     tickLabel: oblique
-      ? (v, _i, name) =>
-          Text({
-            text: fmtNum(v),
+      ? (v, _i, name) => {
+          const label = Text({
+            text: tickText(v),
             fontSize: LABEL_FONT_SIZE,
             fill: AXIS_COLOR,
             rotate: labelRotation!.rotate,
             textAnchor: labelRotation!.textAnchor,
-          }).name(name)
+          }).name(name);
+          label.axisLabel = { dim, kind: "continuous", tier: 0 };
+          return label;
+        }
       : undefined,
     labelRotation,
     crossFloor,
@@ -513,7 +547,8 @@ function elaborateOrdinalAxis(
   keyMap: Record<string, GoFishNode>,
   prefix: string,
   side: "start" | "end" = "start",
-  labelRotation?: LabelRotation
+  labelRotation?: LabelRotation,
+  tier = 0
 ): AxisElaboration {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
   const trackAxis = dirName(dim); // labels track their key along the axis dim
@@ -533,15 +568,15 @@ function elaborateOrdinalAxis(
 
   const nodes: GoFishNode[] = [];
   keys.forEach((k, i) => {
-    nodes.push(
-      Text({
-        text: k,
-        fontSize: LABEL_FONT_SIZE,
-        fill: AXIS_COLOR,
-        rotate: labelRotation?.rotate,
-        textAnchor: labelRotation?.textAnchor,
-      }).name(lName(i))
-    );
+    const label = Text({
+      text: k,
+      fontSize: LABEL_FONT_SIZE,
+      fill: AXIS_COLOR,
+      rotate: labelRotation?.rotate,
+      textAnchor: labelRotation?.textAnchor,
+    }).name(lName(i));
+    label.axisLabel = { dim, kind: "ordinal", tier, field: space.measure };
+    nodes.push(label);
     nodes.push((ref(keyMap[k]) as any).name(rName(i)) as GoFishNode);
   });
 
@@ -631,7 +666,7 @@ function elaborationsFor(
   sides: ["start" | "end" | undefined, "start" | "end" | undefined],
   yUp: boolean,
   underCoord: boolean,
-  labelAngles: [LabelAngleOpt, LabelAngleOpt] = [undefined, undefined],
+  labelSettings: LabelRowSettings = () => undefined,
   tierCounts: [number, number] = [0, 0]
 ): {
   constrained: AxisElaboration[];
@@ -726,11 +761,17 @@ function elaborationsFor(
   // angle — `resolveLabelRotation` also derives the track-axis alignment mode
   // and, for an oblique angle, which end of the label anchors the rotation
   // pivot.
-  const resolvedLabelRotation = (
-    dim: 0 | 1,
-    tier: number
-  ): LabelRotation | undefined =>
-    resolveLabelRotation(angleForTier(labelAngles[dim], tier), frameFlips);
+  const resolvedLabelRotation = (row: LabelRow): LabelRotation | undefined => {
+    const setting = labelSettings(row);
+    if (setting === "hidden") {
+      // Only a category row can be hidden: a legend can carry categories, but
+      // nothing else can carry a continuous axis's tick values.
+      throw new Error(
+        `axis elaboration: a ${row.kind} label row cannot be hidden`
+      );
+    }
+    return resolveLabelRotation(setting, frameFlips);
+  };
   const outTierCounts: [number, number] = [...tierCounts];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
@@ -744,7 +785,8 @@ function elaborationsFor(
         prefix,
         crossFloor,
         axisSide(dim),
-        resolvedLabelRotation(dim, 0)
+        resolvedLabelRotation({ dim, kind: "continuous", tier: 0 }),
+        s.mirrored === true
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
@@ -763,16 +805,22 @@ function elaborationsFor(
       // Ordinal axes keep the `start` default (they follow the content's own flip
       // like a category row); only continuous axes default to the bottom.
       const tier = outTierCounts[dim];
-      refBased.push(
-        elaborateOrdinalAxis(
-          dim,
-          s,
-          keyMap,
-          prefix,
-          sides[dim] ?? "start",
-          resolvedLabelRotation(dim, tier)
-        )
-      );
+      const row: LabelRow = { dim, kind: "ordinal", tier };
+      // A hidden row draws nothing and takes no space, but the node still
+      // claims the axis (and its tier), so no ancestor draws it instead.
+      if (labelSettings(row) !== "hidden") {
+        refBased.push(
+          elaborateOrdinalAxis(
+            dim,
+            s,
+            keyMap,
+            prefix,
+            sides[dim] ?? "start",
+            resolvedLabelRotation(row),
+            tier
+          )
+        );
+      }
       outTierCounts[dim] = tier + 1;
     } else {
       continue;
@@ -827,7 +875,7 @@ export async function elaborateAxes(
   ],
   yUp = false,
   underCoord = false,
-  labelAngles: [LabelAngleOpt, LabelAngleOpt] = [undefined, undefined]
+  labelSettings: LabelRowSettings = () => undefined
 ): Promise<{
   node: GoFishNode;
   changed: boolean;
@@ -854,7 +902,7 @@ export async function elaborateAxes(
         sides,
         yUp,
         childUnderCoord,
-        labelAngles
+        labelSettings
       );
       if (res.changed) changed = true;
       // A child's anchor fills a dim slot we haven't claimed yet.
@@ -882,7 +930,7 @@ export async function elaborateAxes(
     sides,
     yUp,
     childUnderCoord,
-    labelAngles,
+    labelSettings,
     tierCounts
   );
   // Any dim this node owns an axis on is claimed — its own anchor replaces

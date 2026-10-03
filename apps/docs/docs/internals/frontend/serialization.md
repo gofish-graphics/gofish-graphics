@@ -129,13 +129,16 @@ the auto-naming + `selectAll` wiring at resolve time — the producer's
 auto-minted layer name never appears in the IR (mirroring how a relational
 mark's zBelow-by-default paint order stays a resolve-time constraint rather
 than a serialized field). Operators are a flat list (`derive`, `resolve`,
-`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`) — note `join`
+`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
+`pack`). `pack`'s `method` is a strategy object made by a function call
+(`circles()` in both languages), so on the wire it is plain data,
+`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
-`arrow`, `position`, `line`, `ribbon`, `treemap`, and the Porter-Duff family),
+`arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, and the Porter-Duff family),
 refs, or the two self-discriminating wrapper marks `offset` and `cut` (below).
 `position` is `enclose`'s undecorated sibling: it sets a single child's
 min-corner `(x, y)` in the parent's coordinates and draws nothing of its own
@@ -324,7 +327,7 @@ chart(data).mark(
 
 The `__combinator: true` flag tells the deserializer to dispatch this
 node through the combinator factory registry (`layer`, `spread`,
-`arrow`, `position`, `line`, `ribbon`, `treemap`, Porter-Duff) rather than the
+`arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, Porter-Duff) rather than the
 leaf-mark registry — same `type` discriminator namespace, different code path.
 
 ## The descriptor table — one authored source for construct field lists
@@ -337,7 +340,7 @@ default to) was hand-duplicated across four places: the TS type in
 `OPERATOR_TYPES` listed `"treemap"` while the `OperatorIR` union and the
 JSON Schema enum omitted it, and the hand-written Python `rect()` exposed
 `rs=`/`ts=` kwargs that don't exist anywhere in JS (the real names are
-`rSize`/`thetaSize`; they serialized, passed the open-world validator, and
+`rSize`/`thetaSize` at the time; they serialized, passed the open-world validator, and
 were silently dropped at render).
 
 [`descriptors.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/descriptors.ts)
@@ -346,8 +349,8 @@ construct (operator, leaf mark, combinator mark, coord transform) listing
 its fields in a small type DSL (`t.string`, `t.number`, `t.enum(...)`,
 `t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
 pointer at an authored envelope `$def`, and so on — see the file's `t`/`ch`
-exports). Shared field groups (`boxDims`, the 14 box-geometry/coord-alias
-channels; `paint`, the five paint channels) are declared once and pulled
+exports). Shared field groups (`boxDims`, the ten closed x/y/w/h box channels plus the open `dims` bag
+keyed by axis name; `paint`, the five paint channels) are declared once and pulled
 into a mark's entry by reference, so most mark entries list only the
 fields genuinely their own.
 
@@ -357,7 +360,17 @@ fields genuinely their own.
 `ref` — these are structural or recursive shapes rather than flat field
 bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
 of those files the doc comment marks as "stays hand-written below").
-Constraints likewise stay authored.
+Constraints likewise stay authored. So do `AxisInterval` and `AxisDimsValue`,
+the value shape of a `dims` option (`t.record(t.ref("AxisDimsValue"))` in the
+table): a bare `ChannelValue` or an interval object with only
+`min`/`center`/`max`/`size`/`embedded` keys. `validate.ts` tells the two apart
+with `isAxisInterval` (an interval is a plain object with no `type` tag), so a
+misspelled anchor is reported rather than read as an unknown channel shape. It
+exports that predicate and the key list `AXIS_INTERVAL_KEYS`, and the renderer's
+`dims.ts` imports both, so the wire and the renderer share one definition.
+The keys of `dims` are axis names that only mean something inside the enclosing
+coordinate space, so the wire keeps them open and carries them verbatim; the
+same goes for `spread`/`stack`'s `dir`, which is a plain string on the wire.
 
 Four consumers read the table:
 
@@ -482,7 +495,7 @@ generated Python" norm Altair and Plotly.py both follow. It emits:
   killing four previously hand-copied wire-name tables.
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
-  `layer`, the polar coord family) — just the kwargs→dict half. The
+  `layer`, `pack`, the polar coord family) — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 

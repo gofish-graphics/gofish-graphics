@@ -174,7 +174,8 @@ export type OperatorIR =
   | ScatterOperator
   | TableOperator
   | LogOperator
-  | TreemapOperator;
+  | TreemapOperator
+  | PackOperator;
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
@@ -246,7 +247,8 @@ export interface SpreadOperator
    *  `LabelIR`/`labelIRField` in createOperator.ts). */
   label?: LabelIR;
   by?: string | FieldAccessor;
-  dir?: "x" | "y";
+  /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
+  dir?: string;
   spacing?: number;
   alignment?: string;
   sharedScale?: boolean;
@@ -276,7 +278,8 @@ export interface StackOperator
   /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
   label?: LabelIR;
   by?: string | FieldAccessor;
-  dir?: "x" | "y";
+  /** See `SpreadOperator.dir`. */
+  dir?: string;
   /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
    *  true})`, so producers may put spread's options on the wire. Glue
    *  semantics force the effective gap to 0. */
@@ -320,6 +323,9 @@ export interface ScatterOperator
   xMax?: ChannelValue;
   yMin?: ChannelValue;
   yMax?: ChannelValue;
+  /** Per-child placement by axis name (see `AxisDims`): a bare value is the
+   *  point, `{ min, max }` the span, `{ center }` the point. */
+  dims?: AxisDims;
   alignment?: string;
   axes?: AxesOptions;
   w?: ChannelValue;
@@ -405,6 +411,30 @@ export interface TreemapOperator
   y?: ChannelValue;
   w?: ChannelValue;
   h?: ChannelValue;
+  /** The same box by axis name (see `AxisDims`). */
+  dims?: AxisDims;
+}
+
+/** A `pack` strategy, made by a function call (`circles()`). */
+export type PackMethodIR = { kind: "circles" };
+
+/**
+ * `pack({...})` — circle packing: children are placed so their enclosing
+ * circles touch without overlapping. Dual-form like `treemap`: also a
+ * low-level combinator mark (`CombinatorMarkType`'s `"pack"`). Mirrors JS's
+ * `PackOptions` (`graphicalOperators/pack.tsx`).
+ */
+export interface PackOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "pack";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
+  /** Field to partition rows by. Without `by`, one child per row. */
+  by?: string | FieldAccessor;
+  /** The packing strategy. Default `{ kind: "circles" }`. */
+  method?: PackMethodIR;
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +479,7 @@ export type CombinatorMarkType =
   | "line"
   | "ribbon"
   | "treemap"
+  | "pack"
   | "over"
   | "inside"
   | "xor"
@@ -566,6 +597,25 @@ export type ChannelValue =
   | FieldAccessor
   | DatumValue
   | BridgeLambdaSentinel;
+
+/** One axis of a `dims` option, as an interval: its anchors, each a channel
+ *  value (`size` a size channel, the rest positions). */
+export interface AxisInterval {
+  min?: ChannelValue;
+  center?: ChannelValue;
+  max?: ChannelValue;
+  size?: ChannelValue;
+  embedded?: boolean;
+}
+
+/**
+ * A `dims` option (box-dims marks, `scatter`): axis name → value or interval.
+ * The names are `x`/`y` plus whatever the enclosing coordinate space declares
+ * (polar `theta`/`r`, geo `lon`/`lat`); they resolve at render time, so the
+ * wire keeps them open. A bare value is a position (the `min` anchor on a
+ * mark, the point on a scatter).
+ */
+export type AxisDims = Record<string, ChannelValue | AxisInterval>;
 
 /** Explicit field-accessor form, emitted by `field(name, measure?)`. The
  *  optional `measure` is a unit annotation on the channel's underlying space
@@ -762,6 +812,7 @@ export const OPERATOR_TYPES = [
   "table",
   "log",
   "treemap",
+  "pack",
 ] as const;
 
 /** The set of leaf-mark type discriminators recognized in v0. */
@@ -793,6 +844,7 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "line",
   "ribbon",
   "treemap",
+  "pack",
   "over",
   "inside",
   "xor",

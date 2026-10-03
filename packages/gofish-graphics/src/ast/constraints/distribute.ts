@@ -5,7 +5,7 @@
 import type { Axis, AlignAnchor, ConstraintRef } from "./shared";
 import type { Placeable } from "../_node";
 import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
-import type { PlacementFactEmitter } from "./placementFacts";
+import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
 import {
   CONTINUOUS_TYPE,
   ORDINAL,
@@ -16,6 +16,7 @@ import {
   forgetAllMeasures,
   isBaselineMagnitude,
   isPOSITION,
+  mirrored,
   spaceMeasure,
 } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
@@ -40,7 +41,30 @@ export interface DistributeOptions {
   /** The measure for an ORDINAL fold — the grouping field (spread's `by`) — so a
    *  category axis names itself off its own space, like a continuous axis does. */
   measure?: string;
+  /** A stack's origin (glue only), its part named by child name. Omitted, it
+   *  is the tail of the first part laid out. */
+  origin?: StackOrigin<string>;
 }
+
+/**
+ * A stack's origin: its baseline, the 0 its running sums start from, which
+ * the layer seats at the measure's origin (#773). It is the point `fraction`
+ * of the way from the tail of part `part` to its head (see
+ * {@link RelationAnchor}). The default is the first part's tail. A stack over
+ * a column with `HasMidpoint` puts it at the midpoint of the column's order
+ * (#984, `stackOrigin` in schema.ts) and sets `mirrored`: the parts are then
+ * nonnegative amounts measured away from the 0 on both sides, and the
+ * stack's space is {@link CONTINUOUS_TYPE.mirrored}.
+ *
+ * `part` names the part in three ways on the way down: a child index from
+ * the split (`stackOrigin`), a child name on the constraint, and an index
+ * into the parts in placement order once resolved ({@link distributeOrigin}).
+ */
+export type StackOrigin<Part> = {
+  part: Part;
+  fraction: number;
+  mirrored: boolean;
+};
 
 export interface DistributeConstraint {
   type: "distribute";
@@ -51,6 +75,7 @@ export interface DistributeConstraint {
   glue: boolean;
   children: ConstraintRef[];
   measure?: string;
+  origin?: StackOrigin<string>;
 }
 
 export const createDistributeConstraint = (
@@ -67,7 +92,27 @@ export const createDistributeConstraint = (
   glue: options.glue ?? false,
   children,
   measure: options.measure,
+  origin: options.glue ? options.origin : undefined,
 });
+
+/** The {@link StackOrigin} of a stack over `ordered` (its parts in placement
+ *  order), with `part` an index into `ordered`: the declared origin, else the
+ *  first part's tail. */
+export function distributeOrigin(
+  constraint: Pick<DistributeConstraint, "origin">,
+  ordered: readonly { name: string }[]
+): StackOrigin<number> {
+  const origin = constraint.origin;
+  if (origin === undefined) return { part: 0, fraction: 0, mirrored: false };
+  const part = ordered.findIndex((child) => child.name === origin.part);
+  if (part < 0) {
+    throw new Error(
+      `stack: its origin is on part "${origin.part}", which is not one of ` +
+        `its parts (${ordered.map((child) => `"${child.name}"`).join(", ")}).`
+    );
+  }
+  return { ...origin, part };
+}
 
 /** `children` in placement order — reversed for `order: "reverse"`. The result
  *  is read-only: the forward case is the caller's own array. */
@@ -78,15 +123,21 @@ export function distributeChildrenInPlacementOrder(
   return constraint.order === "reverse" ? [...children].reverse() : children;
 }
 
-export function distributePlacementAnchors(
-  anchor: DistributeConstraint["anchor"]
-): {
-  from: AlignAnchor;
-  to: AlignAnchor;
+export function distributePlacementAnchors({
+  anchor,
+  glue,
+}: Pick<DistributeConstraint, "anchor" | "glue">): {
+  from: RelationAnchor;
+  to: RelationAnchor;
 } {
   // Fixed-pitch anchors (start/middle/end/baseline) relate the SAME anchor on
   // both sides of the chain edge (anchor[i+1] = anchor[i] + spacing); "edge"
-  // relates the facing edges (end of prev → start of cur).
+  // relates the facing edges (end of prev → start of cur). A stack (glue) lays
+  // its parts end to end as vectors (#773): each part's tail (its baseline)
+  // sits on the previous part's head, so a negative part goes back. A part
+  // with no data baseline has tail = start and head = end, so for such parts
+  // and for positive bars this is the facing-edge chain.
+  if (glue) return { from: "head", to: "tail" };
   return anchor === "edge"
     ? { from: "end", to: "start" }
     : { from: anchor, to: anchor };
@@ -110,7 +161,7 @@ export function lowerDistributePlacement(
   );
   const ordered = distributeChildrenInPlacementOrder(constraint, children);
   if (ordered.length === 0) return;
-  const anchors = distributePlacementAnchors(constraint.anchor);
+  const anchors = distributePlacementAnchors(constraint);
   // A fixed-pitch chain on y is an OVERLAY, not a tiling: the targets' allocated
   // y bands are just leftover slices, unrelated to where the chained anchor
   // sits. Stamp the chained anchor on each target so a target that later opens
@@ -137,12 +188,18 @@ export function lowerDistributePlacement(
       to: { name: ordered[i].name, anchor: anchors.to },
       gap: constraint.spacing,
       owner,
+      chain: constraint.glue ? "stack" : "spread",
     });
   }
+  // A spread's chain starts at its first member. A stack's chain also carries
+  // its {@link StackOrigin}, which the solver's free-origin fallback seats at
+  // the measure's origin (#773).
+  const origin = distributeOrigin(constraint, ordered);
   emitter.include({
     axis: constraint.dir,
-    name: ordered[0].name,
+    name: ordered[origin.part].name,
     owner,
+    origin: constraint.glue ? origin.fraction : undefined,
   });
 }
 
@@ -155,8 +212,11 @@ export function lowerDistributePlacement(
  *
  *  - explicit `opts.size` (a value) → SIZE(linear(value, 0)) — the spread's own
  *    size wins over any children-derived claim.
- *  - glue → POSITION([0, Σ widths]) when all-POSITION; POSITION([0, Σ run(1)])
- *    when all-SIZE; ORDINAL(keys) when any child is keyed; else UNDEFINED.
+ *  - glue → POSITION over the parts laid end to end from the stack's origin
+ *    (each part's baseline on the previous part's head; `[0, Σ widths]` when
+ *    no part has a descent and the origin is the first part's tail) when
+ *    all-POSITION or all-SIZE; ORDINAL(keys) when any child is keyed; else
+ *    UNDEFINED.
  *  - non-glue, all-SIZE & data-driven (some non-constant Monotonic) → SIZE
  *    composition (Monotonic.add + spacing·(n−1) for "edge"; the
  *    unknown-Monotonic fixed-pitch form for start/middle/end/baseline), so a
@@ -190,6 +250,9 @@ export function distributeSpaceFold(
     /** True when every contributing child was POSITIONALLY keyed (a `spread`
      *  with no `by`): the folded ORDINAL is anonymous and renders no axis. */
     anonymous?: boolean;
+    /** A stack's {@link StackOrigin}, its part an index into `targetSpaces`
+     *  (see {@link distributeOrigin}). */
+    origin: StackOrigin<number>;
   }
 ): UnderlyingSpace {
   const n = targetSpaces.length;
@@ -220,10 +283,42 @@ export function distributeSpaceFold(
     targetSpaces.map(widthAt1).reduce((a, b) => a + b, 0);
 
   if (opts.glue) {
-    // STACK semantics: collapse children into a single anchored POSITION
-    // [0, Σ extent@σ=1] (same total whether they were magnitudes or positioned).
+    // The parts lie end to end as vectors (#773): each covers
+    // `[at − descent, at + ascent]` about the running sum `at` of the parts
+    // before it, and the extent shifts so the stack's origin sits at 0. So
+    // (30, −25, 10, −50) spans [−35, 30], and (5, 10, 20, 40, 25) centered on
+    // the middle of the 20 spans [−25, 75]. A positioned part has descent 0.
     if (allSize || allPosition) {
-      return POSITION(Interval.interval(0, sumWidths()), childMeasure);
+      const { origin } = opts;
+      let at = 0;
+      let lo = 0;
+      let hi = 0;
+      let zero = 0;
+      (targetSpaces as CONTINUOUS_TYPE[]).forEach((s, i) => {
+        const ascent = s.ascent.run(1);
+        const descent = s.descent.run(1);
+        if (origin.mirrored && descent > 0) {
+          const by = opts.measure === undefined ? "" : `"${opts.measure}"`;
+          throw new Error(
+            `${by ? `stack({ by: ${by} })` : "stack"}: a centered stack's ` +
+              `parts are nonnegative amounts, but the part for ` +
+              `${keys[i] !== undefined ? `"${keys[i]}"` : `child ${i + 1}`} ` +
+              `is negative. Its \`by\` column${by ? ` ${by}` : ""} has ` +
+              `HasMidpoint (declared ` +
+              `with \`.diverging()\`), so the stack's 0 is the midpoint of its ` +
+              `order and each part lies on the side its level is on; a ` +
+              `negative amount has no meaning there.`
+          );
+        }
+        if (i === origin.part) zero = at + origin.fraction * (ascent - descent);
+        lo = Math.min(lo, at - descent);
+        hi = Math.max(hi, at + ascent);
+        at += ascent - descent;
+      });
+      return mirrored(
+        POSITION(Interval.interval(lo - zero, hi - zero), childMeasure),
+        origin.mirrored
+      );
     }
     if (namedKeys.length > 0)
       return ORDINAL(namedKeys, opts.measure, opts.anonymous);
@@ -275,6 +370,9 @@ export function distributeSpaceFold(
     });
   };
 
+  // Along a spread chain each child is a box: it contributes its total extent
+  // (ascent + descent), and the composed extent sits above the chain's start.
+  // (A stack, above, keeps the signs instead.)
   if (dataDriven) return SIZE(composeSize(), childMeasure);
   if (namedKeys.length > 0)
     return ORDINAL(namedKeys, opts.measure, opts.anonymous);

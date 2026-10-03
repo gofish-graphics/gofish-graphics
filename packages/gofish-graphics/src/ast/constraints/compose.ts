@@ -57,8 +57,10 @@ import * as Interval from "../../util/interval";
 import type { Measure } from "../data";
 import {
   distributeChildrenInPlacementOrder,
+  distributeOrigin,
   distributeSpaceFold,
   type DistributeConstraint,
+  type StackOrigin,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
 import { isPositionInterval, type PositionConstraint } from "./position";
@@ -117,7 +119,11 @@ export function scaleBaselineMagnitude(
   scale: number
 ): UnderlyingSpace {
   return isBaselineMagnitude(space) && scale !== 1
-    ? SIZE(Monotonic.smul(scale, space.width), space.measure)
+    ? SIZE(
+        Monotonic.smul(scale, space.ascent),
+        space.measure,
+        Monotonic.smul(scale, space.descent)
+      )
     : space;
 }
 
@@ -242,6 +248,7 @@ export function composeConstraintSpaces(
     anchor: AlignAnchor | "edge";
     glue: boolean;
     measure?: string;
+    origin: StackOrigin<number>;
   };
   const segments: Seg[] = [];
   for (const d of distributes) {
@@ -256,6 +263,7 @@ export function composeConstraintSpaces(
       anchor: d.anchor,
       glue: d.glue,
       measure: d.measure,
+      origin: distributeOrigin(d, ordered),
     });
   }
 
@@ -319,6 +327,7 @@ export function composeConstraintSpaces(
           glue: s.glue,
           measure: s.measure,
           anonymous: s.idx.length > 0 && s.idx.every(syntheticOf),
+          origin: s.origin,
         }
       );
       if (!isUNDEFINED(fold)) fragments.push(axisSize(fold, axis));

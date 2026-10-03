@@ -20,12 +20,18 @@
  * Which clock plays them depends on the chart. With no `time.sequence` in the
  * flow, every mark enters once, on the first render, from the empty chart:
  * the build-in. Under a `time.sequence` the marks enter, move and exit with
- * the data, and that is `time.transition()`'s job, so the chart builder turns
- * a mark's `.transition()` into that tier (`tweenTierFor`).
+ * the data, and that is `time.transition()`'s job, so the chart builder draws
+ * one over the marks that chained an `update` (`chainedUpdates`).
  */
 import type { SplitBy } from "../ast/datumProjection";
-import type { GoFishNode } from "../ast/_node";
-import { effectList, isTween, type Effect, type TweenEffect } from "./effects";
+import { GoFishNode } from "../ast/_node";
+import {
+  effectList,
+  isTween,
+  sameTween,
+  type Effect,
+  type TweenEffect,
+} from "./effects";
 import type { Arrangement } from "./schedule";
 
 /** An arrangement as written: `time.stagger(...)` / `time.parallel()`, with
@@ -184,25 +190,62 @@ export function checkPhases(
 }
 
 /**
- * Under a `time.sequence`, a mark's `.transition()` is the chained spelling
- * of today's `.layer(time.transition({ curve, ease }))`: `update` says how the
- * mark moves between years, and the tier that moves it is returned here for
- * the chart builder to layer. Entering and leaving marks fade in place over
- * the stretch between two keyframes (the #892 default), which is what
- * `enter: animation.fadeIn()` and `exit: animation.fadeOut()` say; other
- * enter and exit effects under a sequence are not in this prototype (the
- * build checks them, `checkPhases`).
+ * The tweens chained on the marks of `nodes` or on marks inside them, one
+ * per way of moving (`sameTween`), in the order they are first found. Under a `time.sequence` a mark's
+ * `.transition()` is the chained spelling of
+ * `.layer(time.transition({ curve, ease }))`: `update` says how the mark
+ * moves between years, and the chart builder draws one transition over its
+ * tier's marks for each tween found here (`ChartBuilder.resolve`). Entering
+ * and leaving marks fade in place over the stretch between two keyframes (the
+ * #892 default), which is what `enter: animation.fadeIn()` and
+ * `exit: animation.fadeOut()` say; other enter and exit effects under a
+ * sequence are not in this prototype (the build checks them, `checkPhases`).
+ * The walk does not look inside a mark once it finds one.
  */
-export function tweenTierFor(spec: MarkTransition): unknown {
-  const where = "mark.transition() under a time.sequence";
-  if (spec.update === undefined) {
-    throw new Error(
-      `[gofish] ${where}: give \`update: animation.tween({ curve })\`, how ` +
-        `the mark moves between keyframes. Entering and leaving marks fade ` +
-        `in place with it.`
-    );
+export function chainedUpdates(nodes: GoFishNode[]): TweenEffect[] {
+  const found: TweenEffect[] = [];
+  const walk = (node: GoFishNode): void => {
+    const record = records.get(node);
+    if (record?.kind === "mark" && record.targets === undefined) {
+      if (record.update === undefined) {
+        throw new Error(
+          `[gofish] mark.transition() under a time.sequence: give ` +
+            `\`update: animation.tween({ curve })\`, how the mark moves ` +
+            `between keyframes. Entering and leaving marks fade in place ` +
+            `with it.`
+        );
+      }
+      const update = record.update;
+      if (!found.some((f) => sameTween(f, update))) found.push(update);
+      return;
+    }
+    for (const child of node.children) {
+      if (child instanceof GoFishNode) walk(child);
+    }
+  };
+  nodes.forEach(walk);
+  return found;
+}
+
+/**
+ * The marks in `node`'s subtree a `.transition({ update })` was chained on,
+ * not looking inside one once found. With `update` given, only the marks that
+ * chained a tween that moves them the same way (`sameTween`); without it, the
+ * marks that chained any.
+ */
+export function chainedMarks(
+  node: GoFishNode,
+  update?: TweenEffect
+): GoFishNode[] {
+  const record = records.get(node);
+  if (record?.kind === "mark" && record.update !== undefined) {
+    return update === undefined || sameTween(record.update, update)
+      ? [node]
+      : [];
   }
-  return spec.update.layer();
+  return node.children.flatMap((child) =>
+    child instanceof GoFishNode ? chainedMarks(child, update) : []
+  );
 }
 
 /** Under a sequence the enter / exit of a mark is the tween's fade in place,

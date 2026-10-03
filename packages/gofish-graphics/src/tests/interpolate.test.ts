@@ -10,7 +10,7 @@
 
 import {
   interpolateLinear,
-  interpolateCatmullRom,
+  interpolateMonotone,
   interpolateStep,
   interpolateRun,
   interpolate,
@@ -85,69 +85,67 @@ console.log("# step: holds the previous keyframe, then jumps");
   );
 }
 
-console.log("# catmullRom: passes through every keyframe");
+console.log("# monotone: passes through every keyframe");
 {
   const knots = [1955, 1960, 1965, 1970];
   const values = [10, 20, 15, 40];
   for (let i = 0; i < knots.length; i++) {
     ok(
       `interpolates knot ${knots[i]}`,
-      near(interpolateCatmullRom(knots, values, knots[i]), values[i], 1e-9)
+      near(interpolateMonotone(knots, values, knots[i]), values[i], 1e-9)
     );
   }
   ok(
     "clamps before the run",
-    near(interpolateCatmullRom(knots, values, 1900), 10)
+    near(interpolateMonotone(knots, values, 1900), 10)
   );
   ok(
     "clamps after the run",
-    near(interpolateCatmullRom(knots, values, 2100), 40)
+    near(interpolateMonotone(knots, values, 2100), 40)
   );
-  // Between knots the spline overshoots a straight chord in general, but it
-  // stays in the neighborhood of the segment it is in.
-  const mid = interpolateCatmullRom(knots, values, 1962.5);
-  ok("stays near its own segment", mid > 12 && mid < 23, `got ${mid}`);
+  // Between two knots the curve only rises or only falls, so it stays
+  // between the two keyframes' values.
+  const mid = interpolateMonotone(knots, values, 1962.5);
+  ok("stays between its own keyframes", mid > 15 && mid < 20, `got ${mid}`);
 }
 
-console.log("# catmullRom: knots are data values, not uniform steps");
+console.log("# monotone: knots are data values, not uniform steps");
 {
   // A straight line read at unevenly spaced knots comes back exactly. This is
   // the sharpest statement of "the knots are the data values": a uniformly
-  // parameterized spline through the same points does NOT reproduce it (it
-  // gives 7.1875 at 7.5 below), because it spends equal clock on unequal gaps.
+  // parameterized spline through the same points does NOT reproduce it,
+  // because it spends equal clock on unequal gaps.
   const line = [0, 5, 10, 20];
   ok(
     "an affine run is reproduced exactly",
-    near(interpolateCatmullRom(line, line, 7.5), 7.5, 1e-9)
+    near(interpolateMonotone(line, line, 7.5), 7.5, 1e-9)
   );
-  // The velocity leaving a knot is the non-uniform Catmull-Rom tangent
-  //   m₁ = (p₁-p₀)/(t₁-t₀) − (p₂-p₀)/(t₂-t₀) + (p₂-p₁)/(t₂-t₁),
-  // which is what the Barry-Goldman pyramid computes. On this run that is
-  // 10 − 20/11 + 1 = 9.1818… per unit of t.
+  // The velocity leaving a knot is Steffen's slope,
+  //   (sign s₀ + sign s₁) · min(|s₀|, |s₁|, |p|/2),
+  // where s₀ = 10 and s₁ = 1 are the two intervals' slopes and p = 101/11
+  // the slope of the parabola through the three points. That is 2 · 1 = 2
+  // per unit of t: the shallower interval's slope limits it.
   const knots = [0, 1, 11];
   const values = [0, 10, 20];
-  const h = 1e-4;
-  const slope = (interpolateCatmullRom(knots, values, 1 + h) - 10) / h;
-  ok(
-    "leaves a knot at the non-uniform tangent",
-    near(slope, 10 - 20 / 11 + 1, 1e-3),
-    `got ${slope}`
-  );
-  // Uniform knots must agree with the textbook uniform Catmull-Rom, where the
-  // tangent is the plain centered difference (p₂-p₀)/2.
+  const h = 1e-6;
+  const slope = (interpolateMonotone(knots, values, 1 + h) - 10) / h;
+  ok("leaves a knot at Steffen's slope", near(slope, 2, 1e-3), `got ${slope}`);
+  // Uniform knots, worked by hand: the slopes are 10, 10, 0 at knots 0, 1, 2
+  // (knot 2 is where the run goes flat), so the segment from 1 to 2 has
+  // Bézier values 10, 10 + 10/3, 20, 20, which at u = 0.1 is 11.09.
   const uniform = [0, 1, 2, 3];
   const uvals = [0, 10, 20, 20];
   ok(
-    "uniform knots agree with uniform Catmull-Rom",
-    near(interpolateCatmullRom(uniform, uvals, 1.1), 11.045, 1e-9)
+    "uniform knots agree with the hand-worked cubic",
+    near(interpolateMonotone(uniform, uvals, 1.1), 11.09, 1e-9)
   );
 }
 
 console.log("# degenerate runs");
 {
   ok(
-    "two keyframes fall back to linear",
-    near(interpolateCatmullRom([0, 10], [0, 100], 2.5), 25)
+    "two keyframes read as a straight line",
+    near(interpolateMonotone([0, 10], [0, 100], 2.5), 25)
   );
   // Two keyframes at the same time value (duplicate rows for one year) must
   // not divide by zero; the run stays finite and inside its own values.
@@ -167,8 +165,8 @@ console.log("# interpolateRun dispatch and knotOrder");
     near(interpolateRun([0, 10], [0, 10], 5, "linear"), 5)
   );
   ok(
-    "dispatches catmullRom",
-    near(interpolateRun([0, 10], [0, 10], 5, "catmullRom"), 5)
+    "dispatches monotone",
+    near(interpolateRun([0, 10], [0, 10], 5, "monotone"), 5)
   );
   ok("dispatches step", near(interpolateRun([0, 10], [0, 10], 5, "step"), 0));
   ok(
