@@ -567,7 +567,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
             kind: { type: t.enum("squarify"), required: true },
             ratio: {
               type: t.number,
-              doc: "Target tile aspect ratio (width over height). Omitted, d3's default, the golden ratio.",
+              doc: "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio.",
             },
           }),
           t.object({

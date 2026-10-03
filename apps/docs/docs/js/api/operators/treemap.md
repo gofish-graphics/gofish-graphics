@@ -73,7 +73,8 @@ treemap(options, children); // combinator form
 Each one is a tiling method from d3-hierarchy.
 
 - `squarify({ ratio? })` makes tiles as close as it can to the aspect ratio
-  `ratio` (width over height). It is the default. Without `ratio`, it uses
+  `ratio`, the longer side over the shorter side. `ratio` must be at least 1,
+  and it does not choose between wide and tall tiles. It is the default. Without `ratio`, it uses
   d3's default, the golden ratio. `squarify({ ratio: 1 })` aims for square
   tiles, which suits one circle per leaf.
 - `slice()` puts the tiles in one column, stacked along y.

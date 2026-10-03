@@ -46,7 +46,8 @@ export type TreemapTile = Frontend.TreemapTileIR;
 
 /**
  * Squarified tiling (d3's `treemapSquarify`): makes tiles as close as it can to
- * the aspect `ratio` (width over height). Omitted, `ratio` is d3's default, the
+ * the aspect `ratio`: the longer side over the shorter side, so it is at least
+ * 1 and does not pick an orientation. Omitted, `ratio` is d3's default, the
  * golden ratio. `ratio: 1` aims for square tiles, which suits one circle per
  * leaf.
  */
@@ -77,8 +78,14 @@ const D3_TILES = {
 };
 
 function d3Tile(tile: TreemapTile) {
-  if (tile.kind === "squarify" && tile.ratio !== undefined)
+  if (tile.kind === "squarify" && tile.ratio !== undefined) {
+    // d3 silently clamps a ratio below 1 to 1; say so instead.
+    if (!(tile.ratio >= 1))
+      throw new Error(
+        `[gofish] treemap: squarify ratio must be at least 1 (longer side over shorter side), got ${tile.ratio}`
+      );
     return treemapSquarify.ratio(tile.ratio);
+  }
   const method = D3_TILES[tile.kind];
   if (!method)
     throw new Error(`[gofish] treemap: unknown tile kind "${tile.kind}"`);

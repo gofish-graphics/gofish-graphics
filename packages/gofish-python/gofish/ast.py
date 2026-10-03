@@ -1965,8 +1965,8 @@ def treemap(
 def squarify(*, ratio: Optional[Union[int, float]] = None) -> Dict[str, Any]:
     """
     The ``squarify()`` tiling strategy for :func:`treemap` (the default):
-    make tiles as close as possible to the aspect ``ratio`` (width over
-    height). Omitted, ``ratio`` is d3's default, the golden ratio.
+    make tiles as close as possible to the aspect ``ratio``: the longer side
+    over the shorter side, so at least 1, with no orientation chosen. Omitted, ``ratio`` is d3's default, the golden ratio.
     ``squarify(ratio=1)`` aims for square tiles, which suits one circle per
     leaf.
 
