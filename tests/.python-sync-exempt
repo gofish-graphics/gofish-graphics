@@ -38,6 +38,10 @@ packages/gofish-graphics/stories/forwardsyntax/Pack.stories.tsx::NestedByCount
 # are ported.
 packages/gofish-graphics/stories/forwardsyntax/Swarm.stories.tsx::MixedRadii
 
+# PROTOTYPE overlap strategies (quasirandom, blue noise, uniform jitter):
+# internal resolver functions with no IR form, for comparison only.
+packages/gofish-graphics/stories/prototypes/OverlapPrototypes.stories.tsx
+
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
 
