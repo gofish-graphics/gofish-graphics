@@ -248,47 +248,6 @@ for the API.
         }
       }
     },
-    "AxesOptions": {
-      "description": "Per-node axis-rendering override. Boolean toggles both dimensions; object form lets x and y differ. Each `AxisOption` is `true`/`false`, or `{ title?: string | false }` to set or suppress the title.",
-      "oneOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "x": {
-              "$ref": "#/$defs/AxisOption"
-            },
-            "y": {
-              "$ref": "#/$defs/AxisOption"
-            }
-          }
-        }
-      ]
-    },
-    "AxisOption": {
-      "oneOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "title": {
-              "oneOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "const": false
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
     "FieldAccessor": {
       "description": "Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
       "type": "object",
@@ -948,7 +907,7 @@ for the API.
           "type": "array",
           "items": {
             "type": "object",
-            "properties": {}
+            "additionalProperties": {}
           },
           "description": "The right-hand table, inlined as JSON rows."
         },
@@ -2558,6 +2517,72 @@ for the API.
         },
         {
           "$ref": "#/$defs/MarkFnMark"
+        }
+      ]
+    },
+    "AxisOptions": {
+      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                }
+              ],
+              "description": "Axis title. A string sets it; false suppresses the inferred title."
+            },
+            "side": {
+              "enum": ["start", "end"],
+              "description": "Which frame edge the axis sits on: \"start\" is the near (origin) edge, \"end\" the far edge. Omitted, a continuous x-axis sits at the visual bottom."
+            },
+            "labelAngle": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                {
+                  "enum": ["auto"]
+                }
+              ],
+              "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; \"auto\" picks 0, 45, or 90 degrees per label row so labels do not collide."
+            }
+          }
+        }
+      ]
+    },
+    "AxesOptions": {
+      "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/AxisOptions",
+              "description": "Options for the x axis."
+            },
+            "y": {
+              "$ref": "#/$defs/AxisOptions",
+              "description": "Options for the y axis."
+            }
+          }
         }
       ]
     }

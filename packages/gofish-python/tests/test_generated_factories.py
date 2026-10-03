@@ -13,11 +13,16 @@ shorthand kwarg was removed).
 import pytest
 
 from gofish import (
+    Schema,
+    chart,
     circle,
     circles,
     group,
+    join,
     pack,
+    palette,
     polygon,
+    rect,
     spread,
     stack,
     table,
@@ -145,3 +150,73 @@ def test_camel_case_kwargs_are_rejected():
         text(text="hi", fontSize=12)
     with pytest.raises(TypeError):
         spread(by="a", dir="x", sharedScale=True)
+
+
+# --- Nested option dicts ------------------------------------------------------
+# Keys inside a nested option dict follow the same snake_case rule as the
+# top-level kwargs, by the declared type of the field (OPTION_TYPES in
+# descriptors.ts). Dicts whose keys are data pass through untouched.
+
+
+def test_nested_axes_keys_serialize_to_camel_case_wire_keys():
+    ir = (
+        chart(
+            [{"a": "x", "v": 1}],
+            axes={"x": {"label_angle": 45, "side": "end"}, "y": True},
+        )
+        .flow(
+            spread(
+                by="a",
+                dir="x",
+                axes={"y": {"label_angle": [90], "title": False}},
+            )
+        )
+        .mark(rect(h="v"))
+        .to_ir()
+    )
+    assert ir["options"]["axes"] == {
+        "x": {"labelAngle": 45, "side": "end"},
+        "y": True,
+    }
+    assert ir["operators"][0]["axes"] == {"y": {"labelAngle": [90], "title": False}}
+    # The boolean forms pass through at both levels.
+    assert chart([], axes=False).mark(rect()).to_ir()["options"]["axes"] is False
+    assert stack([], dir="x", axes={"x": False}).to_dict()["options"]["axes"] == {
+        "x": False
+    }
+
+
+def test_nested_camel_case_key_is_rejected():
+    with pytest.raises(TypeError, match="did you mean 'label_angle'"):
+        chart([], axes={"x": {"labelAngle": 45}})
+    with pytest.raises(TypeError, match="unexpected key 'z'"):
+        spread(by="a", dir="x", axes={"z": True})
+    with pytest.raises(TypeError, match="unexpected key 'colour'"):
+        table(by={"x": "a", "y": "b", "colour": "c"})
+
+
+def test_unknown_chart_option_is_rejected():
+    with pytest.raises(TypeError):
+        chart([], labelAngle=45)
+
+
+def test_data_keyed_dicts_are_untouched():
+    # A palette keyed by category, a schema keyed by column, join rows, and
+    # inline data rows keep their keys exactly, camelCase or not.
+    colors = {"fooBar": "#f00", "baz_qux": "#00f"}
+    ir = (
+        chart(
+            [{"myCategory": "fooBar", "v": 1}],
+            color=palette(colors),
+            schema={"myCategory": Schema.ordered(["fooBar", "baz_qux"])},
+        )
+        .flow(
+            join([{"myCategory": "fooBar", "otherCol": 2}], on="myCategory"),
+            spread(by="myCategory", dir="x"),
+        )
+        .mark(rect(h="v", fill="myCategory"))
+        .to_ir()
+    )
+    assert ir["options"]["color"]["values"] == colors
+    assert list(ir["options"]["schema"]) == ["myCategory"]
+    assert ir["operators"][0]["right"] == [{"myCategory": "fooBar", "otherCol": 2}]

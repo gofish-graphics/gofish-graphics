@@ -22,7 +22,12 @@
  *    stack, scatter, group, table, treemap, line, ribbon, layer, the polar
  *    family) — the mechanical kwargs→dict half. The polymorphic
  *    operator-vs-combinator (or bag-vs-pairwise-vs-combinator) DISPATCH stays
- *    hand-written in `ast.py`, calling these cores.
+ *    hand-written in `ast.py`, calling these cores. `_chart_opts` is the
+ *    same kind of core for `chart(data, **options)` (CHART_OPTIONS).
+ *  - `_OPTION_TYPES` + `_to_wire`: the key structure of each named option
+ *    type (OPTION_TYPES) and the one interpreter that renames the keys of a
+ *    nested option dict (`axes={"x": {"label_angle": 45}}`) to wire keys by
+ *    the field's declared type, raising TypeError on an undeclared key.
  * `derive`/`resolve`/`join` (real logic: RPC bridge, ref-shape narrowing,
  * DataFrame conversion) and `palette`/`gradient`/`field`/`datum`/`normalize`/
  * `repeat`/`ref`/`selectAll` (not in the descriptor table) stay fully
@@ -36,6 +41,8 @@ import {
   COMBINATOR_MARKS,
   OPERATORS,
   COORDS,
+  OPTION_TYPES,
+  CHART_OPTIONS,
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,
   PY_LEAF_BASE_KWARGS,
@@ -125,6 +132,113 @@ function pyStr(s: string): string {
   return JSON.stringify(s);
 }
 
+// ---------------------------------------------------------------------------
+// nested option dicts
+// ---------------------------------------------------------------------------
+
+/** Refs outside `OPTION_TYPES` that a generated kwarg may carry. Their values
+ *  pass through unchanged, so each entry says why that is right. A ref in
+ *  neither table fails generation, so a new nested type has to be declared
+ *  before Python can take it. */
+const PASSTHROUGH_REFS: Record<string, string> = {
+  FieldAccessor:
+    "built by field(...), whose dict already carries the wire keys (type, name, measure, ops)",
+  AxisDimsValue:
+    "a `dims` entry: a channel value or an interval {min, center, max, size, embedded}; " +
+    "a channel value can itself be a dict (field(...), datum(...)), so a plain dict here " +
+    "cannot be routed to the interval shape, and the interval keys are single words",
+};
+
+/** Whether a value of this type may be a Python dict. */
+function acceptsDict(type: FieldType): boolean {
+  switch (type.kind) {
+    case "object":
+    case "record":
+    case "any":
+    case "channel": // field(...) / datum(...) are dicts
+      return true;
+    case "ref":
+      return type.name in OPTION_TYPES
+        ? acceptsDict(OPTION_TYPES[type.name].type)
+        : true;
+    case "union":
+      return type.options.some(acceptsDict);
+    default:
+      return false;
+  }
+}
+
+/** The key structure of a field type, as the Python literal `_to_wire` reads,
+ *  or null when a value of this type has no option keys to rename and passes
+ *  through unchanged. Object fields use the same `pyKwarg` rule as top-level
+ *  kwargs. A union contributes its one dict-shaped branch (a dict value can
+ *  only mean that branch); two dict-shaped branches would leave `_to_wire`
+ *  guessing, so they fail generation. A record's keys are data (column names,
+ *  axis names), so only its values are walked. */
+function wireShape(type: FieldType, where: string): string | null {
+  switch (type.kind) {
+    case "object": {
+      const fields = Object.entries(type.fields).map(([name, spec]) => {
+        const sub = wireShape(spec.type, `${where}.${name}`);
+        return `${pyStr(pyKwarg(name, spec))}: (${pyStr(spec.wire ?? name)}, ${sub ?? "None"})`;
+      });
+      return `("object", {${fields.join(", ")}})`;
+    }
+    case "ref": {
+      const named = OPTION_TYPES[type.name];
+      if (named !== undefined) {
+        return wireShape(named.type, type.name) === null
+          ? null
+          : `("ref", ${pyStr(type.name)})`;
+      }
+      if (type.name in PASSTHROUGH_REFS) return null;
+      throw new Error(
+        `${where}: t.ref("${type.name}") is neither a named option type ` +
+          `(OPTION_TYPES in descriptors.ts) nor a known pass-through ref ` +
+          `(PASSTHROUGH_REFS in generate.ts). Declare it before Python takes it.`
+      );
+    }
+    case "union": {
+      const dictBranches = type.options.filter(acceptsDict);
+      const shapes = dictBranches.map((b) => wireShape(b, where));
+      if (shapes.every((sh) => sh === null)) return null;
+      if (dictBranches.length > 1) {
+        throw new Error(
+          `${where}: a union with more than one dict-shaped branch, one of ` +
+            `them with option keys; a Python dict value could mean either.`
+        );
+      }
+      return shapes[0];
+    }
+    case "array": {
+      const sub = wireShape(type.items, `${where}[]`);
+      return sub === null ? null : `("array", ${sub})`;
+    }
+    case "tuple": {
+      const subs = type.items.map((item, i) =>
+        wireShape(item, `${where}[${i}]`)
+      );
+      return subs.every((sh) => sh === null)
+        ? null
+        : `("tuple", (${subs.map((sh) => sh ?? "None").join(", ")},))`;
+    }
+    case "record": {
+      const sub = wireShape(type.valueType, `${where}[*]`);
+      return sub === null ? null : `("record", ${sub})`;
+    }
+    default:
+      return null;
+  }
+}
+
+/** The Python expression a generated function stores under a field's wire
+ *  key: the kwarg itself, or, for a nested option type, the kwarg with its
+ *  keys renamed by `_to_wire`. */
+function wireValue(py: string, spec: FieldSpec): string {
+  const shape = wireShape(spec.type, py);
+  return shape === null ? py : `_to_wire(${shape}, ${py}, ${pyStr(py)})`;
+}
+
 /** Render an `_xxx_opts(...) -> dict` core: same kwargs-collection body as a
  *  leaf factory, but returns the dict instead of wrapping it in a Mark/Operator
  *  — used by hand-written dual-form dispatch in ast.py. */
@@ -144,7 +258,9 @@ function renderOptsCore(
     `    """`,
   ].join("\n");
   const pairs = ents
-    .map(([py, wire]) => `        (${pyStr(wire)}, ${py}),`)
+    .map(
+      ([py, wire, spec]) => `        (${pyStr(wire)}, ${wireValue(py, spec)}),`
+    )
     .join("\n");
   const body = [
     `    opts: Dict[str, Any] = {}`,
@@ -187,7 +303,10 @@ function renderCombinatorFactory(opts: {
     body = `    return Mark(${pyStr(wireType)}, _children=list(children))`;
   } else {
     const pairs = ents
-      .map(([py, wire]) => `        (${pyStr(wire)}, ${py}),`)
+      .map(
+        ([py, wire, spec]) =>
+          `        (${pyStr(wire)}, ${wireValue(py, spec)}),`
+      )
       .join("\n");
     body = [
       `    kwargs: Dict[str, Any] = {}`,
@@ -224,6 +343,84 @@ from typing import Any, Dict, List, Optional, Union
 
 from .ast import Mark, _channel
 `);
+
+// --- Nested option dicts ------------------------------------------------------
+// One table entry per named option type (OPTION_TYPES), and one fixed
+// interpreter. Each generated function passes a kwarg whose declared type has
+// option keys through `_to_wire` with that type's shape.
+parts.push(
+  "\n# --- Nested option dicts -----------------------------------------------------\n"
+);
+{
+  const optionTypes = Object.entries(OPTION_TYPES)
+    .map(([name, spec]) => [name, wireShape(spec.type, name)] as const)
+    .filter(([, shape]) => shape !== null)
+    .map(([name, shape]) => `    ${pyStr(name)}: ${shape},`);
+  parts.push(
+    [
+      `# The key structure of each named option type (descriptors.ts OPTION_TYPES):`,
+      `# ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),`,
+      `# ("tuple", (shape, ...)), ("record", value_shape); None passes a value through.`,
+      `_OPTION_TYPES: Dict[str, Any] = {`,
+      ...optionTypes,
+      `}`,
+      ``,
+      ``,
+      `def _to_wire(shape: Any, value: Any, path: str) -> Any:`,
+      `    """Rename the keys of a nested option value from Python to wire spelling.`,
+      ``,
+      `    \`shape\` is the value's declared type, compiled from the descriptor table,`,
+      `    so only declared option keys are renamed (\`label_angle\` to \`labelAngle\`,`,
+      `    by the same rule as top-level kwargs). A key the type does not declare`,
+      `    raises TypeError, as an unknown kwarg does. Record keys (column names,`,
+      `    axis names) and values of any other type pass through unchanged.`,
+      `    """`,
+      `    if shape is None or value is None:`,
+      `        return value`,
+      `    kind = shape[0]`,
+      `    if kind == "ref":`,
+      `        return _to_wire(_OPTION_TYPES[shape[1]], value, path)`,
+      `    if kind == "object":`,
+      `        if not isinstance(value, dict):`,
+      `            return value`,
+      `        fields = shape[1]`,
+      `        out: Dict[str, Any] = {}`,
+      `        for key, item in value.items():`,
+      `            if key not in fields:`,
+      `                hint = next(`,
+      `                    (py for py, (wire, _) in fields.items() if wire == key and py != key),`,
+      `                    None,`,
+      `                )`,
+      `                raise TypeError(`,
+      `                    f"{path} got an unexpected key {key!r}"`,
+      `                    + (f" (did you mean {hint!r}?)" if hint else "")`,
+      `                    + f"; expected one of {', '.join(map(repr, fields))}"`,
+      `                )`,
+      `            wire, sub = fields[key]`,
+      `            out[wire] = _to_wire(sub, item, f"{path}[{key!r}]")`,
+      `        return out`,
+      `    if kind == "record":`,
+      `        if not isinstance(value, dict):`,
+      `            return value`,
+      `        return {`,
+      `            key: _to_wire(shape[1], item, f"{path}[{key!r}]")`,
+      `            for key, item in value.items()`,
+      `        }`,
+      `    if kind == "array":`,
+      `        if not isinstance(value, (list, tuple)):`,
+      `            return value`,
+      `        return [_to_wire(shape[1], item, f"{path}[{i}]") for i, item in enumerate(value)]`,
+      `    if kind == "tuple":`,
+      `        if not isinstance(value, (list, tuple)):`,
+      `            return value`,
+      `        return [`,
+      `            _to_wire(sub, item, f"{path}[{i}]")`,
+      `            for i, (sub, item) in enumerate(zip(shape[1], value))`,
+      `        ]`,
+      `    raise AssertionError(f"unknown shape kind {kind!r}")`,
+    ].join("\n") + "\n"
+  );
+}
 
 // --- Leaf marks -------------------------------------------------------------
 const OPEN_KWARGS_MARKS = new Set(["circle", "ellipse", "petal", "blank"]);
@@ -263,7 +460,9 @@ for (const name of GENERATED_LEAF_MARKS) {
     `    """`,
   ].join("\n");
   const pairs = ents
-    .map(([py, wire]) => `        (${pyStr(wire)}, ${py}),`)
+    .map(
+      ([py, wire, spec]) => `        (${pyStr(wire)}, ${wireValue(py, spec)}),`
+    )
     .join("\n");
   const bodyLines = [
     `    _kw: Dict[str, Any] = {}`,
@@ -389,6 +588,15 @@ for (const name of ["line", "ribbon"]) {
   parts.push(renderOptsCore("_layer_opts", resolveFields(d), d.doc) + "\n");
 }
 
+// chart(data, **options): the chart-level options (CHART_OPTIONS).
+parts.push(
+  renderOptsCore(
+    "_chart_opts",
+    CHART_OPTIONS,
+    "Chart-level options for chart(data, **options)."
+  ) + "\n"
+);
+
 // --- Coord transforms --------------------------------------------------------
 // Python's polar()/clock() spell every option in snake_case (inner_radius,
 // central_angle, ...), like every generated kwarg (`pyKwarg`); the
@@ -414,7 +622,9 @@ parts.push(
     `    """`,
   ].join("\n");
   const pairs = ents
-    .map(([py, wire]) => `        (${pyStr(wire)}, ${py}),`)
+    .map(
+      ([py, wire, spec]) => `        (${pyStr(wire)}, ${wireValue(py, spec)}),`
+    )
     .join("\n");
   const body = [
     `    cfg: Dict[str, Any] = {"type": transform_type}`,

@@ -15,6 +15,71 @@ from typing import Any, Dict, List, Optional, Union
 from .ast import Mark, _channel
 
 
+# --- Nested option dicts -----------------------------------------------------
+
+# The key structure of each named option type (descriptors.ts OPTION_TYPES):
+# ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),
+# ("tuple", (shape, ...)), ("record", value_shape); None passes a value through.
+_OPTION_TYPES: Dict[str, Any] = {
+    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None)}),
+    "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
+}
+
+
+def _to_wire(shape: Any, value: Any, path: str) -> Any:
+    """Rename the keys of a nested option value from Python to wire spelling.
+
+    `shape` is the value's declared type, compiled from the descriptor table,
+    so only declared option keys are renamed (`label_angle` to `labelAngle`,
+    by the same rule as top-level kwargs). A key the type does not declare
+    raises TypeError, as an unknown kwarg does. Record keys (column names,
+    axis names) and values of any other type pass through unchanged.
+    """
+    if shape is None or value is None:
+        return value
+    kind = shape[0]
+    if kind == "ref":
+        return _to_wire(_OPTION_TYPES[shape[1]], value, path)
+    if kind == "object":
+        if not isinstance(value, dict):
+            return value
+        fields = shape[1]
+        out: Dict[str, Any] = {}
+        for key, item in value.items():
+            if key not in fields:
+                hint = next(
+                    (py for py, (wire, _) in fields.items() if wire == key and py != key),
+                    None,
+                )
+                raise TypeError(
+                    f"{path} got an unexpected key {key!r}"
+                    + (f" (did you mean {hint!r}?)" if hint else "")
+                    + f"; expected one of {', '.join(map(repr, fields))}"
+                )
+            wire, sub = fields[key]
+            out[wire] = _to_wire(sub, item, f"{path}[{key!r}]")
+        return out
+    if kind == "record":
+        if not isinstance(value, dict):
+            return value
+        return {
+            key: _to_wire(shape[1], item, f"{path}[{key!r}]")
+            for key, item in value.items()
+        }
+    if kind == "array":
+        if not isinstance(value, (list, tuple)):
+            return value
+        return [_to_wire(shape[1], item, f"{path}[{i}]") for i, item in enumerate(value)]
+    if kind == "tuple":
+        if not isinstance(value, (list, tuple)):
+            return value
+        return [
+            _to_wire(sub, item, f"{path}[{i}]")
+            for i, (sub, item) in enumerate(zip(shape[1], value))
+        ]
+    raise AssertionError(f"unknown shape kind {kind!r}")
+
+
 # --- Leaf marks -------------------------------------------------------------
 
 def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
@@ -541,7 +606,7 @@ def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing
         ("anchor", anchor),
         ("reverse", reverse),
         ("glue", glue),
-        ("axes", axes),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", x),
         ("y", y),
         ("w", w),
@@ -582,7 +647,7 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
         ("sharedScale", shared_scale),
         ("anchor", anchor),
         ("reverse", reverse),
-        ("axes", axes),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", x),
         ("y", y),
         ("w", w),
@@ -622,7 +687,7 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
         ("yMax", y_max),
         ("dims", dims),
         ("alignment", alignment),
-        ("axes", axes),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("w", w),
         ("h", h),
         ("debug", debug),
@@ -658,7 +723,7 @@ def _table_opts(*, by: Any, spacing: Optional[Any] = None, num_cols: Optional[fl
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("by", by),
+        ("by", _to_wire(("object", {"x": ("x", None), "y": ("y", None)}), by, "by")),
         ("spacing", spacing),
         ("numCols", num_cols),
         ("debug", debug),
@@ -720,7 +785,7 @@ def _pack_opts(*, by: Optional[Any] = None, method: Optional[Any] = None, debug:
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
-        ("method", method),
+        ("method", _to_wire(("object", {"kind": ("kind", None)}), method, "method")),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -801,7 +866,7 @@ def _spread_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = No
         ("anchor", anchor),
         ("reverse", reverse),
         ("glue", glue),
-        ("axes", axes),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", x),
         ("y", y),
         ("w", w),
@@ -844,7 +909,7 @@ def _stack_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = Non
         ("sharedScale", shared_scale),
         ("anchor", anchor),
         ("reverse", reverse),
-        ("axes", axes),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", x),
         ("y", y),
         ("w", w),
@@ -981,9 +1046,37 @@ def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Unio
         ("dims", dims),
         ("key", key),
         ("coord", coord),
-        ("axes", axes),
-        ("transform", transform),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("transform", _to_wire(("object", {"scale": ("scale", ("object", {"x": ("x", None), "y": ("y", None)}))}), transform, "transform")),
         ("box", box),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[Any] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[Any] = None) -> Dict[str, Any]:
+    """Chart-level options for chart(data, **options).
+
+    Args:
+        w: Chart width in pixels.
+        h: Chart height in pixels.
+        coord: Coordinate transform for the whole chart: polar(), clock(), wavy(), ...
+        color: Color scale for every mark: palette(...) or gradient(...).
+        axes: Draw axes: a boolean for both axes, or per-axis options {x?, y?}.
+        legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
+        padding: Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).
+        schema: Column types, keyed by column name, e.g. Schema.ordered(levels).
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("w", w),
+        ("h", h),
+        ("coord", coord),
+        ("color", color),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("legend", legend),
+        ("padding", padding),
+        ("schema", schema),
     ]:
         if _v is not None:
             opts[_k] = _v

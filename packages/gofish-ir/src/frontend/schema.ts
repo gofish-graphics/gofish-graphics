@@ -342,17 +342,25 @@ export interface ScatterOperator
 
 /**
  * Per-node axis-rendering override. Mirrors the JS-side `AxesOptions` /
- * `AxisOptions` from `gofish-graphics/src/ast/gofish.tsx`.
+ * `AxisOptions` from `gofish-graphics/src/ast/gofish.tsx`; the field docs live
+ * on `OPTION_TYPES` in descriptors.ts, which the validator, the JSON Schema,
+ * and the Python generator all read.
  *
  * - `true` / `false` — show or hide both x and y axes.
  * - Object form — independently control each dimension.
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
- * object with an optional `title` (string for custom title, `false` to
- * suppress).
+ * object: `title` (string for a custom title, `false` to suppress), `side`
+ * (the frame edge), and `labelAngle` (label rotation in degrees).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-export type AxisOptions = boolean | { title?: string | false };
+export type AxisOptions =
+  | boolean
+  | {
+      title?: string | false;
+      side?: "start" | "end";
+      labelAngle?: number | number[] | "auto";
+    };
 
 export interface TableOperator
   extends BaseIRNode,

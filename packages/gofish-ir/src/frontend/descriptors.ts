@@ -18,10 +18,13 @@
  *  - `jsonSchema.ts` builds per-construct `$defs` from these descriptors.
  *  - A later stage generates the Python factory functions from this table.
  *
+ * Nested option objects a field points at by name (`AxesOptions`) live in
+ * `OPTION_TYPES` below, and chart-level options in `CHART_OPTIONS`.
+ *
  * Out of scope for this table (stay hand-authored in `schema.ts` /
  * `jsonSchema.ts` / `validate.ts`, per the design doc's staging): `cut`,
  * `offset`, `ref`, constraints, and the envelope types (ChartIR, LayerIR,
- * DataIR, ChannelValue, LabelIR, TranslateIR, AxesOptions). Those are
+ * DataIR, ChannelValue, LabelIR, TranslateIR). Those are
  * structural/recursive shapes rather than flat field bags, and are cheap to
  * keep authored.
  */
@@ -92,9 +95,10 @@ export const t = {
     kind: "channel",
     inner,
   }),
-  /** A reference to an authored envelope `$def` (AxesOptions, LabelIR,
-   *  ConstraintIR, TranslateIR, ...) — those stay hand-written in schema.ts /
-   *  jsonSchema.ts; this just points at them by name. */
+  /** A reference by name: to a named option type in `OPTION_TYPES`
+   *  (AxesOptions, ...), or to an authored envelope `$def` (LabelIR,
+   *  ConstraintIR, TranslateIR, ...) that stays hand-written in schema.ts /
+   *  jsonSchema.ts. */
   ref: (name: string): FieldType => ({ kind: "ref", name }),
   union: (...options: FieldType[]): FieldType => ({ kind: "union", options }),
   array: (items: FieldType): FieldType => ({ kind: "array", items }),
@@ -224,6 +228,93 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
 // Shared field groups
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Option types — named nested option objects
+// ---------------------------------------------------------------------------
+
+/** One axis's options: a boolean (show or hide it, title inferred) or an
+ *  object of named options. Mirrors the JS `AxisOptions` in
+ *  `gofish-graphics/src/ast/gofish.tsx`. */
+const axisOptions: FieldSpec = {
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle.",
+  type: t.union(
+    t.boolean,
+    t.object({
+      title: {
+        type: t.union(t.string, t.boolean),
+        doc: "Axis title. A string sets it; false suppresses the inferred title.",
+      },
+      side: {
+        type: t.enum("start", "end"),
+        doc: 'Which frame edge the axis sits on: "start" is the near (origin) edge, "end" the far edge. Omitted, a continuous x-axis sits at the visual bottom.',
+      },
+      labelAngle: {
+        type: t.union(t.number, t.array(t.number), t.enum("auto")),
+        doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; "auto" picks 0, 45, or 90 degrees per label row so labels do not collide.',
+      },
+    })
+  ),
+};
+
+/** Named option types: the nested option objects a field points at with
+ *  `t.ref(name)`, declared in the same type DSL as the construct fields. Each
+ *  consumer resolves a ref through this table: `jsonSchema.ts` emits one
+ *  `$def` per entry, `validate.ts` walks the value with the generic field-type
+ *  interpreter, and the Python generator renames the keys of a nested dict
+ *  with `pyKwarg`, the same rule as the top-level kwargs
+ *  (`axes={"x": {"label_angle": 45}}` serializes as `labelAngle`).
+ *
+ *  A ref that is not in this table names a hand-authored envelope `$def`
+ *  (LabelIR, TranslateIR, FieldAccessor, AxisDimsValue, ...). */
+export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
+  AxisOptions: axisOptions,
+  AxesOptions: {
+    doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
+    type: t.union(
+      t.boolean,
+      t.object({
+        x: { type: t.ref("AxisOptions"), doc: "Options for the x axis." },
+        y: { type: t.ref("AxisOptions"), doc: "Options for the y axis." },
+      })
+    ),
+  },
+};
+
+/** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
+ *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
+ *  `gofish-graphics/src/ast/marks/chartBuilder.ts`. Read by the Python
+ *  generator (`_chart_opts`); the IR validator and JSON Schema still take
+ *  `options` as an open object. */
+export const CHART_OPTIONS: FieldGroup = group({
+  w: { type: t.number, doc: "Chart width in pixels." },
+  h: { type: t.number, doc: "Chart height in pixels." },
+  coord: {
+    type: t.any,
+    doc: "Coordinate transform for the whole chart: polar(), clock(), wavy(), ...",
+  },
+  color: {
+    type: t.any,
+    doc: "Color scale for every mark: palette(...) or gradient(...).",
+  },
+  axes: {
+    type: t.ref("AxesOptions"),
+    doc: "Draw axes: a boolean for both axes, or per-axis options {x?, y?}.",
+  },
+  legend: {
+    type: t.boolean,
+    default: true,
+    doc: "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
+  },
+  padding: {
+    type: t.number,
+    doc: "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).",
+  },
+  schema: {
+    type: t.record(t.any),
+    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels).",
+  },
+});
+
 /** A `dims` option: axis name → value or interval (`AxisDims` in schema.ts).
  *  The names are `x`/`y` plus whatever the enclosing coordinate space
  *  declares, known only at render time, so the key set is open — the one named
@@ -328,7 +419,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Shared key field matched between the incoming rows and `right`.",
       },
       right: {
-        type: t.array(t.object({})),
+        type: t.array(t.record(t.any)),
         required: true,
         doc: "The right-hand table, inlined as JSON rows.",
       },

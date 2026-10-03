@@ -35,6 +35,7 @@ import {
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,
   OPERATORS,
+  OPTION_TYPES,
   resolveFields,
   type FieldSpec,
   type FieldType,
@@ -398,7 +399,11 @@ function walkFieldType(
     case "union": {
       // Valid if ANY branch matches cleanly (no errors raised by that branch).
       for (const branch of type.options) {
-        const probe: Context = { strict: false, errors: [], warnings: [] };
+        const probe: Context = {
+          strict: ctx.strict,
+          errors: [],
+          warnings: [],
+        };
         walkFieldType(branch, value, path, probe, (p, m) =>
           probe.errors.push({ path: p, message: m })
         );
@@ -446,9 +451,16 @@ function walkFieldType(
         return;
       }
       // Nested object fields validate the same way as top-level descriptor
-      // fields (required/optional), but do NOT reject unrecognized keys —
-      // matching the pre-descriptor behavior (e.g. `table.by` never rejected
-      // extra keys, even in strict mode).
+      // fields (required/optional). Strict mode also rejects a key the
+      // object does not declare (an `axes` entry other than x/y, a misspelled
+      // axis option).
+      if (ctx.strict) {
+        for (const k of Object.keys(value)) {
+          if (!(k in type.fields)) {
+            push(`${path}.${k}`, `unknown field "${k}" (strict)`);
+          }
+        }
+      }
       for (const [name, spec] of Object.entries(type.fields)) {
         const has =
           name in value && value[name] !== undefined && value[name] !== null;
@@ -505,18 +517,23 @@ function walkAxisDimsValue(value: unknown, path: string, ctx: Context): void {
   }
 }
 
-/** Resolve a `t.ref(name)` against the small set of authored envelope
- *  shapes already validated elsewhere in this file. */
+/** Resolve a `t.ref(name)`: a named option type (`OPTION_TYPES`) walks with
+ *  the generic field-type interpreter; any other name is one of the authored
+ *  envelope shapes validated elsewhere in this file. */
 function walkRefType(
   name: string,
   value: unknown,
   path: string,
   ctx: Context
 ): void {
+  const optionType = OPTION_TYPES[name];
+  if (optionType !== undefined) {
+    walkFieldType(optionType.type, value, path, ctx, (p, message) =>
+      ctx.errors.push({ path: p, message })
+    );
+    return;
+  }
   switch (name) {
-    case "AxesOptions":
-      walkAxesOptions(value, path, ctx);
-      return;
     case "LabelIR":
       walkLabel(value, path, ctx);
       return;
@@ -799,48 +816,6 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       // reverse/dropNulls/normalize/sum/mean/count/distinct carry no extra fields.
       return;
   }
-}
-
-/**
- * `axes` — per-node axis-rendering override. Either a boolean (apply to
- * both dims) or an object `{ x?: AxisOptions, y?: AxisOptions }` where each
- * AxisOptions is a boolean or `{ title?: string | false }`.
- */
-function walkAxesOptions(value: unknown, path: string, ctx: Context): void {
-  if (typeof value === "boolean") return;
-  if (!isObject(value)) {
-    ctx.errors.push({
-      path,
-      message: `axes must be boolean or {x?, y?}, got ${typeNameOf(value)}`,
-    });
-    return;
-  }
-  for (const k of ["x", "y"]) {
-    if (k in value) walkAxisOption(value[k], `${path}.${k}`, ctx);
-  }
-  if (ctx.strict) rejectUnknown(value, ["x", "y"], path, ctx);
-}
-
-function walkAxisOption(value: unknown, path: string, ctx: Context): void {
-  if (typeof value === "boolean") return;
-  if (value === undefined) return;
-  if (!isObject(value)) {
-    ctx.errors.push({
-      path,
-      message: `axis option must be boolean or { title? }, got ${typeNameOf(value)}`,
-    });
-    return;
-  }
-  if ("title" in value) {
-    const t = value.title;
-    if (t !== false && typeof t !== "string") {
-      ctx.errors.push({
-        path: `${path}.title`,
-        message: `axis title must be a string or false, got ${typeNameOf(t)}`,
-      });
-    }
-  }
-  if (ctx.strict) rejectUnknown(value, ["title"], path, ctx);
 }
 
 function walkMark(node: unknown, path: string, ctx: Context): void {

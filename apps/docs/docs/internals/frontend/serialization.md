@@ -348,15 +348,25 @@ collapses three of those four into one authored table: one entry per
 construct (operator, leaf mark, combinator mark, coord transform) listing
 its fields in a small type DSL (`t.string`, `t.number`, `t.enum(...)`,
 `t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
-pointer at an authored envelope `$def`, and so on — see the file's `t`/`ch`
+pointer at a named type, and so on — see the file's `t`/`ch`
 exports). Shared field groups (`boxDims`, the ten closed x/y/w/h box channels plus the open `dims` bag
 keyed by axis name; `paint`, the five paint channels) are declared once and pulled
 into a mark's entry by reference, so most mark entries list only the
 fields genuinely their own.
 
+Two smaller tables sit beside the construct entries. `OPTION_TYPES` declares
+the nested option objects a field points at by name, in the same type DSL:
+today `AxesOptions` (a boolean, or `{x, y}`) and `AxisOptions` (a boolean, or
+`{title, side, labelAngle}`). A `t.ref(name)` resolves against it first, so
+the validator, the JSON Schema, and the Python generator all read one
+declaration of the axes option. `CHART_OPTIONS` lists the chart-level
+options (`w`, `h`, `coord`, `color`, `axes`, `legend`, `padding`, `schema`),
+mirroring the JS `ChartOptions`. Only the Python generator reads it so far;
+the validator and the schema still take `ChartIR.options` as an open object.
+
 **What's still authored, not in the table**: the envelope
 (`ChartIR`/`LayerIR`/`DataIR`/`MarkIR` union, `ChannelValue`,
-`ConstraintIR`, `LabelIR`, `TranslateIR`, `AxesOptions`) and `cut`/`offset`/
+`ConstraintIR`, `LabelIR`, `TranslateIR`) and `cut`/`offset`/
 `ref` — these are structural or recursive shapes rather than flat field
 bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
 of those files the doc comment marks as "stays hand-written below").
@@ -391,8 +401,9 @@ unknown`) even though they aren't really open on the JS side (a mark's
   against a leaf mark's field list as "guaranteed accepted."
 - **`jsonSchema.ts`** builds one `$def` per operator (`SpreadOperator`,
   `TableOperator`, …) and one per leaf mark (`RectMark`, `TextMark`, …)
-  from the table (`buildOperatorDefs()` / `buildLeafMarkDefs()`), merged
-  into the hand-written `$defs` object. Operator `$defs` are
+  from the table (`buildOperatorDefs()` / `buildLeafMarkDefs()`), and one
+  per named option type (`buildOptionTypeDefs()`), merged into the
+  hand-written `$defs` object. Operator `$defs` are
   `additionalProperties: false` (schema-level strict, matching
   `validate.ts`'s operator behavior); leaf-mark `$defs` stay
   `additionalProperties: true` so an external strict consumer of the
@@ -464,8 +475,10 @@ The validator at
 [`validate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/validate.ts)
 covers the same shapes, generically interpreting the descriptor table as
 described above, plus the structural checks for the hand-authored parts
-(e.g. `table.by` requires `{x, y}`, `spread`/`stack`/`scatter` accept an
-`axes` override of shape `AxesOptions`). It runs in permissive mode by
+(e.g. `table.by` requires `{x, y}`). A field typed with a named option type,
+such as the `axes` override on `spread`/`stack`/`scatter`, is walked by the
+same generic interpreter against its `OPTION_TYPES` entry. In strict mode a
+nested object rejects a key it does not declare. It runs in permissive mode by
 default (unknown fields ignored, for forward-compat) and strict mode in
 CI tests — "strict" here composes with the operator-reject/leaf-mark-warn
 split above, it doesn't override it.
@@ -497,9 +510,32 @@ builds its IR dict under the wire key, so `rect(stroke_width=2)` serializes
 as `{"strokeWidth": 2}`, and `rect(strokeWidth=2)` is a `TypeError`. The
 docs options tables call the same function. Python code that builds IR
 outside the generated layer (`.label(font_size=...)`, the `line` and
-`ribbon` signatures) renames at its construction site. A nested dict that a
-user passes whole, such as `axes={"x": {"labelAngle": 45}}`, is not
-converted: its keys are wire keys.
+`ribbon` signatures) renames at its construction site.
+
+A nested option dict follows the same rule, by its declared type. The
+generator compiles a field's type into a small Python literal that records
+only its key structure: for an object, each Python key (from `pyKwarg`)
+paired with its wire key and the shape of its value. A field whose type has
+no option keys compiles to nothing and its value passes through as is. The
+generated module holds one entry per named option type (`_OPTION_TYPES`) and
+one interpreter, `_to_wire`, which every generated function calls on such a
+field. So `chart(data, axes={"x": {"label_angle": 45}})` serializes as
+`{"axes": {"x": {"labelAngle": 45}}}`, and an undeclared key, including the
+camelCase `"labelAngle"`, is a `TypeError` that names the expected keys.
+Python's `chart()` now goes through a generated `_chart_opts` core built from
+`CHART_OPTIONS`, so an unknown chart keyword is a `TypeError` too.
+
+The conversion is driven by the declared type, never by the dict itself, so
+dicts whose keys are data keep them: a `record` type's keys (a `schema` keyed
+by column name, the axis names of `dims`) are never renamed, and a field
+typed `any` (`color=palette({...})` keyed by category, `coord`) passes
+through whole. Two rules keep this honest. A union may have only one branch
+that a dict could match, or generation fails, since `_to_wire` would have to
+guess. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
+few refs the generator lists as already in wire form (`FieldAccessor`, built
+by `field(...)`; `AxisDimsValue`, whose plain dict could be a channel value
+or an interval), or generation fails, so a new nested type has to be
+declared before Python can take it.
 
 It emits:
 
@@ -514,7 +550,7 @@ It emits:
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
   `layer`, `pack`, the polar coord family), with separate combinator-form
   cores for `spread`, `stack`, and `treemap` (their combinator entries add
-  `key`) — just the kwargs→dict half. The
+  `key`), and `_chart_opts` for `chart()` — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 

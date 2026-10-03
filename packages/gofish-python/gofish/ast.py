@@ -692,6 +692,7 @@ from ._generated import (  # noqa: E402
     _line_opts,
     _ribbon_opts,
     _layer_opts,
+    _chart_opts,
     _polar_config,
 )
 
@@ -3102,6 +3103,11 @@ def chart(
         axes=False                     # no axes
         axes={"x": True, "y": False}   # per-dimension on/off
         axes={"x": {"title": "Year"}}  # custom title (title=False suppresses it)
+        axes={"x": {"label_angle": 45}}  # rotate x labels (also "side")
+
+    Keys inside the per-axis dict are snake_case like every kwarg; an
+    unknown key (or a camelCase one such as ``"labelAngle"``) raises
+    TypeError.
 
         chart(data, axes=True)
         chart(data, axes={"x": {"title": "Year"}, "y": True})
@@ -3118,13 +3124,14 @@ def chart(
     Args:
         data: Input data, or `ref(name)` / `select_all(name)` for cross-chart
             layer references
-        **options: Chart options as keywords — ``axes``, ``color``, ``coord``,
-            ``padding``, ``schema``, ...
+        **options: Chart options as keywords — ``w``, ``h``, ``coord``,
+            ``color``, ``axes``, ``legend``, ``padding``, ``schema``. Any
+            other keyword raises TypeError.
 
     Returns:
         ChartBuilder instance
     """
-    return ChartBuilder(data, options or None)
+    return ChartBuilder(data, _chart_opts(**options) or None)
 
 
 class LayerBuilder:

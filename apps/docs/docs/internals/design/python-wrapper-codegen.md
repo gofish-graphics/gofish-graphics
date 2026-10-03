@@ -396,6 +396,24 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   the box position `x`/`y` (as `treemap` does), and their combinator
   entries declare `key`.
 
+- **Snake case keys in nested option dicts.** The keys a user types inside
+  a nested option dict are in snake case too:
+  `axes={"x": {"label_angle": 45}}`. The conversion follows the declared
+  type, not the dict. `descriptors.ts` gained `OPTION_TYPES`, which
+  declares `AxesOptions` and `AxisOptions` in the `t.*` type language, and
+  `CHART_OPTIONS`, the chart-level options. The generator compiles each
+  field's type into a Python literal of its key structure and emits one
+  interpreter, `_to_wire`, that renames declared keys with `pyKwarg` and
+  raises `TypeError` on any other key, as an unknown kwarg does. `chart()`
+  now calls a generated `_chart_opts` core, so its keywords are checked as
+  well. Keys that are data are never touched: a `record` type's keys (the
+  `schema` column names, `dims` axis names) and a field typed `any` (a
+  `palette` dict keyed by category, a `coord` config) pass through
+  unchanged. The JSON Schema and the validator read the same `OPTION_TYPES`
+  entries, which replaced their hand-written axes shapes; those had fallen
+  behind the JS type and lacked `side` and `labelAngle`. See
+  [§ Generating the Python factory layer](/internals/frontend/serialization#generating-the-python-factory-layer).
+
 **Deliberately deferred**, not follow-up bugs:
 
 - **The relate ref-walk** (`RelatableMark.relate`'s Python-side
