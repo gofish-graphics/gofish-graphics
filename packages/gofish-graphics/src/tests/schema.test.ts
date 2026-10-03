@@ -208,7 +208,11 @@ async function main() {
       JSON.stringify(continuousInterval(odd))
     );
     check("a centered stack's space is mirrored", odd.mirrored === true);
-    const even = fold([10, 20, 30, 40], { part: 2, fraction: 0, mirrored: true });
+    const even = fold([10, 20, 30, 40], {
+      part: 2,
+      fraction: 0,
+      mirrored: true,
+    });
     check(
       "even: the two middle levels meet at 0",
       JSON.stringify(continuousInterval(even)) ===
@@ -278,9 +282,12 @@ async function main() {
       message
     );
     const rendered = await errorOf(() =>
-      chart(rows.map((row) => ({ ...row, n: 1 })), {
-        schema: { r: Schema.ordered(LEVELS5) },
-      })
+      chart(
+        rows.map((row) => ({ ...row, n: 1 })),
+        {
+          schema: { r: Schema.ordered(LEVELS5) },
+        }
+      )
         .flow(stack({ by: "r", dir: "x" }))
         .mark(rect({ w: "n" }))
         .toDisplayList({ w: 100, h: 100 })
@@ -306,35 +313,57 @@ async function main() {
     check(
       "`.diverging({ midpoint })` writes the midpoint",
       JSON.stringify(Schema.ordered(LEVELS5).diverging({ midpoint: 2 })) ===
-        JSON.stringify({ HasOrder: { levels: LEVELS5 }, HasMidpoint: { at: 2 } })
+        JSON.stringify({
+          HasOrder: { levels: LEVELS5 },
+          HasMidpoint: { at: 2 },
+        })
     );
-    for (const at of [-0.5, 5.5, NaN, Infinity]) {
-      const off = await errorOf(() =>
-        columnTypeOf(
-          "r",
-          Schema.ordered(LEVELS5).diverging({ midpoint: at }).toJSON()
-        )
+    // The same literals as `TestSchema` in gofish-python/tests/test_ast.py:
+    // the two languages raise the same messages, word for word.
+    const order = `the edges of the order ["SD", "D", "N", "A", "SA"]`;
+    const offMessages: [unknown, string][] = [
+      [-0.5, `diverging: midpoint -0.5 is outside 0..5, ${order}.`],
+      [5.5, `diverging: midpoint 5.5 is outside 0..5, ${order}.`],
+      [6, `diverging: midpoint 6 is outside 0..5, ${order}.`],
+    ];
+    for (const at of [NaN, Infinity, "2", true]) {
+      offMessages.push([
+        at,
+        `diverging: midpoint must be a finite number from 0 to 5, ${order}.`,
+      ]);
+    }
+    for (const [at, expected] of offMessages) {
+      const eager = await errorOf(() =>
+        Schema.ordered(LEVELS5).diverging({ midpoint: at })
       );
       check(
-        `midpoint ${at} is an error naming the column and the range`,
-        off !== undefined &&
-          off.includes(`"r"`) &&
-          off.includes("from 0") &&
-          off.includes("to 5"),
-        off
+        `.diverging({ midpoint: ${String(at)} }) throws at once`,
+        eager === expected,
+        eager
+      );
+      const wire = await errorOf(() =>
+        columnTypeOf("r", {
+          HasOrder: { levels: LEVELS5 },
+          HasMidpoint: { at },
+        } as any)
+      );
+      check(
+        `a wire record with midpoint ${String(at)} throws the same message`,
+        wire === expected,
+        wire
       );
     }
     const charted = await errorOf(() =>
       chart([{ r: "SD", n: 1 }], {
-        schema: { r: Schema.ordered(LEVELS5).diverging({ midpoint: 6 }) },
+        schema: { r: centered(LEVELS5, 6) },
       })
         .flow(stack({ by: "r", dir: "x" }))
         .mark(rect({ w: "n" }))
         .toDisplayList({ w: 100, h: 100 })
     );
     check(
-      "chart checks the midpoint",
-      charted !== undefined && charted.includes(`"r"`),
+      "chart checks a wire record's midpoint",
+      charted === `diverging: midpoint 6 is outside 0..5, ${order}.`,
       charted
     );
     const message = await errorOf(() =>

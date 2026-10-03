@@ -588,10 +588,30 @@ class TestSchema:
         assert Schema.ordered(levels).diverging(midpoint=0)["HasMidpoint"] == {"at": 0}
         assert Schema.ordered(levels).diverging(midpoint=5)["HasMidpoint"] == {"at": 5}
 
-    @pytest.mark.parametrize("midpoint", [-0.5, 5.5, float("nan"), float("inf")])
-    def test_diverging_midpoint_off_the_order(self, midpoint):
-        with pytest.raises(ValueError, match="from 0 .* to 5"):
+    # The same literals as the JS schema.test.ts: the two languages raise the
+    # same messages, word for word.
+    ORDER = 'the edges of the order ["SD", "D", "N", "A", "SA"]'
+    NOT_A_NUMBER = (
+        f"diverging: midpoint must be a finite number from 0 to 5, {ORDER}."
+    )
+
+    @pytest.mark.parametrize(
+        "midpoint, message",
+        [
+            (-0.5, f"diverging: midpoint -0.5 is outside 0..5, {ORDER}."),
+            (5.5, f"diverging: midpoint 5.5 is outside 0..5, {ORDER}."),
+            (6, f"diverging: midpoint 6 is outside 0..5, {ORDER}."),
+            (6.0, f"diverging: midpoint 6 is outside 0..5, {ORDER}."),
+            (float("nan"), NOT_A_NUMBER),
+            (float("inf"), NOT_A_NUMBER),
+            ("2", NOT_A_NUMBER),
+            (True, NOT_A_NUMBER),
+        ],
+    )
+    def test_diverging_midpoint_off_the_order(self, midpoint, message):
+        with pytest.raises(ValueError) as error:
             Schema.ordered(["SD", "D", "N", "A", "SA"]).diverging(midpoint=midpoint)
+        assert str(error.value) == message
 
     def test_diverging_needs_has_order(self):
         with pytest.raises(ValueError, match="HasMidpoint needs HasOrder"):

@@ -66,8 +66,10 @@ is a point along an order.
 - The default, `n / 2`, is the middle of the middle level when the number of
   levels is odd, and the boundary between the two middle levels when it is
   even.
-- A `midpoint` below 0, above `n`, or not finite is an error from
-  `.diverging()`.
+- A `midpoint` that is not a finite number, or that is below 0 or above `n`,
+  is an error from `.diverging()`. The message names the midpoint, the range
+  `0..n`, and the levels. `chart` checks a column-type record passed as is
+  (the wire form) the same way, with the same message.
 - A [`stack`](/python/api/operators/stack) whose `by` column has `HasMidpoint` puts its 0 at
   the midpoint instead of at its first part's start. A stack laid out in the
   reverse of the order keeps the same levels on each side.

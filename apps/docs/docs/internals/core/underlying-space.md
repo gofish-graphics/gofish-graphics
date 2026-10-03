@@ -1487,8 +1487,10 @@ reads only the classes, never the builder words. Two classes exist:
   middle level when the count is odd, the boundary between the two middle
   levels when it is even. It requires `HasOrder`; the builder's `this` type
   makes `.diverging()` exist only after `.ordered(...)`, and `columnTypeOf`
-  rejects a wire record that has one without the other, or a midpoint that
-  is not a finite number in `[0, n]`. A stack over the column takes the
+  rejects a wire record that has one without the other. A midpoint that is
+  not a finite number in `[0, n]` is an error from `checkMidpointOnOrder`,
+  which `.diverging()` calls at once and `columnTypeOf` calls on a wire
+  record; Python's `.diverging()` raises the same messages, word for word. A stack over the column takes the
   midpoint as its origin (`stackOrigin`, then the stack fold and the
   free-origin seat above): inside a present level, that fraction of its
   part; on a boundary, or inside a level the row lacks, the tail of the

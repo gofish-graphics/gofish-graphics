@@ -67,12 +67,15 @@ export class ColumnSchema<C extends ColumnType = ColumnType> {
 
   /** Give the column a midpoint (`HasMidpoint`) at `midpoint`, in edge
    *  coordinates over its order. The default is the middle of the order,
-   *  `n / 2` for `n` levels. */
+   *  `n / 2` for `n` levels. A midpoint that is not a number from 0 to `n`
+   *  throws here. */
   diverging(
     this: ColumnSchema<C & { HasOrder: HasOrder }>,
     { midpoint }: { midpoint?: number } = {}
   ): ColumnSchema<C & { HasOrder: HasOrder; HasMidpoint: HasMidpoint }> {
-    const at = midpoint ?? this.type.HasOrder.levels.length / 2;
+    const { levels } = this.type.HasOrder;
+    const at = midpoint ?? levels.length / 2;
+    checkMidpointOnOrder(levels, at);
     return new ColumnSchema({ ...this.type, HasMidpoint: { at } });
   }
 
@@ -94,34 +97,37 @@ export const Schema = {
 export type SchemaEntry = ColumnSchema<ColumnType> | ColumnType;
 
 /** The record a schema entry stands for, checked for the prerequisites the
- *  builder enforces in its types (a record from the wire has no types) and
- *  for a midpoint on its order. */
+ *  builder enforces in its types (a record from the wire, as Python sends it,
+ *  has no types) and for a midpoint on its order, with the same check
+ *  `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const type = entry instanceof ColumnSchema ? entry.type : entry;
-  checkMidpoint(column, type);
-  return type;
-}
-
-/** The loud errors for a {@link HasMidpoint} without {@link HasOrder} (only a
- *  wire record can have one) or off its order (`chart` checks the midpoint
- *  here, where the column has a name, not in `.diverging()`). */
-function checkMidpoint(column: string, type: ColumnType): void {
-  if (type.HasMidpoint === undefined) return;
-  const name = `column "${column}"`;
+  if (type.HasMidpoint === undefined) return type;
   if (!type.HasOrder) {
     throw new Error(
-      `schema: ${name} has HasMidpoint but no HasOrder. A midpoint is a ` +
-        `point along an order; declare the order with ` +
+      `schema: column "${column}" has HasMidpoint but no HasOrder. A ` +
+        `midpoint is a point along an order; declare the order with ` +
         `\`Schema.ordered(levels)\` before \`.diverging()\`.`
     );
   }
-  const n = type.HasOrder.levels.length;
-  const at = type.HasMidpoint.at;
-  if (typeof at !== "number" || !Number.isFinite(at) || at < 0 || at > n) {
+  checkMidpointOnOrder(type.HasOrder.levels, type.HasMidpoint.at);
+  return type;
+}
+
+/** The loud error for a midpoint off its order: `at` must be a finite number
+ *  from 0 to `n`, for `n` levels. Python's `ColumnSchema.diverging` raises
+ *  the same two messages, word for word. */
+function checkMidpointOnOrder(levels: readonly Level[], at: unknown): void {
+  const n = levels.length;
+  const order = `the edges of the order [${levels.map(showLevel).join(", ")}]`;
+  if (typeof at !== "number" || !Number.isFinite(at)) {
     throw new Error(
-      `schema: ${name} has midpoint ${String(at)}, but its order has ${n} ` +
-        `level${n === 1 ? "" : "s"}, so \`.diverging({ midpoint })\` takes ` +
-        `a number from 0 (before the first level) to ${n} (after the last).`
+      `diverging: midpoint must be a finite number from 0 to ${n}, ${order}.`
+    );
+  }
+  if (at < 0 || at > n) {
+    throw new Error(
+      `diverging: midpoint ${String(at)} is outside 0..${n}, ${order}.`
     );
   }
 }

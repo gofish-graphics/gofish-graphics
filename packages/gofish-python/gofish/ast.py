@@ -1,8 +1,11 @@
 """AST classes for building GoFish chart specifications."""
 
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+import decimal
 import inspect
+import json
 import math
+import re
 import uuid
 
 T = TypeVar("T")
@@ -2077,20 +2080,47 @@ class ColumnSchema(dict):
                 "order. Declare the order with `Schema.ordered(levels)` before "
                 "`.diverging()`."
             )
-        n = len(self["HasOrder"]["levels"])
+        levels = self["HasOrder"]["levels"]
+        n = len(levels)
         at = n / 2 if midpoint is None else midpoint
+        # The same two messages as JS `checkMidpointOnOrder` in schema.ts,
+        # word for word.
+        order = (
+            "the edges of the order ["
+            + ", ".join(
+                json.dumps(level, ensure_ascii=False)
+                if isinstance(level, str)
+                else _js_number(level)
+                for level in levels
+            )
+            + "]"
+        )
         if (
             isinstance(at, bool)
             or not isinstance(at, (int, float))
             or not math.isfinite(at)
-            or not 0 <= at <= n
         ):
             raise ValueError(
-                f"diverging(midpoint={at!r}): the order has {n} "
-                f"level{'' if n == 1 else 's'}, so the midpoint is a number "
-                f"from 0 (before the first level) to {n} (after the last)."
+                f"diverging: midpoint must be a finite number from 0 to {n}, "
+                f"{order}."
+            )
+        if not 0 <= at <= n:
+            raise ValueError(
+                f"diverging: midpoint {_js_number(at)} is outside 0..{n}, {order}."
             )
         return ColumnSchema({**self, "HasMidpoint": {"at": at}})
+
+
+def _js_number(x: Union[int, float]) -> str:
+    """``x`` as JS ``String(x)`` writes it (6.0 is "6", 1e-05 is "0.00001"),
+    so an error message reads the same in both languages."""
+    if isinstance(x, int):
+        return str(x)
+    if x.is_integer() and abs(x) < 1e21:
+        return str(int(x))
+    if 1e-7 <= abs(x) < 1e21:
+        return format(decimal.Decimal(repr(x)), "f")
+    return re.sub(r"e([+-])0*(\d)", r"e\1\2", repr(x))
 
 
 class Schema:
