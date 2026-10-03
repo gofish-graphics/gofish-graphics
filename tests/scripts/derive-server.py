@@ -185,7 +185,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 child_payload: {operators, mark, options, data, zOrder}
                   data is the canonical Frontend.DataIR shape:
                     - {"type": "inline", "rows": [...]} for inline rows
-                    - {"type": "select", "layer": name, "mode": ...} for ref/selectAll data
+                    - {"type": "select", "layer": name, "mode": ...} for ref/select_all data
                   See packages/gofish-ir/src/frontend/schema.ts.
 
                 A bare `Mark` tier (a component-level annotation via
@@ -204,7 +204,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     )
                 child_ir = child.to_ir()
                 if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
-                    # `_RefProxy` (ref/selectAll) → {"type": "select", ...};
+                    # `_RefProxy` (ref/select_all) → {"type": "select", ...};
                     # an empty `chart()` scope inside a `.layer(...)` chain →
                     # {"type": "previous-tier"} (JS's LayerBuilder derives the
                     # auto-name/selectAll wiring from that marker — see

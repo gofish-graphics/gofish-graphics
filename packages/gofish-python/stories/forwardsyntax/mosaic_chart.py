@@ -29,5 +29,5 @@ def default(w=400, h=400):
             derive(lambda d: normalize(d, "count")),
             stack(by="cylinders", dir="y"),
         )
-        .mark(rect(h="count", fill="origin", stroke="white", strokeWidth=2))
+        .mark(rect(h="count", fill="origin", stroke="white", stroke_width=2))
     )

@@ -17,7 +17,7 @@ def story_default():
                 r=4,
                 fill="rgba(31, 119, 180, 0.4)",
                 stroke="#1f77b4",
-                strokeWidth=1,
+                stroke_width=1,
             )
         ),
         {"w": 300, "h": 300, "axes": True},

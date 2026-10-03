@@ -1,6 +1,6 @@
 """Equivalent of NodeLink.stories.tsx — Forward Syntax/NodeLink."""
 
-from gofish import chart, circle, line, resolve, scatter, selectAll
+from gofish import chart, circle, line, resolve, scatter, select_all
 
 NODES = [
     {"id": "a", "grp": 0},
@@ -26,8 +26,8 @@ def story_basic():
         .mark(circle(r=14, fill="#4e79a7").name("nodes"))
         .layer(
             chart(EDGES)
-            .flow(resolve(["source", "target"], from_=selectAll("nodes")))
-            .mark(line(from_="source", to="target", stroke="#888", strokeWidth=1.5))
+            .flow(resolve(["source", "target"], from_=select_all("nodes")))
+            .mark(line(from_="source", to="target", stroke="#888", stroke_width=1.5))
         ),
         {"w": 400, "h": 400},
     )

@@ -5,28 +5,28 @@ order: 40
 # line
 
 Connects data points with a line. A line draws **through** a set of points, so
-it is most often paired with [`selectAll()`](/python/api/core/chart#cross-chart-references)
-to trace a layout produced by another chart. `selectAll` hands `line` an array
+it is most often paired with [`select_all()`](/python/api/core/chart#cross-chart-references)
+to trace a layout produced by another chart. `select_all` hands `line` an array
 of refs, and the line reads placed geometry off them.
 
 ::: gofish example:line-chart hidden
 :::
 
 ```python
-from gofish import layer, chart, scatter, blank, selectAll, line
+from gofish import layer, chart, scatter, blank, select_all, line
 
 layer([
     chart(catch_locations)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(blank().name("points")),
-    chart(selectAll("points")).mark(line()),
+    chart(select_all("points")).mark(line()),
 ]).render(w=500, h=300, axes=True)
 ```
 
 ## Signature
 
 ```python
-line(stroke=None, strokeWidth=None, strokeDasharray=None, opacity=None, curve=None, along=None, w=None, h=None, emX=None, emY=None) -> Mark
+line(stroke=None, stroke_width=None, stroke_dasharray=None, opacity=None, curve=None, along=None, w=None, h=None, em_x=None, em_y=None) -> Mark
 ```
 
 ## Parameters
@@ -86,7 +86,7 @@ A line needs points to connect. The idiomatic recipe:
 
 1. One chart positions invisible [`blank`](/python/api/marks/blank) marks and
    names the layer with `.name("points")`.
-2. A second chart selects that layer — `chart(selectAll("points"))` — and draws
+2. A second chart selects that layer — `chart(select_all("points"))` — and draws
    a `line()` through it.
 3. `layer([...])` composes the two.
 
@@ -105,7 +105,7 @@ When you need a _different_ path tier than the one inference would pick, name
 it with `along`: `along="year"` finds the flow tier whose `by` is `"year"`,
 makes it the path, and splits by every other grouping tier instead. Naming a
 field no tier groups by is an error. This doesn't apply to a line drawn over
-an explicit refs bag (`chart(selectAll(...))`) or the pairwise `from`/`to`
+an explicit refs bag (`chart(select_all(...))`) or the pairwise `from`/`to`
 form — `along` is only meaningful when the line fuses into a chart's own
 flow, and throws if used on either of those. A refs bag spells its split
 structurally instead, with an upstream `flow(group(by="species"))`.
@@ -121,19 +121,19 @@ chart(barley, axes=True).flow(
     spread(by="site", dir="x", spacing=110),
     spread(by="year", dir="x", spacing=36),
     scatter(by="variety", y="yield"),
-).mark(line(stroke="variety", strokeWidth=2))
+).mark(line(stroke="variety", stroke_width=2))
 ```
 
 No option at all: the innermost tier that lays out the travel axis (the
 `year` spread) becomes the path, and every other grouping — `site` and
 `variety` — splits, giving one line per site-variety pair. Writing the same
 split by hand would take a composite key over both fields; naming it
-explicitly would be `line(along="year", stroke="variety", strokeWidth=2)`,
+explicitly would be `line(along="year", stroke="variety", stroke_width=2)`,
 which picks the same path tier the default already infers.
 
 ## Sugar: `.layer(line(...))`
 
-When the line connects a chart's _own_ marks, skip the two-chart `selectAll`
+When the line connects a chart's _own_ marks, skip the two-chart `select_all`
 recipe and chain [`.layer()`](/python/api/core/layer) on the builder with a
 bare `line(...)`:
 
@@ -142,14 +142,14 @@ from gofish import chart, scatter, circle, line
 
 chart(driving_shifts, axes=True).flow(
     scatter(by="year", x="miles", y="gas")
-).mark(circle(r=4, fill="white", stroke="black", strokeWidth=2)).layer(
-    line(stroke="black", strokeWidth=2)
+).mark(circle(r=4, fill="white", stroke="black", stroke_width=2)).layer(
+    line(stroke="black", stroke_width=2)
 ).render(w=500, h=300)
 ```
 
 See [`.layer()`](/python/api/core/layer) for the full semantics, including the
 zBelow-by-default paint order and the desugaring to the explicit
-`layer([...])` + `selectAll` form (which is still what you want to connect
+`layer([...])` + `select_all` form (which is still what you want to connect
 _another_ chart's marks).
 
 ## Sugar: `.mark(line(...))` (blank-fusion)
@@ -170,18 +170,18 @@ chart(catch_locations).flow(
 ```
 
 See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart)
-for the full desugaring rule (the `w`/`h`/`emX`/`emY` anchor/connector key
+for the full desugaring rule (the `w`/`h`/`em_x`/`em_y` anchor/connector key
 split, `.name()` chaining, and when the rule doesn't fire).
 
-The `w`/`h`/`emX`/`emY` anchor channels are only meaningful when `line` gets to
+The `w`/`h`/`em_x`/`em_y` anchor channels are only meaningful when `line` gets to
 synthesize its own anchors this way; passing them to a `line` that instead
 connects already-drawn marks (an empty-scope `chart()` tier inside `.layer()`,
-or `chart(selectAll(...))`/`chart(ref(...))`) is an error, since there's
+or `chart(select_all(...))`/`chart(ref(...))`) is an error, since there's
 nothing left for them to anchor.
 
 ## Examples
 
 ```python
 # Styled line
-chart(selectAll("points")).mark(line(stroke="black", strokeWidth=2))
+chart(select_all("points")).mark(line(stroke="black", stroke_width=2))
 ```

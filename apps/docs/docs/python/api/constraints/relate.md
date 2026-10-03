@@ -27,7 +27,7 @@ from gofish import layer, rect, text, Constraint
 
 layer([
     rect(w=200, h=150, fill="#e2ebf6").name("bg"),
-    text(text="Title", fontSize=18).name("label"),
+    text(text="Title", font_size=18).name("label"),
 ]).relate(
     lambda bg, label: [
         Constraint.align([label, bg], x="middle", y="end"),
@@ -105,7 +105,7 @@ layer([
   order.
 - **Scope.** A string `ref("name")` is legal only inside a `.relate()` clause,
   where it resolves from the related layer; anywhere else it raises and says
-  to move it into `.relate()`. A `createName` token `ref` reaches across
+  to move it into `.relate()`. A `create_name` token `ref` reaches across
   scopes and works anywhere.
 - **Flattening.** Nested lists flatten, and `None` or `False` entries are
   skipped.
@@ -377,7 +377,7 @@ order the constraints don't pin, the existing default order is preserved
 layer([
     rect(w=80, h=40, fill="lightgray").name("bg"),
     rect(w=60, h=60, fill="steelblue").name("box"),
-    text(text="label", fontSize=14).name("label"),
+    text(text="label", font_size=14).name("label"),
 ]).relate(
     lambda bg, box, label: [
         # box paints over bg; label paints over both.

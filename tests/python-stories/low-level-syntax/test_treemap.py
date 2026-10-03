@@ -21,21 +21,21 @@ def story_default():
             treemap(
                 by=field("Major Genre").drop_nulls(),
                 size="Worldwide Gross",
-                paddingInner=2,
-                paddingOuter=2,
+                padding_inner=2,
+                padding_outer=2,
                 round=True,
                 tile="squarify",
-                flipY=False,
+                flip_y=False,
             )
         )
         .mark(
             rect(
                 fill="Major Genre",
                 stroke=GRAY,
-                strokeWidth=1,
+                stroke_width=1,
                 rx=2,
                 ry=2,
-            ).label("Major Genre", position="center", color="white", fontSize=12)
+            ).label("Major Genre", position="center", color="white", font_size=12)
         ),
         {"w": 700, "h": 420},
     )

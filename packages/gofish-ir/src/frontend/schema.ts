@@ -257,6 +257,10 @@ export interface SpreadOperator
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
+  /** Position of this operator's box in the parent's space (pixels): the JS
+   *  `Spread` spreads its `FancyDims` into the box, as treemap's does. */
+  x?: ChannelValue;
+  y?: ChannelValue;
   /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
    *  this operator's box, reported as a SIZE claim to the enclosing scale. */
   w?: ChannelValue;
@@ -290,11 +294,11 @@ export interface StackOperator
   sharedScale?: boolean;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
-  /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
-   *  this operator's box, reported as a SIZE claim to the enclosing scale. */
+  /** Box position, extent, and per-entry size — see `SpreadOperator`. */
+  x?: ChannelValue;
+  y?: ChannelValue;
   w?: ChannelValue;
   h?: ChannelValue;
-  /** Per-entry stack-axis extent (#700 Phase 2) — see SpreadOperator.size. */
   size?: ChannelValue;
   axes?: AxesOptions;
 }
@@ -350,17 +354,25 @@ export type OverlapStrategyIR =
 
 /**
  * Per-node axis-rendering override. Mirrors the JS-side `AxesOptions` /
- * `AxisOptions` from `gofish-graphics/src/ast/gofish.tsx`.
+ * `AxisOptions` from `gofish-graphics/src/ast/gofish.tsx`; the field docs live
+ * on `OPTION_TYPES` in descriptors.ts, which the validator, the JSON Schema,
+ * and the Python generator all read.
  *
  * - `true` / `false` — show or hide both x and y axes.
  * - Object form — independently control each dimension.
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
- * object with an optional `title` (string for custom title, `false` to
- * suppress).
+ * object: `title` (string for a custom title, `false` to suppress), `side`
+ * (the frame edge), and `labelAngle` (label rotation in degrees).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-export type AxisOptions = boolean | { title?: string | false };
+export type AxisOptions =
+  | boolean
+  | {
+      title?: string | false;
+      side?: "start" | "end";
+      labelAngle?: number | number[] | "auto";
+    };
 
 export interface TableOperator
   extends BaseIRNode,

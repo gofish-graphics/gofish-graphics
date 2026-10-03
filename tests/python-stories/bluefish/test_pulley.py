@@ -32,8 +32,8 @@ W2_JUT = 10
 # are opaque, matching the Bluefish reference.
 ROPE_OPTS = {
     "stroke": "#774e32",
-    "strokeWidth": 3,
-    "mixBlendMode": "normal",
+    "stroke_width": 3,
+    "mix_blend_mode": "normal",
 }
 
 
@@ -43,7 +43,7 @@ def pulley_circle(r: float = R):
     return layer(
         [
             circle(
-                r=r, stroke="#828282", strokeWidth=3, fill="#C1C1C1"
+                r=r, stroke="#828282", stroke_width=3, fill="#C1C1C1"
             ).name("wheel"),
             circle(r=5, fill="#555555").name("hub"),
         ]
@@ -72,7 +72,7 @@ def weight(width: float, height: float, label: str):
                 fill="#545454",
                 stroke="#545454",
             ).name("body"),
-            text(text=label, fontSize=10, fill="white").name("label"),
+            text(text=label, font_size=10, fill="white").name("label"),
         ]
     ).relate(
         lambda body, label: [
@@ -93,7 +93,7 @@ def story_pulley():
                             w=9 * R,
                             fill="#C9C9C9",
                             stroke="#000",
-                            strokeWidth=2,
+                            stroke_width=2,
                         ).name("ceiling"),
                         pulley_circle(r=R).name("A"),
                         pulley_circle(r=R).name("B"),
@@ -102,9 +102,9 @@ def story_pulley():
                         weight(width=3 * R + W2_JUT, height=30, label="W2").name(
                             "w2"
                         ),
-                        text(text="A", fontSize=12).name("Alabel"),
-                        text(text="B", fontSize=12).name("Blabel"),
-                        text(text="C", fontSize=12).name("Clabel"),
+                        text(text="A", font_size=12).name("Alabel"),
+                        text(text="B", font_size=12).name("Blabel"),
+                        text(text="C", font_size=12).name("Clabel"),
                     ]
                 ).relate(
                     lambda ceiling, A, B, C, w1, w2, Alabel, Blabel, Clabel: [

@@ -56,9 +56,9 @@ invisible anchor tier plus a connector tier:
 .mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
 ```
 
-`anchor(opts)` is exactly the `w`/`h`/`emX`/`emY` subset of `opts` — the purely
+`anchor(opts)` is exactly the `w`/`h`/`em_x`/`em_y` subset of `opts` — the purely
 spatial keys `blank()` itself accepts. Everything else (`fill`, `stroke`,
-`strokeWidth`, `strokeDasharray`, `opacity`, `curve`, `dir`, `mixBlendMode`,
+`stroke_width`, `stroke_dasharray`, `opacity`, `curve`, `dir`, `mix_blend_mode`,
 `along`, `source`, `target`) stays on the connector, matching what you'd write
 by hand:
 
@@ -78,17 +78,17 @@ chart(seafood, axes=True).flow(
 )
 ```
 
-A `.name(...)`/`.label(...)`/`.zOrder(...)` chained onto the relational mark
+A `.name(...)`/`.label(...)`/`.z_order(...)` chained onto the relational mark
 names/labels/orders the **connector** (the anchor tier still gets `.layer()`'s
 usual auto-naming). This rule only fires when the chart's data still needs
 anchors drawn for it — a relational mark applied directly to an existing bag
-of refs (`chart(selectAll("bars")).mark(ribbon(...))`, or the bare-mark tier
+of refs (`chart(select_all("bars")).mark(ribbon(...))`, or the bare-mark tier
 form documented above) keeps its unfused, direct-connect meaning; only the
 pairwise `from_`/`to` form is never fused either, since it already consumes
 ref-bearing rows in `.mark()` position.
 
 Reach for the explicit `.mark(blank(...)).layer(...)` form instead when the
-anchor needs options besides `w`/`h`/`emX`/`emY` (a visible rect anchor, for
+anchor needs options besides `w`/`h`/`em_x`/`em_y` (a visible rect anchor, for
 instance — see [`ribbon`](/python/api/marks/ribbon)'s bar-chart example) or
 when you want the anchor and connector opts kept visually separate.
 
@@ -121,7 +121,7 @@ chart(seafood, axes=True).flow(
 `.layer(ribbon(...))` is sugar for the general `chart()`-tier form, which is
 itself the same manual wiring you'd write with
 [`layer([...])`](/python/api/operators/layer) and
-[`selectAll`](/python/api/selection/ref):
+[`select_all`](/python/api/selection/ref):
 
 ```python
 # One-line sugar
@@ -148,9 +148,9 @@ layer([
         spread(by="lake", dir="x", spacing=64),
         stack(by="species", dir="y"),
     ).mark(rect(h="count", fill="species").name("bars")),
-    chart(selectAll("bars")).flow(group(by="species")).mark(
+    chart(select_all("bars")).flow(group(by="species")).mark(
         ribbon(opacity=0.8)
-    ).zOrder(-1),
+    ).z_order(-1),
 ])
 ```
 
@@ -178,8 +178,8 @@ from gofish import chart, scatter, circle, line
 
 chart(driving_shifts, axes=True).flow(
     scatter(by="year", x="miles", y="gas")
-).mark(circle(r=4, fill="white", stroke="black", strokeWidth=2)).layer(
-    line(stroke="black", strokeWidth=2)
+).mark(circle(r=4, fill="white", stroke="black", stroke_width=2)).layer(
+    line(stroke="black", stroke_width=2)
 ).render(w=500, h=300)
 ```
 
@@ -193,7 +193,7 @@ drawn nodes and connect them with [`line(from_=, to=)`](/python/api/marks/line):
 :::
 
 ```python
-from gofish import chart, scatter, resolve, selectAll, circle, line
+from gofish import chart, scatter, resolve, select_all, circle, line
 
 nodes = [
     {"id": "a", "grp": 0},
@@ -212,7 +212,7 @@ chart(nodes).flow(scatter(by="id", x="grp", y="id")).mark(
     circle(r=14, fill="#4e79a7").name("nodes")
 ).layer(
     chart(edges)
-    .flow(resolve(["source", "target"], from_=selectAll("nodes")))
+    .flow(resolve(["source", "target"], from_=select_all("nodes")))
     .mark(line(from_="source", to="target", stroke="#888"))
 ).render(w=360, h=360)
 ```
@@ -264,10 +264,10 @@ Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then
   whether that tier is an empty `chart()` (binds the scope as chart data), a
   bare relational mark (reads the scope as its ref bag), or a bare leaf mark
   (ignores the scope). Under the hood `.layer()` names the previous tier's mark
-  and binds the next tier to `selectAll(thatName)` — the same wiring you'd
+  and binds the next tier to `select_all(thatName)` — the same wiring you'd
   write by hand, done for you.
 - **Shared registry** — tiers resolve in order sharing one layer context, so a
-  later tier's `selectAll("name")` finds an earlier tier's `.name("name")`.
+  later tier's `select_all("name")` finds an earlier tier's `.name("name")`.
 - **Chart-level options** — axes and color from the root `chart(data, ...)` apply
   to the whole stack.
 - **Paint order** — tiers paint in chain order (later tiers on top), like a
@@ -277,8 +277,8 @@ Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then
   `layer([...])`), which default to painting `zBelow` whatever they reference.
   This is a real paint-order constraint, not a hardcoded z-index, so it
   composes with other constraints — a `line(...)` or `ribbon(...)` tier needs
-  no `.zOrder(...)` incantation to sit under the marks it connects. An
-  explicit `.zOrder(...)` or `.relate(...)` on the connector's own chain
+  no `.z_order(...)` incantation to sit under the marks it connects. An
+  explicit `.z_order(...)` or `.relate(...)` on the connector's own chain
   overrides the default.
 - **Field references on refs** — `by` / `resolve` read bare field names off the
   refs (`by="species"`, not `by="datum.species"`); a ref descends into its row
@@ -290,5 +290,5 @@ This page documents the **builder method** `ChartBuilder.layer(child)`, which
 stacks a `chart(...)` tier over the current one and auto-wires an empty `chart()`
 scope to the previous tier's marks. It's sugar over the lower-level
 [`layer([...])` operator](/python/api/operators/layer) (which composes an explicit
-list of already-built charts) — `.layer()` does the naming + `selectAll` wiring
+list of already-built charts) — `.layer()` does the naming + `select_all` wiring
 for the common "draw, then build over what I drew" case.

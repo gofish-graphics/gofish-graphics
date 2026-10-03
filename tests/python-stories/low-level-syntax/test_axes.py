@@ -1,7 +1,7 @@
 """Equivalent of lowlevel/Axes.stories.tsx — Low Level Syntax/Axes.
 
 Hand-drawn axes built from `layer` + `spread` + `relate` + `ref`, with
-cross-tier links via `createName` tokens (the Pulley pattern). Three stories:
+cross-tier links via `create_name` tokens (the Pulley pattern). Three stories:
 
 - OrdinalXAxis: 3 bars with species labels and a chart-axis title beneath.
   Three tiers (bars / labels / title), each one's `ref(token)` resolves
@@ -24,7 +24,7 @@ Heights and fill (for the bar stories) are shared — same three bars in each.
 
 from gofish import (
     Constraint,
-    createName,
+    create_name,
     datum,
     layer,
     rect,
@@ -48,10 +48,10 @@ def _bars(names):
 
 
 def story_ordinal_xaxis():
-    a = createName("a")
-    b = createName("b")
-    c = createName("c")
-    bars_tok = createName("bars")
+    a = create_name("a")
+    b = create_name("b")
+    c = create_name("c")
+    bars_tok = create_name("bars")
 
     return (
         layer(
@@ -68,7 +68,7 @@ def story_ordinal_xaxis():
                 layer([
                     spread(
                         [
-                            text(text="salmon", fontSize=12, fill="#666"),
+                            text(text="salmon", font_size=12, fill="#666"),
                             ref(a),
                         ],
                         dir="y",
@@ -77,7 +77,7 @@ def story_ordinal_xaxis():
                     ),
                     spread(
                         [
-                            text(text="bass", fontSize=12, fill="#666"),
+                            text(text="bass", font_size=12, fill="#666"),
                             ref(b),
                         ],
                         dir="y",
@@ -86,7 +86,7 @@ def story_ordinal_xaxis():
                     ),
                     spread(
                         [
-                            text(text="trout", fontSize=12, fill="#666"),
+                            text(text="trout", font_size=12, fill="#666"),
                             ref(c),
                         ],
                         dir="y",
@@ -97,7 +97,7 @@ def story_ordinal_xaxis():
                 # tier 3: title above the bars group, x-centered on its bbox
                 spread(
                     [
-                        text(text="species", fontSize=14, fill="#333"),
+                        text(text="species", font_size=14, fill="#333"),
                         ref(bars_tok),
                     ],
                     dir="y",
@@ -124,7 +124,7 @@ def story_continuous_yaxis():
     def _tick(v, i):
         return spread(
             [
-                text(text=str(v), fontSize=11, fill="#666"),
+                text(text=str(v), font_size=11, fill="#666"),
                 rect(w=5, h=1, fill="#999"),
             ],
             dir="x",
@@ -174,7 +174,7 @@ def story_continuous_yaxis():
                 # axis line spanning the plot height (= the data range in pixels)
                 rect(w=1, h=300, fill="#999").name("axis"),
                 *ticks,
-                text(text="count", fontSize=13, fill="#333").name("title"),
+                text(text="count", font_size=13, fill="#333").name("title"),
             ]
         ).relate(_relate),
         {"w": 400, "h": 300},
@@ -191,7 +191,7 @@ def story_non_uniform_yaxis():
     def _tick(v, i):
         return spread(
             [
-                text(text=str(v), fontSize=11, fill="#666"),
+                text(text=str(v), font_size=11, fill="#666"),
                 rect(w=5, h=1, fill="#999"),
             ],
             dir="x",
@@ -228,7 +228,7 @@ def story_non_uniform_yaxis():
                 # axis line spanning the plot height (the [0, 100] domain in pixels)
                 rect(w=1, h=300, fill="#999").name("axis"),
                 *ticks,
-                text(text="score", fontSize=13, fill="#333").name("title"),
+                text(text="score", font_size=13, fill="#333").name("title"),
             ]
         ).relate(_relate),
         {"w": 400, "h": 300},

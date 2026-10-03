@@ -466,6 +466,62 @@ check(
   }).valid
 );
 
+check(
+  "axis side and labelAngle accept (strict)",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: {
+          x: { side: "end", labelAngle: [45] },
+          y: { labelAngle: "auto" },
+        },
+      },
+    ]),
+    { strict: true }
+  ).valid
+);
+
+check(
+  "axis option with unknown key rejected in strict",
+  !validate(
+    chart([{ type: "spread", axes: { x: { label_angle: 45 } } as any }]),
+    { strict: true }
+  ).valid
+);
+
+check(
+  "axis labelAngle of the wrong type rejected",
+  !validate(
+    chart([{ type: "spread", axes: { x: { labelAngle: "45" } } as any }])
+  ).valid
+);
+
+// JS types an axis title `string | false`: `false` suppresses the inferred
+// title, and `true` is not a title.
+check(
+  "axis title false and a string accept (strict)",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: { x: { title: false }, y: { title: "Count" } },
+      },
+    ]),
+    { strict: true }
+  ).valid
+);
+
+check(
+  "axis title true rejected",
+  !validate(chart([{ type: "spread", axes: { x: { title: true } } as any }]))
+    .valid
+);
+
 // ---------------------------------------------------------------------------
 // Bug fixes — label shorthand, table.by required (from PR review)
 // ---------------------------------------------------------------------------

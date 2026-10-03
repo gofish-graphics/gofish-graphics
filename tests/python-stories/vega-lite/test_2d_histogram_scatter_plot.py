@@ -73,10 +73,10 @@ def story_default():
         .mark(
             rect(
                 w="size",
-                aspectRatio=1,
+                aspect_ratio=1,
                 fill="transparent",
                 stroke="black",
-                strokeWidth=1,
+                stroke_width=1,
                 rx=2,
                 ry=2,
             )
