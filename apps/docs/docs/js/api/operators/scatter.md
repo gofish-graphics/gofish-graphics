@@ -164,7 +164,8 @@ circle [`pack`](/js/api/operators/pack) uses.
 
 The cloud is as tall as its dots need. It does not shrink to fit the space it
 is given, so a dense swarm can grow past it. To make it smaller, use smaller
-dots or less padding, or use `jitter`.
+dots or less padding. `jitter` does not make it smaller: its outline also
+grows with the counts, and it leaves extra room so the dots can spread.
 
 Some cases are errors:
 
