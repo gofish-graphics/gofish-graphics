@@ -1935,7 +1935,7 @@ def treemap(
             accessor sizing each leaf's tile area — entry-flagged, one value
             per split entry), ``tile`` (a strategy such as ``squarify()``, the
             default, or ``slice()``, ``dice()``, ``binary()``,
-            ``sliceDice()``), ``sort``, ``spacing`` (gap between sibling
+            ``slice_dice()``), ``sort``, ``spacing`` (gap between sibling
             tiles), ``padding`` (inset around the outer edge), ``round``.
 
     The largest tile (under the default sort) lands at the top left.
@@ -2005,9 +2005,9 @@ def binary() -> Dict[str, Any]:
     return {"kind": "binary"}
 
 
-def sliceDice() -> Dict[str, Any]:
+def slice_dice() -> Dict[str, Any]:
     """
-    The ``sliceDice()`` tiling strategy for :func:`treemap`: alternate slice
+    The ``slice_dice()`` tiling strategy for :func:`treemap`: alternate slice
     and dice by depth. Mirrors JS ``sliceDice()``; on the wire it is
     ``{"kind": "sliceDice"}``.
     """

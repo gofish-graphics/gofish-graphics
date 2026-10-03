@@ -21,7 +21,7 @@ from gofish import (
     pack,
     polygon,
     slice,
-    sliceDice,
+    slice_dice,
     spread,
     squarify,
     stack,
@@ -108,7 +108,7 @@ def test_treemap_serializes_tile_strategy_and_gaps():
     assert d["spacing"] == 2
     assert d["padding"] == 3
     assert squarify() == {"kind": "squarify"}
-    assert [f()["kind"] for f in (slice, dice, binary, sliceDice)] == [
+    assert [f()["kind"] for f in (slice, dice, binary, slice_dice)] == [
         "slice",
         "dice",
         "binary",

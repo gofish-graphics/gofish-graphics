@@ -70,7 +70,7 @@ plain object, such as `{"kind": "squarify", "ratio": 1}`.
 - `dice()` puts the tiles in one row, side by side along x.
 - `binary()` splits the tiles into two halves of about equal weight, and
   repeats on each half.
-- `sliceDice()` alternates between `slice` and `dice` by depth.
+- `slice_dice()` alternates between `slice` and `dice` by depth.
 
 ```python
 from gofish import squarify, treemap
