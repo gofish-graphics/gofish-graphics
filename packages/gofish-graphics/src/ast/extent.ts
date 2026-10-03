@@ -1,0 +1,116 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
+// The SIZE CLAIM half of an axis. The type half (what the axis means: its
+// origin, data interval, measure) is `UnderlyingSpace` in `./underlyingSpace`.
+// An `Extent` says how much room the content needs, as functions of σ (the
+// scope's pixels-per-data-unit), so a scope can solve σ against its box.
+//
+// Claims are computed by their own walk (`GoFishNode.resolveExtent`), AFTER
+// the types: a claim may read the resolved types, but `./underlyingSpace` never
+// imports this module, so a type can never read a claim.
+
+import * as Monotonic from "../util/monotonic";
+import type { Size } from "./dims";
+import {
+  dataSides,
+  isCONTINUOUS,
+  isPOSITION,
+  niceContinuous,
+  type UnderlyingSpace,
+} from "./underlyingSpace";
+
+/**
+ * One axis's size claim, measured from the extent's baseline like a font's
+ * ascent and descent: a bar of value 30 claims ascent 30σ, a bar of value −20
+ * claims descent 20σ. A pinned or origin-less extent sits wholly above its low
+ * edge, so its descent is 0. Every continuous axis has exactly one claim; an
+ * ordinal or undefined axis has none (`undefined`).
+ */
+export type Extent = {
+  /** The σ-affine extent on the positive side of the baseline. */
+  ascent: Monotonic.Monotonic;
+  /** The σ-affine extent on the negative side of the baseline. */
+  descent: Monotonic.Monotonic;
+  /** The total `ascent + descent`, the size a scope solves σ against.
+   *  Computed once by {@link Extent} from the pair; never set on its own. */
+  width: Monotonic.Monotonic;
+};
+
+/** Build an {@link Extent} from its two sides. */
+export const Extent = (
+  ascent: Monotonic.Monotonic,
+  descent: Monotonic.Monotonic = Monotonic.ZERO
+): Extent => ({
+  ascent,
+  descent,
+  width: Monotonic.isZero(descent) ? ascent : Monotonic.add(ascent, descent),
+});
+
+/** The claim a type makes by itself, with no pixel overhead: each side is its
+ *  data extent times σ. This is every leaf's claim, and the claim of any
+ *  pinned or origin-less result of a fold (those claim exactly their data
+ *  width). Only a free result composed from claims (a spread's spacing, a
+ *  nest's padding, a fixed pitch, a `transform.scale`) claims more. */
+export const impliedExtent = (space: UnderlyingSpace): Extent | undefined => {
+  if (!isCONTINUOUS(space)) return undefined;
+  const { ascent, descent } = dataSides(space);
+  return Extent(Monotonic.linear(ascent, 0), Monotonic.linear(descent, 0));
+};
+
+/** {@link impliedExtent} on both axes. */
+export const impliedExtents = (
+  spaces: Size<UnderlyingSpace>
+): Size<Extent | undefined> => [
+  impliedExtent(spaces[0]),
+  impliedExtent(spaces[1]),
+];
+
+/** The overlay of several free claims about one shared baseline: the larger
+ *  ascent above it and the larger descent below. */
+export const maxExtent = (extents: Extent[]): Extent =>
+  Extent(
+    Monotonic.max(...extents.map((e) => e.ascent)),
+    Monotonic.max(...extents.map((e) => e.descent))
+  );
+
+/** A claim scaled by a pixel-space `transform.scale` (like translate, a scale
+ *  acts on pixels, so it scales the claim but never the data interval). */
+export const scaleExtent = (scale: number, extent: Extent): Extent =>
+  scale === 1
+    ? extent
+    : Extent(
+        Monotonic.smul(scale, extent.ascent),
+        Monotonic.smul(scale, extent.descent)
+      );
+
+/** A claim grown by `padding` pixels on each side (a nest's inset). */
+export const padExtent = (extent: Extent, padding: number): Extent =>
+  Extent(
+    Monotonic.adds(extent.ascent, padding),
+    Monotonic.adds(extent.descent, padding)
+  );
+
+/** Nice a σ-scope root's type and its claim together (issue #659). Nicing is
+ *  a type operation ({@link niceContinuous}); a pinned space's niced domain
+ *  then implies its claim. Any other space keeps its type and claim. */
+export const niceScope = <S extends UnderlyingSpace | undefined>(
+  space: S,
+  extent: Extent | undefined
+): [S, Extent | undefined] => {
+  if (space === undefined || !isPOSITION(space)) return [space, extent];
+  const niced = niceContinuous(space);
+  return [niced, impliedExtent(niced)];
+};
+
+/** Where a σ-scope root (the chart root, or a layer's self-scaled stash)
+ *  seats the baseline of the extent it fits (#773). The scope fits `ascent +
+ *  descent` to its box, so the baseline sits `descent·σ` above the box's low
+ *  edge. Pinned and origin-less extents have descent 0, and a scope with no
+ *  σ on the axis (a pinned root) places through its map instead: 0. */
+export const scopeRootBaseline = (
+  extent: Extent | undefined,
+  sigma: number | undefined
+): number =>
+  extent !== undefined && sigma !== undefined ? extent.descent.run(sigma) : 0;

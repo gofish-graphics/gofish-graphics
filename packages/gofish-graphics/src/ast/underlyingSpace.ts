@@ -2,100 +2,82 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { interval, Interval } from "../util/interval";
+import { interval, Interval, width as intervalWidth } from "../util/interval";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
-import * as Monotonic from "../util/monotonic";
 import type { Measure } from "./data";
 import { nice as d3Nice } from "d3-array";
+
+// This module is the TYPE half of an axis: what the axis means, with no σ in
+// it. The SIZE CLAIM half (how much room the content needs, as functions of
+// σ) is the `Extent` record in `./extent.ts`, computed by a separate, later
+// walk that may read these types. This module must not import `Monotonic` or
+// `./extent`. That is what keeps type inference from ever reading a claim.
 
 export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
 
 /**
- * The abstract PLACEMENT of an extent — the missing "baseline" half of the
- * σ-affine box solve, lifted to the underlying-space pass (the `width` Monotonic
- * is already the abstract SIZE half). A determinacy lattice over "has this
- * extent committed a position?":
+ * Where a continuous space's local origin (its data 0) sits:
  *
- *   - `"free"` (⊥) — sized but not yet placed; a parent can still anchor it (old
- *     SIZE).
- *   - `"determined"` — committed at a data coordinate (old POSITION). The
- *     coordinate itself is the `dataDomain` min (which may be 0); it is a DATA
- *     coordinate, not a pixel — the pixel baseline is assigned top-down at
- *     layout (#39 ledger).
- *   - `"conflict"` (⊤) — no single position is possible (old DIFFERENCE; also
- *     the eventual home for disagreeing aligns).
- *
- * Placement is the LAYOUT fact (is this extent positioned) — the abstract
- * baseline half of the σ-affine solve, all that bottom-up space resolution can
- * know before pixels exist. It is a bare determinacy lattice, in bijection with
- * the shape of `dataDomain` (`undefined ↔ free`, interval ↔ determined,
- * `"delta"` ↔ conflict), so it is a derived read ({@link spacePlacement})
- * rather than stored state. */
-export type Placement = "free" | "determined" | "conflict";
-
-/** The DATA-space fact: the `[min,max]` data interval of an anchored axis
- *  (drives posScale / nicing / measure-throw / an absolute axis), `"delta"` for
- *  a difference axis (delta ticks over `[0, width.run(1)]`, no absolute zero),
- *  or `undefined` for a baseline magnitude (no data axis at all). This is the
- *  sole placement carrier: {@link spacePlacement} reads its shape. */
-export type DataDomain = Interval | "delta" | undefined;
-
-/** Read the abstract {@link Placement} off a stored CONTINUOUS space. Placement
- *  is not stored: it is a view of `dataDomain`'s shape (`undefined → "free"`,
- *  `"delta" → "conflict"`, interval → `"determined"`). */
-export const spacePlacement = (space: CONTINUOUS_TYPE): Placement =>
-  space.dataDomain === undefined
-    ? "free"
-    : space.dataDomain === "delta"
-      ? "conflict"
-      : "determined";
+ *   - `"pinned"`: the local origin IS data 0, so the data interval is the
+ *     absolute data domain. Builds a posScale, is niced when an axis views it,
+ *     renders an absolute axis. (The old POSITION.)
+ *   - `"free"`: the extent hangs from a baseline that nothing has placed yet.
+ *     The data interval is `[−descent, ascent]` about that baseline. A parent
+ *     can still pin it (a baseline align, a glued stack, the `position`
+ *     operator). (The old SIZE.)
+ *   - `"none"`: there is no origin at all, only a width. The data interval is
+ *     `[0, width]`, and only differences along it mean anything. Renders a
+ *     delta axis. Produced by middle-align, and absorbing. (The old DIFFERENCE.)
+ */
+export type Origin = "pinned" | "free" | "none";
 
 /**
- * A data-driven extent on one shared scale: always a `width` Monotonic in σ,
- * plus the data coordinate (if any) at which it commits an absolute position.
- * The three cases are the three named constructors:
+ * The abstract PLACEMENT of an extent, a determinacy lattice over "has this
+ * extent committed a position?": `"free"` (⊥, sized but unplaced),
+ * `"determined"` (committed at a data coordinate), `"conflict"` (⊤, no single
+ * position is possible). It is a read of the {@link Origin}
+ * ({@link spacePlacement}), not stored state. */
+export type Placement = "free" | "determined" | "conflict";
+
+/** Read the abstract {@link Placement} off a CONTINUOUS space's origin. */
+export const spacePlacement = (space: CONTINUOUS_TYPE): Placement =>
+  space.origin === "pinned"
+    ? "determined"
+    : space.origin === "free"
+      ? "free"
+      : "conflict";
+
+/**
+ * A data-driven extent on one shared scale. Every continuous kind has the same
+ * shape: one signed interval in DATA units about the space's local origin,
+ * plus the state of that origin ({@link Origin}). A bar of value 30 is
+ * `free [0, 30]`, a bar of value −20 is `free [−20, 0]`, a scatter's x axis is
+ * `pinned [min, max]`, and a middle-aligned overlay of width 7 is
+ * `none [0, 7]`. Pinning a free extent is "shift the interval and pin the
+ * origin" ({@link anchorAt}).
  *
- *   - {@link SIZE} — a BASELINE MAGNITUDE: sized but unplaced, with a local
- *     baseline at 0. Its position is not yet assigned but CAN be (a baseline-
- *     align anchors it; a middle-align makes it a DIFFERENCE). Builds no
- *     posScale; composes as a magnitude (measures FORGET on conflict), scales
- *     with a parent `transform.scale`, and is never niced.
- *   - {@link POSITION} — ANCHORED: the position IS assigned, and `dataDomain`'s
- *     min is the data-space coordinate of the extent's low edge (which may be
- *     0!), NOT a zero point. Builds a posScale, is niced per σ-scope when an
- *     axis views it ({@link niceContinuous}), renders an absolute axis over its
- *     domain. Measures unify as TYPES (THROW on a clash) — a count axis must
- *     not silently merge with millimeters.
- *   - {@link DIFFERENCE} — UNANCHORED: an absolute position is impossible, only
- *     differences are meaningful. No posScale; renders a delta axis over
- *     `[0, width.run(1)]`. Produced by middle-align, and absorbing — alignment
- *     never re-anchors it.
+ * The interval has no σ in it: pixel overhead (spread spacing, nest padding, a
+ * fixed pitch, `transform.scale`) is never part of it. That overhead lives only
+ * in the size claim (`Extent` in `./extent.ts`).
  *
- * A baseline magnitude is NOT a data axis anchored at 0: the former builds no
- * posScale and forgets measures, the latter does the opposite. The distinct
- * `undefined` / `"delta"` / interval `dataDomain` states are what keep them
- * apart, and the abstract {@link Placement} is a derived view of that shape
- * ({@link spacePlacement}), not stored state.
+ * A free magnitude is NOT a data axis pinned at 0: the former builds no
+ * posScale and composes as a magnitude (measures FORGET on conflict), while
+ * the latter builds a posScale and unifies measures as TYPES (THROW on a
+ * clash). The distinct origin states keep them apart.
+ *
+ * TODO(space-unification): the SIZE / POSITION / DIFFERENCE code paths
+ * downstream (folds, posScale construction, nicing, axis rendering) still
+ * branch on the origin state. Now that all three share one interval shape, a
+ * follow-up can collapse many of those branches. See the "Toward one
+ * continuous path" section of the underlying-space essay.
  */
 export type CONTINUOUS_TYPE = {
   kind: "continuous";
-  /** The σ-affine extent on the positive side of the baseline (the local 0).
-   *  A baseline magnitude's extent is measured from its baseline on both
-   *  sides, like a font's ascent and descent: a bar of value 30 has ascent
-   *  30σ, a bar of value −20 has descent 20σ. An anchored or difference
-   *  extent sits wholly above its low edge, so its descent is 0. */
-  ascent: Monotonic.Monotonic;
-  /** The σ-affine extent on the negative side of the baseline. See
-   *  {@link CONTINUOUS_TYPE.ascent}. */
-  descent: Monotonic.Monotonic;
-  /** The total σ-affine extent `ascent + descent`, the size a scope solves σ
-   *  against. Computed once by {@link CONTINUOUS} from the pair; never set on
-   *  its own. */
-  width: Monotonic.Monotonic;
-  /** Data-space extent for scales/axes/nicing/measures, AND the sole carrier of
-   *  the abstract placement (read via {@link spacePlacement}). See
-   *  {@link DataDomain}. */
-  dataDomain: DataDomain;
+  /** The signed data extent about the local origin. Pinned: the absolute data
+   *  domain. Free: `[−descent, ascent]` about the baseline. None: `[0, width]`. */
+  dataInterval: Interval;
+  /** Where the local origin sits. See {@link Origin}. */
+  origin: Origin;
   /** The measure (unit) of this axis. Spaces unify per measure — see
    *  {@link mergeMeasures}. Undefined = "no claim" (permissive). */
   measure?: Measure;
@@ -134,23 +116,19 @@ export type UNDEFINED_TYPE = {
 
 export type UnderlyingSpace = CONTINUOUS_TYPE | ORDINAL_TYPE | UNDEFINED_TYPE;
 
-/** Low-level constructor: takes the stored {@link DataDomain} directly. There
- *  is no scalar "anchor" builder type — the three placement cases ARE the three
- *  named constructors ({@link POSITION} anchored, {@link SIZE} free,
- *  {@link DIFFERENCE} conflict), plus {@link anchorAt} for re-anchoring an
- *  existing space at a data coordinate. */
+/** Low-level constructor. The three origin states have the named smart
+ *  constructors {@link POSITION} (pinned), {@link SIZE} (free) and
+ *  {@link DIFFERENCE} (none), plus {@link anchorAt} for pinning an existing
+ *  space at a data coordinate. */
 export const CONTINUOUS = (
-  ascent: Monotonic.Monotonic,
-  descent: Monotonic.Monotonic,
-  dataDomain: DataDomain,
+  dataInterval: Interval,
+  origin: Origin,
   measure?: Measure,
   coordinateTransform?: CoordinateTransform
 ): CONTINUOUS_TYPE => ({
   kind: "continuous",
-  ascent,
-  descent,
-  width: Monotonic.isZero(descent) ? ascent : Monotonic.add(ascent, descent),
-  dataDomain,
+  dataInterval,
+  origin,
   measure,
   coordinateTransform,
 });
@@ -158,73 +136,76 @@ export const isCONTINUOUS = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE => space.kind === "continuous";
 
-/** The `[min, max]` data interval of an ANCHORED CONTINUOUS space, or undefined
- *  for a baseline magnitude or a difference. This is exactly the `dataDomain`
- *  when it is an interval. */
+/** The absolute `[min, max]` data domain of a PINNED space, or undefined for a
+ *  free magnitude or a difference. */
 export const continuousInterval = (
   space: UnderlyingSpace
 ): Interval | undefined =>
-  isCONTINUOUS(space) &&
-  space.dataDomain !== undefined &&
-  space.dataDomain !== "delta"
-    ? space.dataDomain
+  isCONTINUOUS(space) && space.origin === "pinned"
+    ? space.dataInterval
     : undefined;
 
-/** The extent interval of a CONTINUOUS space, treating a non-anchored extent as
- *  measured from a baseline at 0 — `[−descent.run(1), ascent.run(1)]`. The
- *  fold variant of {@link continuousInterval}: where the latter reports "no
- *  anchor" as `undefined`, this collapses it to the extent about 0 so an extent
- *  can be unioned regardless of anchoring (overlay / alignment). */
+/** The data interval of any CONTINUOUS space, whatever its origin: absolute
+ *  when pinned, `[−descent, ascent]` about the baseline when free, `[0, width]`
+ *  when there is no origin. The fold variant of {@link continuousInterval}, so
+ *  an extent can be unioned regardless of pinning (overlay / alignment). */
 export const continuousExtentInterval = (space: CONTINUOUS_TYPE): Interval =>
-  continuousInterval(space) ??
-  interval(-space.descent.run(1), space.ascent.run(1));
+  space.dataInterval;
 
-/** A baseline magnitude — a sized-but-unplaced extent (the old `SIZE`): no
- *  committed position. Distinct from a data-positioned anchored extent
- *  ({@link isPOSITION}, even at data-min 0) and a difference
- *  ({@link isDIFFERENCE}). Keys on the LAYOUT fact ({@link spacePlacement}). */
+/** The data width of a CONTINUOUS space (the length of its interval). */
+export const dataWidth = (space: CONTINUOUS_TYPE): number =>
+  intervalWidth(space.dataInterval);
+
+/** The data extent on each side of a space's baseline. A free extent hangs
+ *  from its baseline (`ascent` above, `descent` below). A pinned or
+ *  origin-less extent sits wholly above its low edge, so its descent is 0. */
+export const dataSides = (
+  space: CONTINUOUS_TYPE
+): { ascent: number; descent: number } =>
+  space.origin === "free"
+    ? {
+        ascent: Math.max(space.dataInterval.max, 0),
+        descent: Math.max(-space.dataInterval.min, 0),
+      }
+    : { ascent: dataWidth(space), descent: 0 };
+
+/** A baseline magnitude: a free (sized but unplaced) extent. Distinct from a
+ *  pinned data axis ({@link isPOSITION}, even at data-min 0) and a difference
+ *  ({@link isDIFFERENCE}). */
 export const isBaselineMagnitude = (
   space: UnderlyingSpace
-): space is CONTINUOUS_TYPE =>
-  isCONTINUOUS(space) && spacePlacement(space) === "free";
+): space is CONTINUOUS_TYPE => isCONTINUOUS(space) && space.origin === "free";
 
-/** ANCHORED continuous space (old POSITION) — has a data interval; builds a
- *  posScale and an absolute axis. Keys on the DATA fact (`dataDomain`). */
+/** A PINNED continuous space over the absolute data `domain` (the old
+ *  POSITION). Builds a posScale and an absolute axis. */
 export const POSITION = (
   domain: Interval,
   measure?: Measure,
   coordinateTransform?: CoordinateTransform
 ): UnderlyingSpace =>
-  CONTINUOUS(
-    Monotonic.linear(domain.max - domain.min, 0),
-    Monotonic.ZERO,
-    domain,
-    measure,
-    coordinateTransform
-  );
+  CONTINUOUS(domain, "pinned", measure, coordinateTransform);
 export const isPOSITION = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
-  continuousInterval(space) !== undefined;
+  isCONTINUOUS(space) && space.origin === "pinned";
 
-/** Nice an anchored POSITION space's data domain (issue #659). Returns a copy
- *  with the `[min, max]` domain rounded to d3-nice bounds (count 10, matching
- *  the axis tick nicing) and the `width` Monotonic recomputed from the niced
- *  interval, so a scope solved with the niced space sizes content, maps
- *  positions, and — via the same domain — ticks the axis all off ONE rounded
- *  domain.
+/** Nice a pinned space's data domain (issue #659). Returns a copy with the
+ *  `[min, max]` domain rounded to d3-nice bounds (count 10, matching the axis
+ *  tick nicing), so a scope solved with the niced space sizes content, maps
+ *  positions, and (via the same domain) ticks the axis all off ONE rounded
+ *  domain. The size claim of the niced space is the one its type implies
+ *  (`impliedExtent` in `./extent.ts`).
+ *
+ *  Nicing reads only the data interval and the fixed tick count, never σ or
+ *  pixels, so it is a pure type operation.
  *
  *  This is THE nicing operation. It is applied per σ-scope AT the scope's solve
  *  (the render root, a self-scaled region, a shared-scale scope, a datum-position
- *  scale), never as a pre-layout tree walk — so a domain that only reaches a
+ *  scale), never as a pre-layout tree walk, so a domain that only reaches a
  *  scope through a stash cannot escape it (the original #659 bug), and a subtree
  *  that is not a scope root never nices its own subset (it inherits the scope's
  *  σ). It is DEMAND-DRIVEN: each solve site gates the call on
- *  `GoFishNode.scopeRendersAxis` — a scope nices its POSITION domain iff some
- *  node in its space-flow region renders an axis on the dim. Nicing is a
- *  presentation adjustment whose demand comes from axis views; axis-less
- *  content stays at the honest raw scale, and when an axis IS drawn, content
- *  and ticks share the one niced domain. A baseline magnitude, difference,
- *  ordinal, or undefined space is returned UNCHANGED: nicing applies only to
- *  anchored POSITION domains — never SIZE magnitudes, never deltas. A coord
+ *  `GoFishNode.scopeRendersAxis`, so a scope nices its pinned domain iff some
+ *  node in its space-flow region renders an axis on the dim. A free magnitude,
+ *  difference, ordinal, or undefined space is returned UNCHANGED. A coord
  *  scope must NOT nice (its domain maps into a fixed coordinate range), so the
  *  coord boundary never calls this. */
 export const niceContinuous = <T extends UnderlyingSpace | undefined>(
@@ -234,14 +215,10 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   const iv = continuousInterval(space);
   if (iv === undefined) return space;
   const [niceMin, niceMax] = d3Nice(iv.min, iv.max, 10);
-  const niced = CONTINUOUS(
-    Monotonic.linear(niceMax - niceMin, 0),
-    Monotonic.ZERO,
-    interval(niceMin, niceMax),
-    (space as CONTINUOUS_TYPE).measure,
-    (space as CONTINUOUS_TYPE).coordinateTransform
-  );
-  return mirrored(niced, (space as CONTINUOUS_TYPE).mirrored === true) as T;
+  return {
+    ...(space as CONTINUOUS_TYPE),
+    dataInterval: interval(niceMin, niceMax),
+  } as T;
 };
 
 /** `space` with both sides of its 0 marked as amounts measured away from it
@@ -256,75 +233,51 @@ export const mirrored = (
 export const allMirrored = (spaces: CONTINUOUS_TYPE[]): boolean =>
   spaces.length > 0 && spaces.every((s) => s.mirrored === true);
 
-/** UNANCHORED continuous space (old DIFFERENCE) — delta axis. Keys on the DATA
- *  fact (`dataDomain === "delta"`), NOT on placement, so a future `conflict`
- *  placement that still has a real data domain doesn't render delta ticks. */
+/** An origin-less continuous space of data `width` (the old DIFFERENCE): a
+ *  delta axis over `[0, width]`. */
 export const DIFFERENCE = (width: number, measure?: Measure): UnderlyingSpace =>
-  CONTINUOUS(Monotonic.linear(width, 0), Monotonic.ZERO, "delta", measure);
+  CONTINUOUS(interval(0, width), "none", measure);
 export const isDIFFERENCE = (
   space: UnderlyingSpace
-): space is CONTINUOUS_TYPE =>
-  isCONTINUOUS(space) && space.dataDomain === "delta";
+): space is CONTINUOUS_TYPE => isCONTINUOUS(space) && space.origin === "none";
 
-/** A sized-but-unpositioned extent (the old `SIZE`): a baseline magnitude,
- *  `ascent` above its baseline and `descent` below it. Most extents sit wholly
- *  above their baseline, so `descent` defaults to zero; a composition that
- *  carries a real pair passes it. */
+/** A free extent (the old SIZE): a baseline magnitude, `ascent` data units
+ *  above its baseline and `descent` below it. Most extents sit wholly above
+ *  their baseline, so `descent` defaults to zero. */
 export const SIZE = (
-  ascent: Monotonic.Monotonic,
+  ascent: number,
   measure?: Measure,
-  descent: Monotonic.Monotonic = Monotonic.ZERO
-): UnderlyingSpace => CONTINUOUS(ascent, descent, undefined, measure);
+  descent = 0
+): UnderlyingSpace => CONTINUOUS(interval(-descent, ascent), "free", measure);
 
 /** The baseline magnitude of a data length `v` drawn from its baseline (a
  *  rect's `w`/`h`): `[0, v]`, so a positive value is ascent and a negative one
  *  is descent (#773). */
 export const baselineSpan = (v: number, measure?: Measure): UnderlyingSpace =>
-  SIZE(
-    Monotonic.linear(Math.max(v, 0), 0),
-    measure,
-    Monotonic.linear(Math.max(-v, 0), 0)
-  );
+  SIZE(Math.max(v, 0), measure, Math.max(-v, 0));
 
-/** Re-anchor a continuous space so its baseline lands at data coordinate
- *  `origin`, preserving its σ-affine `ascent`/`descent`: the result's domain is
- *  `[origin − descent.run(1), origin + ascent.run(1)]`. An anchored or
- *  difference space has descent 0, so its low edge lands at `origin`. This
- *  is the one construction the named constructors can't express — anchoring a
- *  free (or difference) extent without flattening its width to a constant, or
- *  shifting an anchored one (the `position` operator does both). `measure`
- *  defaults to the space's own. */
+/** Pin a continuous space with its local origin at data coordinate `at`: shift
+ *  its interval by `at` and pin the origin. A free `[−descent, ascent]` lands
+ *  on `[at − descent, at + ascent]`; an origin-less `[0, width]` lands its low
+ *  edge at `at`; a pinned space (whose origin is data 0) moves by `at`. Used by
+ *  the `position` operator. `measure` defaults to the space's own. */
 export const anchorAt = (
   space: CONTINUOUS_TYPE,
-  origin: number,
+  at: number,
   measure?: Measure
 ): CONTINUOUS_TYPE =>
   CONTINUOUS(
-    space.ascent,
-    space.descent,
-    interval(origin - space.descent.run(1), origin + space.ascent.run(1)),
+    interval(space.dataInterval.min + at, space.dataInterval.max + at),
+    "pinned",
     measure ?? space.measure,
     space.coordinateTransform
   );
 
-/** Where a σ-scope root (the chart root, or a layer's self-scaled stash)
- *  seats the baseline of the extent it fits (#773). The scope fits `ascent +
- *  descent` to its box, so the baseline sits `descent·σ` above the box's low
- *  edge. Anchored and difference extents have descent 0, and a scope with no
- *  σ on the axis (an anchored root) places through its map instead: 0. */
-export const scopeRootBaseline = (
-  space: UnderlyingSpace | undefined,
-  sigma: number | undefined
-): number =>
-  space !== undefined && isCONTINUOUS(space) && sigma !== undefined
-    ? space.descent.run(sigma)
-    : 0;
-
-/** Has a baseline (a place it hangs from): a baseline magnitude or an anchored
- *  coordinate, but NOT a difference ({@link spacePlacement} === "conflict"). The
- *  gate for "can be a self-scaling region / needs a concrete canvas". */
+/** Has a baseline (a place it hangs from): a free magnitude or a pinned
+ *  coordinate, but NOT a difference. The gate for "can be a self-scaling
+ *  region / needs a concrete canvas". */
 export const hasBaseline = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
-  isCONTINUOUS(space) && spacePlacement(space) !== "conflict";
+  isCONTINUOUS(space) && space.origin !== "none";
 
 export const ORDINAL = (
   domain?: string[],

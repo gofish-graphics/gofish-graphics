@@ -13,12 +13,16 @@ import {
   SIZE,
   UNDEFINED,
   UnderlyingSpace,
+  dataSides,
+  dataWidth,
   forgetAllMeasures,
   isBaselineMagnitude,
+  isCONTINUOUS,
   isPOSITION,
   mirrored,
   spaceMeasure,
 } from "../underlyingSpace";
+import { Extent, impliedExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import * as Interval from "../../util/interval";
 
@@ -203,28 +207,51 @@ export function lowerDistributePlacement(
   });
 }
 
+/** The options a distribute fold reads (shared by the type fold and the claim
+ *  fold, so both see one chain). */
+export type DistributeFoldOptions = {
+  spacing: number;
+  anchor: AlignAnchor | "edge";
+  glue?: boolean;
+  /** Explicit size on the spread/layer's stack axis; overrides children. */
+  size?: MaybeValue<number>;
+  /** The measure for an ORDINAL result — the grouping field (spread's `by`),
+   *  so a category axis names itself off its own space, just as a continuous
+   *  axis's measure is its field. (Distinct from `childMeasure` below, which
+   *  is the continuous measure composed from the children for a SIZE/POSITION
+   *  result.) */
+  measure?: string;
+  /** True when every contributing child was POSITIONALLY keyed (a `spread`
+   *  with no `by`): the folded ORDINAL is anonymous and renders no axis. */
+  anonymous?: boolean;
+  /** A stack's {@link StackOrigin}, its part an index into `targetSpaces`
+   *  (see {@link distributeOrigin}). */
+  origin: StackOrigin<number>;
+};
+
 /**
- * The distribute constraint's *space-resolution* contribution — the bottom-up
- * half that makes `layer + distribute` claim the same underlying space a
- * `spread` does. Mirrors spread.tsx's stack-axis dispatch exactly (spread's
- * `resolveUnderlyingSpace`), including the explicit-size override and the glue
- * (stack) variant, so phase-3 spread can delegate to it wholesale:
+ * The distribute constraint's *type* contribution — the bottom-up half that
+ * makes `layer + distribute` claim the same underlying space a `spread` does.
+ * Mirrors spread.tsx's stack-axis dispatch exactly, including the
+ * explicit-size override and the glue (stack) variant, so phase-3 spread can
+ * delegate to it wholesale:
  *
- *  - explicit `opts.size` (a value) → SIZE(linear(value, 0)) — the spread's own
- *    size wins over any children-derived claim.
+ *  - explicit `opts.size` (a value) → SIZE(value) — the spread's own size wins
+ *    over any children-derived claim.
  *  - glue → POSITION over the parts laid end to end from the stack's origin
  *    (each part's baseline on the previous part's head; `[0, Σ widths]` when
  *    no part has a descent and the origin is the first part's tail) when
  *    all-POSITION or all-SIZE; ORDINAL(keys) when any child is keyed; else
  *    UNDEFINED.
- *  - non-glue, all-SIZE & data-driven (some non-constant Monotonic) → SIZE
- *    composition (Monotonic.add + spacing·(n−1) for "edge"; the
- *    unknown-Monotonic fixed-pitch form for start/middle/end/baseline), so a
- *    parent can solve a scale factor via Monotonic.inverse (auto-fit).
+ *  - non-glue, all-SIZE with some nonzero data extent → SIZE of the chain's
+ *    data extent ({@link chainDataExtent}).
  *  - non-glue, any child keyed → ORDINAL.
- *  - non-glue, all-SIZE constant → SIZE composition.
+ *  - non-glue, all-SIZE with no data extent → SIZE of the chain's data extent.
  *  - non-glue, all-POSITION → POSITION([0, Σ widths]).
  *  - anything else → UNDEFINED (caller falls back to its default union).
+ *
+ * Every number here is a data extent: spacing and pitch are pixels, so they
+ * live only in the claim ({@link distributeExtentFold}).
  *
  * Measures forget-merge on conflict, like spread. `keys` are the targets'
  * ordinal keys (node.key) in the same order as `targetSpaces`; only used to
@@ -235,25 +262,7 @@ export function lowerDistributePlacement(
 export function distributeSpaceFold(
   targetSpaces: UnderlyingSpace[],
   keys: (string | undefined)[],
-  opts: {
-    spacing: number;
-    anchor: AlignAnchor | "edge";
-    glue?: boolean;
-    /** Explicit size on the spread/layer's stack axis; overrides children. */
-    size?: MaybeValue<number>;
-    /** The measure for an ORDINAL result — the grouping field (spread's `by`),
-     *  so a category axis names itself off its own space, just as a continuous
-     *  axis's measure is its field. (Distinct from `childMeasure` below, which
-     *  is the continuous measure composed from the children for a SIZE/POSITION
-     *  result.) */
-    measure?: string;
-    /** True when every contributing child was POSITIONALLY keyed (a `spread`
-     *  with no `by`): the folded ORDINAL is anonymous and renders no axis. */
-    anonymous?: boolean;
-    /** A stack's {@link StackOrigin}, its part an index into `targetSpaces`
-     *  (see {@link distributeOrigin}). */
-    origin: StackOrigin<number>;
-  }
+  opts: DistributeFoldOptions
 ): UnderlyingSpace {
   const n = targetSpaces.length;
   if (n === 0) return UNDEFINED;
@@ -263,24 +272,18 @@ export function distributeSpaceFold(
 
   // Explicit size on the stack axis dominates the children-derived claim.
   if (opts.size !== undefined && isValue(opts.size)) {
-    return SIZE(
-      Monotonic.linear(getValue(opts.size)!, 0),
-      getMeasure(opts.size)
-    );
+    return SIZE(getValue(opts.size)!, getMeasure(opts.size));
   }
 
   const namedKeys = keys.filter((k): k is string => k !== undefined);
-  const spacing = opts.glue ? 0 : opts.spacing;
-  // A "free" baseline magnitude composes its Monotonic + spacing; an anchored
-  // data-positioned child sums its data widths WITHOUT spacing. The two paths
-  // stay distinct: collapsing them injects spacing into already-positioned
-  // extents.
+  // A "free" baseline magnitude composes as a chain; an anchored
+  // data-positioned child sums its data widths. The two paths stay distinct.
   const allSize = targetSpaces.every(isBaselineMagnitude);
   const allPosition = targetSpaces.every(isPOSITION);
-  const widthAt1 = (s: UnderlyingSpace): number =>
-    (s as CONTINUOUS_TYPE).width.run(1);
   const sumWidths = (): number =>
-    targetSpaces.map(widthAt1).reduce((a, b) => a + b, 0);
+    (targetSpaces as CONTINUOUS_TYPE[])
+      .map(dataWidth)
+      .reduce((a, b) => a + b, 0);
 
   if (opts.glue) {
     // The parts lie end to end as vectors (#773): each covers
@@ -288,6 +291,8 @@ export function distributeSpaceFold(
     // before it, and the extent shifts so the stack's origin sits at 0. So
     // (30, −25, 10, −50) spans [−35, 30], and (5, 10, 20, 40, 25) centered on
     // the middle of the 20 spans [−25, 75]. A positioned part has descent 0.
+    // This is "shift each part's data interval and pin the origin": a glued
+    // stack of free parts is a pinned space.
     if (allSize || allPosition) {
       const { origin } = opts;
       let at = 0;
@@ -295,8 +300,7 @@ export function distributeSpaceFold(
       let hi = 0;
       let zero = 0;
       (targetSpaces as CONTINUOUS_TYPE[]).forEach((s, i) => {
-        const ascent = s.ascent.run(1);
-        const descent = s.descent.run(1);
+        const { ascent, descent } = dataSides(s);
         if (origin.mirrored && descent > 0) {
           const by = opts.measure === undefined ? "" : `"${opts.measure}"`;
           throw new Error(
@@ -325,59 +329,134 @@ export function distributeSpaceFold(
     return UNDEFINED;
   }
 
-  const childDomains = allSize
-    ? targetSpaces.map((s) => (s as CONTINUOUS_TYPE).width)
+  const widths = allSize
+    ? (targetSpaces as CONTINUOUS_TYPE[]).map(dataWidth)
     : [];
-  const dataDriven =
-    allSize && childDomains.some((d) => !Monotonic.isConstant(d));
-  // Fixed-pitch extents: `(n−1)·spacing` of chain plus an amplitude ALLOWANCE
-  // attributed to the side of the chain where content actually extends,
-  // relative to the chained anchor (the painted side — a fixed-pitch chain's
-  // rows mirror about their chained anchor at paint, see `pitchAnchorY`):
-  //  - "middle": content extends half above / half below every anchor — the
-  //    EXACT symmetric form `h_first/2 + (n−1)·s + h_last/2` (unchanged; the
-  //    original center mode).
-  //  - "baseline" / "start": content rises entirely ABOVE each anchor, so the
-  //    allowance sits above the chain HEAD: `max_k(h_k − k·s)⁺ + (n−1)·s`
-  //    (k in chain order — the binding row is whichever peak clears the rows
-  //    chained above it).
-  //  - "end": the mirror image — content hangs BELOW each anchor, allowance
-  //    below the chain TAIL: `max_k(h_k − (n−1−k)·s)⁺ + (n−1)·s`.
-  // The per-k max assumes each child's extent lies wholly on one side of its
-  // anchor (true for SIZE claims — baseline magnitudes) and that the fold's
-  // child order is the chain order (compose.ts passes placement order).
-  const composeSize = (): Monotonic.Monotonic => {
-    if (opts.anchor === "edge")
-      return Monotonic.adds(Monotonic.add(...childDomains), spacing * (n - 1));
-    if (opts.anchor === "middle")
-      return Monotonic.unknown(
-        (scaleFactor: number) =>
-          childDomains[0].run(scaleFactor) / 2 +
-          spacing * (n - 1) +
-          childDomains[childDomains.length - 1].run(scaleFactor) / 2
-      );
-    const anchor = opts.anchor;
-    return Monotonic.unknown((scaleFactor: number) => {
-      let allowance = 0;
-      for (let k = 0; k < n; k++) {
-        const pitchesFromAnchoredEnd = anchor === "end" ? n - 1 - k : k;
-        allowance = Math.max(
-          allowance,
-          childDomains[k].run(scaleFactor) - spacing * pitchesFromAnchoredEnd
-        );
-      }
-      return Math.max(0, allowance) + spacing * (n - 1);
-    });
-  };
+  const dataDriven = allSize && widths.some((w) => w !== 0);
 
   // Along a spread chain each child is a box: it contributes its total extent
   // (ascent + descent), and the composed extent sits above the chain's start.
   // (A stack, above, keeps the signs instead.)
-  if (dataDriven) return SIZE(composeSize(), childMeasure);
+  if (dataDriven)
+    return SIZE(chainDataExtent(widths, opts.anchor), childMeasure);
   if (namedKeys.length > 0)
     return ORDINAL(namedKeys, opts.measure, opts.anonymous);
-  if (allSize) return SIZE(composeSize(), childMeasure);
+  if (allSize) return SIZE(chainDataExtent(widths, opts.anchor), childMeasure);
   if (allPosition)
     return POSITION(Interval.interval(0, sumWidths()), childMeasure);
   return UNDEFINED;
+}
+
+/**
+ * The data extent of a spread chain of free children whose data widths are
+ * `widths` (in chain order): the chain's claim ({@link chainClaim}) with its
+ * pixel terms (spacing, pitch) dropped. An edge chain is the sum of its
+ * children. A fixed-pitch chain's children each sit at their own anchor, a
+ * pitch apart, so without the pitch they overlap at one anchor: half the first
+ * and half the last child about a middle anchor, and the tallest child about a
+ * start, end, or baseline anchor.
+ */
+export function chainDataExtent(
+  widths: number[],
+  anchor: AlignAnchor | "edge"
+): number {
+  if (anchor === "edge") return widths.reduce((a, b) => a + b, 0);
+  if (anchor === "middle") return widths[0] / 2 + widths[widths.length - 1] / 2;
+  return Math.max(0, ...widths);
+}
+
+/**
+ * The size claim of a spread chain whose children claim `widths` (in chain
+ * order), `spacing` pixels apart.
+ *
+ * Fixed-pitch extents: `(n−1)·spacing` of chain plus an amplitude ALLOWANCE
+ * attributed to the side of the chain where content actually extends,
+ * relative to the chained anchor (the painted side — a fixed-pitch chain's
+ * rows mirror about their chained anchor at paint, see `pitchAnchorY`):
+ *  - "middle": content extends half above / half below every anchor — the
+ *    EXACT symmetric form `h_first/2 + (n−1)·s + h_last/2` (unchanged; the
+ *    original center mode).
+ *  - "baseline" / "start": content rises entirely ABOVE each anchor, so the
+ *    allowance sits above the chain HEAD: `max_k(h_k − k·s)⁺ + (n−1)·s`
+ *    (k in chain order — the binding row is whichever peak clears the rows
+ *    chained above it).
+ *  - "end": the mirror image — content hangs BELOW each anchor, allowance
+ *    below the chain TAIL: `max_k(h_k − (n−1−k)·s)⁺ + (n−1)·s`.
+ * The per-k max assumes each child's extent lies wholly on one side of its
+ * anchor (true for SIZE claims — baseline magnitudes) and that the fold's
+ * child order is the chain order (compose.ts passes placement order).
+ */
+function chainClaim(
+  widths: Monotonic.Monotonic[],
+  spacing: number,
+  anchor: AlignAnchor | "edge"
+): Monotonic.Monotonic {
+  const n = widths.length;
+  if (anchor === "edge")
+    return Monotonic.adds(Monotonic.add(...widths), spacing * (n - 1));
+  if (anchor === "middle")
+    return Monotonic.unknown(
+      (scaleFactor: number) =>
+        widths[0].run(scaleFactor) / 2 +
+        spacing * (n - 1) +
+        widths[n - 1].run(scaleFactor) / 2
+    );
+  return Monotonic.unknown((scaleFactor: number) => {
+    let allowance = 0;
+    for (let k = 0; k < n; k++) {
+      const pitchesFromAnchoredEnd = anchor === "end" ? n - 1 - k : k;
+      allowance = Math.max(
+        allowance,
+        widths[k].run(scaleFactor) - spacing * pitchesFromAnchoredEnd
+      );
+    }
+    return Math.max(0, allowance) + spacing * (n - 1);
+  });
+}
+
+/** The claim of a stack: its parts' claims laid end to end exactly as
+ *  {@link distributeSpaceFold} lays their data extents (each part's baseline on
+ *  the previous part's head), so any pixel overhead a part carries stays in the
+ *  claim. The width of the span the parts cover at σ. */
+function stackClaim(parts: Extent[]): Monotonic.Monotonic {
+  return Monotonic.unknown((sigma: number) => {
+    let at = 0;
+    let lo = 0;
+    let hi = 0;
+    for (const part of parts) {
+      const ascent = part.ascent.run(sigma);
+      const descent = part.descent.run(sigma);
+      lo = Math.min(lo, at - descent);
+      hi = Math.max(hi, at + ascent);
+      at += ascent - descent;
+    }
+    return hi - lo;
+  });
+}
+
+/**
+ * The size claim of a {@link distributeSpaceFold} result `space`, given the
+ * targets' claims. It composes the targets' claims the way the type fold
+ * composes their data extents, so pixel overhead stays in the claim:
+ *  - an explicit size claims what its type implies;
+ *  - a glued stack lays its parts' claims end to end ({@link stackClaim});
+ *  - a chain of pinned children sums their claims;
+ *  - a free chain claims the chain of its children's claims with the spacing
+ *    or pitch added ({@link chainClaim}), so a parent can solve a scale factor
+ *    via `Monotonic.inverse` (auto-fit).
+ * An ordinal or undefined result has no claim.
+ */
+export function distributeExtentFold(
+  targetExtents: (Extent | undefined)[],
+  space: UnderlyingSpace,
+  opts: DistributeFoldOptions
+): Extent | undefined {
+  if (!isCONTINUOUS(space)) return undefined;
+  if (opts.size !== undefined && isValue(opts.size))
+    return impliedExtent(space);
+  const parts = targetExtents as Extent[];
+  if (opts.glue) return Extent(stackClaim(parts));
+  const widths = parts.map((e) => e.width);
+  if (isPOSITION(space)) return Extent(Monotonic.add(...widths));
+  return Extent(chainClaim(widths, opts.spacing, opts.anchor));
 }

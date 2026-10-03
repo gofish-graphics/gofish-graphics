@@ -42,10 +42,12 @@ ranges in play — the _domains_. GoFish distinguishes a node's
 [underlying space](/internals/core/underlying-space) (is this dimension
 continuous, ordinal, or undefined? — and if continuous, is it a _position_, a
 _size_, or a _difference_, which since #586 are the three `origin` states of one
-continuous kind) and infers position and size domains separately. This
-pass leans on the [monotonic algebra](/internals/core/monotonic) to track, symbolically,
-how each subtree depends on the data — and to prune subtrees that don't depend on it
-at all.
+continuous kind). It does this in two walks over the tree. The first infers
+each node's _type_ (its kind and data interval, with no σ in it); the second
+infers each node's _size claim_ from its children's claims and the finished
+types. The claim walk leans on the [monotonic algebra](/internals/core/monotonic) to
+track, symbolically, how each subtree's size depends on the scale factor — and to
+prune subtrees that don't depend on it at all.
 
 **2 · Layout.** With domains known, each node computes its size. Layout dispatches on
 the continuous space's `origin` state: a `SIZE` (free) dimension resolves through the

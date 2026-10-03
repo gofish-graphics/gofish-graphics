@@ -1,4 +1,3 @@
-import * as Monotonic from "../../util/monotonic";
 import { computeAesthetic } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { interval } from "../../util/interval";
@@ -274,7 +273,7 @@ export const Image = ({
           }
           if (!isValue(pos) && isValue(dims[axis].size)) {
             return SIZE(
-              Monotonic.linear(getValue(dims[axis].size)!, 0),
+              getValue(dims[axis].size)!,
               getMeasure(dims[axis].size)
             );
           }

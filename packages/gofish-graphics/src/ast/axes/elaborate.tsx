@@ -20,6 +20,7 @@ import {
   isCONTINUOUS,
   isUNDEFINED,
   continuousInterval,
+  dataWidth,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../underlyingSpace";
@@ -505,7 +506,7 @@ function elaborateDifferenceAxis(
   // content's own width-based scaleFactor (size/width) and ticks line up with
   // the marks they annotate. The axis line spans [0, width]; ticks are nice
   // values within it. (The old bespoke path used v*scaleFactor for the same.)
-  const width = space.width.run(1);
+  const width = dataWidth(space);
   const base = d3Ticks(0, width, TICK_COUNT);
   // End cap: the line's far end always carries a tick (the old bespoke axis
   // got this by overshooting to the next nice value; here the scale must stay

@@ -245,7 +245,7 @@ The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
   where the placement solver chained them, at exact pitch, and content rises above its
   baseline (a ridgeline row's silhouette grows up from its own zero line). The layout side
   accounts for that painted extent too: the space fold attributes the chain's amplitude
-  allowance to the painted side (`composeSize` in constraints/distribute.ts), the enclosing
+  allowance to the painted side (`chainClaim` in constraints/distribute.ts), the enclosing
   layer folds each such row's MIRRORED band into its bbox (`paintedYBand` in layer.tsx),
   and `render()` attributes y overhangs by painted side (an unflipped root's negative min
   is the painted TOP), so the resulting negative min is reserved as a painted-TOP gutter —
@@ -290,7 +290,8 @@ canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. It
 `fitAxis(axis, budget)` reads the subtree's resolved space on that axis and
 returns a `(scaleFactor, posScale)` to hand each child: a baseline-magnitude
 (data SIZE) axis scales by `width.inverse(budget)` so the children fill the ring
-(`width` is the sum of the children's total extents, each `ascent + descent`);
+(`width` is the sum of the children's size claims, each `ascent + descent`,
+read with `resolveExtent()`);
 an anchored (data POSITION) axis maps onto `[0, budget]` via a posScale and
 carries **no** size σ (Stage 6c — a POSITION-only axis has no SIZE scope, so it
 never fabricates one; the map's own slope is the scope's σ). Only

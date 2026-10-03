@@ -1,4 +1,3 @@
-import * as Monotonic from "../../util/monotonic";
 import { resolveColorChannel } from "../../color";
 import { computeAesthetic } from "../../util";
 import { posFn } from "../domain";
@@ -265,7 +264,7 @@ export const Text = ({
           }
           if (!isValue(pos) && isValue(dims[axis].size)) {
             return SIZE(
-              Monotonic.linear(getValue(dims[axis].size)!, 0),
+              getValue(dims[axis].size)!,
               getMeasure(dims[axis].size)
             );
           }

@@ -1,5 +1,4 @@
 import { computeAesthetic } from "../../util";
-import * as Monotonic from "../../util/monotonic";
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
@@ -63,32 +62,7 @@ export const Ellipse = ({
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
       ) => {
-        let wDomain = isValue(dims[0].size)
-          ? Monotonic.linear(getValue(dims[0].size!), 0)
-          : Monotonic.linear(0, dims[0].size ?? 0);
-        let hDomain = isValue(dims[1].size)
-          ? Monotonic.linear(getValue(dims[1].size!), 0)
-          : Monotonic.linear(0, dims[1].size ?? 0);
-        if (aspectRatio !== undefined && aspectRatio > 0) {
-          const wIsData = isValue(dims[0].size);
-          const hIsData = isValue(dims[1].size);
-          if (wIsData && !hIsData) {
-            hDomain = Monotonic.linear(
-              (wDomain as Monotonic.Linear).slope / aspectRatio,
-              0
-            );
-          } else if (hIsData && !wIsData) {
-            wDomain = Monotonic.linear(
-              (hDomain as Monotonic.Linear).slope * aspectRatio,
-              0
-            );
-          }
-        }
-
-        const resolveAxis = (
-          axis: 0 | 1,
-          axisDomain: Monotonic.Monotonic
-        ): UnderlyingSpace => {
+        const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
           if (isValue(d.min)) {
             // position; treat it like a position space w/ a single element
@@ -97,12 +71,12 @@ export const Ellipse = ({
           }
           if (isValue(d.size)) {
             // data-driven size only — literals are handled at layout time.
-            return SIZE(axisDomain, getMeasure(d.size));
+            return SIZE(getValue(d.size)!, getMeasure(d.size));
           }
           return UNDEFINED;
         };
 
-        return [resolveAxis(0, wDomain), resolveAxis(1, hDomain)];
+        return [resolveAxis(0), resolveAxis(1)];
       },
       layout: (shared, size, scales, children) => {
         let w = isValue(dims[0].size)

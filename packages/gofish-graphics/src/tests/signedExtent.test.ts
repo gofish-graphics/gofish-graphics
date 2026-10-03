@@ -20,7 +20,8 @@ import {
   continuousInterval,
   type CONTINUOUS_TYPE,
 } from "../ast/underlyingSpace";
-import { nestedSpace } from "../ast/constraints/nest";
+import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
+import { Extent } from "../ast/extent";
 import { resolveAlignmentSpace } from "../ast/graphicalOperators/alignment";
 import { solveAxisProblem } from "../ast/constraints/differenceGraph";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
@@ -90,13 +91,24 @@ async function main() {
 
   console.log("\n# a nest pads both sides of its inner extent");
   {
-    const inner = SIZE(M.linear(10, 0), undefined, M.linear(4, 0));
-    const outer = nestedSpace(SIZE(M.ZERO), inner, 2) as CONTINUOUS_TYPE;
+    const inner = SIZE(10, undefined, 4);
+    const outer = nestedSpace(SIZE(0), inner) as CONTINUOUS_TYPE;
     check(
-      "ascent + padding and descent + padding",
-      outer.ascent.run(1) === 12 && outer.descent.run(1) === 6
+      "the outer type keeps the inner data extent (padding is pixels)",
+      JSON.stringify(outer.dataInterval) ===
+        JSON.stringify((inner as CONTINUOUS_TYPE).dataInterval)
     );
-    check("width is inner width + 2·padding", outer.width.run(1) === 18);
+    const claim = nestedExtent(
+      Extent(M.ZERO),
+      inner,
+      Extent(M.linear(10, 0), M.linear(4, 0)),
+      2
+    )!;
+    check(
+      "claim: ascent + padding and descent + padding",
+      claim.ascent.run(1) === 12 && claim.descent.run(1) === 6
+    );
+    check("claim width is inner width + 2·padding", claim.width.run(1) === 18);
   }
 
   console.log("\n# a chain seats only the baselines it leaves free");
@@ -172,8 +184,8 @@ async function main() {
 
   console.log("\n# the alignment union depends on the alignment");
   {
-    const up = SIZE(M.linear(10, 0));
-    const down = SIZE(M.ZERO, undefined, M.linear(20, 0));
+    const up = SIZE(10);
+    const down = SIZE(0, undefined, 20);
     const span = (alignment: "baseline" | "start" | "end") => {
       const s = resolveAlignmentSpace([up, down], alignment);
       return isPOSITION(s) ? continuousInterval(s) : undefined;
@@ -197,12 +209,16 @@ async function main() {
     // The running sums of (30, −25, 10, −50) are 0, 30, 5, 15, −35, so the
     // stack spans [−35, 30]. With only positive parts it is [0, Σ].
     const fold = (values: number[]) => {
-      const s = distributeSpaceFold(values.map((v) => baselineSpan(v)), [], {
-        spacing: 0,
-        anchor: "edge",
-        glue: true,
-        origin: { part: 0, fraction: 0, mirrored: false },
-      });
+      const s = distributeSpaceFold(
+        values.map((v) => baselineSpan(v)),
+        [],
+        {
+          spacing: 0,
+          anchor: "edge",
+          glue: true,
+          origin: { part: 0, fraction: 0, mirrored: false },
+        }
+      );
       return isPOSITION(s) ? continuousInterval(s) : undefined;
     };
     check(
@@ -252,8 +268,7 @@ async function main() {
     check(
       "a spread still packs boxes edge to edge",
       spreadOut.every(
-        (r, i) =>
-          i === 0 || Math.abs(r.y + r.h + 8 - spreadOut[i - 1].y) < 1e-9
+        (r, i) => i === 0 || Math.abs(r.y + r.h + 8 - spreadOut[i - 1].y) < 1e-9
       ),
       JSON.stringify(spreadOut)
     );

@@ -107,19 +107,30 @@ export class ScopeRegistry {
    * Build the anchored data→pixel map for a POSITION scope root — the space's
    * `[min,max]` domain onto `[0, allocated]`. Records a scope only when a map
    * actually results (a non-anchored axis is not a POSITION scope here).
+   *
+   * TODO(pinned-claim-solve): the map spends the whole box on the data
+   * interval, so pixel overhead the scope's size claim carries (a pinned row
+   * of bars with spacing) lands outside the box. Solving σ from the claim
+   * (`claim.width.inverse(allocated)`) and mapping the domain with that σ
+   * would budget it; it needs a rule for how nicing widens a claim. See the
+   * underlying-space essay's "A known gap" note.
    */
   solvePosition(
     meta: ScopeMeta,
     space:
-      | { kind: string; dataDomain?: { min: number; max: number } | "delta" }
+      | {
+          kind: string;
+          origin?: string;
+          dataInterval?: { min: number; max: number };
+        }
       | undefined,
     allocated: number
   ): AxisMap | undefined {
     const map = posScaleFromSpace(space, allocated);
     if (map !== undefined && DUMP_SCOPES) {
       const dom =
-        space && space.dataDomain && space.dataDomain !== "delta"
-          ? `[${space.dataDomain.min},${space.dataDomain.max}]`
+        space && space.origin === "pinned" && space.dataInterval
+          ? `[${space.dataInterval.min},${space.dataInterval.max}]`
           : "[·]";
       this.entries.push({
         ...meta,

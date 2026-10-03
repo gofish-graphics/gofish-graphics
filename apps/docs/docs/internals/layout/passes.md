@@ -230,7 +230,7 @@ const [underlyingSpaceX, underlyingSpaceY] = child.resolveUnderlyingSpace();
 
 **Implementation**: `src/ast/_node.ts:212-223`
 
-This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered.
+This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered. A second walk over the same tree, `resolveExtent()`, then computes each continuous dimension's **size claim** (an `Extent`: σ-affine `ascent`, `descent`, and `width` Monotonics) from the children's claims and the already-resolved types. Types never read claims; layout reads both.
 
 **Underlying Space Kinds** (defined in `src/ast/underlyingSpace.ts`). Since the
 #586 collapse there are only three _kinds_ — `continuous`, `ordinal`,
@@ -238,14 +238,16 @@ This is one of the most important passes. It determines the **underlying space**
 **`origin` states** of the single `continuous` kind (read via the
 `isPOSITION` / `isDIFFERENCE` / `isBaselineMagnitude` predicates):
 
-- **`CONTINUOUS`**: one data-driven extent, a `width` Monotonic in σ plus an
-  `origin`:
-  - `origin: number` — **POSITION**: anchored at a data coordinate (e.g.
-    `x: value(5)`); builds a position scale (niced per σ-scope at the scope's
-    solve, when an axis views the scope — issue #659), absolute axis.
+- **`CONTINUOUS`**: one data-driven extent, a signed `dataInterval` in data
+  units about its local origin plus an `origin` state:
+  - `origin: "pinned"` — **POSITION**: the interval is the absolute data
+    domain (e.g. `x: value(5)`); builds a position scale (niced per σ-scope at
+    the scope's solve, when an axis views the scope — issue #659), absolute
+    axis.
   - `origin: "free"` — **SIZE**: a baseline magnitude, sized but unplaced (e.g.
-    `h: "value"` with no min); no position scale.
-  - `origin: "impossible"` — **DIFFERENCE**: unanchorable, only differences are
+    `h: "value"` with no min), `[−descent, ascent]` about its baseline; no
+    position scale.
+  - `origin: "none"` — **DIFFERENCE**: unanchorable, only differences are
     meaningful (stacked/centered); delta axis over `[0, width]`.
 - **`ORDINAL`**: Discrete categorical scale (e.g., `spread("category")`)
 - **`UNDEFINED`**: No data-driven encoding
@@ -271,7 +273,8 @@ For a vertical bar chart where:
 - Y-axis: `h: "value"` → `SIZE` space (if no min) or `POSITION` space (if min is specified).
   The `SIZE` space is `baselineSpan(value)`: the value's positive part is its
   ascent and its negative part its descent, so a negative bar extends below
-  its baseline.
+  its baseline. A rect writes no claim hook, so its claim is the one its type
+  implies: `value·σ` on the matching side.
 
 The logic in `resolveUnderlyingSpace` checks:
 

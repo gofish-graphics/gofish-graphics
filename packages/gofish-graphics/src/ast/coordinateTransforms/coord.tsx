@@ -24,7 +24,6 @@ import {
   UnderlyingSpace,
   UNDEFINED,
   POSITION,
-  SIZE,
   ORDINAL,
   isORDINAL,
   isPOSITION,
@@ -34,6 +33,7 @@ import {
   continuousInterval,
   type CONTINUOUS_TYPE,
 } from "../underlyingSpace";
+import { Extent } from "../extent";
 import type { Measure } from "../data";
 import { posScaleFromSpace, axisScale, type AxisMap } from "../domain";
 import { shadowCheckScaleRoot } from "../solver/shadow";
@@ -354,11 +354,13 @@ export const coord = createNodeOperator(
             // leaves this case UNDEFINED, so sum the children's widths here and
             // scale by budget/total (`width.inverse(budget)`) to fill the ring.
             const baseline = children
-              .map((c) => (c as GoFishNode)._underlyingSpace?.[axis])
-              .filter((s): s is UnderlyingSpace => s !== undefined)
-              .filter(isBaselineMagnitude);
+              .filter((c) => {
+                const s = (c as GoFishNode)._underlyingSpace?.[axis];
+                return s !== undefined && isBaselineMagnitude(s);
+              })
+              .map((c) => c.resolveExtent()[axis]!);
             if (baseline.length > 0) {
-              const width = Monotonic.add(...baseline.map((s) => s.width));
+              const width = Monotonic.add(...baseline.map((e) => e.width));
               // Stage 6b: the coord boundary's SIZE frame — solved through the one
               // registry (content(σ)=budget via Monotonic.inverse).
               const sigma = scopes.solveSize(
@@ -373,7 +375,7 @@ export const coord = createNodeOperator(
               // caught, mirroring shadowCheckScaleRoot at the root. No-op unless
               // GOFISH_SOLVER_CHECK is set.
               shadowCheckScaleRoot(
-                SIZE(width),
+                Extent(width),
                 budget,
                 sigma ?? undefined,
                 axis

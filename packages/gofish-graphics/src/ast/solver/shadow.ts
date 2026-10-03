@@ -26,11 +26,8 @@ import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
 import type { AlignAnchor } from "../constraints/shared";
 import { distributePlacementAnchors } from "../constraints/distribute";
-import {
-  isBaselineMagnitude,
-  isCONTINUOUS,
-  type UnderlyingSpace,
-} from "../underlyingSpace";
+import { isBaselineMagnitude } from "../underlyingSpace";
+import type { Extent } from "../extent";
 
 /** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
  *  per-constraint pre-state capture the checks need is only built when set. */
@@ -393,7 +390,7 @@ function shadowCheckPosition(
  * affine solver must handle as under/over-determined rather than silently zero.
  */
 export function shadowCheckScaleRoot(
-  sp: UnderlyingSpace,
+  extent: Extent | undefined,
   allocated: number,
   sigma: number | undefined,
   axisIdx: 0 | 1
@@ -401,10 +398,9 @@ export function shadowCheckScaleRoot(
   if (!SOLVER_CHECK || sigma === undefined || !Number.isFinite(allocated))
     return;
   // Every continuous σ-scope closes the same frame equation: the extent at σ is
-  // `width.run(σ)` (anchored or not — a former POSITION/DIFFERENCE width is just
-  // `linear(extent, 0)`, so `run(σ) = extent·σ`).
-  let content: number | undefined;
-  if (isCONTINUOUS(sp)) content = sp.width.run(sigma);
+  // its claim's `width.run(σ)` (pinned or not — a pinned or difference claim is
+  // just `linear(dataWidth, 0)`, so `run(σ) = dataWidth·σ`).
+  const content = extent?.width.run(sigma);
   if (content === undefined) return;
   if (Math.abs(content - allocated) > 1e-6) {
     report(`scaleRoot.frame axis=${axisIdx}`, content, allocated);

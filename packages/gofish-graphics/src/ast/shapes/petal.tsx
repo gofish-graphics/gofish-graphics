@@ -19,7 +19,6 @@ import {
   Transform,
 } from "../dims";
 import { aesthetic, continuous, Domain } from "../domain";
-import * as Monotonic from "../../util/monotonic";
 import { POSITION, SIZE, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
@@ -70,11 +69,6 @@ export const Petal = ({
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
       ) => {
-        const sizeDomain = (axis: 0 | 1): Monotonic.Monotonic =>
-          isValue(dims[axis].size)
-            ? Monotonic.linear(getValue(dims[axis].size!), 0)
-            : Monotonic.linear(0, dims[axis].size ?? 0);
-
         const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
           if (isValue(d.min)) {
@@ -83,7 +77,7 @@ export const Petal = ({
           }
           if (isValue(d.size)) {
             // data-driven size only — literals handled at layout time.
-            return SIZE(sizeDomain(axis), getMeasure(d.size));
+            return SIZE(getValue(d.size)!, getMeasure(d.size));
           }
           return UNDEFINED;
         };

@@ -12,6 +12,7 @@ import {
   niceContinuous,
   type UnderlyingSpace,
 } from "../underlyingSpace";
+import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
 import type { ScopeRegistry } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
@@ -175,7 +176,7 @@ export type ChildScalePlan = {
   budgetFailures: { axis: 0 | 1; budget: number }[];
   sharedScaleChecks: {
     axis: 0 | 1;
-    space: UnderlyingSpace;
+    extent: Extent | undefined;
     sigma: number | undefined;
   }[];
 };
@@ -193,7 +194,9 @@ export type ChildScalePlan = {
  * shadow hook. */
 export function buildChildScalePlan(
   selfScaledSpaces: Size<UnderlyingSpace | undefined>,
+  selfScaledExtents: Size<Extent | undefined>,
   layerSpace: Size<UnderlyingSpace> | undefined,
+  layerExtent: Size<Extent | undefined> | undefined,
   layerSize: Size,
   inheritedScaleFactors: Size<number | undefined> | undefined,
   inheritedPosScales: ConstraintPosScales,
@@ -230,20 +233,17 @@ export function buildChildScalePlan(
   // content sized against the RAW domain while a niced width solved an orphan
   // scope. Nicing here (or, without axis demand, leaving the raw domain here)
   // makes the ONE scope's domain the single source, consumed by both the
-  // position map (`solvePosition`) and any size solve; `niceContinuous` is
+  // position map (`solvePosition`) and any size solve; `niceScope` is
   // identity on a baseline magnitude (SIZE is never niced). The shared step
   // below reads the stash again, so transform a local copy.
-  const nicedSelfScaled: Size<UnderlyingSpace | undefined> = [
-    selfScaledSpaces[0] !== undefined && axisDemand(0)
-      ? niceContinuous(selfScaledSpaces[0])
-      : selfScaledSpaces[0],
-    selfScaledSpaces[1] !== undefined && axisDemand(1)
-      ? niceContinuous(selfScaledSpaces[1])
-      : selfScaledSpaces[1],
-  ];
+  const nicedSelfScaled = ([0, 1] as const).map((axis) =>
+    selfScaledSpaces[axis] !== undefined && axisDemand(axis)
+      ? niceScope(selfScaledSpaces[axis], selfScaledExtents[axis])
+      : [selfScaledSpaces[axis], selfScaledExtents[axis]]
+  ) as [UnderlyingSpace | undefined, Extent | undefined][];
 
   for (const axis of [0, 1] as const) {
-    const stashed = nicedSelfScaled[axis];
+    const [stashed, stashedExtent] = nicedSelfScaled[axis];
     if (stashed === undefined || !Number.isFinite(layerSize[axis])) continue;
     if (isPOSITION(stashed)) {
       basePosScales[axis] =
@@ -257,7 +257,7 @@ export function buildChildScalePlan(
       childScaleFactors[axis] =
         scopes.solveSize(
           { kind: "self-scaled", rootKey, axis },
-          stashed.width,
+          stashedExtent!.width,
           layerSize[axis]
         ) ?? inheritedScaleFactors?.[axis];
     }
@@ -299,22 +299,23 @@ export function buildChildScalePlan(
     // σ it derives agrees with the niced position map. The self-scaled stash is
     // already demand-niced above; the layer's own space is transformed here
     // (identity on a baseline magnitude or without axis demand).
-    const sp =
-      nicedSelfScaled[axis] ??
-      (axisDemand(axis)
-        ? niceContinuous(layerSpace?.[axis])
-        : layerSpace?.[axis]);
+    const [sp, ext] =
+      nicedSelfScaled[axis][0] !== undefined
+        ? nicedSelfScaled[axis]
+        : axisDemand(axis)
+          ? niceScope(layerSpace?.[axis], layerExtent?.[axis])
+          : [layerSpace?.[axis], layerExtent?.[axis]];
     if (sp === undefined) continue;
     const sf = isCONTINUOUS(sp)
       ? (scopes.solveSize(
           { kind: "shared", rootKey, axis },
-          sp.width,
+          ext!.width,
           layerSize[axis],
           { upperBoundGuess: layerSize[axis] }
         ) ?? 0)
       : undefined;
     if (sf !== undefined) childScaleFactors[axis] = sf;
-    sharedScaleChecks.push({ axis, space: sp, sigma: sf });
+    sharedScaleChecks.push({ axis, extent: ext, sigma: sf });
   }
 
   return {

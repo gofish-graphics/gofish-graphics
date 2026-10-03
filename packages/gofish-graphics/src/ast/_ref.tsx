@@ -20,6 +20,7 @@ import { GoFishNode, isRelateClause } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
 import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
+import type { Extent } from "./extent";
 import type { Placeable, RenderSession } from "./_node";
 import type { Geometry } from "./geometry";
 import type { DisplayList } from "gofish-ir";
@@ -251,6 +252,12 @@ export class GoFishRef {
     return (
       this.selectedNode?.resolveUnderlyingSpace() ?? [ORDINAL([]), ORDINAL([])]
     );
+  }
+
+  /** A ref claims what its target claims. An unresolved ref is ordinal on
+   *  both axes, so it claims nothing. */
+  public resolveExtent(): Size<Extent | undefined> {
+    return this.selectedNode?.resolveExtent() ?? [undefined, undefined];
   }
 
   public layout(_size: Size, _scales?: Size<AxisScale | undefined>): Placeable {

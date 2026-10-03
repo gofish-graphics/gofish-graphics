@@ -316,9 +316,9 @@ one branch per axis flavor — the seam a future public API would override. Sinc
 the #586 collapse POSITION and DIFFERENCE are no longer distinct space _kinds_
 but two `origin` states of the single `continuous` kind, so the branches
 dispatch on the `isPOSITION` / `isDIFFERENCE` / `isORDINAL` predicates rather
-than a `kind` tag, and the data interval is read uniformly via
-`continuousInterval(space)` (`[origin, origin + width.run(1)]`) instead of a
-per-kind `.domain` / `.width` field:
+than a `kind` tag, and the data interval is read off the type alone
+(`continuousInterval(space)` for a pinned axis, `dataWidth(space)` for a
+difference axis), never off the size claim:
 
 - **POSITION (continuous, numeric origin)** — `d3.nice` + `d3.ticks` over the
   interval; an axis line
@@ -342,8 +342,8 @@ per-kind `.domain` / `.width` field:
   both sides of 0 hold amounts measured away from it, so each tick is labeled
   with its distance from 0 (`60 40 20 0 20 40 60`). The label follows from the
   space's type; there is no format option.
-- **DIFFERENCE (continuous, `origin: "impossible"`)** — bare tick marks at the
-  tick values over `[0, width.run(1)]`, plus plain-text labels
+- **DIFFERENCE (continuous, `origin: "none"`)** — bare tick marks at the
+  tick values over `[0, dataWidth(space)]`, plus plain-text labels
   showing the _delta_ between adjacent ticks, pinned at their midpoints
   (`position({ [axis]: datum(midpoint) })`). The delta labels have no tick of
   their own to provide an offset, so they `distribute` off the line (at the
@@ -392,7 +392,7 @@ siblings:
   `resolveAxes` alone reads.
 - A node whose own space collapsed to `UNDEFINED` on `dim` computes
   `sharedSelfScaledChildSignature`: if **every** direct child is self-scaled on
-  `dim` with an **identical** signature (same `dataDomain` + `width` +
+  `dim` with an **identical** signature (same `dataInterval` + `origin` +
   `measure` — at least two children, so there's an actual sibling group), the
   node claims the axis itself, right there, instead of leaving each child to
   fend for itself. It stashes the representative shared space onto

@@ -40,7 +40,6 @@ import type { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import {
   POSITION,
-  SIZE,
   UNDEFINED,
   UnderlyingSpace,
   continuousInterval,
@@ -49,15 +48,19 @@ import {
   spaceMeasure,
 } from "../underlyingSpace";
 import {
+  resolveAlignmentExtent,
   resolveAlignmentSpace,
+  unionChildExtents,
   unionChildSpaces,
 } from "../graphicalOperators/alignment";
+import { impliedExtent, scaleExtent, type Extent } from "../extent";
 import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
 import type { Measure } from "../data";
 import {
   distributeChildrenInPlacementOrder,
   distributeOrigin,
+  distributeExtentFold,
   distributeSpaceFold,
   type DistributeConstraint,
   type StackOrigin,
@@ -97,13 +100,6 @@ export type ComposeBudget = {
   ];
 };
 
-export type ComposedSpaces = {
-  /** Per-axis space overrides; undefined leaves the default union in place
-   *  (no distribute or align on that axis). */
-  spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined];
-  budget: ComposeBudget;
-};
-
 export type PositionDomains = {
   x?: Interval.Interval;
   y?: Interval.Interval;
@@ -111,36 +107,17 @@ export type PositionDomains = {
   yMeasure?: Measure;
 };
 
-/** Apply a layer transform scale to baseline magnitudes produced by the default
- * child-space union. Anchored POSITION and DIFFERENCE axes keep their own data
- * domains; only free extents scale symbolically. */
-export function scaleBaselineMagnitude(
-  space: UnderlyingSpace,
-  scale: number
-): UnderlyingSpace {
-  return isBaselineMagnitude(space) && scale !== 1
-    ? SIZE(
-        Monotonic.smul(scale, space.ascent),
-        space.measure,
-        Monotonic.smul(scale, space.descent)
-      )
-    : space;
-}
-
-/** Resolve a layer's default per-axis space before composed constraint-space
- * overrides: union child spaces, apply transform.scale to free magnitudes, and
- * merge datum position/span domains into POSITION space. */
+/** Resolve a layer's default per-axis TYPE before composed constraint-space
+ * overrides: union child spaces, and merge datum position/span domains into a
+ * pinned space. A `transform.scale` does not touch the type: like translate,
+ * it acts on pixels, so it scales only the claim ({@link resolveLayerAxisExtent}). */
 export function resolveLayerAxisSpace(
   childSpaces: Size<UnderlyingSpace>[],
   axis: 0 | 1,
-  scale: number,
   positionDomain: Interval.Interval | undefined,
   positionMeasure: Measure | undefined
 ): UnderlyingSpace {
-  const base = scaleBaselineMagnitude(
-    unionChildSpaces(childSpaces, axis),
-    scale
-  );
+  const base = unionChildSpaces(childSpaces, axis);
   if (positionDomain === undefined) return base;
   const baseIv = continuousInterval(base);
   const merged = baseIv
@@ -154,40 +131,76 @@ export function resolveLayerAxisSpace(
 
 export function resolveLayerBaseSpaces(
   childSpaces: Size<UnderlyingSpace>[],
-  transformScale: Size,
   positionDomains: PositionDomains
 ): Size<UnderlyingSpace> {
   return [
     resolveLayerAxisSpace(
       childSpaces,
       0,
-      transformScale[0],
       positionDomains.x,
       positionDomains.xMeasure
     ),
     resolveLayerAxisSpace(
       childSpaces,
       1,
-      transformScale[1],
       positionDomains.y,
       positionDomains.yMeasure
     ),
   ];
 }
 
-/** Build a per-axis Size carrying `space` on `axis` and UNDEFINED elsewhere, so
- *  a single space can be fed to `unionChildSpaces` as a pseudo-child. */
-const axisSize = (
-  space: UnderlyingSpace,
-  axis: 0 | 1
-): Size<UnderlyingSpace> =>
-  axis === 0 ? [space, UNDEFINED] : [UNDEFINED, space];
+/** The claim of a layer's default per-axis type `space` (from
+ * {@link resolveLayerAxisSpace}). A free union keeps its children's claims,
+ * scaled by the layer's `transform.scale` (a pixel-space operation, so it
+ * scales the claim and never the data interval). A pinned or difference union
+ * claims the union of its children's claims. An axis whose domain the
+ * layer's own datum positions widen claims the data width they imply. */
+export function resolveLayerAxisExtent(
+  childExtents: Size<Extent | undefined>[],
+  childSpaces: Size<UnderlyingSpace>[],
+  axis: 0 | 1,
+  scale: number,
+  positionDomain: Interval.Interval | undefined,
+  space: UnderlyingSpace
+): Extent | undefined {
+  if (positionDomain !== undefined) return impliedExtent(space);
+  const extent = unionChildExtents(childExtents, childSpaces, axis, space);
+  return extent !== undefined && isBaselineMagnitude(space)
+    ? scaleExtent(scale, extent)
+    : extent;
+}
 
-export function composeConstraintSpaces(
+/** Build a per-axis Size carrying `value` on `axis` and `other` elsewhere, so
+ *  a single fold result can be fed to the union as a pseudo-child. */
+const axisSize = <T>(value: T, axis: 0 | 1, other: T): Size<T> =>
+  axis === 0 ? [value, other] : [other, value];
+
+type Seg = DistributeSegment & {
+  idx: number[];
+  anchor: AlignAnchor | "edge";
+  glue: boolean;
+  measure?: string;
+  origin: StackOrigin<number>;
+  keys: (string | undefined)[];
+  anonymous: boolean;
+};
+type Al = { axis: 0 | 1; anchor: AlignAnchor; idx: number[] };
+
+/** The structure of a layer's constraint composition: which children each
+ *  distribute and align covers, on which axis. It reads only the constraints
+ *  and the child nodes, never a type or a claim, so the type fold
+ *  ({@link composePlanSpaces}) and the claim fold ({@link composePlanExtents})
+ *  share one plan. */
+export type ComposePlan = {
+  segments: Seg[];
+  alignFolds: Al[];
+  spanCover: [Set<number>, Set<number>];
+};
+
+export function planConstraintComposition(
   constraints: ConstraintSpec[],
-  childNodes: GoFishAST[],
-  childSpaces: Size<UnderlyingSpace>[]
-): ComposedSpaces | undefined {
+  childNodes: GoFishAST[]
+): ComposePlan | undefined {
   const distributes = constraints.filter(
     (c): c is DistributeConstraint => c.type === "distribute"
   );
@@ -243,13 +256,6 @@ export function composeConstraintSpaces(
   // Resolve each distribute to its covered child indices in placement order.
   // A target that isn't a direct child (a ref into a nested tier) has no slot
   // here, so bail to the layer's default union.
-  type Seg = DistributeSegment & {
-    idx: number[];
-    anchor: AlignAnchor | "edge";
-    glue: boolean;
-    measure?: string;
-    origin: StackOrigin<number>;
-  };
   const segments: Seg[] = [];
   for (const d of distributes) {
     const ordered = distributeChildrenInPlacementOrder(d);
@@ -264,12 +270,13 @@ export function composeConstraintSpaces(
       glue: d.glue,
       measure: d.measure,
       origin: distributeOrigin(d, ordered),
+      keys: idx.map(keyOf),
+      anonymous: idx.length > 0 && idx.every(syntheticOf),
     });
   }
 
   // Each align contributes an overlay fold on the axis it specifies, but only
   // for a uniform string anchor (a per-child array has no single fold form).
-  type Al = { axis: 0 | 1; anchor: AlignAnchor; idx: number[] };
   const alignFolds: Al[] = [];
   for (const a of aligns) {
     const idx = idxOf(a.children);
@@ -300,54 +307,78 @@ export function composeConstraintSpaces(
     if (s.y !== undefined) idx.forEach((i) => spanCover[1].add(i));
   }
 
+  return { segments, alignFolds, spanCover };
+}
+
+const foldOptions = (s: Seg) => ({
+  spacing: s.spacing,
+  anchor: s.anchor,
+  glue: s.glue,
+  measure: s.measure,
+  anonymous: s.anonymous,
+  origin: s.origin,
+});
+
+/** One operand of an axis's max-union: a distribute fold, an align fold, or a
+ *  child no fold covers. */
+type Fragment =
+  | { kind: "distribute"; seg: Seg; space: UnderlyingSpace }
+  | { kind: "align"; al: Al; space: UnderlyingSpace }
+  | { kind: "child"; index: number; space: UnderlyingSpace };
+
+/** The operands of `axis`'s max-union, with their types, or undefined when no
+ *  distribute or align covers the axis (the layer's default union stands). */
+function axisFragments(
+  plan: ComposePlan,
+  childSpaces: Size<UnderlyingSpace>[],
+  axis: 0 | 1
+): Fragment[] | undefined {
+  const dists = plan.segments.filter((s) => s.dAxis === axis);
+  const als = plan.alignFolds.filter((a) => a.axis === axis);
+  if (dists.length === 0 && als.length === 0) return undefined;
+
+  const fragments: Fragment[] = [];
+  const covered = new Set<number>(plan.spanCover[axis]);
+  for (const s of dists) {
+    s.idx.forEach((i) => covered.add(i));
+    const space = distributeSpaceFold(
+      s.idx.map((i) => childSpaces[i][axis]),
+      s.keys,
+      foldOptions(s)
+    );
+    if (!isUNDEFINED(space))
+      fragments.push({ kind: "distribute", seg: s, space });
+  }
+  for (const a of als) {
+    a.idx.forEach((i) => covered.add(i));
+    // `resolveAlignmentSpace` is spread's own cross-axis fold: anchored for
+    // start/end/baseline, unanchored for `middle`, union otherwise.
+    const space = resolveAlignmentSpace(
+      a.idx.map((i) => childSpaces[i][axis]),
+      a.anchor
+    );
+    if (!isUNDEFINED(space)) fragments.push({ kind: "align", al: a, space });
+  }
+  for (let i = 0; i < childSpaces.length; i++) {
+    if (!covered.has(i))
+      fragments.push({ kind: "child", index: i, space: childSpaces[i][axis] });
+  }
+  return fragments;
+}
+
+/** The composed per-axis TYPES. Undefined on an axis leaves the default union
+ *  in place (no distribute or align on that axis). */
+export function composePlanSpaces(
+  plan: ComposePlan,
+  childSpaces: Size<UnderlyingSpace>[]
+): [UnderlyingSpace | undefined, UnderlyingSpace | undefined] {
   const spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined] = [
     undefined,
     undefined,
   ];
-  const sizeDomain: [
-    Monotonic.Monotonic | undefined,
-    Monotonic.Monotonic | undefined,
-  ] = [undefined, undefined];
-
   for (const axis of [0, 1] as const) {
-    const dists = segments.filter((s) => s.dAxis === axis);
-    const als = alignFolds.filter((a) => a.axis === axis);
-    if (dists.length === 0 && als.length === 0) continue; // keep default union
-
-    const fragments: Size<UnderlyingSpace>[] = [];
-    const covered = new Set<number>(spanCover[axis]);
-    for (const s of dists) {
-      s.idx.forEach((i) => covered.add(i));
-      const fold = distributeSpaceFold(
-        s.idx.map((i) => childSpaces[i][axis]),
-        s.idx.map(keyOf),
-        {
-          spacing: s.spacing,
-          anchor: s.anchor,
-          glue: s.glue,
-          measure: s.measure,
-          anonymous: s.idx.length > 0 && s.idx.every(syntheticOf),
-          origin: s.origin,
-        }
-      );
-      if (!isUNDEFINED(fold)) fragments.push(axisSize(fold, axis));
-    }
-    for (const a of als) {
-      a.idx.forEach((i) => covered.add(i));
-      // `resolveAlignmentSpace` is spread's own cross-axis fold: anchored for
-      // start/end/baseline, unanchored for `middle`, union otherwise.
-      const fold = resolveAlignmentSpace(
-        a.idx.map((i) => childSpaces[i][axis]),
-        a.anchor
-      );
-      if (!isUNDEFINED(fold)) fragments.push(axisSize(fold, axis));
-    }
-    for (let i = 0; i < childSpaces.length; i++) {
-      if (!covered.has(i)) fragments.push(axisSize(childSpaces[i][axis], axis));
-    }
-
-    const composed =
-      fragments.length > 0 ? unionChildSpaces(fragments, axis) : UNDEFINED;
+    const fragments = axisFragments(plan, childSpaces, axis);
+    if (fragments === undefined) continue; // keep default union
     // This axis is covered by an align/distribute, so the FOLD is authoritative
     // — set it even when UNDEFINED, to OVERRIDE (suppress) the layer's default
     // `unionChildSpaces`. For ORDINAL children the cross-axis fold
@@ -356,18 +387,79 @@ export function composeConstraintSpaces(
     // leaks a spurious "Lake B-N" y-axis. (axisSize
     // pads the off-axis with UNDEFINED, so `spaces[axis]` only ever carries this
     // axis's contribution.)
-    spaces[axis] = composed;
+    spaces[axis] =
+      fragments.length > 0
+        ? unionChildSpaces(
+            fragments.map((f) => axisSize(f.space, axis, UNDEFINED)),
+            axis
+          )
+        : UNDEFINED;
+  }
+  return spaces;
+}
+
+/** The composed per-axis CLAIMS for the types `spaces` that
+ *  {@link composePlanSpaces} produced, plus the layout budget. Each fold
+ *  operand's claim comes from its own claim fold, and the operands overlay as
+ *  in {@link unionChildExtents}. An axis the plan does not cover is left
+ *  undefined (the default union's claim stands). */
+export function composePlanExtents(
+  plan: ComposePlan,
+  childExtents: Size<Extent | undefined>[],
+  childSpaces: Size<UnderlyingSpace>[],
+  spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined]
+): {
+  covered: [boolean, boolean];
+  extents: [Extent | undefined, Extent | undefined];
+  budget: ComposeBudget;
+} {
+  const covered: [boolean, boolean] = [false, false];
+  const extents: [Extent | undefined, Extent | undefined] = [
+    undefined,
+    undefined,
+  ];
+  const sizeDomain: [
+    Monotonic.Monotonic | undefined,
+    Monotonic.Monotonic | undefined,
+  ] = [undefined, undefined];
+  for (const axis of [0, 1] as const) {
+    const fragments = axisFragments(plan, childSpaces, axis);
+    const composed = spaces[axis];
+    if (fragments === undefined || composed === undefined) continue;
+    covered[axis] = true;
+    const fragmentExtent = (f: Fragment): Extent | undefined =>
+      f.kind === "distribute"
+        ? distributeExtentFold(
+            f.seg.idx.map((i) => childExtents[i][axis]),
+            f.space,
+            foldOptions(f.seg)
+          )
+        : f.kind === "align"
+          ? resolveAlignmentExtent(
+              f.al.idx.map((i) => childExtents[i][axis]),
+              f.al.idx.map((i) => childSpaces[i][axis]),
+              f.al.anchor,
+              f.space
+            )
+          : childExtents[f.index][axis];
+    const extent = unionChildExtents(
+      fragments.map((f) => axisSize(fragmentExtent(f), axis, undefined)),
+      fragments.map((f) => axisSize(f.space, axis, UNDEFINED)),
+      axis,
+      composed
+    );
+    extents[axis] = extent;
     // Only a baseline magnitude ("free", from a distribute) is a budget the
     // layer σ-solves against via `width.inverse`. An anchored POSITION (from an
     // align fold) is driven by its posScale, not a σ-budget, so it must NOT
     // contribute a sizeDomain (else the layer derives a spurious scale factor).
-    if (isBaselineMagnitude(composed)) sizeDomain[axis] = composed.width;
+    if (isBaselineMagnitude(composed)) sizeDomain[axis] = extent!.width;
   }
-
   return {
-    spaces,
+    covered,
+    extents,
     budget: {
-      segments: segments.map(({ dAxis, spacing, order }) => ({
+      segments: plan.segments.map(({ dAxis, spacing, order }) => ({
         dAxis,
         spacing,
         order,

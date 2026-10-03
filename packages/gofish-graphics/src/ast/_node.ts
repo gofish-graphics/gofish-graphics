@@ -62,9 +62,11 @@ import {
   isPOSITION,
   isUNDEFINED,
   continuousInterval,
+  dataWidth,
   spacePlacement,
   UnderlyingSpace,
 } from "./underlyingSpace";
+import { impliedExtents, type Extent } from "./extent";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
@@ -313,6 +315,28 @@ export type ResolveUnderlyingSpace = (
   constraints: ConstraintSpec[]
 ) => FancySize<UnderlyingSpace>;
 
+/**
+ * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis
+ * whose type is not continuous). It runs in its own walk, after every type is
+ * resolved, so it may read the node's own resolved `spaces` and its children's
+ * types as well as the children's claims. The type hook
+ * ({@link ResolveUnderlyingSpace}) receives no claims at all, so the
+ * dependency runs one way: claims may read types, types never read claims.
+ * Optional: a node that adds no pixel overhead claims what its types imply
+ * ({@link impliedExtents}).
+ */
+export type ResolveExtent = (
+  childExtents: Size<Extent | undefined>[],
+  childSpaces: Size<UnderlyingSpace>[],
+  spaces: Size<UnderlyingSpace>,
+  childNodes: (GoFishNode | GoFishRef)[],
+  constraints: ConstraintSpec[]
+) => Size<Extent | undefined>;
+
+/** Depth of type-hook calls in progress. A claim walk started from inside a
+ *  type hook throws: types never read claims. */
+let typeWalkDepth = 0;
+
 /** Dev gate: set `GOFISH_CONFLICT_CHECK=1` to surface
  *  OVER-DETERMINATION the `BBox` ledger detects but the placement commit silently
  *  absorbs — a single owner writing inconsistent keys on an axis (the
@@ -360,8 +384,8 @@ function selfScaledAxisSignature(
   return (
     "c:" +
     JSON.stringify({
-      d: s.dataDomain,
-      w: s.width,
+      d: s.dataInterval,
+      o: s.origin,
       m: s.measure,
     })
   );
@@ -454,7 +478,9 @@ export class GoFishNode {
    *  {@link INTERNAL_visibleWhile}); undefined on the static path. */
   public __gfVisible?: Map<object, () => boolean>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
+  private _resolveExtent: ResolveExtent;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
+  public _extent?: Size<Extent | undefined> = undefined;
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}) — the node's sole draw
    *  description. Absent on operators that never lower themselves (their
@@ -656,6 +682,7 @@ export class GoFishNode {
       type,
       args,
       resolveUnderlyingSpace,
+      resolveExtent,
       layout,
       lower,
       geometry,
@@ -666,6 +693,7 @@ export class GoFishNode {
       type: string;
       args?: any;
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
+      resolveExtent?: ResolveExtent;
       layout: Layout;
       lower?: Lower;
       geometry?: GeometryFn;
@@ -676,6 +704,8 @@ export class GoFishNode {
   ) {
     this.uid = `node-${GoFishNode.uidCounter++}`;
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
+    this._resolveExtent =
+      resolveExtent ?? ((_ce, _cs, spaces) => impliedExtents(spaces));
     this._layout = layout;
     this._lower = lower;
     this._ownLower = lower;
@@ -869,15 +899,58 @@ export class GoFishNode {
     if (this._underlyingSpace) {
       return this._underlyingSpace;
     }
-    this._underlyingSpace = elaborateSize(
-      this._resolveUnderlyingSpace(
-        this.children.map((child) => child.resolveUnderlyingSpace()),
-        this.children,
-        this.shared,
-        this.constraints
-      )
+    const childSpaces = this.children.map((child) =>
+      child.resolveUnderlyingSpace()
     );
+    typeWalkDepth++;
+    try {
+      this._underlyingSpace = elaborateSize(
+        this._resolveUnderlyingSpace(
+          childSpaces,
+          this.children,
+          this.shared,
+          this.constraints
+        )
+      );
+    } finally {
+      typeWalkDepth--;
+    }
     return this._underlyingSpace;
+  }
+
+  /**
+   * This node's per-axis size claims ({@link Extent}), memoized. Resolves the
+   * types first (claims may read them), then the children's claims, then this
+   * node's own claim hook. Every continuous axis gets a claim and no other
+   * axis does.
+   */
+  public resolveExtent(): Size<Extent | undefined> {
+    if (this._extent) return this._extent;
+    if (typeWalkDepth > 0)
+      throw new Error(
+        `[gofish] ${this.type}: a size claim was read during type inference. ` +
+          `Types never read claims; compute this from the types instead.`
+      );
+    const spaces = this.resolveUnderlyingSpace();
+    const childSpaces = this.children.map((c) => c.resolveUnderlyingSpace());
+    const childExtents = this.children.map((c) => c.resolveExtent());
+    const extent = this._resolveExtent(
+      childExtents,
+      childSpaces,
+      spaces,
+      this.children,
+      this.constraints
+    );
+    for (const dim of [0, 1] as const) {
+      if (isCONTINUOUS(spaces[dim]) !== (extent[dim] !== undefined))
+        throw new Error(
+          `[gofish] ${this.type}: axis ${dim} has a ${spaces[dim].kind} type ` +
+            `but ${extent[dim] === undefined ? "no" : "a"} size claim. Every ` +
+            `continuous axis, and only a continuous axis, has a claim.`
+        );
+    }
+    this._extent = extent;
+    return extent;
   }
 
   /**
@@ -889,6 +962,7 @@ export class GoFishNode {
    */
   public clearUnderlyingSpace(): void {
     this._underlyingSpace = undefined;
+    this._extent = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
     });
@@ -2066,8 +2140,8 @@ const formatSpace = (s: UnderlyingSpace): string => {
     return placement === "determined"
       ? `position(${toJSON(continuousInterval(s)!)})`
       : placement === "free"
-        ? `size(${s.width.run(1)})`
-        : `difference(${s.width.run(1)})`;
+        ? `size(${toJSON(s.dataInterval)})`
+        : `difference(${dataWidth(s)})`;
   }
   if (isORDINAL(s)) return `ordinal(${s.domain})`;
   if (isUNDEFINED(s)) return `undefined`;

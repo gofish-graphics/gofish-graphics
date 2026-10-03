@@ -240,7 +240,7 @@ at itself, two clauses that read each other, or a constraint that moves a
 clause which reads the nodes that constraint places. `GoFishNode.resolveNames`
 runs the check as soon as the refs are resolved. It cannot wait for layout,
 because the space pass would recurse forever first (a ref proxies its target's
-space, and a cyclic target contains the ref). `resolveNames` keeps the
+type and size claim, and a cyclic target contains the ref). `resolveNames` keeps the
 schedule it computed on the layer, and layout reuses it while the layer has
 the same children and constraints (`relateScheduleForLayout`); a pass that
 rewrites the tree runs `resolveNames` again, which recomputes it.

@@ -116,24 +116,24 @@ export const computePosScale = (
  */
 export const posScaleFromSpace = (
   // Structurally typed to avoid a domain.ts → underlyingSpace.ts import cycle;
-  // only an ANCHORED CONTINUOUS space — one whose `dataDomain` is a real
-  // `[min,max]` interval — produces a scale. A baseline magnitude (`dataDomain`
-  // undefined) and a difference (`dataDomain === "delta"`) do not.
+  // only a PINNED continuous space (its data interval is the absolute domain)
+  // produces a scale. A free magnitude and a difference do not.
   space:
     | {
         kind: string;
-        dataDomain?: { min: number; max: number } | "delta";
+        origin?: string;
+        dataInterval?: { min: number; max: number };
       }
     | undefined,
   size: number
 ): AxisMap | undefined =>
   space &&
   space.kind === "continuous" &&
-  space.dataDomain !== undefined &&
-  space.dataDomain !== "delta"
+  space.origin === "pinned" &&
+  space.dataInterval !== undefined
     ? computePosScale(
         continuous({
-          value: [space.dataDomain.min, space.dataDomain.max],
+          value: [space.dataInterval.min, space.dataInterval.max],
           measure: "unit",
         }),
         size

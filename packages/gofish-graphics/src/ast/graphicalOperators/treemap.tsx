@@ -23,15 +23,9 @@ import {
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
-import {
-  POSITION,
-  SIZE,
-  isCONTINUOUS,
-  UnderlyingSpace,
-} from "../underlyingSpace";
+import { POSITION, SIZE, UnderlyingSpace } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import * as Interval from "../../util/interval";
-import * as Monotonic from "../../util/monotonic";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
@@ -123,10 +117,7 @@ const Treemap = createNodeOperator(
           // positioned box that fills the slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace =>
             isValue(dims[i].size)
-              ? SIZE(
-                  Monotonic.linear(getValue(dims[i].size!)!, 0),
-                  getMeasure(dims[i].size)
-                )
+              ? SIZE(getValue(dims[i].size!)!, getMeasure(dims[i].size))
               : POSITION(interval(0, 1));
           return [axisSpace(0), axisSpace(1)];
         },
@@ -142,15 +133,15 @@ const Treemap = createNodeOperator(
             undefined
           );
 
-          // Re-solve a local scale factor from this node's own underlying space,
+          // Re-solve a local scale factor from this node's own size claim,
           // mirroring Spread.computeScaleFactor (spread.tsx:242-259). Used as a
           // fallback for the standalone (non-faceted) data-driven case.
-          const myUSpace = node._underlyingSpace!;
+          const myExtent = node.resolveExtent();
           const localScaleFactor = (dir: Direction): number | undefined => {
-            const space = myUSpace[dir];
-            if (isCONTINUOUS(space)) {
+            const extent = myExtent[dir];
+            if (extent !== undefined) {
               return (
-                space.width.inverse(size[dir], {
+                extent.width.inverse(size[dir], {
                   upperBoundGuess: size[dir],
                 }) ?? 0
               );

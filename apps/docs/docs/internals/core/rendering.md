@@ -79,9 +79,10 @@ horizontal bar chart does not (ordinal category axis), and a box-and-whisker bui
 primitives flips with no opt-in. `options.yUp` still forces a **global** y-up ambient.
 
 **Root placement of a free root (#773).** When the root's space on an axis is a
-baseline magnitude, `layout()` solves σ so `ascent + descent` (the total
-`width`) fills the given canvas, and places the root's baseline `descent·σ`
-above the canvas's low edge (`scopeRootBaseline`, the rule a layer's
+baseline magnitude, `layout()` solves σ so the root's size claim
+`ascent + descent` (the claim's total `width`, from `resolveExtent()`) fills
+the given canvas, and places the root's baseline `descent·σ` above the
+canvas's low edge (`scopeRootBaseline`, the rule a layer's
 self-scaled free stash uses too), so a signed area or bar chart under `scatter`
 keeps its negative side on the canvas. An anchored root has no root σ and
 places through its posScale; every other root has descent 0. This applies only

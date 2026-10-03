@@ -18,15 +18,19 @@ import {
   spacePlacement,
   continuousExtentInterval,
   continuousInterval,
+  dataSides,
+  dataWidth,
   allMirrored,
+  isBaselineMagnitude,
   mirrored,
   type CONTINUOUS_TYPE,
   UnderlyingSpace,
 } from "../underlyingSpace";
+import { Extent, maxExtent } from "../extent";
+import * as Monotonic from "../../util/monotonic";
 import type { Measure } from "../data";
 import type { Size } from "../dims";
 import * as Interval from "../../util/interval";
-import * as Monotonic from "../../util/monotonic";
 
 export type Alignment = "start" | "middle" | "end" | "baseline";
 
@@ -34,9 +38,10 @@ export type Alignment = "start" | "middle" | "end" | "baseline";
  * Union child underlying spaces along one axis for overlay-style operators
  * (layer, Porter-Duff). ORDINAL children with a non-empty domain take
  * precedence: if any such child exists, returns ORDINAL(union of keys).
- * Otherwise collects intervals from POSITION domains, DIFFERENCE widths (as
- * [0, w]), and SIZE values (as [0, v]). When at least one child is a true
- * POSITION, returns POSITION(union) — the overlay has a concrete position.
+ * Otherwise unions the children's data intervals (absolute for a pinned
+ * child, about the baseline for a free one, `[0, w]` for a difference). When
+ * at least one child is pinned, returns POSITION(union): the overlay has a
+ * concrete position, and its free children are pinned at data 0.
  * When intervals came only from DIFFERENCE/SIZE, returns DIFFERENCE(width of
  * union) — the extent is known but the position is not, preserving the "no
  * inherent position" semantic so axis rendering uses interval (difference)
@@ -79,9 +84,9 @@ export function unionChildSpaces(
   if (conts.length === 0) return UNDEFINED;
 
   // Pure magnitude overlay — every child is a baseline magnitude ("free":
-  // bars/stacks not yet placed). Keep the symbolic Monotonic so the parent can
-  // σ-solve via `inverse` (preserving piecewise/intercept extents that an
-  // interval-at-σ=1 collapse would bake away). Composing different fields'
+  // bars/stacks not yet placed). The overlay is free too, with the larger data
+  // extent on each side of the shared baseline (its claim keeps the symbolic
+  // Monotonics; see `unionChildExtents`). Composing different fields'
   // magnitudes is legitimate, so measures FORGET on conflict.
   //
   // A non-UNDEFINED, non-CONTINUOUS sibling (e.g. an empty `ORDINAL([])` from an
@@ -94,10 +99,11 @@ export function unionChildSpaces(
     nonUndefined.length === conts.length &&
     conts.every((s) => spacePlacement(s) === "free")
   ) {
+    const sides = conts.map(dataSides);
     return SIZE(
-      Monotonic.max(...conts.map((s) => s.ascent)),
+      Math.max(...sides.map((d) => d.ascent)),
       forgetAllMeasures(conts.map((s) => s.measure)),
-      Monotonic.max(...conts.map((s) => s.descent))
+      Math.max(...sides.map((d) => d.descent))
     );
   }
 
@@ -155,11 +161,107 @@ export function resolveAlignmentSpace(
   const extent = (s: CONTINUOUS_TYPE) =>
     alignment === "baseline"
       ? continuousExtentInterval(s)
-      : (continuousInterval(s) ?? Interval.interval(0, s.width.run(1)));
+      : (continuousInterval(s) ?? Interval.interval(0, dataWidth(s)));
   const union = Interval.unionAll(...conts.map(extent));
 
   // Children that all hold amounts on both sides of 0 still do together.
   return drop
     ? DIFFERENCE(Interval.width(union), measure)
     : mirrored(POSITION(union, measure), allMirrored(conts));
+}
+
+/** The upper envelope `max_i m_i(σ)` of claims, over σ ≥ 0. Unlike
+ *  `Monotonic.max` it keeps lines with a negative slope or a zero line, which
+ *  a union's lower reach needs (a pinned interval above 0 reaches down by a
+ *  negative amount). Linear and piecewise claims keep an exact envelope. */
+const envelope = (ms: Monotonic.Monotonic[]): Monotonic.Monotonic =>
+  ms.every((m) => Monotonic.isLinear(m) || Monotonic.isPiecewise(m))
+    ? Monotonic.piecewise(
+        ms.flatMap((m) =>
+          Monotonic.isLinear(m)
+            ? [{ slope: m.slope, intercept: m.intercept }]
+            : (m as Monotonic.Piecewise).pieces
+        )
+      )
+    : Monotonic.unknown((x) => Math.max(...ms.map((m) => m.run(x))));
+
+/**
+ * The claim of a union of continuous children laid out on one axis, mirroring
+ * the data intervals the type folds union: at σ a pinned child spans
+ * `[min·σ, max·σ]`, and any other child spans `[−descent, ascent]` about the
+ * shared 0 (`"baseline"`) or its whole box `[0, width]` from the aligned edge
+ * (`"box"`). The claim is the width of the union of those spans, so the pixel
+ * overhead the children carry (spacing, padding) stays in the claim even
+ * though it is no part of the data interval. A union is measured from its low
+ * edge, so its descent is 0.
+ */
+function unionClaim(
+  children: { space: CONTINUOUS_TYPE; extent: Extent }[],
+  mode: "baseline" | "box"
+): Extent {
+  const above: Monotonic.Monotonic[] = [];
+  const below: Monotonic.Monotonic[] = [];
+  for (const { space, extent } of children) {
+    const iv = continuousInterval(space);
+    if (iv !== undefined) {
+      above.push(Monotonic.linear(iv.max, 0));
+      below.push(Monotonic.linear(-iv.min, 0));
+    } else if (mode === "baseline") {
+      above.push(extent.ascent);
+      below.push(extent.descent);
+    } else {
+      above.push(extent.width);
+      below.push(Monotonic.ZERO);
+    }
+  }
+  return Extent(Monotonic.add(envelope(above), envelope(below)));
+}
+
+/** The continuous children on `axis`, each with its claim. */
+const continuousChildren = (
+  childExtents: (Extent | undefined)[],
+  childSpaces: UnderlyingSpace[]
+): { space: CONTINUOUS_TYPE; extent: Extent }[] =>
+  childSpaces.flatMap((space, i) =>
+    isCONTINUOUS(space) ? [{ space, extent: childExtents[i]! }] : []
+  );
+
+/**
+ * The size claim of a {@link unionChildSpaces} overlay, given the overlay's
+ * resolved type `space`. A free overlay keeps its children's symbolic claims
+ * (the larger ascent and the larger descent about the shared baseline), so a
+ * parent can σ-solve it via `inverse` with any pixel overhead intact. A pinned
+ * or difference overlay claims the union of its children's claims
+ * ({@link unionClaim}).
+ */
+export function unionChildExtents(
+  childExtents: Size<Extent | undefined>[],
+  childSpaces: Size<UnderlyingSpace>[],
+  axis: 0 | 1,
+  space: UnderlyingSpace
+): Extent | undefined {
+  if (!isCONTINUOUS(space)) return undefined;
+  const children = continuousChildren(
+    childExtents.map((c) => c[axis]),
+    childSpaces.map((c) => c[axis])
+  );
+  if (isBaselineMagnitude(space))
+    return maxExtent(children.map((c) => c.extent));
+  return unionClaim(children, "baseline");
+}
+
+/** The size claim of a {@link resolveAlignmentSpace} result `space`: the
+ *  union of the children's claims as the alignment places them
+ *  ({@link unionClaim}). */
+export function resolveAlignmentExtent(
+  childExtents: (Extent | undefined)[],
+  childSpaces: UnderlyingSpace[],
+  alignment: Alignment,
+  space: UnderlyingSpace
+): Extent | undefined {
+  if (!isCONTINUOUS(space)) return undefined;
+  return unionClaim(
+    continuousChildren(childExtents, childSpaces),
+    alignment === "baseline" ? "baseline" : "box"
+  );
 }

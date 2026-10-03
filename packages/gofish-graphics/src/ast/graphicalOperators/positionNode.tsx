@@ -5,7 +5,6 @@ import { Size } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import {
   anchorAt,
-  continuousInterval,
   isCONTINUOUS,
   UNDEFINED,
   UnderlyingSpace,
@@ -28,14 +27,10 @@ const offsetSpace = (
   const value = getValue(offset);
   if (value === undefined) return space;
 
-  // An anchored space offsets from its domain min; a free / difference space
-  // anchors at `value` itself. Width stays σ-affine — see anchorAt.
-  const iv = continuousInterval(space);
-  return anchorAt(
-    space,
-    iv !== undefined ? iv.min + value : value,
-    space.measure ?? getMeasure(offset)
-  );
+  // Shift the data interval by `value` and pin it: a pinned space moves by
+  // `value`, a free or difference space hangs its origin at `value`. The claim
+  // is the child's own (see `resolveExtent` below).
+  return anchorAt(space, value, space.measure ?? getMeasure(offset));
 };
 
 export const positionNode = (
@@ -54,6 +49,10 @@ export const positionNode = (
           offsetSpace(child[1], options.y),
         ];
       },
+      // Pinning moves the data interval only: the content keeps its own
+      // σ-affine claim (pixel overhead included), so it sizes as before.
+      resolveExtent: (childExtents) =>
+        childExtents[0] ?? [undefined, undefined],
       layout: (shared, size, scales, children) => {
         if (children.length !== 1) {
           throw new Error("Position operator expects exactly one child");

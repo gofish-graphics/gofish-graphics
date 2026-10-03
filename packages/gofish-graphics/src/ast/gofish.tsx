@@ -28,11 +28,10 @@ import {
   hasBaseline,
   isBaselineMagnitude,
   isCONTINUOUS,
-  scopeRootBaseline,
-  niceContinuous,
   spaceMeasure,
   type UnderlyingSpace,
 } from "./underlyingSpace";
+import { niceScope, scopeRootBaseline } from "./extent";
 import { shadowCheckScaleRoot } from "./solver/shadow";
 import {
   perfNow,
@@ -433,12 +432,15 @@ export async function layout(
     child.scopeRendersAxis(0),
     child.scopeRendersAxis(1),
   ];
-  const niceUnderlyingSpaceX = rootAxisDemand[0]
-    ? niceContinuous(child._underlyingSpace![0])
-    : child._underlyingSpace![0];
-  const niceUnderlyingSpaceY = rootAxisDemand[1]
-    ? niceContinuous(child._underlyingSpace![1])
-    : child._underlyingSpace![1];
+  // The root's types and their size claims, niced together (a niced pinned
+  // domain implies its claim).
+  const rootExtent = child.resolveExtent();
+  const [niceUnderlyingSpaceX, niceExtentX] = rootAxisDemand[0]
+    ? niceScope(child._underlyingSpace![0], rootExtent[0])
+    : [child._underlyingSpace![0], rootExtent[0]];
+  const [niceUnderlyingSpaceY, niceExtentY] = rootAxisDemand[1]
+    ? niceScope(child._underlyingSpace![1], rootExtent[1])
+    : [child._underlyingSpace![1], rootExtent[1]];
 
   // y-orientation is a PER-SCOPE property resolved at bake time (issue #629): the
   // bake walk opens a y-up mirror at each topmost continuous-y node and mirrors
@@ -650,14 +652,14 @@ export async function layout(
     isBaselineMagnitude(niceUnderlyingSpaceX)
       ? scopes.solveSize(
           { kind: "root", rootKey: "root", axis: 0 },
-          niceUnderlyingSpaceX.width,
+          niceExtentX!.width,
           canvasW
         )
       : undefined,
     isBaselineMagnitude(niceUnderlyingSpaceY)
       ? scopes.solveSize(
           { kind: "root", rootKey: "root", axis: 1 },
-          niceUnderlyingSpaceY.width,
+          niceExtentY!.width,
           canvasH
         )
       : undefined,
@@ -703,8 +705,8 @@ export async function layout(
   // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
   // content(σ)=canvas the whole chart resolves against. No-op unless
   // GOFISH_SOLVER_CHECK is set.
-  shadowCheckScaleRoot(niceUnderlyingSpaceX, canvasW, rootScaleFactors[0], 0);
-  shadowCheckScaleRoot(niceUnderlyingSpaceY, canvasH, rootScaleFactors[1], 1);
+  shadowCheckScaleRoot(niceExtentX, canvasW, rootScaleFactors[0], 0);
+  shadowCheckScaleRoot(niceExtentY, canvasH, rootScaleFactors[1], 1);
 
   // Author each dim's `embedded` flag (point/line/area) now that underlying
   // space has resolved each coord axis's measure — Route B reads it to keep a
@@ -767,7 +769,7 @@ export async function layout(
         name,
         offset +
           scopeRootBaseline(
-            axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY,
+            axis === 0 ? niceExtentX : niceExtentY,
             rootScaleFactors[axis]
           ),
         "baseline"

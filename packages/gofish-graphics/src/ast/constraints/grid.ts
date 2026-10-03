@@ -113,7 +113,9 @@ const cellClaim = (
 ): Monotonic.Monotonic | undefined => {
   if (!(cell instanceof GoFishNode)) return undefined;
   const sp = cell._underlyingSpace?.[axis];
-  return sp !== undefined && isBaselineMagnitude(sp) ? sp.width : undefined;
+  return sp !== undefined && isBaselineMagnitude(sp)
+    ? cell.resolveExtent()[axis]!.width
+    : undefined;
 };
 
 /** Per-axis track claims: for each track (a column on x, a row on y), the max

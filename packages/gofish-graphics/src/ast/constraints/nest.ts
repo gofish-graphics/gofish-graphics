@@ -2,8 +2,12 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { SIZE, UnderlyingSpace, isBaselineMagnitude } from "../underlyingSpace";
-import * as Monotonic from "../../util/monotonic";
+import {
+  CONTINUOUS,
+  UnderlyingSpace,
+  isBaselineMagnitude,
+} from "../underlyingSpace";
+import { padExtent, type Extent } from "../extent";
 import type { ConstraintRef } from "./shared";
 import type { PlacementFactEmitter } from "./placementFacts";
 
@@ -93,10 +97,12 @@ export function lowerNestPlacement(
  * a pure layout-time proposal.)
  *
  * When inner's space is SIZE (a data-driven extent, e.g. `rect({ w: value(v) })`),
- * outer's extent is that same Monotonic shifted up by `2·padding` — a
- * `Monotonic.adds`, which stays invertible, so a parent spread/layer solving a
- * scale factor sees `outer = inner + 2·padding`. Chained nests compose: the
- * layer feeds an already-derived outer back in as the next nest's inner.
+ * outer is the same free data extent: padding is pixels, so it is no part of
+ * the type. It goes on the claim instead ({@link nestedExtent}): the inner
+ * claim shifted up by `2·padding`, a `Monotonic.adds`, which stays invertible,
+ * so a parent spread/layer solving a scale factor sees
+ * `outer = inner + 2·padding`. Chained nests compose: the layer feeds an
+ * already-derived outer back in as the next nest's inner.
  *
  * When inner is *not* SIZE (fixed-pixel / position-pinned content), there is no
  * rule to fold; `outer` keeps its own space and the layout-time pixel proposal
@@ -104,20 +110,28 @@ export function lowerNestPlacement(
  */
 export function nestedSpace(
   outerSpace: UnderlyingSpace,
-  innerSpace: UnderlyingSpace,
-  padding: number
+  innerSpace: UnderlyingSpace
 ): UnderlyingSpace {
   // Only a baseline magnitude ("free") folds `outer = inner + 2·padding`, and
   // the padded outer is itself a baseline magnitude (it must stay "free" so a
   // parent spread's auto-fit solves a scale factor against it); data-positioned
   // or origin-less content keeps `outer`.
   if (isBaselineMagnitude(innerSpace)) {
-    // Padding goes on both sides of the inner extent, about its baseline.
-    return SIZE(
-      Monotonic.adds(innerSpace.ascent, padding),
-      innerSpace.measure,
-      Monotonic.adds(innerSpace.descent, padding)
-    );
+    return CONTINUOUS(innerSpace.dataInterval, "free", innerSpace.measure);
   }
   return outerSpace;
+}
+
+/** The claim half of {@link nestedSpace}: when inner is a free magnitude,
+ *  outer claims inner's claim with `padding` pixels on both sides of the
+ *  baseline; otherwise outer keeps its own claim. */
+export function nestedExtent(
+  outerExtent: Extent | undefined,
+  innerSpace: UnderlyingSpace,
+  innerExtent: Extent | undefined,
+  padding: number
+): Extent | undefined {
+  return isBaselineMagnitude(innerSpace)
+    ? padExtent(innerExtent!, padding)
+    : outerExtent;
 }
