@@ -154,10 +154,12 @@ export {
 } from "./ast/graphicalOperators/routers";
 export { treemap } from "./ast/graphicalOperators/treemap";
 export { pack, circles } from "./ast/graphicalOperators/pack";
-export { swarm } from "./ast/graphicalOperators/overlap";
+export { swarm, jitter } from "./ast/graphicalOperators/overlap";
 export type {
   OverlapStrategy,
   SwarmStrategy,
+  JitterStrategy,
+  JitterRandomness,
 } from "./ast/graphicalOperators/overlap";
 export type { PackMethod, PackOptions } from "./ast/graphicalOperators/pack";
 export {

@@ -16,6 +16,7 @@ from gofish import (
     circle,
     circles,
     group,
+    jitter,
     pack,
     polygon,
     spread,
@@ -95,6 +96,21 @@ def test_scatter_serializes_swarm_overlap():
     assert "overlap" not in scatter(x="mass").to_dict()
     with pytest.raises(ValueError):
         swarm(padding=-1)
+
+
+def test_scatter_serializes_jitter_overlap():
+    d = scatter(
+        x="mass", alignment="middle", overlap=jitter(randomness="quasi", smoothing=100)
+    ).to_dict()
+    assert d["overlap"] == {"kind": "jitter", "randomness": "quasi", "smoothing": 100}
+    assert jitter() == {"kind": "jitter"}
+    assert jitter(padding=1, seed=3) == {"kind": "jitter", "padding": 1, "seed": 3}
+    with pytest.raises(ValueError):
+        jitter(randomness="pink")
+    with pytest.raises(ValueError):
+        jitter(smoothing=0)
+    with pytest.raises(ValueError):
+        jitter(smoothing=float("inf"))
 
 
 def test_pack_combinator_form():

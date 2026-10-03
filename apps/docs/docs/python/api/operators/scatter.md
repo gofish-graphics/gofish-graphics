@@ -71,10 +71,17 @@ longer overlap. A strategy only ever moves children along the free axis: each
 child keeps the position its field gives it on the data axis, which `scatter`
 alone places. You make the strategy with a function call.
 
-- `swarm(padding=None)` makes a beeswarm. Each dot keeps its position on the
-  data axis. Then, in data order, it moves to the free spot nearest the line.
+There are two strategies. They differ in what sets the width of the cloud.
+
+- `swarm(padding=None)` makes a beeswarm. In data order, each dot moves to
+  the free spot nearest the line. Dots never overlap, so the counts set the
+  width exactly: where many dots share a value, the swarm grows tall.
   `padding` is the number of pixels kept between neighboring dots. The default
   is 0. This is the same placement as Observable Plot's `dodge`.
+- `jitter(randomness=None, smoothing=None, padding=None, seed=None)` spreads
+  the dots inside an outline. The outline is wide where many dots share a part
+  of the data axis and narrow where few do, so it shows the shape of the
+  distribution. The dots are placed inside it and may touch.
 
 ::: gofish example:penguin-mass-beeswarm hidden
 :::
@@ -90,27 +97,69 @@ chart(weighed, axes=True).flow(
 ).mark(circle(r=3, fill="Species")).render(w=560, h=320)
 ```
 
-The swarm grows from the `alignment` line:
+The same data with `jitter()`:
+
+::: gofish example:penguin-mass-jitter hidden
+:::
+
+```python
+from gofish import chart, circle, jitter, scatter, spread
+
+chart(weighed, axes=True).flow(
+    spread(by="Species", dir="y", spacing=16),
+    scatter(x="Body Mass (g)", alignment="middle", overlap=jitter()),
+).mark(circle(r=3, fill="Species")).render(w=560, h=320)
+```
+
+`jitter` takes these options:
+
+- `randomness` says how the dots are placed inside the outline.
+  - `"blue"` is the default. Each dot tries a few spots and takes the one
+    farthest from the dots already placed. The cloud looks even, with no
+    clumps and no rows.
+  - `"quasi"` spreads the dots by rank with a fixed sequence, as ggbeeswarm's
+    quasirandom does. It is the fastest, so use it for very large data. Faint
+    regular patterns can show in it.
+  - `"uniform"` draws each offset at random, as classic jitter does. Dots can
+    clump and leave gaps.
+- `smoothing` is a width in data units of the data axis, for example grams.
+  The outline counts the dots within that window. By default the window is
+  one dot wide, so the outline follows the data closely, and a pile of equal
+  values shows as a spike. A larger `smoothing` gives a smoother outline. It
+  changes the outline's shape but not its total size. In JavaScript,
+  `smoothing: Infinity` makes the outline flat (classic jitter with
+  `randomness: "uniform"`). Python cannot pass `float("inf")` yet, because the
+  chart description sent to the renderer has no way to carry an infinite
+  number; `jitter(smoothing=float("inf"))` raises an error. A `smoothing`
+  about as wide as the data range gives a nearly flat outline.
+- `padding` is a number of pixels added to each dot's width. The default
+  is 0.
+- `seed` seeds the `"blue"` and `"uniform"` placements. The default is
+  fixed, so a chart looks the same every time it renders. Plain random jitter
+  that changes between renders can change how a distribution looks; see
+  Correll, "Teru Teru Bōzu: Defensive Raincloud Plots" (2023).
+
+Both strategies grow from the `alignment` line:
 
 - `"middle"` grows on both sides of the line.
 - `"start"` and `"baseline"` grow on the positive side. Each dot's start edge
   is on the line or past it.
 - `"end"` grows on the negative side.
 
-Shapes other than circles are kept apart by their enclosing circle, the same
+Shapes other than circles are measured by their enclosing circle, the same
 circle [`pack`](/python/api/operators/pack) uses.
 
-The swarm is as tall as its dots need. It does not shrink to fit the space it
+The cloud is as tall as its dots need. It does not shrink to fit the space it
 is given, so a dense swarm can grow past it. To make it smaller, use smaller
-dots or less padding.
+dots or less padding, or use `jitter`.
 
 Some cases are errors:
 
 - `overlap` when both `x` and `y` come from fields, because then no axis is
   free.
 - `overlap` inside a coordinate space that is not linear, such as `polar()`.
-  The swarm keeps dots apart in the layout frame, and a polar space bends that
-  frame, so dots could still overlap on screen. See
+  The strategies measure distances in the layout frame, and a polar space
+  bends that frame, so dots could still overlap on screen. See
   [#1002](https://github.com/gofish-graphics/gofish-graphics/issues/1002).
 
 ## Examples

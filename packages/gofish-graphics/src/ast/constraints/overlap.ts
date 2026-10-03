@@ -7,13 +7,18 @@ import { enclosingCircle } from "../geometry";
 import {
   resolveOverlap,
   type OverlapSide,
-  type AnyOverlapStrategy,
+  type OverlapStrategy,
 } from "../graphicalOperators/overlap";
-import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
+import type {
+  AlignAnchor,
+  Axis,
+  ConstraintPosScales,
+  ConstraintRef,
+} from "./shared";
 import { axisIndex } from "./shared";
 
 /**
- * Spread the children out along `axis` so they do not overlap, growing from
+ * Spread the children out along `axis` so they stop covering each other, growing from
  * the line their `alignment` names (`scatter`'s `overlap` option). The private
  * elaboration target of `scatter`, like `grid` is for `table`: there is no
  * `Constraint.overlap`.
@@ -29,7 +34,7 @@ export interface OverlapConstraint {
   axis: Axis;
   /** The line the children grow from (scatter's `alignment`). */
   alignment: AlignAnchor;
-  strategy: AnyOverlapStrategy;
+  strategy: OverlapStrategy;
   /** The children, in priority order (data order). */
   children: ConstraintRef[];
 }
@@ -37,7 +42,7 @@ export interface OverlapConstraint {
 export const createOverlapConstraint = (
   axis: Axis,
   alignment: AlignAnchor,
-  strategy: AnyOverlapStrategy,
+  strategy: OverlapStrategy,
   children: ConstraintRef[]
 ): OverlapConstraint => ({
   type: "overlap",
@@ -64,15 +69,19 @@ const sideOf = (alignment: AlignAnchor): OverlapSide =>
  * the layer's local 0; the layer's box is the fold of where the children land,
  * so where the line is in the layer's frame does not matter.
  *
- * Non-overlap holds in the layout frame, which is the screen in a linear
+ * Distances are measured in the layout frame, which is the screen in a linear
  * space. `scatter` refuses an overlap strategy inside any other space.
  */
 export function applyOverlapPlacement(
   constraint: OverlapConstraint,
-  targets: Map<string, Placeable>
+  targets: Map<string, Placeable>,
+  posScales?: ConstraintPosScales
 ): void {
   const free = axisIndex(constraint.axis);
   const data = (1 - free) as 0 | 1;
+  // Pixels per data unit on the data axis, for a strategy option given in
+  // data units (jitter's `smoothing`).
+  const sigma = posScales?.[data]?.sigma;
   const placed = constraint.children.map((ref) => {
     const p = targets.get(ref.name);
     if (p === undefined)
@@ -96,7 +105,8 @@ export function applyOverlapPlacement(
   const offsets = resolveOverlap(
     constraint.strategy,
     items,
-    sideOf(constraint.alignment)
+    sideOf(constraint.alignment),
+    { pxPerUnit: sigma === undefined ? undefined : Math.abs(sigma) }
   );
   placed.forEach(({ p, geometry, center }, i) => {
     // Land the circle's center at the offset: place the child's box min at

@@ -471,11 +471,20 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Cross-axis alignment for the axis without an explicit position.",
       },
       overlap: {
-        type: t.object({
-          kind: { type: t.enum("swarm"), required: true },
-          padding: { type: t.number },
-        }),
-        doc: 'How children keep clear of each other on the axis no field places, made by a function call: swarm({padding}) is a beeswarm (each dot moves to the free spot nearest the alignment line). It grows from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Linear coordinate spaces only.',
+        type: t.union(
+          t.object({
+            kind: { type: t.enum("swarm"), required: true },
+            padding: { type: t.number },
+          }),
+          t.object({
+            kind: { type: t.enum("jitter"), required: true },
+            randomness: { type: t.enum("blue", "quasi", "uniform") },
+            smoothing: { type: t.number },
+            padding: { type: t.number },
+            seed: { type: t.number },
+          })
+        ),
+        doc: 'How children keep clear of each other on the axis no field places, made by a function call. swarm({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. jitter({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis; randomness "blue" (default), "quasi" or "uniform"; smoothing is the outline\'s counting window in data units (default one dot width). Both grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.',
       },
       axes: { type: t.ref("AxesOptions") },
       w: ch.num(

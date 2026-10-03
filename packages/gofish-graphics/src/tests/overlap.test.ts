@@ -16,12 +16,16 @@ import * as GoFish from "../../dist/index.js";
 import {
   swarmOffsets,
   swarm,
+  jitter,
+  jitterOffsets,
+  jitterOutline,
   resolveOverlap,
   type OverlapItem,
   type OverlapSide,
 } from "../ast/graphicalOperators/overlap";
 
 const { chart, scatter, spread, circle, polar } = GoFish as any;
+const jitterDist = (GoFish as any).jitter;
 
 declare const process: { exit(code: number): never };
 
@@ -279,6 +283,141 @@ console.log("# scatter overlap: rendered");
     "overlap inside a polar space throws",
     inPolar?.includes("linear coordinate space") === true,
     inPolar
+  );
+}
+
+console.log("# jitter: outline and offsets");
+{
+  const rand = lcg(11);
+  const normal = () =>
+    Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());
+  // 400 dots of radius 2 on a 2-px grid, normally spread over ~200 px.
+  const items: OverlapItem[] = Array.from({ length: 400 }, () => ({
+    at: Math.round((200 + 40 * normal()) / 2) * 2,
+    r: 2,
+  }));
+  // The outline's area: its full width integrated over the data axis, by the
+  // trapezoid rule over the dots in data order (positions without ties).
+  const spreadItems: OverlapItem[] = Array.from({ length: 400 }, () => ({
+    at: 200 + 40 * normal(),
+    r: 2,
+  }));
+  const area = (half: ArrayLike<number>) => {
+    const order = spreadItems
+      .map((it, i) => i)
+      .sort((a, b) => spreadItems[a].at - spreadItems[b].at);
+    let s = 0;
+    for (let k = 1; k < order.length; k++) {
+      const [a, b] = [order[k - 1], order[k]];
+      s += (spreadItems[b].at - spreadItems[a].at) * (half[a] + half[b]);
+    }
+    return s;
+  };
+  const dotArea = area(jitterOutline(spreadItems, 0));
+  for (const w of [20, 60]) {
+    const smoothArea = area(jitterOutline(spreadItems, 0, w));
+    check(
+      `smoothing ${w}px keeps the outline's total size (within 25%)`,
+      Math.abs(smoothArea / dotArea - 1) < 0.25,
+      `${smoothArea.toFixed(0)} vs ${dotArea.toFixed(0)}`
+    );
+  }
+  const flat = jitterOutline(items, 0, Infinity);
+  check(
+    "smoothing Infinity gives a flat outline",
+    Array.from(flat).every((h) => Math.abs(h - flat[0]) < 1e-9) && flat[0] > 0,
+    `${flat[0]}`
+  );
+  const lone = jitterOutline([{ at: 0, r: 2 }, { at: 100, r: 2 }], 0);
+  check("a lone dot sits on the line", lone[0] === 0 && lone[1] === 0);
+
+  for (const randomness of ["blue", "quasi", "uniform"] as const) {
+    const opts = { randomness, padding: 0, seed: 3 };
+    const a = jitterOffsets(items, "middle", opts);
+    const b = jitterOffsets(items, "middle", opts);
+    check(
+      `${randomness}: the same seed gives the same offsets`,
+      a.every((y, i) => y === b[i])
+    );
+    const half = jitterOutline(items, 0);
+    check(
+      `${randomness}: every offset stays inside the outline`,
+      a.every((y, i) => Math.abs(y) <= half[i] + 1e-9)
+    );
+    const start = jitterOffsets(items, "start", opts);
+    check(
+      `${randomness}: start keeps every dot on the positive side`,
+      start.every((y, i) => y >= items[i].r - 1e-9)
+    );
+  }
+  const otherSeed = (randomness: "blue" | "uniform" | "quasi") =>
+    jitterOffsets(items, "middle", { randomness, padding: 0, seed: 4 });
+  for (const randomness of ["blue", "uniform"] as const)
+    check(
+      `${randomness}: another seed gives other offsets`,
+      otherSeed(randomness).some(
+        (y, i) =>
+          y !==
+          jitterOffsets(items, "middle", { randomness, padding: 0, seed: 3 })[i]
+      )
+    );
+  const q = resolveOverlap(jitter({ randomness: "quasi" }), items, "middle");
+  check(
+    "quasi needs no seed: the default and seeded runs agree",
+    q.every((y, i) => y === otherSeed("quasi")[i])
+  );
+}
+
+console.log("# jitter(): strategy objects");
+{
+  check(
+    "jitter() is a plain object",
+    JSON.stringify(jitter()) === '{"kind":"jitter"}'
+  );
+  check(
+    "an unknown randomness throws",
+    (await errorOf(() => jitter({ randomness: "pink" as any })))?.includes(
+      "randomness"
+    ) === true
+  );
+  check(
+    "a non-positive smoothing throws",
+    (await errorOf(() => jitter({ smoothing: 0 })))?.includes("smoothing") ===
+      true
+  );
+  check(
+    "smoothing Infinity is accepted in JS",
+    jitter({ smoothing: Infinity }).smoothing === Infinity
+  );
+}
+
+console.log("# scatter overlap jitter: rendered");
+{
+  const rand = lcg(5);
+  const rows = Array.from({ length: 200 }, () => ({
+    v: Math.round(rand() * 40),
+  }));
+  const render = (overlap?: unknown) =>
+    chart(rows)
+      .flow(scatter({ x: "v", alignment: "middle", overlap }))
+      .mark(circle({ r: 3 }))
+      .toDisplayList({ w: 400, h: 200 });
+  const plain = circlesOf(await render());
+  const jittered = circlesOf(await render(jitterDist({ smoothing: 5 })));
+  check(
+    "jitter leaves every dot's data-axis position alone",
+    plain.length === jittered.length &&
+      plain.every((c, i) => Math.abs(c.cx - jittered[i].cx) < 1e-6)
+  );
+  const ys = jittered.map((c) => c.cy);
+  check(
+    "jitter moves the dots along the free axis",
+    Math.max(...ys) - Math.min(...ys) > 6
+  );
+  const again = circlesOf(await render(jitterDist({ smoothing: 5 })));
+  check(
+    "a jittered render is the same every time",
+    again.every((c, i) => c.cy === jittered[i].cy)
   );
 }
 

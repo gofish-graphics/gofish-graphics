@@ -335,9 +335,18 @@ export interface ScatterOperator
   h?: ChannelValue;
 }
 
-/** A `scatter` overlap strategy, made by a function call (`swarm()`). Mirrors
- *  JS's `OverlapStrategy` (`graphicalOperators/overlap.ts`). */
-export type OverlapStrategyIR = { kind: "swarm"; padding?: number };
+/** A `scatter` overlap strategy, made by a function call (`swarm()`,
+ *  `jitter()`). Mirrors JS's `OverlapStrategy`
+ *  (`graphicalOperators/overlap.ts`). */
+export type OverlapStrategyIR =
+  | { kind: "swarm"; padding?: number }
+  | {
+      kind: "jitter";
+      randomness?: "blue" | "quasi" | "uniform";
+      smoothing?: number;
+      padding?: number;
+      seed?: number;
+    };
 
 /**
  * Per-node axis-rendering override. Mirrors the JS-side `AxesOptions` /

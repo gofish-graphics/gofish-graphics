@@ -13,7 +13,9 @@ status: speculative
 > measured at layout, like text, so a swarm takes the room its dots need; it dodges
 > in screen space and throws under a non-linear coordinate space (#1002); other
 > shapes are dodged by their enclosing circle; the option is named `overlap`, and
-> there is no priority option yet (data order). See
+> there is no priority option yet (data order). Jitter shipped next to it as
+> `overlap: jitter({ randomness, smoothing })` (#970), a density outline rather
+> than a collision search. See
 > [Layout Calculation](/internals/layout/passes).
 >
 > **Status: design proposal (2026-09-29).** Nothing here is implemented. It grew out of the

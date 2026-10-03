@@ -563,7 +563,8 @@ That is why `pack` keeps its children at their pixel size and does not fit
 itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
 
-The second consumer is `scatter`'s `overlap` option, e.g. `swarm()` (#969).
+The second consumer is `scatter`'s `overlap` option, `swarm()` (#969) or
+`jitter()` (#970).
 `scatter` elaborates to a layer with a `position` constraint per child on each
 axis a field places, and an `align` on every other ("free") axis. With an
 overlap strategy, the free axis gets an `overlap` constraint
@@ -572,8 +573,14 @@ constraint, so the placement solver never sees it: `applyConstraints` runs it
 after the solve, when each child's position on the data axis is known. It reads
 each child's `enclosingCircle`, asks the strategy
 (`graphicalOperators/overlap.ts`) for each circle center's offset from the
-alignment line, and pins each child there. The strategies share one broad
-phase, `NeighborGrid`, a uniform grid over the data axis. The swarm reports no
+alignment line, and pins each child there. A strategy returns one free-axis
+number per child, so it cannot move the data axis. `applyConstraints` also
+passes the data axis's pixels per data unit (the layer's position-scale
+`sigma`), which `jitter` needs for its `smoothing` window in data units. The
+strategies share one broad phase, `NeighborGrid`, a uniform grid over the data
+axis kept as linked lists in typed arrays. `jitter`'s outline is a box-kernel
+count over a sorted sliding window (`jitterOutline`), and its `"blue"`
+placement buckets placed dots on both axes (`PlaneGrid`). The swarm reports no
 size on its free axis in the space pass (a fixed-pixel dot's space is
 `UNDEFINED` there), and its real extent comes from where the children land, in
 the layer's box fold, the way a text label's extent is measured at layout.

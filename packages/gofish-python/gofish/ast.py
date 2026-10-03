@@ -1890,7 +1890,8 @@ def scatter(
                   ``dims={"theta": "bearing", "r": "distance"}``.
             alignment: "start" | "middle" | "end" | "baseline".
             overlap: How children keep clear of each other on the axis no
-                     field places, e.g. ``swarm(padding=1)`` for a beeswarm.
+                     field places, e.g. ``swarm(padding=1)`` for a beeswarm
+                     or ``jitter()`` for dots spread inside a density outline.
                      It grows from the ``alignment`` line.
 
     Returns:
@@ -1980,6 +1981,65 @@ def swarm(*, padding: Optional[float] = None) -> Dict[str, Any]:
     if padding is not None and not padding >= 0:
         raise ValueError(f"swarm: padding must be a non-negative number, got {padding}")
     return {"kind": "swarm"} if padding is None else {"kind": "swarm", "padding": padding}
+
+
+def jitter(
+    *,
+    randomness: Optional[str] = None,
+    smoothing: Optional[float] = None,
+    padding: Optional[float] = None,
+    seed: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    The ``jitter()`` overlap strategy for :func:`scatter`. Each dot keeps its
+    position on the data axis and gets an offset on the axis no field places,
+    inside an outline that follows how many dots share that part of the data
+    axis.
+
+        chart(penguins).flow(
+            scatter(x="Body Mass (g)", alignment="middle",
+                    overlap=jitter(randomness="quasi", smoothing=100))
+        ).mark(circle(r=3))
+
+    Mirrors JS ``jitter({ randomness, smoothing, padding, seed })``; the
+    strategy is a plain object on the wire, ``{"kind": "jitter", ...}``.
+
+    Args:
+        randomness: ``"blue"`` (default) keeps each dot far from its
+            neighbors, ``"quasi"`` spreads dots by rank (fastest),
+            ``"uniform"`` draws seeded uniform offsets.
+        smoothing: Width, in data units of the data axis, of the window that
+            counts dots to set the outline. Default: one dot width.
+        padding: Pixels added to each dot's width. Default 0.
+        seed: Seed for ``"blue"`` and ``"uniform"``. Default 0.
+    """
+    if randomness is not None and randomness not in ("blue", "quasi", "uniform"):
+        raise ValueError(
+            f'jitter: randomness must be "blue", "quasi" or "uniform", got {randomness!r}'
+        )
+    if smoothing is not None:
+        if math.isinf(smoothing):
+            # TODO: the IR has no way to carry an infinite number yet, so a
+            # flat outline (classic fixed-band jitter) is JS-only for now.
+            raise ValueError(
+                "jitter: smoothing=inf (a flat outline) cannot cross to the "
+                "renderer yet, because the IR has no infinite number. Use a "
+                "large finite smoothing, about the data range."
+            )
+        if not smoothing > 0:
+            raise ValueError(f"jitter: smoothing must be positive, got {smoothing}")
+    if padding is not None and not padding >= 0:
+        raise ValueError(f"jitter: padding must be a non-negative number, got {padding}")
+    out: Dict[str, Any] = {"kind": "jitter"}
+    for key, value in (
+        ("randomness", randomness),
+        ("smoothing", smoothing),
+        ("padding", padding),
+        ("seed", seed),
+    ):
+        if value is not None:
+            out[key] = value
+    return out
 
 
 def circles() -> Dict[str, Any]:

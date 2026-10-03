@@ -390,7 +390,7 @@ export function applyConstraints(
   // axis. So it runs after the solve.
   for (const constraint of constraints)
     if (isOverlapConstraint(constraint))
-      applyOverlapPlacement(constraint, nameToPlaceable);
+      applyOverlapPlacement(constraint, nameToPlaceable, posScales);
 
   if (prePlaced) {
     for (const constraint of placement) {

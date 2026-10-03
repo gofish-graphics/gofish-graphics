@@ -1233,17 +1233,42 @@ for the API.
           "default": "baseline"
         },
         "overlap": {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "enum": ["swarm"]
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": ["swarm"]
+                },
+                "padding": {
+                  "type": "number"
+                }
+              },
+              "required": ["kind"]
             },
-            "padding": {
-              "type": "number"
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": ["jitter"]
+                },
+                "randomness": {
+                  "enum": ["blue", "quasi", "uniform"]
+                },
+                "smoothing": {
+                  "type": "number"
+                },
+                "padding": {
+                  "type": "number"
+                },
+                "seed": {
+                  "type": "number"
+                }
+              },
+              "required": ["kind"]
             }
-          },
-          "required": ["kind"],
-          "description": "How children keep clear of each other on the axis no field places, made by a function call: swarm({padding}) is a beeswarm (each dot moves to the free spot nearest the alignment line). It grows from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Linear coordinate spaces only."
+          ],
+          "description": "How children keep clear of each other on the axis no field places, made by a function call. swarm({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. jitter({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis; randomness \"blue\" (default), \"quasi\" or \"uniform\"; smoothing is the outline's counting window in data units (default one dot width). Both grow from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only."
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
