@@ -19,7 +19,8 @@ from .ast import Mark, _channel
 
 # The key structure of each named option type (descriptors.ts OPTION_TYPES):
 # ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),
-# ("tuple", (shape, ...)), ("record", value_shape); None passes a value through.
+# ("tuple", (shape, ...)), ("record", value_shape),
+# ("tagged", tag_key, {tag_value: shape}); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
@@ -33,7 +34,9 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     so only declared option keys are renamed (`label_angle` to `labelAngle`,
     by the same rule as top-level kwargs). A key the type does not declare
     raises TypeError, as an unknown kwarg does. Record keys (column names,
-    axis names) and values of any other type pass through unchanged.
+    axis names) and values of any other type pass through unchanged. A
+    tagged union picks its branch by the dict's tag key (`kind`); a missing
+    or unknown tag raises TypeError.
     """
     if shape is None or value is None:
         return value
@@ -59,6 +62,17 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
             wire, sub = fields[key]
             out[wire] = _to_wire(sub, item, f"{path}[{key!r}]")
         return out
+    if kind == "tagged":
+        if not isinstance(value, dict):
+            return value
+        tag, branches = shape[1], shape[2]
+        expected = ", ".join(map(repr, branches))
+        if tag not in value:
+            raise TypeError(f"{path} is missing the key {tag!r}; expected {tag!r} to be one of {expected}")
+        branch = value[tag]
+        if not isinstance(branch, str) or branch not in branches:
+            raise TypeError(f"{path}[{tag!r}] got an unexpected value {branch!r}; expected one of {expected}")
+        return _to_wire(branches[branch], value, path)
     if kind == "record":
         if not isinstance(value, dict):
             return value
@@ -732,7 +746,7 @@ def _table_opts(*, by: Any, spacing: Optional[Any] = None, num_cols: Optional[fl
             opts[_k] = _v
     return opts
 
-def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, padding_inner: Optional[float] = None, padding_outer: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flip_y: Optional[bool] = None, leaf_intrinsic_radius_field: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[Any] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.
 
     Args:
@@ -742,14 +756,12 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
-        padding_inner: Padding between sibling rectangles. Default 0.
-        padding_outer: Padding around the outer edge of the treemap. Default 0.
+        spacing: Gap between sibling tiles, in pixels. Default 0.
+        padding: Inset around the outer edge of the treemap, in pixels. Default 0.
         round: Round pixel positions and sizes. Default true.
-        tile: Tiling strategy. Default "squarify".
+        tile: The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
-        flip_y: Mirror leaf layout top-to-bottom within the treemap box. Default false.
-        leaf_intrinsic_radius_field: When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
@@ -760,14 +772,12 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
         ("h", h),
         ("dims", dims),
         ("by", by),
-        ("paddingInner", padding_inner),
-        ("paddingOuter", padding_outer),
+        ("spacing", spacing),
+        ("padding", padding),
         ("round", round),
-        ("tile", tile),
+        ("tile", _to_wire(("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "sliceDice": ("object", {"kind": ("kind", None)})}), tile, "tile")),
         ("sort", sort),
         ("size", size),
-        ("flipY", flip_y),
-        ("leafIntrinsicRadiusField", leaf_intrinsic_radius_field),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -792,7 +802,7 @@ def _pack_opts(*, by: Optional[Any] = None, method: Optional[Any] = None, debug:
             opts[_k] = _v
     return opts
 
-def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, padding_inner: Optional[float] = None, padding_outer: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flip_y: Optional[bool] = None, leaf_intrinsic_radius_field: Optional[str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[Any] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
 
     Args:
@@ -802,14 +812,12 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
-        padding_inner: Padding between sibling rectangles. Default 0.
-        padding_outer: Padding around the outer edge of the treemap. Default 0.
+        spacing: Gap between sibling tiles, in pixels. Default 0.
+        padding: Inset around the outer edge of the treemap, in pixels. Default 0.
         round: Round pixel positions and sizes. Default true.
-        tile: Tiling strategy. Default "squarify".
+        tile: The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
-        flip_y: Mirror leaf layout top-to-bottom within the treemap box. Default false.
-        leaf_intrinsic_radius_field: When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
@@ -821,14 +829,12 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
         ("h", h),
         ("dims", dims),
         ("by", by),
-        ("paddingInner", padding_inner),
-        ("paddingOuter", padding_outer),
+        ("spacing", spacing),
+        ("padding", padding),
         ("round", round),
-        ("tile", tile),
+        ("tile", _to_wire(("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "sliceDice": ("object", {"kind": ("kind", None)})}), tile, "tile")),
         ("sort", sort),
         ("size", size),
-        ("flipY", flip_y),
-        ("leafIntrinsicRadiusField", leaf_intrinsic_radius_field),
         ("key", key),
         ("debug", debug),
     ]:

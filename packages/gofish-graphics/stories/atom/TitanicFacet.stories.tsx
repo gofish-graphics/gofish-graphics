@@ -17,16 +17,15 @@ const meta: Meta = {
   argTypes: {
     w: { control: { type: "number", min: 200, max: 900, step: 10 } },
     h: { control: { type: "number", min: 200, max: 900, step: 10 } },
-    paddingInner: { control: { type: "number", min: 0, max: 6, step: 0.5 } },
   },
 };
 
 export default meta;
 
-type Args = { w: number; h: number; paddingInner: number };
+type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 720, h: 480, paddingInner: 0 },
+  args: { w: 720, h: 480 },
   tags: ["gallery"],
   parameters: {
     gallery: {

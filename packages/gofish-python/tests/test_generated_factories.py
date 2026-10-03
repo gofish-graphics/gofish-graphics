@@ -13,18 +13,23 @@ shorthand kwarg was removed).
 import pytest
 
 from gofish import (
+    binary,
     Schema,
     chart,
     circle,
     circles,
+    dice,
     group,
     join,
     layer,
     pack,
     palette,
     polygon,
+    slice,
+    slice_dice,
     rect,
     spread,
+    squarify,
     stack,
     table,
     text,
@@ -103,6 +108,39 @@ def test_pack_combinator_form():
         pack([circle(r=1)], by="lake")
 
 
+def test_treemap_serializes_tile_strategy_and_gaps():
+    d = treemap(by="g", tile=squarify(ratio=1), spacing=2, padding=3).to_dict()
+    assert d["tile"] == {"kind": "squarify", "ratio": 1}
+    assert d["spacing"] == 2
+    assert d["padding"] == 3
+    assert squarify() == {"kind": "squarify"}
+    assert [f()["kind"] for f in (slice, dice, binary, slice_dice)] == [
+        "slice",
+        "dice",
+        "binary",
+        "sliceDice",
+    ]
+    assert "tile" not in treemap().to_dict()
+
+
+def test_treemap_tile_is_a_tagged_union():
+    # `tile` is a union of dict shapes told apart by `kind`; `_to_wire` picks
+    # the branch by the dict's `kind` and checks its keys against that branch.
+    assert treemap(by="g", tile=squarify(ratio=1)).to_dict()["tile"] == {
+        "kind": "squarify",
+        "ratio": 1,
+    }
+    assert treemap(by="g", tile=slice_dice()).to_dict()["tile"] == {
+        "kind": "sliceDice"
+    }
+    with pytest.raises(TypeError, match="ratio"):
+        treemap(by="g", tile={"kind": "slice", "ratio": 2})
+    with pytest.raises(TypeError, match="'nope'"):
+        treemap(by="g", tile={"kind": "nope"})
+    with pytest.raises(TypeError, match="missing"):
+        treemap(by="g", tile={"ratio": 2})
+
+
 def test_treemap_combinator_accepts_key():
     node = treemap([], size="gross", key="genre")
     d = node.to_dict()
@@ -140,7 +178,6 @@ def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():
         "sharedScale": True,
         "key": "k",
     }
-    assert treemap(by="g", padding_inner=2).to_dict()["paddingInner"] == 2
     assert text(text="hi").label("n", font_size=9).to_dict()["label"] == [
         {"accessor": "n", "fontSize": 9}
     ]

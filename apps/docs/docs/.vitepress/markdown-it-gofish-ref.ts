@@ -112,7 +112,7 @@ function tsType(f: FieldType): string {
     case "ref":
       return f.name;
     case "union":
-      return f.options.map(tsType).join(" | ");
+      return [...new Set(f.options.map(tsType))].join(" | ");
     case "array":
       return `${tsType(f.items)}[]`;
     case "tuple":
@@ -150,7 +150,7 @@ function pyType(f: FieldType): string {
           return "str";
       }
     case "union":
-      return f.options.map(pyType).join(" | ");
+      return [...new Set(f.options.map(pyType))].join(" | ");
     case "array":
       return "list";
     case "tuple":

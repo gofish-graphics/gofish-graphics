@@ -9,12 +9,12 @@ const meta: Meta = {
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },
-    paddingInner: { control: { type: "number", min: 0, max: 20, step: 1 } },
+    spacing: { control: { type: "number", min: 0, max: 20, step: 1 } },
   },
 };
 export default meta;
 
-type Args = { w: number; h: number; paddingInner: number };
+type Args = { w: number; h: number; spacing: number };
 
 type Movie = {
   Title: string;
@@ -23,7 +23,7 @@ type Movie = {
 };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 700, h: 420, paddingInner: 2 },
+  args: { w: 700, h: 420, spacing: 2 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   tags: ["gallery"],
   parameters: {
@@ -42,8 +42,8 @@ export const Default: StoryObj<Args> = {
         treemap({
           by: field("Major Genre").dropNulls(),
           size: "Worldwide Gross",
-          paddingInner: args.paddingInner,
-          paddingOuter: args.paddingInner,
+          spacing: args.spacing,
+          padding: args.spacing,
           round: true,
         })
       )

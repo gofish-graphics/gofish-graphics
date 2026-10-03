@@ -132,7 +132,9 @@ than a serialized field). Operators are a flat list (`derive`, `resolve`,
 `join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
 `pack`). `pack`'s `method` is a strategy object made by a function call
 (`circles()` in both languages), so on the wire it is plain data,
-`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. Note `join`
+`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. `treemap`'s
+`tile` works the same way (`squarify({ ratio })`, `slice()`, `dice()`,
+`binary()`, `sliceDice()`; e.g. `{ "kind": "squarify", "ratio": 1 }`). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
@@ -536,7 +538,13 @@ by column name, the axis names of `dims`) are never renamed, and a field
 typed `any` (`color=palette({...})` keyed by category, `coord`) passes
 through whole. Two rules keep this honest. A union may have only one branch
 that a dict could match, or generation fails, since `_to_wire` would have to
-guess. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
+guess. The one exception is a tagged union: when every dict branch is an
+object whose `kind` field is a literal or enum, and no two branches share a
+`kind` value (treemap's `tile`: `{kind: "squarify", ratio?}` or
+`{kind: "slice" | "dice" | ...}`), the generator emits a
+`("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
+the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
+branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
 few refs the generator lists as already in wire form (`FieldAccessor`, built
 by `field(...)`; `AxisDimsValue`, whose plain dict could be a channel value
 or an interval), or generation fails, so a new nested type has to be

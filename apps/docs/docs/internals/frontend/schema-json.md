@@ -1381,14 +1381,14 @@ for the API.
           ],
           "description": "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row."
         },
-        "paddingInner": {
+        "spacing": {
           "type": "number",
-          "description": "Padding between sibling rectangles.",
+          "description": "Gap between sibling tiles, in pixels.",
           "default": 0
         },
-        "paddingOuter": {
+        "padding": {
           "type": "number",
-          "description": "Padding around the outer edge of the treemap.",
+          "description": "Inset around the outer edge of the treemap, in pixels.",
           "default": 0
         },
         "round": {
@@ -1397,16 +1397,34 @@ for the API.
           "default": true
         },
         "tile": {
-          "enum": [
-            "squarify",
-            "slice",
-            "dice",
-            "binary",
-            "slicedice",
-            "squarifyCircle"
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": ["squarify"]
+                },
+                "ratio": {
+                  "type": "number",
+                  "description": "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio."
+                }
+              },
+              "required": ["kind"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": ["slice", "dice", "binary", "sliceDice"]
+                }
+              },
+              "required": ["kind"]
+            }
           ],
-          "description": "Tiling strategy.",
-          "default": "squarify"
+          "description": "The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+          "default": {
+            "kind": "squarify"
+          }
         },
         "sort": {
           "enum": ["asc", "desc", "none"],
@@ -1416,15 +1434,6 @@ for the API.
         "size": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group."
-        },
-        "flipY": {
-          "type": "boolean",
-          "description": "Mirror leaf layout top-to-bottom within the treemap box.",
-          "default": false
-        },
-        "leafIntrinsicRadiusField": {
-          "type": "string",
-          "description": "When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field])."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
