@@ -48,6 +48,8 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
       return {};
     case "enum":
       return { enum: [...type.values] };
+    case "literal":
+      return { const: type.value };
     case "channel":
       return { $ref: "#/$defs/ChannelValue" };
     case "ref":

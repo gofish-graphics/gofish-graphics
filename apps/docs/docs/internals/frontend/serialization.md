@@ -347,7 +347,8 @@ were silently dropped at render).
 collapses three of those four into one authored table: one entry per
 construct (operator, leaf mark, combinator mark, coord transform) listing
 its fields in a small type DSL (`t.string`, `t.number`, `t.enum(...)`,
-`t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
+`t.literal(v)` for exactly one value, such as the `false` in an axis
+title's `string | false`, `t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
 pointer at a named type, and so on — see the file's `t`/`ch`
 exports). Shared field groups (`boxDims`, the ten closed x/y/w/h box channels plus the open `dims` bag
 keyed by axis name; `paint`, the five paint channels) are declared once and pulled
@@ -525,7 +526,9 @@ field. So `chart(data, axes={"x": {"label_angle": 45}})` serializes as
 `{"axes": {"x": {"labelAngle": 45}}}`, and an undeclared key, including the
 camelCase `"labelAngle"`, is a `TypeError` that names the expected keys.
 Python's `chart()` now goes through a generated `_chart_opts` core built from
-`CHART_OPTIONS`, so an unknown chart keyword is a `TypeError` too.
+`CHART_OPTIONS`, so an unknown chart keyword is a `TypeError` too. The
+chart-tier form `layer([chart1, chart2], **options)` takes its options
+through the same core, so they are spelled and checked as in `chart()`.
 
 The conversion is driven by the declared type, never by the dict itself, so
 dicts whose keys are data keep them: a `record` type's keys (a `schema` keyed
@@ -552,7 +555,9 @@ It emits:
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
   `layer`, `pack`, the polar coord family), with separate combinator-form
   cores for `spread`, `stack`, and `treemap` (their combinator entries add
-  `key`), and `_chart_opts` for `chart()` — just the kwargs→dict half. The
+  `key`; `spread` and `stack` also include the whole `boxDims` group, since
+  JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
+  `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 

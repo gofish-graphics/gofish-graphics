@@ -406,7 +406,8 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   interpreter, `_to_wire`, that renames declared keys with `pyKwarg` and
   raises `TypeError` on any other key, as an unknown kwarg does. `chart()`
   now calls a generated `_chart_opts` core, so its keywords are checked as
-  well. Keys that are data are never touched: a `record` type's keys (the
+  well, and so does the chart-tier `layer([chart1, chart2], **options)`.
+  Keys that are data are never touched: a `record` type's keys (the
   `schema` column names, `dims` axis names) and a field typed `any` (a
   `palette` dict keyed by category, a `coord` config) pass through
   unchanged. The JSON Schema and the validator read the same `OPTION_TYPES`

@@ -836,10 +836,21 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
             opts[_k] = _v
     return opts
 
-def _spread_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key`.
+def _spread_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, size: Optional[Union[int, float, str]] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
 
     Args:
+        x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        cx: Center x.
+        x2: Right edge position.
+        w: Data-driven cross-axis extent (field/datum-sized children).
+        em_x: Embed x in the parent's x space.
+        y: Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        cy: Center y.
+        y2: Other y edge position.
+        h: Data-driven cross-axis extent (field/datum-sized children).
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Gap between children, px. Default 8.
@@ -848,16 +859,23 @@ def _spread_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = No
         anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
-        x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
-        y: Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
-        w: Data-driven cross-axis extent (field/datum-sized children).
-        h: Data-driven cross-axis extent (field/datum-sized children).
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
+        ("x", x),
+        ("cx", cx),
+        ("x2", x2),
+        ("w", w),
+        ("emX", em_x),
+        ("y", y),
+        ("cy", cy),
+        ("y2", y2),
+        ("h", h),
+        ("emY", em_y),
+        ("dims", dims),
         ("by", by),
         ("dir", dir),
         ("spacing", spacing),
@@ -867,10 +885,6 @@ def _spread_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = No
         ("reverse", reverse),
         ("glue", glue),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("x", x),
-        ("y", y),
-        ("w", w),
-        ("h", h),
         ("size", size),
         ("key", key),
         ("debug", debug),
@@ -879,10 +893,21 @@ def _spread_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = No
             opts[_k] = _v
     return opts
 
-def _stack_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key`.
+def _stack_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, size: Optional[Union[int, float, str]] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.
 
     Args:
+        x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        cx: Center x.
+        x2: Right edge position.
+        w: Data-driven cross-axis extent (field/datum-sized children).
+        em_x: Embed x in the parent's x space.
+        y: Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        cy: Center y.
+        y2: Other y edge position.
+        h: Data-driven cross-axis extent (field/datum-sized children).
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
         dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
@@ -891,16 +916,23 @@ def _stack_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = Non
         shared_scale: Share one scale across all children. Default false.
         anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
-        x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
-        y: Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
-        w: Data-driven cross-axis extent (field/datum-sized children).
-        h: Data-driven cross-axis extent (field/datum-sized children).
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
+        ("x", x),
+        ("cx", cx),
+        ("x2", x2),
+        ("w", w),
+        ("emX", em_x),
+        ("y", y),
+        ("cy", cy),
+        ("y2", y2),
+        ("h", h),
+        ("emY", em_y),
+        ("dims", dims),
         ("by", by),
         ("dir", dir),
         ("spacing", spacing),
@@ -910,10 +942,6 @@ def _stack_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = Non
         ("anchor", anchor),
         ("reverse", reverse),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("x", x),
-        ("y", y),
-        ("w", w),
-        ("h", h),
         ("size", size),
         ("key", key),
         ("debug", debug),

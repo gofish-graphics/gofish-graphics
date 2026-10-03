@@ -368,6 +368,13 @@ function walkFieldType(
       if (typeof value !== "boolean")
         push(path, `expected boolean, got ${typeNameOf(value)}`);
       return;
+    case "literal":
+      if (value !== type.value)
+        push(
+          path,
+          `expected ${JSON.stringify(type.value)}, got ${JSON.stringify(value)}`
+        );
+      return;
     case "any":
       return;
     case "enum":

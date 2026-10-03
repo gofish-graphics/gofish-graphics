@@ -496,6 +496,29 @@ check(
   ).valid
 );
 
+// JS types an axis title `string | false`: `false` suppresses the inferred
+// title, and `true` is not a title.
+check(
+  "axis title false and a string accept (strict)",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: { x: { title: false }, y: { title: "Count" } },
+      },
+    ]),
+    { strict: true }
+  ).valid
+);
+
+check(
+  "axis title true rejected",
+  !validate(chart([{ type: "spread", axes: { x: { title: true } } as any }]))
+    .valid
+);
+
 // ---------------------------------------------------------------------------
 // Bug fixes — label shorthand, table.by required (from PR review)
 // ---------------------------------------------------------------------------

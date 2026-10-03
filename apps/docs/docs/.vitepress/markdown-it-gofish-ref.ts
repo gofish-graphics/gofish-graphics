@@ -98,6 +98,8 @@ function tsType(f: FieldType): string {
       return "any";
     case "enum":
       return f.values.map((v) => `"${v}"`).join(" | ");
+    case "literal":
+      return JSON.stringify(f.value);
     case "channel":
       switch (f.inner) {
         case "number":
@@ -131,6 +133,13 @@ function pyType(f: FieldType): string {
       return "float";
     case "boolean":
       return "bool";
+    case "literal":
+      // Python spelling of the one value: False/True, or a repr.
+      return typeof f.value === "boolean"
+        ? f.value
+          ? "True"
+          : "False"
+        : JSON.stringify(f.value);
     case "channel":
       switch (f.inner) {
         case "number":

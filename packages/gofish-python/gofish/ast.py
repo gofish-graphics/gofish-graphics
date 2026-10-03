@@ -1485,7 +1485,10 @@ def layer(
 
     - **Chart tiers** — ``layer([chart(...), chart(...)])`` stacks each chart and
       emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``).
-      Options are keyword arguments: ``layer([chart1, chart2], coord=clock())``.
+      Options are keyword arguments: ``layer([chart1, chart2], coord=clock())``,
+      the same chart-level options ``chart()`` takes (the generated
+      ``_chart_opts``), so nested keys are snake_case
+      (``axes={"x": {"label_angle": 45}}``).
     - **Marks** — ``layer([rect(...).name("a"), ...])`` wraps child marks in a
       layer node (returns a ``RelatableMark`` that renders directly), with
       ``.relate(...)`` for clauses that relate the marks::
@@ -1498,9 +1501,10 @@ def layer(
     Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
     charts and marks.
     """
-    # Chart tiers → LayerBuilder; marks → combinator mark.
+    # Chart tiers → LayerBuilder; marks → combinator mark. Chart-tier options
+    # take the chart-level option set, spelled and checked as in `chart()`.
     if children and all(isinstance(c, ChartBuilder) for c in children):
-        return LayerBuilder(list(children), options or None)
+        return LayerBuilder(list(children), _chart_opts(**options) or None)
     return RelatableMark(
         "layer", _children=list(children), **_layer_opts(**options)
     )

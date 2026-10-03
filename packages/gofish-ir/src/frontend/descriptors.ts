@@ -39,12 +39,17 @@
  *  expected JS type for docgen (e.g. Python's generated signature/docstring). */
 export type ChannelInner = "number" | "string" | "boolean" | "color";
 
+/** The value a `literal` type admits: exactly one string, number, or boolean
+ *  (`false` in `title: string | false`). */
+export type LiteralValue = string | number | boolean;
+
 export type FieldType =
   | { kind: "string" }
   | { kind: "number" }
   | { kind: "boolean" }
   | { kind: "any" }
   | { kind: "enum"; values: readonly string[] }
+  | { kind: "literal"; value: LiteralValue }
   | { kind: "channel"; inner: ChannelInner }
   | { kind: "ref"; name: string }
   | { kind: "union"; options: readonly FieldType[] }
@@ -128,6 +133,9 @@ export const t = {
    *  `AnchorSpec`, a JS function accessor). */
   any: { kind: "any" } as FieldType,
   enum: (...values: string[]): FieldType => ({ kind: "enum", values }),
+  /** Exactly one value, e.g. `t.literal(false)` for the `false` in JS's
+   *  `string | false`. */
+  literal: (value: LiteralValue): FieldType => ({ kind: "literal", value }),
   channel: (inner: ChannelInner = "number"): FieldType => ({
     kind: "channel",
     inner,
@@ -308,7 +316,7 @@ const axisOptions: FieldSpec = {
     t.boolean,
     t.object({
       title: {
-        type: t.union(t.string, t.boolean),
+        type: t.union(t.string, t.literal(false)),
         doc: "Axis title. A string sets it; false suppresses the inferred title.",
       },
       side: {
@@ -1133,14 +1141,21 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
 export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   spread: combinatorMark("spread", {
-    doc: "Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key`.",
+    doc: "Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.",
+    // JS `Spread` spreads its `FancyDims` into its box and the combinator
+    // passes its options straight through, so every box-dims key is real
+    // here (`cx`, `emX`, `dims`, ...). The operator form's own x/y/w/h win
+    // the name collision (same type, operator-specific docs).
+    include: [boxDims],
     fields: {
       ...resolveFields(OPERATORS.spread),
       key: { type: t.string, doc: "Internal per-node key override." },
     },
   }),
   stack: combinatorMark("stack", {
-    doc: "Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key`.",
+    doc: "Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.",
+    // Same box as spread's: JS `stack` is `spread({...opts, glue: true})`.
+    include: [boxDims],
     fields: {
       ...resolveFields(OPERATORS.stack),
       key: { type: t.string, doc: "Internal per-node key override." },

@@ -62,6 +62,12 @@ const OUT_FILE = join(HERE, "..", "gofish", "_generated.py");
 // small helpers
 // ---------------------------------------------------------------------------
 
+function literalPyType(value: string | number | boolean): string {
+  if (typeof value === "string") return "str";
+  if (typeof value === "number") return "float";
+  return "bool";
+}
+
 function pyType(f: FieldType): string {
   switch (f.kind) {
     case "string":
@@ -74,6 +80,10 @@ function pyType(f: FieldType): string {
       return f.inner === "number" ? "Union[int, float, str]" : "str";
     case "enum":
       return "str";
+    case "literal":
+      // Annotated by the literal's base type, like `enum` → str; the IR
+      // validator checks the exact value.
+      return literalPyType(f.value);
     case "array":
       return "List[Any]";
     case "union": {
@@ -83,6 +93,7 @@ function pyType(f: FieldType): string {
         if (o.kind === "string") return "str";
         if (o.kind === "number") return "float";
         if (o.kind === "boolean") return "bool";
+        if (o.kind === "literal") return literalPyType(o.value);
         return null;
       });
       if (prims.every(Boolean)) return `Union[${prims.join(", ")}]`;

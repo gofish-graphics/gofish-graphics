@@ -2542,7 +2542,7 @@ for the API.
                   "type": "string"
                 },
                 {
-                  "type": "boolean"
+                  "const": false
                 }
               ],
               "description": "Axis title. A string sets it; false suppresses the inferred title."

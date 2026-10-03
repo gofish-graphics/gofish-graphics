@@ -19,6 +19,7 @@ from gofish import (
     circles,
     group,
     join,
+    layer,
     pack,
     palette,
     polygon,
@@ -220,3 +221,30 @@ def test_data_keyed_dicts_are_untouched():
     assert ir["options"]["color"]["values"] == colors
     assert list(ir["options"]["schema"]) == ["myCategory"]
     assert ir["operators"][0]["right"] == [{"myCategory": "fooBar", "otherCol": 2}]
+
+
+def test_layer_of_charts_options_spell_like_chart():
+    # The chart-tier `layer([...], **options)` takes chart()'s option set, so
+    # nested keys are snake_case in Python and camelCase on the wire.
+    c1 = chart([{"v": 1}]).mark(rect(h="v"))
+    c2 = chart([{"v": 2}]).mark(rect(h="v"))
+    ir = layer([c1, c2], axes={"x": {"label_angle": 45}}).to_ir()
+    assert ir["options"] == {"axes": {"x": {"labelAngle": 45}}}
+    with pytest.raises(TypeError, match="did you mean 'label_angle'"):
+        layer([c1, c2], axes={"x": {"labelAngle": 45}})
+    with pytest.raises(TypeError):
+        layer([c1, c2], labelAngle=45)
+
+
+# --- Combinator box dims ------------------------------------------------------
+# The spread/stack combinators take the full FancyDims box group, like JS
+# `Spread`, which spreads `...fancyDims` into its box.
+
+
+def test_spread_combinator_takes_box_dims():
+    children = [rect(w=10, h=10), rect(w=10, h=20)]
+    opts = spread(children, dir="x", cx=200, em_x=True).to_dict()["options"]
+    assert opts["cx"] == 200
+    assert opts["emX"] is True
+    opts = stack(children, dir="y", dims={"y": {"min": 0}}).to_dict()["options"]
+    assert opts["dims"] == {"y": {"min": 0}}
