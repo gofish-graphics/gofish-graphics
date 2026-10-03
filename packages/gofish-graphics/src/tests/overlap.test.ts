@@ -299,6 +299,18 @@ console.log("# scatter overlap: rendered");
     both?.includes("both x and y are placed") === true,
     both
   );
+
+  const neither = await errorOf(() =>
+    chart(rows)
+      .flow(scatter({ alignment: "middle", overlap: separate() }))
+      .mark(circle({ r: 3 }))
+      .toDisplayList({ w: 400, h: 200 })
+  );
+  check(
+    "overlap with neither axis placed by a field throws scatter's own clear error",
+    neither?.includes("requires at least one of x or y") === true,
+    neither
+  );
   const inPolar = await errorOf(() =>
     chart(rows, { coord: polar() })
       .flow(scatter({ x: "v", overlap: separate() }))

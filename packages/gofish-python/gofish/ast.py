@@ -1991,8 +1991,8 @@ def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
     Args:
         padding: Pixels kept between neighboring dots. Default 0.
     """
-    if padding is not None and not padding >= 0:
-        raise ValueError(f"separate: padding must be a non-negative number, got {padding}")
+    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
+        raise ValueError(f"separate: padding must be a finite non-negative number, got {padding}")
     return {"kind": "separate"} if padding is None else {"kind": "separate", "padding": padding}
 
 
@@ -2035,8 +2035,8 @@ def jitter(
         raise ValueError(
             f"jitter: smoothing must be a positive number (or math.inf), got {smoothing}"
         )
-    if padding is not None and not padding >= 0:
-        raise ValueError(f"jitter: padding must be a non-negative number, got {padding}")
+    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
+        raise ValueError(f"jitter: padding must be a finite non-negative number, got {padding}")
     if seed is not None and not (
         isinstance(seed, (int, float)) and not isinstance(seed, bool) and math.isfinite(seed)
     ):
