@@ -652,22 +652,28 @@ for the API.
                 ]
               },
               "position": {
-                "type": "string"
+                "type": "string",
+                "description": "Label position, e.g. \"center\", \"outset-top\", \"inset-bottom-start\"."
               },
               "fontSize": {
-                "type": "number"
+                "type": "number",
+                "description": "Font size in pixels."
               },
               "color": {
-                "type": "string"
+                "type": "string",
+                "description": "Label color. Omitted, it is chosen to contrast with the mark."
               },
               "offset": {
-                "type": "number"
+                "type": "number",
+                "description": "Offset from the shape's edge in pixels."
               },
               "rotate": {
-                "type": "number"
+                "type": "number",
+                "description": "Rotation in degrees."
               },
               "fontFamily": {
-                "type": "string"
+                "type": "string",
+                "description": "Font family of the label's text node. Omitted, the elaborator's own font family."
               },
               "fontWeight": {
                 "oneOf": [
@@ -677,10 +683,12 @@ for the API.
                   {
                     "type": "string"
                   }
-                ]
+                ],
+                "description": "Font weight, e.g. \"bold\" or a numeric weight."
               },
               "fontStyle": {
-                "type": "string"
+                "type": "string",
+                "description": "Font style, e.g. \"italic\"."
               }
             }
           }
@@ -2521,7 +2529,6 @@ for the API.
       ]
     },
     "AxisOptions": {
-      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle.",
       "oneOf": [
         {
           "type": "boolean"
@@ -2563,10 +2570,10 @@ for the API.
             }
           }
         }
-      ]
+      ],
+      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle."
     },
     "AxesOptions": {
-      "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
       "oneOf": [
         {
           "type": "boolean"
@@ -2584,7 +2591,8 @@ for the API.
             }
           }
         }
-      ]
+      ],
+      "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own."
     }
   }
 }

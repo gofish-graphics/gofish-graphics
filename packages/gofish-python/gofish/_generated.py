@@ -48,7 +48,7 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
         for key, item in value.items():
             if key not in fields:
                 hint = next(
-                    (py for py, (wire, _) in fields.items() if wire == key and py != key),
+                    (py for py, (wire, _) in fields.items() if wire == key),
                     None,
                 )
                 raise TypeError(
@@ -917,6 +917,34 @@ def _stack_combinator_opts(*, by: Optional[Any] = None, dir: Optional[str] = Non
         ("size", size),
         ("key", key),
         ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[Union[float, str]] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
+    """Options of one .label(accessor, **options) call.
+
+    Args:
+        position: Label position, e.g. "center", "outset-top", "inset-bottom-start".
+        font_size: Font size in pixels.
+        color: Label color. Omitted, it is chosen to contrast with the mark.
+        offset: Offset from the shape's edge in pixels.
+        rotate: Rotation in degrees.
+        font_family: Font family of the label's text node. Omitted, the elaborator's own font family.
+        font_weight: Font weight, e.g. "bold" or a numeric weight.
+        font_style: Font style, e.g. "italic".
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("position", position),
+        ("fontSize", font_size),
+        ("color", color),
+        ("offset", offset),
+        ("rotate", rotate),
+        ("fontFamily", font_family),
+        ("fontWeight", font_weight),
+        ("fontStyle", font_style),
     ]:
         if _v is not None:
             opts[_k] = _v

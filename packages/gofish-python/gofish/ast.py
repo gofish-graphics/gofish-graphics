@@ -43,16 +43,7 @@ class Operator:
         return new_op
 
     def label(
-        self,
-        accessor: Union[str, "FieldAccessor"],
-        position: Optional[str] = None,
-        font_size: Optional[int] = None,
-        color: Optional[str] = None,
-        offset: Optional[int] = None,
-        rotate: Optional[int] = None,
-        font_family: Optional[str] = None,
-        font_weight: Optional[Union[int, str]] = None,
-        font_style: Optional[str] = None,
+        self, accessor: Union[str, "FieldAccessor"], **options: Any
     ) -> "Operator":
         """Attach a per-group label to this operator (traversal form).
 
@@ -72,31 +63,16 @@ class Operator:
 
         Python has no function-accessor form; use one of the above.
 
+        `options` are the label options (``position``, ``font_size``,
+        ``color``, ...), the same as on :meth:`Mark.label`; see the generated
+        ``_label_opts`` or the docs options table.
+
         Returns:
             New Operator (same subclass as self) with the label appended.
         """
         new_op = type(self)(self.op_type, **self.kwargs)
         new_op._translate = self._translate
-        label_spec: Dict[str, Any] = {
-            "accessor": dict(accessor) if isinstance(accessor, FieldAccessor) else accessor
-        }
-        if position is not None:
-            label_spec["position"] = position
-        if font_size is not None:
-            label_spec["fontSize"] = font_size
-        if color is not None:
-            label_spec["color"] = color
-        if offset is not None:
-            label_spec["offset"] = offset
-        if rotate is not None:
-            label_spec["rotate"] = rotate
-        if font_family is not None:
-            label_spec["fontFamily"] = font_family
-        if font_weight is not None:
-            label_spec["fontWeight"] = font_weight
-        if font_style is not None:
-            label_spec["fontStyle"] = font_style
-        new_op._labels = [*self._labels, label_spec]
+        new_op._labels = [*self._labels, _label_spec(accessor, options)]
         return new_op
 
     def to_dict(self) -> dict:
@@ -429,16 +405,7 @@ class Mark:
         return CutMark("cut", source=self, dir=dir, size=size, inset=inset)
 
     def label(
-        self,
-        accessor: Union[str, "FieldAccessor"],
-        position: Optional[str] = None,
-        font_size: Optional[int] = None,
-        color: Optional[str] = None,
-        offset: Optional[int] = None,
-        rotate: Optional[int] = None,
-        font_family: Optional[str] = None,
-        font_weight: Optional[Union[int, str]] = None,
-        font_style: Optional[str] = None,
+        self, accessor: Union[str, "FieldAccessor"], **options: Any
     ) -> "Mark":
         """
         Attach a label to this mark. Calling `.label()` more than once
@@ -451,15 +418,9 @@ class Mark:
                 true by construction for a `by` field; raises otherwise), or
                 a `field(...)` aggregate (`field("count").sum()`, etc.)
                 folding the group's rows to one value.
-            position: Label position (e.g. "center", "outset-top", "inset-bottom-start")
-            font_size: Font size in pixels
-            color: Label color (auto-contrasted if omitted)
-            offset: Offset from shape edge in pixels
-            rotate: Rotation angle in degrees
-            font_family: Font family passed straight through to the label's
-                text node (defaults to the elaborator's own font family)
-            font_weight: Font weight (e.g. `"bold"` or a numeric weight)
-            font_style: Font style (e.g. `"italic"`)
+            **options: Label options (``position``, ``font_size``, ``color``,
+                ...): see the generated ``_label_opts`` or the docs options
+                table. An unknown option raises TypeError.
 
         Returns:
             New Mark (same subclass as self) with the label appended
@@ -468,26 +429,7 @@ class Mark:
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        label_spec: Dict[str, Any] = {
-            "accessor": dict(accessor) if isinstance(accessor, FieldAccessor) else accessor
-        }
-        if position is not None:
-            label_spec["position"] = position
-        if font_size is not None:
-            label_spec["fontSize"] = font_size
-        if color is not None:
-            label_spec["color"] = color
-        if offset is not None:
-            label_spec["offset"] = offset
-        if rotate is not None:
-            label_spec["rotate"] = rotate
-        if font_family is not None:
-            label_spec["fontFamily"] = font_family
-        if font_weight is not None:
-            label_spec["fontWeight"] = font_weight
-        if font_style is not None:
-            label_spec["fontStyle"] = font_style
-        new_mark._labels = [*self._labels, label_spec]
+        new_mark._labels = [*self._labels, _label_spec(accessor, options)]
         return new_mark
 
     def to_dict(self) -> dict:
@@ -693,8 +635,18 @@ from ._generated import (  # noqa: E402
     _ribbon_opts,
     _layer_opts,
     _chart_opts,
+    _label_opts,
     _polar_config,
 )
+
+
+def _label_spec(accessor: Union[str, "FieldAccessor"], options: Dict[str, Any]) -> dict:
+    """One `.label(accessor, **options)` call's wire entry, shared by
+    `Mark.label` and `Operator.label`."""
+    return {
+        "accessor": dict(accessor) if isinstance(accessor, FieldAccessor) else accessor,
+        **_label_opts(**options),
+    }
 
 
 # Low-level constraint surface — mirrors JS `Constraint.align` / `Constraint.distribute`
@@ -1493,15 +1445,11 @@ def spread(
         by: Field name to partition by (operator form only), or a
             ``field(...)`` accessor carrying domain ops
             (``field("site").sort("yield")``). Omit for per-item spread.
-        **options: dir ("x", "y", or an axis name the enclosing coordinate
-            space declares, such as "theta"), spacing, alignment, shared_scale,
-            anchor, glue.
-            Also `w`/`h` — a field name or pixel number sizing this operator's
-            box (data-driven operator extent, e.g. a mosaic's column width), and
-            `size` — a field name, pixel number, or ``field(...)`` accessor
-            sizing each split entry along the stack axis;
-            `size=field("count").normalize()` makes it a space-filling spine
-            (the mosaic/marimekko conditional axis).
+        **options: The generated ``_spread_opts`` core's options (the
+            combinator form's: ``_spread_combinator_opts``); see the docs
+            options table. ``dir`` is required. ``size=field("count").normalize()``
+            makes the stack axis a space-filling spine (the mosaic/marimekko
+            conditional axis).
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -1727,14 +1675,11 @@ def stack(
         by: Field name to partition by (operator form only), or a
             ``field(...)`` accessor carrying domain ops
             (``field("site").sort("yield")``). Omit for per-item stack.
-        **options: dir ("x", "y", or a coordinate-space axis name such as
-            "theta"), alignment, shared_scale, anchor. Also `w`/`h` —
-            a field name or pixel number sizing this operator's box (data-driven
-            operator extent, e.g. a mosaic's column width), and `size` — a
-            field name, pixel number, or ``field(...)`` accessor sizing each
-            split entry along the stack axis; `size=field("count").normalize()`
-            makes it a space-filling spine (the mosaic/marimekko conditional
-            axis).
+        **options: The generated ``_stack_opts`` core's options (the
+            combinator form's: ``_stack_combinator_opts``); see the docs
+            options table. ``dir`` is required. ``size=field("count").normalize()``
+            makes the stack axis a space-filling spine (the mosaic/marimekko
+            conditional axis).
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -1879,17 +1824,11 @@ def scatter(
         by: Field name to group by, or a ``field(...)`` accessor carrying
             domain ops (``field("site").sort("yield")``). Omit for per-item
             scatter.
-        **options:
-            x, y: Field-name accessors (str) for position; or arrays for
-                  combinator form. Required: at least one of x, y, x_min/x_max,
-                  y_min/y_max.
-            x_min, x_max, y_min, y_max: Range-form accessors (str) — children
-                                    span [x_min[i], x_max[i]] in data space.
-            dims: Placement by axis name — "x"/"y", or a name the enclosing
-                  coordinate space declares (polar "theta"/"r"). A bare value
-                  is the point, {"min", "max"} the span, e.g.
-                  ``dims={"theta": "bearing", "r": "distance"}``.
-            alignment: "start" | "middle" | "end" | "baseline".
+        **options: The generated ``_scatter_opts`` core's options; see the
+            docs options table. Give at least one of ``x``, ``y``,
+            ``x_min``/``x_max``, ``y_min``/``y_max``, or ``dims`` (placement
+            by axis name, e.g. ``dims={"theta": "bearing", "r": "distance"}``
+            in polar).
 
     Returns:
         Operator object
@@ -1932,10 +1871,10 @@ def treemap(
             ``spread``/``group``), or a ``field(...)`` accessor carrying domain
             ops (``field("site").sort("yield")``, ``field("genre").drop_nulls()``).
             Without ``by``, one leaf is emitted per row.
-        **options: ``size`` (a field name, pixel number, or ``field(...)``
-            accessor sizing each leaf's tile area — entry-flagged, one value
-            per split entry), ``tile``, ``sort``, ``flip_y``, ``padding_inner``,
-            ``padding_outer``, ``round``, ``leaf_intrinsic_radius_field``.
+        **options: The generated ``_treemap_opts`` core's options (the
+            combinator form's: ``_treemap_combinator_opts``); see the docs
+            options table. ``size`` sizes each leaf's tile area, one value
+            per split entry.
 
     Mirrors JS ``treemap({ by, size, tile, sort, flipY, ... })`` in
     ``.flow()`` and ``treemap({ size, ... }, marks)`` as a combinator.
@@ -2028,7 +1967,8 @@ def table(
     Args:
         by: Dict with `x` and `y` keys naming the two fields, e.g.
             ``table(by={"x": "model", "y": "year"})``.
-        **options: spacing (number or [x_sp, y_sp] tuple), num_cols.
+        **options: The generated ``_table_opts`` core's options; see the
+            docs options table.
 
     Returns:
         Operator object
@@ -2444,10 +2384,8 @@ def assign_gradient_color(gradient_config: dict, t: float) -> str:
 # Coordinate transforms
 
 
-# `_polar_config` is generated (packages/gofish-python/gofish/_generated.py)
-# from the shared `polarFields` group in the descriptor table — imported
-# above. `clock()`/`polar()`/`wavy()` stay hand-written thin wrappers (the
-# `clock`-vs-`polar` type-tag dispatch isn't part of the descriptor).
+# `clock()`/`polar()` are hand-written because the `clock`-vs-`polar` type
+# tag isn't part of the descriptor; both call the generated `_polar_config`.
 
 
 def clock(
@@ -2826,31 +2764,7 @@ def repeat(row: dict, field: str) -> List[dict]:
 # drops a phantom `fontWeight=` (also nowhere in JS).
 
 
-def line(
-    children: Optional[List["Mark"]] = None,
-    *,
-    dir: Optional[str] = None,
-    source: Optional[
-        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
-    ] = None,
-    target: Optional[
-        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
-    ] = None,
-    fill: Optional[str] = None,
-    stroke: Optional[str] = None,
-    stroke_width: Optional[int] = None,
-    stroke_dasharray: Optional[str] = None,
-    opacity: Optional[float] = None,
-    mix_blend_mode: Optional[str] = None,
-    curve: Optional[Union[str, Dict[str, Any]]] = None,
-    from_: Optional[str] = None,
-    to: Optional[str] = None,
-    along: Optional[str] = None,
-    em_x: Optional[bool] = None,
-    em_y: Optional[bool] = None,
-    w: Optional[Union[int, float, str]] = None,
-    h: Optional[Union[int, float, str]] = None,
-) -> Mark:
+def line(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     """Line mark — a center-mode connector (the path between mark centers).
 
     Three forms:
@@ -2875,49 +2789,17 @@ def line(
     in ``.mark(...)`` position, ``line(...)`` elaborates to an invisible
     anchor tier (a ``blank()`` carrying just these four keys) plus this
     connector. ``line`` itself ignores them.
+
+    The options are the generated ``_line_opts`` core's (see the docs options
+    table); an unknown option raises TypeError.
     """
-    kwargs = _line_opts(
-        dir=dir,
-        source=source,
-        target=target,
-        fill=fill,
-        stroke=stroke,
-        stroke_width=stroke_width,
-        stroke_dasharray=stroke_dasharray,
-        opacity=opacity,
-        mix_blend_mode=mix_blend_mode,
-        curve=curve,
-        from_=from_,
-        to=to,
-        along=along,
-        em_x=em_x,
-        em_y=em_y,
-        w=w,
-        h=h,
-    )
+    kwargs = _line_opts(**options)
     if children is not None:
         return Mark("line", _children=list(children), **kwargs)
     return Mark("line", **kwargs)
 
 
-def ribbon(
-    children: Optional[List["Mark"]] = None,
-    *,
-    dir: Optional[str] = None,
-    fill: Optional[str] = None,
-    stroke: Optional[str] = None,
-    stroke_width: Optional[int] = None,
-    opacity: Optional[float] = None,
-    mix_blend_mode: Optional[str] = None,
-    curve: Optional[Union[str, Dict[str, Any]]] = None,
-    from_: Optional[str] = None,
-    to: Optional[str] = None,
-    along: Optional[str] = None,
-    em_x: Optional[bool] = None,
-    em_y: Optional[bool] = None,
-    w: Optional[Union[int, float, str]] = None,
-    h: Optional[Union[int, float, str]] = None,
-) -> Mark:
+def ribbon(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     """Ribbon mark — an edge-mode connector: a filled band between the facing
     edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
@@ -2932,23 +2814,11 @@ def ribbon(
     in ``.mark(...)`` position, ``ribbon(...)`` elaborates to an invisible
     anchor tier (a ``blank()`` carrying just these four keys) plus this
     connector. ``ribbon`` itself ignores them.
+
+    The options are the generated ``_ribbon_opts`` core's (see the docs
+    options table); an unknown option raises TypeError.
     """
-    kwargs = _ribbon_opts(
-        dir=dir,
-        fill=fill,
-        stroke=stroke,
-        stroke_width=stroke_width,
-        opacity=opacity,
-        mix_blend_mode=mix_blend_mode,
-        curve=curve,
-        from_=from_,
-        to=to,
-        along=along,
-        em_x=em_x,
-        em_y=em_y,
-        w=w,
-        h=h,
-    )
+    kwargs = _ribbon_opts(**options)
     if children is not None:
         return Mark("ribbon", _children=list(children), **kwargs)
     return Mark("ribbon", **kwargs)
@@ -3105,10 +2975,6 @@ def chart(
         axes={"x": {"title": "Year"}}  # custom title (title=False suppresses it)
         axes={"x": {"label_angle": 45}}  # rotate x labels (also "side")
 
-    Keys inside the per-axis dict are snake_case like every kwarg; an
-    unknown key (or a camelCase one such as ``"labelAngle"``) raises
-    TypeError.
-
         chart(data, axes=True)
         chart(data, axes={"x": {"title": "Year"}, "y": True})
         chart(data, coord=clock(), axes=True, padding=80)   # polar chart
@@ -3120,6 +2986,10 @@ def chart(
     ``schema`` declares column types, keyed by column name (see ``Schema``):
 
         chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
+
+    Keys inside the per-axis dict are snake_case like every kwarg; an
+    unknown key (or a camelCase one such as ``"labelAngle"``) raises
+    TypeError.
 
     Args:
         data: Input data, or `ref(name)` / `select_all(name)` for cross-chart

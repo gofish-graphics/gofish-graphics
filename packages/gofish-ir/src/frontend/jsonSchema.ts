@@ -22,6 +22,7 @@
  */
 
 import {
+  LABEL_OPTIONS,
   LEAF_MARKS,
   OPERATORS,
   OPTION_TYPES,
@@ -192,15 +193,7 @@ function buildLeafMarkDefs(): Record<string, unknown> {
  *  a descriptor field's `t.ref(name)` resolves to the same declaration the
  *  validator and the Python generator read. */
 function buildOptionTypeDefs(): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(OPTION_TYPES).map(([name, spec]) => [
-      name,
-      {
-        ...(spec.doc ? { description: spec.doc } : {}),
-        ...fieldTypeToSchema(spec.type),
-      },
-    ])
-  );
+  return fieldsToProperties(OPTION_TYPES).properties;
 }
 
 const GENERATED_DEFS: Record<string, unknown> = {
@@ -604,16 +597,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
               accessor: {
                 oneOf: [{ type: "string" }, { $ref: "#/$defs/FieldAccessor" }],
               },
-              position: { type: "string" },
-              fontSize: { type: "number" },
-              color: { type: "string" },
-              offset: { type: "number" },
-              rotate: { type: "number" },
-              fontFamily: { type: "string" },
-              fontWeight: {
-                oneOf: [{ type: "number" }, { type: "string" }],
-              },
-              fontStyle: { type: "string" },
+              ...fieldsToProperties(LABEL_OPTIONS).properties,
             },
           },
         },

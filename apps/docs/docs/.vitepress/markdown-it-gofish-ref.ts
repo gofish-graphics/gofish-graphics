@@ -219,8 +219,8 @@ function sharedGroupOf(spec: FieldSpec): string | null {
 /** The option's name as a user types it: the camelCase field name in JS, the
  *  snake_case kwarg (`pyKwarg`, the same mapping the Python generator uses) in
  *  Python. */
-function fieldName(name: string, spec: FieldSpec, lang: Lang): string {
-  return lang === "python" ? pyKwarg(name, spec) : name;
+function fieldName(name: string, lang: Lang): string {
+  return lang === "python" ? pyKwarg(name) : name;
 }
 
 function optionsTable(
@@ -236,7 +236,7 @@ function optionsTable(
     const type = lang === "python" ? pyType(spec.type) : tsType(spec.type);
     const required = spec.required ? "**Required.** " : "";
     const doc = spec.doc ? cell(spec.doc) : "";
-    return `| ${code(fieldName(name, spec, lang))} | ${code(type)} | ${code(
+    return `| ${code(fieldName(name, lang))} | ${code(type)} | ${code(
       formatDefault(spec.default, lang)
     )} | ${required}${doc} |`;
   });

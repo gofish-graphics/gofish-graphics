@@ -18,7 +18,18 @@
  * Runnable as a script: `pnpm --filter gofish-ir test`.
  */
 
-import { OPERATORS, resolveFields } from "../frontend/descriptors.js";
+import {
+  LABEL_OPTIONS,
+  OPERATORS,
+  OPTION_TYPES,
+  resolveFields,
+  type FieldType,
+} from "../frontend/descriptors.js";
+import type {
+  AxesOptions,
+  AxisOptions,
+  LabelSpecIR,
+} from "../frontend/schema.js";
 
 declare const process: { exit(code: number): never };
 
@@ -150,6 +161,65 @@ for (const type of Object.keys(OPERATORS)) {
   check(
     `SCHEMA_OPERATOR_KEYS has an entry for "${type}"`,
     type in SCHEMA_OPERATOR_KEYS
+  );
+}
+
+/**
+ * The object-form keys of schema.ts's hand-written `AxisOptions` /
+ * `AxesOptions` types. Typed as `Record<keyof ..., true>`, so a type checker
+ * flags a key added to or removed from the TS type; the runtime check below
+ * compares them with the `OPTION_TYPES` declaration.
+ */
+const SCHEMA_OPTION_TYPE_KEYS: Record<string, Record<string, true>> = {
+  AxisOptions: {
+    title: true,
+    side: true,
+    labelAngle: true,
+  } satisfies Record<keyof Exclude<AxisOptions, boolean>, true>,
+  AxesOptions: {
+    x: true,
+    y: true,
+  } satisfies Record<keyof Exclude<AxesOptions, boolean>, true>,
+};
+
+/** The fields of the one object branch of a named option type. */
+function optionTypeObjectKeys(type: FieldType): string[] {
+  if (type.kind === "object") return Object.keys(type.fields);
+  if (type.kind === "union") return type.options.flatMap(optionTypeObjectKeys);
+  return [];
+}
+
+console.log("\n# OPTION_TYPES agree with schema.ts AxisOptions / AxesOptions");
+for (const [name, keys] of Object.entries(SCHEMA_OPTION_TYPE_KEYS)) {
+  const spec = OPTION_TYPES[name];
+  check(`OPTION_TYPES["${name}"] exists`, spec !== undefined);
+  if (!spec) continue;
+  const schemaKeys = Object.keys(keys).sort();
+  const descriptorKeys = optionTypeObjectKeys(spec.type).sort();
+  check(
+    `${name}: OPTION_TYPES object keys === schema.ts type keys`,
+    JSON.stringify(schemaKeys) === JSON.stringify(descriptorKeys),
+    JSON.stringify({ schemaKeys, descriptorKeys })
+  );
+}
+
+console.log("\n# LABEL_OPTIONS agree with schema.ts LabelSpecIR");
+{
+  const schemaKeys = Object.keys({
+    position: true,
+    fontSize: true,
+    color: true,
+    offset: true,
+    rotate: true,
+    fontFamily: true,
+    fontWeight: true,
+    fontStyle: true,
+  } satisfies Record<Exclude<keyof LabelSpecIR, "accessor">, true>).sort();
+  const descriptorKeys = Object.keys(LABEL_OPTIONS).sort();
+  check(
+    "LABEL_OPTIONS keys === LabelSpecIR keys but accessor",
+    JSON.stringify(schemaKeys) === JSON.stringify(descriptorKeys),
+    JSON.stringify({ schemaKeys, descriptorKeys })
   );
 }
 

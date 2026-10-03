@@ -277,8 +277,8 @@ mark("inside", {
 `{ type: t.channel(number|color) }` — a `ChannelValue` slot accepting a
 literal, a field name, or a `datum()` wrapper. The Python kwarg for a field
 is its name in snake case (`strokeWidth` becomes `stroke_width`), computed by
-one function, `pyKwarg`; a field declares a `py` name only for a
-Python-keyword collision (`{ py: "from_" }` on `line`'s `from` field).
+one function, `pyKwarg`, which adds a trailing underscore when the name is a
+Python keyword (`line`'s `from` field becomes `from_`).
 
 From the `rect` entry the generator emits, mechanically:
 
@@ -381,16 +381,16 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   `padding_inner`), and the two camel case functions became `select_all`
   and `create_name`. The wire format did not change: it stays in camel
   case, so the Python IR is byte-identical to before. The mapping is one
-  function, `pyKwarg(fieldName, spec)` in `descriptors.ts`: a field's
-  Python name is its name in snake case, unless the field declares a `py`
-  name for a Python-keyword collision (`from` becomes `from_`). The
+  function, `pyKwarg(fieldName)` in `descriptors.ts`: a field's Python
+  name is its name in snake case, with a trailing underscore when that is a
+  Python keyword (`from` becomes `from_`). The
   generator emits each generated function's `(wireKey, pyName)` pairs, so
   each function builds its IR dict under the camel case wire key, and a
   camel case kwarg is a `TypeError`. The docs options tables call the same
   `pyKwarg`, so a Python page shows the names a user types. Hand-written
-  signatures that build IR outside the generated layer
-  (`.label(font_size=...)`, `line`, `ribbon`) rename at the construction
-  site. To route the `spread` combinator and the `stack` operator and
+  wrappers (`.label()`, `line`, `ribbon`, the dual-form dispatchers) take
+  `**options` and pass them to a generated core (`_label_opts` from
+  `LABEL_OPTIONS`, `_line_opts`, ...), so they never rename by hand. To route the `spread` combinator and the `stack` operator and
   combinator through generated cores (before, they passed their kwargs to
   the wire unchecked), `OPERATORS.spread` and `OPERATORS.stack` now declare
   the box position `x`/`y` (as `treemap` does), and their combinator

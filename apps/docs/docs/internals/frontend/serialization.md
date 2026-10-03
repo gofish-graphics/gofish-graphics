@@ -501,16 +501,18 @@ CI freshness check (`pnpm --filter gofish-python gen` then `git diff
 generated Python" norm Altair and Plotly.py both follow.
 
 Python kwargs are in snake case, while the wire stays in camel case. One
-function in `descriptors.ts`, `pyKwarg(fieldName, spec)`, gives each field's
+function in `descriptors.ts`, `pyKwarg(fieldName)`, gives each field's
 Python name: the field name in snake case (`strokeWidth` becomes
-`stroke_width`, `emX` becomes `em_x`), or the field's `py` name when the
-snake case name would collide with a Python keyword (`from` becomes
-`from_`). Every generated function lists its `(wireKey, pyName)` pairs and
-builds its IR dict under the wire key, so `rect(stroke_width=2)` serializes
-as `{"strokeWidth": 2}`, and `rect(strokeWidth=2)` is a `TypeError`. The
-docs options tables call the same function. Python code that builds IR
-outside the generated layer (`.label(font_size=...)`, the `line` and
-`ribbon` signatures) renames at its construction site.
+`stroke_width`, `emX` becomes `em_x`), with a trailing underscore when that
+is a Python keyword (`from` becomes `from_`). Every generated function lists
+its `(wireKey, pyName)` pairs and builds its IR dict under the wire key, so
+`rect(stroke_width=2)` serializes as `{"strokeWidth": 2}`, and
+`rect(strokeWidth=2)` is a `TypeError`. The docs options tables call the
+same function. Hand-written wrappers take `**options` and pass them to a
+generated core, so none renames by hand: `.label(accessor, **options)` on
+marks and operators calls `_label_opts`, built from `LABEL_OPTIONS` (the
+options of a `LabelSpecIR`, which the JSON Schema's `LabelIR` and the
+validator also read), and `line`/`ribbon` call `_line_opts`/`_ribbon_opts`.
 
 A nested option dict follows the same rule, by its declared type. The
 generator compiles a field's type into a small Python literal that records

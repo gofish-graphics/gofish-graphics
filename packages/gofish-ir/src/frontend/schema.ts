@@ -294,15 +294,11 @@ export interface StackOperator
   sharedScale?: boolean;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
-  /** Position of this operator's box in the parent's space (pixels): the JS
-   *  `Spread` spreads its `FancyDims` into the box, as treemap's does. */
+  /** Box position, extent, and per-entry size — see `SpreadOperator`. */
   x?: ChannelValue;
   y?: ChannelValue;
-  /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
-   *  this operator's box, reported as a SIZE claim to the enclosing scale. */
   w?: ChannelValue;
   h?: ChannelValue;
-  /** Per-entry stack-axis extent (#700 Phase 2) — see SpreadOperator.size. */
   size?: ChannelValue;
   axes?: AxesOptions;
 }

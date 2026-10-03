@@ -23,7 +23,8 @@
  *    family) — the mechanical kwargs→dict half. The polymorphic
  *    operator-vs-combinator (or bag-vs-pairwise-vs-combinator) DISPATCH stays
  *    hand-written in `ast.py`, calling these cores. `_chart_opts` is the
- *    same kind of core for `chart(data, **options)` (CHART_OPTIONS).
+ *    same kind of core for `chart(data, **options)` (CHART_OPTIONS), and
+ *    `_label_opts` for `.label(accessor, **options)` (LABEL_OPTIONS).
  *  - `_OPTION_TYPES` + `_to_wire`: the key structure of each named option
  *    type (OPTION_TYPES) and the one interpreter that renames the keys of a
  *    nested option dict (`axes={"x": {"label_angle": 45}}`) to wire keys by
@@ -44,8 +45,9 @@ import {
   OPTION_TYPES,
   CHART_OPTIONS,
   MARK_BASE_FIELDS,
-  OPERATOR_BASE_FIELDS,
   PY_LEAF_BASE_KWARGS,
+  PY_OPERATOR_BASE_KWARGS,
+  LABEL_OPTIONS,
   pyKwarg,
   resolveFields,
   type FieldGroup,
@@ -122,7 +124,7 @@ function docLine(name: string, f: FieldSpec): string | null {
  *  Python user types `stroke_width=` and the IR still says `strokeWidth`. */
 function entries(fields: FieldGroup): Array<[string, string, FieldSpec]> {
   return Object.entries(fields).map(([fieldName, spec]) => [
-    pyKwarg(fieldName, spec),
+    pyKwarg(fieldName),
     spec.wire ?? fieldName,
     spec,
   ]);
@@ -180,7 +182,7 @@ function wireShape(type: FieldType, where: string): string | null {
     case "object": {
       const fields = Object.entries(type.fields).map(([name, spec]) => {
         const sub = wireShape(spec.type, `${where}.${name}`);
-        return `${pyStr(pyKwarg(name, spec))}: (${pyStr(spec.wire ?? name)}, ${sub ?? "None"})`;
+        return `${pyStr(pyKwarg(name))}: (${pyStr(spec.wire ?? name)}, ${sub ?? "None"})`;
       });
       return `("object", {${fields.join(", ")}})`;
     }
@@ -239,6 +241,16 @@ function wireValue(py: string, spec: FieldSpec): string {
   return shape === null ? py : `_to_wire(${shape}, ${py}, ${pyStr(py)})`;
 }
 
+/** The `(wireKey, value)` pair lines a generated function loops over to
+ *  build its IR dict. */
+function renderPairs(ents: Array<[string, string, FieldSpec]>): string {
+  return ents
+    .map(
+      ([py, wire, spec]) => `        (${pyStr(wire)}, ${wireValue(py, spec)}),`
+    )
+    .join("\n");
+}
+
 /** Render an `_xxx_opts(...) -> dict` core: same kwargs-collection body as a
  *  leaf factory, but returns the dict instead of wrapping it in a Mark/Operator
  *  — used by hand-written dual-form dispatch in ast.py. */
@@ -257,11 +269,7 @@ function renderOptsCore(
     ...(docLines.length ? ["", "    Args:", ...docLines] : []),
     `    """`,
   ].join("\n");
-  const pairs = ents
-    .map(
-      ([py, wire, spec]) => `        (${pyStr(wire)}, ${wireValue(py, spec)}),`
-    )
-    .join("\n");
+  const pairs = renderPairs(ents);
   const body = [
     `    opts: Dict[str, Any] = {}`,
     `    for _k, _v in [`,
@@ -302,12 +310,7 @@ function renderCombinatorFactory(opts: {
   if (ents.length === 0) {
     body = `    return Mark(${pyStr(wireType)}, _children=list(children))`;
   } else {
-    const pairs = ents
-      .map(
-        ([py, wire, spec]) =>
-          `        (${pyStr(wire)}, ${wireValue(py, spec)}),`
-      )
-      .join("\n");
+    const pairs = renderPairs(ents);
     body = [
       `    kwargs: Dict[str, Any] = {}`,
       `    for _k, _v in [`,
@@ -388,7 +391,7 @@ parts.push(
       `        for key, item in value.items():`,
       `            if key not in fields:`,
       `                hint = next(`,
-      `                    (py for py, (wire, _) in fields.items() if wire == key and py != key),`,
+      `                    (py for py, (wire, _) in fields.items() if wire == key),`,
       `                    None,`,
       `                )`,
       `                raise TypeError(`,
@@ -459,11 +462,7 @@ for (const name of GENERATED_LEAF_MARKS) {
     ...(docLines.length ? ["", "    Args:", ...docLines] : []),
     `    """`,
   ].join("\n");
-  const pairs = ents
-    .map(
-      ([py, wire, spec]) => `        (${pyStr(wire)}, ${wireValue(py, spec)}),`
-    )
-    .join("\n");
+  const pairs = renderPairs(ents);
   const bodyLines = [
     `    _kw: Dict[str, Any] = {}`,
     `    for _k, _v in [`,
@@ -531,44 +530,34 @@ const DUAL_FORM_OPERATOR_CORES: Array<[string, string]> = [
 ];
 for (const [opType, fnName] of DUAL_FORM_OPERATOR_CORES) {
   const d = OPERATORS[opType];
-  // `debug` (OPERATOR_BASE_FIELDS) is the universal fluent-operator escape hatch
-  // (stripped JS-side by FACTORY_ONLY_KEYS) — every core accepts it.
   parts.push(
-    renderOptsCore(
-      fnName,
-      { ...d.fields, debug: OPERATOR_BASE_FIELDS.debug },
-      d.doc
-    ) + "\n"
+    renderOptsCore(fnName, { ...d.fields, ...PY_OPERATOR_BASE_KWARGS }, d.doc) +
+      "\n"
   );
 }
 
-// treemap's combinator form carries combinator-only fields (`key`, the
-// JS-only `value` accessor) on top of the operator's — its own core, from
-// the COMBINATOR_MARKS entry, so Treemap() doesn't reject them.
-{
-  const d = COMBINATOR_MARKS["treemap"];
-  parts.push(
-    renderOptsCore(
-      "_treemap_combinator_opts",
-      { ...resolveFields(d), debug: OPERATOR_BASE_FIELDS.debug },
-      d.doc
-    ) + "\n"
-  );
-}
-
-// spread/stack combinator forms: their own cores from the COMBINATOR_MARKS
-// entries, so the combinator form maps snake_case kwargs to wire keys the
-// same way the operator form does.
-for (const name of ["spread", "stack"]) {
+// The combinator form of a dual-form wrapper gets its own core from its
+// COMBINATOR_MARKS entry, which adds combinator-only fields (`key`) to the
+// operator's. Both kinds of core take the operator base kwargs (`debug`).
+for (const name of ["treemap", "spread", "stack"]) {
   const d = COMBINATOR_MARKS[name];
   parts.push(
     renderOptsCore(
       `_${name}_combinator_opts`,
-      { ...resolveFields(d), debug: OPERATOR_BASE_FIELDS.debug },
+      { ...resolveFields(d), ...PY_OPERATOR_BASE_KWARGS },
       d.doc
     ) + "\n"
   );
 }
+
+// `.label(accessor, **options)` on Mark and Operator: the label options.
+parts.push(
+  renderOptsCore(
+    "_label_opts",
+    LABEL_OPTIONS,
+    "Options of one .label(accessor, **options) call."
+  ) + "\n"
+);
 
 // line/ribbon: same field list for bag/pairwise/combinator forms.
 for (const name of ["line", "ribbon"]) {
@@ -598,9 +587,6 @@ parts.push(
 );
 
 // --- Coord transforms --------------------------------------------------------
-// Python's polar()/clock() spell every option in snake_case (inner_radius,
-// central_angle, ...), like every generated kwarg (`pyKwarg`); the
-// descriptor's camelCase field names are the wire keys.
 parts.push(
   "\n# --- Coord transforms ---------------------------------------------------------\n"
 );
@@ -621,11 +607,7 @@ parts.push(
     ...docLines,
     `    """`,
   ].join("\n");
-  const pairs = ents
-    .map(
-      ([py, wire, spec]) => `        (${pyStr(wire)}, ${wireValue(py, spec)}),`
-    )
-    .join("\n");
+  const pairs = renderPairs(ents);
   const body = [
     `    cfg: Dict[str, Any] = {"type": transform_type}`,
     `    for _k, _v in [`,

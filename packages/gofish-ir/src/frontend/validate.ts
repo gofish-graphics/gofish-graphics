@@ -31,6 +31,7 @@ import {
   type RefMarkIR,
 } from "./schema.js";
 import {
+  LABEL_OPTIONS,
   LEAF_MARKS,
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,
@@ -1137,32 +1138,7 @@ function walkLabelSpec(node: unknown, path: string, ctx: Context): void {
       message: `expected a string or field(...) accessor object, got ${typeNameOf(node.accessor)}`,
     });
   }
-  optionalField(node, "position", path, ctx, expectString);
-  optionalField(node, "fontSize", path, ctx, expectNumber);
-  optionalField(node, "color", path, ctx, expectString);
-  optionalField(node, "offset", path, ctx, expectNumber);
-  optionalField(node, "rotate", path, ctx, expectNumber);
-  optionalField(node, "fontFamily", path, ctx, expectString);
-  optionalField(node, "fontWeight", path, ctx, expectStringOrNumber);
-  optionalField(node, "fontStyle", path, ctx, expectString);
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      [
-        "accessor",
-        "position",
-        "fontSize",
-        "color",
-        "offset",
-        "rotate",
-        "fontFamily",
-        "fontWeight",
-        "fontStyle",
-      ],
-      path,
-      ctx
-    );
-  }
+  walkDescriptorFields(node, path, ctx, LABEL_OPTIONS, ["accessor"]);
 }
 
 function walkLabel(node: unknown, path: string, ctx: Context): void {
@@ -1346,19 +1322,6 @@ function expectNumber(value: unknown, path: string, ctx: Context): void {
     ctx.errors.push({
       path,
       message: `expected number, got ${typeNameOf(value)}`,
-    });
-  }
-}
-
-function expectStringOrNumber(
-  value: unknown,
-  path: string,
-  ctx: Context
-): void {
-  if (typeof value !== "string" && typeof value !== "number") {
-    ctx.errors.push({
-      path,
-      message: `expected string or number, got ${typeNameOf(value)}`,
     });
   }
 }

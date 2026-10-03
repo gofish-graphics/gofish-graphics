@@ -63,22 +63,59 @@ export interface FieldSpec {
   doc?: string;
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
-  /** Python kwarg name, when it is not the field name in snake_case (see
-   *  `pyKwarg`). Only for Python keyword collisions: `from` → `from_`. */
-  py?: string;
 }
 
 export type FieldGroup = Record<string, FieldSpec>;
 
+/** Python's reserved words (`keyword.kwlist`). */
+const PY_KEYWORDS: ReadonlySet<string> = new Set([
+  "False",
+  "None",
+  "True",
+  "and",
+  "as",
+  "assert",
+  "async",
+  "await",
+  "break",
+  "class",
+  "continue",
+  "def",
+  "del",
+  "elif",
+  "else",
+  "except",
+  "finally",
+  "for",
+  "from",
+  "global",
+  "if",
+  "import",
+  "in",
+  "is",
+  "lambda",
+  "nonlocal",
+  "not",
+  "or",
+  "pass",
+  "raise",
+  "return",
+  "try",
+  "while",
+  "with",
+  "yield",
+]);
+
 /** The Python kwarg name for a descriptor field: the field name in snake_case
- *  (`strokeWidth` → `stroke_width`, `emX` → `em_x`), or the field's `py`
- *  override when snake_case alone would collide with a Python keyword
- *  (`from` → `from_`). The wire key is unaffected (`spec.wire ?? fieldName`):
- *  the Python generator and the docs options tables both call this, so a
- *  Python user types the snake_case name and the serialized IR keeps the
- *  camelCase key. */
-export function pyKwarg(fieldName: string, spec: FieldSpec): string {
-  return spec.py ?? fieldName.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+ *  (`strokeWidth` → `stroke_width`, `emX` → `em_x`), with a trailing
+ *  underscore when that is a Python keyword (`from` → `from_`, as PEP 8
+ *  advises). The wire key is unaffected (`spec.wire ?? fieldName`): the
+ *  Python generator and the docs options tables both call this, so a Python
+ *  user types the snake_case name and the serialized IR keeps the camelCase
+ *  key. */
+export function pyKwarg(fieldName: string): string {
+  const snake = fieldName.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+  return PY_KEYWORDS.has(snake) ? `${snake}_` : snake;
 }
 
 /** The small type DSL referenced by the design doc as `t.*`. */
@@ -224,9 +261,39 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
   },
 });
 
-// ---------------------------------------------------------------------------
-// Shared field groups
-// ---------------------------------------------------------------------------
+/** The base fields the Python generator exposes as kwargs on every operator
+ *  core and dual-form combinator core (the rest of OPERATOR_BASE_FIELDS ride
+ *  Operator methods: `.label()`, `.translate()`). */
+export const PY_OPERATOR_BASE_KWARGS: FieldGroup = group({
+  debug: OPERATOR_BASE_FIELDS.debug,
+});
+
+/** The options of one `.label(accessor, options?)` call: every field of a
+ *  `LabelSpecIR` (schema.ts) but the `accessor`. Marks and operators share
+ *  them; the JSON Schema's `LabelIR`, the validator, and the Python
+ *  generator (`_label_opts`) all read this group. */
+export const LABEL_OPTIONS: FieldGroup = group({
+  position: {
+    type: t.string,
+    doc: 'Label position, e.g. "center", "outset-top", "inset-bottom-start".',
+  },
+  fontSize: { type: t.number, doc: "Font size in pixels." },
+  color: {
+    type: t.string,
+    doc: "Label color. Omitted, it is chosen to contrast with the mark.",
+  },
+  offset: { type: t.number, doc: "Offset from the shape's edge in pixels." },
+  rotate: { type: t.number, doc: "Rotation in degrees." },
+  fontFamily: {
+    type: t.string,
+    doc: "Font family of the label's text node. Omitted, the elaborator's own font family.",
+  },
+  fontWeight: {
+    type: t.union(t.number, t.string),
+    doc: 'Font weight, e.g. "bold" or a numeric weight.',
+  },
+  fontStyle: { type: t.string, doc: 'Font style, e.g. "italic".' },
+});
 
 // ---------------------------------------------------------------------------
 // Option types — named nested option objects
@@ -315,6 +382,10 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
 });
 
+// ---------------------------------------------------------------------------
+// Shared field groups
+// ---------------------------------------------------------------------------
+
 /** A `dims` option: axis name → value or interval (`AxisDims` in schema.ts).
  *  The names are `x`/`y` plus whatever the enclosing coordinate space
  *  declares, known only at render time, so the key set is open — the one named
@@ -370,6 +441,28 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
   { label: "Paint", fields: paint },
 ];
 
+/** The box fields `spread` and `stack` (a re-tagged `spread({glue: true})`)
+ *  share. `x`/`y` place the operator's box in the parent's space: `Spread`
+ *  spreads its `FancyDims` into the box, like treemap's. `w`/`h` are the
+ *  data-driven operator extent (#4/#20, field/datum-driven cross-axis
+ *  sizing), and `size` the per-entry stack-axis extent (#700 Phase 2);
+ *  `size: field(<name>).normalize()` (a field accessor with a `normalize`
+ *  pipeline op) is the space-filling spine (mosaic/marimekko) that replaced
+ *  the old `normalize: true` layout flag. */
+const spreadBoxFields: FieldGroup = group({
+  x: ch.num(
+    "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+  ),
+  y: ch.num(
+    "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+  ),
+  w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+  h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+  size: ch.num(
+    "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
+  ),
+});
+
 // ---------------------------------------------------------------------------
 // Operators (all 9) — grounded in schema.ts interfaces + validate.ts's
 // per-type checks + the fluent factories in graphicalOperators/ and marks/chart.ts.
@@ -401,7 +494,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       from: {
         type: t.string,
         doc: "The `selectAll(layerName)` of a prior layer whose nodes the columns are matched against.",
-        py: "from_",
       },
       key: {
         type: t.string,
@@ -470,27 +562,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
       axes: { type: t.ref("AxesOptions") },
-      // Data-driven operator extent (#4/#20): the fluent spread operator carries
-      // `w`/`h` (field/datum-driven cross-axis sizing) and `size` (#700 Phase
-      // 2 — per-entry stack-axis extent, field/datum-sized children).
-      // `COMBINATOR_MARKS.spread` also carries `w`/`h` for the low-level
-      // Spread combinator's FancyDims. `size: field(<name>).normalize()`
-      // (a field accessor with a `normalize` pipeline op) is the
-      // space-filling spine (mosaic/marimekko) that replaced the old
-      // `normalize: true` layout flag.
-      // `x`/`y` place the operator's box in the parent's space: `Spread`
-      // spreads its `FancyDims` into the box, like treemap's.
-      x: ch.num(
-        "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
-      ),
-      y: ch.num(
-        "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
-      ),
-      w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-      h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-      size: ch.num(
-        "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
-      ),
+      ...spreadBoxFields,
     },
   }),
 
@@ -539,19 +611,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Reverse the children's order along dir.",
       },
       axes: { type: t.ref("AxesOptions") },
-      // Box position, data-driven extent + space-filling spine — see
-      // `spread` above.
-      x: ch.num(
-        "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
-      ),
-      y: ch.num(
-        "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
-      ),
-      w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-      h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-      size: ch.num(
-        "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
-      ),
+      ...spreadBoxFields,
     },
   }),
 
@@ -981,7 +1041,6 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       from: {
         type: t.string,
         doc: "Pairwise form: column holding the source ref.",
-        py: "from_",
       },
       to: {
         type: t.string,
@@ -1033,7 +1092,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.any,
         doc: 'Screen-space band-edge shape ("linear" | bezier() | "step" | "monotone" | "smooth" | "catmullRom"). "step" steps both edges, as a stepped area does. "monotone" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); "smooth" is a rounder reading over the same parameter, and can go a little past a point; "catmullRom" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = "auto" (monotone on a homogeneous continuous connection axis, else a bezier band).',
       },
-      from: { type: t.string, py: "from_" },
+      from: { type: t.string },
       to: { type: t.string },
       along: {
         type: t.string,
