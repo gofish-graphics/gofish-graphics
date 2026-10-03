@@ -39,11 +39,11 @@ grouping](/python/api/marks/ribbon#default-grouping)). `group()` is for nested
 splits (composing with a connector's own `by`, or an explicit `by` override)
 and for operator pipelines generally — anywhere you need a named per-partition
 frame without a connector mark driving the partitioning. `group`'s own `by` reads
-refs when it runs after a `selectAll`, and a ref is read through its rows, so the
+refs when it runs after a `select_all`, and a ref is read through its rows, so the
 bare field name works — `by="species"`:
 
 ```python
-chart(selectAll("bars")) \
+chart(select_all("bars")) \
     .flow(group(by="species")) \
     .mark(ribbon(opacity=0.8))
 ```

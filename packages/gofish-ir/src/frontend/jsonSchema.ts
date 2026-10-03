@@ -14,15 +14,18 @@
  * `$defs` (enumerated channels, `additionalProperties: true` — the warn-
  * don't-reject rollout stance) are GENERATED from `descriptors.ts` by
  * `buildOperatorDefs()` / `buildLeafMarkDefs()` below, merged into the
- * authored `$defs` object. Field-level coverage matches `validate.ts` (which
+ * authored `$defs` object, as are the named option types (`AxesOptions`,
+ * `AxisOptions`) from `OPTION_TYPES` (`buildOptionTypeDefs()`). Field-level coverage matches `validate.ts` (which
  * interprets the same descriptor table); this file is the wire artifact
  * (consumed by external tooling, language servers, and the Python wrapper's
  * parity-test harness).
  */
 
 import {
+  LABEL_OPTIONS,
   LEAF_MARKS,
   OPERATORS,
+  OPTION_TYPES,
   resolveFields,
   type FieldGroup,
   type FieldType,
@@ -45,6 +48,8 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
       return {};
     case "enum":
       return { enum: [...type.values] };
+    case "literal":
+      return { const: type.value };
     case "channel":
       return { $ref: "#/$defs/ChannelValue" };
     case "ref":
@@ -186,9 +191,17 @@ function buildLeafMarkDefs(): Record<string, unknown> {
   return defs;
 }
 
+/** One `$def` per named option type (`AxesOptions`, `AxisOptions`, ...), so
+ *  a descriptor field's `t.ref(name)` resolves to the same declaration the
+ *  validator and the Python generator read. */
+function buildOptionTypeDefs(): Record<string, unknown> {
+  return fieldsToProperties(OPTION_TYPES).properties;
+}
+
 const GENERATED_DEFS: Record<string, unknown> = {
   ...buildOperatorDefs(),
   ...buildLeafMarkDefs(),
+  ...buildOptionTypeDefs(),
 };
 
 export const FRONTEND_IR_JSON_SCHEMA = {
@@ -334,33 +347,8 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         y: { type: "number" },
       },
     },
-    AxesOptions: {
-      description:
-        "Per-node axis-rendering override. Boolean toggles both dimensions; object form lets x and y differ. Each `AxisOption` is `true`/`false`, or `{ title?: string | false }` to set or suppress the title.",
-      oneOf: [
-        { type: "boolean" },
-        {
-          type: "object",
-          properties: {
-            x: { $ref: "#/$defs/AxisOption" },
-            y: { $ref: "#/$defs/AxisOption" },
-          },
-        },
-      ],
-    },
-    AxisOption: {
-      oneOf: [
-        { type: "boolean" },
-        {
-          type: "object",
-          properties: {
-            title: {
-              oneOf: [{ type: "string" }, { const: false }],
-            },
-          },
-        },
-      ],
-    },
+    // AxesOptions / AxisOptions are GENERATED from descriptors.ts's
+    // OPTION_TYPES — see GENERATED_DEFS below.
     FieldAccessor: {
       description:
         'Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field("site").sort("yield") or field("count").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator\'s entry-flagged size channel, normalize.',
@@ -611,16 +599,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
               accessor: {
                 oneOf: [{ type: "string" }, { $ref: "#/$defs/FieldAccessor" }],
               },
-              position: { type: "string" },
-              fontSize: { type: "number" },
-              color: { type: "string" },
-              offset: { type: "number" },
-              rotate: { type: "number" },
-              fontFamily: { type: "string" },
-              fontWeight: {
-                oneOf: [{ type: "number" }, { type: "string" }],
-              },
-              fontStyle: { type: "string" },
+              ...fieldsToProperties(LABEL_OPTIONS).properties,
             },
           },
         },

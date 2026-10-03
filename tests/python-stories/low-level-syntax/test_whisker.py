@@ -37,7 +37,7 @@ def _box_and_whisker(d, tag):
                     line(
                         [ref(min_name), ref(max_name)],
                         dir="y",
-                        strokeWidth=1,
+                        stroke_width=1,
                         curve="bezier",
                     )
                 ]
@@ -61,7 +61,7 @@ def story_pair_box_whisker():
             [_box_and_whisker(male, "male"), _box_and_whisker(female, "female")],
             dir="x",
             spacing=8,
-            sharedScale=True,
+            shared_scale=True,
         ),
         _RENDER,
     )
@@ -88,7 +88,7 @@ def story_box_whisker():
             ],
             dir="x",
             spacing=8,
-            sharedScale=True,
+            shared_scale=True,
         ),
         _RENDER,
     )

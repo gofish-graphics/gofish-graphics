@@ -75,7 +75,7 @@ spread(by="origin.country", dir="x")         # nested path
 spread(by=field("species").sort(), dir="x")  # field(...) accessor
 ```
 
-The same bare field name works after a `ref` / `selectAll` selection. The stream
+The same bare field name works after a `ref` / `select_all` selection. The stream
 items are then **refs**, not raw records, but a ref is read through its `.datum`
 rows automatically, so you still write `by="species"`. Do **not** add a `datum.`
 prefix: `by="datum.species"` looks for a field named `datum` inside each row,
@@ -94,7 +94,7 @@ read the field off the first row — it **projects with homogeneity collapse**:
 This is exactly SQL's `ONLY_FULL_GROUP_BY` / functional-dependency rule: you may
 only group by a column that is constant within each row-bag.
 
-**Example.** After `selectAll("bars")` where each ref is a _lake_ aggregate of 5
+**Example.** After `select_all("bars")` where each ref is a _lake_ aggregate of 5
 species rows:
 
 ```python
@@ -110,7 +110,7 @@ single record.
 So a ribbon chart reads:
 
 ```python
-chart(selectAll("bars")) \
+chart(select_all("bars")) \
     .flow(group(by="species")) \
     .mark(ribbon(opacity=0.8))
 ```
@@ -216,7 +216,7 @@ entry's share (the conditional):
         # survival share within each column (conditional), filling height
         stack(by="survived", dir="y", size=field("count").normalize()),
     )
-    .mark(rect(fill="survived", stroke="white", strokeWidth=1))
+    .mark(rect(fill="survived", stroke="white", stroke_width=1))
     .render(w=400, h=300)
 )
 ```

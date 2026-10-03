@@ -11,7 +11,7 @@ from gofish import (
     log,
     clock,
     ref,
-    selectAll,
+    select_all,
     palette,
     gradient,
     normalize,
@@ -121,11 +121,11 @@ class TestMarkName:
 
 
 class TestRefData:
-    """Test `ref(...)` / `selectAll(...)` used as chart data."""
+    """Test `ref(...)` / `select_all(...)` used as chart data."""
 
     def test_select_all_returns_ref_proxy(self):
-        """Test selectAll() returns a _RefProxy carrying multiplicity='all'."""
-        s = selectAll("bars")
+        """Test select_all() returns a _RefProxy carrying multiplicity='all'."""
+        s = select_all("bars")
         assert isinstance(s, _RefProxy)
         assert s.multiplicity == "all"
         assert s._sel() == ["bars"]
@@ -143,15 +143,15 @@ class TestRefData:
         assert ir["data"] == {"type": "select", "layer": "bars", "mode": "one"}
 
     def test_chart_with_select_all_data_ir(self):
-        """Test chart(selectAll(...)) serializes with mode 'all'."""
-        c = chart(selectAll("bars")).mark(line())
+        """Test chart(select_all(...)) serializes with mode 'all'."""
+        c = chart(select_all("bars")).mark(line())
         ir = c.to_ir()
         assert ir["data"] == {"type": "select", "layer": "bars", "mode": "all"}
 
     def test_select_all_inline_raises(self):
-        """selectAll() cannot be used inline in a layout."""
+        """select_all() cannot be used inline in a layout."""
         with pytest.raises(ValueError, match="cannot be used inline"):
-            selectAll("bars").to_dict()
+            select_all("bars").to_dict()
 
     def test_chart_with_regular_data_ir(self):
         """Test regular chart has null data in IR."""

@@ -173,7 +173,7 @@ def empty_placeholder_arrow_bytes() -> bytes:
     """
     Arrow IPC bytes for an empty table with a single dummy `_placeholder`
     column — the wire payload for a chart tier that has no data of its own
-    (a `ref`/`selectAll` chart borrowing nodes from a sibling, or a tier
+    (a `ref`/`select_all` chart borrowing nodes from a sibling, or a tier
     whose data is `None`/empty). The widget only needs *some* valid Arrow
     stream; the placeholder column is never read.
 

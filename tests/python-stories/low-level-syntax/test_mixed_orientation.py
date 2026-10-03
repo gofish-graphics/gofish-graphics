@@ -77,7 +77,7 @@ def _tree_node(label):
     return layer(
         [
             ellipse(w=20, h=20, fill=_C6[2]),
-            text(text=label, fontSize=9, fill="white"),
+            text(text=label, font_size=9, fill="white"),
         ]
     )
 

@@ -1,6 +1,6 @@
 """Forward Syntax/Scatter (Connected & WithPieGlyphs) — mirrors Scatter.stories.tsx"""
 
-from gofish import layer, chart, scatter, circle, selectAll, line
+from gofish import layer, chart, scatter, circle, select_all, line
 from stories.data.driving_shifts import driving_shifts
 
 TITLE = "Forward Syntax/Scatter (Connected)"
@@ -10,13 +10,13 @@ def connected(w=400, h=400):
     points = (
         chart(driving_shifts)
         .flow(scatter(by="year", x="miles", y="gas"))
-        .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2).name("points"))
+        .mark(circle(r=4, fill="white", stroke="black", stroke_width=2).name("points"))
     )
-    lines = chart(selectAll("points")).mark(line(stroke="black", strokeWidth=2))
+    lines = chart(select_all("points")).mark(line(stroke="black", stroke_width=2))
     dots = (
         chart(driving_shifts)
         .flow(scatter(by="year", x="miles", y="gas"))
-        .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2))
+        .mark(circle(r=4, fill="white", stroke="black", stroke_width=2))
     )
     return layer([points, lines, dots])
 

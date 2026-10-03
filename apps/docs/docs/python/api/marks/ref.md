@@ -13,11 +13,11 @@ References another node so later marks can reuse its position or bounding box �
   anywhere — resolved at layout time against the name tree.
 - **As chart data**: `chart(ref("maxBar")).mark(text(text="peak"))` — resolved at
   build time against the named-layer registry, where it must match **exactly one**
-  node (use [`selectAll`](/python/api/selection/ref) for many). See
-  [ref / selectAll](/python/api/selection/ref) for the chart-data role and node-unit
+  node (use [`select_all`](/python/api/selection/ref) for many). See
+  [ref / select_all](/python/api/selection/ref) for the chart-data role and node-unit
   selection.
 
-See also [hygienic scoping](/python/api/selection/ref#hygienic-scoping) for when a name is visible and when to reach for a `createName` token.
+See also [hygienic scoping](/python/api/selection/ref#hygienic-scoping) for when a name is visible and when to reach for a `create_name` token.
 
 ## Signature
 
@@ -25,7 +25,7 @@ See also [hygienic scoping](/python/api/selection/ref#hygienic-scoping) for when
 ref(target: str | Token) -> Ref
 ```
 
-`Token` is the hygienic name returned by `createName(tag)`. A `Ref` is chainable:
+`Token` is the hygienic name returned by `create_name(tag)`. A `Ref` is chainable:
 `ref(token).foo[i].bar` accumulates a selection path (see [Path](#path) below).
 
 ## Forms
@@ -49,12 +49,12 @@ A `.relate()` parameter is the same thing spelled as a variable: `lambda bg, lab
 
 ### Token — globally addressable
 
-A `Token` (from `createName`) is a unique value. `.name(token)` registers the node in a global token context; `ref(token)` retrieves it.
+A `Token` (from `create_name`) is a unique value. `.name(token)` registers the node in a global token context; `ref(token)` retrieves it.
 
 ```python
-from gofish import layer, rect, ref, createName
+from gofish import layer, rect, ref, create_name
 
-target_name = createName("target")
+target_name = create_name("target")
 
 layer([
     rect(w=80, h=40).name(target_name),
@@ -65,7 +65,7 @@ layer([
 
 ### Path — step through scopes + positional children {#path}
 
-A path starts at a `Token` and descends one step per segment. Tag strings resolve against the current node's scope map (populated by `createName`-tagged children inside a scope root). Numbers pick the positional child at that index.
+A path starts at a `Token` and descends one step per segment. Tag strings resolve against the current node's scope map (populated by `create_name`-tagged children inside a scope root). Numbers pick the positional child at that index.
 
 ```python
 # Chained (proxy) — preferred for static paths
@@ -100,7 +100,7 @@ with the chained form or the variadic `.path(*segs)` escape hatch shown above.
 A ref exposes the datum bound to the node it points at via its `.datum` path:
 
 ```python
-bars = selectAll("bars")  # list of refs
+bars = select_all("bars")  # list of refs
 bars[0].datum             # the raw row-bag behind the first bar
 ```
 

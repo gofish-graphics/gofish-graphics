@@ -11,18 +11,18 @@ annotations, node names in diagrams, and axis titles.
 from gofish import chart, text
 
 chart([{"label": "GoFish"}]).mark(
-    text(text="label", fontSize=28, fill="steelblue")
+    text(text="label", font_size=28, fill="steelblue")
 ).render(w=240, h=80)
 ```
 
 ## Signature
 
 ```python
-text(*, text=None, fill=None, stroke=None, strokeWidth=None, filter=None,
-     fontSize=None, fontFamily=None, fontStyle=None, fontWeight=None,
-     debugBoundingBox=None, rotate=None, textAnchor=None,
-     x=None, cx=None, x2=None, w=None, emX=None,
-     y=None, cy=None, y2=None, h=None, emY=None,
+text(*, text=None, fill=None, stroke=None, stroke_width=None, filter=None,
+     font_size=None, font_family=None, font_style=None, font_weight=None,
+     debug_bounding_box=None, rotate=None, text_anchor=None,
+     x=None, cx=None, x2=None, w=None, em_x=None,
+     y=None, cy=None, y2=None, h=None, em_y=None,
      dims=None, key=None) -> Mark
 ```
 
@@ -51,14 +51,14 @@ text(text=lambda row: f"{row['amount']}%")  # computed per row
 
 ```python
 # Static label
-chart([{"label": "GoFish"}]).mark(text(text="label", fontSize=24, fill="steelblue"))
+chart([{"label": "GoFish"}]).mark(text(text="label", font_size=24, fill="steelblue"))
 
 # Value labels: layer text totals on top of bars
 layer([
     chart(seafood)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count").name("bars")),
-    chart(selectAll("bars"))
+    chart(select_all("bars"))
         .flow(group(by="lake"))
         .mark(lambda d: spread(
             [d[0], text(text=str(sum(r["count"] for r in d[0].datum)))],
@@ -67,11 +67,11 @@ layer([
 ])
 
 # Computed per-row label
-chart(bottles).mark(text(text=lambda d: f"{d['amount']}%", fontSize=35, fill="#666"))
+chart(bottles).mark(text(text=lambda d: f"{d['amount']}%", font_size=35, fill="#666"))
 
 # Italic label
-text(text="note", fontStyle="italic")
+text(text="note", font_style="italic")
 
 # Light-weight label
-text(text="caption", fontWeight=300)
+text(text="caption", font_weight=300)
 ```

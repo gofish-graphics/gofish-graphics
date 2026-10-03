@@ -1,4 +1,4 @@
-# ref / selectAll
+# ref / select_all
 
 `ref` is the single reference noun in GoFish, and it works in two positions:
 
@@ -10,19 +10,19 @@
   build time against the named-layer registry and stands in for the one node
   registered under that name.
 
-`selectAll(name)` is the **plural** chart-data verb: it returns an **array of
+`select_all(name)` is the **plural** chart-data verb: it returns an **array of
 refs**, one per node a named mark produced (node-unit; aggregate or not, no
 flattening). Pass either form as the data argument to a second
 [`chart()`](/python/api/core/chart) call to build overlays and connectors.
 
-Think of `selectAll` as the DOM's `querySelectorAll` (always a collection) and
+Think of `select_all` as the DOM's `querySelectorAll` (always a collection) and
 `ref(name)`-as-data as `querySelector` (the one-or-bust singular).
 
 ::: gofish example:line-chart hidden
 :::
 
 ```python
-from gofish import layer, chart, scatter, blank, selectAll, line
+from gofish import layer, chart, scatter, blank, select_all, line
 
 layer([
     # Step 1: name the mark
@@ -30,8 +30,8 @@ layer([
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(blank().name("points")),
 
-    # Step 2: selectAll those nodes as data for a connector
-    chart(selectAll("points")).mark(line(stroke="coral", strokeWidth=2)),
+    # Step 2: select_all those nodes as data for a connector
+    chart(select_all("points")).mark(line(stroke="coral", stroke_width=2)),
 ]).render(w=500, h=300, axes=True)
 ```
 
@@ -39,7 +39,7 @@ layer([
 
 ```python
 ref(name: str) -> Ref            # singular; resolves to exactly one node
-selectAll(name: str) -> list[Ref]  # one ref per matching node
+select_all(name: str) -> list[Ref]  # one ref per matching node
 ```
 
 ## Parameters
@@ -53,7 +53,7 @@ selectAll(name: str) -> list[Ref]  # one ref per matching node
 When you pass `ref(name)` as chart data it must resolve to **exactly one** node:
 
 - **Zero matches → error.** Nothing was registered under that name in scope.
-- **More than one match → error**, with a hint to use `selectAll(name)` instead.
+- **More than one match → error**, with a hint to use `select_all(name)` instead.
   A named mark that produced several nodes is a collection, and the singular
   reference refuses to silently pick one.
 
@@ -63,13 +63,13 @@ chart(ref("kpi")).mark(text(text="peak"))  # one ref; raises on 0 or >1 nodes
 
 ## Node-unit selection
 
-`selectAll` selects at **node granularity**: one ref per node the named mark
+`select_all` selects at **node granularity**: one ref per node the named mark
 produced, never flattened and never merged. Each ref points at a placed node, so
 overlay marks position themselves relative to it, and a ref's `datum` is **that
 node's data bag**.
 
 ```python
-bars = selectAll("bars")  # list[Ref]
+bars = select_all("bars")  # list[Ref]
 bars[0].datum             # the raw row-bag behind the first bar
 ```
 
@@ -82,7 +82,7 @@ GoFish models a selection as a plain list of refs rather than a bespoke
 selection object, and this is deliberate:
 
 - **A ref is structurally a one-element selection.** `ref(name)` (one ref) and
-  `selectAll` (a list of refs) are the singular/plural of the very same noun, so
+  `select_all` (a list of refs) are the singular/plural of the very same noun, so
   there is nothing new to learn — the ref you get from a selection behaves
   exactly like a ref you wrote by hand inline.
 - **Geometry is decoupled from data.** A ref points at a placed node; you read
@@ -108,34 +108,34 @@ selects every node it was given in the chart, so a mark repeated per row can
 carry one name. Inline, a string `ref` (and a `.relate()` operand) takes the
 nearest match to the layer that relates it; see the [`ref`](/python/api/marks/ref) mark.
 
-## Inline `selectAll` is not supported yet
+## Inline `select_all` is not supported yet
 
-`selectAll` is a chart-data verb only. Using it inline inside a layout raises —
+`select_all` is a chart-data verb only. Using it inline inside a layout raises —
 pass it as the data argument to a `chart()` instead. (Inline plural references
-may arrive later; for now use a named layer + `selectAll` as data.)
+may arrive later; for now use a named layer + `select_all` as data.)
 
-## Connectors take `selectAll` directly
+## Connectors take `select_all` directly
 
 [`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon) consume a
-list of refs and read placed geometry off them, so feed them `selectAll`:
+list of refs and read placed geometry off them, so feed them `select_all`:
 
 ```python
-chart(selectAll("points")).mark(line(stroke="black"))
+chart(select_all("points")).mark(line(stroke="black"))
 ```
 
 When the connector traces a chart's _own_ marks, chaining
 [`.layer()`](/python/api/core/layer) with a bare connector mark (or with `by`)
-is sugar for this two-chart `selectAll` recipe — only reach for `selectAll` by
+is sugar for this two-chart `select_all` recipe — only reach for `select_all` by
 hand to connect _another_ chart's marks.
 
 ## Path-aware `by` after a selection {#path-aware-by-after-a-selection}
 
-After `selectAll`, the stream items are refs, not raw records. Operators' `by`
+After `select_all`, the stream items are refs, not raw records. Operators' `by`
 option reads a ref through its `datum` rows, so you write the same bare field
 name you would on raw records:
 
 ```python
-chart(selectAll("bars")) \
+chart(select_all("bars")) \
     .flow(group(by="species")) \
     .mark(ribbon(opacity=0.8))  # not by="datum.species"
 ```

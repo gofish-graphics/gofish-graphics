@@ -6,28 +6,28 @@ order: 50
 
 Fills the region between a baseline and a set of data points as a filled band.
 Like [`line`](/python/api/marks/line), a ribbon traces a layout produced by
-another chart, selected with [`selectAll()`](/python/api/core/chart#cross-chart-references)
+another chart, selected with [`select_all()`](/python/api/core/chart#cross-chart-references)
 — an array of refs whose placed geometry the ribbon reads.
 
 ::: gofish example:area-chart hidden
 :::
 
 ```python
-from gofish import layer, chart, spread, blank, selectAll, ribbon
+from gofish import layer, chart, spread, blank, select_all, ribbon
 
 layer([
     chart(lake_totals)
         .flow(spread(by="lake", dir="x", spacing=64))
         .mark(blank(h="count").name("points")),
-    chart(selectAll("points")).mark(ribbon(opacity=0.8)),
+    chart(select_all("points")).mark(ribbon(opacity=0.8)),
 ]).render(w=500, h=300, axes=True)
 ```
 
 ## Signature
 
 ```python
-ribbon(stroke=None, strokeWidth=None, opacity=None, mixBlendMode=None,
-     dir=None, curve=None, along=None, w=None, h=None, emX=None, emY=None) -> Mark
+ribbon(stroke=None, stroke_width=None, opacity=None, mix_blend_mode=None,
+     dir=None, curve=None, along=None, w=None, h=None, em_x=None, em_y=None) -> Mark
 ```
 
 ## Parameters
@@ -41,13 +41,13 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
 Ribbons use the same two-chart recipe as [`line`](/python/api/marks/line#the-line-pattern):
 one chart positions named [`blank`](/python/api/marks/blank) marks, a second
-`selectAll`s them and draws the `ribbon()`. `selectAll(name)` reads a named layer
+`select_all`s them and draws the `ribbon()`. `select_all(name)` reads a named layer
 from an earlier chart as an array of refs, and `layer([chartA, chartB])` composes
 multiple charts into one figure. To re-partition the selection first (e.g. one
 ribbon per series), run it through `group(by="field")` — see
 [`group`](/python/api/operators/group).
 
-Stack several ribbons in one `layer` — with `opacity` or `mixBlendMode` — for
+Stack several ribbons in one `layer` — with `opacity` or `mix_blend_mode` — for
 layered and stacked area charts.
 
 ## Default grouping
@@ -62,7 +62,7 @@ When you need a _different_ path tier than the one inference would pick,
 name it with `along`: `along="species"` finds the flow tier whose `by` is
 `"species"`, makes it the path, and splits by every other grouping tier
 instead. Naming a field no tier groups by is an error. This doesn't apply to
-a ribbon drawn over an explicit refs bag (`chart(selectAll(...))`) or the
+a ribbon drawn over an explicit refs bag (`chart(select_all(...))`) or the
 pairwise `from`/`to` form — `along` is only meaningful when the ribbon fuses
 into a chart's own flow, and throws if used on either of those. A refs bag
 spells its split structurally instead, with an upstream
@@ -70,7 +70,7 @@ spells its split structurally instead, with an upstream
 
 ## Sugar: `.layer(ribbon(...))`
 
-When the ribbon traces a chart's _own_ marks, skip the two-chart `selectAll`
+When the ribbon traces a chart's _own_ marks, skip the two-chart `select_all`
 recipe and chain [`.layer()`](/python/api/core/layer) on the
 builder — this is the canonical simple ribbon-chart spelling:
 
@@ -90,7 +90,7 @@ group, so the ribbon splits into one band per species by default.
 
 See [`.layer()`](/python/api/core/layer) for the full semantics, including the
 zBelow-by-default paint order and the desugaring to the explicit
-`layer([...])` + `selectAll` form (which is still what you want to trace
+`layer([...])` + `select_all` form (which is still what you want to trace
 _another_ chart's marks).
 
 ## Sugar: `.mark(ribbon(...))` (blank-fusion)
@@ -124,18 +124,18 @@ chart(seafood, axes=True).flow(
 the same as it would if `fill` were declared on an explicit anchor `blank()`.
 
 See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart)
-for the full desugaring rule (the `w`/`h`/`emX`/`emY` anchor/connector key
+for the full desugaring rule (the `w`/`h`/`em_x`/`em_y` anchor/connector key
 split, `.name()` chaining, and when the rule doesn't fire).
 
-The `w`/`h`/`emX`/`emY` anchor channels are only meaningful when `ribbon` gets
+The `w`/`h`/`em_x`/`em_y` anchor channels are only meaningful when `ribbon` gets
 to synthesize its own anchors this way; passing them to a `ribbon` that
 instead connects already-drawn marks (an empty-scope `chart()` tier inside
-`.layer()`, or `chart(selectAll(...))`/`chart(ref(...))`) is an error, since
+`.layer()`, or `chart(select_all(...))`/`chart(ref(...))`) is an error, since
 there's nothing left for them to anchor.
 
 ## Examples
 
 ```python
 # Semi-transparent ribbon
-chart(selectAll("points")).mark(ribbon(opacity=0.8))
+chart(select_all("points")).mark(ribbon(opacity=0.8))
 ```

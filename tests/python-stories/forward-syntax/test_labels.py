@@ -45,7 +45,7 @@ def story_center():
         )
         .mark(
             rect(h="count", fill="species").label(
-                "count", position="center", fontSize=10
+                "count", position="center", font_size=10
             )
         ),
         {"w": 400, "h": 300, "axes": True},
@@ -74,7 +74,7 @@ def story_below():
         )
         .mark(
             rect(w="count", fill="species").label(
-                "count", position="outset-bottom", fontSize=9
+                "count", position="outset-bottom", font_size=9
             )
         ),
         {"w": 400, "h": 300, "axes": False},
@@ -94,7 +94,7 @@ def story_left():
             rect(w="count", fill="species").label(
                 "count",
                 position="outset-left",
-                fontSize=9,
+                font_size=9,
                 offset=13,
             )
         ),
@@ -128,7 +128,7 @@ def story_above_start():
         )
         .mark(
             rect(h="count", fill="species").label(
-                "count", position="outset-top-start", fontSize=9
+                "count", position="outset-top-start", font_size=9
             )
         ),
         {"w": 500, "h": 300, "axes": True},
@@ -146,7 +146,7 @@ def story_above_end():
         )
         .mark(
             rect(h="count", fill="species").label(
-                "count", position="outset-top-end", fontSize=9
+                "count", position="outset-top-end", font_size=9
             )
         ),
         {"w": 500, "h": 300, "axes": True},
@@ -171,7 +171,7 @@ def story_heatmap_with_labels():
         .flow(table(by={"x": "hour", "y": "day"}, spacing=4))
         .mark(
             rect(fill="value").label(
-                "value", position="center", fontSize=11
+                "value", position="center", font_size=11
             )
         ),
         {"w": 420, "h": 280, "axes": True},
@@ -188,7 +188,7 @@ def story_label_on_stack_operator():
         chart(titanic_passengers)
         .flow(
             stack(by="pclass", dir="y").label(
-                "pclass", position="center", fontSize=14, color="white"
+                "pclass", position="center", font_size=14, color="white"
             )
         )
         .mark(rect(w=120, h=field("survived").count())),
@@ -208,7 +208,7 @@ def story_label_on_stack_aggregate():
             stack(by="pclass", dir="y").label(
                 field("survived").count(),
                 position="center",
-                fontSize=14,
+                font_size=14,
                 color="white",
             )
         )
@@ -234,7 +234,7 @@ def story_two_labels_per_bar():
                 color="white",
                 font_weight="bold",
             )
-            .label("lake", position="outset-top", fontSize=9)
+            .label("lake", position="outset-top", font_size=9)
         ),
         {"w": 400, "h": 300, "axes": True},
     )

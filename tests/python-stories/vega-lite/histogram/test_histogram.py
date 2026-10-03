@@ -11,7 +11,7 @@ def story_default():
         chart(movies)
         .flow(
             derive(bin("IMDB Rating")),
-            scatter(xMin="start", xMax="end"),
+            scatter(x_min="start", x_max="end"),
         )
         .mark(rect(h="count")),
         {"w": 500, "h": 300, "axes": True},

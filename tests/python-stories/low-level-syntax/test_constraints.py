@@ -177,7 +177,7 @@ def story_align_span():
     return (
         layer([
             group,
-            rect(fill="none", stroke="#333", strokeWidth=2).name("border"),
+            rect(fill="none", stroke="#333", stroke_width=2).name("border"),
         ]).relate(lambda group, border, **_: [
             Constraint.align([group, border], x="span"),
             Constraint.align([group, border], y="span"),

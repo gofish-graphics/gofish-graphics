@@ -18,10 +18,13 @@
  *  - `jsonSchema.ts` builds per-construct `$defs` from these descriptors.
  *  - A later stage generates the Python factory functions from this table.
  *
+ * Nested option objects a field points at by name (`AxesOptions`) live in
+ * `OPTION_TYPES` below, and chart-level options in `CHART_OPTIONS`.
+ *
  * Out of scope for this table (stay hand-authored in `schema.ts` /
  * `jsonSchema.ts` / `validate.ts`, per the design doc's staging): `cut`,
  * `offset`, `ref`, constraints, and the envelope types (ChartIR, LayerIR,
- * DataIR, ChannelValue, LabelIR, TranslateIR, AxesOptions). Those are
+ * DataIR, ChannelValue, LabelIR, TranslateIR). Those are
  * structural/recursive shapes rather than flat field bags, and are cheap to
  * keep authored.
  */
@@ -36,12 +39,17 @@
  *  expected JS type for docgen (e.g. Python's generated signature/docstring). */
 export type ChannelInner = "number" | "string" | "boolean" | "color";
 
+/** The value a `literal` type admits: exactly one string, number, or boolean
+ *  (`false` in `title: string | false`). */
+export type LiteralValue = string | number | boolean;
+
 export type FieldType =
   | { kind: "string" }
   | { kind: "number" }
   | { kind: "boolean" }
   | { kind: "any" }
   | { kind: "enum"; values: readonly string[] }
+  | { kind: "literal"; value: LiteralValue }
   | { kind: "channel"; inner: ChannelInner }
   | { kind: "ref"; name: string }
   | { kind: "union"; options: readonly FieldType[] }
@@ -60,12 +68,60 @@ export interface FieldSpec {
   doc?: string;
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
-  /** Python kwarg name, when it differs from the field name (keyword
-   *  collisions: `from` → `from_`). */
-  py?: string;
 }
 
 export type FieldGroup = Record<string, FieldSpec>;
+
+/** Python's reserved words (`keyword.kwlist`). */
+const PY_KEYWORDS: ReadonlySet<string> = new Set([
+  "False",
+  "None",
+  "True",
+  "and",
+  "as",
+  "assert",
+  "async",
+  "await",
+  "break",
+  "class",
+  "continue",
+  "def",
+  "del",
+  "elif",
+  "else",
+  "except",
+  "finally",
+  "for",
+  "from",
+  "global",
+  "if",
+  "import",
+  "in",
+  "is",
+  "lambda",
+  "nonlocal",
+  "not",
+  "or",
+  "pass",
+  "raise",
+  "return",
+  "try",
+  "while",
+  "with",
+  "yield",
+]);
+
+/** The Python kwarg name for a descriptor field: the field name in snake_case
+ *  (`strokeWidth` → `stroke_width`, `emX` → `em_x`), with a trailing
+ *  underscore when that is a Python keyword (`from` → `from_`, as PEP 8
+ *  advises). The wire key is unaffected (`spec.wire ?? fieldName`): the
+ *  Python generator and the docs options tables both call this, so a Python
+ *  user types the snake_case name and the serialized IR keeps the camelCase
+ *  key. */
+export function pyKwarg(fieldName: string): string {
+  const snake = fieldName.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+  return PY_KEYWORDS.has(snake) ? `${snake}_` : snake;
+}
 
 /** The small type DSL referenced by the design doc as `t.*`. */
 export const t = {
@@ -77,13 +133,17 @@ export const t = {
    *  `AnchorSpec`, a JS function accessor). */
   any: { kind: "any" } as FieldType,
   enum: (...values: string[]): FieldType => ({ kind: "enum", values }),
+  /** Exactly one value, e.g. `t.literal(false)` for the `false` in JS's
+   *  `string | false`. */
+  literal: (value: LiteralValue): FieldType => ({ kind: "literal", value }),
   channel: (inner: ChannelInner = "number"): FieldType => ({
     kind: "channel",
     inner,
   }),
-  /** A reference to an authored envelope `$def` (AxesOptions, LabelIR,
-   *  ConstraintIR, TranslateIR, ...) — those stay hand-written in schema.ts /
-   *  jsonSchema.ts; this just points at them by name. */
+  /** A reference by name: to a named option type in `OPTION_TYPES`
+   *  (AxesOptions, ...), or to an authored envelope `$def` (LabelIR,
+   *  ConstraintIR, TranslateIR, ...) that stays hand-written in schema.ts /
+   *  jsonSchema.ts. */
   ref: (name: string): FieldType => ({ kind: "ref", name }),
   union: (...options: FieldType[]): FieldType => ({ kind: "union", options }),
   array: (items: FieldType): FieldType => ({ kind: "array", items }),
@@ -209,6 +269,127 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
   },
 });
 
+/** The base fields the Python generator exposes as kwargs on every operator
+ *  core and dual-form combinator core (the rest of OPERATOR_BASE_FIELDS ride
+ *  Operator methods: `.label()`, `.translate()`). */
+export const PY_OPERATOR_BASE_KWARGS: FieldGroup = group({
+  debug: OPERATOR_BASE_FIELDS.debug,
+});
+
+/** The options of one `.label(accessor, options?)` call: every field of a
+ *  `LabelSpecIR` (schema.ts) but the `accessor`. Marks and operators share
+ *  them; the JSON Schema's `LabelIR`, the validator, and the Python
+ *  generator (`_label_opts`) all read this group. */
+export const LABEL_OPTIONS: FieldGroup = group({
+  position: {
+    type: t.string,
+    doc: 'Label position, e.g. "center", "outset-top", "inset-bottom-start".',
+  },
+  fontSize: { type: t.number, doc: "Font size in pixels." },
+  color: {
+    type: t.string,
+    doc: "Label color. Omitted, it is chosen to contrast with the mark.",
+  },
+  offset: { type: t.number, doc: "Offset from the shape's edge in pixels." },
+  rotate: { type: t.number, doc: "Rotation in degrees." },
+  fontFamily: {
+    type: t.string,
+    doc: "Font family of the label's text node. Omitted, the elaborator's own font family.",
+  },
+  fontWeight: {
+    type: t.union(t.number, t.string),
+    doc: 'Font weight, e.g. "bold" or a numeric weight.',
+  },
+  fontStyle: { type: t.string, doc: 'Font style, e.g. "italic".' },
+});
+
+// ---------------------------------------------------------------------------
+// Option types — named nested option objects
+// ---------------------------------------------------------------------------
+
+/** One axis's options: a boolean (show or hide it, title inferred) or an
+ *  object of named options. Mirrors the JS `AxisOptions` in
+ *  `gofish-graphics/src/ast/gofish.tsx`. */
+const axisOptions: FieldSpec = {
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle.",
+  type: t.union(
+    t.boolean,
+    t.object({
+      title: {
+        type: t.union(t.string, t.literal(false)),
+        doc: "Axis title. A string sets it; false suppresses the inferred title.",
+      },
+      side: {
+        type: t.enum("start", "end"),
+        doc: 'Which frame edge the axis sits on: "start" is the near (origin) edge, "end" the far edge. Omitted, a continuous x-axis sits at the visual bottom.',
+      },
+      labelAngle: {
+        type: t.union(t.number, t.array(t.number), t.enum("auto")),
+        doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; "auto" picks 0, 45, or 90 degrees per label row so labels do not collide.',
+      },
+    })
+  ),
+};
+
+/** Named option types: the nested option objects a field points at with
+ *  `t.ref(name)`, declared in the same type DSL as the construct fields. Each
+ *  consumer resolves a ref through this table: `jsonSchema.ts` emits one
+ *  `$def` per entry, `validate.ts` walks the value with the generic field-type
+ *  interpreter, and the Python generator renames the keys of a nested dict
+ *  with `pyKwarg`, the same rule as the top-level kwargs
+ *  (`axes={"x": {"label_angle": 45}}` serializes as `labelAngle`).
+ *
+ *  A ref that is not in this table names a hand-authored envelope `$def`
+ *  (LabelIR, TranslateIR, FieldAccessor, AxisDimsValue, ...). */
+export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
+  AxisOptions: axisOptions,
+  AxesOptions: {
+    doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
+    type: t.union(
+      t.boolean,
+      t.object({
+        x: { type: t.ref("AxisOptions"), doc: "Options for the x axis." },
+        y: { type: t.ref("AxisOptions"), doc: "Options for the y axis." },
+      })
+    ),
+  },
+};
+
+/** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
+ *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
+ *  `gofish-graphics/src/ast/marks/chartBuilder.ts`. Read by the Python
+ *  generator (`_chart_opts`); the IR validator and JSON Schema still take
+ *  `options` as an open object. */
+export const CHART_OPTIONS: FieldGroup = group({
+  w: { type: t.number, doc: "Chart width in pixels." },
+  h: { type: t.number, doc: "Chart height in pixels." },
+  coord: {
+    type: t.any,
+    doc: "Coordinate transform for the whole chart: polar(), clock(), wavy(), ...",
+  },
+  color: {
+    type: t.any,
+    doc: "Color scale for every mark: palette(...) or gradient(...).",
+  },
+  axes: {
+    type: t.ref("AxesOptions"),
+    doc: "Draw axes: a boolean for both axes, or per-axis options {x?, y?}.",
+  },
+  legend: {
+    type: t.boolean,
+    default: true,
+    doc: "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
+  },
+  padding: {
+    type: t.number,
+    doc: "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).",
+  },
+  schema: {
+    type: t.record(t.any),
+    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels).",
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Shared field groups
 // ---------------------------------------------------------------------------
@@ -268,6 +449,28 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
   { label: "Paint", fields: paint },
 ];
 
+/** The box fields `spread` and `stack` (a re-tagged `spread({glue: true})`)
+ *  share. `x`/`y` place the operator's box in the parent's space: `Spread`
+ *  spreads its `FancyDims` into the box, like treemap's. `w`/`h` are the
+ *  data-driven operator extent (#4/#20, field/datum-driven cross-axis
+ *  sizing), and `size` the per-entry stack-axis extent (#700 Phase 2);
+ *  `size: field(<name>).normalize()` (a field accessor with a `normalize`
+ *  pipeline op) is the space-filling spine (mosaic/marimekko) that replaced
+ *  the old `normalize: true` layout flag. */
+const spreadBoxFields: FieldGroup = group({
+  x: ch.num(
+    "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+  ),
+  y: ch.num(
+    "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+  ),
+  w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+  h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+  size: ch.num(
+    "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
+  ),
+});
+
 // ---------------------------------------------------------------------------
 // Operators (all 9) — grounded in schema.ts interfaces + validate.ts's
 // per-type checks + the fluent factories in graphicalOperators/ and marks/chart.ts.
@@ -299,7 +502,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       from: {
         type: t.string,
         doc: "The `selectAll(layerName)` of a prior layer whose nodes the columns are matched against.",
-        py: "from_",
       },
       key: {
         type: t.string,
@@ -317,7 +519,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Shared key field matched between the incoming rows and `right`.",
       },
       right: {
-        type: t.array(t.object({})),
+        type: t.array(t.record(t.any)),
         required: true,
         doc: "The right-hand table, inlined as JSON rows.",
       },
@@ -368,19 +570,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
       axes: { type: t.ref("AxesOptions") },
-      // Data-driven operator extent (#4/#20): the fluent spread operator carries
-      // `w`/`h` (field/datum-driven cross-axis sizing) and `size` (#700 Phase
-      // 2 — per-entry stack-axis extent, field/datum-sized children).
-      // `COMBINATOR_MARKS.spread` also carries `w`/`h` for the low-level
-      // Spread combinator's FancyDims. `size: field(<name>).normalize()`
-      // (a field accessor with a `normalize` pipeline op) is the
-      // space-filling spine (mosaic/marimekko) that replaced the old
-      // `normalize: true` layout flag.
-      w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-      h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-      size: ch.num(
-        "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
-      ),
+      ...spreadBoxFields,
     },
   }),
 
@@ -429,12 +619,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Reverse the children's order along dir.",
       },
       axes: { type: t.ref("AxesOptions") },
-      // Data-driven extent + space-filling spine — see `spread` above.
-      w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-      h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-      size: ch.num(
-        "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
-      ),
+      ...spreadBoxFields,
     },
   }),
 
@@ -864,7 +1049,6 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       from: {
         type: t.string,
         doc: "Pairwise form: column holding the source ref.",
-        py: "from_",
       },
       to: {
         type: t.string,
@@ -916,7 +1100,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.any,
         doc: 'Screen-space band-edge shape ("linear" | bezier() | "step" | "monotone" | "smooth" | "catmullRom"). "step" steps both edges, as a stepped area does. "monotone" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); "smooth" is a rounder reading over the same parameter, and can go a little past a point; "catmullRom" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = "auto" (monotone on a homogeneous continuous connection axis, else a bezier band).',
       },
-      from: { type: t.string, py: "from_" },
+      from: { type: t.string },
       to: { type: t.string },
       along: {
         type: t.string,
@@ -957,12 +1141,25 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
 export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   spread: combinatorMark("spread", {
-    doc: "Low-level combinator form of `spread`. Its `Spread`/`SpreadOptions` factory carries the same `w`/`h` (FancyDims passthrough to the elaborated layer) the fluent operator now exposes.",
-    fields: resolveFields(OPERATORS.spread),
+    doc: "Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.",
+    // JS `Spread` spreads its `FancyDims` into its box and the combinator
+    // passes its options straight through, so every box-dims key is real
+    // here (`cx`, `emX`, `dims`, ...). The operator form's own x/y/w/h win
+    // the name collision (same type, operator-specific docs).
+    include: [boxDims],
+    fields: {
+      ...resolveFields(OPERATORS.spread),
+      key: { type: t.string, doc: "Internal per-node key override." },
+    },
   }),
   stack: combinatorMark("stack", {
-    doc: "Low-level combinator form of `stack`. See `spread`'s note on `w`/`h`.",
-    fields: resolveFields(OPERATORS.stack),
+    doc: "Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.",
+    // Same box as spread's: JS `stack` is `spread({...opts, glue: true})`.
+    include: [boxDims],
+    fields: {
+      ...resolveFields(OPERATORS.stack),
+      key: { type: t.string, doc: "Internal per-node key override." },
+    },
   }),
   scatter: combinatorMark("scatter", {
     fields: resolveFields(OPERATORS.scatter),
@@ -1198,28 +1395,24 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 // dispatch; they don't need JSON Schema $defs yet (per the design doc).
 // ---------------------------------------------------------------------------
 
-// The `py` names are the snake_case convention Python's polar()/clock()
-// already used before this table existed; the field names stay the camelCase
-// wire keys. Both the generated `_polar_config` and the docs options table read
-// them from here.
+// The field names are the camelCase wire keys; Python's polar()/clock() spell
+// them in snake_case (inner_radius, ...) like every other generated kwarg (see
+// `pyKwarg`).
 const polarFields: FieldGroup = group({
   innerRadius: {
     type: t.number,
     default: 0,
     doc: "Donut hole as a fraction [0,1) of the outer radius.",
-    py: "inner_radius",
   },
   centralAngle: {
     type: t.number,
     default: 2 * Math.PI,
     doc: "Total angular sweep in radians.",
-    py: "central_angle",
   },
   startAngle: {
     type: t.number,
     default: Math.PI / 2,
     doc: "Angle (radians) of θ=0.",
-    py: "start_angle",
   },
   direction: {
     type: t.number,

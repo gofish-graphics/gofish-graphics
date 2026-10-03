@@ -18,6 +18,6 @@ def story_default():
             stack(by="origin", dir="x", size="count"),
             stack(by="cylinders", dir="y", size=field("count").normalize()),
         )
-        .mark(rect(fill="origin", stroke="white", strokeWidth=2)),
+        .mark(rect(fill="origin", stroke="white", stroke_width=2)),
         {"w": 400, "h": 400},
     )

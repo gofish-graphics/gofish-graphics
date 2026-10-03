@@ -248,47 +248,6 @@ for the API.
         }
       }
     },
-    "AxesOptions": {
-      "description": "Per-node axis-rendering override. Boolean toggles both dimensions; object form lets x and y differ. Each `AxisOption` is `true`/`false`, or `{ title?: string | false }` to set or suppress the title.",
-      "oneOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "x": {
-              "$ref": "#/$defs/AxisOption"
-            },
-            "y": {
-              "$ref": "#/$defs/AxisOption"
-            }
-          }
-        }
-      ]
-    },
-    "AxisOption": {
-      "oneOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "title": {
-              "oneOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "const": false
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
     "FieldAccessor": {
       "description": "Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
       "type": "object",
@@ -693,22 +652,28 @@ for the API.
                 ]
               },
               "position": {
-                "type": "string"
+                "type": "string",
+                "description": "Label position, e.g. \"center\", \"outset-top\", \"inset-bottom-start\"."
               },
               "fontSize": {
-                "type": "number"
+                "type": "number",
+                "description": "Font size in pixels."
               },
               "color": {
-                "type": "string"
+                "type": "string",
+                "description": "Label color. Omitted, it is chosen to contrast with the mark."
               },
               "offset": {
-                "type": "number"
+                "type": "number",
+                "description": "Offset from the shape's edge in pixels."
               },
               "rotate": {
-                "type": "number"
+                "type": "number",
+                "description": "Rotation in degrees."
               },
               "fontFamily": {
-                "type": "string"
+                "type": "string",
+                "description": "Font family of the label's text node. Omitted, the elaborator's own font family."
               },
               "fontWeight": {
                 "oneOf": [
@@ -718,10 +683,12 @@ for the API.
                   {
                     "type": "string"
                   }
-                ]
+                ],
+                "description": "Font weight, e.g. \"bold\" or a numeric weight."
               },
               "fontStyle": {
-                "type": "string"
+                "type": "string",
+                "description": "Font style, e.g. \"italic\"."
               }
             }
           }
@@ -948,7 +915,7 @@ for the API.
           "type": "array",
           "items": {
             "type": "object",
-            "properties": {}
+            "additionalProperties": {}
           },
           "description": "The right-hand table, inlined as JSON rows."
         },
@@ -1025,6 +992,14 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -1109,6 +1084,14 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -2544,6 +2527,72 @@ for the API.
           "$ref": "#/$defs/MarkFnMark"
         }
       ]
+    },
+    "AxisOptions": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": false
+                }
+              ],
+              "description": "Axis title. A string sets it; false suppresses the inferred title."
+            },
+            "side": {
+              "enum": ["start", "end"],
+              "description": "Which frame edge the axis sits on: \"start\" is the near (origin) edge, \"end\" the far edge. Omitted, a continuous x-axis sits at the visual bottom."
+            },
+            "labelAngle": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                {
+                  "enum": ["auto"]
+                }
+              ],
+              "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; \"auto\" picks 0, 45, or 90 degrees per label row so labels do not collide."
+            }
+          }
+        }
+      ],
+      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle."
+    },
+    "AxesOptions": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/AxisOptions",
+              "description": "Options for the x axis."
+            },
+            "y": {
+              "$ref": "#/$defs/AxisOptions",
+              "description": "Options for the y axis."
+            }
+          }
+        }
+      ],
+      "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own."
     }
   }
 }

@@ -20,6 +20,6 @@ def story_default():
             spread(by="year", dir="x", spacing=36),
             scatter(by="variety", y="yield"),
         )
-        .mark(line(stroke="variety", strokeWidth=2)),
+        .mark(line(stroke="variety", stroke_width=2)),
         {"w": 700, "h": 350},
     )

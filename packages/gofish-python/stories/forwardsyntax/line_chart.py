@@ -1,6 +1,6 @@
 """Forward Syntax/Line Chart — mirrors LineChart.stories.tsx"""
 
-from gofish import layer, chart, scatter, blank, selectAll, line
+from gofish import layer, chart, scatter, blank, select_all, line
 from stories.data.seafood import catch_locations_array
 
 TITLE = "Forward Syntax/Line Chart"
@@ -12,5 +12,5 @@ def default(w=400, h=400):
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(blank().name("points"))
     )
-    lines = chart(selectAll("points")).mark(line())
+    lines = chart(select_all("points")).mark(line())
     return layer([points, lines])

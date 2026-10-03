@@ -30,13 +30,13 @@ chart(movies_raw).flow(
     treemap(
         by=field("Major Genre").drop_nulls(),
         size="Worldwide Gross",
-        paddingInner=2,
-        paddingOuter=2,
+        padding_inner=2,
+        padding_outer=2,
         round=True,
     )
 ).mark(
-    circle(fill="Major Genre", stroke="gray", strokeWidth=1).label(
-        "Major Genre", position="center", color="white", fontSize=12
+    circle(fill="Major Genre", stroke="gray", stroke_width=1).label(
+        "Major Genre", position="center", color="white", font_size=12
     )
 ).render(w=700, h=420)
 ```

@@ -21,7 +21,7 @@ chart(catch_locations, axes=True).flow(scatter(by="lake", x="x", y="y")).mark(
 ## Signature
 
 ```python
-circle(r=None, fill=None, stroke=None, strokeWidth=None, debug=None) -> Mark
+circle(r=None, fill=None, stroke=None, stroke_width=None, debug=None) -> Mark
 ```
 
 ## Parameters
@@ -44,6 +44,6 @@ chart(data).flow(scatter(x="x", y="y")).mark(circle(r="population", fill="region
 
 # Outlined dots
 chart(data).flow(scatter(x="x", y="y")).mark(
-    circle(r=4, fill="white", stroke="black", strokeWidth=2)
+    circle(r=4, fill="white", stroke="black", stroke_width=2)
 )
 ```

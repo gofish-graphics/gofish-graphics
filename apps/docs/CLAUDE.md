@@ -137,8 +137,8 @@ single source the generated Python factory layer
   `paint`). Several names in one block render one titled subsection each
   (`::: gofish-ref intersect exclude subtract paint mask`). An unknown name
   throws and fails the build.
-- JS pages get the JS field names and a TS-ish type; Python pages get the `py`
-  kwarg names and a Python type. The language comes from the page's path.
+- JS pages get the JS field names and a TS-ish type; Python pages get the snake_case
+  kwarg names (`pyKwarg` in `descriptors.ts`) and a Python type. The language comes from the page's path.
 - Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
   their own open subsection ("Box dimensions", "Paint"), below the table of the
   construct's own fields.
