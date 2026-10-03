@@ -12,15 +12,16 @@ export default function render(container, data) {
 }
 ```
 
-- `chart(data, { axes, color, coord, legend })`.
-- `.flow(op, ...)`: each operator splits rows into groups `by` a field and lays them out; the next runs inside each group. `spread` leaves gaps, `stack` none (sizes add up), `scatter` places at data values, `group` only splits.
+- `chart(data, { axes, color, coord, legend, schema })`.
+- `.flow(op, ...)`: each operator splits rows into groups `by` a field and lays them out; the next runs inside each group. `spread` leaves gaps, `stack` none (sizes add up), `scatter` places at data values, `pack` packs them as touching circles (marks keep their pixel size), `group` only splits.
 - `.mark(m)`: the shape per final group. Unset sizes fill the slot.
 - `.layer(chart().flow(...).mark(...))`: a layer over the marks drawn so far.
 - `.render(container, { w, h, axes })`: `w`, `h` = plot area; axes and legend go outside. Returns a Promise.
-- An option naming a field is data-driven (`fill: "kind"` adds a legend). Sizes (`w`, `h`, `r`, `size`) sum a group's rows, positions average; `field("v").mean()`, `.count()` override.
-- `by: field("k").sort("v", "desc")`, `.sort(["a", "b"])`, `.bin()`. Default order: first appearance (top first for `dir: "y"`). `stack({ size: field("v").normalize() })` fills 100% (mosaic).
-- `axes: true | { x: { title, labelAngle }, y: false }`. `color: palette("tableau10" | [colors] | { value: color })` or `gradient("blues" | [stops])`.
+- An option naming a field is data-driven (`fill: "kind"` adds a legend). Sizes (`w`, `h`, `r`, `size`) sum a group's rows, positions average; `field("v").mean()`, `.count()` override. A negative `w`/`h` grows from 0 the other way; a stack lays signed parts end to end (a negative part goes back).
+- `by: field("k").sort("v", "desc")`, `.sort(["a", "b"])`, `.bin()`. Default order: first appearance (top first for `dir: "y"`). `stack({ size: field("v").normalize() })` fills 100% (mosaic). `schema: { k: Schema.ordered(["a", "b", "c"]).diverging() }` orders `k` and centers a stack over it on its middle level.
+- `axes: true | { x: { title, labelAngle: 45 | "auto" }, y: false }`. `color: palette("tableau10" | [colors] | { value: color })` or `gradient("blues" | [stops])`.
 - `mark.label(field, { position: "center" | "outset" | "inset-top" | ..., fontSize })`; on an operator, one label per group.
+- `line`/`ribbon` `curve`: `"linear"`, `"step"`, `"monotone"` (the default along a continuous axis), `"smooth"`.
 - `coord: clock()`: `x`/`w` are angle, `y`/`h` radius. Pie: `stack({ by, dir: "x" })`, `rect({ w: "v", fill: "k" })`, no axes.
 - `derive(bin("v"))` makes rows `{ start, end, count }` for `scatter({ xMin: "start", xMax: "end" })`.
 
@@ -28,12 +29,12 @@ Options (=default). [box] = x y w h cx cy x2 y2. [style] = fill stroke strokeWid
 
 ## Operators (in `.flow()`)
 
-- `spread`: by, dir: "x"|"y", spacing=8, alignment="baseline", anchor="edge", reverse, axes, w, h, size
-- `stack`: by, dir: "x"|"y", spacing, alignment="baseline", anchor="edge", reverse, axes, w, h, size
-- `scatter`: by, x, y, xMin, xMax, yMin, yMax, alignment="baseline", axes, w, h
-- `group`: by
+- `spread`: by, dir, spacing=8, alignment="baseline", anchor="edge", reverse, axes, w, h, size
+- `stack`: by, dir, spacing, alignment="baseline", anchor="edge", reverse, axes, w, h, size
+- `scatter`: by, x, y, xMin, xMax, yMin, yMax, dims, alignment="baseline", axes, w, h
+- `group` `pack`: by
 - `table`: by: { x, y }, spacing, numCols
-- `treemap`: x, y, w, h, by, paddingInner, paddingOuter, tile="squarify", sort="desc", size
+- `treemap`: x, y, w, h, dims, by, paddingInner, paddingOuter, tile="squarify", sort="desc", size
 - `derive(fn)`, `fn(rows)` returns rows
 - `resolve`: cols, from
 - `join`: on, right
@@ -95,12 +96,15 @@ This folder is the GoFish skill. The cheatsheet above lists every operator and m
 | Circle Treemap | Movie counts by major genre shown as a bubble chart of nested circles sized by each genre's frequency. | examples/circle-treemap.js |
 | Colored Scatter Plot | A scatter plot of penguin flipper length against body mass, with points colored by species to reveal three distinct clusters. | examples/colored-scatter-plot.js |
 | Connected Scatter Plot | A connected scatter plot tracing gas price against miles driven over successive years, with a line threading the points in chronological order to reveal the path through time. | examples/connected-scatter-plot.js |
+| Connected Scatter Plot Animated | Fifty-five years of miles driven per person against the price of gas, with the line drawn in year by year as the animation plays. | examples/connected-scatter-plot-animated.js |
 | Croissant Chart | A gaussian density sliced into gapped vertical bands of unequal width that hold their true x positions, sampling the distribution as a croissant chart over a hand-drawn standard-deviation axis. | examples/croissant-chart.js |
 | DFSCQ File System Log | A four-stage pipeline diagram of the DFSCQ verified file system's write-ahead log, from an in-memory active transaction through a committed-transaction group, its on-disk block layout, and the applier that replays it to disk. | examples/dfscq-file-system-log.js |
+| Diverging Likert Chart | Survey answers stacked in the order of the response scale, with every row centered on the middle of its Neutral bar. | examples/diverging-likert-chart.js |
 | Donut Chart | A donut chart of fish catch by species, where the open center leaves a ring of wedges sized by each species' share of the total. | examples/donut-chart.js |
 | Faceted Scatter Plot | Gas prices over the years shown as small-multiple scatter panels stacked vertically, one per side of the road. | examples/faceted-scatter-plot.js |
 | Flower Chart | A distribution rendered as a meadow, where each binned count grows a layered flower of colored petals atop a green stem. | examples/flower-chart.js |
 | Gapminder Animated | Fifty years of every country's fertility rate and life expectancy, played as an animation in which each country is one moving dot. | examples/gapminder-animated.js |
+| Gapminder Trails | Five countries' fertility rate and life expectancy from 1955 to 2005, each a dot moving through the years that leaves a trail of its past years behind it. | examples/gapminder-trails.js |
 | Grouped Bar Chart | Fish catch counts per lake, with bars grouped side by side by species. | examples/grouped-bar-chart.js |
 | Grouped Box-and-Whisker Plot | Paired distributions across five categories shown as grouped box-and-whisker plots, with male and female boxes side by side over a labeled value axis. | examples/grouped-box-and-whisker-plot.js |
 | Highlighted Ribbon Chart | Species catch flows across lakes as stacked ribbons, with Salmon and Trout picked out in color against gray. | examples/highlighted-ribbon-chart.js |
@@ -127,6 +131,7 @@ This folder is the GoFish skill. The cheatsheet above lists every operator and m
 | Ohm Parse Tree | A parse-derivation diagram for the arithmetic expression "3 + (4 * 5)", with each matched grammar rule drawn as a colored bar spanning exactly the characters it covers, nested rules stacking downward toward the deepest match. | examples/ohm-parse-tree.js |
 | Pie Chart | A pie chart breaking down total fish catch by species, with each wedge's angle proportional to its share of the catch. | examples/pie-chart.js |
 | Polar Ribbon Chart | The lake-by-lake fish catch ribbons wrapped around a polar layout, coiling each species into a swirling spiral of nested colored bands. | examples/polar-ribbon-chart.js |
+| Population Pyramid | Women and men in each age band drawn outward from a shared center, so the two sides of the population compare at a glance. | examples/population-pyramid.js |
 | Pulley Diagram | A constraint-based physics diagram of three pulley wheels suspended from a ceiling bar by labeled ropes, lifting two hanging weights. | examples/pulley-diagram.js |
 | Quantum Circuit Equivalence | A quantum-circuit diagram showing a controlled-Z gate is equivalent to an H-CNOT-H sequence, with control dots wired to their gates and the CNOT called out in a highlighted box. | examples/quantum-circuit-equivalence.js |
 | Ribbon Chart | A ribbon chart tracking fish catch by species across six lakes, where each species' band is reordered at every lake so the largest sits on top and ribbons cross as rankings change. | examples/ribbon-chart.js |

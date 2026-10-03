@@ -11,7 +11,7 @@ export default function render(container, data) {
     .mark(circle({ r: 3, fill: "steelblue" }))
     .layer(
       chart().mark(
-        line({ stroke: "steelblue", strokeWidth: 2, curve: "straight" })
+        line({ stroke: "steelblue", strokeWidth: 2, curve: "linear" })
       )
     )
     .render(container, { w: 540, h: 305 });

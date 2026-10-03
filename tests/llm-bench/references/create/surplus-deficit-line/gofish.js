@@ -6,7 +6,6 @@ import {
   line,
   blank,
   palette,
-  field,
 } from "gofish-graphics";
 
 export default function render(container, data) {
@@ -27,11 +26,10 @@ export default function render(container, data) {
     }
     pts.push(d);
   });
-  // WORKAROUND (#773): a signed `h` does not grow from zero, so each side's
-  // area is given as an interval from zero to the balance clamped to it.
+  // Each side's area is the balance clamped to that side of zero.
   const area = pts.flatMap((d) => [
-    { year: d.year, side: "Surplus", lo: 0, hi: Math.max(d.balance, 0) },
-    { year: d.year, side: "Deficit", lo: Math.min(d.balance, 0), hi: 0 },
+    { year: d.year, side: "Surplus", balance: Math.max(d.balance, 0) },
+    { year: d.year, side: "Deficit", balance: Math.min(d.balance, 0) },
   ]);
 
   return (
@@ -39,16 +37,8 @@ export default function render(container, data) {
       axes: true,
       color: palette({ Surplus: "#2a9d8f", Deficit: "#e76f51" }),
     })
-      .flow(
-        group({ by: "side" }),
-        scatter({
-          by: "year",
-          x: "year",
-          yMin: field("lo", "balance"),
-          yMax: field("hi", "balance"),
-        })
-      )
-      .mark(ribbon({ fill: "side", curve: "straight" }))
+      .flow(group({ by: "side" }), scatter({ by: "year", x: "year" }))
+      .mark(ribbon({ h: "balance", fill: "side", curve: "linear" }))
       // The line: invisible anchors at the monthly values, then a line
       // through them. (`.layer(chart(rows)...mark(line(...)))` would nest a
       // fused line tier, which draws a wrong line.)
@@ -57,7 +47,7 @@ export default function render(container, data) {
           .flow(scatter({ by: "year", x: "year", y: "balance" }))
           .mark(blank())
       )
-      .layer(line({ stroke: "#222", strokeWidth: 1.5, curve: "straight" }))
+      .layer(line({ stroke: "#222", strokeWidth: 1.5, curve: "linear" }))
       .render(container, { w: 560, h: 340 })
   );
 }

@@ -96,7 +96,7 @@ Without a sort, groups keep the order in which their values first appear in the 
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rect({...})`   | `w`, `h` (size), `x`, `y` (position), `fill`, `stroke`, `strokeWidth` (0), `opacity` (1), `rx`, `ry` (corner radius). Bars, heatmap cells, pie slices.                                          |
 | `circle({...})` | `r` (radius px, or a field for bubble size), `fill`, `stroke`, `strokeWidth`, `opacity`. Has no `x`/`y`: place it with `scatter`.                                                               |
-| `line({...})`   | `stroke`, `strokeWidth` (1), `strokeDasharray` (e.g. `"4 2"`), `opacity`, `curve` (smooth by default; `"straight"` for straight segments), `along`. Connects the points of each group in order. |
+| `line({...})`   | `stroke`, `strokeWidth` (1), `strokeDasharray` (e.g. `"4 2"`), `opacity`, `curve` (smooth by default; `"linear"` for straight segments), `along`. Connects the points of each group in order. |
 | `ribbon({...})` | `h` (band height, a field), `fill`, `opacity`, `stroke`, `curve`, `along`. A filled band between consecutive points: area charts.                                                               |
 | `text({...})`   | `text`, `fontSize` (12), `fill` ("black"), `fontWeight`.                                                                                                                                        |
 
@@ -307,12 +307,12 @@ export default function render(container, data) {
       group({ by: "series" }),
       scatter({ by: "year", x: "year", y: "value" })
     )
-    .mark(line({ stroke: "series", strokeWidth: 2, curve: "straight" }))
+    .mark(line({ stroke: "series", strokeWidth: 2, curve: "linear" }))
     .render(container, { w: 500, h: 300 });
 }
 ```
 
-Lines are smoothed by default. `curve: "straight"` draws straight segments between points.
+Lines are smoothed by default. `curve: "linear"` draws straight segments between points.
 
 ### Line chart with points
 
@@ -326,7 +326,7 @@ export default function render(container, data) {
     .layer(
       chart()
         .flow(group({ by: "series" }))
-        .mark(line({ stroke: "series", curve: "straight" }))
+        .mark(line({ stroke: "series", curve: "linear" }))
     )
     .render(container, { w: 500, h: 300 });
 }
@@ -353,7 +353,7 @@ export default function render(container, data) {
         along: "month",
         stroke: "series",
         strokeWidth: 2,
-        curve: "straight",
+        curve: "linear",
       })
     )
     .render(container, { w: W, h: 300 });
@@ -373,7 +373,7 @@ export default function render(container, data) {
       stack({ by: () => "all", dir: "y" }) // one band; gives the y axis
     )
     .mark(
-      ribbon({ h: "value", fill: "steelblue", opacity: 0.8, curve: "straight" })
+      ribbon({ h: "value", fill: "steelblue", opacity: 0.8, curve: "linear" })
     )
     .render(container, { w: 500, h: 300 });
 }
@@ -509,6 +509,6 @@ Plain JS before `chart()` works just as well: compute the rows you need, then ch
 12. **One `.mark()` per chart.** To draw more (points plus lines, labels plus bars), use `.label()` on the mark or `.layer(chart().flow(...).mark(...))`.
 13. **Do not set `w` on bars in a `spread`** unless you want fixed widths. The bar width is inferred to fill the plot.
 14. **`w`/`h` in `.render()` size the plot area, not the whole SVG.** Axes and the legend add roughly 100px of width and 95px of height, plus about 100px for a legend.
-15. **Lines and areas are smoothed by default.** Pass `curve: "straight"` for straight segments, which is what most line charts should show.
+15. **Lines and areas are smoothed by default.** Pass `curve: "linear"` for straight segments, which is what most line charts should show.
 16. **`.render()` is async.** Return its Promise from `render()`. Do not call `.render()` twice on the same container.
 17. **No `datum.` prefix** in `by` or channel names. Write `by: "species"`, not `by: "datum.species"`.

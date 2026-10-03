@@ -3,10 +3,8 @@ import {
   scatter,
   group,
   polygon,
-  rect,
   blank,
   gradient,
-  assignGradientColor,
 } from "gofish-graphics";
 
 const W = 440; // plot width, px
@@ -48,7 +46,6 @@ function hexbins(rows) {
     bins.get(key).count++;
   }
   const cells = [...bins.values()];
-  const max = Math.max(...cells.map((c) => c.count));
   return cells.map(({ key, cx, cy, count }) => {
     const [x, y] = toData([cx, cy]);
     return {
@@ -56,9 +53,6 @@ function hexbins(rows) {
       x,
       y,
       count,
-      // WORKAROUND: a polygon's `fill` is not a data channel, so the
-      // sequential color is looked up here.
-      color: assignGradientColor(ORANGES, count / max),
       // pointy-top hexagon around the center, in data units
       ring: [0, 1, 2, 3, 4, 5].map((k) => {
         const t = (Math.PI / 3) * k;
@@ -82,27 +76,21 @@ export default function render(container, data) {
       },
       color: ORANGES,
     })
-      // a zero-size rect per cell colored by count, for the color bar
-      .flow(scatter({ by: "key", x: "x", y: "y" }))
-      .mark(rect({ w: 0, h: 0, fill: "count" }))
+      // one polygon per cell, its points in data units
+      .flow(group({ by: "key" }))
+      .mark(
+        polygon({
+          points: "ring",
+          fill: "count",
+          stroke: "white",
+          strokeWidth: 0.5,
+        })
+      )
       // invisible points at the ends of both domains
       .layer(
         chart(frame)
           .flow(scatter({ by: "x", x: "x", y: "y" }))
           .mark(blank())
-      )
-      // one polygon per cell, its points in data units
-      .layer(
-        chart(cells)
-          .flow(group({ by: "key" }))
-          .mark((rows) =>
-            polygon({
-              points: "ring",
-              fill: rows[0].color,
-              stroke: "white",
-              strokeWidth: 0.5,
-            })(rows)
-          )
       )
       .render(container, { w: W, h: H })
   );

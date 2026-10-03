@@ -5,12 +5,10 @@ import {
   Constraint,
   circle,
   createMark,
-  createName,
   layer,
   line,
   polygon,
   rect,
-  ref,
   text,
 } from "gofish-graphics";
 const r = 25;
@@ -50,19 +48,10 @@ const Weight = createMark(({ width, height, label }) =>
   ]),
 );
 const container = document.getElementById("app");
-// Cross-tier names: the ropes (outer layer) reference the shapes (inner
-// layer). String names are layer-scoped; `createName` tokens register
-// globally, so `ref(token)` resolves across the layer boundary.
-const ceiling = createName("ceiling");
-const A = createName("A");
-const B = createName("B");
-const C = createName("C");
-const w1 = createName("w1");
-const w2 = createName("w2");
 // x/y shift the resolved bounding box to start at (20, 20) — the constraint
 // layout produces negative coordinates and the root render does not auto-fit.
 layer({ x: 20, y: 20 }, [
-  // ── tier 1: shapes + letter labels — a finished, fully-placed unit ──
+  // ── tier 1: shapes + letter labels + ropes ──────────────────────────
   layer([
     rect({
       h: 20,
@@ -70,12 +59,12 @@ layer({ x: 20, y: 20 }, [
       fill: "#C9C9C9",
       stroke: "#000",
       strokeWidth: 2,
-    }).name(ceiling),
-    PulleyCircle({ r }).name(A),
-    PulleyCircle({ r }).name(B),
-    PulleyCircle({ r }).name(C),
-    Weight({ width: 30, height: 30, label: "W1" }).name(w1),
-    Weight({ width: 3 * r + w2jut, height: 30, label: "W2" }).name(w2),
+    }).name("ceiling"),
+    PulleyCircle({ r }).name("A"),
+    PulleyCircle({ r }).name("B"),
+    PulleyCircle({ r }).name("C"),
+    Weight({ width: 30, height: 30, label: "W1" }).name("w1"),
+    Weight({ width: 3 * r + w2jut, height: 30, label: "W2" }).name("w2"),
     text({ text: "A", fontSize: 12 }).name("Alabel"),
     text({ text: "B", fontSize: 12 }).name("Blabel"),
     text({ text: "C", fontSize: 12 }).name("Clabel"),
@@ -129,40 +118,37 @@ layer({ x: 20, y: 20 }, [
       ),
       Constraint.align({ y }, [pulley, label]),
     ]),
+    // rope segments — drawing clauses, drawn between the placed shapes.
+    // zOrder(-1): painted behind the shapes, so the wheels draw over rope
+    // ends. `ropeSupport` is the unlabeled support rope from the ceiling
+    // to B; the rest are named after the dimension letter (x/y/z/p/q/s)
+    // they carry.
+    line({ ...rope, target: "middle" }, [c.ceiling, c.B])
+      .name("ropeSupport")
+      .zOrder(-1),
+    line({ ...rope, source: ["start", "middle"], target: "middle" }, [c.B, c.A])
+      .name("ropeX")
+      .zOrder(-1),
+    line({ ...rope, source: ["end", "middle"], target: ["start", "middle"] }, [
+      c.B,
+      c.C,
+    ])
+      .name("ropeY")
+      .zOrder(-1),
+    line({ ...rope, target: ["end", "middle"] }, [c.ceiling, c.C])
+      .name("ropeZ")
+      .zOrder(-1),
+    line({ ...rope, source: ["start", "middle"] }, [c.A, c.w1])
+      .name("ropeP")
+      .zOrder(-1),
+    line({ ...rope, source: ["end", "middle"] }, [c.A, c.w2])
+      .name("ropeQ")
+      .zOrder(-1),
+    line({ ...rope, source: "middle" }, [c.C, c.w2])
+      .name("ropeS")
+      .zOrder(-1),
   ]),
-  // ── tier 2: rope segments — read the placed shapes ──────────────────
-  // Declared after tier 1 so their ref()s resolve against placed shapes.
-  // zOrder(-1): painted behind tier 1, so the wheels draw over rope ends.
-  // `ropeSupport` is the unlabeled support rope from the ceiling to B; the
-  // rest are named after the dimension letter (x/y/z/p/q/s) they carry.
-  line({ ...rope, target: "middle" }, [ref(ceiling), ref(B)])
-    .name("ropeSupport")
-    .zOrder(-1),
-  line({ ...rope, source: ["start", "middle"], target: "middle" }, [
-    ref(B),
-    ref(A),
-  ])
-    .name("ropeX")
-    .zOrder(-1),
-  line({ ...rope, source: ["end", "middle"], target: ["start", "middle"] }, [
-    ref(B),
-    ref(C),
-  ])
-    .name("ropeY")
-    .zOrder(-1),
-  line({ ...rope, target: ["end", "middle"] }, [ref(ceiling), ref(C)])
-    .name("ropeZ")
-    .zOrder(-1),
-  line({ ...rope, source: ["start", "middle"] }, [ref(A), ref(w1)])
-    .name("ropeP")
-    .zOrder(-1),
-  line({ ...rope, source: ["end", "middle"] }, [ref(A), ref(w2)])
-    .name("ropeQ")
-    .zOrder(-1),
-  line({ ...rope, source: "middle" }, [ref(C), ref(w2)])
-    .name("ropeS")
-    .zOrder(-1),
-  // ── tier 3: dimension labels ────────────────────────────────────────
+  // ── tier 2: dimension labels ────────────────────────────────────────
   text({ text: "x" }).name("labelX"),
   text({ text: "y" }).name("labelY"),
   text({ text: "z" }).name("labelZ"),
@@ -190,10 +176,10 @@ layer({ x: 20, y: 20 }, [
       Constraint.align({ y: "middle" }, [yAnchorTo, label]),
     ]),
     // ── granular paint order: relative z-order constraints ────────────
-    // Cross-tier refs (c.A, c.B, c.C) work because a constraint operand
-    // resolves anywhere inside the constraining layer. The ropes' default
-    // .zOrder(-1) keeps the unmentioned ropes (Y/Z/P/Q) behind their
-    // circles; these constraints carve out the four exceptions.
+    // The ropes and the shapes all lie in tier 1, so these constraints
+    // order them inside that tier. The ropes' default .zOrder(-1) keeps
+    // the unmentioned ropes (Y/Z/P/Q) behind their circles; these
+    // constraints carve out the four exceptions.
     Constraint.zAbove(c.ropeX, c.A), // x over A
     Constraint.zBelow(c.ropeX, c.B), // x under B
     Constraint.zAbove(c.ropeSupport, c.B), // ceiling→B over B

@@ -7,7 +7,7 @@ export default function render(container, data) {
     axes: { x: { title: "Year" }, y: { title: "Visitors (thousands)" } },
   })
     .flow(scatter({ by: "year", x: "year", y: "visitors" }))
-    .mark(line({ stroke: "steelblue", strokeWidth: 2, curve: "straight" }))
+    .mark(line({ stroke: "steelblue", strokeWidth: 2, curve: "linear" }))
     .layer(
       chart(data)
         .flow(

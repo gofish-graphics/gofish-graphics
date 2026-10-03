@@ -58,6 +58,7 @@ const OPERATOR_NAMES = [
   "group",
   "table",
   "treemap",
+  "pack",
   "derive",
   "resolve",
   "join",
@@ -123,10 +124,12 @@ const OMIT = new Set([
 ]);
 
 /** A line's and ribbon's w/h only matter for blank fusion, and from/to for
- *  connecting two ref columns (diagrams). */
+ *  connecting two ref columns (diagrams). pack's `method` has one strategy,
+ *  the default. */
 const OMIT_FOR: Record<string, string[]> = {
   line: ["w", "h", "from", "to"],
   ribbon: ["w", "h", "from", "to"],
+  pack: ["method"],
 };
 
 /** Constructs whose options are not an options object (a function), and
@@ -146,6 +149,7 @@ const INTRO_NAMES = [
   "gradient",
   "bin",
   "filter",
+  "Schema",
 ];
 
 /** The value exported from lib.ts under each name. */

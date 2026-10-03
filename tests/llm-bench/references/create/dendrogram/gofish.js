@@ -41,7 +41,7 @@ export default function render(container, data) {
   const { points, leaves } = layoutTree(data);
   return chart(points, { axes: { x: false, y: { title: "height" } } })
     .flow(group({ by: "link" }), scatter({ by: "i", x: "x", y: "height" }))
-    .mark(line({ stroke: "#555", strokeWidth: 1.5, curve: "straight" }))
+    .mark(line({ stroke: "#555", strokeWidth: 1.5, curve: "linear" }))
     .layer(
       chart(leaves)
         .flow(scatter({ by: "name", x: "x", y: "height" }))

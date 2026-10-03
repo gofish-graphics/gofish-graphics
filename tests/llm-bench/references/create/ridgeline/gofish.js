@@ -54,7 +54,7 @@ export default function render(container, data) {
         fill: "steelblue",
         stroke: "white",
         strokeWidth: 1,
-        curve: "straight",
+        curve: "linear",
       })
     )
     .layer(layer(labels))

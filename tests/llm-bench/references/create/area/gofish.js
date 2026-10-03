@@ -13,6 +13,6 @@ export default function render(container, data) {
       scatter({ by: "date", x: "year" }),
       stack({ by: "category", dir: "y" })
     )
-    .mark(ribbon({ h: "sales", fill: "category", curve: "straight" }))
+    .mark(ribbon({ h: "sales", fill: "category", curve: "linear" }))
     .render(container, { w: 520, h: 330 });
 }

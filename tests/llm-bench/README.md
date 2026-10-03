@@ -399,7 +399,7 @@ tokens, time to a finished chart, and repair rounds. The code is in
 | Context       | What the model gets                                                                                                                                                                                          |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `pack:<path>` | a docs pack after the arm's system prompt. `context/gofish.md` (v1) and `context/gofish-v2.md` (v2) are the two packs so far. The path is read from where the command was typed, or from `tests/llm-bench/`. |
-| `cheatsheet`  | `context/cheatsheet.md` after the system prompt: about 1,600 tokens.                                                                                                                                         |
+| `cheatsheet`  | `context/cheatsheet.md` after the system prompt: about 1,750 tokens.                                                                                                                                         |
 | `retrieval`   | the cheatsheet, plus the three gallery examples most like the task, at the start of the first user message.                                                                                                  |
 | `skill`       | a folder of files it reads with tools (claude-code backend only).                                                                                                                                            |
 
@@ -414,7 +414,7 @@ tokens, time to a finished chart, and repair rounds. The code is in
   diagram-only options are left out (the script lists them). `--check` fails
   when `cheatsheet.md` is out of date.
 - **retrieval**: `context/gallery-index.json` holds every gallery-tagged
-  story (86 of them; the gofish-gotree stories and the loader's fallbacks are
+  story (90 of them; the gofish-gotree stories and the loader's fallbacks are
   left out) with its title, description and standalone example, compiled to
   JavaScript. The examples come from the docs build's own loader
   (`apps/docs/docs/.vitepress/data/storyExamples.ts`). For each conversation
@@ -429,7 +429,7 @@ tokens, time to a finished chart, and repair rounds. The code is in
   and the report lists them per task.
 - **skill**: `context/skill/` holds `SKILL.md` (the cheatsheet, a paragraph on
   how to use the folder, and a table of every example's title, description
-  and file) and `examples/<id>.js` (the same 86 examples). Each call copies
+  and file) and `examples/<id>.js` (the same 90 examples). Each call copies
   the folder into its empty working directory and runs `claude -p` with
   `--tools Read,Glob,Grep --allowedTools Read,Glob,Grep --permission-prompts
 none --output-format stream-json --verbose`. The system prompt is the arm's

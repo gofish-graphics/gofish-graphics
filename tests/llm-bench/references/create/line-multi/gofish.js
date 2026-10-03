@@ -6,6 +6,6 @@ export default function render(container, data) {
       group({ by: "country" }),
       scatter({ by: "year", x: "year", y: "life_expect" })
     )
-    .mark(line({ stroke: "country", strokeWidth: 2, curve: "straight" }))
+    .mark(line({ stroke: "country", strokeWidth: 2, curve: "linear" }))
     .render(container, { w: 440, h: 305 });
 }

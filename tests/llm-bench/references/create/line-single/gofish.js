@@ -8,6 +8,6 @@ export default function render(container, data) {
     },
   })
     .flow(scatter({ by: "year", x: "year", y: "wheat" }))
-    .mark(line({ stroke: "steelblue", strokeWidth: 2, curve: "straight" }))
+    .mark(line({ stroke: "steelblue", strokeWidth: 2, curve: "linear" }))
     .render(container, { w: 540, h: 305 });
 }

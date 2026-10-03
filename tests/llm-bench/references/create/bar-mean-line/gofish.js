@@ -18,7 +18,7 @@ export default function render(container, data) {
           text: `Mean = ${mean.toFixed(1)}`,
         }),
       ]).relate(({ start, end }) => [
-        line({ stroke: "#333", strokeDasharray: "6 4", curve: "straight" }, [
+        line({ stroke: "#333", strokeDasharray: "6 4", curve: "linear" }, [
           start,
           end,
         ]),
