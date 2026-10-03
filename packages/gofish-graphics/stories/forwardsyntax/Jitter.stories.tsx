@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { penguins } from "../../src/data/penguins";
+import { denseMasses as dense } from "../../src/data/denseMasses";
 import { chart, circle, jitter, scatter, spread } from "../../src/lib";
 
 // Jitter: `scatter`'s `overlap: jitter()` spreads each dot along the axis no
@@ -41,33 +42,6 @@ export const PenguinMass: StoryObj = {
   },
 };
 
-/** About 1000 synthetic masses in three groups, from a seeded generator:
- *  normal, bimodal, and skewed (with a pile of tied values near 4500). */
-const dense = (() => {
-  let s = 12345;
-  const rand = () =>
-    (s = (1664525 * s + 1013904223) % 4294967296) / 4294967296;
-  const normal = (mu: number, sd: number) =>
-    mu +
-    sd * Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());
-  const rows: { group: string; mass: number }[] = [];
-  for (let i = 0; i < 340; i++)
-    rows.push({ group: "A", mass: Math.round(normal(3700, 420) / 25) * 25 });
-  for (let i = 0; i < 330; i++)
-    rows.push({
-      group: "B (bimodal)",
-      mass:
-        Math.round(
-          (rand() < 0.5 ? normal(3400, 250) : normal(4600, 300)) / 25
-        ) * 25,
-    });
-  for (let i = 0; i < 330; i++)
-    rows.push({
-      group: "C (skewed)",
-      mass: Math.round((3000 + 900 * -Math.log(1 - rand())) / 25) * 25,
-    });
-  return rows;
-})();
 
 const denseStory = (overlap: ReturnType<typeof jitter>): StoryObj => ({
   render: () => {

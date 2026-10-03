@@ -110,7 +110,33 @@ def test_scatter_serializes_jitter_overlap():
     with pytest.raises(ValueError):
         jitter(smoothing=0)
     with pytest.raises(ValueError):
-        jitter(smoothing=float("inf"))
+        jitter(smoothing=float("nan"))
+
+
+def test_non_finite_numbers_are_tagged_in_the_ir():
+    import json
+    import math
+
+    from gofish import chart, circle
+
+    ir = (
+        chart([{"v": 1.0}, {"v": math.inf}])
+        .flow(scatter(x="v", overlap=jitter(smoothing=math.inf)))
+        .mark(circle(r=3))
+        .to_ir()
+    )
+    overlap = ir["operators"][0]["overlap"]
+    assert overlap["smoothing"] == {"$numberDouble": "Infinity"}
+    # The document is strict JSON: no bare Infinity / NaN.
+    json.dumps(ir, allow_nan=False)
+    from gofish._nonfinite import encode_non_finite
+
+    assert encode_non_finite([-math.inf, math.nan, 2.0, "x"]) == [
+        {"$numberDouble": "-Infinity"},
+        {"$numberDouble": "NaN"},
+        2.0,
+        "x",
+    ]
 
 
 def test_pack_combinator_form():

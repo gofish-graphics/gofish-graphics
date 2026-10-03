@@ -9,6 +9,7 @@ covers:
   - packages/gofish-ir/src/frontend/validate.ts
   - packages/gofish-ir/src/frontend/jsonSchema.ts
   - packages/gofish-ir/src/frontend/descriptors.ts
+  - packages/gofish-ir/src/frontend/nonFinite.ts
   - packages/gofish-graphics/src/serialize/toJSON.ts
   - packages/gofish-graphics/src/serialize/fromJSON.ts
   - packages/gofish-graphics/src/serialize/registry.ts
@@ -234,6 +235,45 @@ shorthand path) or one of three explicit tagged objects:
 - `literal(x)` → `{type: "literal", value: x}` — inline constant, not scaled.
 
 These three mirror Vega-Lite's `field` / `datum` / `value` trichotomy.
+
+### Non-finite numbers
+
+JSON has no `Infinity`, `-Infinity` or `NaN`. `JSON.stringify` writes them as
+`null`, and Python's `json.dumps` writes a bare `Infinity`, which `JSON.parse`
+rejects. So the IR carries each one as a tagged object, the canonical form of
+MongoDB Extended JSON:
+
+```json
+{ "$numberDouble": "Infinity" }
+{ "$numberDouble": "-Infinity" }
+{ "$numberDouble": "NaN" }
+```
+
+It is one mechanism for every number in the document (an option such as
+`jitter`'s `smoothing`, a channel value, a data row), at the serialization
+boundary, with no per-field rule:
+
+- A writer encodes the whole document as it makes it: JS `toJSON` (through
+  `Frontend.encodeNonFinite`, gofish-ir's `frontend/nonFinite.ts`) and Python
+  `to_ir()` (`gofish/_nonfinite.py`). The test derive server encodes the
+  infinities in what it sends the same way.
+- A reader decodes the whole document where it receives it, before it
+  rebuilds a chart: `Frontend.decodeNonFinite` in the parity harness (the spec
+  and every derive response) and in the widget (the spec trait). The
+  reconstruction functions (`buildChart`, `mapMark`, ...) take a decoded
+  document.
+- The validator accepts the tagged `Infinity` and `-Infinity` wherever it
+  expects a number, through one check (`isIRNumber`), and the JSON Schema has
+  one shared `Number` def that every number field points to. A tagged `NaN`
+  where a number is expected is an error: a NaN option is always a bug. Data
+  rows are untyped, so a NaN there round-trips.
+- The test derive server keeps its old rule for a NaN in rows: it sends
+  `null`, which is how pandas' missing value reads in JS.
+
+The tag was chosen over protobuf's JSON mapping (a bare string `"Infinity"`
+in a number field) because a string already means a field name in a channel
+value, so a bare string would be ambiguous there; a tagged object is not, in
+any position.
 
 ### `.relate()` clauses
 

@@ -17,6 +17,16 @@ export {
 } from "./examples.js";
 export { FRONTEND_IR_JSON_SCHEMA } from "./jsonSchema.js";
 export {
+  NON_FINITE_KEY,
+  isNonFiniteNumberIR,
+  encodeNumber,
+  decodeNumber,
+  encodeNonFinite,
+  decodeNonFinite,
+  type NonFiniteNumberIR,
+  type NonFiniteSpelling,
+} from "./nonFinite.js";
+export {
   t,
   ch,
   group,

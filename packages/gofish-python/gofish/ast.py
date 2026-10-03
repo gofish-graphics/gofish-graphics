@@ -8,6 +8,8 @@ import math
 import re
 import uuid
 
+from ._nonfinite import encode_non_finite
+
 T = TypeVar("T")
 
 
@@ -554,7 +556,7 @@ class Mark:
         Chart/Frame wrapper, which is what gives byte-identical output to a
         JS storybook export that renders a mark directly.
         """
-        return {"type": "raw-mark", "mark": self.to_dict()}
+        return encode_non_finite({"type": "raw-mark", "mark": self.to_dict()})
 
     def render(
         self,
@@ -1367,7 +1369,7 @@ class ChartBuilder:
         }
         if self._z_order is not None:
             result["zOrder"] = self._z_order
-        return result
+        return encode_non_finite(result)
 
     def render(
         self,
@@ -2010,6 +2012,7 @@ def jitter(
             ``"uniform"`` draws seeded uniform offsets.
         smoothing: Width, in data units of the data axis, of the window that
             counts dots to set the outline. Default: one dot width.
+            ``math.inf`` gives a flat outline (classic fixed-band jitter).
         padding: Pixels added to each dot's width. Default 0.
         seed: Seed for ``"blue"`` and ``"uniform"``. Default 0.
     """
@@ -2017,17 +2020,10 @@ def jitter(
         raise ValueError(
             f'jitter: randomness must be "blue", "quasi" or "uniform", got {randomness!r}'
         )
-    if smoothing is not None:
-        if math.isinf(smoothing):
-            # TODO: the IR has no way to carry an infinite number yet, so a
-            # flat outline (classic fixed-band jitter) is JS-only for now.
-            raise ValueError(
-                "jitter: smoothing=inf (a flat outline) cannot cross to the "
-                "renderer yet, because the IR has no infinite number. Use a "
-                "large finite smoothing, about the data range."
-            )
-        if not smoothing > 0:
-            raise ValueError(f"jitter: smoothing must be positive, got {smoothing}")
+    if smoothing is not None and not smoothing > 0:
+        raise ValueError(
+            f"jitter: smoothing must be a positive number (or math.inf), got {smoothing}"
+        )
     if padding is not None and not padding >= 0:
         raise ValueError(f"jitter: padding must be a non-negative number, got {padding}")
     out: Dict[str, Any] = {"kind": "jitter"}
@@ -3284,7 +3280,7 @@ class LayerBuilder:
             result["builder"] = True
         if self._relate is not None:
             result["relate"] = [c.to_dict() for c in self._relate]
-        return result
+        return encode_non_finite(result)
 
     def render(
         self,

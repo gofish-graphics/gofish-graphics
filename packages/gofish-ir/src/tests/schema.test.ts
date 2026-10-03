@@ -9,6 +9,9 @@
 import {
   allExamples,
   validate,
+  encodeNonFinite,
+  decodeNonFinite,
+  FRONTEND_IR_JSON_SCHEMA,
   type FrontendIRDocument,
 } from "../frontend/index.js";
 
@@ -533,6 +536,96 @@ check(
 // ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Non-finite numbers ({ "$numberDouble": ... })
+// ---------------------------------------------------------------------------
+
+console.log("\n# Non-finite numbers");
+{
+  const inf = { $numberDouble: "Infinity" };
+  const nan = { $numberDouble: "NaN" };
+  const doc = (smoothing: unknown, zOrder: unknown = 1) =>
+    ({
+      irVersion: 0,
+      ir: "gofish-frontend",
+      root: {
+        type: "chart",
+        data: { type: "inline", rows: [{ v: 1 }, { v: Infinity }] },
+        operators: [
+          {
+            type: "scatter",
+            x: "v",
+            overlap: { kind: "jitter", smoothing },
+          },
+        ],
+        mark: { type: "circle", r: 3 },
+        zOrder,
+      },
+    }) as unknown as FrontendIRDocument;
+
+  const plain = validate(doc(5));
+  check("a finite number field validates", plain.valid, JSON.stringify(plain));
+  const tagged = validate(doc(inf, { $numberDouble: "-Infinity" }));
+  check(
+    "a number field accepts the tagged Infinity and -Infinity",
+    tagged.valid,
+    JSON.stringify(tagged.errors)
+  );
+  const bad = validate(doc(nan));
+  check(
+    "a number field rejects the tagged NaN loudly",
+    !bad.valid && bad.errors.some((e) => /NaN/.test(e.message)),
+    JSON.stringify(bad.errors)
+  );
+  const channel = validate({
+    ...doc(5),
+    root: { ...(doc(5).root as object), mark: { type: "circle", r: inf } },
+  } as unknown as FrontendIRDocument);
+  check(
+    "a channel value accepts the tagged Infinity",
+    channel.valid,
+    JSON.stringify(channel.errors)
+  );
+
+  const raw = {
+    a: Infinity,
+    b: [-Infinity, 2, NaN],
+    c: { d: "x", e: { f: Infinity } },
+  };
+  const enc = encodeNonFinite(raw);
+  check(
+    "encode writes every non-finite number as its tag",
+    JSON.stringify(enc) ===
+      '{"a":{"$numberDouble":"Infinity"},"b":[{"$numberDouble":"-Infinity"},2,{"$numberDouble":"NaN"}],"c":{"d":"x","e":{"f":{"$numberDouble":"Infinity"}}}}',
+    JSON.stringify(enc)
+  );
+  const back = decodeNonFinite(JSON.parse(JSON.stringify(enc)));
+  check(
+    "decode after JSON text restores Infinity, -Infinity and NaN",
+    back.a === Infinity &&
+      back.b[0] === -Infinity &&
+      back.b[1] === 2 &&
+      Number.isNaN(back.b[2]) &&
+      back.c.e.f === Infinity &&
+      back.c.d === "x"
+  );
+  const finite = { a: 1, b: [2, { c: "x" }] };
+  check(
+    "encode and decode share an unchanged value",
+    encodeNonFinite(finite) === finite && decodeNonFinite(finite) === finite
+  );
+  check(
+    "a look-alike object with another key is not decoded",
+    (decodeNonFinite({ x: { $numberDouble: "Infinity", y: 1 } }) as any).x
+      .$numberDouble === "Infinity"
+  );
+  const defs = (FRONTEND_IR_JSON_SCHEMA as any).$defs;
+  check(
+    "the JSON Schema has one shared Number def admitting the tag",
+    JSON.stringify(defs.Number).includes("$numberDouble")
+  );
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {

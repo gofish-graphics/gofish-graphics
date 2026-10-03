@@ -143,8 +143,7 @@ gf.chart(
   changes the outline's shape but not its total size. `smoothing: Infinity`
   makes the outline flat, a band of fixed width. With `randomness: "uniform"`,
   that is classic jitter, as in seaborn's `stripplot` or ggplot's
-  `position_jitter`. `Infinity` works when you render from JavaScript, but it
-  does not survive `toJSON` yet, because JSON has no infinite number.
+  `position_jitter`.
 - `padding` is a number of pixels added to each dot's width. The default
   is 0.
 - `seed` seeds the `"blue"` and `"uniform"` placements. The default is

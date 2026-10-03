@@ -158,7 +158,7 @@ for the API.
           "type": "object"
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "name": {
           "type": "string",
@@ -241,10 +241,10 @@ for the API.
       "type": "object",
       "properties": {
         "x": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "y": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         }
       }
     },
@@ -336,7 +336,7 @@ for the API.
                     "type": "string"
                   },
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   }
                 ]
               },
@@ -363,12 +363,12 @@ for the API.
             "thresholds": {
               "oneOf": [
                 {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 },
                 {
                   "type": "array",
                   "items": {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   }
                 }
               ]
@@ -459,10 +459,10 @@ for the API.
           "const": "offset"
         },
         "x": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "y": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "children": {
           "type": "array",
@@ -501,13 +501,13 @@ for the API.
           "$ref": "#/$defs/CutSize"
         },
         "inset": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "name": {
           "type": "string"
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -531,7 +531,7 @@ for the API.
           "items": {
             "oneOf": [
               {
-                "type": "number"
+                "$ref": "#/$defs/Number"
               },
               {
                 "type": "object",
@@ -545,7 +545,7 @@ for the API.
                     "type": "string"
                   },
                   "offset": {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   },
                   "colorOps": {
                     "type": "array",
@@ -557,7 +557,7 @@ for the API.
                           "enum": ["lighten", "darken"]
                         },
                         "amount": {
-                          "type": "number"
+                          "$ref": "#/$defs/Number"
                         }
                       }
                     }
@@ -620,7 +620,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"
@@ -650,7 +650,7 @@ for the API.
                     "type": "string"
                   },
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   }
                 ]
               }
@@ -664,7 +664,7 @@ for the API.
           "$ref": "#/$defs/LabelIR"
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -696,16 +696,16 @@ for the API.
                 "type": "string"
               },
               "fontSize": {
-                "type": "number"
+                "$ref": "#/$defs/Number"
               },
               "color": {
                 "type": "string"
               },
               "offset": {
-                "type": "number"
+                "$ref": "#/$defs/Number"
               },
               "rotate": {
-                "type": "number"
+                "$ref": "#/$defs/Number"
               },
               "fontFamily": {
                 "type": "string"
@@ -713,7 +713,7 @@ for the API.
               "fontWeight": {
                 "oneOf": [
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   },
                   {
                     "type": "string"
@@ -723,6 +723,24 @@ for the API.
               "fontStyle": {
                 "type": "string"
               }
+            }
+          }
+        }
+      ]
+    },
+    "Number": {
+      "description": "A number. JSON has no Infinity, so +/-Infinity travel as the tagged object { \"$numberDouble\": \"Infinity\" | \"-Infinity\" } (MongoDB Extended JSON). A tagged \"NaN\" is not a valid number here.",
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "object",
+          "required": ["$numberDouble"],
+          "additionalProperties": false,
+          "properties": {
+            "$numberDouble": {
+              "enum": ["Infinity", "-Infinity"]
             }
           }
         }
@@ -771,7 +789,7 @@ for the API.
           "type": "string"
         },
         {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         {
           "type": "boolean"
@@ -804,7 +822,7 @@ for the API.
               "type": "string"
             },
             "offset": {
-              "type": "number",
+              "$ref": "#/$defs/Number",
               "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."
             }
           }
@@ -994,7 +1012,7 @@ for the API.
           "description": "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Gap between children, px.",
           "default": 8
         },
@@ -1080,7 +1098,7 @@ for the API.
           "description": "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity."
         },
         "glue": {
@@ -1241,7 +1259,7 @@ for the API.
                   "enum": ["swarm"]
                 },
                 "padding": {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 }
               },
               "required": ["kind"]
@@ -1256,13 +1274,13 @@ for the API.
                   "enum": ["blue", "quasi", "uniform"]
                 },
                 "smoothing": {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 },
                 "padding": {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 },
                 "seed": {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 }
               },
               "required": ["kind"]
@@ -1323,7 +1341,7 @@ for the API.
         "spacing": {
           "oneOf": [
             {
-              "type": "number"
+              "$ref": "#/$defs/Number"
             },
             {
               "type": "array",
@@ -1331,10 +1349,10 @@ for the API.
               "maxItems": 2,
               "prefixItems": [
                 {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 },
                 {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 }
               ]
             }
@@ -1343,7 +1361,7 @@ for the API.
           "default": 0
         },
         "numCols": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Explicit column count (falls back to the number of distinct column keys)."
         },
         "label": {
@@ -1437,12 +1455,12 @@ for the API.
           "description": "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row."
         },
         "paddingInner": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Padding between sibling rectangles.",
           "default": 0
         },
         "paddingOuter": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Padding around the outer edge of the treemap.",
           "default": 0
         },
@@ -1651,12 +1669,12 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1.",
           "default": 1
         },
@@ -1669,17 +1687,17 @@ for the API.
           "description": "Internal per-node key override."
         },
         "rx": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Corner radius, x.",
           "default": 0
         },
         "ry": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Corner radius, y.",
           "default": 0
         },
         "aspectRatio": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "w/h ratio to enforce; the constraining axis wins when both are data-driven."
         },
         "debug": {
@@ -1698,7 +1716,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1727,12 +1745,12 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
           "default": 1
         },
@@ -1752,7 +1770,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1824,17 +1842,17 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1.",
           "default": 1
         },
         "aspectRatio": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "w/h ratio to enforce. When both dims are data-driven, the constraining axis is used."
         },
         "debug": {
@@ -1853,7 +1871,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1925,7 +1943,7 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
@@ -1945,7 +1963,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2026,7 +2044,7 @@ for the API.
           "description": "Stroke color."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
@@ -2035,7 +2053,7 @@ for the API.
           "description": "Raw SVG filter attribute."
         },
         "fontSize": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Font size in pixels.",
           "default": 12
         },
@@ -2051,7 +2069,7 @@ for the API.
         "fontWeight": {
           "oneOf": [
             {
-              "type": "number"
+              "$ref": "#/$defs/Number"
             },
             {
               "type": "string"
@@ -2065,7 +2083,7 @@ for the API.
           "default": false
         },
         "rotate": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Rotation in degrees, applied in the chart's y-up world frame about the text anchor.",
           "default": 0
         },
@@ -2087,7 +2105,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"
@@ -2166,7 +2184,7 @@ for the API.
           "description": "Raw SVG filter attribute."
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
         "preserveAspectRatio": {
@@ -2190,7 +2208,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2216,10 +2234,10 @@ for the API.
                 "maxItems": 2,
                 "prefixItems": [
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   },
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   }
                 ]
               }
@@ -2240,12 +2258,12 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1, applied to both fill and stroke.",
           "default": 1
         },
@@ -2265,7 +2283,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2319,7 +2337,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2344,7 +2362,7 @@ for the API.
           "description": "Line color."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Line thickness in pixels.",
           "default": 1
         },
@@ -2353,7 +2371,7 @@ for the API.
           "description": "Raw SVG stroke-dasharray (e.g. \"12\") for a dashed line."
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
         "mixBlendMode": {
@@ -2414,7 +2432,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"
@@ -2442,12 +2460,12 @@ for the API.
           "description": "Stroke color."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
         "mixBlendMode": {
@@ -2501,7 +2519,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"
@@ -2536,7 +2554,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"

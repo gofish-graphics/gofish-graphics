@@ -38,15 +38,6 @@ packages/gofish-graphics/stories/forwardsyntax/Pack.stories.tsx::NestedByCount
 # are ported.
 packages/gofish-graphics/stories/forwardsyntax/Swarm.stories.tsx::MixedRadii
 
-# jitter: the Dense* stories draw ~1000 rows from a seeded JS generator
-# (Math.log/Math.cos), which Python cannot reproduce bit for bit, and
-# DenseUniformFlat passes smoothing: Infinity, which the IR cannot carry yet.
-# Forward Syntax/Jitter::PenguinMass is ported.
-packages/gofish-graphics/stories/forwardsyntax/Jitter.stories.tsx::DenseDefault
-packages/gofish-graphics/stories/forwardsyntax/Jitter.stories.tsx::DenseSmoothing
-packages/gofish-graphics/stories/forwardsyntax/Jitter.stories.tsx::DenseQuasi
-packages/gofish-graphics/stories/forwardsyntax/Jitter.stories.tsx::DenseUniformFlat
-
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
 

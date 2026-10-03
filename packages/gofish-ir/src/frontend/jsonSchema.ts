@@ -38,7 +38,7 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
     case "string":
       return { type: "string" };
     case "number":
-      return { type: "number" };
+      return { $ref: "#/$defs/Number" };
     case "boolean":
       return { type: "boolean" };
     case "any":
@@ -173,7 +173,7 @@ function buildLeafMarkDefs(): Record<string, unknown> {
           type: "array",
           items: { $ref: "#/$defs/RelateClauseIR" },
         },
-        zOrder: { type: "number" },
+        zOrder: { $ref: "#/$defs/Number" },
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -273,7 +273,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         operators: { type: "array", items: { $ref: "#/$defs/OperatorIR" } },
         mark: { $ref: "#/$defs/MarkIR" },
         options: { type: "object" },
-        zOrder: { type: "number" },
+        zOrder: { $ref: "#/$defs/Number" },
         name: {
           type: "string",
           description:
@@ -330,8 +330,8 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         "Structural pixel translation reapplied by the runtime deserializer.",
       type: "object",
       properties: {
-        x: { type: "number" },
-        y: { type: "number" },
+        x: { $ref: "#/$defs/Number" },
+        y: { $ref: "#/$defs/Number" },
       },
     },
     AxesOptions: {
@@ -393,7 +393,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             order: { enum: ["asc", "desc"] },
             values: {
               type: "array",
-              items: { oneOf: [{ type: "string" }, { type: "number" }] },
+              items: {
+                oneOf: [{ type: "string" }, { $ref: "#/$defs/Number" }],
+              },
               description:
                 'Explicit group order (#735), e.g. sort(["sun", "fog", ...]). Mutually exclusive with by/order. Groups whose key isn\'t in this list are appended after, in natural sort order.',
             },
@@ -411,8 +413,8 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             op: { const: "bin" },
             thresholds: {
               oneOf: [
-                { type: "number" },
-                { type: "array", items: { type: "number" } },
+                { $ref: "#/$defs/Number" },
+                { type: "array", items: { $ref: "#/$defs/Number" } },
               ],
             },
           },
@@ -465,8 +467,8 @@ export const FRONTEND_IR_JSON_SCHEMA = {
       required: ["type", "children"],
       properties: {
         type: { const: "offset" },
-        x: { type: "number" },
-        y: { type: "number" },
+        x: { $ref: "#/$defs/Number" },
+        y: { $ref: "#/$defs/Number" },
         children: {
           type: "array",
           minItems: 1,
@@ -488,9 +490,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         source: { $ref: "#/$defs/MarkIR" },
         dir: { enum: ["x", "y"] },
         size: { $ref: "#/$defs/CutSize" },
-        inset: { type: "number" },
+        inset: { $ref: "#/$defs/Number" },
         name: { type: "string" },
-        zOrder: { type: "number" },
+        zOrder: { $ref: "#/$defs/Number" },
         translate: { $ref: "#/$defs/Translate" },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
@@ -505,7 +507,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           type: "array",
           items: {
             oneOf: [
-              { type: "number" },
+              { $ref: "#/$defs/Number" },
               {
                 type: "object",
                 required: ["type", "datum"],
@@ -513,7 +515,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
                   type: { const: "datum" },
                   datum: {},
                   measure: { type: "string" },
-                  offset: { type: "number" },
+                  offset: { $ref: "#/$defs/Number" },
                   colorOps: {
                     type: "array",
                     items: {
@@ -521,7 +523,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
                       required: ["op", "amount"],
                       properties: {
                         op: { enum: ["lighten", "darken"] },
-                        amount: { type: "number" },
+                        amount: { $ref: "#/$defs/Number" },
                       },
                     },
                   },
@@ -569,7 +571,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           type: "array",
           items: { $ref: "#/$defs/RelateClauseIR" },
         },
-        zOrder: { type: "number" },
+        zOrder: { $ref: "#/$defs/Number" },
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -584,13 +586,15 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             { type: "string" },
             {
               type: "array",
-              items: { oneOf: [{ type: "string" }, { type: "number" }] },
+              items: {
+                oneOf: [{ type: "string" }, { $ref: "#/$defs/Number" }],
+              },
             },
           ],
         },
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        zOrder: { type: "number" },
+        zOrder: { $ref: "#/$defs/Number" },
         translate: { $ref: "#/$defs/Translate" },
       },
     },
@@ -612,16 +616,31 @@ export const FRONTEND_IR_JSON_SCHEMA = {
                 oneOf: [{ type: "string" }, { $ref: "#/$defs/FieldAccessor" }],
               },
               position: { type: "string" },
-              fontSize: { type: "number" },
+              fontSize: { $ref: "#/$defs/Number" },
               color: { type: "string" },
-              offset: { type: "number" },
-              rotate: { type: "number" },
+              offset: { $ref: "#/$defs/Number" },
+              rotate: { $ref: "#/$defs/Number" },
               fontFamily: { type: "string" },
               fontWeight: {
-                oneOf: [{ type: "number" }, { type: "string" }],
+                oneOf: [{ $ref: "#/$defs/Number" }, { type: "string" }],
               },
               fontStyle: { type: "string" },
             },
+          },
+        },
+      ],
+    },
+    Number: {
+      description:
+        'A number. JSON has no Infinity, so +/-Infinity travel as the tagged object { "$numberDouble": "Infinity" | "-Infinity" } (MongoDB Extended JSON). A tagged "NaN" is not a valid number here.',
+      oneOf: [
+        { type: "number" },
+        {
+          type: "object",
+          required: ["$numberDouble"],
+          additionalProperties: false,
+          properties: {
+            $numberDouble: { enum: ["Infinity", "-Infinity"] },
           },
         },
       ],
@@ -647,7 +666,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         "Right-hand side of a channel slot. Bare primitives for the shorthand path; tagged objects for the explicit field/datum/literal constructors and Python-bridge sentinels.",
       oneOf: [
         { type: "string" },
-        { type: "number" },
+        { $ref: "#/$defs/Number" },
         { type: "boolean" },
         { type: "null" },
         { $ref: "#/$defs/FieldAccessor" },
@@ -667,7 +686,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             datum: {},
             measure: { type: "string" },
             offset: {
-              type: "number",
+              $ref: "#/$defs/Number",
               description:
                 "Pixel offset applied after the datum maps through its scale (datum(v) + px).",
             },

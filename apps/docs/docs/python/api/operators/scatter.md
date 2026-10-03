@@ -126,12 +126,10 @@ chart(weighed, axes=True).flow(
   The outline counts the dots within that window. By default the window is
   one dot wide, so the outline follows the data closely, and a pile of equal
   values shows as a spike. A larger `smoothing` gives a smoother outline. It
-  changes the outline's shape but not its total size. In JavaScript,
-  `smoothing: Infinity` makes the outline flat (classic jitter with
-  `randomness: "uniform"`). Python cannot pass `float("inf")` yet, because the
-  chart description sent to the renderer has no way to carry an infinite
-  number; `jitter(smoothing=float("inf"))` raises an error. A `smoothing`
-  about as wide as the data range gives a nearly flat outline.
+  changes the outline's shape but not its total size. `smoothing=math.inf`
+  makes the outline flat, a band of fixed width. With
+  `randomness="uniform"`, that is classic jitter, as in seaborn's
+  `stripplot` or ggplot's `position_jitter`.
 - `padding` is a number of pixels added to each dot's width. The default
   is 0.
 - `seed` seeds the `"blue"` and `"uniform"` placements. The default is

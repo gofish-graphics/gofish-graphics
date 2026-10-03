@@ -23,7 +23,7 @@ import {
   type ChartBuilder,
   type View,
 } from "gofish-graphics";
-import type { Frontend } from "gofish-ir";
+import { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
 
 // Type aliases pointing at the canonical IR schema. Internal usages below
@@ -252,6 +252,12 @@ function makeDeriveBridge(model: WidgetModel): Serialize.DeriveBridge {
 // Rendering
 // ---------------------------------------------------------------------------
 
+/** The spec trait, with its tagged non-finite numbers (Python `to_ir()`
+ *  encodes them; see gofish-ir's `nonFinite.ts`) turned back into numbers. */
+function readSpec(model: WidgetModel): any {
+  return Frontend.decodeNonFinite(model.get("spec"));
+}
+
 function renderError(
   container: HTMLElement,
   error: Error,
@@ -294,7 +300,7 @@ function renderLayer(
 
   log("Rendering layer...");
 
-  const spec = model.get("spec") as LayerSpec;
+  const spec = readSpec(model) as LayerSpec;
   const arrowDataRaw = model.get("arrow_data");
 
   let arrowDict: Record<string, string> = {};
@@ -360,7 +366,7 @@ function renderRawMark(
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
 ): Promise<View> {
-  const spec = model.get("spec") as unknown as RawMarkSpec;
+  const spec = readSpec(model) as unknown as RawMarkSpec;
   const debug = model.get("debug");
   const log = debug
     ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
@@ -387,7 +393,7 @@ function renderChart(
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
 ): Promise<View> {
-  const spec = model.get("spec");
+  const spec = readSpec(model);
   if ((spec as any).type === "layer") {
     return renderLayer(model, container, bridge);
   }
