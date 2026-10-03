@@ -13,12 +13,17 @@ shorthand kwarg was removed).
 import pytest
 
 from gofish import (
+    binary,
     circle,
     circles,
+    dice,
     group,
     pack,
     polygon,
+    slice,
+    sliceDice,
     spread,
+    squarify,
     stack,
     table,
     text,
@@ -95,6 +100,21 @@ def test_pack_combinator_form():
     assert pack([circle(r=1)]).to_dict()["options"] == {}
     with pytest.raises(ValueError):
         pack([circle(r=1)], by="lake")
+
+
+def test_treemap_serializes_tile_strategy_and_gaps():
+    d = treemap(by="g", tile=squarify(ratio=1), spacing=2, padding=3).to_dict()
+    assert d["tile"] == {"kind": "squarify", "ratio": 1}
+    assert d["spacing"] == 2
+    assert d["padding"] == 3
+    assert squarify() == {"kind": "squarify"}
+    assert [f()["kind"] for f in (slice, dice, binary, sliceDice)] == [
+        "slice",
+        "dice",
+        "binary",
+        "sliceDice",
+    ]
+    assert "tile" not in treemap().to_dict()
 
 
 def test_treemap_combinator_accepts_key():

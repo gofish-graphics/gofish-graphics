@@ -1921,7 +1921,7 @@ def treemap(
             [rect(fill=datum(genre)).bind_data({"worldwideGross": gross}, genre)
              for genre, gross in groups],
             size=[gross for genre, gross in groups],
-            paddingInner=2,
+            spacing=2,
         ).render(w=700, h=420)
 
     Args:
@@ -1933,10 +1933,14 @@ def treemap(
             Without ``by``, one leaf is emitted per row.
         **options: ``size`` (a field name, pixel number, or ``field(...)``
             accessor sizing each leaf's tile area — entry-flagged, one value
-            per split entry), ``tile``, ``sort``, ``flipY``, ``paddingInner``,
-            ``paddingOuter``, ``round``, ``leafIntrinsicRadiusField``.
+            per split entry), ``tile`` (a strategy such as ``squarify()``, the
+            default, or ``slice()``, ``dice()``, ``binary()``,
+            ``sliceDice()``), ``sort``, ``spacing`` (gap between sibling
+            tiles), ``padding`` (inset around the outer edge), ``round``.
 
-    Mirrors JS ``treemap({ by, size, tile, sort, flipY, ... })`` in
+    The largest tile (under the default sort) lands at the top left.
+
+    Mirrors JS ``treemap({ by, size, tile, sort, spacing, ... })`` in
     ``.flow()`` and ``treemap({ size, ... }, marks)`` as a combinator.
 
     Returns:
@@ -1956,6 +1960,58 @@ def treemap(
     if by is not None:
         options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))
+
+
+def squarify(*, ratio: Optional[Union[int, float]] = None) -> Dict[str, Any]:
+    """
+    The ``squarify()`` tiling strategy for :func:`treemap` (the default):
+    make tiles as close as possible to the aspect ``ratio`` (width over
+    height). Omitted, ``ratio`` is d3's default, the golden ratio.
+    ``squarify(ratio=1)`` aims for square tiles, which suits one circle per
+    leaf.
+
+    Mirrors JS ``squarify({ ratio })``; on the wire it is the plain object
+    ``{"kind": "squarify", "ratio": ...}``.
+    """
+    if ratio is None:
+        return {"kind": "squarify"}
+    return {"kind": "squarify", "ratio": ratio}
+
+
+def slice() -> Dict[str, Any]:
+    """
+    The ``slice()`` tiling strategy for :func:`treemap`: lay the tiles out in
+    one column, stacked along y. Mirrors JS ``slice()``; on the wire it is
+    ``{"kind": "slice"}``.
+    """
+    return {"kind": "slice"}
+
+
+def dice() -> Dict[str, Any]:
+    """
+    The ``dice()`` tiling strategy for :func:`treemap`: lay the tiles out in
+    one row, side by side along x. Mirrors JS ``dice()``; on the wire it is
+    ``{"kind": "dice"}``.
+    """
+    return {"kind": "dice"}
+
+
+def binary() -> Dict[str, Any]:
+    """
+    The ``binary()`` tiling strategy for :func:`treemap`: split the tiles into
+    two halves of near-equal weight, recursively. Mirrors JS ``binary()``; on
+    the wire it is ``{"kind": "binary"}``.
+    """
+    return {"kind": "binary"}
+
+
+def sliceDice() -> Dict[str, Any]:
+    """
+    The ``sliceDice()`` tiling strategy for :func:`treemap`: alternate slice
+    and dice by depth. Mirrors JS ``sliceDice()``; on the wire it is
+    ``{"kind": "sliceDice"}``.
+    """
+    return {"kind": "sliceDice"}
 
 
 def circles() -> Dict[str, Any]:

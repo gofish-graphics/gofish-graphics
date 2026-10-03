@@ -659,7 +659,7 @@ def _table_opts(*, by: Any, spacing: Optional[Any] = None, numCols: Optional[flo
             opts[_k] = _v
     return opts
 
-def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[Any] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.
 
     Args:
@@ -669,14 +669,12 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
-        paddingInner: Padding between sibling rectangles. Default 0.
-        paddingOuter: Padding around the outer edge of the treemap. Default 0.
+        spacing: Gap between sibling tiles, in pixels. Default 0.
+        padding: Inset around the outer edge of the treemap, in pixels. Default 0.
         round: Round pixel positions and sizes. Default true.
-        tile: Tiling strategy. Default "squarify".
+        tile: The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
-        flipY: Mirror leaf layout top-to-bottom within the treemap box. Default false.
-        leafIntrinsicRadiusField: When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
@@ -687,14 +685,12 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
         ("h", h),
         ("dims", dims),
         ("by", by),
-        ("paddingInner", paddingInner),
-        ("paddingOuter", paddingOuter),
+        ("spacing", spacing),
+        ("padding", padding),
         ("round", round),
         ("tile", tile),
         ("sort", sort),
         ("size", size),
-        ("flipY", flipY),
-        ("leafIntrinsicRadiusField", leafIntrinsicRadiusField),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -719,7 +715,7 @@ def _pack_opts(*, by: Optional[Any] = None, method: Optional[Any] = None, debug:
             opts[_k] = _v
     return opts
 
-def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[Any] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
 
     Args:
@@ -729,14 +725,12 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
-        paddingInner: Padding between sibling rectangles. Default 0.
-        paddingOuter: Padding around the outer edge of the treemap. Default 0.
+        spacing: Gap between sibling tiles, in pixels. Default 0.
+        padding: Inset around the outer edge of the treemap, in pixels. Default 0.
         round: Round pixel positions and sizes. Default true.
-        tile: Tiling strategy. Default "squarify".
+        tile: The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
-        flipY: Mirror leaf layout top-to-bottom within the treemap box. Default false.
-        leafIntrinsicRadiusField: When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
@@ -748,14 +742,12 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
         ("h", h),
         ("dims", dims),
         ("by", by),
-        ("paddingInner", paddingInner),
-        ("paddingOuter", paddingOuter),
+        ("spacing", spacing),
+        ("padding", padding),
         ("round", round),
         ("tile", tile),
         ("sort", sort),
         ("size", size),
-        ("flipY", flipY),
-        ("leafIntrinsicRadiusField", leafIntrinsicRadiusField),
         ("key", key),
         ("debug", debug),
     ]:

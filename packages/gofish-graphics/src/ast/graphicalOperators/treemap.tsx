@@ -36,33 +36,78 @@ import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
 
-type TreemapTile =
-  | "squarify"
-  | "slice"
-  | "dice"
-  | "binary"
-  | "slicedice"
-  | "squarifyCircle";
+/**
+ * How `treemap` tiles its box. A strategy is a plain object made by a function
+ * call (`squarify()`, `slice()`, ...), so it crosses the Python bridge as IR.
+ * `kind` names the strategy; each maps to one of d3-hierarchy's tiling methods.
+ */
+export type TreemapTile =
+  | { kind: "squarify"; ratio?: number }
+  | { kind: "slice" }
+  | { kind: "dice" }
+  | { kind: "binary" }
+  | { kind: "sliceDice" };
+
+/**
+ * Squarified tiling (d3's `treemapSquarify`): makes tiles as close as it can to
+ * the aspect `ratio` (width over height). Omitted, `ratio` is d3's default, the
+ * golden ratio. `ratio: 1` aims for square tiles, which suits one circle per
+ * leaf.
+ */
+export const squarify = (opts: { ratio?: number } = {}): TreemapTile =>
+  opts.ratio === undefined
+    ? { kind: "squarify" }
+    : { kind: "squarify", ratio: opts.ratio };
+
+/** Lay the tiles out in one column, stacked along y (d3's `treemapSlice`). */
+export const slice = (): TreemapTile => ({ kind: "slice" });
+
+/** Lay the tiles out in one row, side by side along x (d3's `treemapDice`). */
+export const dice = (): TreemapTile => ({ kind: "dice" });
+
+/** Split the tiles into two halves of near-equal weight, recursively (d3's
+ *  `treemapBinary`). */
+export const binary = (): TreemapTile => ({ kind: "binary" });
+
+/** Alternate slice and dice by depth (d3's `treemapSliceDice`). */
+export const sliceDice = (): TreemapTile => ({ kind: "sliceDice" });
+
+function d3Tile(tile: TreemapTile) {
+  switch (tile.kind) {
+    case "squarify":
+      return tile.ratio === undefined
+        ? treemapSquarify
+        : treemapSquarify.ratio(tile.ratio);
+    case "slice":
+      return treemapSlice;
+    case "dice":
+      return treemapDice;
+    case "binary":
+      return treemapBinary;
+    case "sliceDice":
+      return treemapSliceDice;
+    default:
+      throw new Error(
+        `[gofish] treemap: unknown tile kind "${(tile as { kind: string }).kind}"`
+      );
+  }
+}
+
 type TreemapSort = "asc" | "desc" | "none";
 
 type TreemapProps = {
   key?: string;
-  paddingInner?: number;
-  paddingOuter?: number;
+  /** Gap between sibling tiles, in pixels. Default 0. */
+  spacing?: number;
+  /** Inset around the outer edge of the treemap, in pixels. Default 0. */
+  padding?: number;
   round?: boolean;
+  /** The tiling strategy. Default `squarify()`. */
   tile?: TreemapTile;
   sort?: TreemapSort;
   /** Per-entry weight driving each leaf's tile area — one value per child, in
    *  child order (mirrors `spread`'s entry-flagged `size`, #700-style). */
   size?: MaybeValue<number>[];
-  /** When true, mirror leaf layout top-to-bottom within the treemap box (SVG y grows downward). */
-  flipY?: boolean;
-  /**
-   * When set, each leaf is laid out in a square of side `min(leafW, leafH, 2*datum[field])`
-   * so mark size can follow a **global** scale across facets. Default fills the full leaf
-   * rectangle (`[w,h]`).
-   */
-  leafIntrinsicRadiusField?: string;
 } & FancyDims<MaybeValue<number>>;
 
 type LeafDatum = {
@@ -85,14 +130,12 @@ const Treemap = createNodeOperator(
   (opts: TreemapProps, children: GoFishAST[]) => {
     const {
       key,
-      paddingInner = 0,
-      paddingOuter = 0,
+      spacing = 0,
+      padding = 0,
       round = true,
-      tile = "squarify",
+      tile = squarify(),
       sort = "desc",
       size: sizeChannel,
-      flipY = false,
-      leafIntrinsicRadiusField,
       ...fancyDims
     } = opts;
 
@@ -103,14 +146,12 @@ const Treemap = createNodeOperator(
         type: "treemap",
         args: {
           key,
-          paddingInner,
-          paddingOuter,
+          spacing,
+          padding,
           round,
           tile,
           sort,
           size: sizeChannel,
-          flipY,
-          leafIntrinsicRadiusField,
           dims,
         },
         key,
@@ -228,17 +269,10 @@ const Treemap = createNodeOperator(
 
           const treemapLayout = d3Treemap<any>()
             .size([resolvedSize[0], resolvedSize[1]])
-            .paddingInner(paddingInner)
-            .paddingOuter(paddingOuter)
-            .round(round);
-
-          // Keep default squarify unless we explicitly choose something else.
-          if (tile === "slice") treemapLayout.tile(treemapSlice);
-          else if (tile === "dice") treemapLayout.tile(treemapDice);
-          else if (tile === "binary") treemapLayout.tile(treemapBinary);
-          else if (tile === "slicedice") treemapLayout.tile(treemapSliceDice);
-          else if (tile === "squarifyCircle")
-            treemapLayout.tile(treemapSquarify.ratio(1));
+            .paddingInner(spacing)
+            .paddingOuter(padding)
+            .round(round)
+            .tile(d3Tile(tile));
 
           const rectRoot = treemapLayout(root) as HierarchyRectangularNode<any>;
           const leaves = rectRoot.leaves();
@@ -264,23 +298,12 @@ const Treemap = createNodeOperator(
             const w = Math.max(0, x1 - x0);
             const h = Math.max(0, y1 - y0);
 
-            const child = childAsts[i];
-            let lw = w;
-            let lh = h;
-            if (leafIntrinsicRadiusField && child instanceof GoFishNode) {
-              const datum = (child as GoFishNode & { datum?: unknown }).datum;
-              const d = datum as Record<string, unknown> | undefined;
-              const rad = Number(d?.[leafIntrinsicRadiusField]);
-              if (Number.isFinite(rad) && rad > 0) {
-                const side = Math.min(2 * rad, w, h);
-                lw = side;
-                lh = side;
-              }
-            }
-            const placeable = child.layout([lw, lh], scales);
+            const placeable = childAsts[i].layout([w, h], scales);
             placeable.place(0, x0 + w / 2, "center");
-            const cy = flipY ? resolvedSize[1] - (y0 + h / 2) : y0 + h / 2;
-            placeable.place(1, cy, "center");
+            // d3 lays out y-down and GoFish is y-up, so mirror y: d3's first
+            // tile (the largest, under the default sort) lands at the top
+            // left, in reading order.
+            placeable.place(1, resolvedSize[1] - (y0 + h / 2), "center");
             placed[i] = placeable;
           }
 

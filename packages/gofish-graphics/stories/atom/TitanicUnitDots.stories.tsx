@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { treemap, circle, chart, palette } from "../../src/lib";
+import { treemap, squarify, circle, chart, palette } from "../../src/lib";
 import {
   titanicPassengers,
   type TitanicPassenger,
@@ -11,16 +11,16 @@ const meta: Meta = {
   argTypes: {
     w: { control: { type: "number", min: 200, max: 900, step: 10 } },
     h: { control: { type: "number", min: 200, max: 900, step: 10 } },
-    paddingInner: { control: { type: "number", min: 0, max: 6, step: 0.5 } },
+    spacing: { control: { type: "number", min: 0, max: 6, step: 0.5 } },
   },
 };
 
 export default meta;
 
-type Args = { w: number; h: number; paddingInner: number };
+type Args = { w: number; h: number; spacing: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 1000, h: 320, paddingInner: 0 },
+  args: { w: 1000, h: 320, spacing: 0 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) }).facet({by: "pclass", dir: "x"})
-      .flow(treemap({ h: "fare", size: "fare", paddingInner: args.paddingInner, tile: "squarifyCircle", sort: "desc", flipY: true}))
+      .flow(treemap({ h: "fare", size: "fare", spacing: args.spacing, tile: squarify({ ratio: 1 }), sort: "desc" }))
       .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
       .render(container, { w: args.w, h: args.h });
     return container;

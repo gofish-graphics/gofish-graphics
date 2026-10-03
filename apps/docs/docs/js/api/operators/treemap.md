@@ -24,8 +24,8 @@ const items = [
 gf.treemap(
   {
     size: items.map((d) => d.value),
-    paddingInner: 2,
-    paddingOuter: 2,
+    spacing: 2,
+    padding: 2,
     round: true,
   },
   gf.map(items, (d) =>
@@ -67,7 +67,30 @@ treemap(options, children); // combinator form
 ::: gofish-ref treemap
 :::
 
+## Tiling strategies
+
+`tile` holds the tiling strategy. You make a strategy with a function call.
+Each one is a tiling method from d3-hierarchy.
+
+- `squarify({ ratio? })` makes tiles as close as it can to the aspect ratio
+  `ratio` (width over height). It is the default. Without `ratio`, it uses
+  d3's default, the golden ratio. `squarify({ ratio: 1 })` aims for square
+  tiles, which suits one circle per leaf.
+- `slice()` puts the tiles in one column, stacked along y.
+- `dice()` puts the tiles in one row, side by side along x.
+- `binary()` splits the tiles into two halves of about equal weight, and
+  repeats on each half.
+- `sliceDice()` alternates between `slice` and `dice` by depth.
+
+```js
+gf.treemap({ by: "genre", size: "gross", tile: gf.squarify({ ratio: 1 }) });
+```
+
 ## Notes
 
+- The tile d3 places first sits at the top left. With the default
+  `sort: "desc"`, that is the largest tile.
+- `spacing` is the gap between sibling tiles and `padding` is the inset around
+  the treemap's outer edge, both in pixels.
 - A treemap accepts a **flat list of children**; for multi-level treemaps, compose by nesting `treemap(...)` calls (or add a higher-level wrapper).
 - In the combinator form, `size` is an **explicit array**, one weight per child in child order — it does not read back off each child's bound datum.

@@ -132,7 +132,9 @@ than a serialized field). Operators are a flat list (`derive`, `resolve`,
 `join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
 `pack`). `pack`'s `method` is a strategy object made by a function call
 (`circles()` in both languages), so on the wire it is plain data,
-`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. Note `join`
+`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. `treemap`'s
+`tile` works the same way (`squarify({ ratio })`, `slice()`, `dice()`,
+`binary()`, `sliceDice()`; e.g. `{ "kind": "squarify", "ratio": 1 }`). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,

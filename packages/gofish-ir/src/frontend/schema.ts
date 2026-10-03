@@ -377,6 +377,15 @@ export interface LogOperator
  * Mirrors JS's `TreemapProps`/`TreemapOptions` (`graphicalOperators/treemap.tsx`)
  * minus `key`.
  */
+/** A `treemap` tiling strategy, made by a function call (`squarify()`,
+ *  `slice()`, `dice()`, `binary()`, `sliceDice()`). */
+export type TreemapTileIR =
+  | { kind: "squarify"; ratio?: number }
+  | { kind: "slice" }
+  | { kind: "dice" }
+  | { kind: "binary" }
+  | { kind: "sliceDice" };
+
 export interface TreemapOperator
   extends BaseIRNode,
     TranslatableIR,
@@ -388,21 +397,16 @@ export interface TreemapOperator
    *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
    *  emitted per row. */
   by?: string | FieldAccessor;
-  paddingInner?: number;
-  paddingOuter?: number;
+  /** Gap between sibling tiles, in pixels. Default 0. */
+  spacing?: number;
+  /** Inset around the outer edge of the treemap, in pixels. Default 0. */
+  padding?: number;
   round?: boolean;
-  tile?:
-    | "squarify"
-    | "slice"
-    | "dice"
-    | "binary"
-    | "slicedice"
-    | "squarifyCircle";
+  /** The tiling strategy. Default `{ kind: "squarify" }`. */
+  tile?: TreemapTileIR;
   sort?: "asc" | "desc" | "none";
   /** Per-leaf weight driving tile area (entry-flagged per split entry). */
   size?: ChannelValue;
-  flipY?: boolean;
-  leafIntrinsicRadiusField?: string;
   /** Position of the box the treemap tiles into, in the parent's space. Both
    *  forms spread `FancyDims` into `elaborateDims`, so the box's position is as
    *  real an option as its size — unlike `w`/`h` these carry no channel

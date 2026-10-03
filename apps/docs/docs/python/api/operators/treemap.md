@@ -30,8 +30,8 @@ chart(movies_raw).flow(
     treemap(
         by=field("Major Genre").drop_nulls(),
         size="Worldwide Gross",
-        paddingInner=2,
-        paddingOuter=2,
+        spacing=2,
+        padding=2,
         round=True,
     )
 ).mark(
@@ -56,8 +56,37 @@ treemap(children, **options) -> Mark
 ::: gofish-ref treemap
 :::
 
+## Tiling strategies
+
+`tile` holds the tiling strategy. You make a strategy with a function call.
+Each one is a tiling method from d3-hierarchy. On the wire a strategy is a
+plain object, such as `{"kind": "squarify", "ratio": 1}`.
+
+- `squarify(ratio=None)` makes tiles as close as it can to the aspect ratio
+  `ratio` (width over height). It is the default. Without `ratio`, it uses
+  d3's default, the golden ratio. `squarify(ratio=1)` aims for square tiles,
+  which suits one circle per leaf.
+- `slice()` puts the tiles in one column, stacked along y.
+- `dice()` puts the tiles in one row, side by side along x.
+- `binary()` splits the tiles into two halves of about equal weight, and
+  repeats on each half.
+- `sliceDice()` alternates between `slice` and `dice` by depth.
+
+```python
+from gofish import squarify, treemap
+
+treemap(by="genre", size="gross", tile=squarify(ratio=1))
+```
+
+Importing `slice` from `gofish` hides Python's built-in `slice` in that
+module, so you may prefer `import gofish as gf` and `gf.slice()`.
+
 ## Notes
 
+- The tile d3 places first sits at the top left. With the default
+  `sort="desc"`, that is the largest tile.
+- `spacing` is the gap between sibling tiles and `padding` is the inset around
+  the treemap's outer edge, both in pixels.
 - A treemap accepts a **flat list of children**; for multi-level treemaps,
   compose by nesting `treemap(...)` calls (or add a higher-level wrapper).
 - In the combinator form, each child is bound to its row with

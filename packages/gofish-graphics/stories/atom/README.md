@@ -61,7 +61,7 @@ GoFish has no dedicated `gridxy` operator; an Atom layout decomposes into a shor
 | `size: sum(field)` | `treemap({ size: field })` |
 | `size: count` | per-group count via `groupBy`, then main-axis value-proportional sizing through the σ solve (`rect({ h: "count" })` / `stack`); packed square-unit (2-D) case still awaits cross-scope size coupling ([gap #1](#feature-gaps)) |
 | `aspect_ratio: square / fillX / fillY` | manual grid via `chunk(rows, cols)` (e.g. `cols = ceil(sqrt(n))` for square) ([gap #2](#feature-gaps)) |
-| `aspect_ratio: maxfill` | `treemap({ tile: "squarify" })`, or manual chunking |
+| `aspect_ratio: maxfill` | `treemap({ tile: squarify() })`, or manual chunking |
 | `direction` (`LRBT`, `BT`, …) + `align` | `spread`'s `dir`, `reverse`, and `alignment` |
 | `sort` | `derive(rows => orderBy(rows, key, dir))` (lodash) |
 | `mark: circle / rect` + `color` | `circle({ fill })` / `rect({ fill })` with a `chart(data, { color: palette([...]) })` scale |
