@@ -342,7 +342,7 @@ async function main() {
     // Through real JSON text, as a file or a bridge would carry it.
     const parsed = JSON.parse(JSON.stringify(doc));
     validateDoc(parsed, "chart with non-finite numbers");
-    const decoded = Frontend.decodeNonFinite(parsed);
+    const decoded = Serialize.readIR(JSON.stringify(doc));
     check(
       "decode restores Infinity and -Infinity",
       (decoded.root as any).operators[0].overlap.smoothing === Infinity &&

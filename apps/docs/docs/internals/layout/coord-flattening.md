@@ -375,9 +375,11 @@ rendering in coordinate space, where a cleaner design would have `connect` emit 
 path mark instead. Treat this page as describing the _intended_ model — expect the
 exact leaf rules to shift as the non-Cartesian coordinate work matures.
 
-A `coord` node records the transform it opens on itself
-(`GoFishNode.coordinateTransform`). A layout that is only correct in some
-spaces reads it from its ancestors before layout: `scatter`'s `overlap` keeps
+A `coord` node declares the space it opens (`GoFishNode._space`: its axis
+names and its transform's type). The axis-scope pass (`resolveAliases`) hands
+each node the scope it sits in, and that scope also carries the nearest
+enclosing space that is not linear (`AxisScope.warpedBy`). A layout that is
+only correct in some spaces reads it there: `scatter`'s `overlap` keeps
 children apart in the layout frame, which is the screen only in a linear space,
 so it throws under any other transform (#1002).
 

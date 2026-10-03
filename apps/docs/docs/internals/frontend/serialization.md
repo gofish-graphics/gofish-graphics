@@ -257,11 +257,12 @@ boundary, with no per-field rule:
   `Frontend.encodeNonFinite`, gofish-ir's `frontend/nonFinite.ts`) and Python
   `to_ir()` (`gofish/_nonfinite.py`). The test derive server encodes the
   infinities in what it sends the same way.
-- A reader decodes the whole document where it receives it, before it
-  rebuilds a chart: `Frontend.decodeNonFinite` in the parity harness (the spec
-  and every derive response) and in the widget (the spec trait). The
-  reconstruction functions (`buildChart`, `mapMark`, ...) take a decoded
-  document.
+- A reader decodes in one place, `Serialize.readIR` (`fromJSON.ts`), which
+  parses JSON text if it is given text and decodes the tags. The parity
+  harness calls it once per spec and once per derive response, the widget once
+  per spec trait (and hands the result down), and `buildChart` reads its own
+  arguments through it. The other reconstruction functions (`mapMark`,
+  `mapOperator`, ...) take what `readIR` returns.
 - The validator accepts the tagged `Infinity` and `-Infinity` wherever it
   expects a number, through one check (`isIRNumber`), and the JSON Schema has
   one shared `Number` def that every number field points to. A tagged `NaN`

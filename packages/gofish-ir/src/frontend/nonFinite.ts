@@ -18,16 +18,17 @@
  * row), so one encoding covers every number field with no per-field rule. A
  * writer encodes the whole document as it makes it ({@link encodeNonFinite}:
  * JS `toJSON`, Python `to_ir()`), and a reader decodes the whole document
- * where it receives it, before rebuilding a chart ({@link decodeNonFinite}).
- * The validator accepts `"Infinity"` and `"-Infinity"` wherever it expects a
- * number and rejects `"NaN"` there loudly: a NaN option is always a bug. A
- * NaN inside data rows is untyped and passes through.
+ * where it receives it, before rebuilding a chart ({@link decodeNonFinite},
+ * through gofish-graphics' `Serialize.readIR`). The validator accepts
+ * `"Infinity"` and `"-Infinity"` wherever it expects a number and rejects
+ * `"NaN"` there loudly: a NaN option is always a bug. A NaN inside data rows
+ * is untyped and passes through.
  */
 
 /** The tag's key, from MongoDB Extended JSON's canonical form. */
-export const NON_FINITE_KEY = "$numberDouble";
+const NON_FINITE_KEY = "$numberDouble";
 
-export type NonFiniteSpelling = "Infinity" | "-Infinity" | "NaN";
+type NonFiniteSpelling = "Infinity" | "-Infinity" | "NaN";
 
 /** A non-finite number as the IR carries it. */
 export type NonFiniteNumberIR = { $numberDouble: NonFiniteSpelling };
@@ -46,17 +47,22 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> => {
 
 /** Is `v` the tagged form of a non-finite number? */
 export function isNonFiniteNumberIR(v: unknown): v is NonFiniteNumberIR {
-  if (!isPlainObject(v)) return false;
-  const keys = Object.keys(v);
-  return (
-    keys.length === 1 &&
-    keys[0] === NON_FINITE_KEY &&
-    Object.prototype.hasOwnProperty.call(SPELLINGS, v[NON_FINITE_KEY] as string)
+  if (v === null || typeof v !== "object" || !(NON_FINITE_KEY in v))
+    return false;
+  if (!isPlainObject(v) || Object.keys(v).length !== 1) return false;
+  return Object.prototype.hasOwnProperty.call(
+    SPELLINGS,
+    v[NON_FINITE_KEY] as string
   );
 }
 
+/** Is `v` the tagged form of `Infinity` or `-Infinity` (not `NaN`)? */
+export function isTaggedInfinity(v: unknown): v is NonFiniteNumberIR {
+  return isNonFiniteNumberIR(v) && v[NON_FINITE_KEY] !== "NaN";
+}
+
 /** The tagged form of a non-finite number; a finite number is unchanged. */
-export function encodeNumber(n: number): number | NonFiniteNumberIR {
+function encodeNumber(n: number): number | NonFiniteNumberIR {
   if (Number.isFinite(n)) return n;
   return {
     [NON_FINITE_KEY]: Number.isNaN(n)
@@ -65,11 +71,6 @@ export function encodeNumber(n: number): number | NonFiniteNumberIR {
         ? "Infinity"
         : "-Infinity",
   } as NonFiniteNumberIR;
-}
-
-/** The number a tagged form stands for. */
-export function decodeNumber(v: NonFiniteNumberIR): number {
-  return SPELLINGS[v[NON_FINITE_KEY]];
 }
 
 /**
@@ -87,7 +88,7 @@ export function encodeNonFinite<T>(value: T): T {
  *  number. The inverse of {@link encodeNonFinite}. */
 export function decodeNonFinite<T>(value: T): T {
   return walk(value, (v) =>
-    isNonFiniteNumberIR(v) ? decodeNumber(v) : undefined
+    isNonFiniteNumberIR(v) ? SPELLINGS[v[NON_FINITE_KEY]] : undefined
   ) as T;
 }
 
@@ -98,15 +99,18 @@ function walk(value: unknown, swap: (v: unknown) => unknown): unknown {
   if (swapped !== undefined) return swapped;
   if (Array.isArray(value)) {
     let out: unknown[] | undefined;
-    value.forEach((item, i) => {
+    for (let i = 0; i < value.length; i++) {
+      const item = value[i];
       const next = walk(item, swap);
       if (next !== item) (out ??= value.slice())[i] = next;
-    });
+    }
     return out ?? value;
   }
   if (isPlainObject(value)) {
     let out: Record<string, unknown> | undefined;
-    for (const [k, item] of Object.entries(value)) {
+    for (const k in value) {
+      if (!Object.prototype.hasOwnProperty.call(value, k)) continue;
+      const item = value[k];
       const next = walk(item, swap);
       if (next !== item) (out ??= { ...value })[k] = next;
     }

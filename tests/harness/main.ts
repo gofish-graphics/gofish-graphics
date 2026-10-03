@@ -232,7 +232,7 @@ function makeLambdaAccessor(
         `lambda accessor ${lambdaId} failed: ${resp.status} ${await resp.text()}`
       );
     }
-    const result = Frontend.decodeNonFinite(await resp.json());
+    const result = Serialize.readIR(await resp.json());
     if (Array.isArray(result)) {
       if (result.length === 0) {
         console.warn(
@@ -379,7 +379,7 @@ function mapOperator(
             );
           }
 
-          const result = Frontend.decodeNonFinite(await resp.json());
+          const result = Serialize.readIR(await resp.json());
           const tagged =
             provenance !== undefined
               ? setMeasureProvenance(result, provenance)
@@ -585,7 +585,7 @@ function mapMark(
               `mark-fn ${lambdaId} failed: ${resp.status} ${await resp.text()}`
             );
           }
-          const result = Frontend.decodeNonFinite(await resp.json());
+          const result = Serialize.readIR(await resp.json());
           const resultSpec = Array.isArray(result) ? result[0] : result;
           // A bare Mark returned by the Python mark-fn (e.g. `spread([...])`)
           // serializes as `{type: "raw-mark", mark: ...}` (same shape as the
@@ -882,7 +882,7 @@ function buildChartFromSpec(
 function renderChart(encodedSpec: HarnessSpec) {
   // Non-finite numbers travel tagged (`Frontend.encodeNonFinite`); turn them
   // back into numbers before rebuilding anything.
-  const spec = Frontend.decodeNonFinite(encodedSpec);
+  const spec = Serialize.readIR(encodedSpec);
   const container = document.getElementById("gofish-harness-root");
   if (!container) {
     window.__GOFISH_RENDER_ERROR__ = "Container not found";

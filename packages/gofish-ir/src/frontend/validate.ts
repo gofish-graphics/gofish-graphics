@@ -30,26 +30,7 @@ import {
   type Origin,
   type RefMarkIR,
 } from "./schema.js";
-import { isNonFiniteNumberIR, NON_FINITE_KEY } from "./nonFinite.js";
-
-/**
- * Is `value` a number as the IR carries it: a JSON number, or the tagged
- * form of `Infinity` / `-Infinity` (see `nonFinite.ts`)? The tagged `NaN` is
- * not: a NaN where a number is expected is always a bug, so it fails loudly.
- */
-function isIRNumber(value: unknown): boolean {
-  return (
-    typeof value === "number" ||
-    (isNonFiniteNumberIR(value) && value[NON_FINITE_KEY] !== "NaN")
-  );
-}
-
-/** The error for a value that is not an IR number. */
-function notANumber(value: unknown, expected = "number"): string {
-  return isNonFiniteNumberIR(value)
-    ? `expected ${expected}, got NaN`
-    : `expected ${expected}, got ${typeNameOf(value)}`;
-}
+import { isNonFiniteNumberIR, isTaggedInfinity } from "./nonFinite.js";
 import {
   LEAF_MARKS,
   MARK_BASE_FIELDS,
@@ -59,6 +40,22 @@ import {
   type FieldSpec,
   type FieldType,
 } from "./descriptors.js";
+
+/**
+ * Is `value` a number as the IR carries it: a JSON number, or the tagged
+ * form of `Infinity` / `-Infinity` (see `nonFinite.ts`)? The tagged `NaN` is
+ * not: a NaN where a number is expected is always a bug, so it fails loudly.
+ */
+function isIRNumber(value: unknown): boolean {
+  return typeof value === "number" || isTaggedInfinity(value);
+}
+
+/** The error for a value that is not an IR number. */
+function notANumber(value: unknown, expected = "number"): string {
+  return isNonFiniteNumberIR(value)
+    ? `expected ${expected}, got NaN`
+    : `expected ${expected}, got ${typeNameOf(value)}`;
+}
 
 export interface ValidationError {
   /** Dotted path into the document. */
@@ -635,10 +632,11 @@ function walkTranslate(node: unknown, path: string, ctx: Context): void {
  */
 function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   if (value === null) return;
-  if (typeof value === "string") return;
-  if (isIRNumber(value)) return;
+  if (typeof value === "string" || typeof value === "number") return;
   if (isNonFiniteNumberIR(value)) {
-    ctx.errors.push({ path, message: notANumber(value, "channel value") });
+    // The tagged infinities are numbers; the tagged NaN never is.
+    if (!isTaggedInfinity(value))
+      ctx.errors.push({ path, message: notANumber(value, "channel value") });
     return;
   }
   if (typeof value === "boolean") return;

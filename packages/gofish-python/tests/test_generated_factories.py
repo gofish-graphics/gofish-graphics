@@ -111,6 +111,10 @@ def test_scatter_serializes_jitter_overlap():
         jitter(smoothing=0)
     with pytest.raises(ValueError):
         jitter(smoothing=float("nan"))
+    with pytest.raises(ValueError):
+        jitter(seed=float("inf"))
+    with pytest.raises(ValueError):
+        jitter(seed="1")
 
 
 def test_non_finite_numbers_are_tagged_in_the_ir():
@@ -137,6 +141,12 @@ def test_non_finite_numbers_are_tagged_in_the_ir():
         2.0,
         "x",
     ]
+    # Nothing to encode: the same object back (and unchanged parts shared).
+    finite = {"a": [1.0, {"b": "x"}], "c": 2}
+    assert encode_non_finite(finite) is finite
+    mixed = {"keep": [1.0], "inf": math.inf}
+    out = encode_non_finite(mixed)
+    assert out["keep"] is mixed["keep"] and out is not mixed
 
 
 def test_pack_combinator_form():

@@ -20,9 +20,11 @@ import {
   jitterOffsets,
   jitterOutline,
   resolveOverlap,
+  sideSign,
   type OverlapItem,
   type OverlapSide,
 } from "../ast/graphicalOperators/overlap";
+import { lcg } from "../util/lcg";
 
 const { chart, scatter, spread, circle, polar } = GoFish as any;
 const jitterDist = (GoFish as any).jitter;
@@ -48,12 +50,6 @@ async function errorOf(fn: () => unknown): Promise<string | undefined> {
   } catch (e) {
     return (e as Error).message;
   }
-}
-
-/** A seeded generator, so the random cases are the same every run. */
-function lcg(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => (s = (1664525 * s + 1013904223) % 4294967296) / 4294967296;
 }
 
 const EPS = 1e-6;
@@ -85,18 +81,17 @@ function nearestFree(
 ): string | undefined {
   for (let i = 0; i < items.length; i++) {
     const { at, r } = items[i];
-    const base = side === "start" ? r : side === "end" ? -r : 0;
+    const sign = sideSign(side);
+    const base = sign * r;
     const dist = Math.abs(ys[i] - base);
     const blockedAt = (y: number) =>
       items
         .slice(0, i)
         .some(
-          (o, j) =>
-            Math.hypot(at - o.at, y - ys[j]) < r + o.r + padding - 1e-4
+          (o, j) => Math.hypot(at - o.at, y - ys[j]) < r + o.r + padding - 1e-4
         );
     for (let d = 0; d < dist - 1e-3; d += 0.05) {
-      const ys2 =
-        side === "middle" ? [base + d, base - d] : [side === "start" ? base + d : base - d];
+      const ys2 = sign === 0 ? [base + d, base - d] : [base + sign * d];
       if (ys2.some((y) => !blockedAt(y)))
         return `dot ${i} at ${ys[i].toFixed(3)} but ${d.toFixed(2)} from the line is free`;
     }
@@ -104,36 +99,46 @@ function nearestFree(
   return undefined;
 }
 
-console.log("# separateOffsets: random dots");
-for (const side of ["middle", "start", "end"] as const) {
-  for (const padding of [0, 1.5]) {
-    const rand = lcg(7);
-    const items: OverlapItem[] = Array.from({ length: 150 }, () => ({
-      at: rand() * 200,
-      r: 1 + rand() * 4,
-    }));
-    const ys = separateOffsets(items, side, padding);
-    const worst = worstOverlap(items, ys, padding);
-    check(
-      `${side}, padding ${padding}: no two dots overlap within the padding`,
-      worst <= EPS,
-      `worst overlap ${worst}`
-    );
-    const miss = nearestFree(items, ys, side, padding);
-    check(
-      `${side}, padding ${padding}: each dot takes the free spot nearest the line`,
-      miss === undefined,
-      miss
-    );
-    if (side !== "middle")
-      check(
-        `${side}, padding ${padding}: every dot stays on its side of the line`,
-        items.every((it, i) =>
-          side === "start" ? ys[i] >= it.r - EPS : ys[i] <= -it.r + EPS
-        )
+console.log("# separateOffsets: random dots and tied columns");
+for (const [label, make] of [
+  ["random", (rand: () => number) => ({ at: rand() * 200, r: 1 + rand() * 4 })],
+  [
+    "tied columns",
+    (rand: () => number) => ({
+      at: Math.floor(rand() * 8) * 5,
+      r: 1 + Math.floor(rand() * 3),
+    }),
+  ],
+] as const)
+  for (const side of ["middle", "start", "end"] as const) {
+    for (const padding of [0, 1.5]) {
+      const rand = lcg(7);
+      const items: OverlapItem[] = Array.from({ length: 150 }, () =>
+        make(rand)
       );
+      const ys = separateOffsets(items, side, padding);
+      const worst = worstOverlap(items, ys, padding);
+      const name = `${label}, ${side}, padding ${padding}`;
+      check(
+        `${name}: no two dots overlap within the padding`,
+        worst <= EPS,
+        `worst overlap ${worst}`
+      );
+      const miss = nearestFree(items, ys, side, padding);
+      check(
+        `${name}: each dot takes the free spot nearest the line`,
+        miss === undefined,
+        miss
+      );
+      if (side !== "middle")
+        check(
+          `${name}: every dot stays on its side of the line`,
+          items.every((it, i) =>
+            side === "start" ? ys[i] >= it.r - EPS : ys[i] <= -it.r + EPS
+          )
+        );
+    }
   }
-}
 
 console.log("# separateOffsets: small cases");
 {
@@ -148,7 +153,9 @@ console.log("# separateOffsets: small cases");
   );
   check(
     "three dots at one value: line, then one below, then one above",
-    ys[0] === 0 && Math.abs(Math.abs(ys[1]) - 6) < EPS && Math.abs(ys[1] + ys[2]) < EPS,
+    ys[0] === 0 &&
+      Math.abs(Math.abs(ys[1]) - 6) < EPS &&
+      Math.abs(ys[1] + ys[2]) < EPS,
     JSON.stringify(ys)
   );
   const apart = separateOffsets(
@@ -159,7 +166,10 @@ console.log("# separateOffsets: small cases");
     "middle",
     1
   );
-  check("dots that do not touch both stay on the line", apart.every((y) => y === 0));
+  check(
+    "dots that do not touch both stay on the line",
+    apart.every((y) => y === 0)
+  );
   const start = separateOffsets([{ at: 0, r: 4 }], "start", 0);
   check("a lone start dot rests its start edge on the line", start[0] === 4);
   check(
@@ -177,20 +187,25 @@ console.log("# separateOffsets: small cases");
 
 console.log("# separate(): strategy objects");
 {
-  check("separate() is a plain object", JSON.stringify(separate()) === '{"kind":"separate"}');
+  check(
+    "separate() is a plain object",
+    JSON.stringify(separate()) === '{"kind":"separate"}'
+  );
   check(
     "separate({ padding }) keeps the padding",
-    JSON.stringify(separate({ padding: 2 })) === '{"kind":"separate","padding":2}'
+    JSON.stringify(separate({ padding: 2 })) ===
+      '{"kind":"separate","padding":2}'
   );
   check(
     "a negative padding throws",
-    (await errorOf(() => separate({ padding: -1 })))?.includes("padding") === true
+    (await errorOf(() => separate({ padding: -1 })))?.includes("padding") ===
+      true
   );
   check(
     "an unknown kind throws",
-    (await errorOf(() =>
-      resolveOverlap({ kind: "nope" } as any, [], "middle")
-    ))?.includes("unknown strategy") === true
+    (
+      await errorOf(() => resolveOverlap({ kind: "nope" } as any, [], "middle"))
+    )?.includes("unknown strategy") === true
   );
 }
 
@@ -214,7 +229,11 @@ console.log("# scatter overlap: rendered");
   }));
   const dl = await chart(rows)
     .flow(
-      scatter({ x: "v", alignment: "middle", overlap: separate({ padding: 1 }) })
+      scatter({
+        x: "v",
+        alignment: "middle",
+        overlap: separate({ padding: 1 }),
+      })
     )
     .mark(circle({ r: 3 }))
     .toDisplayList({ w: 400, h: 200 });
@@ -225,9 +244,16 @@ console.log("# scatter overlap: rendered");
     for (let j = 0; j < i; j++)
       worst = Math.max(
         worst,
-        cs[i].r + cs[j].r + 1 - Math.hypot(cs[i].cx - cs[j].cx, cs[i].cy - cs[j].cy)
+        cs[i].r +
+          cs[j].r +
+          1 -
+          Math.hypot(cs[i].cx - cs[j].cx, cs[i].cy - cs[j].cy)
       );
-  check("no two rendered circles overlap within the padding", worst <= 1e-6, `${worst}`);
+  check(
+    "no two rendered circles overlap within the padding",
+    worst <= 1e-6,
+    `${worst}`
+  );
   const ys = cs.map((c) => c.cy);
   const spreadY = Math.max(...ys) - Math.min(...ys);
   check("the separated dots grow off the line", spreadY > 6, `${spreadY}`);
@@ -328,7 +354,13 @@ console.log("# jitter: outline and offsets");
     Array.from(flat).every((h) => Math.abs(h - flat[0]) < 1e-9) && flat[0] > 0,
     `${flat[0]}`
   );
-  const lone = jitterOutline([{ at: 0, r: 2 }, { at: 100, r: 2 }], 0);
+  const lone = jitterOutline(
+    [
+      { at: 0, r: 2 },
+      { at: 100, r: 2 },
+    ],
+    0
+  );
   check("a lone dot sits on the line", lone[0] === 0 && lone[1] === 0);
 
   for (const randomness of ["blue", "quasi", "uniform"] as const) {

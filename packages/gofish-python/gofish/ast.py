@@ -556,7 +556,12 @@ class Mark:
         Chart/Frame wrapper, which is what gives byte-identical output to a
         JS storybook export that renders a mark directly.
         """
-        return encode_non_finite({"type": "raw-mark", "mark": self.to_dict()})
+        return encode_non_finite(self._ir())
+
+    def _ir(self) -> dict:
+        """``to_ir()`` before its non-finite numbers are encoded: the form a
+        parent document nests, so the document is encoded once, at its top."""
+        return {"type": "raw-mark", "mark": self.to_dict()}
 
     def render(
         self,
@@ -1322,6 +1327,11 @@ class ChartBuilder:
         Returns:
             Dictionary representing the chart IR
         """
+        return encode_non_finite(self._ir())
+
+    def _ir(self) -> dict:
+        """``to_ir()`` before its non-finite numbers are encoded (see
+        ``Mark._ir``)."""
         if self._mark is None:
             raise ValueError("Chart must have a mark before converting to IR")
 
@@ -1369,7 +1379,7 @@ class ChartBuilder:
         }
         if self._z_order is not None:
             result["zOrder"] = self._z_order
-        return encode_non_finite(result)
+        return result
 
     def render(
         self,
@@ -2027,6 +2037,10 @@ def jitter(
         )
     if padding is not None and not padding >= 0:
         raise ValueError(f"jitter: padding must be a non-negative number, got {padding}")
+    if seed is not None and not (
+        isinstance(seed, (int, float)) and not isinstance(seed, bool) and math.isfinite(seed)
+    ):
+        raise ValueError(f"jitter: seed must be a number, got {seed}")
     out: Dict[str, Any] = {"kind": "jitter"}
     for key, value in (
         ("randomness", randomness),
@@ -3272,16 +3286,21 @@ class LayerBuilder:
         ``layer([chart1, chart2])`` leaves it off and renders as the low-level
         combinator, mirroring JS ``layer([...])``.
         """
+        return encode_non_finite(self._ir())
+
+    def _ir(self) -> dict:
+        """``to_ir()`` before its non-finite numbers are encoded (see
+        ``Mark._ir``)."""
         result: dict = {
             "type": "layer",
-            "charts": [child.to_ir() for child in self.children],
+            "charts": [child._ir() for child in self.children],
             "options": self.options,
         }
         if self._builder_chain:
             result["builder"] = True
         if self._relate is not None:
             result["relate"] = [c.to_dict() for c in self._relate]
-        return encode_non_finite(result)
+        return result
 
     def render(
         self,

@@ -640,12 +640,27 @@ export function mapMark(
  * caller — either an inline `rows` from the IR or external Arrow data
  * from the Python bridge).
  */
+/**
+ * Read an IR document (or any part of one, such as a derive response) as it
+ * arrives: parse it if it is JSON text, and turn its tagged non-finite
+ * numbers (`{ "$numberDouble": "Infinity" }`, written by `toJSON` and Python's
+ * `to_ir()`) back into numbers. The one place a reader decodes; everything
+ * that rebuilds a chart takes what this returns.
+ */
+export function readIR<T = any>(json: T | string): T {
+  return Frontend.decodeNonFinite(
+    typeof json === "string" ? (JSON.parse(json) as T) : json
+  );
+}
+
 export function buildChart(
-  chartSpec: ChartSpec,
-  data: Record<string, any>[],
+  encodedSpec: ChartSpec,
+  encodedData: Record<string, any>[],
   bridge: DeriveBridge | undefined,
   resolveToken: TokenResolver
 ): ChartBuilder<any> {
+  const chartSpec = readIR(encodedSpec);
+  const data = readIR(encodedData);
   const operators: Operator<any, any>[] = [];
   for (const opSpec of (chartSpec.operators ?? []) as OperatorSpec[]) {
     const op = mapOperator(opSpec, bridge);

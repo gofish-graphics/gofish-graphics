@@ -133,20 +133,18 @@ const isPlaced = (axes: AxisPlacement[], axis: Direction): boolean => {
  * That frame is the screen only in a linear space: under polar or any other
  * warping space, layout happens in the data plane, and circles that do not
  * overlap there can overlap once warped (or the reverse). So refuse it there.
+ * The axis scope carries the nearest such space (`warpedBy`).
  *
  * TODO(#1002): separate dots in screen space under a non-linear coordinate transform.
  */
-function assertLinearSpace(node: GoFishNode): void {
-  for (let p = node.parent; p !== undefined; p = p.parent) {
-    const space = p.type === "coord" ? p.coordinateTransform : undefined;
-    if (space !== undefined && space.type !== "linear")
-      throw new Error(
-        `scatter: \`overlap\` works only in a linear coordinate space, but ` +
-          `this scatter is inside a "${space.type}" space. It keeps children ` +
-          `clear of each other in the layout frame, which a non-linear space ` +
-          `warps (#1002).`
-      );
-  }
+function assertLinearSpace(scope: AxisScope): void {
+  if (scope.warpedBy !== undefined)
+    throw new Error(
+      `scatter: \`overlap\` works only in a linear coordinate space, but ` +
+        `this scatter is inside a "${scope.warpedBy}" space. It keeps children ` +
+        `clear of each other in the layout frame, which a non-linear space ` +
+        `warps (#1002).`
+    );
 }
 
 const Scatter = createNodeOperator(
@@ -200,7 +198,7 @@ const Scatter = createNodeOperator(
     // (`theta`, `lon`, ...), so the per-axis placement, and the constraints
     // built from it, wait for the resolveAliases pass.
     node._elaborateInAxisScope = async (_outer, inner) => {
-      if (overlap !== undefined) assertLinearSpace(node);
+      if (overlap !== undefined) assertLinearSpace(inner);
       const placement = scatterAxes(
         { x, y, xMin, xMax, yMin, yMax },
         dims,

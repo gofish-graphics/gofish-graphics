@@ -77,7 +77,7 @@ export async function toJSON(
  * Wrap a root in the IR document envelope, with every non-finite number
  * (`Infinity`, `-Infinity`, `NaN`) in its tagged form, since JSON has no
  * spelling for them (see gofish-ir's `nonFinite.ts`). A reader decodes them
- * with `Frontend.decodeNonFinite` before rebuilding the chart.
+ * with `Serialize.readIR` before rebuilding the chart.
  */
 function document(root: Frontend.FrontendIRDocument["root"]) {
   return Frontend.encodeNonFinite<Frontend.FrontendIRDocument>({

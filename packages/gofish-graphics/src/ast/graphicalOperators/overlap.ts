@@ -17,11 +17,13 @@
  * names the strategy. Every strategy sees the children the same way: as their
  * enclosing circles, one {@link OverlapItem} each, in data order. It answers
  * with the offset of each circle's center from the alignment line
- * ({@link OverlapResolver}). The shared broad phase for "which placed children
- * are near this one" is {@link NeighborGrid}.
+ * ({@link resolveOverlap}). Contract: a strategy moves only the free axis; it
+ * returns one free-axis number per child and cannot touch the data axis, which
+ * scatter alone places.
  */
+import { lcg } from "../../util/lcg";
 
-/** `separate()`: a beeswarm. See {@link separate}. */
+/** `separate()`: dots kept apart. See {@link separate}. */
 export type SeparateStrategy = { kind: "separate"; padding?: number };
 
 /** How `jitter()` draws each dot's offset inside the outline. */
@@ -132,63 +134,24 @@ export type OverlapItem = { at: number; r: number };
  */
 export type OverlapSide = "middle" | "start" | "end";
 
-/** What a strategy may know about the data axis besides the items: its
- *  pixels per data unit, when a data scale places it. */
-export type OverlapContext = { pxPerUnit?: number };
+/** The direction a side grows in: +1 for `"start"`, -1 for `"end"`, 0 for
+ *  `"middle"` (both ways). A dot's nearest allowed center is `sideSign · r`. */
+export const sideSign = (side: OverlapSide): -1 | 0 | 1 =>
+  side === "start" ? 1 : side === "end" ? -1 : 0;
 
-/** A strategy's placement rule: the free-axis offset of each item's center
- *  from the alignment line, in item order. Contract: a strategy moves only the
- *  free axis; it returns one free-axis number per child and cannot touch the
- *  data axis, which scatter alone places. */
-export type OverlapResolver = (
-  items: OverlapItem[],
-  side: OverlapSide,
-  ctx: OverlapContext
-) => number[];
-
-const RESOLVERS: {
-  [K in OverlapStrategy["kind"]]: (
-    strategy: Extract<OverlapStrategy, { kind: K }>
-  ) => OverlapResolver;
-} = {
-  separate: (s) => (items, side) =>
-    separateOffsets(items, side, s.padding ?? 0),
-  jitter: (s) => (items, side, ctx) => {
-    let windowPx: number | undefined;
-    if (s.smoothing !== undefined) {
-      if (ctx.pxPerUnit === undefined)
-        throw new Error(
-          "[gofish] jitter: `smoothing` is in data units, but no data scale " +
-            "places this scatter's data axis. Drop `smoothing`."
-        );
-      windowPx = s.smoothing * ctx.pxPerUnit;
-    }
-    return jitterOffsets(items, side, {
-      randomness: s.randomness ?? "blue",
-      windowPx,
-      padding: s.padding ?? 0,
-      seed: s.seed ?? 0,
-    });
-  },
-};
-
-/** Run a strategy: the free-axis offset of each item's center from the
- *  alignment line. */
+/**
+ * Run a strategy: the free-axis offset of each item's center from the
+ * alignment line, in item order.
+ *
+ * @param pxPerUnit Pixels per data unit on the data axis, when a data scale
+ *   places it; needed by an option given in data units (jitter's `smoothing`).
+ */
 export function resolveOverlap(
   strategy: OverlapStrategy,
   items: OverlapItem[],
   side: OverlapSide,
-  ctx: OverlapContext = {}
+  pxPerUnit?: number
 ): number[] {
-  const make = RESOLVERS[strategy?.kind] as
-    | ((s: OverlapStrategy) => OverlapResolver)
-    | undefined;
-  if (make === undefined)
-    throw new Error(
-      `[gofish] scatter overlap: unknown strategy kind ` +
-        `"${(strategy as { kind?: unknown })?.kind}". Make one with separate() ` +
-        `or jitter().`
-    );
   items.forEach(({ at, r }, i) => {
     if (!Number.isFinite(at) || !Number.isFinite(r))
       throw new Error(
@@ -196,57 +159,90 @@ export function resolveOverlap(
           `size (position ${at}, radius ${r})`
       );
   });
-  return make(strategy)(items, side, ctx);
+  switch (strategy?.kind) {
+    case "separate":
+      return separateOffsets(items, side, strategy.padding ?? 0);
+    case "jitter": {
+      let windowPx: number | undefined;
+      if (strategy.smoothing !== undefined) {
+        if (pxPerUnit === undefined)
+          throw new Error(
+            "[gofish] jitter: `smoothing` is in data units, but no data " +
+              "scale places this scatter's data axis. Drop `smoothing`."
+          );
+        windowPx = strategy.smoothing * pxPerUnit;
+      }
+      return jitterOffsets(items, side, {
+        randomness: strategy.randomness ?? "blue",
+        windowPx,
+        padding: strategy.padding ?? 0,
+        seed: strategy.seed ?? 0,
+      });
+    }
+    default:
+      throw new Error(
+        `[gofish] scatter overlap: unknown strategy kind ` +
+          `"${(strategy as { kind?: unknown })?.kind}". Make one with ` +
+          `separate() or jitter().`
+      );
+  }
 }
 
+/** The cell width of the broad phase: twice the largest radius plus the
+ *  padding, so any two dots close enough to touch are at most one cell apart
+ *  on each axis. */
+const cellWidth = (items: OverlapItem[], padding: number): number => {
+  let maxR = 0;
+  for (const it of items) maxR = Math.max(maxR, it.r);
+  return 2 * maxR + padding;
+};
+
 /**
- * The broad phase every strategy shares: placed items bucketed by data-axis
- * position into cells of a fixed width, each cell a linked list in typed
- * arrays. With a cell width of twice the largest radius plus the padding, any
- * item close enough to touch another lies in the same cell or the one beside
- * it.
+ * The broad phase both strategies share: placed items bucketed into square
+ * cells ({@link cellWidth}), each cell a list in insertion order. `separate`
+ * buckets on the data axis only; `jitter`'s `"blue"` also on the free axis,
+ * where the placed offsets are known.
  */
-export class NeighborGrid {
-  private readonly head = new Map<number, number>();
-  private readonly tail = new Map<number, number>();
-  private readonly next: Int32Array;
-  private constructor(
-    private readonly at: Float64Array,
-    readonly cellWidth: number
-  ) {
-    this.next = new Int32Array(at.length).fill(-1);
+class NeighborGrid {
+  private readonly cells = new Map<number, number[]>();
+  private readonly found: number[][] = [];
+  constructor(private readonly width: number) {}
+
+  private cellOf(v: number): number {
+    return this.width > 0 ? Math.floor(v / this.width) : 0;
   }
 
-  /** A grid sized so neighbors that can touch are at most one cell apart. */
-  static forItems(items: OverlapItem[], padding: number): NeighborGrid {
-    const at = new Float64Array(items.length);
-    let maxR = 0;
-    items.forEach((it, i) => {
-      at[i] = it.at;
-      maxR = Math.max(maxR, it.r);
-    });
-    return new NeighborGrid(at, 2 * maxR + padding);
+  /** One number per cell: `cy` stays within ±2^21. */
+  private static key(cx: number, cy: number): number {
+    return cx * 4194304 + cy;
   }
 
-  private cellOf(at: number): number {
-    return this.cellWidth > 0 ? Math.floor(at / this.cellWidth) : 0;
+  /** Record item `i` as placed at data-axis `x` (and free-axis `y`). */
+  insert(i: number, x: number, y = 0): void {
+    const k = NeighborGrid.key(this.cellOf(x), this.cellOf(y));
+    const bucket = this.cells.get(k);
+    if (bucket) bucket.push(i);
+    else this.cells.set(k, [i]);
   }
 
-  /** Record item `i` as placed. Appended, so a cell is visited in the order
-   *  its items were placed (`separate`'s tie-breaking depends on it). */
-  insert(i: number): void {
-    const cell = this.cellOf(this.at[i]);
-    const last = this.tail.get(cell);
-    if (last === undefined) this.head.set(cell, i);
-    else this.next[last] = i;
-    this.tail.set(cell, i);
-  }
-
-  /** Call `visit(j)` for each placed item within one cell of `at`. */
-  forNear(at: number, visit: (j: number) => void): void {
-    const cell = this.cellOf(at);
-    for (let c = cell - 1; c <= cell + 1; c++)
-      for (let j = this.head.get(c) ?? -1; j >= 0; j = this.next[j]) visit(j);
+  /**
+   * The buckets of placed items within one cell of `x` (and of `y`, when
+   * given), cell by cell in order, each in insertion order (`separate`'s
+   * tie-breaking depends on it). The returned array is reused by the next
+   * call.
+   */
+  near(x: number, y?: number): readonly number[][] {
+    const found = this.found;
+    found.length = 0;
+    const cx = this.cellOf(x);
+    const cy = y === undefined ? 0 : this.cellOf(y);
+    const reach = y === undefined ? 0 : 1;
+    for (let a = cx - 1; a <= cx + 1; a++)
+      for (let b = cy - reach; b <= cy + reach; b++) {
+        const bucket = this.cells.get(NeighborGrid.key(a, b));
+        if (bucket) found.push(bucket);
+      }
+    return found;
   }
 }
 
@@ -254,15 +250,17 @@ export class NeighborGrid {
 const EPS = 1e-6;
 
 /**
- * The beeswarm placement (Observable Plot's `dodge`, with a uniform grid as the
- * broad phase in place of Plot's interval tree).
+ * The `separate` placement (Observable Plot's `dodge`, with a uniform grid as
+ * the broad phase in place of Plot's interval tree).
  *
  * Items are placed one at a time in order. Each placed neighbor `j` within
  * reach rules out the free-axis interval `yj ± sqrt(dr² − dx²)`, where
  * `dr = ri + rj + padding` and `dx` is the distance between the two centers on
  * the data axis: inside it the two circles (plus padding) would overlap. The
- * candidates are the line itself and the ends of those intervals; the item
- * takes the free candidate nearest the line.
+ * item takes the free spot nearest the line: the line itself if no interval
+ * covers it, else an end of the run of overlapping intervals that does. The
+ * intervals are sorted and merged in one sweep, so a dot costs O(m log m) in
+ * its m neighbors.
  *
  * @returns The offset of each item's center from the line, in item order.
  */
@@ -271,45 +269,133 @@ export function separateOffsets(
   side: OverlapSide,
   padding = 0
 ): number[] {
-  const offsets = new Array<number>(items.length);
-  const grid = NeighborGrid.forItems(items, padding);
-
-  // Lower cost = nearer the line on the allowed side.
-  const cost = (y: number) =>
-    side === "middle" ? Math.abs(y) : side === "start" ? y : -y;
-
-  items.forEach(({ at, r }, i) => {
-    // The nearest allowed center: on the line, or a radius off it on a side.
-    const base = side === "start" ? r : side === "end" ? -r : 0;
-    const blocked: [number, number][] = [];
-    const candidates: number[] = [base];
-    grid.forNear(at, (j) => {
-      const dx = at - items[j].at;
-      const dr = r + items[j].r + padding;
-      if (Math.abs(dx) >= dr) return;
-      const dy = Math.sqrt(dr * dr - dx * dx);
-      const yj = offsets[j];
-      blocked.push([yj - dy, yj + dy]);
-      candidates.push(yj - dy, yj + dy);
-    });
-    const allowed = candidates.filter((y) =>
-      side === "start"
-        ? y >= base - EPS
-        : side === "end"
-          ? y <= base + EPS
-          : true
-    );
-    // A stable sort keeps insertion order among ties, so a tie between the
-    // two sides of a neighbor goes to the side found first.
-    allowed.sort((a, b) => cost(a) - cost(b));
-    // The farthest end of every blocked interval is always free, so a free
-    // candidate always exists.
-    offsets[i] = allowed.find((y) =>
-      blocked.every(([lo, hi]) => !(lo + EPS < y && y < hi - EPS))
-    )!;
-    grid.insert(i);
-  });
+  const n = items.length;
+  const offsets = new Array<number>(n);
+  const grid = new NeighborGrid(cellWidth(items, padding));
+  const sign = sideSign(side);
+  const runs = new IntervalRuns();
+  for (let i = 0; i < n; i++) {
+    const { at, r } = items[i];
+    runs.clear();
+    for (const bucket of grid.near(at))
+      for (const j of bucket) {
+        const dx = at - items[j].at;
+        const dr = r + items[j].r + padding;
+        if (Math.abs(dx) >= dr) continue;
+        const dy = Math.sqrt(dr * dr - dx * dx);
+        runs.add(offsets[j] - dy, offsets[j] + dy);
+      }
+    offsets[i] = runs.nearestFree(sign * r, sign);
+    grid.insert(i, at);
+  }
   return offsets;
+}
+
+/**
+ * The blocked intervals around one dot, as scratch buffers reused from dot to
+ * dot. An interval `[lo, hi]` blocks the open range `(lo + EPS, hi − EPS)`, so
+ * its ends, and a neighbor that only touches, stay free.
+ */
+class IntervalRuns {
+  private lo = new Float64Array(16);
+  private hi = new Float64Array(16);
+  private order = new Int32Array(16);
+  /** Merged runs, flat: start, end, start, end, ... */
+  private readonly runs: number[] = [];
+  private m = 0;
+  private readonly byLo = (a: number, b: number) => this.lo[a] - this.lo[b];
+
+  clear(): void {
+    this.m = 0;
+  }
+
+  add(lo: number, hi: number): void {
+    if (this.m === this.lo.length) {
+      const grow = <T extends Float64Array | Int32Array>(a: T): T => {
+        const b = new (a.constructor as new (n: number) => T)(a.length * 2);
+        b.set(a);
+        return b;
+      };
+      this.lo = grow(this.lo);
+      this.hi = grow(this.hi);
+      this.order = grow(this.order);
+    }
+    this.lo[this.m] = lo;
+    this.hi[this.m] = hi;
+    this.m++;
+  }
+
+  /**
+   * The free spot nearest the line on the allowed side (`sign`: +1 at or
+   * above `base` only, -1 at or below only, 0 either way). The candidates are
+   * `base` and every interval end; the answer is the free candidate nearest
+   * the line, the earliest one on a tie (`base` first, then each neighbor's
+   * `lo` and `hi` in the order they were found). Freedom is tested against
+   * the intervals merged into disjoint runs, by binary search.
+   */
+  nearestFree(base: number, sign: -1 | 0 | 1): number {
+    const { lo, hi, m } = this;
+    const order = this.order.subarray(0, m);
+    for (let k = 0; k < m; k++) order[k] = k;
+    order.sort(this.byLo);
+
+    // Merge into runs: the union of the open ranges (lo + EPS, hi − EPS), as
+    // disjoint open ranges sorted by start.
+    const runs = this.runs;
+    runs.length = 0;
+    for (const k of order) {
+      const s = lo[k] + EPS;
+      const e = hi[k] - EPS;
+      if (!(s < e)) continue; // blocks nothing
+      const last = runs.length - 2;
+      if (last >= 0 && s < runs[last + 1]) {
+        if (e > runs[last + 1]) runs[last + 1] = e;
+      } else runs.push(s, e);
+    }
+    this.base = base;
+    this.sign = sign;
+    this.best = NaN;
+    this.bestCost = Infinity;
+    this.consider(base);
+    if (sign === 0 && this.bestCost === 0) return base;
+    for (let k = 0; k < m; k++) {
+      this.consider(lo[k]);
+      this.consider(hi[k]);
+    }
+    // The far end of the outermost run is always free, so `best` is set.
+    return this.best;
+  }
+
+  private base = 0;
+  private sign: -1 | 0 | 1 = 0;
+  private best = NaN;
+  private bestCost = Infinity;
+
+  /** Take `y` if it is free, allowed, and strictly nearer the line than the
+   *  best so far (so the earliest candidate wins a tie). */
+  private consider(y: number): void {
+    const { sign, base } = this;
+    const cost = sign === 0 ? Math.abs(y) : sign * y;
+    if (!(cost < this.bestCost)) return;
+    if (sign > 0 ? y < base - EPS : sign < 0 ? y > base + EPS : false) return;
+    if (!this.isFree(y)) return;
+    this.best = y;
+    this.bestCost = cost;
+  }
+
+  /** Is `y` outside every run? Only the last run starting before `y` can
+   *  cover it. */
+  private isFree(y: number): boolean {
+    const runs = this.runs;
+    let a = 0;
+    let b = runs.length / 2;
+    while (a < b) {
+      const mid = (a + b) >> 1;
+      if (runs[2 * mid] < y) a = mid + 1;
+      else b = mid;
+    }
+    return a === 0 || !(y < runs[2 * a - 1]);
+  }
 }
 
 /** How much wider than a tight column the jitter outline is: room for the
@@ -384,13 +470,6 @@ export function jitterOutline(
   return half;
 }
 
-/** A seeded generator on [0, 1) with d3's `randomLcg` constants. */
-function lcg(seed: number): () => number {
-  const m = 4294967296;
-  let s = ((Math.floor(seed) % m) + m) % m;
-  return () => (s = (1664525 * s + 1013904223) % m) / m;
-}
-
 /** The base-2 van der Corput sequence: its `i`-th term (i ≥ 1), in [0, 1). */
 function vanDerCorput(i: number): number {
   let q = 0;
@@ -416,11 +495,9 @@ export function jitterOffsets(
 ): number[] {
   const { randomness, padding } = opts;
   const half = jitterOutline(items, padding, opts.windowPx);
-  const place = (u: number, i: number) => {
-    if (side === "middle") return u * half[i];
-    const away = items[i].r + (u + 1) * half[i];
-    return side === "start" ? away : -away;
-  };
+  const sign = sideSign(side);
+  const place = (u: number, i: number) =>
+    sign === 0 ? u * half[i] : sign * (items[i].r + (u + 1) * half[i]);
   const n = items.length;
   const out = new Array<number>(n);
 
@@ -442,13 +519,11 @@ export function jitterOffsets(
 
   // "blue": Mitchell's best candidate. Each dot, in data order, tries a few
   // seeded spots in its band and keeps the one farthest from its placed
-  // neighbors. Placed dots are bucketed on both axes (their free-axis offset
-  // is known once placed), so a candidate looks only at the dots within one
-  // cell of it; a candidate with none that close scores the cell width.
-  let maxR = 0;
-  for (const it of items) maxR = Math.max(maxR, it.r);
-  const cell = 2 * maxR + padding;
-  const grid = new PlaneGrid(cell);
+  // neighbors. The grid buckets placed dots on both axes, so a candidate looks
+  // only at the dots within one cell of it; a candidate with none that close
+  // scores the cell width.
+  const cell = cellWidth(items, padding);
+  const grid = new NeighborGrid(cell);
   for (let i = 0; i < n; i++) {
     const { at, r } = items[i];
     let best = 0;
@@ -456,12 +531,13 @@ export function jitterOffsets(
     for (let c = 0; c < BLUE_CANDIDATES; c++) {
       const y = place(2 * rand() - 1, i);
       let gap = cell;
-      grid.forNear(at, y, (j) => {
-        const dx = at - items[j].at;
-        const dy = y - out[j];
-        const g = Math.sqrt(dx * dx + dy * dy) - (r + items[j].r + padding);
-        if (g < gap) gap = g;
-      });
+      for (const bucket of grid.near(at, y))
+        for (const j of bucket) {
+          const dx = at - items[j].at;
+          const dy = y - out[j];
+          const g = Math.sqrt(dx * dx + dy * dy) - (r + items[j].r + padding);
+          if (g < gap) gap = g;
+        }
       if (gap > bestGap) {
         bestGap = gap;
         best = y;
@@ -471,34 +547,4 @@ export function jitterOffsets(
     grid.insert(i, at, best);
   }
   return out;
-}
-
-/** Placed points bucketed into square cells on both axes, each cell a list
- *  in insertion order. Any point within one cell width of a query lies in the
- *  3×3 cells around it. */
-class PlaneGrid {
-  private readonly cells = new Map<number, number[]>();
-  constructor(private readonly cellWidth: number) {}
-  /** One number per cell: both indices offset by 2^21 into 22 bits each. */
-  private key(cx: number, cy: number): number {
-    return (cx + 2097152) * 4194304 + (cy + 2097152);
-  }
-  private cellOf(v: number): number {
-    return this.cellWidth > 0 ? Math.floor(v / this.cellWidth) : 0;
-  }
-  insert(i: number, x: number, y: number): void {
-    const k = this.key(this.cellOf(x), this.cellOf(y));
-    const bucket = this.cells.get(k);
-    if (bucket) bucket.push(i);
-    else this.cells.set(k, [i]);
-  }
-  forNear(x: number, y: number, visit: (j: number) => void): void {
-    const cx = this.cellOf(x);
-    const cy = this.cellOf(y);
-    for (let a = cx - 1; a <= cx + 1; a++)
-      for (let b = cy - 1; b <= cy + 1; b++) {
-        const bucket = this.cells.get(this.key(a, b));
-        if (bucket) for (const j of bucket) visit(j);
-      }
-  }
 }

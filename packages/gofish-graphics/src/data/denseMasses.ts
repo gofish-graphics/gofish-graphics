@@ -6,11 +6,12 @@
  * `tests/python-stories/_lowlevel_data/dense_masses.json`, dumped from this
  * module.
  */
+import { lcg } from "../util/lcg";
+
 export type DenseMass = { group: string; mass: number };
 
 export const denseMasses: DenseMass[] = (() => {
-  let s = 12345;
-  const rand = () => (s = (1664525 * s + 1013904223) % 4294967296) / 4294967296;
+  const rand = lcg(12345);
   const normal = (mu: number, sd: number) =>
     mu +
     sd * Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());

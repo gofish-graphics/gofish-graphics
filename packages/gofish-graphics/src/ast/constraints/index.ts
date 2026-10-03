@@ -72,7 +72,7 @@ export type { GridConstraint } from "./grid";
 // Like grid, `overlap` is a private elaboration target (scatter's `overlap`
 // option), not part of the public authoring surface: no `Constraint.overlap`.
 export type { OverlapConstraint } from "./overlap";
-export { createOverlapConstraint, isOverlapConstraint } from "./overlap";
+export { isOverlapConstraint } from "./overlap";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
 export {

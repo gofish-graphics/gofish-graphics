@@ -873,10 +873,10 @@ export const coord = createNodeOperator(
     );
     // Declare this space's axis names (e.g. polar `{ x: "theta", y: "r" }`) so
     // resolveAliases can rebind the axis-name scope for the coord's subtree.
-    coordNode._aliases = coordTransform.aliases;
-    // The space this coord opens, for a descendant whose layout is only
-    // correct in some spaces (scatter's `overlap` needs a linear one).
-    coordNode.coordinateTransform = coordTransform;
+    coordNode._space = {
+      aliases: coordTransform.aliases,
+      type: coordTransform.type,
+    };
     // The coord's own box lives in its parent's space, so its `dims` option
     // resolves against the parent's names (the hook's `outer` scope).
     coordNode._elaborateInAxisScope = deferAxisDims(fancyDims, dims);

@@ -18,10 +18,10 @@ import type {
 import { axisIndex } from "./shared";
 
 /**
- * Spread the children out along `axis` so they stop covering each other, growing from
- * the line their `alignment` names (`scatter`'s `overlap` option). The private
- * elaboration target of `scatter`, like `grid` is for `table`: there is no
- * `Constraint.overlap`.
+ * Spread the children out along `axis` so they stop covering each other,
+ * growing from the line their `alignment` names (`scatter`'s `overlap`
+ * option). The private elaboration target of `scatter`, like `grid` is for
+ * `table`: there is no `Constraint.overlap`.
  *
  * It is not a difference constraint, so the placement solver never sees it.
  * The layer runs it after the solve (`applyConstraints`), when every child's
@@ -56,12 +56,6 @@ export const isOverlapConstraint = (
   c: { type: string } | undefined
 ): c is OverlapConstraint => c?.type === "overlap";
 
-/** A child's start edge on the line means it grows to the positive side.
- *  `baseline` is the same: for the dots `separate()` places (no data extent), the
- *  baseline is the start edge. */
-const sideOf = (alignment: AlignAnchor): OverlapSide =>
-  alignment === "middle" ? "middle" : alignment === "end" ? "end" : "start";
-
 /**
  * Place the children of an overlap constraint on its free axis. Each child is
  * read through its enclosing circle (`geometry()`), and is moved so that
@@ -79,10 +73,7 @@ export function applyOverlapPlacement(
 ): void {
   const free = axisIndex(constraint.axis);
   const data = (1 - free) as 0 | 1;
-  // Pixels per data unit on the data axis, for a strategy option given in
-  // data units (jitter's `smoothing`).
-  const sigma = posScales?.[data]?.sigma;
-  const placed = constraint.children.map((ref) => {
+  const children = constraint.children.map((ref, i) => {
     const p = targets.get(ref.name);
     if (p === undefined)
       throw new Error(
@@ -91,24 +82,34 @@ export function applyOverlapPlacement(
     const geometry = p.geometry();
     const circle = enclosingCircle(geometry);
     const center: [number, number] = [circle.cx, circle.cy];
-    return { p, geometry, circle, center };
-  });
-  const items = placed.map(({ p, geometry, circle, center }, i) => {
     const min = p.dims[data].min;
     if (min === undefined)
       throw new Error(
         `[gofish] scatter overlap: child ${i} has no position on the data ` +
           `axis, so it cannot be kept clear of its neighbors`
       );
-    return { at: min + (center[data] - geometry.box.min[data]), r: circle.r };
+    const item = {
+      at: min + (center[data] - geometry.box.min[data]),
+      r: circle.r,
+    };
+    return { p, geometry, center, item };
   });
+  // A child's start edge on the line means it grows to the positive side.
+  // `baseline` is the same: for the dots an overlap strategy places (no data
+  // extent), the baseline is the start edge.
+  const { alignment } = constraint;
+  const side: OverlapSide =
+    alignment === "middle" ? "middle" : alignment === "end" ? "end" : "start";
+  // Pixels per data unit on the data axis, for a strategy option given in
+  // data units (jitter's `smoothing`).
+  const sigma = posScales?.[data]?.sigma;
   const offsets = resolveOverlap(
     constraint.strategy,
-    items,
-    sideOf(constraint.alignment),
-    { pxPerUnit: sigma === undefined ? undefined : Math.abs(sigma) }
+    children.map((c) => c.item),
+    side,
+    sigma === undefined ? undefined : Math.abs(sigma)
   );
-  placed.forEach(({ p, geometry, center }, i) => {
+  children.forEach(({ p, geometry, center }, i) => {
     // Land the circle's center at the offset: place the child's box min at
     // the offset less the center's distance from that min.
     const min = offsets[i] - (center[free] - geometry.box.min[free]);
