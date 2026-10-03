@@ -8,6 +8,8 @@ import math
 import re
 import uuid
 
+from ._nonfinite import encode_non_finite
+
 T = TypeVar("T")
 
 
@@ -496,6 +498,11 @@ class Mark:
         Chart/Frame wrapper, which is what gives byte-identical output to a
         JS storybook export that renders a mark directly.
         """
+        return encode_non_finite(self._ir())
+
+    def _ir(self) -> dict:
+        """``to_ir()`` before its non-finite numbers are encoded: the form a
+        parent document nests, so the document is encoded once, at its top."""
         return {"type": "raw-mark", "mark": self.to_dict()}
 
     def render(
@@ -1273,6 +1280,11 @@ class ChartBuilder:
         Returns:
             Dictionary representing the chart IR
         """
+        return encode_non_finite(self._ir())
+
+    def _ir(self) -> dict:
+        """``to_ir()`` before its non-finite numbers are encoded (see
+        ``Mark._ir``)."""
         if self._mark is None:
             raise ValueError("Chart must have a mark before converting to IR")
 
@@ -1900,6 +1912,85 @@ def treemap(
     if by is not None:
         options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))
+
+
+def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
+    """
+    The ``separate()`` overlap strategy for :func:`scatter`: it keeps dots
+    apart, so no two overlap, and the result is a beeswarm. Each dot keeps its
+    position on the data axis and moves along the axis no field places, to the
+    free spot nearest the ``alignment`` line (Observable Plot's ``dodge``).
+
+        chart(penguins).flow(
+            scatter(x="Body Mass (g)", alignment="middle", overlap=separate(padding=1))
+        ).mark(circle(r=3))
+
+    Mirrors JS ``separate({ padding })``; the strategy is a plain object on the
+    wire, ``{"kind": "separate", "padding": ...}``.
+
+    Args:
+        padding: Pixels kept between neighboring dots. Default 0.
+    """
+    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
+        raise ValueError(f"separate: padding must be a finite non-negative number, got {padding}")
+    return {"kind": "separate"} if padding is None else {"kind": "separate", "padding": padding}
+
+
+def jitter(
+    *,
+    randomness: Optional[str] = None,
+    smoothing: Optional[float] = None,
+    padding: Optional[float] = None,
+    seed: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    The ``jitter()`` overlap strategy for :func:`scatter`. Each dot keeps its
+    position on the data axis and gets an offset on the axis no field places,
+    inside an outline that follows how many dots share that part of the data
+    axis.
+
+        chart(penguins).flow(
+            scatter(x="Body Mass (g)", alignment="middle",
+                    overlap=jitter(randomness="quasi", smoothing=100))
+        ).mark(circle(r=3))
+
+    Mirrors JS ``jitter({ randomness, smoothing, padding, seed })``; the
+    strategy is a plain object on the wire, ``{"kind": "jitter", ...}``.
+
+    Args:
+        randomness: ``"blue"`` (default) keeps each dot far from its
+            neighbors, ``"quasi"`` spreads dots by rank (fastest),
+            ``"uniform"`` draws seeded uniform offsets.
+        smoothing: Width, in data units of the data axis, of the window that
+            counts dots to set the outline. Default: one dot width.
+            ``math.inf`` gives a flat outline (classic fixed-band jitter).
+        padding: Pixels added to each dot's width. Default 0.
+        seed: Seed for ``"blue"`` and ``"uniform"``. Default 0.
+    """
+    if randomness is not None and randomness not in ("blue", "quasi", "uniform"):
+        raise ValueError(
+            f'jitter: randomness must be "blue", "quasi" or "uniform", got {randomness!r}'
+        )
+    if smoothing is not None and not smoothing > 0:
+        raise ValueError(
+            f"jitter: smoothing must be a positive number (or math.inf), got {smoothing}"
+        )
+    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
+        raise ValueError(f"jitter: padding must be a finite non-negative number, got {padding}")
+    if seed is not None and not (
+        isinstance(seed, (int, float)) and not isinstance(seed, bool) and math.isfinite(seed)
+    ):
+        raise ValueError(f"jitter: seed must be a number, got {seed}")
+    out: Dict[str, Any] = {"kind": "jitter"}
+    for key, value in (
+        ("randomness", randomness),
+        ("smoothing", smoothing),
+        ("padding", padding),
+        ("seed", seed),
+    ):
+        if value is not None:
+            out[key] = value
+    return out
 
 
 def circles() -> Dict[str, Any]:
@@ -3071,9 +3162,14 @@ class LayerBuilder:
         ``layer([chart1, chart2])`` leaves it off and renders as the low-level
         combinator, mirroring JS ``layer([...])``.
         """
+        return encode_non_finite(self._ir())
+
+    def _ir(self) -> dict:
+        """``to_ir()`` before its non-finite numbers are encoded (see
+        ``Mark._ir``)."""
         result: dict = {
             "type": "layer",
-            "charts": [child.to_ir() for child in self.children],
+            "charts": [child._ir() for child in self.children],
             "options": self.options,
         }
         if self._builder_chain:

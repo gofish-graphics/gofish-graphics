@@ -9,6 +9,7 @@ covers:
   - packages/gofish-ir/src/frontend/validate.ts
   - packages/gofish-ir/src/frontend/jsonSchema.ts
   - packages/gofish-ir/src/frontend/descriptors.ts
+  - packages/gofish-ir/src/frontend/nonFinite.ts
   - packages/gofish-graphics/src/serialize/toJSON.ts
   - packages/gofish-graphics/src/serialize/fromJSON.ts
   - packages/gofish-graphics/src/serialize/registry.ts
@@ -234,6 +235,46 @@ shorthand path) or one of three explicit tagged objects:
 - `literal(x)` → `{type: "literal", value: x}` — inline constant, not scaled.
 
 These three mirror Vega-Lite's `field` / `datum` / `value` trichotomy.
+
+### Non-finite numbers
+
+JSON has no `Infinity`, `-Infinity` or `NaN`. `JSON.stringify` writes them as
+`null`, and Python's `json.dumps` writes a bare `Infinity`, which `JSON.parse`
+rejects. So the IR carries each one as a tagged object, the canonical form of
+MongoDB Extended JSON:
+
+```json
+{ "$numberDouble": "Infinity" }
+{ "$numberDouble": "-Infinity" }
+{ "$numberDouble": "NaN" }
+```
+
+It is one mechanism for every number in the document (an option such as
+`jitter`'s `smoothing`, a channel value, a data row), at the serialization
+boundary, with no per-field rule:
+
+- A writer encodes the whole document as it makes it: JS `toJSON` (through
+  `Frontend.encodeNonFinite`, gofish-ir's `frontend/nonFinite.ts`) and Python
+  `to_ir()` (`gofish/_nonfinite.py`). The test derive server encodes the
+  infinities in what it sends the same way.
+- A reader decodes in one place, `Serialize.readIR` (`fromJSON.ts`), which
+  parses JSON text if it is given text and decodes the tags. The parity
+  harness calls it once per spec and once per derive response, the widget once
+  per spec trait (and hands the result down), and `buildChart` reads its own
+  arguments through it. The other reconstruction functions (`mapMark`,
+  `mapOperator`, ...) take what `readIR` returns.
+- The validator accepts the tagged `Infinity` and `-Infinity` wherever it
+  expects a number, through one check (`isIRNumber`), and the JSON Schema has
+  one shared `Number` def that every number field points to. A tagged `NaN`
+  where a number is expected is an error: a NaN option is always a bug. Data
+  rows are untyped, so a NaN there round-trips.
+- The test derive server keeps its old rule for a NaN in rows: it sends
+  `null`, which is how pandas' missing value reads in JS.
+
+The tag was chosen over protobuf's JSON mapping (a bare string `"Infinity"`
+in a number field) because a string already means a field name in a channel
+value, so a bare string would be ambiguous there; a tagged object is not, in
+any position.
 
 ### `.relate()` clauses
 
@@ -536,7 +577,11 @@ by column name, the axis names of `dims`) are never renamed, and a field
 typed `any` (`color=palette({...})` keyed by category, `coord`) passes
 through whole. Two rules keep this honest. A union may have only one branch
 that a dict could match, or generation fails, since `_to_wire` would have to
-guess. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
+guess. The one exception is a tagged union: object branches that all require
+the same field, each with its own single constant (scatter's `overlap`,
+`{kind: "separate", ...} | {kind: "jitter", ...}`). The generator compiles it
+to a `("tagged", field, {value: shape})` entry, and `_to_wire` picks the
+branch by that field and raises TypeError on an unknown value. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
 few refs the generator lists as already in wire form (`FieldAccessor`, built
 by `field(...)`; `AxisDimsValue`, whose plain dict could be a channel value
 or an interval), or generation fails, so a new nested type has to be

@@ -31,6 +31,7 @@ const {
   layer,
   pack,
   circles,
+  jitter,
   derive,
   join,
   log,
@@ -306,6 +307,72 @@ async function main() {
     const ops = (doc.root as Frontend.ChartIR).operators!;
     check("log operator", ops[0].type === "log");
     check("log prefix preserved", (ops[0] as any).prefix === "debug-label");
+  }
+
+  // -------------------------------------------------------------------------
+  // Non-finite numbers round-trip: toJSON tags them, the validator accepts
+  // the tag, and decoding before reconstruction gives the same chart.
+  // -------------------------------------------------------------------------
+  {
+    const rows = Array.from({ length: 60 }, (_, i) => ({
+      v: (i * 7) % 23,
+      w: i === 0 ? -Infinity : i,
+    }));
+    const c = chart(rows)
+      .flow(
+        scatter({
+          x: "v",
+          alignment: "middle",
+          overlap: jitter({ randomness: "uniform", smoothing: Infinity }),
+        })
+      )
+      .mark(circle({ r: 3 }));
+    const doc = await c.toJSON();
+    const root = doc.root as Frontend.ChartIR;
+    check(
+      "toJSON tags smoothing: Infinity",
+      JSON.stringify((root.operators![0] as any).overlap.smoothing) ===
+        '{"$numberDouble":"Infinity"}'
+    );
+    check(
+      "toJSON tags -Infinity inside data rows",
+      JSON.stringify((root.data as any).rows[0].w) ===
+        '{"$numberDouble":"-Infinity"}'
+    );
+    // Through real JSON text, as a file or a bridge would carry it.
+    const parsed = JSON.parse(JSON.stringify(doc));
+    validateDoc(parsed, "chart with non-finite numbers");
+    const decoded = Serialize.readIR(JSON.stringify(doc));
+    check(
+      "decode restores Infinity and -Infinity",
+      (decoded.root as any).operators[0].overlap.smoothing === Infinity &&
+        (decoded.root as any).data.rows[0].w === -Infinity
+    );
+    const rebuilt = Serialize.buildChart(
+      decoded.root,
+      (decoded.root as any).data.rows,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    check(
+      "the rebuilt chart re-emits the same IR",
+      JSON.stringify(doc2) === JSON.stringify(doc)
+    );
+    const opts = { w: 300, h: 120 };
+    // Item ids are node uids, which differ between two builds; compare the
+    // drawing without them.
+    const drawing = async (chartToDraw: any) =>
+      JSON.stringify(await chartToDraw.toDisplayList(opts), (k, val) =>
+        k === "id" ? undefined : val
+      );
+    const a = await drawing(c);
+    const b = await drawing(rebuilt);
+    check(
+      "the rebuilt chart draws the same display list",
+      a === b,
+      `${a.slice(0, 120)} vs ${b.slice(0, 120)}`
+    );
   }
 
   // -------------------------------------------------------------------------

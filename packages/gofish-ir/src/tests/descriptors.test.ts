@@ -105,6 +105,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "yMax",
     "dims",
     "alignment",
+    "overlap",
     "axes",
     "w",
     "h",

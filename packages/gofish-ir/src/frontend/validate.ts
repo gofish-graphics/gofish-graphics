@@ -30,6 +30,7 @@ import {
   type Origin,
   type RefMarkIR,
 } from "./schema.js";
+import { isNonFiniteNumberIR, isTaggedInfinity } from "./nonFinite.js";
 import {
   LABEL_OPTIONS,
   LEAF_MARKS,
@@ -41,6 +42,22 @@ import {
   type FieldSpec,
   type FieldType,
 } from "./descriptors.js";
+
+/**
+ * Is `value` a number as the IR carries it: a JSON number, or the tagged
+ * form of `Infinity` / `-Infinity` (see `nonFinite.ts`)? The tagged `NaN` is
+ * not: a NaN where a number is expected is always a bug, so it fails loudly.
+ */
+function isIRNumber(value: unknown): boolean {
+  return typeof value === "number" || isTaggedInfinity(value);
+}
+
+/** The error for a value that is not an IR number. */
+function notANumber(value: unknown, expected = "number"): string {
+  return isNonFiniteNumberIR(value)
+    ? `expected ${expected}, got NaN`
+    : `expected ${expected}, got ${typeNameOf(value)}`;
+}
 
 export interface ValidationError {
   /** Dotted path into the document. */
@@ -361,8 +378,7 @@ function walkFieldType(
         push(path, `expected string, got ${typeNameOf(value)}`);
       return;
     case "number":
-      if (typeof value !== "number")
-        push(path, `expected number, got ${typeNameOf(value)}`);
+      if (!isIRNumber(value)) push(path, notANumber(value));
       return;
     case "boolean":
       if (typeof value !== "boolean")
@@ -641,8 +657,13 @@ function walkTranslate(node: unknown, path: string, ctx: Context): void {
  */
 function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   if (value === null) return;
-  if (typeof value === "string") return;
-  if (typeof value === "number") return;
+  if (typeof value === "string" || typeof value === "number") return;
+  if (isNonFiniteNumberIR(value)) {
+    // The tagged infinities are numbers; the tagged NaN never is.
+    if (!isTaggedInfinity(value))
+      ctx.errors.push({ path, message: notANumber(value, "channel value") });
+    return;
+  }
   if (typeof value === "boolean") return;
   if (typeof value !== "object") {
     ctx.errors.push({
@@ -655,7 +676,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   const obj = value as Record<string, unknown>;
   if ("__gofish_lambda" in obj) return; // Python-bridge sentinel
   if (obj.type === "datum") {
-    if (obj.offset !== undefined && typeof obj.offset !== "number") {
+    if (obj.offset !== undefined && !isIRNumber(obj.offset)) {
       ctx.errors.push({
         path: `${path}.offset`,
         message: 'datum "offset" must be a number (post-scale pixel offset)',
@@ -676,7 +697,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
               message: 'colorOp "op" must be "lighten" or "darken"',
             });
           }
-          if (typeof cop?.amount !== "number") {
+          if (!isIRNumber(cop?.amount)) {
             ctx.errors.push({
               path: `${path}.colorOps[${i}].amount`,
               message: 'colorOp "amount" must be a number',
@@ -792,9 +813,7 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       if (value.values !== undefined) {
         if (
           !Array.isArray(value.values) ||
-          !value.values.every(
-            (v) => typeof v === "string" || typeof v === "number"
-          )
+          !value.values.every((v) => typeof v === "string" || isIRNumber(v))
         ) {
           ctx.errors.push({
             path: `${path}.values`,
@@ -807,10 +826,10 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
     case "bin":
       if (
         value.thresholds !== undefined &&
-        typeof value.thresholds !== "number" &&
+        !isIRNumber(value.thresholds) &&
         !(
           Array.isArray(value.thresholds) &&
-          value.thresholds.every((t) => typeof t === "number")
+          value.thresholds.every((t) => isIRNumber(t))
         )
       ) {
         ctx.errors.push({
@@ -951,9 +970,9 @@ function walkCutSize(value: unknown, path: string, ctx: Context): void {
   }
   value.forEach((item, i) => {
     const p = `${path}[${i}]`;
-    if (typeof item === "number") return;
+    if (isIRNumber(item)) return;
     if (isObject(item) && item.type === "datum") {
-      if (item.offset !== undefined && typeof item.offset !== "number") {
+      if (item.offset !== undefined && !isIRNumber(item.offset)) {
         ctx.errors.push({
           path: `${p}.offset`,
           message: 'datum "offset" must be a number',
@@ -1325,12 +1344,7 @@ function expectString(value: unknown, path: string, ctx: Context): void {
 }
 
 function expectNumber(value: unknown, path: string, ctx: Context): void {
-  if (typeof value !== "number") {
-    ctx.errors.push({
-      path,
-      message: `expected number, got ${typeNameOf(value)}`,
-    });
-  }
+  if (!isIRNumber(value)) ctx.errors.push({ path, message: notANumber(value) });
 }
 
 function expectBoolean(value: unknown, path: string, ctx: Context): void {

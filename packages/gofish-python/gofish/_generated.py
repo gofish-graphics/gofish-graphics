@@ -19,7 +19,8 @@ from .ast import Mark, _channel
 
 # The key structure of each named option type (descriptors.ts OPTION_TYPES):
 # ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),
-# ("tuple", (shape, ...)), ("record", value_shape); None passes a value through.
+# ("tuple", (shape, ...)), ("record", value_shape), ("tagged", field,
+# {value: shape}) for objects told apart by one field; None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
@@ -40,6 +41,16 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     kind = shape[0]
     if kind == "ref":
         return _to_wire(_OPTION_TYPES[shape[1]], value, path)
+    if kind == "tagged":
+        if not isinstance(value, dict):
+            return value
+        field, cases = shape[1], shape[2]
+        tag = value.get(field)
+        if tag not in cases:
+            raise TypeError(
+                f"{path}[{field!r}] must be one of {', '.join(map(repr, cases))}, got {tag!r}"
+            )
+        return _to_wire(cases[tag], value, path)
     if kind == "object":
         if not isinstance(value, dict):
             return value
@@ -659,7 +670,7 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
             opts[_k] = _v
     return opts
 
-def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, x_min: Optional[Union[int, float, str]] = None, x_max: Optional[Union[int, float, str]] = None, y_min: Optional[Union[int, float, str]] = None, y_max: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, alignment: Optional[str] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, x_min: Optional[Union[int, float, str]] = None, x_max: Optional[Union[int, float, str]] = None, y_min: Optional[Union[int, float, str]] = None, y_max: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, alignment: Optional[str] = None, overlap: Optional[Any] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Position each child at an explicit (x, y) point or [min, max] span in data space.
 
     Args:
@@ -672,6 +683,7 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
         y_max: Range form: right/top edge, y.
         dims: Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span.
         alignment: Cross-axis alignment for the axis without an explicit position. Default "baseline".
+        overlap: How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. jitter({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis; randomness "blue" (default), "quasi" or "uniform"; smoothing is the outline's counting window in data units (default one dot width). Both grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.
         w: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
         h: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -687,6 +699,7 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
         ("yMax", y_max),
         ("dims", dims),
         ("alignment", alignment),
+        ("overlap", _to_wire(("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "jitter": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}), overlap, "overlap")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("w", w),
         ("h", h),

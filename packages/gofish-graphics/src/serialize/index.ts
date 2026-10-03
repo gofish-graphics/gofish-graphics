@@ -15,6 +15,7 @@ export {
 
 export {
   buildChart,
+  readIR,
   constraintFromIR,
   isTokenSentinel,
   makeTokenResolver,

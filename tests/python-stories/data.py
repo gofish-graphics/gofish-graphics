@@ -17,6 +17,9 @@ def _load_json(name: str):
 
 TITANIC = _load_json("titanic")
 PENGUINS = _load_json("penguins")
+# ~1000 synthetic masses in three groups — mirrors
+# packages/gofish-graphics/src/data/denseMasses.ts (dumped from it).
+DENSE_MASSES = _load_json("dense_masses")
 CALTRAIN = _load_json("caltrain")
 CALTRAIN_STOP_ORDER = _load_json("caltrain_stop_order")
 GENDER_PAY_GAP = _load_json("gender_pay_gap")

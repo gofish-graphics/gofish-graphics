@@ -283,6 +283,7 @@ function renderError(
 }
 
 function renderLayer(
+  spec: LayerSpec,
   model: WidgetModel,
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
@@ -294,7 +295,6 @@ function renderLayer(
 
   log("Rendering layer...");
 
-  const spec = model.get("spec") as LayerSpec;
   const arrowDataRaw = model.get("arrow_data");
 
   let arrowDict: Record<string, string> = {};
@@ -356,11 +356,11 @@ function renderLayer(
 }
 
 function renderRawMark(
+  spec: RawMarkSpec,
   model: WidgetModel,
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
 ): Promise<View> {
-  const spec = model.get("spec") as unknown as RawMarkSpec;
   const debug = model.get("debug");
   const log = debug
     ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
@@ -387,12 +387,14 @@ function renderChart(
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
 ): Promise<View> {
-  const spec = model.get("spec");
+  // The spec trait as Python's `to_ir()` wrote it: read it once (its tagged
+  // non-finite numbers become numbers) and hand it down.
+  const spec = Serialize.readIR(model.get("spec"));
   if ((spec as any).type === "layer") {
-    return renderLayer(model, container, bridge);
+    return renderLayer(spec as LayerSpec, model, container, bridge);
   }
   if ((spec as any).type === "raw-mark") {
-    return renderRawMark(model, container, bridge);
+    return renderRawMark(spec as RawMarkSpec, model, container, bridge);
   }
 
   const chartSpec = spec as ChartSpec;

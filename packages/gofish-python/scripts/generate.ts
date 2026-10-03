@@ -181,6 +181,26 @@ function acceptsDict(type: FieldType): boolean {
   }
 }
 
+/** The field that tells a union's object branches apart: a field every
+ *  branch requires, typed as a one-value enum, with a different value in each
+ *  branch. Its name is the same in Python and on the wire. */
+function discriminator(branches: FieldType[]): string | undefined {
+  if (!branches.every((b) => b.kind === "object")) return undefined;
+  const groups = branches.map((b) => (b as { fields: FieldGroup }).fields);
+  const constant = (spec: FieldSpec | undefined): string | undefined =>
+    spec?.required && spec.type.kind === "enum" && spec.type.values.length === 1
+      ? spec.type.values[0]
+      : undefined;
+  return Object.keys(groups[0]).find((name) => {
+    if (pyKwarg(name) !== name) return false;
+    const values = groups.map((g) => constant(g[name]));
+    return (
+      values.every((v) => v !== undefined) &&
+      new Set(values).size === values.length
+    );
+  });
+}
+
 /** The key structure of a field type, as the Python literal `_to_wire` reads,
  *  or null when a value of this type has no option keys to rename and passes
  *  through unchanged. Object fields use the same `pyKwarg` rule as top-level
@@ -215,13 +235,24 @@ function wireShape(type: FieldType, where: string): string | null {
       const dictBranches = type.options.filter(acceptsDict);
       const shapes = dictBranches.map((b) => wireShape(b, where));
       if (shapes.every((sh) => sh === null)) return null;
-      if (dictBranches.length > 1) {
+      if (dictBranches.length === 1) return shapes[0];
+      // Several dict branches: fine when they are objects told apart by one
+      // required field holding a distinct constant (a tagged union, such as
+      // scatter's `overlap: {kind: "separate"} | {kind: "jitter"}`).
+      const tag = discriminator(dictBranches);
+      if (tag === undefined) {
         throw new Error(
           `${where}: a union with more than one dict-shaped branch, one of ` +
-            `them with option keys; a Python dict value could mean either.`
+            `them with option keys, and no field that tells them apart; a ` +
+            `Python dict value could mean either.`
         );
       }
-      return shapes[0];
+      const cases = dictBranches.map((b, i) => {
+        const field = (b as { fields: FieldGroup }).fields[tag];
+        const value = (field.type as { values: string[] }).values[0];
+        return `${pyStr(value)}: ${shapes[i] ?? "None"}`;
+      });
+      return `("tagged", ${pyStr(tag)}, {${cases.join(", ")}})`;
     }
     case "array": {
       const sub = wireShape(type.items, `${where}[]`);
@@ -374,7 +405,8 @@ parts.push(
     [
       `# The key structure of each named option type (descriptors.ts OPTION_TYPES):`,
       `# ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),`,
-      `# ("tuple", (shape, ...)), ("record", value_shape); None passes a value through.`,
+      `# ("tuple", (shape, ...)), ("record", value_shape), ("tagged", field,`,
+      `# {value: shape}) for objects told apart by one field; None passes a value through.`,
       `_OPTION_TYPES: Dict[str, Any] = {`,
       ...optionTypes,
       `}`,
@@ -394,6 +426,16 @@ parts.push(
       `    kind = shape[0]`,
       `    if kind == "ref":`,
       `        return _to_wire(_OPTION_TYPES[shape[1]], value, path)`,
+      `    if kind == "tagged":`,
+      `        if not isinstance(value, dict):`,
+      `            return value`,
+      `        field, cases = shape[1], shape[2]`,
+      `        tag = value.get(field)`,
+      `        if tag not in cases:`,
+      `            raise TypeError(`,
+      `                f"{path}[{field!r}] must be one of {', '.join(map(repr, cases))}, got {tag!r}"`,
+      `            )`,
+      `        return _to_wire(cases[tag], value, path)`,
       `    if kind == "object":`,
       `        if not isinstance(value, dict):`,
       `            return value`,
