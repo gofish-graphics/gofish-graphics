@@ -78,9 +78,9 @@ stacked bar), group by sign first, so each stack holds one sign:
 
 ## Centered stacks
 
-When the chart's `schema` gives the `by` column a center
+When the chart's `schema` gives the `by` column a midpoint
 ([`Schema.ordered(levels).diverging()`](/js/api/core/schema)), the stack's 0 is
-the center of that order instead of the start of its first part. The parts
+the midpoint of that order instead of the start of its first part. The parts
 must be nonnegative. This draws Likert charts and population pyramids:
 
 ```ts

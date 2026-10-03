@@ -90,7 +90,7 @@ export const Spread = createNodeOperator(
       glue?: boolean;
       /** A stack's {@link StackOrigin}, its part a child index. Omitted: the
        *  first part's tail. The `stack` operator's split sets it from a
-       *  `HasCenter` column (`stackOrigin` in schema.ts). Ignored without
+       *  `HasMidpoint` column (`stackOrigin` in schema.ts). Ignored without
        *  `glue`: a spread packs boxes and has no origin. */
       origin?: StackOrigin<number>;
       /** Per-entry stack-axis extent — one value per child, in child order.
@@ -262,8 +262,8 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // that override lives in createOperator (it dispatches on the mark's kind),
   // not here, so this split stays kind-agnostic.
   //
-  // A stack over a column with HasCenter (from the chart's `schema`) puts its
-  // origin at the center of the column's order instead of at its first
+  // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
+  // origin at the midpoint of the column's order instead of at its first
   // part's tail; the split knows the groups present, so it computes it. It
   // reorders every level of the order the way it reorders the groups, so the
   // stack knows which way it lays the order out even in a row with one part.

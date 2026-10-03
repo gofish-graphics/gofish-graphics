@@ -104,7 +104,7 @@ export { Schema, ColumnSchema } from "./ast/schema";
 export type {
   ColumnType,
   HasOrder,
-  HasCenter,
+  HasMidpoint,
   Level,
   SchemaEntry,
 } from "./ast/schema";

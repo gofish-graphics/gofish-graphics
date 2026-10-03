@@ -817,7 +817,7 @@ export class GoFishNode {
       // The domain lists its values in first-seen order, or in the order of
       // their column when every value comes from one ordered column, so the
       // legend follows the order the schema declares.
-      // TODO(#996): a diverging palette driven by HasCenter.
+      // TODO(#996): a diverging palette driven by HasMidpoint.
       const [order] = orders;
       const orderedKeys =
         orders.size === 1 && order !== undefined

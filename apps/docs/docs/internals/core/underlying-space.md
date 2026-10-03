@@ -279,13 +279,14 @@ the consumers that place things about the baseline read the pair:
   positives up from 0, all negatives down from 0) is not a stack option: it is
   spelled by grouping by sign first, so that each stack holds one sign.
 - The 0 of a stack is its **origin**: its first part's tail by default, as
-  above. A stack whose `by` column has `HasCenter` (see
+  above. A stack whose `by` column has `HasMidpoint` (see
   [Column types](#column-types-the-chart-schema)) puts its origin at the
-  center of the column's order instead, and the fold shifts the extent so
-  the center sits at 0: the parts before the center (and half of a middle
-  level) lie below 0, the rest above. Parts (5, 10, 20, 40, 25) centered on
-  the middle of the 20 span `[−25, 75]`. The parts of a centered stack must be
-  nonnegative (a negative one is an error naming `HasCenter`), and the space
+  midpoint of the column's order instead, and the fold shifts the extent so
+  the midpoint sits at 0: the parts before the midpoint (and the share of the
+  level it falls in that lies before it) lie below 0, the rest above. Parts
+  (5, 10, 20, 40, 25) centered on the middle of the 20 span `[−25, 75]`. The
+  parts of a centered stack must be nonnegative (a negative one is an error
+  naming `HasMidpoint`), and the space
   it builds is **mirrored** (the origin's `mirrored` flag, then
   `CONTINUOUS_TYPE.mirrored`; see `StackOrigin`): both sides of 0 hold
   amounts measured away from it, so an axis over it labels each tick with its
@@ -782,9 +783,10 @@ not the part is a baseline magnitude, and whether or not it is size-strong (a
 size-strong part's tail is its start). By default it is the first part's tail.
 So a stack seats at the origin like a single bar, a negative first part hangs
 below it, and two stacks of one sign each (grouped by sign) meet on the 0
-tick. A stack over a `HasCenter` column carries its origin at the center of
-the order (the middle of a middle part, or the tail of the first part past
-the center), so every row of a Likert chart seats its center on the 0 tick
+tick. A stack over a `HasMidpoint` column carries its origin at the midpoint
+of the order (a fraction of the way through the part it falls in, or the
+tail of the first part past it), so every row of a Likert chart seats its
+midpoint on the 0 tick
 with no other code. A spread packs boxes from its first
 member's start, which is not a baseline, so it lists none and keeps its
 sequence origin, even when its members' baselines happen to coincide. Its
@@ -1476,19 +1478,29 @@ reads only the classes, never the builder words. Two classes exist:
   column and the stray values (`strayLevelsError`), checked where the order
   is used (`orderByLevels`, at a split or a color scale), not when the chart
   types its data, so a `filter` in the flow can drop the stray rows first.
-- `HasCenter` (`.diverging()`): the order has a center, the fixed point of
-  reversing it: the middle level when the count is odd, the boundary between
-  the two middle levels when it is even. It carries no data and requires
-  `HasOrder`; the builder's `this` type makes `.diverging()` exist only after
-  `.ordered(...)`, and `columnTypeOf` rejects a wire record that has one
-  without the other. A stack over the column takes the center as its
-  origin (`stackOrigin`, then the stack fold and the free-origin seat above).
-  The center comes from the order, not from the parts present: a row with no
-  responses for some level keeps the same center. So does the side of it each
-  level lies on: the split applies its `field(...).sort()` and `.reverse()`
-  to every level of the order (`orderEntries`), and `stackOrigin` reads the
-  stack's direction off that, so a row with one part puts it where a full row
-  does. A split order that is neither the order nor its reverse is an error.
+- `HasMidpoint` (`.diverging({ midpoint })`): the order has a midpoint, the
+  point `{ at }` along it in edge coordinates. Level `i` spans `[i, i + 1]`,
+  so 0 is the first level's leading edge, `n` the last level's trailing
+  edge, and 2.25 a quarter of the way into the third level (the `cutoff` of
+  ggstats' `gglikert`). `.diverging()` writes the default `n / 2` into the
+  record, so the wire form always carries a number: the middle of the
+  middle level when the count is odd, the boundary between the two middle
+  levels when it is even. It requires `HasOrder`; the builder's `this` type
+  makes `.diverging()` exist only after `.ordered(...)`, and `columnTypeOf`
+  rejects a wire record that has one without the other, or a midpoint that
+  is not a finite number in `[0, n]`. A stack over the column takes the
+  midpoint as its origin (`stackOrigin`, then the stack fold and the
+  free-origin seat above): inside a present level, that fraction of its
+  part; on a boundary, or inside a level the row lacks, the tail of the
+  first part past it (or the last part's head). A stack laid out against the
+  order measures the fraction from the other end, so the midpoint `at` sits
+  at `n − at` along the layout. The midpoint comes from the order, not from
+  the parts present: a row with no responses for some level keeps the same
+  midpoint. So does the side of it each level lies on: the split applies its
+  `field(...).sort()` and `.reverse()` to every level of the order
+  (`orderEntries`), and `stackOrigin` reads the stack's direction off that,
+  so a row with one part puts it where a full row does. A split order that
+  is neither the order nor its reverse is an error.
 
 The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
 same way a transform's measure provenance does: `ChartBuilder` copies the

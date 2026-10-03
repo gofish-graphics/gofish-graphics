@@ -51,7 +51,7 @@ export interface DistributeOptions {
  * the layer seats at the measure's origin (#773). It is the point `fraction`
  * of the way from the tail of part `part` to its head (see
  * {@link RelationAnchor}). The default is the first part's tail. A stack over
- * a column with `HasCenter` puts it at the center of the column's order
+ * a column with `HasMidpoint` puts it at the midpoint of the column's order
  * (#984, `stackOrigin` in schema.ts) and sets `mirrored`: the parts are then
  * nonnegative amounts measured away from the 0 on both sides, and the
  * stack's space is {@link CONTINUOUS_TYPE.mirrored}.
@@ -304,8 +304,8 @@ export function distributeSpaceFold(
               `parts are nonnegative amounts, but the part for ` +
               `${keys[i] !== undefined ? `"${keys[i]}"` : `child ${i + 1}`} ` +
               `is negative. Its \`by\` column${by ? ` ${by}` : ""} has ` +
-              `HasCenter (declared ` +
-              `with \`.diverging()\`), so the stack's 0 is the center of its ` +
+              `HasMidpoint (declared ` +
+              `with \`.diverging()\`), so the stack's 0 is the midpoint of its ` +
               `order and each part lies on the side its level is on; a ` +
               `negative amount has no meaning there.`
           );

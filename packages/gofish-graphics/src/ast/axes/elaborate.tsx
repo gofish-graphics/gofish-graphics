@@ -449,7 +449,7 @@ function positionAxis(opts: {
  *  (asymmetric, rotated) label's own bbox.
  *
  *  Over a `mirrored` space (both sides of 0 hold amounts measured away from
- *  it, e.g. a stack centered on a `HasCenter` column) each tick is labeled
+ *  it, e.g. a stack centered on a `HasMidpoint` column) each tick is labeled
  *  with its distance from 0, so a Likert axis reads `40 20 0 20 40`. */
 function elaborateContinuousAxis(
   dim: 0 | 1,

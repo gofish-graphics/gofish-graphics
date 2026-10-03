@@ -1,11 +1,13 @@
 /**
  * Column types (#984): `chart(data, { schema })` with `Schema.ordered(levels)`
- * (HasOrder) and `.diverging()` (HasCenter). Covers the center of an order
- * (odd, even, a missing level), the centered stack's extent fold, the
- * stray-level and signed-part errors (checked where the order is used, so a
- * `filter` in the flow can drop a stray), the HasOrder prerequisite of
- * HasCenter, a spread of centered stacks lining up on their centers, and the
- * schema keeping the measure provenance its data carries.
+ * (HasOrder) and `.diverging()` (HasMidpoint). Covers the midpoint of an
+ * order (the default for odd and even orders, a set midpoint on a boundary,
+ * inside a level, and at either end, a missing level), the midpoint's range
+ * check, the centered stack's extent fold, the stray-level and signed-part
+ * errors (checked where the order is used, so a `filter` in the flow can drop
+ * a stray), the HasOrder prerequisite of HasMidpoint, a spread of centered
+ * stacks lining up on their midpoints, and the schema keeping the measure
+ * provenance its data carries.
  *
  * Run: `pnpm build && tsx src/tests/schema.test.ts` (wired as
  * `pnpm test:schema`). The rendering checks import from `dist` for the same
@@ -14,7 +16,7 @@
  * The type-level rule (`.diverging()` exists only after `.ordered(...)`) is
  * enforced by `ColumnSchema#diverging`'s `this` type. The repo's test files
  * are not typechecked, so this file checks the runtime counterpart (a
- * HasCenter record without HasOrder, as it would arrive from the wire).
+ * HasMidpoint record without HasOrder, as it would arrive from the wire).
  */
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
@@ -78,18 +80,25 @@ const rectsOf = (dl: any): Box[] => {
 
 const LEVELS5 = ["SD", "D", "N", "A", "SA"];
 const LEVELS4 = ["SD", "D", "A", "SA"];
-const centered = (levels: string[]): ColumnType => ({
+const centered = (levels: string[], at = levels.length / 2): ColumnType => ({
   HasOrder: { levels },
-  HasCenter: true,
+  HasMidpoint: { at },
 });
 
 async function main() {
-  console.log("\n# the center of an order");
+  console.log("\n# the midpoint of an order");
   {
-    const origin = (levels: string[], keys: string[], reverse = false) =>
+    const origin = (
+      levels: string[],
+      keys: string[],
+      reverse = false,
+      at?: number
+    ) =>
       JSON.stringify(
-        stackOrigin("r", centered(levels), levels, keys, reverse)
+        stackOrigin("r", centered(levels, at), levels, keys, reverse)
       );
+    const is = (part: number, fraction: number) =>
+      JSON.stringify({ part, fraction, mirrored: true });
     check(
       "odd: the middle of the middle level",
       origin(LEVELS5, LEVELS5) ===
@@ -121,7 +130,43 @@ async function main() {
         JSON.stringify({ part: 1, fraction: 0, mirrored: true })
     );
     check(
-      "no HasCenter: the default origin",
+      "midpoint 2 of 5: the boundary after the second level",
+      origin(LEVELS5, LEVELS5, false, 2) === is(2, 0)
+    );
+    check(
+      "midpoint 2.25 of 5: a quarter of the way through the third level",
+      origin(LEVELS5, LEVELS5, false, 2.25) === is(2, 0.25)
+    );
+    check(
+      "midpoint 0: the first level's tail",
+      origin(LEVELS5, LEVELS5, false, 0) === is(0, 0)
+    );
+    check(
+      "midpoint n: the last level's head",
+      origin(LEVELS5, LEVELS5, false, 5) === is(4, 1)
+    );
+    check(
+      "a midpoint inside a missing level: the tail of the next present part",
+      origin(LEVELS5, ["SD", "D", "A", "SA"], false, 2.25) === is(2, 0)
+    );
+    check(
+      "a midpoint inside a missing last level: the last present part's head",
+      origin(LEVELS5, ["SD", "D", "N"], false, 4.5) === is(2, 1)
+    );
+    check(
+      "reversed, midpoint 2.25 of 5: three quarters through the third level",
+      origin(LEVELS5, LEVELS5, true, 2.25) === is(2, 0.75)
+    );
+    check(
+      "reversed, midpoint 2 of 5: the tail of the second level",
+      origin(LEVELS5, LEVELS5, true, 2) === is(1, 0)
+    );
+    check(
+      "reversed, midpoint 0: the head of the first level, laid out last",
+      origin(LEVELS5, LEVELS5, true, 0) === is(0, 1)
+    );
+    check(
+      "no HasMidpoint: the default origin",
       stackOrigin("r", { HasOrder: { levels: LEVELS5 } }, LEVELS5, LEVELS5) ===
         undefined
     );
@@ -135,7 +180,7 @@ async function main() {
     );
     check(
       "parts out of order are an error",
-      shuffled !== undefined && shuffled.includes("HasCenter"),
+      shuffled !== undefined && shuffled.includes("HasMidpoint"),
       shuffled
     );
   }
@@ -179,9 +224,9 @@ async function main() {
       fold([10, -5, 20], { part: 1, fraction: 0.5, mirrored: true })
     );
     check(
-      "a negative part in a centered stack is an error naming HasCenter",
+      "a negative part in a centered stack is an error naming HasMidpoint",
       signed !== undefined &&
-        signed.includes("HasCenter") &&
+        signed.includes("HasMidpoint") &&
         signed.includes(`"k1"`),
       signed
     );
@@ -201,7 +246,7 @@ async function main() {
     check(
       "a chart stacking a negative count on a centered column fails loudly",
       rendered !== undefined &&
-        rendered.includes("HasCenter") &&
+        rendered.includes("HasMidpoint") &&
         rendered.includes(`"N"`),
       rendered
     );
@@ -247,19 +292,56 @@ async function main() {
     );
   }
 
-  console.log("\n# HasCenter needs HasOrder");
+  console.log("\n# HasMidpoint needs HasOrder and a midpoint on the order");
   {
     check("Schema has no `diverging` factory", !("diverging" in Schema));
     check(
-      "`.diverging()` follows `.ordered(...)`",
-      JSON.stringify(Schema.ordered(["a", "b"]).diverging()) ===
-        JSON.stringify({ HasOrder: { levels: ["a", "b"] }, HasCenter: true })
-    );
-    const message = await errorOf(() =>
-      columnTypeOf("r", { HasCenter: true })
+      "`.diverging()` follows `.ordered(...)`, its midpoint n / 2",
+      JSON.stringify(Schema.ordered(["a", "b", "c"]).diverging()) ===
+        JSON.stringify({
+          HasOrder: { levels: ["a", "b", "c"] },
+          HasMidpoint: { at: 1.5 },
+        })
     );
     check(
-      "a HasCenter record without HasOrder is an error",
+      "`.diverging({ midpoint })` writes the midpoint",
+      JSON.stringify(Schema.ordered(LEVELS5).diverging({ midpoint: 2 })) ===
+        JSON.stringify({ HasOrder: { levels: LEVELS5 }, HasMidpoint: { at: 2 } })
+    );
+    for (const at of [-0.5, 5.5, NaN, Infinity]) {
+      const off = await errorOf(() =>
+        columnTypeOf(
+          "r",
+          Schema.ordered(LEVELS5).diverging({ midpoint: at }).toJSON()
+        )
+      );
+      check(
+        `midpoint ${at} is an error naming the column and the range`,
+        off !== undefined &&
+          off.includes(`"r"`) &&
+          off.includes("from 0") &&
+          off.includes("to 5"),
+        off
+      );
+    }
+    const charted = await errorOf(() =>
+      chart([{ r: "SD", n: 1 }], {
+        schema: { r: Schema.ordered(LEVELS5).diverging({ midpoint: 6 }) },
+      })
+        .flow(stack({ by: "r", dir: "x" }))
+        .mark(rect({ w: "n" }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "chart checks the midpoint",
+      charted !== undefined && charted.includes(`"r"`),
+      charted
+    );
+    const message = await errorOf(() =>
+      columnTypeOf("r", { HasMidpoint: { at: 1 } })
+    );
+    check(
+      "a HasMidpoint record without HasOrder is an error",
       message !== undefined &&
         message.includes("HasOrder") &&
         message.includes(".diverging()"),
@@ -267,7 +349,7 @@ async function main() {
     );
   }
 
-  console.log("\n# a spread of centered stacks lines up on the center");
+  console.log("\n# a spread of centered stacks lines up on the midpoint");
   {
     // Row "q2" has no "SD" responses; its center must not move.
     const counts: [string, number[]][] = [

@@ -15,10 +15,10 @@ import { copyMeasureProvenance } from "./data";
  *    Declared with `Schema.ordered(levels)`. Every `by` split over the column
  *    lays its groups out in that order, and a categorical color scale over it
  *    lists its domain in that order.
- *  - {@link HasCenter}: the order has a center, the fixed point of reversing
- *    it. Declared with `.diverging()`, which exists only after `.ordered(...)`
- *    because a center needs an order. A stack over the column puts its origin
- *    (its 0) at the center.
+ *  - {@link HasMidpoint}: the order has a midpoint, a point along it.
+ *    Declared with `.diverging()`, which exists only after `.ordered(...)`
+ *    because a midpoint is a point along an order. A stack over the column
+ *    puts its origin (its 0) at the midpoint.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
@@ -39,17 +39,19 @@ export type Level = string | number;
  *  to last. */
 export type HasOrder = { levels: readonly Level[] };
 
-/** The class of an ordered column whose order has a center: the fixed point of
- *  reversing the order. With an odd number of levels it is the middle level
- *  (half of it lies on each side); with an even number it is the boundary
- *  between the two middle levels. It carries no data of its own: the center
- *  follows from {@link HasOrder}, which it requires. */
-export type HasCenter = true;
+/** The class of an ordered column whose order has a midpoint: the point `at`
+ *  along the order, in edge coordinates. 0 is the first level's leading
+ *  edge, `n` is the last level's trailing edge (`n` levels), and level `i`
+ *  spans `[i, i + 1]`, so 2.25 has two levels and a quarter of the third
+ *  before it. `.diverging()` defaults it to `n / 2`: the middle of the middle
+ *  level when `n` is odd, the boundary between the two middle levels when it
+ *  is even. It requires {@link HasOrder}, and `0 <= at <= n`. */
+export type HasMidpoint = { at: number };
 
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
   HasOrder?: HasOrder;
-  HasCenter?: HasCenter;
+  HasMidpoint?: HasMidpoint;
 };
 
 /** The column types of a dataset, keyed by column name. */
@@ -63,11 +65,15 @@ export type ColumnTypes = Record<string, ColumnType>;
 export class ColumnSchema<C extends ColumnType = ColumnType> {
   constructor(public readonly type: C) {}
 
-  /** Give the column a center (`HasCenter`): the middle of its order. */
+  /** Give the column a midpoint (`HasMidpoint`) at `midpoint`, in edge
+   *  coordinates over its order. The default is the middle of the order,
+   *  `n / 2` for `n` levels. */
   diverging(
-    this: ColumnSchema<C & { HasOrder: HasOrder }>
-  ): ColumnSchema<C & { HasOrder: HasOrder; HasCenter: HasCenter }> {
-    return new ColumnSchema({ ...this.type, HasCenter: true as const });
+    this: ColumnSchema<C & { HasOrder: HasOrder }>,
+    { midpoint }: { midpoint?: number } = {}
+  ): ColumnSchema<C & { HasOrder: HasOrder; HasMidpoint: HasMidpoint }> {
+    const at = midpoint ?? this.type.HasOrder.levels.length / 2;
+    return new ColumnSchema({ ...this.type, HasMidpoint: { at } });
   }
 
   toJSON(): C {
@@ -88,17 +94,36 @@ export const Schema = {
 export type SchemaEntry = ColumnSchema<ColumnType> | ColumnType;
 
 /** The record a schema entry stands for, checked for the prerequisites the
- *  builder enforces in its types (a record from the wire has no types). */
+ *  builder enforces in its types (a record from the wire has no types) and
+ *  for a midpoint on its order. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const type = entry instanceof ColumnSchema ? entry.type : entry;
-  if (type.HasCenter && !type.HasOrder) {
+  checkMidpoint(column, type);
+  return type;
+}
+
+/** The loud errors for a {@link HasMidpoint} without {@link HasOrder} (only a
+ *  wire record can have one) or off its order (`chart` checks the midpoint
+ *  here, where the column has a name, not in `.diverging()`). */
+function checkMidpoint(column: string, type: ColumnType): void {
+  if (type.HasMidpoint === undefined) return;
+  const name = `column "${column}"`;
+  if (!type.HasOrder) {
     throw new Error(
-      `schema: column "${column}" has HasCenter but no HasOrder. A center ` +
-        `is the middle of an order; declare the order with ` +
+      `schema: ${name} has HasMidpoint but no HasOrder. A midpoint is a ` +
+        `point along an order; declare the order with ` +
         `\`Schema.ordered(levels)\` before \`.diverging()\`.`
     );
   }
-  return type;
+  const n = type.HasOrder.levels.length;
+  const at = type.HasMidpoint.at;
+  if (typeof at !== "number" || !Number.isFinite(at) || at < 0 || at > n) {
+    throw new Error(
+      `schema: ${name} has midpoint ${String(at)}, but its order has ${n} ` +
+        `level${n === 1 ? "" : "s"}, so \`.diverging({ midpoint })\` takes ` +
+        `a number from 0 (before the first level) to ${n} (after the last).`
+    );
+  }
 }
 
 /**
@@ -197,20 +222,23 @@ export function orderByLevels<K>(
 /**
  * The {@link StackOrigin} of a stack over `column`, its part a child index,
  * whose children are the groups `keys` (in child order, laid out reversed
- * when `reverse`): the center of the column's order, when the column has
- * {@link HasCenter}; else undefined (the default origin). `split` is every
+ * when `reverse`): the midpoint of the column's order, when the column has
+ * {@link HasMidpoint}; else undefined (the default origin). `split` is every
  * level of the order, in the order the split puts groups in (the level order
  * after any `field(...).sort()` or `.reverse()`), and `keys` are the levels
  * the data has, in that order.
  *
- * The center is defined by the ORDER, not by the parts present: a group the
- * data lacks moves nothing. With an odd number of levels it is the middle of
- * the middle level when that group is present, and otherwise the boundary
- * where it would be; with an even number it is the boundary between the two
- * middle levels. A boundary is the tail of the first part laid out past it,
- * or the head of the last part when every part lies before it. The side of
- * the center a level lands on comes from `split`, not from the parts present,
- * so a row with one part puts it where a row with every part does.
+ * The midpoint is defined by the ORDER, not by the parts present: a group the
+ * data lacks moves nothing. Level `i` spans `[i, i + 1]` in the midpoint's
+ * edge coordinates. When the midpoint falls inside a level whose part is
+ * present, the origin is that far through the part. Otherwise it falls on a
+ * boundary between present parts (a level edge, or a level the data lacks):
+ * the tail of the first part laid out past it, or the head of the last part
+ * when every part lies before it. A stack that lays the order out against
+ * its levels measures the fraction from the other end, so the midpoint `at`
+ * lands at `n - at` along the layout. The side of the midpoint a level lands
+ * on comes from `split`, not from the parts present, so a row with one part
+ * puts it where a row with every part does.
  */
 export function stackOrigin(
   column: string | undefined,
@@ -219,13 +247,13 @@ export function stackOrigin(
   keys: unknown[],
   reverse = false
 ): StackOrigin<number> | undefined {
-  if (column === undefined || !type?.HasCenter || keys.length === 0)
+  if (column === undefined || !type?.HasMidpoint || keys.length === 0)
     return undefined;
   const rank = levelRanks(type.HasOrder!);
-  const center = (type.HasOrder!.levels.length - 1) / 2;
+  const midpoint = type.HasMidpoint.at;
   // The order's ranks as the stack lays the levels out: along the order (+1)
-  // or against it (−1). It must be one or the other, or "before the center"
-  // is not a prefix.
+  // or against it (−1). It must be one or the other, or "before the
+  // midpoint" is not a prefix.
   const laidOut = (reverse ? [...split].reverse() : split).map(
     (level) => rank.get(level)!
   );
@@ -236,9 +264,9 @@ export function stackOrigin(
         `stack({ by: "${column}" }): a centered stack lays its parts out in ` +
           `the order of "${column}" (or its reverse), but its \`by\` puts ` +
           `the levels in the order ${split.map(showLevel).join(", ")}. ` +
-          `HasCenter (declared with \`.diverging()\`) puts the stack's 0 at ` +
-          `the center of that order, which needs the parts on each side of it ` +
-          `together. Drop the reordering of "${column}".`
+          `HasMidpoint (declared with \`.diverging()\`) puts the stack's 0 at ` +
+          `a point along that order, which needs the parts on each side of ` +
+          `it together. Drop the reordering of "${column}".`
       );
     }
   }
@@ -251,10 +279,14 @@ export function stackOrigin(
     mirrored: true,
   });
   for (let p = 0; p < ranks.length; p++) {
-    if (ranks[p] === center) return at(p, 0.5);
-    // The first part laid out past the center: the center is its tail.
-    if (dir * (ranks[p] - center) > 0) return at(p, 0);
+    // The part's level spans [r, r + 1] along the order. Laid out against
+    // the order, its tail is at r + 1.
+    const r = ranks[p];
+    if (r < midpoint && midpoint < r + 1)
+      return at(p, dir > 0 ? midpoint - r : r + 1 - midpoint);
+    // The first part laid out past the midpoint: the midpoint is its tail.
+    if (dir > 0 ? r >= midpoint : r + 1 <= midpoint) return at(p, 0);
   }
-  // Every part lies before the center: it is the last part's head.
+  // Every part lies before the midpoint: it is the last part's head.
   return at(ranks.length - 1, 1);
 }

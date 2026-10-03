@@ -561,20 +561,40 @@ class TestRelateCallback:
 
 
 class TestSchema:
-    """`Schema.ordered(levels).diverging()` builds the column-type record
+    """`Schema.ordered(levels).diverging(midpoint=...)` builds the column-type record
     JS reads as is (#984)."""
 
     def test_ordered_is_has_order(self):
         assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
 
-    def test_diverging_adds_has_center(self):
+    def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
         assert Schema.ordered(["a", "b"]).diverging() == {
             "HasOrder": {"levels": ["a", "b"]},
-            "HasCenter": True,
+            "HasMidpoint": {"at": 1},
+        }
+        assert Schema.ordered(["a", "b", "c"]).diverging()["HasMidpoint"] == {
+            "at": 1.5
         }
 
+    def test_diverging_midpoint(self):
+        levels = ["SD", "D", "N", "A", "SA"]
+        assert Schema.ordered(levels).diverging(midpoint=2) == {
+            "HasOrder": {"levels": levels},
+            "HasMidpoint": {"at": 2},
+        }
+        assert Schema.ordered(levels).diverging(midpoint=2.25)["HasMidpoint"] == {
+            "at": 2.25
+        }
+        assert Schema.ordered(levels).diverging(midpoint=0)["HasMidpoint"] == {"at": 0}
+        assert Schema.ordered(levels).diverging(midpoint=5)["HasMidpoint"] == {"at": 5}
+
+    @pytest.mark.parametrize("midpoint", [-0.5, 5.5, float("nan"), float("inf")])
+    def test_diverging_midpoint_off_the_order(self, midpoint):
+        with pytest.raises(ValueError, match="from 0 .* to 5"):
+            Schema.ordered(["SD", "D", "N", "A", "SA"]).diverging(midpoint=midpoint)
+
     def test_diverging_needs_has_order(self):
-        with pytest.raises(ValueError, match="HasCenter needs HasOrder"):
+        with pytest.raises(ValueError, match="HasMidpoint needs HasOrder"):
             ColumnSchema({}).diverging()
 
     def test_schema_rides_chart_options(self):
@@ -583,4 +603,4 @@ class TestSchema:
             .mark(rect(w=1))
             .to_ir()
         )
-        assert ir["options"]["schema"]["r"]["HasCenter"] is True
+        assert ir["options"]["schema"]["r"]["HasMidpoint"] == {"at": 0.5}

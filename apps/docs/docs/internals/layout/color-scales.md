@@ -78,7 +78,7 @@ gradient(stops); // constructor
 
 ### Two-pass color resolution (`_node.ts` `resolveColorScale()`)
 
-1. `collectColorValues()` walks subtree, collects unique fill values in encounter order. When every value was read from one column the chart's `schema` declares ordered (`HasOrder`, carried on the value as `DatumValueImpl.fieldType`), the palette branch lists them in the column's order instead, so the legend follows the declared order even when the first row lacks a level (see [Column types](/internals/core/underlying-space#column-types-the-chart-schema)). TODO(#984): a diverging palette driven by `HasCenter`.
+1. `collectColorValues()` walks subtree, collects unique fill values in encounter order. When every value was read from one column the chart's `schema` declares ordered (`HasOrder`, carried on the value as `DatumValueImpl.fieldType`), the palette branch lists them in the column's order instead, so the legend follows the declared order even when the first row lacks a level (see [Column types](/internals/core/underlying-space#column-types-the-chart-schema)). TODO(#984): a diverging palette driven by `HasMidpoint`.
 2. Dispatch on `_tag`:
    - `"gradient"` → compute numeric min/max, build one continuous scale via `createGradientScale(config, [min, max])` and store it (with the domain) on `scaleContext.unit` as a `ContinuousColorScale`. First writer wins: the root resolves the full-subtree domain, and deeper re-entries are skipped (a `resolved` flag) so they can't shrink it. No per-value color map is enumerated for gradients.
    - `"palette"` → assign `assignPaletteColor(config, key, index)` per value into the `color` map (`CategoricalScale`)

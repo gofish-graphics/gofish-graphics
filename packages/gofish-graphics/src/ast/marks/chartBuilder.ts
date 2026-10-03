@@ -91,8 +91,8 @@ export type ChartOptions = {
    * Column types, keyed by column name: the classes each column has (#984),
    * e.g. `{ response: Schema.ordered(LEVELS).diverging() }`. An ordered column
    * (`HasOrder`) splits in the order of its levels, and a value outside them
-   * is an error where the order is used; a stack over a column with `HasCenter` puts its 0 at the
-   * center of the order. See schema.ts.
+   * is an error where the order is used; a stack over a column with `HasMidpoint` puts its 0 at the
+   * midpoint of the order. See schema.ts.
    */
   schema?: Record<string, SchemaEntry>;
 };

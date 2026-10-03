@@ -269,7 +269,7 @@ function reorderEntries<T>(
 
 /** `entries` reordered by the `sort` and `reverse` ops a `field(...)`
  *  accessor carries, in order: the reordering {@link splitEntries} applies
- *  to its groups. A stack over a `HasCenter` column runs it over every level
+ *  to its groups. A stack over a `HasMidpoint` column runs it over every level
  *  of the order (spread.tsx), so it knows the order the split lays the
  *  levels out in even when a row has only some of them. */
 export function orderEntries<T>(

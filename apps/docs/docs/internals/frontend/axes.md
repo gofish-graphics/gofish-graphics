@@ -337,7 +337,7 @@ per-kind `.domain` / `.width` field:
   `align(end)` sets the ticks flush against the line (their inner edge _is_
   the tick mark, so the label text ends up offset by the tick + gap inside
   each tick's spread). Over a **mirrored** space (`CONTINUOUS_TYPE.mirrored`,
-  e.g. a stack centered on a `HasCenter` column, see
+  e.g. a stack centered on a `HasMidpoint` column, see
   [Underlying Space](/internals/core/underlying-space#column-types-the-chart-schema))
   both sides of 0 hold amounts measured away from it, so each tick is labeled
   with its distance from 0 (`60 40 20 0 20 40 60`). The label follows from the

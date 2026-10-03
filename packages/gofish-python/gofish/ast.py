@@ -2,6 +2,7 @@
 
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 import inspect
+import math
 import uuid
 
 T = TypeVar("T")
@@ -2060,20 +2061,36 @@ class ColumnSchema(dict):
     each method adds one class.
     """
 
-    def diverging(self) -> "ColumnSchema":
-        """Give the column a center (``HasCenter``): the middle of its order.
+    def diverging(self, midpoint: Optional[float] = None) -> "ColumnSchema":
+        """Give the column a midpoint (``HasMidpoint``) along its order.
 
-        With an odd number of levels the center is the middle level (half of
-        it lies on each side); with an even number it is the boundary between
-        the two middle levels. A stack over the column puts its 0 there.
+        ``midpoint`` is in edge coordinates over the order: 0 is the first
+        level's leading edge, ``n`` is the last level's trailing edge (``n``
+        levels), and 2.25 has two levels and a quarter of the third before it.
+        The default is ``n / 2``: the middle of the middle level when ``n`` is
+        odd, the boundary between the two middle levels when it is even. A
+        stack over the column puts its 0 there.
         """
         if "HasOrder" not in self:
             raise ValueError(
-                "HasCenter needs HasOrder: a center is the middle of an order. "
-                "Declare the order with `Schema.ordered(levels)` before "
+                "HasMidpoint needs HasOrder: a midpoint is a point along an "
+                "order. Declare the order with `Schema.ordered(levels)` before "
                 "`.diverging()`."
             )
-        return ColumnSchema({**self, "HasCenter": True})
+        n = len(self["HasOrder"]["levels"])
+        at = n / 2 if midpoint is None else midpoint
+        if (
+            isinstance(at, bool)
+            or not isinstance(at, (int, float))
+            or not math.isfinite(at)
+            or not 0 <= at <= n
+        ):
+            raise ValueError(
+                f"diverging(midpoint={at!r}): the order has {n} "
+                f"level{'' if n == 1 else 's'}, so the midpoint is a number "
+                f"from 0 (before the first level) to {n} (after the last)."
+            )
+        return ColumnSchema({**self, "HasMidpoint": {"at": at}})
 
 
 class Schema:

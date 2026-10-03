@@ -1,7 +1,8 @@
 /**
  * A stack's origin (#773, #984): where the free origin seats a stack, and
- * where a centered stack (a `HasCenter` column) puts its 0. Covers the side
- * of the center a level lands on when the split reorders the levels, a
+ * where a centered stack (a `HasMidpoint` column) puts its 0. Covers the side
+ * of the midpoint a level lands on when the split reorders the levels, a
+ * set midpoint under a reversed order, a
  * spread chain staying on its sequence origin when a free node joins its
  * component, and a centered origin on a size-strong part.
  *
@@ -55,10 +56,13 @@ const rectsOf = (dl: any): Box[] => {
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 
 const LEVELS5 = ["SD", "D", "N", "A", "SA"];
-const centered: ColumnType = { HasOrder: { levels: LEVELS5 }, HasCenter: true };
+const centered: ColumnType = {
+  HasOrder: { levels: LEVELS5 },
+  HasMidpoint: { at: 2.5 },
+};
 
 async function main() {
-  console.log("\n# a level's side of the center comes from the split's order");
+  console.log("\n# a level's side of the midpoint comes from the split's order");
   {
     // The split reverses the order, so the stack lays SA first. A row with
     // only "D" puts it past the center, as a row with every level does.
@@ -127,9 +131,46 @@ async function main() {
     check(
       "a split order that is not the order is an error in every row",
       sorted !== undefined &&
-        sorted.includes("HasCenter") &&
+        sorted.includes("HasMidpoint") &&
         sorted.includes(`"A", "D", "N", "SA", "SD"`),
       sorted
+    );
+  }
+
+  console.log("\n# a set midpoint under a reversed order");
+  {
+    // Midpoint 2.25: SD, D and a quarter of N lie before it. Reversed, the
+    // stack lays SA first, so the 0 is three quarters through N from the
+    // left. q2 has only SA, which lies past the midpoint in the order, so in
+    // the reversed layout it ends at the 0.
+    const counts = [1, 2, 3, 4, 5];
+    const rows = [
+      ...LEVELS5.map((r, i) => ({ q: "q1", r, n: counts[i] })),
+      { q: "q2", r: "SA", n: 5 },
+    ];
+    const dl = await chart(rows, {
+      schema: { r: Schema.ordered(LEVELS5).diverging({ midpoint: 2.25 }) },
+    })
+      .flow(
+        spread({ by: "q", dir: "y" }),
+        stack({ by: field("r").reverse(), dir: "x" })
+      )
+      .mark(rect({ w: "n" }))
+      .toDisplayList({ w: 300, h: 200 });
+    const boxes = rectsOf(dl);
+    const q1 = boxes.slice(0, 5).sort((a, b) => a.x - b.x);
+    const [q2] = boxes.slice(5);
+    const unit = q1[0].w / 5;
+    check(
+      "the reversed row lays SA first",
+      q1.every((b, i) => near(b.w, unit * (5 - i))),
+      JSON.stringify(q1)
+    );
+    const neutral = q1[2];
+    check(
+      "the 0 is three quarters through N, where the lone SA ends",
+      near(neutral.x + 0.75 * neutral.w, q2.x + q2.w),
+      JSON.stringify({ neutral, q2 })
     );
   }
 

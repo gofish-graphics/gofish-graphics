@@ -137,7 +137,7 @@ Walking `createOperator.ts:391-415`:
 1. **Split** — `cfg.split(opts, d)` partitions the input into a
    `Map<key, subdata>`. (Some operators also return `layoutOpts`, opts the
    split computed that get merged into the layout opts: `table`'s row/column
-   labels, or a `stack`'s `origin` when its `by` column has `HasCenter`.) Each
+   labels, or a `stack`'s `origin` when its `by` column has `HasMidpoint`.) Each
    array leaf is then re-tagged with `d`'s measure provenance
    (`copyMeasureProvenance`): a leaf is a fresh sub-array that wouldn't
    otherwise inherit the `MEASURE_PROVENANCE` symbol, so without this a _mark_
