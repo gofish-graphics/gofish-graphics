@@ -18,8 +18,9 @@ import {
   dataWidth,
   isCONTINUOUS,
   niceContinuous,
+  axisOver,
+  type CONTINUOUS_TYPE,
   type UnderlyingSpace,
-  originIs,
 } from "./underlyingSpace";
 
 /**
@@ -89,16 +90,24 @@ export const padExtent = (extent: Extent, padding: number): Extent =>
  *  a type operation ({@link niceContinuous}) that widens only the data part:
  *  the niced claim is the claim plus `σ·(nicedWidth − dataWidth)`, both widths
  *  in data units from the type, so any pixel overhead the claim carries is
- *  kept. The widths are lengths, so this holds for a signed domain too. Only a
- *  pinned space is niced; any other space keeps its type and claim. */
+ *  kept. The widths are lengths, so this holds for a signed domain too, and
+ *  for a delta axis, whose width is niced from 0. Only a space that renders an
+ *  axis over its interval ({@link axisOver}) is niced; a free magnitude keeps
+ *  its type and claim. */
 export const niceScope = <S extends UnderlyingSpace | undefined>(
   space: S,
   extent: Extent | undefined
 ): [S, Extent | undefined] => {
-  if (space === undefined || !originIs(space, "pinned")) return [space, extent];
+  if (
+    space === undefined ||
+    !isCONTINUOUS(space) ||
+    axisOver(space) === undefined
+  )
+    return [space, extent];
   const niced = niceContinuous(space);
   if (extent === undefined) return [niced, undefined];
-  const widened = dataWidth(niced as typeof space) - dataWidth(space);
+  const widened =
+    dataWidth(niced as CONTINUOUS_TYPE) - dataWidth(space as CONTINUOUS_TYPE);
   return [
     niced,
     Extent(

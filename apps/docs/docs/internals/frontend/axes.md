@@ -344,7 +344,9 @@ difference axis), never off the size claim:
   with its distance from 0 (`60 40 20 0 20 40 60`). The label follows from the
   space's type; there is no format option.
 - **DIFFERENCE (continuous, `origin: "none"`)** — bare tick marks at the
-  tick values over `[0, dataWidth(space)]`, plus plain-text labels
+  tick values over `[0, w]`, where `w` is the space's width niced from 0
+  (`niceContinuous`, the same nicing the scope that sizes the content
+  applies), so the steps are even, plus plain-text labels
   showing the _delta_ between adjacent ticks, pinned at their midpoints
   (`position({ [axis]: datum(midpoint) })`). The delta labels have no tick of
   their own to provide an offset, so they `distribute` off the line (at the

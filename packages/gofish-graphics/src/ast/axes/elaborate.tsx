@@ -17,11 +17,11 @@ import {
   isORDINAL,
   isCONTINUOUS,
   isUNDEFINED,
-  continuousInterval,
   dataWidth,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
   axisOver,
+  niceContinuous,
 } from "../underlyingSpace";
 
 /**
@@ -501,18 +501,12 @@ function elaborateDifferenceAxis(
   crossFloor?: number,
   side: "start" | "end" = "start"
 ): AxisElaboration {
-  // Scale over the RAW width (not a niced max) so the tick scale equals the
-  // content's own width-based scaleFactor (size/width) and ticks line up with
-  // the marks they annotate. The axis line spans [0, width]; ticks are nice
-  // values within it. (The old bespoke path used v*scaleFactor for the same.)
+  // `space` is the axis's niced space (`niceContinuous`), so its width is a
+  // nice value from 0 and the ticks step evenly up to it: the scope that sizes
+  // the content solves against the same niced width (`niceScope`), so ticks
+  // line up with the marks they annotate. The axis line spans [0, width].
   const width = dataWidth(space);
-  const base = d3Ticks(0, width, TICK_COUNT);
-  // End cap: the line's far end always carries a tick (the old bespoke axis
-  // got this by overshooting to the next nice value; here the scale must stay
-  // anchored to the content's size/width factor, so the cap sits at `width`
-  // itself) — and the final, possibly partial, interval still gets its delta.
-  const tickValues =
-    base.length > 0 && base[base.length - 1] < width ? [...base, width] : base;
+  const tickValues = d3Ticks(0, width, TICK_COUNT);
   const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
     value: (v + tickValues[i + 1]) / 2,
     text: fmtNum(tickValues[i + 1] - v),
@@ -712,9 +706,9 @@ function elaborationsFor(
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
-    const iv = continuousInterval(s);
-    if (axisOver(s) === "absolute" && iv) {
-      nices[dim] = d3Nice(iv.min, iv.max, TICK_COUNT);
+    if (axisOver(s) === "absolute") {
+      const niced = niceContinuous(s) as CONTINUOUS_TYPE;
+      nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
       floors[dim] = nices[dim]![0];
     } else if (axisOver(s) === "delta") {
       floors[dim] = 0;
@@ -794,7 +788,7 @@ function elaborationsFor(
     } else if (kind === "delta" && isCONTINUOUS(s)) {
       const e = elaborateDifferenceAxis(
         dim,
-        s,
+        niceContinuous(s),
         prefix,
         crossFloor,
         axisSide(dim)

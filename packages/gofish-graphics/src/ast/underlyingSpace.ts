@@ -190,12 +190,13 @@ export const dataSides = (
   };
 };
 
-/** Nice a pinned space's data domain (issue #659). Returns a copy with the
- *  `[min, max]` domain rounded to d3-nice bounds (count 10, matching the axis
- *  tick nicing), so a scope solved with the niced space sizes content, maps
- *  positions, and (via the same domain) ticks the axis all off ONE rounded
- *  domain. The size claim of the niced space is the one its type implies
- *  (`impliedExtent` in `./extent.ts`).
+/** Nice the interval a space renders an axis over (issue #659): a pinned
+ *  domain's `[min, max]`, or a delta axis's width from 0, rounded to d3-nice
+ *  bounds (count 10, matching the axis tick nicing), so a scope solved with
+ *  the niced space sizes content, maps positions, and (via the same interval)
+ *  ticks the axis all off ONE rounded interval. The niced claim widens by the
+ *  same data (`niceScope` in `./extent.ts`). The gate is {@link axisOver}:
+ *  "an axis renders over this interval", not "the origin is pinned".
  *
  *  Nicing reads only the data interval and the fixed tick count, never σ or
  *  pixels, so it is a pure type operation.
@@ -206,21 +207,28 @@ export const dataSides = (
  *  scope through a stash cannot escape it (the original #659 bug), and a subtree
  *  that is not a scope root never nices its own subset (it inherits the scope's
  *  σ). It is DEMAND-DRIVEN: each solve site gates the call on
- *  `GoFishNode.scopeRendersAxis`, so a scope nices its pinned domain iff some
- *  node in its space-flow region renders an axis on the dim. A free magnitude,
- *  difference, ordinal, or undefined space is returned UNCHANGED. A coord
+ *  `GoFishNode.scopeRendersAxis`, so a scope nices its interval iff some
+ *  node in its space-flow region renders an axis on the dim. A free magnitude
+ *  (it renders no axis), ordinal, or undefined space is returned UNCHANGED. A coord
  *  scope must NOT nice (its domain maps into a fixed coordinate range), so the
  *  coord boundary never calls this. */
 export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   space: T
 ): T => {
-  if (space === undefined) return space;
-  const iv = continuousInterval(space);
-  if (iv === undefined) return space;
-  const [niceMin, niceMax] = d3Nice(iv.min, iv.max, 10);
+  const axis = axisOver(space);
+  if (axis === undefined) return space;
+  const iv = (space as CONTINUOUS_TYPE).dataInterval;
+  // An absolute axis nices its domain's ends; a delta axis has only a width,
+  // which it nices from 0 so its steps are even (ticks 20, 40, …, 160 rather
+  // than 20, 40, …, 140, 147). The low edge of an origin-less interval means
+  // nothing, so it stays.
+  const [lo, hi] =
+    axis === "absolute"
+      ? d3Nice(iv.min, iv.max, 10)
+      : [iv.min, iv.min + d3Nice(0, iv.max - iv.min, 10)[1]];
   return {
     ...(space as CONTINUOUS_TYPE),
-    dataInterval: interval(niceMin, niceMax),
+    dataInterval: interval(lo, hi),
   } as T;
 };
 

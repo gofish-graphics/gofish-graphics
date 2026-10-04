@@ -84,10 +84,7 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
     magMsg !== null && /different measures/.test(magMsg),
     magMsg ?? "did not throw"
   );
-  ok(
-    "...and nothing was composed",
-    composed === undefined
-  );
+  ok("...and nothing was composed", composed === undefined);
 }
 
 console.log("# space: the three origin states are distinct");
@@ -420,6 +417,24 @@ console.log("# space: one fold for every origin");
       undefined,
       pinnedLayer
     )!.width.run(1) === 20
+  );
+}
+
+console.log("# space: nicing is gated on an axis over the interval");
+{
+  const [delta, deltaClaim] = niceScope(
+    CONTINUOUS(interval(0, 137), "none"),
+    Extent(M.linear(137, 0))
+  );
+  ok(
+    "a delta axis nices its width from 0, and its claim with it",
+    JSON.stringify(delta!.dataInterval) === JSON.stringify(interval(0, 140)) &&
+      deltaClaim!.width.run(1) === 140
+  );
+  const free = CONTINUOUS(interval(0, 137), "free");
+  ok(
+    "a free magnitude renders no axis, so it is not niced",
+    niceScope(free, undefined)[0] === free
   );
 }
 

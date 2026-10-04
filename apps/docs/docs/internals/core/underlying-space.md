@@ -1160,8 +1160,8 @@ baseline alignment, so the root's claim is `137σ + 100` and σ leaves exactly
 
 Nicing widens only the data part of a claim: the niced claim is the claim
 plus `σ·(nicedWidth − dataWidth)`, both widths in data units from the type
-(`niceScope`). The widths are lengths, so this holds for a signed domain, and
-only a pinned type is ever niced. The overhead keeps its pixels.
+(`niceScope`). The widths are lengths, so this holds for a signed domain and
+for a delta axis alike. The overhead keeps its pixels.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
@@ -1262,13 +1262,16 @@ position map, axis ticks) reads the same rounded domain. `niceContinuous`
 (`underlyingSpace.ts`) is the one nicing function; the non-coord scope roots
 apply it at their solve sites — the render root (`gofish.tsx`), the self-scaled
 stash and the shared-scale step (`buildChildScalePlan`), and the layer-local
-datum-position scale (`buildPositionScalePlan`). It touches only anchored
-POSITION domains — never SIZE magnitudes, never deltas — and a **coord scope
-never nices** (its domains map into a fixed coordinate range; rounding them
-would break the mapping).
+datum-position scale (`buildPositionScalePlan`). It nices exactly the spaces
+that render an axis over their interval (`axisOver`): a pinned domain's two
+ends, and a delta axis's width from 0, so a delta axis steps evenly (ticks
+20, 40, …, 160 rather than 20, 40, …, 140 and a last step of 7). A free
+magnitude renders no axis, so it is never niced, and a **coord scope never
+nices** (its domains map into a fixed coordinate range; rounding them would
+break the mapping).
 
-And it is **demand-driven**: a scope nices its POSITION domain **iff at least
-one node in the scope renders an axis on that dim**. Nicing is a presentation
+And it is **demand-driven**: a scope nices its domain **iff at least one node
+in the scope renders an axis on that dim**. Nicing is a presentation
 adjustment whose demand comes from axis views — with no axis there is no tick
 grid to round for, so axis-less content stays at the honest raw scale; with an
 axis, content and ticks share the one niced domain, which is the contract.
@@ -1288,9 +1291,9 @@ a region shares it, and the region is scanned once per render however many
 scopes ask. A layer asks only when it roots a scope the answer changes (most
 layers, e.g. one per keyframe mark under a `time.sequence`, root none), so the
 solve takes the demand as a per-axis read, `axisDemand(dim)`.
-Tick elaboration nices node-locally with the same
-`d3.nice`, applied to the axis-owning node's domain — the same union domain
-that bubbled to the scope root — so elaboration and the solve cannot disagree.
+Tick elaboration nices node-locally with the same `niceContinuous`, applied to
+the axis-owning node's space — the same union that bubbled to the scope root —
+so elaboration and the solve cannot disagree.
 
 The facet corollaries fall out of the one rule: shared-scale facets all render
 the parent scope's identical niced axis, and free-scale facets are their own
