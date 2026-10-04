@@ -15,13 +15,15 @@
  * A strategy is a plain object made by a function call (`separate({ padding })`,
  * `noise({ randomness })`), so it crosses the Python bridge as IR. `kind`
  * names the strategy. `sina()` and `jitter()` are `noise()` with other
- * defaults filled in, so their objects have kind `"noise"`. Every strategy sees the children the same way: as their
- * enclosing circles, one {@link OverlapItem} each, in data order. It answers
+ * defaults filled in, so their objects have kind `"noise"`. Every strategy
+ * sees the children the same way: as their enclosing circles, one
+ * {@link OverlapItem} each, in data order. It answers
  * with the offset of each circle's center from the alignment line
  * ({@link resolveOverlap}). Contract: a strategy moves only the free axis; it
  * returns one free-axis number per child and cannot touch the data axis, which
  * scatter alone places.
  */
+import { deviation, quantile } from "d3-array";
 import { lcg } from "../../util/lcg";
 
 /** `separate()`: dots kept apart. See {@link separate}. */
@@ -38,15 +40,17 @@ export type NoiseRandomness = "blue" | "quasi" | "uniform";
  */
 export type NoiseSmoothing = number | "silverman";
 
-/** `noise()`: dots spread inside a density outline. See {@link noise}.
- *  `sina()` and `jitter()` make this same object with other defaults. */
-export type NoiseStrategy = {
-  kind: "noise";
+/** The options `noise()`, `sina()` and `jitter()` share. */
+export type NoiseOptions = {
   randomness?: NoiseRandomness;
   smoothing?: NoiseSmoothing;
   padding?: number;
   seed?: number;
 };
+
+/** `noise()`: dots spread inside a density outline. See {@link noise}.
+ *  `sina()` and `jitter()` make this same object with other defaults. */
+export type NoiseStrategy = { kind: "noise" } & NoiseOptions;
 
 /** Every built-in overlap strategy. */
 export type OverlapStrategy = SeparateStrategy | NoiseStrategy;
@@ -81,14 +85,6 @@ export function separate(opts: { padding?: number } = {}): SeparateStrategy {
 }
 
 const RANDOMNESS: readonly NoiseRandomness[] = ["blue", "quasi", "uniform"];
-
-/** The options `noise()`, `sina()` and `jitter()` share. */
-export type NoiseOptions = {
-  randomness?: NoiseRandomness;
-  smoothing?: NoiseSmoothing;
-  padding?: number;
-  seed?: number;
-};
 
 /** Check the options and build the strategy object; `name` is the factory
  *  the user called, for the error messages. */
@@ -136,10 +132,7 @@ function makeNoise(name: string, opts: NoiseOptions): NoiseStrategy {
  *   offsets, classic jitter.
  * @param smoothing The bandwidth of each dot's bell (its standard deviation),
  *   in data units of the data axis. Default 0: no smoothing beyond the dots'
- *   own size. Each dot's bell is always at least as wide as the dot itself
- *   (see {@link noiseOutline}), because with no blur at all, dots with
- *   nearly equal values would draw on top of each other; the smoothing widens
- *   it from there.
+ *   own size (see {@link noiseOutline}).
  *   `Infinity`: a flat outline, the fixed band of classic jitter.
  *   `"silverman"`: computed from the dots, as `sina()` does.
  * @param padding Pixels added to each dot's width when the outline is sized
@@ -224,19 +217,12 @@ export function resolveOverlap(
       // Infinity are the same in any unit. Only another number needs the
       // scale.
       const smoothing = strategy.smoothing ?? 0;
-      let bandwidthPx: number;
-      if (smoothing === "silverman") bandwidthPx = silvermanBandwidth(items);
-      else if (smoothing === 0 || smoothing === Infinity)
-        bandwidthPx = smoothing;
-      else {
-        if (pxPerUnit === undefined)
-          throw new Error(
-            "[gofish] noise: `smoothing` is in data units, but no data " +
-              "scale places this scatter's data axis. Drop `smoothing`, or " +
-              'use Infinity or "silverman".'
-          );
-        bandwidthPx = smoothing * pxPerUnit;
-      }
+      const bandwidthPx =
+        smoothing === "silverman"
+          ? silvermanBandwidth(items)
+          : smoothing === 0 || smoothing === Infinity
+            ? smoothing
+            : smoothing * requireScale(pxPerUnit);
       return noiseOffsets(items, side, {
         randomness: strategy.randomness ?? "blue",
         bandwidthPx,
@@ -252,6 +238,18 @@ export function resolveOverlap(
       );
   }
 }
+
+/** Pixels per data unit, for an option given in data units; throws when no
+ *  data scale places the data axis. */
+const requireScale = (pxPerUnit: number | undefined): number => {
+  if (pxPerUnit === undefined)
+    throw new Error(
+      "[gofish] noise: `smoothing` is in data units, but no data " +
+        "scale places this scatter's data axis. Drop `smoothing`, or " +
+        'use Infinity or "silverman".'
+    );
+  return pxPerUnit;
+};
 
 /** The cell width of the broad phase: twice the largest radius plus the
  *  padding, so any two dots close enough to touch are at most one cell apart
@@ -521,22 +519,11 @@ function erf(x: number): number {
 export function silvermanBandwidth(items: OverlapItem[]): number {
   const n = items.length;
   if (n < 2) return 0;
-  let mean = 0;
-  for (const it of items) mean += it.at;
-  mean /= n;
-  let ss = 0;
-  for (const it of items) ss += (it.at - mean) ** 2;
-  const sd = Math.sqrt(ss / (n - 1));
-  const sorted = Float64Array.from(items, (it) => it.at).sort();
-  // R's default quantile (type 7): linear between the order statistics.
-  const quantile = (p: number) => {
-    const h = (n - 1) * p;
-    const k = Math.floor(h);
-    return k + 1 < n
-      ? sorted[k] + (h - k) * (sorted[k + 1] - sorted[k])
-      : sorted[k];
-  };
-  const iqr = quantile(0.75) - quantile(0.25);
+  const at = (it: OverlapItem) => it.at;
+  // d3's deviation divides by n − 1, and its quantile is R's default (type
+  // 7), as `bw.nrd0` uses.
+  const sd = deviation(items, at)!;
+  const iqr = quantile(items, 0.75, at)! - quantile(items, 0.25, at)!;
   const lo = iqr > 0 ? Math.min(sd, iqr / 1.34) : sd;
   return 0.9 * lo * Math.pow(n, -0.2);
 }
@@ -655,23 +642,25 @@ export function noiseOutline(
     weight[k + 1] += f;
   }
   const taps = Math.ceil((TRUNCATE * sigma) / step);
-  const bell = new Float64Array(taps + 1);
-  for (let d = 0; d <= taps; d++)
-    bell[d] = Math.exp(-((d * step) ** 2) / (2 * sigma * sigma));
+  // The whole bell, both sides: bell[d + taps] is its value d steps away.
+  const bell = new Float64Array(2 * taps + 1);
+  for (let d = -taps; d <= taps; d++)
+    bell[d + taps] = Math.exp(-((d * step) ** 2) / (2 * sigma * sigma));
   const sum = new Float64Array(size);
   for (let m = 0; m < size; m++) {
     const w = weight[m];
     if (w === 0) continue;
     const a = Math.max(0, m - taps);
     const b = Math.min(size - 1, m + taps);
-    for (let k = a; k <= b; k++) sum[k] += w * bell[Math.abs(k - m)];
+    for (let k = a; k <= b; k++) sum[k] += w * bell[k - m + taps];
   }
 
   // ρ = pitch · Σ φσ / M. `Σ φσ` is the unnormalized sum times
   // 1/(σ√(2π)). M is the weight of the smoothing bell (bandwidth s, not σ)
   // inside the extent, (erf(a) + erf(b)) / 2 with a, b ≥ 0 the distances to
   // the two ends in units of s√2 (a sum, not a difference, so a very wide
-  // bell stays exact); with no smoothing it is 1.
+  // bell stays exact). With no smoothing toErf is Infinity and both
+  // distances are at least pitch/2 > 0, so erf gives exactly 1 and M = 1.
   const norm = pitch / (sigma * Math.sqrt(2 * Math.PI));
   const toErf = 1 / (bandwidthPx * Math.SQRT2);
   for (let i = 0; i < n; i++) {
@@ -680,10 +669,7 @@ export function noiseOutline(
     const k = Math.min(Math.floor(u), size - 2);
     const f = u - k;
     const s = sum[k] * (1 - f) + sum[k + 1] * f;
-    const m =
-      bandwidthPx > 0
-        ? (erf((extentHi - x) * toErf) + erf((x - extentLo) * toErf)) / 2
-        : 1;
+    const m = (erf((extentHi - x) * toErf) + erf((x - extentLo) * toErf)) / 2;
     setHalf(i, (norm * s) / m);
   }
   return half;

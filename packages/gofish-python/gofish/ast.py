@@ -1940,6 +1940,11 @@ def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
     return {"kind": "separate"} if padding is None else {"kind": "separate", "padding": padding}
 
 
+def _is_real(v: Any) -> bool:
+    """A real number: an int or float, not a bool."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 def _make_noise(
     name: str,
     randomness: Optional[str],
@@ -1954,9 +1959,7 @@ def _make_noise(
             f'{name}: randomness must be "blue", "quasi" or "uniform", got {randomness!r}'
         )
     if smoothing is not None and smoothing != "silverman" and not (
-        isinstance(smoothing, (int, float))
-        and not isinstance(smoothing, bool)
-        and smoothing >= 0
+        _is_real(smoothing) and smoothing >= 0
     ):
         raise ValueError(
             f'{name}: smoothing must be a non-negative number of data units, math.inf, '
@@ -1964,9 +1967,7 @@ def _make_noise(
         )
     if padding is not None and not (padding >= 0 and math.isfinite(padding)):
         raise ValueError(f"{name}: padding must be a finite non-negative number, got {padding}")
-    if seed is not None and not (
-        isinstance(seed, (int, float)) and not isinstance(seed, bool) and math.isfinite(seed)
-    ):
+    if seed is not None and not (_is_real(seed) and math.isfinite(seed)):
         raise ValueError(f"{name}: seed must be a number, got {seed}")
     out: Dict[str, Any] = {"kind": "noise"}
     for key, value in (
@@ -2009,12 +2010,8 @@ def noise(
             ``"uniform"`` draws seeded uniform offsets.
         smoothing: The bandwidth of each dot's bell, in data units of the
             data axis. Default 0: no smoothing beyond the dots' own size.
-            Each bell is always at least as wide as a dot, because with no
-            blur at all, dots with nearly equal values would draw on top of
-            each other; the smoothing widens it from there. ``math.inf``
-            gives a flat
-            outline (classic fixed-band jitter). ``"silverman"`` computes it
-            from the data, as :func:`sina` does.
+            ``math.inf`` gives a flat outline (classic fixed-band jitter).
+            ``"silverman"`` computes it from the data, as :func:`sina` does.
         padding: Pixels added to each dot's width. Default 0.
         seed: Seed for ``"blue"`` and ``"uniform"``. Default 0.
     """
@@ -2041,6 +2038,8 @@ def sina(
 
     Mirrors JS ``sina({ ... })``; on the wire it is
     ``{"kind": "noise", "smoothing": "silverman", ...}``.
+
+    Args: as :func:`noise`.
     """
     return _make_noise(
         "sina",
@@ -2069,6 +2068,8 @@ def jitter(
 
     Mirrors JS ``jitter({ ... })``; on the wire it is
     ``{"kind": "noise", "randomness": "uniform", "smoothing": Infinity, ...}``.
+
+    Args: as :func:`noise`.
     """
     return _make_noise(
         "jitter",
