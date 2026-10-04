@@ -163,6 +163,17 @@ export const axisOver = (
       ? "delta"
       : undefined;
 
+/** A space as its scope root places it. A scope root seats a free space's
+ *  baseline (its data 0) at the scope's `originPx`, so from there on the
+ *  space has data coordinates: it is pinned over the same interval. Any
+ *  other space is unchanged. */
+export const placeBaseline = <T extends UnderlyingSpace | undefined>(
+  space: T
+): T =>
+  originIs(space, "free")
+    ? ({ ...(space as CONTINUOUS_TYPE), origin: "pinned" } as T)
+    : space;
+
 /** The data width of a CONTINUOUS space (the length of its interval). */
 export const dataWidth = (space: CONTINUOUS_TYPE): number =>
   intervalWidth(space.dataInterval);
@@ -209,13 +220,16 @@ export const dataSides = (
  *  σ). It is DEMAND-DRIVEN: each solve site gates the call on
  *  `GoFishNode.scopeRendersAxis`, so a scope nices its interval iff some
  *  node in its space-flow region renders an axis on the dim. A free magnitude
- *  (it renders no axis), ordinal, or undefined space is returned UNCHANGED. A coord
+ *  renders the absolute axis of the scope that places its baseline
+ *  ({@link placeBaseline}), so it nices as that axis does, about its own 0
+ *  (which its interval contains), and stays free. An ordinal or undefined
+ *  space is returned UNCHANGED. A coord
  *  scope must NOT nice (its domain maps into a fixed coordinate range), so the
  *  coord boundary never calls this. */
 export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   space: T
 ): T => {
-  const axis = axisOver(space);
+  const axis = axisOver(placeBaseline(space));
   if (axis === undefined) return space;
   const iv = (space as CONTINUOUS_TYPE).dataInterval;
   // An absolute axis nices its domain's ends; a delta axis has only a width,

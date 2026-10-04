@@ -423,12 +423,13 @@ This is where the actual positioning and sizing happens. Each node's `layout` fu
 It applies layout algorithms (stacking, positioning, etc.), calculates intrinsic dimensions for each node, and handles nested layouts and complex arrangements.
 
 **Inferring an omitted `w`/`h`.** The chart-level `w` and `h` are optional. An
-omitted dimension is resolved per axis from that axis's root underlying space:
+omitted dimension is resolved per axis from the root's size claim on it:
 
-- A **POSITION** or **data-driven SIZE** axis (a scatter axis, or bar heights
-  `= value`) has data to scale into pixels, so it falls back to a concrete canvas
-  (`DEFAULT_CANVAS_SIZE = 400`).
-- An **ORDINAL** or **UNDEFINED** axis (a bar chart's category axis, or a bare
+- An axis with a **claim** (a scatter axis, bar heights `= value`, or bar
+  widths `= value` laid side by side, whose spread is ordinal but whose room is
+  σ-dependent) has data to scale into pixels, so it falls back to a concrete
+  canvas (`DEFAULT_CANVAS_SIZE = 400`).
+- An axis with **no claim** (a bar chart's category axis, or a bare
   fixed-size shape) has nothing to scale, so it lays out _unsized_: marks keep
   their default sizes (a mark treats a non-finite size as "use my default" via its
   `Number.isFinite` guards) and the operator shrinks to fit.

@@ -61,6 +61,7 @@ import {
   isUNDEFINED,
   UnderlyingSpace,
   axisOver,
+  placeBaseline,
   MeasureClash,
 } from "./underlyingSpace";
 import { impliedExtents, type Extent } from "./extent";
@@ -174,10 +175,11 @@ export type Placeable = {
    *  `rect({})`), so the size cell is free for the constraint to own. Optional
    *  for the same reason as the other constraint write hooks. */
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
-  /** Stamped by a FIXED-PITCH `distribute` (`anchor` ≠ "edge") on `dir: "y"`:
-   *  the anchor the chain related on this target. A fixed-pitch chain is an
-   *  overlay, not a tiling — the target's allocated y band is just the leftover
-   *  slice and bears no relation to where its chained anchor sits — so if this
+  /** Stamped by a spread `distribute` on `dir: "y"`: the anchor the chain
+   *  fixed on this target (for an edge chain, which fixes the whole box,
+   *  `"middle"`, whose mirror keeps the box in place). The chain places the
+   *  target itself — the target's allocated y band is just a slice of the
+   *  spread's height and bears no relation to where it sits — so if this
    *  node later opens its own y-up flip scope, the scope mirrors about THIS
    *  anchor (a point reflection; see `scopeBox` in coordinateTransforms/bake.ts)
    *  rather than the allocated band. That keeps the PAINTED anchor coincident
@@ -934,11 +936,21 @@ export class GoFishNode {
     return key;
   }
 
+  /** This node's space `space` on `dim` as the axis machinery sees it: placed
+   *  ({@link placeBaseline}) when this node is the render root, the scope root
+   *  that seats a free baseline at the scope's `originPx`, so the root of a
+   *  bar chart renders an absolute value axis over its free bars. Anywhere
+   *  else a free space is still waiting for its parent to place it. */
+  public placedSpace(dim: 0 | 1, space: UnderlyingSpace): UnderlyingSpace {
+    return this.parent === undefined ? placeBaseline(space) : space;
+  }
+
   /**
    * This node's per-axis size claims ({@link Extent}), memoized. Resolves the
    * types first (claims may read them), then the children's claims, then this
-   * node's own claim hook. Every continuous axis gets a claim and no other
-   * axis does.
+   * node's own claim hook. Every continuous axis gets a claim; a
+   * non-continuous axis claims only when its content's room is σ-dependent
+   * (a spread of magnitudes).
    */
   public resolveExtent(): Size<Extent | undefined> {
     if (this._extent) return this._extent;
@@ -958,11 +970,10 @@ export class GoFishNode {
       this.constraints
     );
     for (const dim of [0, 1] as const) {
-      if (isCONTINUOUS(spaces[dim]) !== (extent[dim] !== undefined))
+      if (isCONTINUOUS(spaces[dim]) && extent[dim] === undefined)
         throw new Error(
-          `[gofish] ${this.type}: axis ${dim} has a ${spaces[dim].kind} type ` +
-            `but ${extent[dim] === undefined ? "no" : "a"} size claim. Every ` +
-            `continuous axis, and only a continuous axis, has a claim.`
+          `[gofish] ${this.type}: axis ${dim} has a continuous type but no ` +
+            `size claim. Every continuous axis has a claim.`
         );
     }
     this._extent = extent;
@@ -1290,7 +1301,7 @@ export class GoFishNode {
             (prior.startsWith("o:") && prior !== mySig)
           )
             sig = mySig;
-        } else if (axisOver(s) !== undefined) {
+        } else if (axisOver(this.placedSpace(dim, s)) !== undefined) {
           // Continuous: single-owner — only the root-most unclaimed dim claims.
           if (prior === undefined) sig = AXIS_CLAIM_OPAQUE;
         }

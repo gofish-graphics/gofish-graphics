@@ -25,7 +25,10 @@ import {
 } from "../ast/graphicalOperators/alignment";
 import * as M from "../util/monotonic";
 import { interval } from "../util/interval";
-import { distributeSpaceFold } from "../ast/constraints/distribute";
+import {
+  distributeExtentFold,
+  distributeSpaceFold,
+} from "../ast/constraints/distribute";
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import {
   resolveLayerAxisExtent,
@@ -404,34 +407,51 @@ console.log("# space: one fold for every origin");
     anchor: "edge" as const,
     origin: { part: 0, fraction: 0, mirrored: false },
   };
-  // A spread moves each target to its place, so pinned targets chain as
-  // boxes of their data width, like free ones.
-  const pinnedChain = distributeSpaceFold(
-    [
-      CONTINUOUS(interval(5, 9), "pinned"),
-      CONTINUOUS(interval(100, 103), "pinned"),
-    ],
-    [undefined, undefined],
+  // A spread separates: along its direction its result is a sequence of
+  // separate spaces, never one continuous space, whatever its targets.
+  const pinnedTargets = [
+    CONTINUOUS(interval(5, 9), "pinned"),
+    CONTINUOUS(interval(100, 103), "pinned"),
+  ];
+  const freeTargets = [
+    CONTINUOUS(interval(0, 4), "free"),
+    CONTINUOUS(interval(0, 3), "free"),
+  ];
+  ok(
+    "an unkeyed spread is no continuous space, of pinned or free targets",
+    distributeSpaceFold(pinnedTargets, [undefined, undefined], chainOpts)
+      .kind === "undefined" &&
+      distributeSpaceFold(freeTargets, [undefined, undefined], chainOpts)
+        .kind === "undefined"
+  );
+  ok(
+    "a keyed spread is ordinal, of pinned or free targets",
+    distributeSpaceFold(pinnedTargets, ["a", "b"], chainOpts).kind ===
+      "ordinal" &&
+      distributeSpaceFold(freeTargets, ["a", "b"], chainOpts).kind === "ordinal"
+  );
+  // Its room: a spread of magnitudes shares the enclosing scope's σ, so it
+  // claims its targets' claims chained with the spacing; a spread of frames
+  // (pinned panels) claims nothing (each panel roots its own scope).
+  const freeChain = distributeSpaceFold(freeTargets, ["a", "b"], chainOpts);
+  const freeClaim = distributeExtentFold(
+    freeTargets.map(impliedExtent),
+    freeTargets,
+    freeChain,
     chainOpts
   );
   ok(
-    "an unkeyed chain of pinned targets is a free chain of their widths",
-    originIs(pinnedChain, "free") &&
-      JSON.stringify(pinnedChain.dataInterval) ===
-        JSON.stringify(interval(0, 7))
+    "a spread of magnitudes claims their chained claims plus spacing",
+    freeClaim !== undefined && freeClaim.width.run(2) === 4 * 2 + 3 * 2 + 10
   );
-  // A keyed chain of pinned targets is a category axis (their widths are
-  // spans of positions, not quantities).
   ok(
-    "a keyed chain of pinned targets is ordinal",
-    distributeSpaceFold(
-      [
-        CONTINUOUS(interval(5, 9), "pinned"),
-        CONTINUOUS(interval(1, 2), "pinned"),
-      ],
-      ["a", "b"],
+    "a spread of pinned frames claims nothing",
+    distributeExtentFold(
+      pinnedTargets.map(impliedExtent),
+      pinnedTargets,
+      distributeSpaceFold(pinnedTargets, ["a", "b"], chainOpts),
       chainOpts
-    ).kind === "ordinal"
+    ) === undefined
   );
   // A stack lays out pinned and free parts alike.
   const mixed = distributeSpaceFold(
@@ -509,10 +529,19 @@ console.log("# space: nicing is gated on an axis over the interval");
       deltaClaim!.width.run(1) === 140 &&
       deltaClaim!.descent.run(1) === 1.5
   );
-  const free = CONTINUOUS(interval(0, 137), "free");
+  // A free magnitude renders the absolute axis of the scope that places its
+  // baseline, so it nices as that axis does, about its own 0, and each side
+  // of its claim widens by its own niced end.
+  const [free, freeClaim] = niceScope(
+    CONTINUOUS(interval(-28, 137), "free"),
+    Extent(M.linear(137, 0), M.linear(28, 0))
+  );
   ok(
-    "a free magnitude renders no axis, so it is not niced",
-    niceScope(free, undefined)[0] === free
+    "a free magnitude nices about its 0, each side by its own end",
+    JSON.stringify(free!.dataInterval) === JSON.stringify(interval(-40, 140)) &&
+      free!.origin === "free" &&
+      freeClaim!.ascent.run(1) === 140 &&
+      freeClaim!.descent.run(1) === 40
   );
 }
 

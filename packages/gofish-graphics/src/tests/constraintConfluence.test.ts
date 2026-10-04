@@ -1289,9 +1289,9 @@ console.log("# constraint confluence: child scale factor planning");
     "test"
   );
   ok(
-    "self-scaled POSITION axis builds local posScale",
+    "self-scaled POSITION axis builds local posScale; a free stash hands none",
     pxOf(selfScaled.basePosScales[0]!, 5) === 50 &&
-      selfScaled.basePosScales[1] === inheritedY
+      selfScaled.basePosScales[1] === undefined
   );
   ok(
     "every self-scaled axis roots its own σ, pinned or free",
@@ -1365,8 +1365,8 @@ console.log("# constraint confluence: child scale factor planning");
     [CONTINUOUS(interval(0, 25), "free"), UNDEFINED],
     [impliedExtent(CONTINUOUS(interval(0, 25), "free")), undefined],
     [100, 80],
-    [2, 3],
-    [inheritedX, inheritedY],
+    [undefined, undefined],
+    [undefined, undefined],
     { sizeDomain: [Monotonic.linear(10, 0), undefined] },
     [true, false],
     () => false,
@@ -1379,6 +1379,27 @@ console.log("# constraint confluence: child scale factor planning");
       shared.sharedScaleChecks.length === 1 &&
       shared.sharedScaleChecks[0].axis === 0 &&
       shared.sharedScaleChecks[0].sigma === 4
+  );
+  // Only a scope root solves: a shared-scale node under an ancestor that
+  // already owns σ (a chart nested in another chart's mark) inherits it.
+  const nestedShared = buildChildScalePlan(
+    [undefined, undefined],
+    [undefined, undefined],
+    [CONTINUOUS(interval(0, 25), "free"), UNDEFINED],
+    [impliedExtent(CONTINUOUS(interval(0, 25), "free")), undefined],
+    [100, 80],
+    [2, 3],
+    [inheritedX, inheritedY],
+    undefined,
+    [true, false],
+    () => false,
+    new ScopeRegistry(),
+    "test"
+  );
+  ok(
+    "a shared scale node under an inherited σ inherits it",
+    nestedShared.childScaleFactors[0] === 2 &&
+      nestedShared.sharedScaleChecks.length === 0
   );
 }
 

@@ -123,7 +123,9 @@ export class ScopeRegistry {
    * baseline ({@link baselineData}) sits `claim.descent(σ)` above the box's low
    * edge, so `originPx = claim.descent(σ) − σ·baselineData`. For a pinned
    * claim with no overhead that is `−σ·min`, the domain's low edge at 0; for a
-   * free one it is `descent·σ`. Returns undefined when the claim cannot
+   * free one it is `descent·σ`. A scope whose type has no data coordinates
+   * (a spread of magnitudes is ordinal) still solves σ from its claim, with no
+   * `originPx`. Returns undefined when there is no claim or it cannot
    * determine σ (a claim with no σ in it, such as a zero-width domain).
    */
   solveScope(
@@ -132,8 +134,7 @@ export class ScopeRegistry {
     claim: Extent | undefined,
     allocated: number
   ): ScopeSolution | undefined {
-    if (space === undefined || !isCONTINUOUS(space) || claim === undefined)
-      return undefined;
+    if (space === undefined || claim === undefined) return undefined;
     const sigma = claim.width.inverse(allocated, {
       upperBoundGuess: allocated,
     });
@@ -141,7 +142,7 @@ export class ScopeRegistry {
       this.entries.push({
         ...meta,
         allocated,
-        frame: `${space.origin}[${space.dataInterval.min},${space.dataInterval.max}] ${Monotonic.print(claim.width)}`,
+        frame: `${isCONTINUOUS(space) ? `${space.origin}[${space.dataInterval.min},${space.dataInterval.max}]` : space.kind} ${Monotonic.print(claim.width)}`,
         sigma,
         hasMap: hasOrigin(space),
       });

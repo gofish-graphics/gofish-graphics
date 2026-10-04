@@ -111,16 +111,20 @@ export function nestedSpace(
   return isCONTINUOUS(innerSpace) ? innerSpace : outerSpace;
 }
 
-/** The claim half of {@link nestedSpace}: when inner is continuous, outer
- *  claims inner's claim with `padding` pixels on both sides of the baseline;
- *  otherwise outer keeps its own claim. */
+/** The claim half of {@link nestedSpace}: outer claims inner's claim with
+ *  `padding` pixels on both sides of the baseline when outer takes inner's
+ *  type (inner is continuous), and also when outer has no claim of its own
+ *  and inner claims room without a continuous type (a spread of magnitudes,
+ *  whose room is σ-dependent: a sunburst parent wedge spans its children's
+ *  arc). Otherwise outer keeps its own claim. */
 export function nestedExtent(
   outerExtent: Extent | undefined,
   innerSpace: UnderlyingSpace,
   innerExtent: Extent | undefined,
   padding: number
 ): Extent | undefined {
-  return isCONTINUOUS(innerSpace)
-    ? padExtent(innerExtent!, padding)
+  return innerExtent !== undefined &&
+    (isCONTINUOUS(innerSpace) || outerExtent === undefined)
+    ? padExtent(innerExtent, padding)
     : outerExtent;
 }

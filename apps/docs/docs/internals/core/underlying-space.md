@@ -265,15 +265,17 @@ measure?)`:
 Because the three share one shape, **pinning a free extent is "shift the
 interval and pin the origin"**: `anchorAt(space, at)` turns `free [−d, a]`
 into `pinned [at − d, at + a]`. Every place that pins does exactly this, in
-data: a baseline alignment pins its free children at data 0, a glued stack
-shifts each part by the running sum of the parts before it, and the
-`position` operator shifts by its datum offset.
+data: a glued stack shifts each part by the running sum of the parts before
+it, and the `position` operator shifts by its datum offset. Alignment does not
+pin: it establishes a shared baseline (see below). What places a free
+baseline is placement: a parent constraint, a data anchor, or the scope root
+(`placeBaseline`).
 
 **The data interval has no σ in it.** Pixel overhead (a spread's spacing, a
 nest's padding, a fixed pitch, a `transform.scale`) is never part of the data
-interval. It lives only in the claim. So when a spread of bars 25 px apart
-is pinned by a baseline alignment, the data domain is the bars' data, not the
-bars plus 100 px of spacing read as if it were data.
+interval. It lives only in the claim. So when bars 25 px apart are lined up
+on a baseline, the data domain is the bars' data, not the bars plus 100 px of
+spacing read as if it were data.
 
 **Ascent and descent (#773).** A baseline magnitude is measured from its
 baseline on both sides, like a font's ascent and descent. In the type the two
@@ -412,7 +414,7 @@ _which kind_: σ is always the claim's `width.inverse(size)`, and the extent at
 σ is always `width.run(σ)`. The one genuine state transition is
 **`middle`-alignment drops the origin** — centering scrambles the children's
 baselines, so the result is origin-less (the streamgraph). An origin-less
-extent is absorbing: no alignment pins it.
+extent is absorbing: no fold gives it an origin back.
 
 The pinned data interval is read back with `continuousInterval(space)`
 (used by posScale construction and axis nicing), which is `undefined` for a
@@ -454,18 +456,31 @@ each inherent to what the origin states are:
   (an overlay, a baseline alignment), and is a box from the aligned edge
   otherwise; an origin-less child is always a box, and adds nothing to a
   pinned result's data interval (it has no data 0 to give it).
-- **A keyed chain**: a spread of free targets with data extent is a quantity
-  axis even when keyed (a marimekko's widths add up), while a keyed spread of
-  pinned targets is a category axis (a facet panel's width is a span of its
-  own positions, which adds up to nothing).
-- **Alignment pins, an overlay does not**: aligning free children (anything
-  but `middle`) commits them to a shared position, which is where a bar
-  chart's value axis comes from; overlaying them keeps the result free so a
-  parent can still lay it out. This is a choice about where a magnitude
-  acquires an axis, and an open design question rather than a bug: it could
-  instead be the scope root that pins (see the TODO below).
+- **A stack glues, a spread separates**: a stack glues its parts into ONE
+  continuous space along its direction (positions are running data totals);
+  a spread's result along its direction is a sequence of separate spaces,
+  ORDINAL by its keys (anonymous for positional keys) or UNDEFINED, whatever
+  its spacing or pitch, and each target keeps its own continuous space
+  inside. Its room is its claim: a spread of magnitudes (free targets, or
+  targets that are themselves spreads of magnitudes) shares the enclosing
+  scope's σ, so it claims the chain of their claims plus spacing, on an
+  ordinal or undefined type; a spread of pinned frames (facet panels) claims
+  nothing, and each panel roots its own scope in its slice. A marimekko is a
+  stack, so its widths still add up to one axis.
+- **Alignment establishes a baseline; it does not pin**: aligning or
+  overlaying free children gives a free result with one shared baseline
+  (`overlayOrigin`: pinned only when a child is pinned, none when a child has
+  no origin, and none for `middle`). The bars of a bar chart are one free
+  magnitude until the scope root places its baseline.
 - **Which axis renders** (`axisOver`): pinned renders an absolute axis, none
-  a delta axis, free none.
+  a delta axis, free none, until placed. The render root places a free
+  space's baseline at its `originPx` (`placeBaseline`; `GoFishNode.
+placedSpace`), so a free root renders an absolute axis, niced about its 0;
+  the axis's frame seats the free content's baseline at its data 0 (the
+  content is left unpinned and the frame's map places it). A free layer's own
+  frame has its baseline at local 0, so where no map reaches it, it hands its
+  children the map `{σ, originPx: 0}` of that frame (a rule at `y: "amount"`
+  among free bars places through it).
 
 A coordinate space is a σ-scope root like any other, so it reports nothing
 upward on either axis: to its parent it is a pixel box. It keeps its own type
@@ -544,12 +559,11 @@ composes its targets' spaces into the layer's claim on that axis:
 - `Constraint.distribute` contributes the stack fold, as a type fold
   (`distributeSpaceFold`, `constraints/distribute.ts`) and a claim fold
   (`distributeExtentFold`). The chain moves every target to its place, so it
-  reads each one, pinned or free, as a box of its data extent. A spread is a
-  free magnitude: the type is the chain's data extent (`chainDataExtent`,
-  spacing dropped) and the claim is the chain of the targets' claims with the
-  spacing added (`chainClaim`, `Monotonic.add(...) + spacing·(n−1)` for an
-  edge chain). A keyed spread is ORDINAL unless its targets are all free with
-  some data extent (a quantity axis, see
+  reads each one, pinned or free, as a box. A spread separates: its type is
+  ORDINAL of its keys, or UNDEFINED, and a spread of magnitudes claims the
+  chain of the targets' claims with the spacing added (`chainClaim`,
+  `Monotonic.add(...) + spacing·(n−1)` for an edge chain) for the enclosing
+  scope to solve σ against (see
   [the differences that remain](#one-continuous-path-and-the-differences-that-remain)).
   With `glue: true` (stack semantics) the extents are laid end to end and
   pinned over the range of their running sums (`[0, Σ]` when no part has a
@@ -704,19 +718,18 @@ The per-k max assumes each child's extent lies wholly on one side of its
 anchor (true for SIZE claims — baseline magnitudes) and that the fold's child
 order is the chain order (compose.ts passes placement order).
 
-The type fold keeps only the data part of the same chain (`chainDataExtent`):
-with the pitch dropped, the children all sit at one anchor, so a fixed-pitch
-chain's data extent is the tallest child (`max_k h_k`) for `"start"`,
-`"end"`, and `"baseline"`, and `h_first/2 + h_last/2` for `"middle"`; an edge
-chain's is the sum of its children. All of it sits above the chain's start,
-so the descent is 0.
+The type fold has no data part of the chain: a spread separates, so its type
+is ordinal (or undefined) whatever its pitch, and the chain lives only in the
+claim.
 
-A fixed-pitch chain also has a PAINT-side handshake. The chain is an overlay,
-not a tiling — its targets' allocated slices are just the leftover budget — so
-if a chained target later opens its own y-up flip scope, mirroring about the
-allocated band would displace every painted anchor away from where the solver
-chained it. `lowerDistributePlacement` therefore stamps the chained anchor on
-each y-chained target (`Placeable.pitchAnchorY`), and the bake's scope-band
+A spread chain on y also has a PAINT-side handshake. The chain places its
+targets itself — their allocated slices are just slices of the spread's
+height — so if a chained target later opens its own y-up flip scope (a
+spread separates, so its targets can), mirroring about the allocated band
+would displace it from where the solver chained it. `lowerDistributePlacement`
+therefore stamps the anchor the chain fixed on each y-chained target
+(`Placeable.pitchAnchorY`: the pitch anchor of a fixed-pitch chain, and
+`"middle"` for an edge chain, which fixes the whole box), and the bake's scope-band
 decision (`scopeBox` in `coordinateTransforms/bake.ts`) mirrors such a scope
 about that anchor pointwise (`y ↦ 2·anchor − y`), keeping the painted anchors
 exactly at the solved pitch — see
@@ -1056,8 +1069,10 @@ The horizontal `spread` separates lakes. Its children are now stacks
 with `[UNDEFINED on x, pinned [0, total] on y]`. Stack direction (x):
 no children are continuous, but they're named (the "by" key produces lake
 keys) → `ORDINAL(["Lake A", ..., "Lake F"])`. Alignment direction (y):
-all children are pinned → `pinned unionAll([0, total_i])`
-= `pinned [0, max_total]`.
+the children are pinned → `pinned unionAll([0, total_i])`
+= `pinned [0, max_total]`. (Lining up unstacked bars instead gives a free
+`[0, max]`: alignment shares a baseline, it does not pin. The render root then
+places that baseline and renders the same absolute axis.)
 
 So the root underlying space is `[ORDINAL(lakes), pinned [0, max_total]]`.
 The y-axis renders quantitative ticks (POSITION); the x-axis renders
@@ -1134,9 +1149,11 @@ gofish.tsx (root):
   `sigma` for size, `map` for data position (they're mutually exclusive at root)
 
 layer.layout, on an axis the node scopes (node.shared[axis] — set by
-`spread`/`stack`'s `sharedScale`; default [false, false] is a no-op):
-    if space[axis].kind === "continuous" → claim[axis].width.inverse(size[axis])
-    else → undefined (ORDINAL/UNDEFINED don't need a continuous scale factor)
+`spread`/`stack`'s `sharedScale` and on every chart's content; default
+[false, false] is a no-op), when it roots the scope (no inherited σ, or a
+self-scaled stash — a chart nested in another chart's mark inherits):
+    if claim[axis] exists → claim[axis].width.inverse(size[axis])
+    else → undefined (no σ-dependent room, e.g. an ordinal of fixed boxes)
 ```
 
 **Every scope solves σ from its claim, and `originPx` from its baseline.** A
@@ -1265,10 +1282,12 @@ position map, axis ticks) reads the same rounded domain. `niceContinuous`
 apply it at their solve sites — the render root (`gofish.tsx`), the self-scaled
 stash and the shared-scale step (`buildChildScalePlan`), and the layer-local
 datum-position scale (`buildPositionScalePlan`). It nices exactly the spaces
-that render an axis over their interval (`axisOver`): a pinned domain's two
-ends, and a delta axis's width from 0, so a delta axis steps evenly (ticks
-20, 40, …, 160 rather than 20, 40, …, 140 and a last step of 7). A free
-magnitude renders no axis, so it is never niced, and a **coord scope never
+that render an axis over their interval (`axisOver`), or will once placed: a
+pinned domain's two ends, a free one's two ends about its 0 (the absolute
+axis of the scope that places its baseline; each side of the claim widens by
+its own end), and a delta axis's width from 0, so a delta axis steps evenly
+(ticks 20, 40, …, 160 rather than 20, 40, …, 140 and a last step of 7). A
+**coord scope never
 nices** (its domains map into a fixed coordinate range; rounding them would
 break the mapping).
 

@@ -4,11 +4,7 @@
 
 import { type Size } from "../dims";
 import { isValue } from "../data";
-import {
-  isCONTINUOUS,
-  type UnderlyingSpace,
-  originIs,
-} from "../underlyingSpace";
+import { type UnderlyingSpace, originIs } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
 import type { ScopeRegistry } from "../solver/scopes";
@@ -259,8 +255,13 @@ export function buildChildScalePlan(
     if (scope === undefined) continue;
     childScaleFactors[axis] = scope.sigma;
     stashOriginPx[axis] = scope.originPx;
-    if (originIs(stashed, "pinned"))
-      basePosScales[axis] = { sigma: scope.sigma, originPx: scope.originPx! };
+    // The stash's scope replaces the inherited one on this axis: a pinned
+    // stash hands its children its own map; a free one hands them none (it
+    // seats their baselines at `originPx` itself), never the ancestor's map,
+    // whose σ is another scope's.
+    basePosScales[axis] = originIs(stashed, "pinned")
+      ? { sigma: scope.sigma, originPx: scope.originPx! }
+      : undefined;
   }
 
   if (constraintBudget !== undefined) {
@@ -294,11 +295,20 @@ export function buildChildScalePlan(
 
   for (const axis of [0, 1] as const) {
     if (!shared[axis] || !Number.isFinite(layerSize[axis])) continue;
+    // The same structural rule as the budget above: only a scope root
+    // solves. A shared-scale node under an ancestor that already owns σ on
+    // the axis (a chart nested in another chart's mark) inherits it.
+    if (
+      inheritedScaleFactors?.[axis] !== undefined &&
+      selfScaledSpaces[axis] === undefined
+    )
+      continue;
     // A shared-scale scope root: when the scope renders an axis on this dim,
     // nice its anchored POSITION domain at the solve (issue #659), so the SIZE
     // σ it derives agrees with the niced position map. The self-scaled stash is
     // already demand-niced above; the layer's own space is transformed here
-    // (identity on a baseline magnitude or without axis demand).
+    // (identity without axis demand). The solve reads the claim: a spread of
+    // magnitudes is ordinal but still claims σ-dependent room.
     const [sp, ext] =
       nicedSelfScaled[axis][0] !== undefined
         ? nicedSelfScaled[axis]
@@ -306,16 +316,32 @@ export function buildChildScalePlan(
           ? niceScope(layerSpace?.[axis], layerExtent?.[axis])
           : [layerSpace?.[axis], layerExtent?.[axis]];
     if (sp === undefined) continue;
-    const sf = isCONTINUOUS(sp)
-      ? (scopes.solveScope(
-          { kind: "shared", rootKey, axis },
-          sp,
-          ext,
-          layerSize[axis]
-        )?.sigma ?? 0)
-      : undefined;
+    const sf =
+      ext !== undefined
+        ? (scopes.solveScope(
+            { kind: "shared", rootKey, axis },
+            sp,
+            ext,
+            layerSize[axis]
+          )?.sigma ?? 0)
+        : undefined;
     if (sf !== undefined) childScaleFactors[axis] = sf;
     sharedScaleChecks.push({ axis, extent: ext, sigma: sf });
+  }
+
+  // A free layer's own frame has its baseline, data 0, at local 0. So where
+  // no map reaches it, it hands its children the map of that frame: a pinned
+  // child (a rule at `y: "amount"` among free bars) places its data through
+  // it, as it would in any frame with data coordinates.
+  for (const axis of [0, 1] as const) {
+    const sigma = childScaleFactors[axis];
+    if (
+      basePosScales[axis] === undefined &&
+      sigma !== undefined &&
+      selfScaledSpaces[axis] === undefined &&
+      originIs(layerSpace?.[axis], "free")
+    )
+      basePosScales[axis] = { sigma, originPx: 0 };
   }
 
   return {

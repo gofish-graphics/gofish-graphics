@@ -42,7 +42,6 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   isCONTINUOUS,
-  isUNDEFINED,
   spaceMeasure,
   mergeMeasures,
   CONTINUOUS,
@@ -433,8 +432,9 @@ function axisFragments(
       s.keys,
       foldOptions(s)
     );
-    if (!isUNDEFINED(space))
-      fragments.push({ kind: "distribute", seg: s, space });
+    // Kept even when UNDEFINED: an unkeyed spread of magnitudes has no type
+    // on the axis but still claims σ-dependent room.
+    fragments.push({ kind: "distribute", seg: s, space });
   }
   for (const a of als) {
     a.idx.forEach((i) => covered.add(i));
@@ -445,7 +445,7 @@ function axisFragments(
       a.anchor,
       axis
     );
-    if (!isUNDEFINED(space)) fragments.push({ kind: "align", al: a, space });
+    fragments.push({ kind: "align", al: a, space });
   }
   for (let i = 0; i < childSpaces.length; i++) {
     if (!covered.has(i))
@@ -519,6 +519,7 @@ export function composePlanExtents(
       f.kind === "distribute"
         ? distributeExtentFold(
             f.seg.idx.map((i) => childExtents[i][axis]),
+            f.seg.idx.map((i) => childSpaces[i][axis]),
             f.space,
             foldOptions(f.seg)
           )
@@ -537,9 +538,11 @@ export function composePlanExtents(
       composed
     );
     extents[axis] = extent;
-    // Every continuous composed claim is a budget the layer σ-solves against
-    // via `width.inverse` when the layer roots the axis's scope.
-    if (isCONTINUOUS(composed)) sizeDomain[axis] = extent!.width;
+    // Every composed claim is a budget the layer σ-solves against via
+    // `width.inverse` when the layer roots the axis's scope, whatever the
+    // composed type (a spread of magnitudes is ordinal, but its room is still
+    // σ-dependent).
+    if (extent !== undefined) sizeDomain[axis] = extent.width;
   }
   return {
     covered,

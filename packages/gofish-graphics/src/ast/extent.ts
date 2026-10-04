@@ -19,6 +19,7 @@ import {
   isCONTINUOUS,
   niceContinuous,
   axisOver,
+  placeBaseline,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "./underlyingSpace";
@@ -27,8 +28,10 @@ import {
  * One axis's size claim, measured from the extent's baseline like a font's
  * ascent and descent: a bar of value 30 claims ascent 30σ, a bar of value −20
  * claims descent 20σ. A pinned or origin-less extent sits wholly above its low
- * edge, so its descent is 0. Every continuous axis has exactly one claim; an
- * ordinal or undefined axis has none (`undefined`).
+ * edge, so its descent is 0. Every continuous axis has exactly one claim. An
+ * ordinal or undefined axis has one only when its content's room depends on
+ * σ (a spread of magnitudes: separate spaces, one shared scale), measured as
+ * a box (descent 0); otherwise it has none (`undefined`).
  */
 export type Extent = {
   /** The σ-affine extent on the positive side of the baseline. */
@@ -92,17 +95,14 @@ export const padExtent = (extent: Extent, padding: number): Extent =>
  *  in data units from the type, so any pixel overhead the claim carries is
  *  kept. The widths are lengths, so this holds for a signed domain too, and
  *  for a delta axis, whose width is niced from 0. Only a space that renders an
- *  axis over its interval ({@link axisOver}) is niced; a free magnitude keeps
- *  its type and claim. */
+ *  axis over its interval ({@link axisOver}), or will once placed (a free
+ *  magnitude, {@link placeBaseline}), is niced. */
 export const niceScope = <S extends UnderlyingSpace | undefined>(
   space: S,
   extent: Extent | undefined
 ): [S, Extent | undefined] => {
-  if (
-    space === undefined ||
-    !isCONTINUOUS(space) ||
-    axisOver(space) === undefined
-  )
+  const axis = axisOver(placeBaseline(space));
+  if (space === undefined || !isCONTINUOUS(space) || axis === undefined)
     return [space, extent];
   const niced = niceContinuous(space);
   if (extent === undefined) return [niced, undefined];
@@ -110,10 +110,18 @@ export const niceScope = <S extends UnderlyingSpace | undefined>(
     dataWidth(niced as CONTINUOUS_TYPE) - dataWidth(space as CONTINUOUS_TYPE);
   // A pinned domain's niced ends are data, and its claim is measured from the
   // low edge, so the widening is all ascent (the map places the content). A
-  // delta axis comes from centering (`middle` alignment), so the content sits
-  // centered in the niced width: half the widening on each side.
+  // free domain's claim is measured from its 0, so each side widens by its
+  // own niced end. A delta axis comes from centering (`middle` alignment), so
+  // the content sits centered in the niced width: half the widening on each
+  // side.
+  const iv = (space as CONTINUOUS_TYPE).dataInterval;
+  const nicedIv = (niced as CONTINUOUS_TYPE).dataInterval;
   const [up, down] =
-    axisOver(space) === "delta" ? [widened / 2, widened / 2] : [widened, 0];
+    axis === "delta"
+      ? [widened / 2, widened / 2]
+      : space.origin === "free"
+        ? [nicedIv.max - iv.max, iv.min - nicedIv.min]
+        : [widened, 0];
   return [
     niced,
     Extent(

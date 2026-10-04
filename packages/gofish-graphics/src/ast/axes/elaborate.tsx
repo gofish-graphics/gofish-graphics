@@ -22,6 +22,7 @@ import {
   type UnderlyingSpace,
   axisOver,
   niceContinuous,
+  originIs,
 } from "../underlyingSpace";
 
 /**
@@ -67,8 +68,8 @@ export type AxisElaboration = {
   anchor?: GoFishNode;
   /** Where the content's baseline sits along this axis, in the axis's own
    *  data frame: a delta axis has no data 0, so its frame is its own, and it
-   *  centers the content in its niced width. Unset: the content's baseline is
-   *  the frame's 0. */
+   *  centers the content in its niced width. Unset: the content sits as its
+   *  type says (see the inner tier in `elaborateAxes`). */
   contentAt?: { dim: 0 | 1; at: number };
 };
 
@@ -708,7 +709,7 @@ function elaborationsFor(
   // so an ordinary (non-self-scaled) space is never overridden.
   const spaceFor = (dim: 0 | 1): UnderlyingSpace =>
     !isUNDEFINED(space[dim])
-      ? space[dim]
+      ? node.placedSpace(dim, space[dim])
       : (node.hoistedAxisSpace?.[dim] ?? space[dim]);
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
@@ -970,17 +971,28 @@ export async function elaborateAxes(
       content.name(CONTENT_NAME);
       const axisNodes = constrained.flatMap((e) => e.nodes);
       inner = (await (layer as any)([content, ...axisNodes])) as GoFishNode;
-      // A delta axis says where in its own frame the content sits; elsewhere
-      // the content's baseline is the frame's 0 (a literal pixel pin).
+      // Where the content sits on each axis. A delta axis says where in its
+      // own frame. A free content (a bar chart's bars) is a magnitude whose
+      // baseline the axis's frame places: left unpinned, the layer seats it
+      // at data 0 of the frame's map, as a pinned layer seats every free
+      // child, so value 0 sits at the 0 tick. Otherwise the content's
+      // baseline is the frame's 0 (a literal pixel pin): a pinned content
+      // shares the frame.
+      const contentSpace = content._underlyingSpace;
       const contentAt = (dim: 0 | 1) => {
         const at = constrained.find((e) => e.contentAt?.dim === dim)?.contentAt;
-        return at === undefined ? 0 : datum(at.at);
+        if (at !== undefined) return datum(at.at);
+        return originIs(contentSpace?.[dim], "free") ? undefined : 0;
       };
+      const seat = { x: contentAt(0), y: contentAt(1) };
       await inner.relate((g) => [
-        Constraint.position(
-          { x: contentAt(0), y: contentAt(1), anchor: "baseline" },
-          [g[CONTENT_NAME]]
-        ),
+        ...(seat.x === undefined && seat.y === undefined
+          ? []
+          : [
+              Constraint.position({ ...seat, anchor: "baseline" }, [
+                g[CONTENT_NAME],
+              ]),
+            ]),
         ...constrained.flatMap((e) => e.constraints(g)),
       ]);
     }

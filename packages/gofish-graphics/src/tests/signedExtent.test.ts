@@ -190,8 +190,9 @@ async function main() {
     const up = CONTINUOUS(interval(0, 10), "free");
     const down = CONTINUOUS(interval(-20, 0), "free");
     const span = (alignment: "baseline" | "start" | "end") => {
+      // Alignment establishes a shared baseline; it does not pin it.
       const s = resolveAlignmentSpace([up, down], alignment, 1);
-      return originIs(s, "pinned") ? continuousInterval(s) : undefined;
+      return originIs(s, "free") ? s.dataInterval : undefined;
     };
     check(
       "baseline: [−descent, ascent] about the shared baseline",
@@ -267,12 +268,15 @@ async function main() {
       }),
       JSON.stringify(stacked)
     );
-    // A spread packs the same bars as boxes, 8px apart, signs aside.
+    // A spread packs the same bars as boxes, 8px apart, signs aside. It
+    // separates them into a category axis, which reads top down.
     const spreadOut = rectsOf(await render(spread({ by: "k", dir: "y" })));
     check(
       "a spread still packs boxes edge to edge",
       spreadOut.every(
-        (r, i) => i === 0 || Math.abs(r.y + r.h + 8 - spreadOut[i - 1].y) < 1e-9
+        (r, i) =>
+          i === 0 ||
+          Math.abs(spreadOut[i - 1].y + spreadOut[i - 1].h + 8 - r.y) < 1e-9
       ),
       JSON.stringify(spreadOut)
     );

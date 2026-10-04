@@ -30,7 +30,7 @@ import {
   type UnderlyingSpace,
   originIs,
 } from "./underlyingSpace";
-import { niceScope } from "./extent";
+import { niceScope, type Extent } from "./extent";
 import { opensFlipScope } from "./coordinateTransforms/bake";
 import { shadowCheckScaleRoot } from "./solver/shadow";
 import {
@@ -594,26 +594,26 @@ export async function layout(
     debugUnderlyingSpaceTree(child);
   }
 
-  // An omitted overall dimension is resolved per axis from its root underlying
-  // space:
-  //  - POSITION / data-driven SIZE (a scatter axis, or bar heights = value):
-  //    there's data to scale into pixels, so fall back to a concrete canvas
-  //    (DEFAULT_CANVAS_SIZE).
-  //  - ORDINAL / UNDEFINED (a bar chart's category axis, or a bare fixed-size
-  //    shape): nothing to scale, so lay out *unsized* — marks keep their default
+  // An omitted overall dimension is resolved per axis from the root's size
+  // claim:
+  //  - a claim (a scatter axis, bar heights = value, bar widths = value laid
+  //    side by side): there's data to scale into pixels, so fall back to a
+  //    concrete canvas (DEFAULT_CANVAS_SIZE).
+  //  - no claim (a bar chart's category axis, or a bare fixed-size shape):
+  //    nothing to scale, so lay out *unsized* — marks keep their default
   //    sizes and the operator shrinks to fit. The natural extent is recovered by
   //    the `finalDim` readback below, so the SVG is still sized concretely.
   // Unsized axes are handed `UNSIZED` (NaN); marks treat a non-finite size as
   // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
   // guards, the same path the layout engine already relies on.
   const UNSIZED = NaN;
-  const needsCanvas = (s: UnderlyingSpace) => isCONTINUOUS(s);
-  // Concrete canvas for scaling a CONTINUOUS axis (always a real number).
+  const needsCanvas = (claim: Extent | undefined) => claim !== undefined;
+  // Concrete canvas for scaling a claimed axis (always a real number).
   const canvasW = w ?? DEFAULT_CANVAS_SIZE;
   const canvasH = h ?? DEFAULT_CANVAS_SIZE;
   // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
-  const layoutW = w ?? (needsCanvas(niceUnderlyingSpaceX) ? canvasW : UNSIZED);
-  const layoutH = h ?? (needsCanvas(niceUnderlyingSpaceY) ? canvasH : UNSIZED);
+  const layoutW = w ?? (needsCanvas(niceExtentX) ? canvasW : UNSIZED);
+  const layoutH = h ?? (needsCanvas(niceExtentY) ? canvasH : UNSIZED);
 
   // The render's σ-scope registry: the ONE place σ / posScale is derived
   // (Stage 6b). The root is the first scope root; every other scope (self-scaled

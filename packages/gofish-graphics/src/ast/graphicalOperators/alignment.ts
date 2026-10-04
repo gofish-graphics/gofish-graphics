@@ -151,14 +151,14 @@ export const overlayOrigin = (spaces: UnderlyingSpace[]): Origin => {
  * overlay; any other non-continuous child (an ORDINAL) leaves the axis with
  * no continuous fold (UNDEFINED).
  *
- * The result's origin: `middle` drops it (centering scrambles baselines), and
- * so does an origin-less child (it is absorbing: alignment never pins it).
- * Otherwise the result is pinned, even when every child is free: aligning
- * free extents is where GoFish commits them to a shared position, which is
- * what gives a bar chart its absolute value axis. That is the one place a fold
- * pins free children, and it is a choice about where a magnitude acquires an
- * axis, not an accident of the fold: an overlay of free children
- * ({@link unionChildSpaces}) stays free so a parent can still lay it out.
+ * Alignment establishes a shared baseline; it does not place it. So the
+ * result's origin is the overlay's ({@link overlayOrigin}): free when every
+ * child is free (a bar chart's bars, lined up on one baseline, are still one
+ * magnitude a parent can place), pinned when a child is (it fixes the
+ * position), and none when a child has no origin. `middle` drops it
+ * (centering scrambles baselines). What places a free baseline is placement:
+ * a parent constraint, a data anchor, or the scope root (see
+ * `ScopeRegistry.solveScope`).
  */
 export function resolveAlignmentSpace(
   spaces: UnderlyingSpace[],
@@ -168,10 +168,7 @@ export function resolveAlignmentSpace(
   const opinions = spaces.filter((s) => !isUNDEFINED(s));
   const conts = opinions.filter(isCONTINUOUS);
   if (conts.length === 0 || conts.length !== opinions.length) return UNDEFINED;
-  const origin: Origin =
-    alignment === "middle" || conts.some((s) => s.origin === "none")
-      ? "none"
-      : "pinned";
+  const origin: Origin = alignment === "middle" ? "none" : overlayOrigin(conts);
   return overlay(conts, alignment === "baseline" ? "baseline" : "box", origin, {
     axis,
     where: "where marks are lined up",
@@ -190,16 +187,34 @@ export function resolveAlignmentSpace(
  * baseline: a free result keeps the larger reach on each side of 0 (so a
  * parent can σ-solve it with every intercept intact), and a pinned or
  * origin-less result is measured from its low edge, so its descent is 0.
+ *
+ * A result with no data coordinates (ordinal or undefined) still claims when
+ * a child with no data coordinates does (a spread of magnitudes: its type is
+ * a sequence of separate spaces, its room is σ-dependent): each such child is
+ * its box, so the claim is the envelope of their widths. A continuous child
+ * of such a result is no part of it on this axis (the type folded no
+ * continuous space from it), so neither is its claim. With no such child
+ * there is no claim.
  */
 function overlayClaim(
-  children: { space: CONTINUOUS_TYPE; extent: Extent }[],
+  children: { space: UnderlyingSpace; extent: Extent | undefined }[],
   seat: Seat,
-  space: CONTINUOUS_TYPE
-): Extent {
+  space: UnderlyingSpace
+): Extent | undefined {
+  const claiming = children.filter(
+    (c): c is { space: UnderlyingSpace; extent: Extent } =>
+      c.extent !== undefined
+  );
+  if (!isCONTINUOUS(space)) {
+    const boxes = claiming.filter((c) => !isCONTINUOUS(c.space));
+    return boxes.length === 0
+      ? undefined
+      : Extent(envelope(boxes.map((c) => c.extent.width)));
+  }
   const above: Monotonic.Monotonic[] = [];
   const below: Monotonic.Monotonic[] = [];
-  for (const { space: s, extent } of children) {
-    if (atOwnData(s, seat)) {
+  for (const { space: s, extent } of claiming) {
+    if (isCONTINUOUS(s) && atOwnData(s, seat)) {
       const b = baselineData(s);
       above.push(Monotonic.add(Monotonic.linear(b, 0), extent.ascent));
       below.push(Monotonic.add(extent.descent, Monotonic.linear(-b, 0)));
@@ -215,15 +230,6 @@ function overlayClaim(
     : Extent(Monotonic.add(up, down));
 }
 
-/** The continuous children, each with its claim. */
-const continuousChildren = (
-  childExtents: (Extent | undefined)[],
-  childSpaces: UnderlyingSpace[]
-): { space: CONTINUOUS_TYPE; extent: Extent }[] =>
-  childSpaces.flatMap((space, i) =>
-    isCONTINUOUS(space) ? [{ space, extent: childExtents[i]! }] : []
-  );
-
 /** The size claim of a {@link unionChildSpaces} overlay, given the overlay's
  *  resolved type `space` ({@link overlayClaim}). */
 export function unionChildExtents(
@@ -232,12 +238,11 @@ export function unionChildExtents(
   axis: 0 | 1,
   space: UnderlyingSpace
 ): Extent | undefined {
-  if (!isCONTINUOUS(space)) return undefined;
   return overlayClaim(
-    continuousChildren(
-      childExtents.map((c) => c[axis]),
-      childSpaces.map((c) => c[axis])
-    ),
+    childSpaces.map((c, i) => ({
+      space: c[axis],
+      extent: childExtents[i][axis],
+    })),
     "baseline",
     space
   );
@@ -251,9 +256,8 @@ export function resolveAlignmentExtent(
   alignment: Alignment,
   space: UnderlyingSpace
 ): Extent | undefined {
-  if (!isCONTINUOUS(space)) return undefined;
   return overlayClaim(
-    continuousChildren(childExtents, childSpaces),
+    childSpaces.map((s, i) => ({ space: s, extent: childExtents[i] })),
     alignment === "baseline" ? "baseline" : "box",
     space
   );

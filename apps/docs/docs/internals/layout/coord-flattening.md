@@ -233,9 +233,12 @@ The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
   `_ambientYDown` chrome subtree renders in the ambient frame and is **box-mirrored** about
   the plot's frame — stamped directly on the chrome nodes by `layout()` as `_chromeFrame`
   (no walk-time search).
-- **Fixed-pitch exception.** A target chained by a fixed-pitch `distribute` on y
-  (`anchor: "baseline" | "start" | "middle" | "end"`) carries `pitchAnchorY` — the anchor the
-  chain related, stamped by `lowerDistributePlacement`. A fixed-pitch chain is an **overlay**,
+- **Chained exception.** A target a spread `distribute` chains on y carries
+  `pitchAnchorY` — the anchor the chain fixed, stamped by `lowerDistributePlacement`: the
+  pitch anchor (`"baseline" | "start" | "middle" | "end"`) of a fixed-pitch chain, and
+  `"middle"` for an edge chain, which fixes the whole box (the mirror about a box's middle
+  keeps the box, so signed bars spread down a category axis stay packed edge to edge). A
+  spread separates, so its targets can open their own scopes. A fixed-pitch chain is an **overlay**,
   not a tiling: the target's allocated band is just the leftover slice (`(h − (n−1)·pitch)/n`)
   and bears no relation to where its chained anchor sits, so mirroring about it would displace
   every painted anchor by the slice height (and a connector reading the same rows from outside

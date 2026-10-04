@@ -12,7 +12,7 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   dataSides,
-  dataWidth,
+  originIs,
   mergeAllMeasures,
   isCONTINUOUS,
   mirrored,
@@ -164,16 +164,22 @@ export function lowerDistributePlacement(
   const ordered = distributeChildrenInPlacementOrder(constraint, children);
   if (ordered.length === 0) return;
   const anchors = distributePlacementAnchors(constraint);
-  // A fixed-pitch chain on y is an OVERLAY, not a tiling: the targets' allocated
-  // y bands are just leftover slices, unrelated to where the chained anchor
-  // sits. Stamp the chained anchor on each target so a target that later opens
-  // its own y-up flip scope mirrors about that anchor (see `Placeable.
-  // pitchAnchorY` and `scopeBox` in coordinateTransforms/bake.ts) — keeping the
-  // painted anchors exactly where this chain solved them, at exact pitch.
-  if (constraint.anchor !== "edge" && constraint.dir === "y") {
+  // A spread chain on y places its targets itself: their allocated y bands are
+  // just slices of the spread's height, unrelated to where the chain put
+  // them. Stamp the anchor the chain fixed on each target so a target that
+  // later opens its own y-up flip scope mirrors about that anchor (see
+  // `Placeable.pitchAnchorY` and `scopeBox` in coordinateTransforms/bake.ts),
+  // keeping the painted targets exactly where this chain solved them. A
+  // fixed-pitch chain fixes its anchor (an overlay, at exact pitch); an edge
+  // chain fixes the whole box, which a mirror about its middle keeps. (A
+  // stack's parts never open their own scope: the stack is one continuous
+  // space and flips as a whole.)
+  if (constraint.dir === "y" && !constraint.glue) {
     for (const child of ordered) {
       const target = targets.get(child.name);
-      if (target) target.pitchAnchorY = constraint.anchor;
+      if (target)
+        target.pitchAnchorY =
+          constraint.anchor === "edge" ? "middle" : constraint.anchor;
     }
   }
   for (let i = 1; i < ordered.length; i++) {
@@ -238,23 +244,17 @@ export type DistributeFoldOptions = {
  *
  *  - explicit `opts.size` (a value) → free `[0, value]` — the spread's own
  *    size wins over any children-derived claim.
- *  - Every other continuous result needs every target to have an origin
- *    (pinned or free): the chain moves each target to its place, so it reads
- *    each one as a box of its data extent. Otherwise: ORDINAL(keys) when any
- *    target is keyed, else UNDEFINED.
- *  - glue → pinned over the parts laid end to end from the stack's origin
- *    (each part's baseline on the previous part's head; `[0, Σ widths]` when
- *    no part has a descent and the origin is the first part's tail).
- *  - non-glue → free over the chain's data extent ({@link chainDataExtent}),
- *    except that a keyed chain is ORDINAL unless its targets are all free
- *    with some data extent. That asymmetry is inherent: a free target's width
- *    is a quantity (a marimekko's column widths), so a chain of them is a
- *    quantity axis even when keyed; a pinned target's width is a span of its
- *    own data positions (a facet panel), which adds up to no quantity, so a
- *    keyed chain of them is a category axis.
- *
- * Every number here is a data extent: spacing and pitch are pixels, so they
- * live only in the claim ({@link distributeExtentFold}).
+ *  - glue (a stack) GLUES its parts into one continuous space: pinned over
+ *    the parts laid end to end from the stack's origin (each part's baseline
+ *    on the previous part's head; `[0, Σ widths]` when no part has a descent
+ *    and the origin is the first part's tail). It needs every part to have an
+ *    origin (pinned or free).
+ *  - non-glue (a spread) SEPARATES: the result is a sequence of separate
+ *    spaces, ORDINAL(keys) when any target is keyed (anonymous for positional
+ *    keys), else UNDEFINED, whatever its spacing or pitch. Each target keeps
+ *    its own continuous space inside; the room the chain takes is its claim
+ *    ({@link distributeExtentFold}), not a data extent.
+ *  - A stack whose parts are not all continuous with an origin is a spread.
  *
  * Measures unify as types (a clash is an error). `keys` are the targets'
  * ordinal keys (node.key) in the same order as `targetSpaces`; only used to
@@ -339,36 +339,11 @@ export function distributeSpaceFold(
     );
   }
 
-  // Along a spread chain each target is a box: it contributes its total
-  // extent (ascent + descent), and the composed extent sits above the chain's
-  // start. (A stack, above, keeps the signs instead.)
-  const widths = targets.map(dataWidth);
-  const quantity =
-    targets.every((s) => s.origin === "free") && widths.some((w) => w !== 0);
-  if (namedKeys.length > 0 && !quantity) return keyed();
-  return CONTINUOUS(
-    Interval.interval(0, chainDataExtent(widths, opts.anchor)),
-    "free",
-    childMeasure
-  );
-}
-
-/**
- * The data extent of a spread chain of free children whose data widths are
- * `widths` (in chain order): the chain's claim ({@link chainClaim}) with its
- * pixel terms (spacing, pitch) dropped. An edge chain is the sum of its
- * children. A fixed-pitch chain's children each sit at their own anchor, a
- * pitch apart, so without the pitch they overlap at one anchor: half the first
- * and half the last child about a middle anchor, and the tallest child about a
- * start, end, or baseline anchor.
- */
-export function chainDataExtent(
-  widths: number[],
-  anchor: AlignAnchor | "edge"
-): number {
-  if (anchor === "edge") return widths.reduce((a, b) => a + b, 0);
-  if (anchor === "middle") return widths[0] / 2 + widths[widths.length - 1] / 2;
-  return Math.max(0, ...widths);
+  // A spread separates: along its direction the result is a sequence of
+  // separate spaces, one per child, each keeping its own continuous space
+  // inside. So it is ORDINAL (keyed by `by`, or anonymous for positional
+  // keys), or UNDEFINED with no keys, whatever the spacing or pitch.
+  return keyed();
 }
 
 /**
@@ -471,21 +446,44 @@ function stackClaim(parts: Extent[]): Monotonic.Monotonic {
  * composes their data extents, so pixel overhead stays in the claim:
  *  - an explicit size claims what its type implies;
  *  - a glued stack lays its parts' claims end to end ({@link stackClaim});
- *  - a chain claims the chain of its targets' claims with the spacing or
- *    pitch added ({@link chainClaim}), so a parent can solve a scale factor
- *    via `Monotonic.inverse` (auto-fit).
- * An ordinal or undefined result has no claim.
+ *  - a spread chain of free targets claims the chain of their claims with the
+ *    spacing or pitch added ({@link chainClaim}), so a parent can solve a
+ *    scale factor via `Monotonic.inverse` (auto-fit). Its type is ordinal
+ *    (the targets are separate spaces), but its room is still σ-dependent,
+ *    so the claim is there for the enclosing scope to solve against.
+ *
+ * A spread chain claims only when every target is a magnitude: free, or
+ * itself a spread of magnitudes (a claim with no continuous type, as in a
+ * sunburst's nested rings). That distinction is inherent to the origin
+ * states: a magnitude has no position of its own, so it can only be measured
+ * in the enclosing scope, and a chain of them shares that scope's σ (bar
+ * widths stay comparable). A pinned target carries its own data coordinates,
+ * a frame (a facet panel), so a chain of them takes its slices and each panel
+ * roots its own scope. An origin-less target is lined up by its middle, not
+ * measured from a baseline. Any other result has no claim.
  */
 export function distributeExtentFold(
   targetExtents: (Extent | undefined)[],
+  targetSpaces: UnderlyingSpace[],
   space: UnderlyingSpace,
   opts: DistributeFoldOptions
 ): Extent | undefined {
-  if (!isCONTINUOUS(space)) return undefined;
-  if (opts.size !== undefined && isValue(opts.size))
-    return impliedExtent(space);
+  if (isCONTINUOUS(space)) {
+    if (opts.size !== undefined && isValue(opts.size))
+      return impliedExtent(space);
+    return Extent(stackClaim(targetExtents as Extent[]));
+  }
+  if (
+    opts.glue ||
+    targetSpaces.length === 0 ||
+    !targetSpaces.every(
+      (s, i) =>
+        targetExtents[i] !== undefined &&
+        (originIs(s, "free") || !isCONTINUOUS(s))
+    )
+  )
+    return undefined;
   const parts = targetExtents as Extent[];
-  if (opts.glue) return Extent(stackClaim(parts));
   return Extent(
     chainClaim(
       parts.map((e) => e.width),

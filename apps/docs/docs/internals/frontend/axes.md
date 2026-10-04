@@ -52,6 +52,17 @@ must be `baseline`, not `start`: `start` pins the _bounding-box_ corner, which
 slides the marks off the tick grid once the box overhangs the origin (nested
 facet labels, negative bars).
 
+One case leaves the content unpinned on a dim: a **free** content (a bar
+chart's bars, lined up on one baseline, are one free magnitude; alignment
+shares a baseline but does not pin it). The render root places a free
+space's baseline (`placeBaseline`, `GoFishNode.placedSpace`), so it owns an
+absolute axis over it, niced about its 0. In the inner tier the free content
+is left unpinned on that dim, and the tier, pinned by its axis's datum
+domain, seats it as a pinned layer seats every free child: its baseline at
+the map's data 0. So value 0 sits at the 0 tick, negative bars included. (A
+literal-pixel pin there would put the baseline at the frame's 0, the niced
+domain's low end.)
+
 Everything else then seats around the stationary content in **negative gutter
 space** (into the SVG padding): the axis line distributes off the content's
 near edge, tick marks align flush with the line, labels hang outward. Keeping
