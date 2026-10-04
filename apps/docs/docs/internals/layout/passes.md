@@ -236,7 +236,7 @@ This is one of the most important passes. It determines the **underlying space**
 #586 collapse there are only three _kinds_ — `continuous`, `ordinal`,
 `undefined` — and the old POSITION / DIFFERENCE / SIZE trichotomy is now three
 **`origin` states** of the single `continuous` kind (read via the
-`isPOSITION` / `isDIFFERENCE` / `isBaselineMagnitude` predicates):
+`originOf(space)` read):
 
 - **`CONTINUOUS`**: one data-driven extent, a signed `dataInterval` in data
   units about its local origin plus an `origin` state:
@@ -271,7 +271,7 @@ For a vertical bar chart where:
 
 - X-axis: `spread("category")` → `ORDINAL` space
 - Y-axis: `h: "value"` → `SIZE` space (if no min) or `POSITION` space (if min is specified).
-  The `SIZE` space is `baselineSpan(value)`: the value's positive part is its
+  The `SIZE` space is `CONTINUOUS(interval(0, value), "free")`: the value's positive part is its
   ascent and its negative part its descent, so a negative bar extends below
   its baseline. A rect writes no claim hook, so its claim is the one its type
   implies: `value·σ` on the matching side.
@@ -282,14 +282,14 @@ The logic in `resolveUnderlyingSpace` checks:
 if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
   underlyingSpaceX = ORDINAL([]);
 } else if (isAesthetic(dims[0].min) && isValue(dims[0].size)) {
-  underlyingSpaceX = DIFFERENCE(getValue(dims[0].size)!);
+  underlyingSpaceX = CONTINUOUS(interval(0, getValue(dims[0].size)!), "none");
 } else if (!isValue(dims[0].min) && isValue(dims[0].size)) {
-  underlyingSpaceX = baselineSpan(getValue(dims[0].size)!);
+  underlyingSpaceX = CONTINUOUS(interval(0, getValue(dims[0].size)!), "free");
 } else {
   const min = isValue(dims[0].min) ? getValue(dims[0].min) : 0;
   const size = isValue(dims[0].size) ? getValue(dims[0].size) : 0;
   const domain = interval(min, min + size);
-  underlyingSpaceX = POSITION(domain);
+  underlyingSpaceX = CONTINUOUS(domain, "pinned");
 }
 ```
 

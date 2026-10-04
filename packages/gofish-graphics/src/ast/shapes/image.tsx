@@ -11,13 +11,7 @@ import {
   FancyDims,
   Transform,
 } from "../dims";
-import {
-  DIFFERENCE,
-  ORDINAL,
-  POSITION,
-  SIZE,
-  UNDEFINED,
-} from "../underlyingSpace";
+import { ORDINAL, UNDEFINED, CONTINUOUS } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
@@ -258,22 +252,25 @@ export const Image = ({
           if (isValue(pos)) {
             const min = getValue(pos) ?? 0;
             if (isValue(dims[axis].size)) {
-              return DIFFERENCE(
-                getValue(dims[axis].size)!,
+              return CONTINUOUS(
+                interval(0, getValue(dims[axis].size)!),
+                "none",
                 getMeasure(dims[axis].size)
               );
             }
-            return POSITION(interval(min, min), getMeasure(pos));
+            return CONTINUOUS(interval(min, min), "pinned", getMeasure(pos));
           }
           if (isAesthetic(pos) && isValue(dims[axis].size)) {
-            return DIFFERENCE(
-              getValue(dims[axis].size)!,
+            return CONTINUOUS(
+              interval(0, getValue(dims[axis].size)!),
+              "none",
               getMeasure(dims[axis].size)
             );
           }
           if (!isValue(pos) && isValue(dims[axis].size)) {
-            return SIZE(
-              getValue(dims[axis].size)!,
+            return CONTINUOUS(
+              interval(0, getValue(dims[axis].size)!),
+              "free",
               getMeasure(dims[axis].size)
             );
           }

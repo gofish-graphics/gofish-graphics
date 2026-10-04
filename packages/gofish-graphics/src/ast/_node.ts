@@ -57,14 +57,12 @@ import { color6 } from "../color";
 import { orderByLevels, type HasOrder } from "./schema";
 import {
   isCONTINUOUS,
-  isDIFFERENCE,
   isORDINAL,
-  isPOSITION,
   isUNDEFINED,
   continuousInterval,
   dataWidth,
-  spacePlacement,
   UnderlyingSpace,
+  originIs,
 } from "./underlyingSpace";
 import { impliedExtents, type Extent } from "./extent";
 import { toJSON } from "../util/interval";
@@ -380,7 +378,8 @@ function selfScaledAxisSignature(
   dim: 0 | 1
 ): string | undefined {
   const s = node.selfScaledSpace[dim];
-  if (s === undefined || !(isPOSITION(s) || isDIFFERENCE(s))) return undefined;
+  if (s === undefined || !(originIs(s, "pinned") || originIs(s, "none")))
+    return undefined;
   return (
     "c:" +
     JSON.stringify({
@@ -1274,7 +1273,7 @@ export class GoFishNode {
             (prior.startsWith("o:") && prior !== mySig)
           )
             sig = mySig;
-        } else if (isPOSITION(s) || isDIFFERENCE(s)) {
+        } else if (originIs(s, "pinned") || originIs(s, "none")) {
           // Continuous: single-owner — only the root-most unclaimed dim claims.
           if (prior === undefined) sig = AXIS_CLAIM_OPAQUE;
         }
@@ -2136,12 +2135,7 @@ export const debugNodeTree = (node: GoFishNode | GoFishAST): void =>
 
 const formatSpace = (s: UnderlyingSpace): string => {
   if (isCONTINUOUS(s)) {
-    const placement = spacePlacement(s);
-    return placement === "determined"
-      ? `position(${toJSON(continuousInterval(s)!)})`
-      : placement === "free"
-        ? `size(${toJSON(s.dataInterval)})`
-        : `difference(${dataWidth(s)})`;
+    return `${s.origin}(${toJSON(s.dataInterval)})`;
   }
   if (isORDINAL(s)) return `ordinal(${s.domain})`;
   if (isUNDEFINED(s)) return `undefined`;

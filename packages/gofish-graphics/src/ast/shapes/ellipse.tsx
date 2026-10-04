@@ -19,10 +19,9 @@ import { aesthetic, continuous, posFn } from "../domain";
 import { interval } from "../../util/interval";
 import {
   ORDINAL,
-  POSITION,
-  SIZE,
   UNDEFINED,
   UnderlyingSpace,
+  CONTINUOUS,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { boxOfDims } from "../geometry";
@@ -67,11 +66,15 @@ export const Ellipse = ({
           if (isValue(d.min)) {
             // position; treat it like a position space w/ a single element
             const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min), getMeasure(d.min));
+            return CONTINUOUS(interval(min, min), "pinned", getMeasure(d.min));
           }
           if (isValue(d.size)) {
             // data-driven size only — literals are handled at layout time.
-            return SIZE(getValue(d.size)!, getMeasure(d.size));
+            return CONTINUOUS(
+              interval(0, getValue(d.size)!),
+              "free",
+              getMeasure(d.size)
+            );
           }
           return UNDEFINED;
         };

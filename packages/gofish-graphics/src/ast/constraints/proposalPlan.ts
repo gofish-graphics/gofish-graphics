@@ -5,10 +5,9 @@
 import { type Size } from "../dims";
 import { isValue } from "../data";
 import {
-  isBaselineMagnitude,
   isCONTINUOUS,
-  isPOSITION,
   type UnderlyingSpace,
+  originIs,
 } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
@@ -243,7 +242,7 @@ export function buildChildScalePlan(
   for (const axis of [0, 1] as const) {
     const [stashed, stashedExtent] = nicedSelfScaled[axis];
     if (stashed === undefined || !Number.isFinite(layerSize[axis])) continue;
-    if (isPOSITION(stashed)) {
+    if (originIs(stashed, "pinned")) {
       basePosScales[axis] =
         scopes.solvePosition(
           { kind: "self-scaled", rootKey, axis },
@@ -252,7 +251,7 @@ export function buildChildScalePlan(
           layerSize[axis]
         ) ?? inheritedPosScales[axis];
     }
-    if (isBaselineMagnitude(stashed)) {
+    if (originIs(stashed, "free")) {
       childScaleFactors[axis] =
         scopes.solveSize(
           { kind: "self-scaled", rootKey, axis },
@@ -439,7 +438,7 @@ export function childPosScalesFor(
   const pick = (dim: 0 | 1) => {
     if (!ownsAxis[dim]) return basePosScales[dim];
     if (targetDims?.has(dim)) return undefined;
-    return childSpace && isPOSITION(childSpace[dim])
+    return childSpace && originIs(childSpace[dim], "pinned")
       ? effectivePosScales[dim]
       : undefined;
   };

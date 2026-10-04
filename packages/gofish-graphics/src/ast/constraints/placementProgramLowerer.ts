@@ -16,7 +16,7 @@ import type {
   RelationAnchor,
 } from "./placementFacts";
 import { emptyAnchorProgram } from "./placementFacts";
-import { isBaselineMagnitude } from "../underlyingSpace";
+import { originIs } from "../underlyingSpace";
 
 export const BOX_ANCHOR: Record<AlignAnchor, Anchor> = {
   start: "min",
@@ -33,7 +33,7 @@ export function freeBaselineOffset(
   axis: Axis
 ): number | undefined {
   const space = target.spaceOn?.(axisIndex(axis));
-  if (space === undefined || !isBaselineMagnitude(space)) return undefined;
+  if (space === undefined || !originIs(space, "free")) return undefined;
   return anchorOffset(target, axis, "baseline");
 }
 

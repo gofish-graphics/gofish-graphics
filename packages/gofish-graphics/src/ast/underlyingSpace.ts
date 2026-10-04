@@ -19,33 +19,20 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  * Where a continuous space's local origin (its data 0) sits:
  *
  *   - `"pinned"`: the local origin IS data 0, so the data interval is the
- *     absolute data domain. Builds a posScale, is niced when an axis views it,
- *     renders an absolute axis. (The old POSITION.)
+ *     absolute data domain. Renders an absolute axis. (The old POSITION.)
  *   - `"free"`: the extent hangs from a baseline that nothing has placed yet.
  *     The data interval is `[−descent, ascent]` about that baseline. A parent
  *     can still pin it (a baseline align, a glued stack, the `position`
- *     operator). (The old SIZE.)
+ *     operator). Renders no axis. (The old SIZE.)
  *   - `"none"`: there is no origin at all, only a width. The data interval is
  *     `[0, width]`, and only differences along it mean anything. Renders a
  *     delta axis. Produced by middle-align, and absorbing. (The old DIFFERENCE.)
+ *
+ * The origin state is the whole placement fact: whether an extent has
+ * committed a position (`pinned`), can still be given one (`free`), or can
+ * never have one (`none`) is read straight off it ({@link originOf}).
  */
 export type Origin = "pinned" | "free" | "none";
-
-/**
- * The abstract PLACEMENT of an extent, a determinacy lattice over "has this
- * extent committed a position?": `"free"` (⊥, sized but unplaced),
- * `"determined"` (committed at a data coordinate), `"conflict"` (⊤, no single
- * position is possible). It is a read of the {@link Origin}
- * ({@link spacePlacement}), not stored state. */
-export type Placement = "free" | "determined" | "conflict";
-
-/** Read the abstract {@link Placement} off a CONTINUOUS space's origin. */
-export const spacePlacement = (space: CONTINUOUS_TYPE): Placement =>
-  space.origin === "pinned"
-    ? "determined"
-    : space.origin === "free"
-      ? "free"
-      : "conflict";
 
 /**
  * A data-driven extent on one shared scale. Every continuous kind has the same
@@ -116,10 +103,11 @@ export type UNDEFINED_TYPE = {
 
 export type UnderlyingSpace = CONTINUOUS_TYPE | ORDINAL_TYPE | UNDEFINED_TYPE;
 
-/** Low-level constructor. The three origin states have the named smart
- *  constructors {@link POSITION} (pinned), {@link SIZE} (free) and
- *  {@link DIFFERENCE} (none), plus {@link anchorAt} for pinning an existing
- *  space at a data coordinate. */
+/** The one continuous constructor: a data interval and its origin state. A
+ *  rect of value `v` is `CONTINUOUS(interval(0, v), "free")` (a negative `v`
+ *  extends below its baseline), a scatter axis is
+ *  `CONTINUOUS(interval(min, max), "pinned")`. {@link anchorAt} pins an
+ *  existing space at a data coordinate. */
 export const CONTINUOUS = (
   dataInterval: Interval,
   origin: Origin,
@@ -141,16 +129,28 @@ export const isCONTINUOUS = (
 export const continuousInterval = (
   space: UnderlyingSpace
 ): Interval | undefined =>
-  isCONTINUOUS(space) && space.origin === "pinned"
-    ? space.dataInterval
-    : undefined;
+  originIs(space, "pinned") ? space.dataInterval : undefined;
 
-/** The data interval of any CONTINUOUS space, whatever its origin: absolute
- *  when pinned, `[−descent, ascent]` about the baseline when free, `[0, width]`
- *  when there is no origin. The fold variant of {@link continuousInterval}, so
- *  an extent can be unioned regardless of pinning (overlay / alignment). */
-export const continuousExtentInterval = (space: CONTINUOUS_TYPE): Interval =>
-  space.dataInterval;
+/** The origin state of a space's axis, or undefined when the axis is not
+ *  continuous. Every placement question (is this extent positioned, can it
+ *  still be placed, which axis does it render) is this one read. */
+export const originOf = (
+  space: UnderlyingSpace | undefined
+): Origin | undefined =>
+  space !== undefined && isCONTINUOUS(space) ? space.origin : undefined;
+
+/** A continuous space whose origin is `origin`. */
+export const originIs = (
+  space: UnderlyingSpace | undefined,
+  origin: Origin
+): space is CONTINUOUS_TYPE => originOf(space) === origin;
+
+/** A continuous space with an origin, pinned or free (not `none`): an extent
+ *  that hangs from a place, so it can root a σ-scope that seats it. */
+export const hasOrigin = (
+  space: UnderlyingSpace | undefined
+): space is CONTINUOUS_TYPE =>
+  originIs(space, "pinned") || originIs(space, "free");
 
 /** The data width of a CONTINUOUS space (the length of its interval). */
 export const dataWidth = (space: CONTINUOUS_TYPE): number =>
@@ -168,24 +168,6 @@ export const dataSides = (
         descent: Math.max(-space.dataInterval.min, 0),
       }
     : { ascent: dataWidth(space), descent: 0 };
-
-/** A baseline magnitude: a free (sized but unplaced) extent. Distinct from a
- *  pinned data axis ({@link isPOSITION}, even at data-min 0) and a difference
- *  ({@link isDIFFERENCE}). */
-export const isBaselineMagnitude = (
-  space: UnderlyingSpace
-): space is CONTINUOUS_TYPE => isCONTINUOUS(space) && space.origin === "free";
-
-/** A PINNED continuous space over the absolute data `domain` (the old
- *  POSITION). Builds a posScale and an absolute axis. */
-export const POSITION = (
-  domain: Interval,
-  measure?: Measure,
-  coordinateTransform?: CoordinateTransform
-): UnderlyingSpace =>
-  CONTINUOUS(domain, "pinned", measure, coordinateTransform);
-export const isPOSITION = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
-  isCONTINUOUS(space) && space.origin === "pinned";
 
 /** Nice a pinned space's data domain (issue #659). Returns a copy with the
  *  `[min, max]` domain rounded to d3-nice bounds (count 10, matching the axis
@@ -233,29 +215,6 @@ export const mirrored = (
 export const allMirrored = (spaces: CONTINUOUS_TYPE[]): boolean =>
   spaces.length > 0 && spaces.every((s) => s.mirrored === true);
 
-/** An origin-less continuous space of data `width` (the old DIFFERENCE): a
- *  delta axis over `[0, width]`. */
-export const DIFFERENCE = (width: number, measure?: Measure): UnderlyingSpace =>
-  CONTINUOUS(interval(0, width), "none", measure);
-export const isDIFFERENCE = (
-  space: UnderlyingSpace
-): space is CONTINUOUS_TYPE => isCONTINUOUS(space) && space.origin === "none";
-
-/** A free extent (the old SIZE): a baseline magnitude, `ascent` data units
- *  above its baseline and `descent` below it. Most extents sit wholly above
- *  their baseline, so `descent` defaults to zero. */
-export const SIZE = (
-  ascent: number,
-  measure?: Measure,
-  descent = 0
-): UnderlyingSpace => CONTINUOUS(interval(-descent, ascent), "free", measure);
-
-/** The baseline magnitude of a data length `v` drawn from its baseline (a
- *  rect's `w`/`h`): `[0, v]`, so a positive value is ascent and a negative one
- *  is descent (#773). */
-export const baselineSpan = (v: number, measure?: Measure): UnderlyingSpace =>
-  SIZE(Math.max(v, 0), measure, Math.max(-v, 0));
-
 /** Pin a continuous space with its local origin at data coordinate `at`: shift
  *  its interval by `at` and pin the origin. A free `[−descent, ascent]` lands
  *  on `[at − descent, at + ascent]`; an origin-less `[0, width]` lands its low
@@ -272,12 +231,6 @@ export const anchorAt = (
     measure ?? space.measure,
     space.coordinateTransform
   );
-
-/** Has a baseline (a place it hangs from): a free magnitude or a pinned
- *  coordinate, but NOT a difference. The gate for "can be a self-scaling
- *  region / needs a concrete canvas". */
-export const hasBaseline = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
-  isCONTINUOUS(space) && space.origin !== "none";
 
 export const ORDINAL = (
   domain?: string[],
@@ -296,11 +249,12 @@ export const UNDEFINED: UnderlyingSpace = { kind: "undefined" };
 export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
   space.kind === "undefined";
 
-/** A *positioning* space — one that places marks along an axis (a `POSITION`
- *  data axis or an `ORDINAL` category axis), as opposed to `SIZE` (a mark's own
- *  extent) or `UNDEFINED`. Used to find the axis a set of marks is laid out on. */
+/** A *positioning* space — one that places marks along an axis (a pinned
+ *  data axis or an `ORDINAL` category axis), as opposed to a free magnitude (a
+ *  mark's own extent) or `UNDEFINED`. Used to find the axis a set of marks is
+ *  laid out on. */
 export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
-  isPOSITION(space) || isORDINAL(space);
+  originIs(space, "pinned") || isORDINAL(space);
 
 /** Read the measure of any space, or undefined for the measureless kind
  *  (UNDEFINED). Both CONTINUOUS (unit) and ORDINAL (grouping field) carry one. */

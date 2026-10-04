@@ -14,11 +14,10 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import {
-  SIZE,
-  baselineSpan,
-  isPOSITION,
   continuousInterval,
   type CONTINUOUS_TYPE,
+  CONTINUOUS,
+  originIs,
 } from "../ast/underlyingSpace";
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { Extent } from "../ast/extent";
@@ -30,6 +29,7 @@ import { ref } from "../ast/shapes/ref";
 import { createName } from "../ast/createName";
 import { GoFishRef } from "../ast/_ref";
 import * as M from "../util/monotonic";
+import { interval } from "../util/interval";
 
 const { chart, scatter, stack, spread, rect } = GoFish as any;
 
@@ -91,8 +91,11 @@ async function main() {
 
   console.log("\n# a nest pads both sides of its inner extent");
   {
-    const inner = SIZE(10, undefined, 4);
-    const outer = nestedSpace(SIZE(0), inner) as CONTINUOUS_TYPE;
+    const inner = CONTINUOUS(interval(-4, 10), "free");
+    const outer = nestedSpace(
+      CONTINUOUS(interval(0, 0), "free"),
+      inner
+    ) as CONTINUOUS_TYPE;
     check(
       "the outer type keeps the inner data extent (padding is pixels)",
       JSON.stringify(outer.dataInterval) ===
@@ -184,11 +187,11 @@ async function main() {
 
   console.log("\n# the alignment union depends on the alignment");
   {
-    const up = SIZE(10);
-    const down = SIZE(0, undefined, 20);
+    const up = CONTINUOUS(interval(0, 10), "free");
+    const down = CONTINUOUS(interval(-20, 0), "free");
     const span = (alignment: "baseline" | "start" | "end") => {
       const s = resolveAlignmentSpace([up, down], alignment);
-      return isPOSITION(s) ? continuousInterval(s) : undefined;
+      return originIs(s, "pinned") ? continuousInterval(s) : undefined;
     };
     check(
       "baseline: [−descent, ascent] about the shared baseline",
@@ -210,7 +213,7 @@ async function main() {
     // stack spans [−35, 30]. With only positive parts it is [0, Σ].
     const fold = (values: number[]) => {
       const s = distributeSpaceFold(
-        values.map((v) => baselineSpan(v)),
+        values.map((v) => CONTINUOUS(interval(0, v), "free")),
         [],
         {
           spacing: 0,
@@ -219,7 +222,7 @@ async function main() {
           origin: { part: 0, fraction: 0, mirrored: false },
         }
       );
-      return isPOSITION(s) ? continuousInterval(s) : undefined;
+      return originIs(s, "pinned") ? continuousInterval(s) : undefined;
     };
     check(
       "a signed stack spans its running sums",

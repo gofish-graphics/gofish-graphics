@@ -220,14 +220,15 @@ Each axis (x and y) of each node has a type of one of three kinds:
 `continuous`, `ordinal`, or `undefined`. A continuous type stores one data
 fact in one shape for every continuous axis: a signed **`dataInterval`** in
 data units about the axis's local origin, plus the state of that origin,
-**`origin`**. The **`placement`** (the _layout_ fact: is this extent
-positioned) is not stored. It is a read of the origin state, a bare
-determinacy lattice read via `spacePlacement(space)`:
+**`origin`**. The origin state is the whole _placement_ fact (is this extent
+positioned?): `pinned` has committed a position, `free` can still be given
+one, and `none` can never have one. Every such question is the one read
+`originOf(space)` (or `originIs(space, "pinned")`, and `hasOrigin(space)` for
+pinned-or-free):
 
 ```ts
 // underlyingSpace.ts
 type Origin = "pinned" | "free" | "none";
-type Placement = "free" | "determined" | "conflict";
 
 type CONTINUOUS_TYPE = {
   kind: "continuous";
@@ -238,26 +239,22 @@ type CONTINUOUS_TYPE = {
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
-
-const spacePlacement = (s: CONTINUOUS_TYPE): Placement =>
-  s.origin === "pinned" ? "determined"   // committed to a data interval (a scatter point's x)
-    : s.origin === "free" ? "free"       // sized, position not yet committed (a bar's height)
-      : "conflict";                      // no absolute position possible (a centered streamgraph band)
 ```
 
 The three origin states are the old `POSITION` / `SIZE` / `DIFFERENCE`, and
-the old names survive as the smart constructors over this one shape:
+there is one constructor for all of them, `CONTINUOUS(interval, origin,
+measure?)`:
 
-- **pinned** (`POSITION(domain)`): the local origin _is_ data 0, so the
-  interval is the absolute data domain. A scatter's x axis over `[30, 50]` is
-  `pinned [30, 50]`.
-- **free** (`SIZE(ascent, measure, descent)`): the extent hangs from a
-  baseline that nothing has placed yet, and the interval is
-  `[−descent, ascent]` about it. A bar of value 30 is `free [0, 30]`; a bar of
-  value −20 is `free [−20, 0]`.
-- **none** (`DIFFERENCE(width)`): there is no origin at all, only a width, so
-  the interval is `[0, width]` and only differences along it mean anything. A
-  middle-aligned overlay is one.
+- **pinned**: the local origin _is_ data 0, so the interval is the absolute
+  data domain. A scatter's x axis over `[30, 50]` is
+  `CONTINUOUS(interval(30, 50), "pinned")`.
+- **free**: the extent hangs from a baseline that nothing has placed yet, and
+  the interval is `[−descent, ascent]` about it. A bar of value `v` is
+  `CONTINUOUS(interval(0, v), "free")`, which is `[0, 30]` for 30 and
+  `[−20, 0]` for −20.
+- **none**: there is no origin at all, only a width, so the interval is
+  `[0, width]` and only differences along it mean anything. A middle-aligned
+  overlay is one.
 
 Because the three share one shape, **pinning a free extent is "shift the
 interval and pin the origin"**: `anchorAt(space, at)` turns `free [−d, a]`
@@ -277,16 +274,15 @@ baseline on both sides, like a font's ascent and descent. In the type the two
 sides are the two ends of the free interval (`dataSides(space)` reads them
 back). In the claim they are two Monotonics. A rect of value 30 has data
 ascent 30 and claims ascent `30σ`; a rect of value −20 has data descent 20
-and claims descent `20σ` (`baselineSpan(v)`, used only by `rect`: a rect
-length is signed, while a text, image, or treemap size is a nonnegative
-magnitude). Most extents sit wholly above their baseline and never spell the
+and claims descent `20σ` (a rect length is signed, while a text, image, or
+treemap size is a nonnegative magnitude). Most extents sit wholly above their baseline and never spell the
 descent. A pinned or origin-less extent sits wholly above its low edge, so
 its descent is 0. The claim's `width` is `ascent + descent`, computed once by
 the `Extent` constructor, and it is what a scope solves σ against. The places
 that read the two sides:
 
 - `unionChildSpaces`' all-free branch takes the larger data extent on each
-  side, `SIZE(max of ascents, measure, max of descents)`, and its claim
+  side (the union of the free intervals), and its claim
   (`unionChildExtents`) takes the larger claim on each side,
   `maxExtent(...)`, which keeps the σ-affine intercepts. So a `group` of
   signed bars keeps both sides.
@@ -409,15 +405,13 @@ The pre/post-solve distinction is handled by _when_ σ is substituted, not by
 _which kind_: σ is always the claim's `width.inverse(size)`, and the extent at
 σ is always `width.run(σ)`. The one genuine state transition is
 **`middle`-alignment drops the origin** — centering scrambles the children's
-baselines, so the result is origin-less (the streamgraph), which reads as
-placement `conflict`. An origin-less extent is absorbing: no alignment pins
-it.
+baselines, so the result is origin-less (the streamgraph). An origin-less
+extent is absorbing: no alignment pins it.
 
 The pinned data interval is read back with `continuousInterval(space)`
 (used by posScale construction and axis nicing), which is `undefined` for a
-free or origin-less space. `continuousExtentInterval(space)` reads the
-interval whatever the origin, for the folds that union extents regardless of
-pinning.
+free or origin-less space. The folds that union extents regardless of
+pinning read `space.dataInterval` directly.
 
 These kinds map closely to Stevens's statistical data types, but not cleanly:
 a pinned interval covers both interval and ratio, and an origin-less one is
@@ -926,9 +920,9 @@ free) — collected _once_ at the layer boundary and
 handed to the solve as an explicit ownership input. The constraint path no longer
 reconstructs the space pass's `free`/`determined`/`conflict` lattice by calling a
 `placementOn` method on the target mid-lowering; there is no layout fact derived
-from the space pass in the guards anymore. (`spacePlacement` still computes that
-lattice for the space folds themselves — the `union`/`middle`/anchored decisions —
-which is where a determinacy read belongs.)
+from the space pass in the guards anymore. (The space folds themselves still read
+the origin state — the `union`/`middle`/anchored decisions — which is where a
+determinacy read belongs.)
 
 When alignment does write an anchor relation, it asks
 `Placeable.localAnchor(axis, anchor)` for the anchor's coordinate in the
@@ -952,9 +946,9 @@ Three patterns cover most operators:
 
 **Leaf shapes** (`rect`, `ellipse`, `petal`, `text`, `image`) decide the
 kind from their props. A rect with data-bound `h` emits
-`baselineSpan(value)` on y (a `free` magnitude: the value's positive part as
-ascent, its negative part as descent); the same
-rect with literal `y` and `y2` emits `POSITION([y, y2])`. Constants (no
+`CONTINUOUS(interval(0, value), "free")` on y (the value's positive part as
+ascent, its negative part as descent); the same rect with literal `y` and `y2`
+emits `CONTINUOUS(interval(y, y2), "pinned")`. Constants (no
 data-bound dim) emit `UNDEFINED` — the literal pixel value is handled at
 layout time by `computeAesthetic`, not via the underlying-space tree. (The
 old anomaly where a literal-pixel `min` plus a data size made `DIFFERENCE`
@@ -998,24 +992,23 @@ chart(seafood)
 ```
 
 Each `rect` starts with a data-driven height and no data-driven y
-position: its type is `[UNDEFINED, SIZE(count)]`, a free magnitude
-`free [0, count]`, and its claim on y is the implied `count·σ`.
+position: its type is `[UNDEFINED, free [0, count]]`, and its claim on y is the implied `count·σ`.
 
 The vertical `stack` (which is `spread({ glue: true, dir: "y" })`) glues
 each lake's species rects together. Its stack-direction children are all
 free magnitudes, so it lays their data intervals end to end and pins the
-result: `POSITION([0, total_lake_sum])` on y, claiming the parts' claims end
+result: `pinned [0, total_lake_sum]` on y, claiming the parts' claims end
 to end (`total_lake_sum·σ`). The alignment direction (x) of the stack is
 UNDEFINED because each rect's x is UNDEFINED.
 
 The horizontal `spread` separates lakes. Its children are now stacks
-with `[UNDEFINED on x, POSITION([0, total]) on y]`. Stack direction (x):
+with `[UNDEFINED on x, pinned [0, total] on y]`. Stack direction (x):
 no children are continuous, but they're named (the "by" key produces lake
 keys) → `ORDINAL(["Lake A", ..., "Lake F"])`. Alignment direction (y):
-all children are anchored continuous → `POSITION(unionAll([0, total_i]))`
-= `POSITION([0, max_total])`.
+all children are pinned → `pinned unionAll([0, total_i])`
+= `pinned [0, max_total]`.
 
-So the root underlying space is `[ORDINAL(lakes), POSITION([0, max_total])]`.
+So the root underlying space is `[ORDINAL(lakes), pinned [0, max_total]]`.
 The y-axis renders quantitative ticks (POSITION); the x-axis renders
 ordinal labels at laid-out positions (ORDINAL); both follow from the
 tree, with no special "bar chart" rule.
@@ -1327,7 +1320,7 @@ the explicit size is a **literal** or a **data value**:
   stashes its own half.
   - **Literal pixel size** (`w: 80`). After resolving each axis normally, for
     any dim that has an explicit pixel size and whose resolved space **has a
-    baseline** (`hasBaseline` — `placement` is `free` or `determined`, i.e. not
+    baseline** (`hasOrigin` — its origin is `free` or `pinned`, i.e. not
     a difference), the real type is **stashed** verbatim and `UNDEFINED` is
     reported upward; the claim hook stashes the matching claim and reports
     none. ORDINAL and difference (`placement: conflict`) extents are left
@@ -1339,7 +1332,7 @@ the explicit size is a **literal** or a **data value**:
     layer's pixel extent — the layer is a leaf in its ancestor's scope,
     exactly like a leaf `rect({ w: "count" })`. But that leaves the layer's
     own _composed content_ (its children's real space) needing somewhere to
-    go: if the composed space `hasBaseline`, it is stashed (in baseline-
+    go: if the composed space `hasOrigin`, it is stashed (in baseline-
     **magnitude** form, a free type with the composed space's data sides, not
     the anchored POSITION a fold might have returned, together with the
     composed claim) before being overridden by the new data-valued `SIZE`
@@ -1371,7 +1364,7 @@ the explicit size is a **literal** or a **data value**:
 
 Note that a histogram's count axis is **anchored, not origin-less**, at the
 frame boundary. Under start/end/baseline alignment, `resolveAlignmentSpace`
-(`alignment.ts`) folds the baseline magnitudes into `POSITION([0, max])` — it
+(`alignment.ts`) folds the baseline magnitudes into `pinned [0, max]` — it
 commits the data-driven extents to an anchored axis so they can be aligned.
 Without the self-scaling rule, that count POSITION would union straight into
 the shared axes as if it were data units; the rule is what keeps the absorbed
@@ -1560,7 +1553,7 @@ operator's reduction onto constraints had dropped.
 **Propagation through the baseline → anchored conversion.** A histogram's
 count axis is all baseline magnitudes (origin 0) at the children, and
 `resolveAlignmentSpace`'s start/end/baseline path folds them into
-`POSITION([0, max])`. That conversion carries the merged child measure forward
+`pinned [0, max]`. That conversion carries the merged child measure forward
 (a `forgetOnConflict` reduce) — it is load-bearing, because it is exactly how
 the count POSITION acquires its `"count"` tag so a later overlay union can
 recognize it as foreign and refuse.

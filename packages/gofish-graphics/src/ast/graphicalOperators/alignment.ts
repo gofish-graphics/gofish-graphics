@@ -3,10 +3,7 @@
 // </gofish-wiki>
 
 import {
-  DIFFERENCE,
   ORDINAL,
-  POSITION,
-  SIZE,
   UNDEFINED,
   isCONTINUOUS,
   isORDINAL,
@@ -15,16 +12,15 @@ import {
   mergeAllMeasures,
   forgetAllMeasures,
   spaceMeasure,
-  spacePlacement,
-  continuousExtentInterval,
   continuousInterval,
   dataSides,
   dataWidth,
   allMirrored,
-  isBaselineMagnitude,
   mirrored,
   type CONTINUOUS_TYPE,
   UnderlyingSpace,
+  CONTINUOUS,
+  originIs,
 } from "../underlyingSpace";
 import { Extent, envelope, maxExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
@@ -97,13 +93,16 @@ export function unionChildSpaces(
   // would change geometry. UNDEFINED siblings (fixed-pixel) still never veto.
   if (
     nonUndefined.length === conts.length &&
-    conts.every((s) => spacePlacement(s) === "free")
+    conts.every((s) => s.origin === "free")
   ) {
     const sides = conts.map(dataSides);
-    return SIZE(
-      Math.max(...sides.map((d) => d.ascent)),
-      forgetAllMeasures(conts.map((s) => s.measure)),
-      Math.max(...sides.map((d) => d.descent))
+    return CONTINUOUS(
+      Interval.interval(
+        -Math.max(...sides.map((d) => d.descent)),
+        Math.max(...sides.map((d) => d.ascent))
+      ),
+      "free",
+      forgetAllMeasures(conts.map((s) => s.measure))
     );
   }
 
@@ -116,14 +115,14 @@ export function unionChildSpaces(
   let hasAnchored = false;
   let measure: Measure | undefined;
   for (const s of conts) {
-    intervals.push(continuousExtentInterval(s));
-    if (spacePlacement(s) === "determined") hasAnchored = true;
+    intervals.push(s.dataInterval);
+    if (s.origin === "pinned") hasAnchored = true;
     measure = mergeMeasures(measure, s.measure, "overlay union");
   }
   const union = Interval.unionAll(...intervals);
   return hasAnchored
-    ? mirrored(POSITION(union, measure), allMirrored(conts))
-    : DIFFERENCE(Interval.width(union), measure);
+    ? mirrored(CONTINUOUS(union, "pinned", measure), allMirrored(conts))
+    : CONTINUOUS(Interval.interval(0, Interval.width(union)), "none", measure);
 }
 
 /**
@@ -142,7 +141,7 @@ export function resolveAlignmentSpace(
   // conflict — that's how a histogram's count axis carries a "count" tag
   // forward; mixed/positioned children unify measures as TYPES (throw on a real
   // clash).
-  const allBaseline = conts.every((s) => spacePlacement(s) === "free");
+  const allBaseline = conts.every((s) => s.origin === "free");
   const measure = allBaseline
     ? forgetAllMeasures(conts.map(spaceMeasure))
     : mergeAllMeasures(conts.map(spaceMeasure), "alignment");
@@ -150,9 +149,7 @@ export function resolveAlignmentSpace(
   // `middle` DROPS the anchor (centering scrambles baselines); an already
   // unanchored ("conflict") child can't be re-anchored by alignment (it is
   // absorbing). Either way the result is unanchored.
-  const drop =
-    alignment === "middle" ||
-    conts.some((s) => spacePlacement(s) === "conflict");
+  const drop = alignment === "middle" || conts.some((s) => s.origin === "none");
 
   // Baseline alignment lines the children up at their baselines, so each
   // extends `[−descent, ascent]` about the shared one. Any other alignment
@@ -160,14 +157,14 @@ export function resolveAlignmentSpace(
   // and the union spans the widest. An anchored child keeps its own interval.
   const extent = (s: CONTINUOUS_TYPE) =>
     alignment === "baseline"
-      ? continuousExtentInterval(s)
+      ? s.dataInterval
       : (continuousInterval(s) ?? Interval.interval(0, dataWidth(s)));
   const union = Interval.unionAll(...conts.map(extent));
 
   // Children that all hold amounts on both sides of 0 still do together.
   return drop
-    ? DIFFERENCE(Interval.width(union), measure)
-    : mirrored(POSITION(union, measure), allMirrored(conts));
+    ? CONTINUOUS(Interval.interval(0, Interval.width(union)), "none", measure)
+    : mirrored(CONTINUOUS(union, "pinned", measure), allMirrored(conts));
 }
 
 /**
@@ -231,8 +228,7 @@ export function unionChildExtents(
     childExtents.map((c) => c[axis]),
     childSpaces.map((c) => c[axis])
   );
-  if (isBaselineMagnitude(space))
-    return maxExtent(children.map((c) => c.extent));
+  if (originIs(space, "free")) return maxExtent(children.map((c) => c.extent));
   return unionClaim(children, "baseline");
 }
 

@@ -26,7 +26,7 @@ import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
 import type { AlignAnchor } from "../constraints/shared";
 import { distributePlacementAnchors } from "../constraints/distribute";
-import { isBaselineMagnitude } from "../underlyingSpace";
+import { originIs } from "../underlyingSpace";
 import type { Extent } from "../extent";
 
 /** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
@@ -268,7 +268,7 @@ function anchorCoord(
     const lo = localAnchorPoint("min", min, size);
     const hi = localAnchorPoint("max", min, size);
     const tail =
-      (space !== undefined && isBaselineMagnitude(space)
+      (space !== undefined && originIs(space, "free")
         ? anchorCoord(t, idx, "baseline")
         : undefined) ?? lo;
     return anchor === "tail" ? tail : lo + hi - tail;

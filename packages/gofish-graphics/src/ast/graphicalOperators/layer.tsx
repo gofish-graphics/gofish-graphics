@@ -15,18 +15,18 @@ import {
   displayTranslate,
 } from "../dims";
 import {
-  SIZE,
   UNDEFINED,
   UnderlyingSpace,
   dataSides,
-  hasBaseline,
-  isBaselineMagnitude,
   isCONTINUOUS,
-  isPOSITION,
   isUNDEFINED,
+  CONTINUOUS,
+  originIs,
+  hasOrigin,
 } from "../underlyingSpace";
 import { impliedExtent, scopeRootBaseline, type Extent } from "../extent";
 import { getMeasure, getValue, isValue } from "../data";
+import { interval } from "../../util/interval";
 import { computeSize, foldFinite } from "../../util";
 import { axisScale, measureOrigin, posFn } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
@@ -407,21 +407,25 @@ export const layer = createNodeOperatorSequential(
               // self-scaling region" the general rule: the node's box is
               // solved by the ancestor scope, its interior is a fresh scope
               // resolved against that box.
-              if (hasBaseline(composed)) {
+              if (hasOrigin(composed)) {
                 const { ascent, descent } = dataSides(composed);
-                selfScaledSpaces[axis] = SIZE(
-                  ascent,
-                  composed.measure,
-                  descent
+                selfScaledSpaces[axis] = CONTINUOUS(
+                  interval(-descent, ascent),
+                  "free",
+                  composed.measure
                 );
               }
-              resolved[axis] = SIZE(getValue(dsize)!, getMeasure(dsize));
+              resolved[axis] = CONTINUOUS(
+                interval(0, getValue(dsize)!),
+                "free",
+                getMeasure(dsize)
+              );
               continue;
             }
             const sp = resolved[axis];
             // Stash anything with a baseline (an anchored POSITION or a "free"
             // magnitude); a difference / ORDINAL is left untouched (no stash).
-            if (hasBaseline(sp)) {
+            if (hasOrigin(sp)) {
               selfScaledSpaces[axis] = sp;
               // Persist the stashed space itself (presence IS the "self-scaled"
               // marker) — `resolveAxes` reads this to detect SIBLING self-scaled regions
@@ -500,9 +504,9 @@ export const layer = createNodeOperatorSequential(
           selfScaledExtents[1] = undefined;
           for (const axis of [0, 1] as const) {
             if (dims[axis].size === undefined) continue;
-            if (hasBaseline(t.resolved[axis]))
+            if (hasOrigin(t.resolved[axis]))
               selfScaledExtents[axis] = resolved[axis];
-            if (isValue(dims[axis].size) || hasBaseline(t.resolved[axis]))
+            if (isValue(dims[axis].size) || hasOrigin(t.resolved[axis]))
               resolved[axis] = impliedExtent(spaces[axis]);
           }
           return resolved;
@@ -676,11 +680,11 @@ export const layer = createNodeOperatorSequential(
             const stash = selfScaledSpaces[axis];
             const own = stash ?? space?.[axis];
             if (own === undefined) return undefined;
-            if (isPOSITION(own))
+            if (originIs(own, "pinned"))
               return posFn(effectivePosScales[axis])?.(
                 measureOrigin(own.measure)
               );
-            if (!isBaselineMagnitude(own)) return undefined;
+            if (!originIs(own, "free")) return undefined;
             return stash !== undefined
               ? scopeRootBaseline(
                   selfScaledExtents[axis],
@@ -694,7 +698,7 @@ export const layer = createNodeOperatorSequential(
           ): [number, number] =>
             [0, 1].map((axis) => {
               const s = cp.spaceOn?.(axis as 0 | 1);
-              return s !== undefined && isBaselineMagnitude(s)
+              return s !== undefined && originIs(s, "free")
                 ? (freeOrigin[axis] ?? 0)
                 : 0;
             }) as [number, number];

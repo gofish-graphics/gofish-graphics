@@ -9,18 +9,16 @@ import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
 import {
   CONTINUOUS_TYPE,
   ORDINAL,
-  POSITION,
-  SIZE,
   UNDEFINED,
   UnderlyingSpace,
   dataSides,
   dataWidth,
   forgetAllMeasures,
-  isBaselineMagnitude,
   isCONTINUOUS,
-  isPOSITION,
   mirrored,
   spaceMeasure,
+  CONTINUOUS,
+  originIs,
 } from "../underlyingSpace";
 import { Extent, envelope, impliedExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
@@ -272,14 +270,18 @@ export function distributeSpaceFold(
 
   // Explicit size on the stack axis dominates the children-derived claim.
   if (opts.size !== undefined && isValue(opts.size)) {
-    return SIZE(getValue(opts.size)!, getMeasure(opts.size));
+    return CONTINUOUS(
+      Interval.interval(0, getValue(opts.size)!),
+      "free",
+      getMeasure(opts.size)
+    );
   }
 
   const namedKeys = keys.filter((k): k is string => k !== undefined);
   // A "free" baseline magnitude composes as a chain; an anchored
   // data-positioned child sums its data widths. The two paths stay distinct.
-  const allSize = targetSpaces.every(isBaselineMagnitude);
-  const allPosition = targetSpaces.every(isPOSITION);
+  const allSize = targetSpaces.every((s) => originIs(s, "free"));
+  const allPosition = targetSpaces.every((s) => originIs(s, "pinned"));
   const sumWidths = (): number =>
     (targetSpaces as CONTINUOUS_TYPE[])
       .map(dataWidth)
@@ -320,7 +322,11 @@ export function distributeSpaceFold(
         at += ascent - descent;
       });
       return mirrored(
-        POSITION(Interval.interval(lo - zero, hi - zero), childMeasure),
+        CONTINUOUS(
+          Interval.interval(lo - zero, hi - zero),
+          "pinned",
+          childMeasure
+        ),
         origin.mirrored
       );
     }
@@ -338,12 +344,25 @@ export function distributeSpaceFold(
   // (ascent + descent), and the composed extent sits above the chain's start.
   // (A stack, above, keeps the signs instead.)
   if (dataDriven)
-    return SIZE(chainDataExtent(widths, opts.anchor), childMeasure);
+    return CONTINUOUS(
+      Interval.interval(0, chainDataExtent(widths, opts.anchor)),
+      "free",
+      childMeasure
+    );
   if (namedKeys.length > 0)
     return ORDINAL(namedKeys, opts.measure, opts.anonymous);
-  if (allSize) return SIZE(chainDataExtent(widths, opts.anchor), childMeasure);
+  if (allSize)
+    return CONTINUOUS(
+      Interval.interval(0, chainDataExtent(widths, opts.anchor)),
+      "free",
+      childMeasure
+    );
   if (allPosition)
-    return POSITION(Interval.interval(0, sumWidths()), childMeasure);
+    return CONTINUOUS(
+      Interval.interval(0, sumWidths()),
+      "pinned",
+      childMeasure
+    );
   return UNDEFINED;
 }
 
@@ -482,6 +501,6 @@ export function distributeExtentFold(
   const parts = targetExtents as Extent[];
   if (opts.glue) return Extent(stackClaim(parts));
   const widths = parts.map((e) => e.width);
-  if (isPOSITION(space)) return Extent(Monotonic.add(...widths));
+  if (originIs(space, "pinned")) return Extent(Monotonic.add(...widths));
   return Extent(chainClaim(widths, opts.spacing, opts.anchor));
 }

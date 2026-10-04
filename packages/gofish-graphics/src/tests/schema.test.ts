@@ -30,15 +30,16 @@ import {
   type ColumnType,
 } from "../ast/schema";
 import { getMeasureProvenance } from "../ast/data";
+import { interval } from "../util/interval";
 import { bin } from "../ast/transforms";
 import {
   distributeSpaceFold,
   type StackOrigin,
 } from "../ast/constraints/distribute";
 import {
-  baselineSpan,
   continuousInterval,
   type CONTINUOUS_TYPE,
+  CONTINUOUS,
 } from "../ast/underlyingSpace";
 
 const { chart, spread, stack, rect, filter, palette, Schema } = GoFish as any;
@@ -192,7 +193,7 @@ async function main() {
       origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false }
     ) =>
       distributeSpaceFold(
-        values.map((v) => baselineSpan(v)),
+        values.map((v) => CONTINUOUS(interval(0, v), "free")),
         values.map((_, i) => `k${i}`),
         { spacing: 0, anchor: "edge", glue: true, measure: "r", origin }
       ) as CONTINUOUS_TYPE;

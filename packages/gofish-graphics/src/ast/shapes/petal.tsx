@@ -19,7 +19,7 @@ import {
   Transform,
 } from "../dims";
 import { aesthetic, continuous, Domain } from "../domain";
-import { POSITION, SIZE, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
+import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
 /* Implementation inspired by https://web.archive.org/web/20220808041640/http://bl.ocks.org/herrstucki/6199768 */
@@ -73,11 +73,15 @@ export const Petal = ({
           const d = dims[axis];
           if (isValue(d.min)) {
             const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min), getMeasure(d.min));
+            return CONTINUOUS(interval(min, min), "pinned", getMeasure(d.min));
           }
           if (isValue(d.size)) {
             // data-driven size only — literals handled at layout time.
-            return SIZE(getValue(d.size)!, getMeasure(d.size));
+            return CONTINUOUS(
+              interval(0, getValue(d.size)!),
+              "free",
+              getMeasure(d.size)
+            );
           }
           return UNDEFINED;
         };

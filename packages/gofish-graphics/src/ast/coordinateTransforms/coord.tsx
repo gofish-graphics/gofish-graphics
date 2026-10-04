@@ -23,15 +23,14 @@ import { black } from "../../color";
 import {
   UnderlyingSpace,
   UNDEFINED,
-  POSITION,
   ORDINAL,
   isORDINAL,
-  isPOSITION,
   isUNDEFINED,
-  isBaselineMagnitude,
   forgetAllMeasures,
   continuousInterval,
   type CONTINUOUS_TYPE,
+  CONTINUOUS,
+  originIs,
 } from "../underlyingSpace";
 import { Extent } from "../extent";
 import type { Measure } from "../data";
@@ -182,7 +181,7 @@ export const coord = createNodeOperator(
 
           let xSpace = UNDEFINED;
           const xChildrenPositionSpaces = children.filter((child) =>
-            isPOSITION(child[0])
+            originIs(child[0], "pinned")
           );
           const xChildrenOrdinalSpaces = children.filter(
             (child) => child[0].kind === "ordinal"
@@ -194,7 +193,7 @@ export const coord = createNodeOperator(
           ) {
             const xPos = xChildrenPositionSpaces
               .map((child) => child[0])
-              .filter(isPOSITION);
+              .filter((s) => originIs(s, "pinned"));
             const domain =
               declared?.[0] ??
               IntervalLib.unionAll(...xPos.map((s) => continuousInterval(s)!));
@@ -203,14 +202,14 @@ export const coord = createNodeOperator(
             // transform's business, not the marginal-style corruption the guard
             // targets, so forget on conflict rather than throwing.
             const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
-            xSpace = POSITION(domain, xMeasure, coordTransform);
+            xSpace = CONTINUOUS(domain, "pinned", xMeasure, coordTransform);
           } else if (xChildrenOrdinalSpaces.length > 0) {
             xSpace = unionOrdinal(children, 0);
           }
 
           let ySpace = UNDEFINED;
           const yChildrenPositionSpaces = children.filter((child) =>
-            isPOSITION(child[1])
+            originIs(child[1], "pinned")
           );
           const yChildrenOrdinalSpaces = children.filter(
             (child) => child[1].kind === "ordinal"
@@ -222,14 +221,14 @@ export const coord = createNodeOperator(
           ) {
             const yPos = yChildrenPositionSpaces
               .map((child) => child[1])
-              .filter(isPOSITION);
+              .filter((s) => originIs(s, "pinned"));
             const domain =
               declared?.[1] ??
               IntervalLib.unionAll(...yPos.map((s) => continuousInterval(s)!));
             // See the x branch: coord maps into its own coordinate space, so
             // forget on cross-unit conflict rather than throwing.
             const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
-            ySpace = POSITION(domain, yMeasure, coordTransform);
+            ySpace = CONTINUOUS(domain, "pinned", yMeasure, coordTransform);
           } else if (yChildrenOrdinalSpaces.length > 0) {
             ySpace = unionOrdinal(children, 1);
           }
@@ -340,7 +339,7 @@ export const coord = createNodeOperator(
             // map difference; a plain-number size bypasses both. The former `1`
             // placeholder was a fabricated size σ with no scope behind it.
             const resolved = spaceRef.current?.[axis];
-            if (resolved !== undefined && isPOSITION(resolved)) {
+            if (resolved !== undefined && originIs(resolved, "pinned")) {
               return [
                 undefined,
                 scopes.solvePosition(
@@ -357,7 +356,7 @@ export const coord = createNodeOperator(
             const baseline = children
               .filter((c) => {
                 const s = (c as GoFishNode)._underlyingSpace?.[axis];
-                return s !== undefined && isBaselineMagnitude(s);
+                return s !== undefined && originIs(s, "free");
               })
               .map((c) => c.resolveExtent()[axis]!);
             if (baseline.length > 0) {
@@ -788,7 +787,7 @@ export const coord = createNodeOperator(
                   textItem(lx, ly, label, anchor, "middle", 10, "gray")
                 );
               };
-              if (isPOSITION(xSpace) && xIv) {
+              if (originIs(xSpace, "pinned") && xIv) {
                 const xMin = xIv.min;
                 const xMax = xIv.max;
                 const [, nicedMax] = d3Nice(xMin, xMax, 8);
@@ -833,7 +832,7 @@ export const coord = createNodeOperator(
             }
 
             const yIv = continuousInterval(ySpace);
-            if (axesY && isPOSITION(ySpace) && yIv) {
+            if (axesY && originIs(ySpace, "pinned") && yIv) {
               const yMin = yIv.min;
               const yMax = yIv.max;
               const dataToScreenR = (v: number) =>

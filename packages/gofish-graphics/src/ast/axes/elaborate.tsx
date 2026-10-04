@@ -14,15 +14,14 @@ import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
 import { datum } from "../data";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
-  isPOSITION,
   isORDINAL,
-  isDIFFERENCE,
   isCONTINUOUS,
   isUNDEFINED,
   continuousInterval,
   dataWidth,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
+  originIs,
 } from "../underlyingSpace";
 
 /**
@@ -714,10 +713,10 @@ function elaborationsFor(
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     const iv = continuousInterval(s);
-    if (isPOSITION(s) && iv) {
+    if (originIs(s, "pinned") && iv) {
       nices[dim] = d3Nice(iv.min, iv.max, TICK_COUNT);
       floors[dim] = nices[dim]![0];
-    } else if (isDIFFERENCE(s)) {
+    } else if (originIs(s, "none")) {
       floors[dim] = 0;
     }
   }
@@ -779,7 +778,7 @@ function elaborationsFor(
     const s = spaceFor(dim);
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
-    if (isPOSITION(s)) {
+    if (originIs(s, "pinned")) {
       const e = elaborateContinuousAxis(
         dim,
         nices[dim]!,
@@ -791,7 +790,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
-    } else if (isDIFFERENCE(s)) {
+    } else if (originIs(s, "none")) {
       const e = elaborateDifferenceAxis(
         dim,
         s,

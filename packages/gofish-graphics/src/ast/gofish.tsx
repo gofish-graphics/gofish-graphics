@@ -25,11 +25,11 @@ import type { FlipScope } from "./_displayObject";
 import type { Size } from "./dims";
 import {
   continuousInterval,
-  hasBaseline,
-  isBaselineMagnitude,
   isCONTINUOUS,
   spaceMeasure,
   type UnderlyingSpace,
+  originIs,
+  hasOrigin,
 } from "./underlyingSpace";
 import { niceScope, scopeRootBaseline } from "./extent";
 import { shadowCheckScaleRoot } from "./solver/shadow";
@@ -610,7 +610,7 @@ export async function layout(
   // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
   // guards, the same path the layout engine already relies on.
   const UNSIZED = NaN;
-  const needsCanvas = (s: UnderlyingSpace) => hasBaseline(s);
+  const needsCanvas = (s: UnderlyingSpace) => hasOrigin(s);
   // Concrete canvas for scaling a CONTINUOUS axis (always a real number).
   const canvasW = w ?? DEFAULT_CANVAS_SIZE;
   const canvasH = h ?? DEFAULT_CANVAS_SIZE;
@@ -652,14 +652,14 @@ export async function layout(
   // Anchored roots use the posScale (above) instead; a difference root
   // shrink-to-fits.
   const rootScaleFactors: Size<number | undefined> = [
-    isBaselineMagnitude(niceUnderlyingSpaceX)
+    originIs(niceUnderlyingSpaceX, "free")
       ? scopes.solveSize(
           { kind: "root", rootKey: "root", axis: 0 },
           niceExtentX!.width,
           canvasW
         )
       : undefined,
-    isBaselineMagnitude(niceUnderlyingSpaceY)
+    originIs(niceUnderlyingSpaceY, "free")
       ? scopes.solveSize(
           { kind: "root", rootKey: "root", axis: 1 },
           niceExtentY!.width,

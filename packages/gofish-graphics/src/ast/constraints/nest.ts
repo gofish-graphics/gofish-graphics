@@ -2,11 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import {
-  CONTINUOUS,
-  UnderlyingSpace,
-  isBaselineMagnitude,
-} from "../underlyingSpace";
+import { CONTINUOUS, UnderlyingSpace, originIs } from "../underlyingSpace";
 import { padExtent, type Extent } from "../extent";
 import type { ConstraintRef } from "./shared";
 import type { PlacementFactEmitter } from "./placementFacts";
@@ -116,7 +112,7 @@ export function nestedSpace(
   // the padded outer is itself a baseline magnitude (it must stay "free" so a
   // parent spread's auto-fit solves a scale factor against it); data-positioned
   // or origin-less content keeps `outer`.
-  if (isBaselineMagnitude(innerSpace)) {
+  if (originIs(innerSpace, "free")) {
     return CONTINUOUS(innerSpace.dataInterval, "free", innerSpace.measure);
   }
   return outerSpace;
@@ -131,7 +127,7 @@ export function nestedExtent(
   innerExtent: Extent | undefined,
   padding: number
 ): Extent | undefined {
-  return isBaselineMagnitude(innerSpace)
+  return originIs(innerSpace, "free")
     ? padExtent(innerExtent!, padding)
     : outerExtent;
 }

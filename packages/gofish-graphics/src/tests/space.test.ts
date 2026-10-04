@@ -6,21 +6,14 @@
  * here instead of silently corrupting units / over-nicing. Run via `tsx`.
  */
 import {
-  POSITION,
-  SIZE,
-  DIFFERENCE,
   UNDEFINED,
   ORDINAL,
-  isPOSITION,
-  isDIFFERENCE,
-  isBaselineMagnitude,
   anchorAt,
-  spacePlacement,
-  continuousExtentInterval,
   continuousInterval,
-  baselineSpan,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
+  CONTINUOUS,
+  originIs,
 } from "../ast/underlyingSpace";
 import { Extent, impliedExtent, niceScope } from "../ast/extent";
 import { ScopeRegistry } from "../ast/solver/scopes";
@@ -63,8 +56,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   // units. Overlaying foreign units onto one axis must be REFUSED — this is the
   // marginal-histogram unit guard. (Two-state's `every(origin === 0)` wrongly
   // took these for magnitudes and silently forgot the clash.)
-  const dollars0 = POSITION(interval(0, 100), "dollars");
-  const units0 = POSITION(interval(0, 50), "units");
+  const dollars0 = CONTINUOUS(interval(0, 100), "pinned", "dollars");
+  const units0 = CONTINUOUS(interval(0, 50), "pinned", "units");
   const msg = throws(() => unionChildSpaces([onY(dollars0), onY(units0)], 1));
   ok(
     "overlay of two origin-0 data axes with clashing measures THROWS",
@@ -74,8 +67,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
 
   // Two baseline magnitudes (the old SIZE) in different fields compose into a
   // real extent that carries no single unit — this must NOT throw, just forget.
-  const dollarsMag = SIZE(100, "dollars");
-  const unitsMag = SIZE(50, "units");
+  const dollarsMag = CONTINUOUS(interval(0, 100), "free", "dollars");
+  const unitsMag = CONTINUOUS(interval(0, 50), "free", "units");
   let composed: UnderlyingSpace | undefined;
   const magMsg = throws(() => {
     composed = unionChildSpaces([onY(dollarsMag), onY(unitsMag)], 1);
@@ -87,61 +80,42 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   );
   ok(
     "...and the forgotten composition is itself a baseline magnitude",
-    composed !== undefined && isBaselineMagnitude(composed),
+    composed !== undefined && originIs(composed, "free"),
     composed && JSON.stringify(composed)
   );
 }
 
 console.log("# space: the three origin states are distinct");
 {
-  const mag = SIZE(10); // "free"
-  const atZero = POSITION(interval(0, 10)); // pinned, data-min 0
-  ok("a baseline magnitude is NOT a POSITION", !isPOSITION(mag));
-  ok("a data axis anchored at 0 IS a POSITION", isPOSITION(atZero));
+  const mag = CONTINUOUS(interval(0, 10), "free"); // "free"
+  const atZero = CONTINUOUS(interval(0, 10), "pinned"); // pinned, data-min 0
+  ok("a baseline magnitude is NOT a POSITION", !originIs(mag, "pinned"));
+  ok("a data axis anchored at 0 IS a POSITION", originIs(atZero, "pinned"));
   ok(
     "a data axis anchored at 0 is NOT a baseline magnitude",
-    !isBaselineMagnitude(atZero)
+    !originIs(atZero, "free")
   );
 }
 
-console.log(
-  "# space: the abstract placement lattice is a read of the origin (Phase A)"
-);
+console.log("# space: pinning is a shift of the interval");
 {
   // Pinning a free extent shifts its data interval and pins its origin.
-  const free = SIZE(10) as CONTINUOUS_TYPE;
+  const free = CONTINUOUS(interval(0, 10), "free") as CONTINUOUS_TYPE;
   const anchored = anchorAt(free, 1955);
-  ok(
-    "anchorAt(free, 1955) → placement determined",
-    spacePlacement(anchored) === "determined"
-  );
+  ok("anchorAt(free, 1955) pins the origin", anchored.origin === "pinned");
   ok(
     "anchorAt domain is the free interval shifted to the anchor",
     JSON.stringify(continuousInterval(anchored)) ===
       JSON.stringify(interval(1955, 1965))
   );
 
-  // One interval shape for all three; placement is read off the origin.
-  const cases: [string, CONTINUOUS_TYPE, string, unknown][] = [
-    ["SIZE(10)", SIZE(10) as CONTINUOUS_TYPE, "free", interval(0, 10)],
-    [
-      "POSITION([5,9])",
-      POSITION(interval(5, 9)) as CONTINUOUS_TYPE,
-      "determined",
-      interval(5, 9),
-    ],
-    [
-      "DIFFERENCE(7)",
-      DIFFERENCE(7) as CONTINUOUS_TYPE,
-      "conflict",
-      interval(0, 7),
-    ],
+  // One interval shape for all three origin states.
+  const cases: [string, CONTINUOUS_TYPE, unknown][] = [
+    ["free [0, 10]", CONTINUOUS(interval(0, 10), "free"), interval(0, 10)],
+    ["pinned [5, 9]", CONTINUOUS(interval(5, 9), "pinned"), interval(5, 9)],
+    ["none [0, 7]", CONTINUOUS(interval(0, 7), "none"), interval(0, 7)],
   ];
-  for (const [label, sp, expectedTag, expectedInterval] of cases) {
-    ok(
-      `${label} derives placement === "${expectedTag}"`,
-      spacePlacement(sp) === expectedTag
-    );
+  for (const [label, sp, expectedInterval] of cases) {
     ok(
       `${label} carries the expected data interval`,
       JSON.stringify(sp.dataInterval) === JSON.stringify(expectedInterval)
@@ -157,17 +131,17 @@ console.log("# space: an empty-ORDINAL sibling vetoes SIZE self-scaling");
   // unanchored (DIFFERENCE, no baseline → not self-scaled), exactly as before
   // the 3-kind collapse. Filtering to CONTINUOUS-only would silently drop the
   // ORDINAL and wrongly self-scale.
-  const sized = SIZE(40);
+  const sized = CONTINUOUS(interval(0, 40), "free");
   const composed = unionChildSpaces([onY(sized), onY(ORDINAL([]))], 1);
   ok(
     "SIZE + empty-ORDINAL overlay is a DIFFERENCE (unanchored), not a free magnitude",
-    isDIFFERENCE(composed) && !isBaselineMagnitude(composed)
+    originIs(composed, "none") && !originIs(composed, "free")
   );
   // Sanity: SIZE alone (or with an UNDEFINED sibling) DOES stay a free magnitude.
   const magOnly = unionChildSpaces([onY(sized), onY(UNDEFINED)], 1);
   ok(
     "SIZE + UNDEFINED overlay stays a free baseline magnitude",
-    isBaselineMagnitude(magOnly)
+    originIs(magOnly, "free")
   );
 }
 
@@ -176,16 +150,15 @@ console.log("# space: a free extent keeps its ascent and descent (#773)");
   // A group of signed bars (values 30 and −20): the overlay keeps each side of
   // the baseline. The type carries the data extent; the claim carries the
   // σ-affine sides, pixel intercepts intact.
-  const up = SIZE(30);
-  const down = SIZE(0, undefined, 20);
+  const up = CONTINUOUS(interval(0, 30), "free");
+  const down = CONTINUOUS(interval(-20, 0), "free");
   const upClaim = Extent(M.linear(30, 4));
   const downClaim = Extent(M.ZERO, M.linear(20, 6));
   const u = unionChildSpaces([onY(up), onY(down)], 1) as CONTINUOUS_TYPE;
-  ok("signed overlay stays a free baseline magnitude", isBaselineMagnitude(u));
+  ok("signed overlay stays a free baseline magnitude", originIs(u, "free"));
   ok(
     "the data interval spans both sides of the baseline",
-    JSON.stringify(continuousExtentInterval(u)) ===
-      JSON.stringify(interval(-20, 30))
+    JSON.stringify(u.dataInterval) === JSON.stringify(interval(-20, 30))
   );
   const claim = unionChildExtents(
     [
@@ -204,7 +177,7 @@ console.log("# space: a free extent keeps its ascent and descent (#773)");
     claim.ascent.run(2) === 64 && claim.descent.run(2) === 46
   );
   ok("the claim's width is ascent + descent", claim.width.run(2) === 110);
-  const span = baselineSpan(-20) as CONTINUOUS_TYPE;
+  const span = CONTINUOUS(interval(0, -20), "free") as CONTINUOUS_TYPE;
   ok(
     "baselineSpan of a negative length is all descent",
     JSON.stringify(span.dataInterval) === JSON.stringify(interval(-20, 0))
@@ -218,14 +191,14 @@ console.log("# space: a free extent keeps its ascent and descent (#773)");
 
 console.log("# space: a type implies a claim with no pixel overhead");
 {
-  const implied = impliedExtent(baselineSpan(-20))!;
+  const implied = impliedExtent(CONTINUOUS(interval(0, -20), "free"))!;
   ok(
     "a free type's implied claim is its data sides times σ",
     implied.ascent.run(3) === 0 && implied.descent.run(3) === 60
   );
   ok(
     "a pinned type's implied claim is its data width times σ",
-    impliedExtent(POSITION(interval(5, 9)))!.width.run(2) === 8
+    impliedExtent(CONTINUOUS(interval(5, 9), "pinned"))!.width.run(2) === 8
   );
   ok(
     "an ordinal type implies no claim",
@@ -242,7 +215,10 @@ console.log("# space: a type hook cannot read a claim");
   const leaf = new GoFishNode(
     {
       type: "leaf",
-      resolveUnderlyingSpace: () => [SIZE(5), UNDEFINED],
+      resolveUnderlyingSpace: () => [
+        CONTINUOUS(interval(0, 5), "free"),
+        UNDEFINED,
+      ],
       layout,
     },
     []
@@ -274,7 +250,7 @@ console.log("# space: a pinned scope solves σ from its claim");
 {
   const scopes = new ScopeRegistry();
   const meta = { kind: "root" as const, rootKey: "t", axis: 0 as const };
-  const pinned = POSITION(interval(0, 137));
+  const pinned = CONTINUOUS(interval(0, 137), "pinned");
   // No overhead: the domain fills the box, as before.
   const plain = scopes.solvePosition(meta, pinned, impliedExtent(pinned), 400)!;
   ok(
@@ -295,7 +271,7 @@ console.log("# space: a pinned scope solves σ from its claim");
   );
   // Nicing widens only the data part.
   const [niced, nicedClaim] = niceScope(
-    POSITION(interval(-3, 44)),
+    CONTINUOUS(interval(-3, 44), "pinned"),
     Extent(M.linear(47, 100))
   );
   ok(
@@ -307,9 +283,9 @@ console.log("# space: a pinned scope solves σ from its claim");
   // A pinned child's claim reaches the union whole.
   const u = unionChildExtents(
     [[Extent(M.linear(10, 25)), undefined]],
-    [[POSITION(interval(2, 12)), UNDEFINED]],
+    [[CONTINUOUS(interval(2, 12), "pinned"), UNDEFINED]],
     0,
-    POSITION(interval(2, 12))
+    CONTINUOUS(interval(2, 12), "pinned")
   )!;
   ok(
     "a pinned child spans its data min then its whole claim",

@@ -39,14 +39,13 @@ import * as Monotonic from "../../util/monotonic";
 import type { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import {
-  POSITION,
   UNDEFINED,
   UnderlyingSpace,
   continuousInterval,
-  isBaselineMagnitude,
-  isPOSITION,
   isUNDEFINED,
   spaceMeasure,
+  CONTINUOUS,
+  originIs,
 } from "../underlyingSpace";
 import {
   resolveAlignmentExtent,
@@ -127,7 +126,7 @@ export function resolveLayerAxisSpace(
   // The position/span constraints' OWN measure is the authoritative unit for
   // this axis's data domain (they define it); it wins, falling back to the
   // children's POSITION measure when the constraints are untagged.
-  return POSITION(merged, positionMeasure ?? spaceMeasure(base));
+  return CONTINUOUS(merged, "pinned", positionMeasure ?? spaceMeasure(base));
 }
 
 export function resolveLayerBaseSpaces(
@@ -168,9 +167,9 @@ export function resolveLayerAxisExtent(
   const base = unionChildSpaces(childSpaces, axis);
   const baseExtent = unionChildExtents(childExtents, childSpaces, axis, base);
   if (positionDomain !== undefined) {
-    const datum = POSITION(positionDomain);
+    const datum = CONTINUOUS(positionDomain, "pinned");
     const parts: [UnderlyingSpace, Extent | undefined][] = [
-      ...(isPOSITION(base)
+      ...(originIs(base, "pinned")
         ? [[base, baseExtent] as [UnderlyingSpace, Extent | undefined]]
         : []),
       [datum, impliedExtent(datum)],
@@ -183,7 +182,7 @@ export function resolveLayerAxisExtent(
     );
   }
   const extent = baseExtent;
-  return extent !== undefined && isBaselineMagnitude(space)
+  return extent !== undefined && originIs(space, "free")
     ? scaleExtent(scale, extent)
     : extent;
 }
@@ -471,7 +470,7 @@ export function composePlanExtents(
     // layer σ-solves against via `width.inverse`. An anchored POSITION (from an
     // align fold) is driven by its posScale, not a σ-budget, so it must NOT
     // contribute a sizeDomain (else the layer derives a spurious scale factor).
-    if (isBaselineMagnitude(composed)) sizeDomain[axis] = extent!.width;
+    if (originIs(composed, "free")) sizeDomain[axis] = extent!.width;
   }
   return {
     covered,

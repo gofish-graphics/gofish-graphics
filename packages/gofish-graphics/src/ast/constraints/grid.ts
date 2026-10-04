@@ -44,8 +44,8 @@ import { sliceExtent } from "./folds";
 import {
   ORDINAL,
   UNDEFINED,
-  isBaselineMagnitude,
   type UnderlyingSpace,
+  originIs,
 } from "../underlyingSpace";
 import type { ScopeRegistry } from "../solver/scopes";
 import type { PlacementFactEmitter } from "./placementFacts";
@@ -113,7 +113,7 @@ const cellClaim = (
 ): Monotonic.Monotonic | undefined => {
   if (!(cell instanceof GoFishNode)) return undefined;
   const sp = cell._underlyingSpace?.[axis];
-  return sp !== undefined && isBaselineMagnitude(sp)
+  return sp !== undefined && originIs(sp, "free")
     ? cell.resolveExtent()[axis]!.width
     : undefined;
 };

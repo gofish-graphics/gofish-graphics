@@ -17,9 +17,9 @@ import {
   dataSides,
   dataWidth,
   isCONTINUOUS,
-  isPOSITION,
   niceContinuous,
   type UnderlyingSpace,
+  originIs,
 } from "./underlyingSpace";
 
 /**
@@ -103,7 +103,7 @@ export const niceScope = <S extends UnderlyingSpace | undefined>(
   space: S,
   extent: Extent | undefined
 ): [S, Extent | undefined] => {
-  if (space === undefined || !isPOSITION(space)) return [space, extent];
+  if (space === undefined || !originIs(space, "pinned")) return [space, extent];
   const niced = niceContinuous(space);
   if (extent === undefined) return [niced, undefined];
   const widened = dataWidth(niced as typeof space) - dataWidth(space);

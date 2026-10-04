@@ -52,13 +52,12 @@ import {
 import { discretePosition, value } from "../ast/data";
 import { pxOf, type AxisMap } from "../ast/domain";
 import {
-  POSITION,
-  SIZE,
   UNDEFINED,
   continuousInterval,
   dataWidth,
-  isBaselineMagnitude,
   spaceMeasure,
+  CONTINUOUS,
+  originIs,
 } from "../ast/underlyingSpace";
 import { Extent, impliedExtent } from "../ast/extent";
 import { ScopeRegistry } from "../ast/solver/scopes";
@@ -576,7 +575,7 @@ console.log("# constraint confluence: nest size dependency planning");
 
   const childSpaces = [
     [UNDEFINED, UNDEFINED],
-    [SIZE(10), SIZE(4)],
+    [CONTINUOUS(interval(0, 10), "free"), CONTINUOUS(interval(0, 4), "free")],
   ] as const;
   const insideOutPlan = {
     order: [1, 0],
@@ -590,9 +589,9 @@ console.log("# constraint confluence: nest size dependency planning");
   const folded = applyNestSpacePlan(childSpaces, insideOutPlan);
   ok(
     "inside-out nest space fold derives a free outer with the inner's data extent",
-    isBaselineMagnitude(folded[0][0]) &&
+    originIs(folded[0][0], "free") &&
       dataWidth(folded[0][0]) === 10 &&
-      isBaselineMagnitude(folded[0][1]) &&
+      originIs(folded[0][1], "free") &&
       dataWidth(folded[0][1]) === 4
   );
   const foldedClaims = applyNestExtentPlan(
@@ -616,18 +615,28 @@ console.log("# constraint confluence: nest size dependency planning");
   );
 
   const resolved = resolveLayerBaseSpaces(
-    [[SIZE(10), POSITION(interval(5, 15), "child")]],
+    [
+      [
+        CONTINUOUS(interval(0, 10), "free"),
+        CONTINUOUS(interval(5, 15), "pinned", "child"),
+      ],
+    ],
     { y: interval(0, 20), yMeasure: "pin" }
   );
   ok(
     "transform.scale leaves the free magnitude's data extent alone",
-    isBaselineMagnitude(resolved[0]) && dataWidth(resolved[0]) === 10
+    originIs(resolved[0], "free") && dataWidth(resolved[0]) === 10
   );
   ok(
     "transform.scale scales the free magnitude's claim",
     resolveLayerAxisExtent(
       [[Extent(Monotonic.linear(10, 0)), undefined]],
-      [[SIZE(10), POSITION(interval(5, 15), "child")]],
+      [
+        [
+          CONTINUOUS(interval(0, 10), "free"),
+          CONTINUOUS(interval(5, 15), "pinned", "child"),
+        ],
+      ],
       0,
       3,
       undefined,
@@ -849,7 +858,7 @@ console.log("# constraint confluence: child posScale forwarding");
   const baseY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
   const effectiveX: AxisMap = { sigma: 10, domainMin: 0, pxMin: 0 }; // v * 10
   const effectiveY: AxisMap = { sigma: 20, domainMin: 0, pxMin: 0 }; // v * 20
-  const positionSpace = POSITION(interval(0, 10));
+  const positionSpace = CONTINUOUS(interval(0, 10), "pinned");
 
   const noOwnedAxisPlan = buildPositionScalePlan(
     [false, false],
@@ -1247,8 +1256,8 @@ console.log("# constraint confluence: child scale factor planning");
 {
   const inheritedX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
   const inheritedY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
-  const positionSpace = POSITION(interval(0, 10));
-  const sizeSpace = SIZE(20);
+  const positionSpace = CONTINUOUS(interval(0, 10), "pinned");
+  const sizeSpace = CONTINUOUS(interval(0, 20), "free");
 
   const selfScaled = buildChildScalePlan(
     [positionSpace, sizeSpace],
@@ -1338,8 +1347,8 @@ console.log("# constraint confluence: child scale factor planning");
   const shared = buildChildScalePlan(
     [undefined, undefined],
     [undefined, undefined],
-    [SIZE(25), UNDEFINED],
-    [impliedExtent(SIZE(25)), undefined],
+    [CONTINUOUS(interval(0, 25), "free"), UNDEFINED],
+    [impliedExtent(CONTINUOUS(interval(0, 25), "free")), undefined],
     [100, 80],
     [2, 3],
     [inheritedX, inheritedY],

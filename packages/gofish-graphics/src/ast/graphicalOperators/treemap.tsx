@@ -23,7 +23,7 @@ import {
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
-import { POSITION, SIZE, UnderlyingSpace } from "../underlyingSpace";
+import { UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import * as Interval from "../../util/interval";
 import { createOperator } from "../marks/createOperator";
@@ -117,8 +117,12 @@ const Treemap = createNodeOperator(
           // positioned box that fills the slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace =>
             isValue(dims[i].size)
-              ? SIZE(getValue(dims[i].size!)!, getMeasure(dims[i].size))
-              : POSITION(interval(0, 1));
+              ? CONTINUOUS(
+                  interval(0, getValue(dims[i].size!)!),
+                  "free",
+                  getMeasure(dims[i].size)
+                )
+              : CONTINUOUS(interval(0, 1), "pinned");
           return [axisSpace(0), axisSpace(1)];
         },
         layout: (_shared, size, scales, childAsts, node) => {
