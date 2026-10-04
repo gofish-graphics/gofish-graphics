@@ -581,24 +581,34 @@ alignment line, and pins each child there. A strategy returns one free-axis
 number per child, so it cannot move the data axis. `applyConstraints` also
 passes the data axis's pixels per data unit (the layer's position-scale
 `sigma`), which `noise` needs to turn a `smoothing` bandwidth in data units
-into pixels. `smoothing: Infinity` and `smoothing: "silverman"` need no scale:
-Silverman's rule reads the dots' own pixel positions, and on a linear axis the
-rule in pixels is the rule in data units times the scale. The
+into pixels. `smoothing: 0` (the default), `smoothing: Infinity` and
+`smoothing: "silverman"` need no scale. 0 and Infinity are the same in any
+unit. Silverman's rule reads the dots' own pixel positions, and on a linear
+axis the rule in pixels is the rule in data units times the scale. The
 strategies share one broad phase, `NeighborGrid`, a uniform grid of square
 cells kept as lists in insertion order: `separate` buckets placed dots on the
 data axis, and `noise`'s `"blue"` on both axes. `separate` merges each dot's
 blocked intervals into disjoint runs in one sorted sweep and takes the nearest
 free candidate. `noise`'s outline (`noiseOutline`) is a Gaussian density
-estimate: each dot adds a bell with standard deviation `smoothing`, and the
-outline follows the sum. The bells are summed on a grid, not pair by pair:
+estimate in two steps. First each dot is blurred by a bell of the
+`smoothing` bandwidth `s`, which estimates where the data is. Then each dot is
+blurred by its own footprint, a bell of `σ_dot = pitch/√(2π)` whose peak is
+one dot spread over one dot width. Gaussians compose by adding variances, so
+each dot adds one bell with `σ = √(σ_dot² + s²)`, and the outline follows the
+sum. The bells are summed on a grid, not pair by pair:
 each dot's weight is split between its two nearest grid points, the grid is
 convolved with the bell cut off at four bandwidths, and each dot reads the sum
 back by linear interpolation, the way R's `density()` bins. At the ends of the
-data range the sum is divided by the part of the bell at that point that lies
-inside the range, so a cut off bell does not thin the ends; this keeps the
-outline's total size about the same for every bandwidth. The narrowest bell
-is as tall as one dot spread over one dot width, so a lone dot sits on the
-line. A scatter with an overlap strategy reports no
+data range the sum is divided by the part of the smoothing bell (bandwidth
+`s`, not `σ`) at that point that lies inside the range, so a cut off bell
+does not thin the ends; this keeps the outline's total size about the same
+for every bandwidth. The footprint step is not corrected, since it is the
+dot's size, not missing data. With `s = 0` (the
+default, and what Silverman's rule gives for fewer than two dots or equal
+values) the bell is the footprint alone and nothing is corrected, so a lone
+dot sits on the line even at the end of the range. The footprint is the
+smallest blur, since a smaller bell would let dots with nearly equal values
+draw on top of each other. A scatter with an overlap strategy reports no
 size on its free axis in the space pass (a fixed-pixel dot's space is
 `UNDEFINED` there), and its real extent comes from where the children land, in
 the layer's box fold, the way a text label's extent is measured at layout.

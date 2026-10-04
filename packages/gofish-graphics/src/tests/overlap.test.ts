@@ -378,12 +378,26 @@ console.log("# noise: outline and offsets");
     0
   );
   check("a lone dot sits on the line", lone[1] === 0, `${lone[1]}`);
-  // At the ends of the data range, the edge correction lifts a lone dot a
-  // little: part of its bell falls outside the range.
+  // The edge correction is for the smoothing only, not the dot's own size,
+  // so with no smoothing a lone dot at an end also sits on the line.
   check(
-    "a lone dot at an end of the range barely moves (under 0.15 dot widths)",
-    lone[0] < 0.15 * 4 && lone[2] < 0.15 * 4,
+    "a lone dot at an end of the range sits on the line",
+    lone[0] < 1e-9 && lone[2] < 1e-9,
     `${lone[0]}, ${lone[2]}`
+  );
+  const smoothedLone = noiseOutline(
+    [
+      { at: 0, r: 2 },
+      { at: 50.3, r: 2 },
+      { at: 100, r: 2 },
+    ],
+    0,
+    3
+  );
+  check(
+    "with smoothing, lone dots (ends included) still sit on the line",
+    Array.from(smoothedLone).every((h) => h < 1e-9),
+    `${Array.from(smoothedLone)}`
   );
   const tied = noiseOutline(
     [
@@ -412,10 +426,13 @@ console.log("# noise: outline and offsets");
     twoPeaks[50] < 0.01 && twoPeaks[0] > 10 && twoPeaks[51] > 10,
     `${twoPeaks[0]}, ${twoPeaks[50]}, ${twoPeaks[51]}`
   );
-  // The grid sum matches the exact sum over every pair of dots.
+  // The grid sum matches the exact sum over every pair of dots: bells of
+  // σ = √(σ_dot² + s²), divided by the smoothing bell's weight (bandwidth s)
+  // inside the extent.
   {
-    const sigma = 6;
+    const s = 6;
     const pitch = 4;
+    const sigma = Math.sqrt(pitch ** 2 / (2 * Math.PI) + s * s);
     const lo = Math.min(...spreadItems.map((it) => it.at)) - pitch / 2;
     const hi = Math.max(...spreadItems.map((it) => it.at)) + pitch / 2;
     const Phi = (z: number) => {
@@ -430,18 +447,16 @@ console.log("# noise: outline and offsets");
       }
       return (s * h) / Math.sqrt(2 * Math.PI);
     };
-    const got = noiseOutline(spreadItems, 0, sigma);
+    const got = noiseOutline(spreadItems, 0, s);
     let worst = 0;
     for (const i of [0, 7, 99, 250, 399]) {
       const x = spreadItems[i].at;
       let sum = 0;
       for (const it of spreadItems)
         sum += Math.exp(-((x - it.at) ** 2) / (2 * sigma * sigma));
-      const inside =
-        sigma *
-        Math.sqrt(2 * Math.PI) *
-        (Phi((hi - x) / sigma) - Phi((lo - x) / sigma));
-      const want = Math.max(0, (pitch * sum) / inside - 1) * pitch;
+      const density = sum / (sigma * Math.sqrt(2 * Math.PI));
+      const inside = Phi((hi - x) / s) - Phi((lo - x) / s);
+      const want = Math.max(0, (pitch * density) / inside - 1) * pitch;
       worst = Math.max(worst, Math.abs(got[i] - want) / Math.max(want, 1));
     }
     check(
@@ -458,15 +473,19 @@ console.log("# noise: outline and offsets");
     ) < 1e-5
   );
   check(
-    "Silverman's rule falls back to the standard deviation when the IQR is 0",
+    "Silverman's rule uses the standard deviation when the IQR is 0",
     Math.abs(
       silvermanBandwidth([1, 1, 1, 1, 5].map((at) => ({ at, r: 1 })))! -
         1.166865
     ) < 1e-5
   );
   check(
-    "Silverman's rule gives no bandwidth for one value",
-    silvermanBandwidth([3, 3, 3].map((at) => ({ at, r: 1 }))) === undefined
+    "Silverman's rule gives 0 for one value",
+    silvermanBandwidth([3, 3, 3].map((at) => ({ at, r: 1 }))) === 0
+  );
+  check(
+    "Silverman's rule gives 0 for fewer than two dots",
+    silvermanBandwidth([{ at: 3, r: 1 }]) === 0
   );
 
   for (const randomness of ["blue", "quasi", "uniform"] as const) {
@@ -534,8 +553,17 @@ console.log("# noise(), sina(), jitter(): strategy objects");
     ) === true
   );
   check(
-    "a non-positive smoothing throws",
-    (await errorOf(() => noise({ smoothing: 0 })))?.includes("smoothing") ===
+    "smoothing 0 is accepted",
+    noise({ smoothing: 0 }).smoothing === 0
+  );
+  check(
+    "a negative smoothing throws",
+    (await errorOf(() => noise({ smoothing: -1 })))?.includes("smoothing") ===
+      true
+  );
+  check(
+    "a NaN smoothing throws",
+    (await errorOf(() => noise({ smoothing: NaN })))?.includes("smoothing") ===
       true
   );
   check(
@@ -549,6 +577,18 @@ console.log("# noise(), sina(), jitter(): strategy objects");
     noise({ smoothing: Infinity }).smoothing === Infinity
   );
   const items = [0, 1, 1, 2, 2, 2, 3, 3, 4].map((at) => ({ at: at * 3, r: 2 }));
+  const byDefault = resolveOverlap(noise(), items, "middle");
+  const zero = resolveOverlap(noise({ smoothing: 0 }), items, "middle");
+  check(
+    "smoothing 0 needs no data scale and equals the default",
+    zero.every((y, i) => y === byDefault[i])
+  );
+  check(
+    "a tiny smoothing is nearly the default (bells add in quadrature)",
+    resolveOverlap(noise({ smoothing: 1e-6 }), items, "middle", 1).every(
+      (y, i) => Math.abs(y - byDefault[i]) < 1e-6
+    )
+  );
   check(
     "sina and jitter need no data scale (no unit to convert)",
     resolveOverlap(sina(), items, "middle").length === items.length &&

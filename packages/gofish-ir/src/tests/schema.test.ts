@@ -650,6 +650,12 @@ console.log("\n# Non-finite numbers");
     JSON.stringify(silverman.errors)
   );
   check("noise smoothing rejects another name", !validate(doc("scott")).valid);
+  const zero = validate(doc(0));
+  check(
+    "noise smoothing accepts 0 (the default)",
+    zero.valid,
+    JSON.stringify(zero.errors)
+  );
 
   const raw = {
     a: Infinity,

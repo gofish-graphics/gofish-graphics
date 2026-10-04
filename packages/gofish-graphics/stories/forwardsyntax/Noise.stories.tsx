@@ -115,7 +115,7 @@ const denseStory = (overlap: OverlapStrategy): StoryObj => ({
   },
 });
 
-// The default: blue noise in an outline of bells one dot wide.
+// The default: blue noise, smoothing 0 (no smoothing beyond the dots' size).
 export const DenseDefault = denseStory(noise({ padding: 0.5 }));
 // A smoother outline: bells with a bandwidth of 100 g.
 export const DenseSmoothing = denseStory(

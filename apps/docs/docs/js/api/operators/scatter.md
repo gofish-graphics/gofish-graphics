@@ -174,14 +174,22 @@ dot far away counts almost nothing. Only each bump is bell-shaped. The sum
 follows the data: it can have several peaks, lean to one side, or show a
 spike where many dots share one value.
 
-The width of each bump is the `smoothing` option. This width is called the
-bandwidth. A narrow bandwidth keeps small spikes in the data. A wide one
-blurs them into a broad hill. Changing it changes the shape of the outline
-but not its total size.
+Each bump is made in two steps.
 
-At the two ends of the data, part of each bump would fall past the last dot,
-where there are no dots. The outline makes up for that part, so the ends
-are not drawn too thin.
+1. The first step estimates where the data is. Each dot is blurred by the
+   `smoothing` option. This width is called the bandwidth. A narrow
+   bandwidth keeps small spikes in the data. A wide one blurs them into a
+   broad hill. Changing it changes the shape of the outline but not its
+   total size. At the two ends of the data, part of this blur would fall
+   past the last dot, where there are no dots. The outline makes up for that
+   part, so the ends are not drawn too thin.
+2. The second step gives each dot its own size. Each dot is blurred again by
+   a bump about as wide as the dot. Nothing is made up at the ends for this
+   step, because it is the dot itself, not missing data. So a lone dot sits
+   on the line, at the end of the data as well as in the middle.
+
+With `smoothing` 0, only the second step blurs the dots. A smaller blur than
+that would let dots with nearly equal values draw on top of each other.
 
 ### Options
 
@@ -198,16 +206,19 @@ are not drawn too thin.
     clump and leave gaps. It is the default for `jitter`.
 - `smoothing` is the bandwidth of each bump, in data units of the data axis,
   for example grams. It can be:
-  - a number. The default for `noise` is the narrowest bump, about one dot
-    wide, so the outline follows the data closely, and a pile of equal values
-    shows as a spike. A smaller number counts as that narrowest bump.
+  - a number, 0 or more. The default for `noise` is 0, which means no
+    smoothing beyond the size of the dots. The outline follows the data
+    closely, and a pile of equal values shows as a spike. A truly zero blur
+    would let dots with nearly equal values draw on top of each other, so
+    each bump is always at least as wide as a dot, and the smoothing widens
+    it from there.
   - `"silverman"`, the default for `sina`. The bandwidth is worked out from
     the data with Silverman's rule of thumb, `0.9 · min(sd, IQR / 1.34) ·
 n^(-1/5)`, separately for each group. This is the rule that ggforce's
     `geom_sina` and R's `density()` use, so the outline is the curve a violin
     plot draws. Spread out data gets wider bumps, and more data gets narrower
-    ones. When every dot in a group has the same value, it uses the narrowest
-    bump.
+    ones. When a group has fewer than two dots, or every dot in it has the
+    same value, the rule gives 0, so each bump is just the size of a dot.
   - `Infinity`, the default for `jitter`. Every bump is flat, so the outline
     is a band of fixed width. With `randomness: "uniform"`, that is classic
     jitter, as in seaborn's `stripplot` or ggplot's `position_jitter`.

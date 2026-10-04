@@ -1956,10 +1956,10 @@ def _make_noise(
     if smoothing is not None and smoothing != "silverman" and not (
         isinstance(smoothing, (int, float))
         and not isinstance(smoothing, bool)
-        and smoothing > 0
+        and smoothing >= 0
     ):
         raise ValueError(
-            f'{name}: smoothing must be a positive number of data units, math.inf, '
+            f'{name}: smoothing must be a non-negative number of data units, math.inf, '
             f'or "silverman", got {smoothing!r}'
         )
     if padding is not None and not (padding >= 0 and math.isfinite(padding)):
@@ -2008,7 +2008,11 @@ def noise(
             neighbors, ``"quasi"`` spreads dots by rank (fastest),
             ``"uniform"`` draws seeded uniform offsets.
         smoothing: The bandwidth of each dot's bell, in data units of the
-            data axis. Default: one dot wide. ``math.inf`` gives a flat
+            data axis. Default 0: no smoothing beyond the dots' own size.
+            Each bell is always at least as wide as a dot, because with no
+            blur at all, dots with nearly equal values would draw on top of
+            each other; the smoothing widens it from there. ``math.inf``
+            gives a flat
             outline (classic fixed-band jitter). ``"silverman"`` computes it
             from the data, as :func:`sina` does.
         padding: Pixels added to each dot's width. Default 0.

@@ -126,8 +126,9 @@ def test_scatter_serializes_noise_overlap():
         scatter(x="mass", overlap={"kind": "separate", "randomness": "blue"})
     with pytest.raises(ValueError):
         noise(randomness="pink")
+    assert noise(smoothing=0) == {"kind": "noise", "smoothing": 0}
     with pytest.raises(ValueError):
-        noise(smoothing=0)
+        noise(smoothing=-1)
     with pytest.raises(ValueError):
         noise(smoothing=float("nan"))
     with pytest.raises(ValueError):

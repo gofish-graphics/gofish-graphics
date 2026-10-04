@@ -32,8 +32,9 @@ export type NoiseRandomness = "blue" | "quasi" | "uniform";
 
 /**
  * `noise()`'s `smoothing`: the bandwidth of each dot's bell, in data units of
- * the data axis; `Infinity` for a flat band; or `"silverman"` to compute it
- * from the data (Silverman's rule of thumb, as `sina()` does).
+ * the data axis (0 or more; 0, the default, is no smoothing beyond the dots'
+ * own size); `Infinity` for a flat band; or `"silverman"` to compute it from
+ * the data (Silverman's rule of thumb, as `sina()` does).
  */
 export type NoiseSmoothing = number | "silverman";
 
@@ -100,10 +101,10 @@ function makeNoise(name: string, opts: NoiseOptions): NoiseStrategy {
   if (
     smoothing !== undefined &&
     smoothing !== "silverman" &&
-    !(typeof smoothing === "number" && smoothing > 0)
+    !(typeof smoothing === "number" && smoothing >= 0)
   )
     throw new Error(
-      `[gofish] ${name}: smoothing must be a positive number of data units, ` +
+      `[gofish] ${name}: smoothing must be a non-negative number of data units, ` +
         `Infinity, or "silverman", got ${JSON.stringify(smoothing)}`
     );
   checkPadding(name, padding);
@@ -134,10 +135,13 @@ function makeNoise(name: string, opts: NoiseOptions): NoiseStrategy {
  *   (ggbeeswarm's quasirandom), the fastest; `"uniform"` draws seeded uniform
  *   offsets, classic jitter.
  * @param smoothing The bandwidth of each dot's bell (its standard deviation),
- *   in data units of the data axis. Omitted: the narrowest bell, one dot wide
- *   (as tall as one dot spread over one dot width). `Infinity`: a flat
- *   outline, the fixed band of classic jitter. `"silverman"`: computed from
- *   the dots, as `sina()` does.
+ *   in data units of the data axis. Default 0: no smoothing beyond the dots'
+ *   own size. Each dot's bell is always at least as wide as the dot itself
+ *   (see {@link noiseOutline}), because with no blur at all, dots with
+ *   nearly equal values would draw on top of each other; the smoothing widens
+ *   it from there.
+ *   `Infinity`: a flat outline, the fixed band of classic jitter.
+ *   `"silverman"`: computed from the dots, as `sina()` does.
  * @param padding Pixels added to each dot's width when the outline is sized
  *   and, for `"blue"`, when distances are compared. Default 0.
  * @param seed Seed for `"blue"` and `"uniform"`. Default 0, so a render is the
@@ -216,13 +220,15 @@ export function resolveOverlap(
     case "noise": {
       // The bandwidth in pixels. Silverman's rule reads the dots' own
       // positions, and the data axis is linear, so the rule in pixels is the
-      // rule in data units times the scale: no data scale is needed. Infinity
-      // is Infinity in any unit. Only a finite number needs the scale.
-      const { smoothing } = strategy;
-      let bandwidthPx: number | undefined;
+      // rule in data units times the scale: no data scale is needed. 0 and
+      // Infinity are the same in any unit. Only another number needs the
+      // scale.
+      const smoothing = strategy.smoothing ?? 0;
+      let bandwidthPx: number;
       if (smoothing === "silverman") bandwidthPx = silvermanBandwidth(items);
-      else if (smoothing === Infinity) bandwidthPx = Infinity;
-      else if (smoothing !== undefined) {
+      else if (smoothing === 0 || smoothing === Infinity)
+        bandwidthPx = smoothing;
+      else {
         if (pxPerUnit === undefined)
           throw new Error(
             "[gofish] noise: `smoothing` is in data units, but no data " +
@@ -507,18 +513,14 @@ function erf(x: number): number {
 /**
  * Silverman's rule of thumb for a bandwidth, as R's `bw.nrd0` (ggforce's
  * `geom_sina` default): `0.9 · min(sd, IQR / 1.34) · n^(-1/5)`, over the dots'
- * positions on the data axis, in pixels. As in R, a zero IQR falls back to
- * the standard deviation.
- *
- * R falls back further, to `|x[1]|` and then 1, when every value is the same.
- * Those are in data units and depend on where zero is, so here every dot at
- * one value (or fewer than two dots) returns `undefined`: the narrowest bell,
- * one dot wide. With one pile of dots the outline barely depends on the
- * bandwidth, since every bell is centered on the same spot.
+ * positions on the data axis, in pixels. As in R, a zero IQR uses the
+ * standard deviation instead. Fewer than two dots, or every dot at one value,
+ * gives 0: no smoothing, so each bell is just the dot's own size (see
+ * {@link noiseOutline}).
  */
-export function silvermanBandwidth(items: OverlapItem[]): number | undefined {
+export function silvermanBandwidth(items: OverlapItem[]): number {
   const n = items.length;
-  if (n < 2) return undefined;
+  if (n < 2) return 0;
   let mean = 0;
   for (const it of items) mean += it.at;
   mean /= n;
@@ -535,9 +537,7 @@ export function silvermanBandwidth(items: OverlapItem[]): number | undefined {
       : sorted[k];
   };
   const iqr = quantile(0.75) - quantile(0.25);
-  let lo = Math.min(sd, iqr / 1.34);
-  if (!(lo > 0)) lo = sd;
-  if (!(lo > 0)) return undefined;
+  const lo = iqr > 0 ? Math.min(sd, iqr / 1.34) : sd;
   return 0.9 * lo * Math.pow(n, -0.2);
 }
 
@@ -545,39 +545,55 @@ export function silvermanBandwidth(items: OverlapItem[]): number | undefined {
  * The noise outline: the half-width, in pixels, of the band each dot may move
  * in.
  *
- * Each dot adds a small bell-shaped bump (a Gaussian with standard deviation
- * `σ`, the bandwidth) centered on its position, and the outline follows the
- * sum of the bumps. A dot near `x` adds a lot there, a dot farther away less,
- * and a dot far away almost nothing. So the outline follows the data: it can
- * have several peaks, a skew, or a spike.
+ * Each dot adds a small bell-shaped bump (a Gaussian) centered on its
+ * position, and the outline follows the sum of the bumps. A dot near `x` adds
+ * a lot there, a dot farther away less, and a dot far away almost nothing. So
+ * the outline follows the data: it can have several peaks, a skew, or a
+ * spike.
  *
- * Let `pitch` be the mean dot diameter plus the padding, and the dots' extent
- * the data range widened by half a pitch at each end. At dot `i`, at `x`,
+ * Let `pitch` be the mean dot diameter plus the padding. The bump is made in
+ * two steps.
  *
- *     ρ = pitch · Σⱼ φσ(x − xⱼ) / M(x),   M(x) = ∫ over the extent of φσ(t − x) dt
+ * 1. Where the data is: each dot is blurred by the smoothing, a bell of
+ *    bandwidth `s` (`bandwidthPx`). Only this step is corrected at the ends
+ *    (below), since only it spreads a dot's weight to where there is no data.
+ * 2. How big each dot is: each dot is blurred again by its own footprint, a
+ *    bell of bandwidth `σ_dot = pitch / √(2π)`, about four tenths of a pitch:
+ *    the bell whose peak, `1 / pitch`, is as tall as one dot spread evenly
+ *    over one dot width. This step is not corrected: it is the dot's size,
+ *    not missing data.
  *
- * where `φσ` is the bell, normalized to weight 1. `Σⱼ φσ` is a density
- * estimate scaled to the dot count, so `ρ` is how many dots share one dot
- * width of the axis there. The outline is
+ * Blurring by one bell and then another is blurring by one bell whose
+ * variance is the sum, so each dot's bump is one bell with
+ * `σ = √(σ_dot² + s²)`.
+ *
+ * Let the dots' extent be the data range widened by half a pitch at each end.
+ * At dot `i`, at `x`,
+ *
+ *     ρ = pitch · Σⱼ φσ(x − xⱼ) / M(x),   M(x) = ∫ over the extent of φs(t − x) dt
+ *
+ * where `φσ` is a bell normalized to weight 1, and `M ≡ 1` when `s = 0`.
+ * `Σⱼ φσ` is a density estimate scaled to the dot count, so `ρ` is how many
+ * dots share one dot width of the axis there. The outline is
  *
  *     half(x) = LOOSENESS · pitch/2 · max(0, ρ − 1)
  *
  * which is LOOSENESS times the half-height a tight column of those dots would
  * need, less the dot itself (so a lone dot sits on the line).
  *
- * - The edge correction: near the ends of the extent part of each bell falls
- *   outside, where no dot can be, so the sum is divided by the weight `M(x)`
- *   of the bell at `x` that lies inside the extent. (This is a box window
- *   divided by its length inside the extent, done for a bell.) With it the
- *   density estimate integrates to about the dot count for every `σ`, so the
- *   cloud's total area stays about the same as the bandwidth changes; only
- *   its shape changes.
- * - The narrowest bell is `σ = pitch / √(2π)`, about four tenths of a pitch:
- *   the bell whose peak, `1 / pitch`, is as tall as one dot spread evenly over
- *   one dot width. So a lone dot has `ρ = 1` and sits on the line, and `k`
- *   dots at one value have `ρ ≈ k`. This is the default (one dot wide); a
- *   smaller `σ` counts as this one.
- * - `σ` = Infinity: every bell is flat over the extent, so `ρ` is the dot
+ * - The edge correction: near the ends of the extent part of each smoothing
+ *   bell falls outside, where no dot can be, so the sum is divided by the
+ *   weight `M(x)` of the smoothing bell at `x` that lies inside the extent.
+ *   (This is a box window divided by its length inside the extent, done for a
+ *   bell.) With it the density estimate integrates to about the dot count for
+ *   every `s`, so the cloud's total area stays about the same as the
+ *   smoothing changes; only its shape changes.
+ * - With no smoothing (`s = 0`, the default) the bell is the dot's own
+ *   footprint and nothing is corrected, so a lone dot, at the end of the data
+ *   or inside it, has `ρ = 1` and sits on the line, and `k` dots at one value
+ *   have `ρ ≈ k`. The footprint is the smallest blur. With less, dots with
+ *   nearly equal values would draw on top of each other.
+ * - `s` = Infinity: every bell is flat over the extent, so `ρ` is the dot
  *   count over the extent length for every dot, and the outline is flat.
  *
  * The bells are summed on a grid, not dot by dot (a sum over every pair of
@@ -590,12 +606,13 @@ export function silvermanBandwidth(items: OverlapItem[]): number | undefined {
  * data range over the step and the bell has 2 · TRUNCATE · STEPS_PER_BANDWIDTH
  * taps.
  *
- * @param bandwidthPx `σ` in pixels. Omitted: the narrowest bell.
+ * @param bandwidthPx The smoothing `s`, in pixels. Default 0: no smoothing
+ *   beyond the dots' own size.
  */
 export function noiseOutline(
   items: OverlapItem[],
   padding: number,
-  bandwidthPx?: number
+  bandwidthPx = 0
 ): Float64Array {
   const n = items.length;
   const half = new Float64Array(n);
@@ -612,7 +629,10 @@ export function noiseOutline(
   if (!(pitch > 0)) return half;
   const extentLo = lo - pitch / 2;
   const extentHi = hi + pitch / 2;
-  const sigma = Math.max(bandwidthPx ?? 0, pitch / Math.sqrt(2 * Math.PI));
+  // Step 2's bell, the dot's own size, and step 1's, the smoothing, composed:
+  // Gaussians add variances.
+  const dotSigma = pitch / Math.sqrt(2 * Math.PI);
+  const sigma = Math.sqrt(dotSigma * dotSigma + bandwidthPx * bandwidthPx);
   const setHalf = (i: number, rho: number) => {
     half[i] = (LOOSENESS * pitch * Math.max(0, rho - 1)) / 2;
   };
@@ -647,12 +667,13 @@ export function noiseOutline(
     for (let k = a; k <= b; k++) sum[k] += w * bell[Math.abs(k - m)];
   }
 
-  // ρ = pitch · Σ φσ / M. Both carry the factor 1/(σ√(2π)), which cancels:
-  // the unnormalized sum over the unnormalized weight inside the extent,
-  // σ·√(π/2)·(erf(a) + erf(b)) with a, b ≥ 0 the distances to the two ends in
-  // units of σ√2 (a sum, not a difference, so a very wide bell stays exact).
-  const inside = sigma * Math.sqrt(Math.PI / 2);
-  const toErf = 1 / (sigma * Math.SQRT2);
+  // ρ = pitch · Σ φσ / M. `Σ φσ` is the unnormalized sum times
+  // 1/(σ√(2π)). M is the weight of the smoothing bell (bandwidth s, not σ)
+  // inside the extent, (erf(a) + erf(b)) / 2 with a, b ≥ 0 the distances to
+  // the two ends in units of s√2 (a sum, not a difference, so a very wide
+  // bell stays exact); with no smoothing it is 1.
+  const norm = pitch / (sigma * Math.sqrt(2 * Math.PI));
+  const toErf = 1 / (bandwidthPx * Math.SQRT2);
   for (let i = 0; i < n; i++) {
     const x = items[i].at;
     const u = (x - lo) / step;
@@ -660,8 +681,10 @@ export function noiseOutline(
     const f = u - k;
     const s = sum[k] * (1 - f) + sum[k + 1] * f;
     const m =
-      inside * (erf((extentHi - x) * toErf) + erf((x - extentLo) * toErf));
-    setHalf(i, (pitch * s) / m);
+      bandwidthPx > 0
+        ? (erf((extentHi - x) * toErf) + erf((x - extentLo) * toErf)) / 2
+        : 1;
+    setHalf(i, (norm * s) / m);
   }
   return half;
 }
