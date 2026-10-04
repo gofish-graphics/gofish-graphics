@@ -19,12 +19,11 @@ import {
   UnderlyingSpace,
   isCONTINUOUS,
   isUNDEFINED,
-  CONTINUOUS,
+  magnitude,
   originIs,
 } from "../underlyingSpace";
 import { impliedExtent, type Extent } from "../extent";
-import { getMeasure, getValue, isValue } from "../data";
-import { interval } from "../../util/interval";
+import { isValue } from "../data";
 import { computeSize, foldFinite } from "../../util";
 import { axisScale, measureOrigin, posFn } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
@@ -411,12 +410,7 @@ export const layer = createNodeOperatorSequential(
             // pixel size is a fixed box with its own units (a marginal
             // histogram), which must NOT pollute the ancestor's data domain,
             // so a stashed axis reports UNDEFINED.
-            if (isValue(dsize))
-              resolved[axis] = CONTINUOUS(
-                interval(0, getValue(dsize)!),
-                "free",
-                getMeasure(dsize)
-              );
+            if (isValue(dsize)) resolved[axis] = magnitude(dsize);
             else if (isCONTINUOUS(composed)) resolved[axis] = UNDEFINED;
           }
           return resolved;

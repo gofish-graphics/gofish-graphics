@@ -4,7 +4,14 @@
 
 import { interval, Interval, width as intervalWidth } from "../util/interval";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
-import type { Measure } from "./data";
+import {
+  getMeasure,
+  getValue,
+  isAesthetic,
+  isValue,
+  type MaybeValue,
+  type Measure,
+} from "./data";
 import { nice as d3Nice } from "d3-array";
 
 // This module is the TYPE half of an axis: what the axis means, with no σ in
@@ -120,6 +127,15 @@ export const CONTINUOUS = (
 export const isCONTINUOUS = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE => space.kind === "continuous";
+
+/** The space of a datum magnitude `size`: `[0, v]` with the datum's measure.
+ *  Free by default (its parent places its baseline); `"none"` when the mark's
+ *  position is an aesthetic, so the magnitude has only a width. */
+export const magnitude = (
+  size: MaybeValue<number | undefined>,
+  origin: "free" | "none" = "free"
+): CONTINUOUS_TYPE =>
+  CONTINUOUS(interval(0, getValue(size)!), origin, getMeasure(size));
 
 /** The absolute `[min, max]` data domain of a PINNED space, or undefined for a
  *  free magnitude or a difference. */
@@ -291,6 +307,36 @@ export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
 export const UNDEFINED: UnderlyingSpace = { kind: "undefined" };
 export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
   space.kind === "undefined";
+
+/** The space of a datum point: a pinned zero-width interval at `pos`. */
+const pointAt = (pos: MaybeValue<number | undefined>): CONTINUOUS_TYPE => {
+  const at = getValue(pos) ?? 0;
+  return CONTINUOUS(interval(at, at), "pinned", getMeasure(pos));
+};
+
+/** One axis of a mark sized about a point (an ellipse, a petal): a datum
+ *  position is a pinned point, else a datum size is a free magnitude, else
+ *  nothing (literal sizes are resolved at layout time). */
+export const pointOrMagnitude = (
+  pos: MaybeValue<number | undefined>,
+  size: MaybeValue<number | undefined>
+): UnderlyingSpace =>
+  isValue(pos) ? pointAt(pos) : isValue(size) ? magnitude(size) : UNDEFINED;
+
+/** One axis of a glyph placed by its center or low edge (a text, an image).
+ *  A datum size beside any position is an origin-less width, and a datum size
+ *  with no position is a free magnitude. A datum position alone is a pinned
+ *  point. With neither, the glyph's intrinsic extent is resolved at layout
+ *  time, so the axis is undefined. */
+export const glyphAxis = (
+  pos: MaybeValue<number | undefined>,
+  size: MaybeValue<number | undefined>
+): UnderlyingSpace => {
+  if (!isValue(size)) return isValue(pos) ? pointAt(pos) : UNDEFINED;
+  return isValue(pos) || isAesthetic(pos)
+    ? magnitude(size, "none")
+    : magnitude(size);
+};
 
 /** A *positioning* space — one that places marks along an axis (a pinned
  *  data axis or an `ORDINAL` category axis), as opposed to a free magnitude (a

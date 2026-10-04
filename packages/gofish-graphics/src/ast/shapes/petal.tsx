@@ -7,7 +7,7 @@ import {
   rectItemFromBox,
   roleFor,
 } from "../displayList/lowerHelpers";
-import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
+import { getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
@@ -19,8 +19,7 @@ import {
   Transform,
 } from "../dims";
 import { aesthetic, continuous, Domain } from "../domain";
-import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
-import { interval } from "../../util/interval";
+import { UnderlyingSpace, pointOrMagnitude } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 /* Implementation inspired by https://web.archive.org/web/20220808041640/http://bl.ocks.org/herrstucki/6199768 */
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
@@ -69,24 +68,10 @@ export const Petal = ({
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
       ) => {
-        const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
-          const d = dims[axis];
-          if (isValue(d.min)) {
-            const min = getValue(d.min) ?? 0;
-            return CONTINUOUS(interval(min, min), "pinned", getMeasure(d.min));
-          }
-          if (isValue(d.size)) {
-            // data-driven size only — literals handled at layout time.
-            return CONTINUOUS(
-              interval(0, getValue(d.size)!),
-              "free",
-              getMeasure(d.size)
-            );
-          }
-          return UNDEFINED;
-        };
-
-        return [resolveAxis(0), resolveAxis(1)];
+        return [
+          pointOrMagnitude(dims[0].min, dims[0].size),
+          pointOrMagnitude(dims[1].min, dims[1].size),
+        ];
       },
       layout: (shared, size, scales, children) => {
         const w = isValue(dims[0].size)

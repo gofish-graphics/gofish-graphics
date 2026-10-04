@@ -4,7 +4,7 @@
 
 import type { Axis, AlignAnchor, ConstraintRef } from "./shared";
 import type { Placeable } from "../_node";
-import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
+import { isValue, type MaybeValue } from "../data";
 import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
 import {
   CONTINUOUS_TYPE,
@@ -18,6 +18,7 @@ import {
   mirrored,
   spaceMeasure,
   CONTINUOUS,
+  magnitude,
   hasOrigin,
 } from "../underlyingSpace";
 import { Extent, impliedExtent } from "../extent";
@@ -281,11 +282,7 @@ export function distributeSpaceFold(
 
   // Explicit size on the stack axis dominates the children-derived claim.
   if (opts.size !== undefined && isValue(opts.size)) {
-    return CONTINUOUS(
-      Interval.interval(0, getValue(opts.size)!),
-      "free",
-      getMeasure(opts.size)
-    );
+    return magnitude(opts.size);
   }
 
   const namedKeys = keys.filter((k): k is string => k !== undefined);

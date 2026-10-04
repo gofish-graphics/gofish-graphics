@@ -33,6 +33,7 @@ import {
   UnderlyingSpace,
   mergeMeasures,
   CONTINUOUS,
+  magnitude,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
@@ -115,20 +116,12 @@ export const Rect = ({
             return UNDEFINED;
           }
           if (isAesthetic(d.min) && isValue(d.size)) {
-            return CONTINUOUS(
-              interval(0, getValue(d.size)!),
-              "none",
-              getMeasure(d.size)
-            );
+            return magnitude(d.size, "none");
           }
           if (!isValue(d.min) && isValue(d.size)) {
             // No data position; data-driven size → a span from the baseline,
             // signed: a negative value extends below it (#773).
-            return CONTINUOUS(
-              interval(0, getValue(d.size)!),
-              "free",
-              getMeasure(d.size)
-            );
+            return magnitude(d.size);
           }
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;

@@ -20,10 +20,10 @@ import {
   deferAxisDims,
   elaborateDims,
 } from "../dims";
-import { getMeasure, getValue, isValue, MaybeValue } from "../data";
+import { getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
-import { UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
+import { UnderlyingSpace, CONTINUOUS, magnitude } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import * as Interval from "../../util/interval";
 import { createOperator } from "../marks/createOperator";
@@ -157,11 +157,7 @@ const Treemap = createNodeOperator(
           // positioned box that fills the slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace =>
             isValue(dims[i].size)
-              ? CONTINUOUS(
-                  interval(0, getValue(dims[i].size!)!),
-                  "free",
-                  getMeasure(dims[i].size)
-                )
+              ? magnitude(dims[i].size)
               : CONTINUOUS(interval(0, 1), "pinned");
           return [axisSpace(0), axisSpace(1)];
         },

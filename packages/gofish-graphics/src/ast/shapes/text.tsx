@@ -1,15 +1,8 @@
 import { resolveColorChannel } from "../../color";
 import { computeAesthetic } from "../../util";
 import { posFn } from "../domain";
-import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
-import {
-  getMeasure,
-  getValue,
-  isAesthetic,
-  isValue,
-  MaybeValue,
-} from "../data";
+import { getValue, isValue, MaybeValue } from "../data";
 import {
   Dimensions,
   displayTranslate,
@@ -18,7 +11,7 @@ import {
   FancyDims,
   Transform,
 } from "../dims";
-import { UNDEFINED, CONTINUOUS } from "../underlyingSpace";
+import { glyphAxis } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -239,38 +232,7 @@ export const Text = ({
         const xPos = dims[0].center ?? dims[0].min;
         const yPos = dims[1].center ?? dims[1].min;
 
-        const resolveAxis = (axis: 0 | 1, pos: any) => {
-          if (isValue(pos)) {
-            const min = getValue(pos) ?? 0;
-            if (isValue(dims[axis].size)) {
-              return CONTINUOUS(
-                interval(0, getValue(dims[axis].size)!),
-                "none",
-                getMeasure(dims[axis].size)
-              );
-            }
-            return CONTINUOUS(interval(min, min), "pinned", getMeasure(pos));
-          }
-          if (isAesthetic(pos) && isValue(dims[axis].size)) {
-            return CONTINUOUS(
-              interval(0, getValue(dims[axis].size)!),
-              "none",
-              getMeasure(dims[axis].size)
-            );
-          }
-          if (!isValue(pos) && isValue(dims[axis].size)) {
-            return CONTINUOUS(
-              interval(0, getValue(dims[axis].size)!),
-              "free",
-              getMeasure(dims[axis].size)
-            );
-          }
-          // No data position, no data size — text's intrinsic extent is
-          // handled at layout time, not via the underlying-space tree.
-          return UNDEFINED;
-        };
-
-        return [resolveAxis(0, xPos), resolveAxis(1, yPos)];
+        return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
       },
       layout: (shared, size, scales, children) => {
         const finalText = isValue(textContent)

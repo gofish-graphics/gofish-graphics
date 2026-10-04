@@ -257,7 +257,8 @@ measure?)`:
 - **free**: the extent hangs from a baseline that nothing has placed yet, and
   the interval is `[−descent, ascent]` about it. A bar of value `v` is
   `CONTINUOUS(interval(0, v), "free")`, which is `[0, 30]` for 30 and
-  `[−20, 0]` for −20.
+  `[−20, 0]` for −20. Marks build it with `magnitude(size)`, which also
+  carries the datum's measure.
 - **none**: there is no origin at all, only a width, so the interval is
   `[0, width]` and only differences along it mean anything. A middle-aligned
   overlay is one.
