@@ -49,17 +49,52 @@ export type ScopeKind =
  *  differences, so it has a slope and no `originPx`. */
 export type ScopeSolution = { sigma: number; originPx: number | undefined };
 
-/** The map a solved scope hands its content: `sigma·d + originPx` when the
- *  scope's type is pinned, so its content shares the scope's frame and places
- *  its data through the map. Undefined for an unsolved scope or any other
- *  type: a free scope seats its content's baseline at `originPx` itself. */
-export const scopeMap = (
-  space: UnderlyingSpace | undefined,
+/** The frame a solved scope places its content in, `px(d) = sigma·d +
+ *  originPx`, or undefined for an unsolved scope or one with no origin (only
+ *  differences). */
+export const scopeFrame = (
   scope: ScopeSolution | undefined
 ): AxisMap | undefined =>
-  scope !== undefined && originIs(space, "pinned")
-    ? { sigma: scope.sigma, originPx: scope.originPx! }
-    : undefined;
+  scope?.originPx === undefined
+    ? undefined
+    : { sigma: scope.sigma, originPx: scope.originPx };
+
+/** The frame a node with type `space` places its children in, given the
+ *  scale it was handed (its parent's frame's map, and its σ). A pinned node
+ *  shares its parent's frame. A free node has a frame of its own whose 0 is
+ *  its baseline, `{σ, 0}` (its parent places that baseline). A node with no
+ *  data 0 has no frame. */
+export const frameOf = (
+  space: UnderlyingSpace | undefined,
+  handed: { sigma?: number; map?: AxisMap }
+): AxisMap | undefined => {
+  if (originIs(space, "pinned")) return handed.map;
+  if (!originIs(space, "free")) return undefined;
+  const sigma = handed.map?.sigma ?? handed.sigma;
+  return sigma === undefined ? undefined : { sigma, originPx: 0 };
+};
+
+/** The one seating rule: where a child with type `child` sits in its
+ *  parent's `frame` on one axis (`seatPx`, the pixel its baseline is placed
+ *  at), and the map it is handed (`childMap`, its own frame, {@link
+ *  frameOf}). A pinned child shares the frame: it sits at 0 and places its
+ *  data through the frame's map. A free child's position is set by its
+ *  parent: its baseline sits at the frame's `originPx`, the pixel of data 0,
+ *  and its own frame has that baseline at 0. A child with no data 0 sits at
+ *  0 and has no frame.
+ *
+ *  TODO(#773 follow-up): data 0 is the additive identity of the measure's
+ *  algebraic structure (an ordered additive group's 0). Measures don't carry
+ *  their structure yet, so every measure is treated as a group with identity
+ *  0. A torsor-valued measure (dates, temperatures) has no identity and
+ *  should reject bars. */
+export const seatInScope = (
+  frame: AxisMap | undefined,
+  child: UnderlyingSpace | undefined
+): { seatPx: number; childMap: AxisMap | undefined } => ({
+  seatPx: originIs(child, "free") ? (frame?.originPx ?? 0) : 0,
+  childMap: frameOf(child, { map: frame }),
+});
 
 /** The pixel of data 0 in a box whose claim starts `offset` px above its low
  *  edge: a claim is measured from data 0, so data 0 sits `claim.descent(σ)`

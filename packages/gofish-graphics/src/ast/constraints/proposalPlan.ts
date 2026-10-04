@@ -4,10 +4,16 @@
 
 import { type Size } from "../dims";
 import { isValue } from "../data";
-import { type UnderlyingSpace, originIs } from "../underlyingSpace";
+import { type UnderlyingSpace } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
-import { scopeMap, type ScopeRegistry } from "../solver/scopes";
+import {
+  frameOf,
+  scopeFrame,
+  seatInScope,
+  type ScopeRegistry,
+  type ScopeSolution,
+} from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
@@ -156,11 +162,10 @@ export function childLayoutSizeProposal(
 }
 
 export type ChildScalePlan = {
+  /** Per axis: the layer's frame, the map its children sit in
+   *  (`seatInScope`). */
   basePosScales: ConstraintPosScales;
   childScaleFactors: Size<number | undefined>;
-  /** Per axis: the pixel of data 0 in a self-scaled stash's scope, where the
-   *  layer seats its free children's baselines. */
-  stashOriginPx: Size<number | undefined>;
   budgetFailures: { axis: 0 | 1; budget: number }[];
   sharedScaleChecks: {
     axis: 0 | 1;
@@ -175,11 +180,13 @@ export type ChildScalePlan = {
  * most one σ-scope root here, solved once (`solveScope`) from one type and
  * claim, niced at the solve when the scope renders an axis (issue #659):
  *   - an explicit size (a self-scaled stash) roots a scope over the stashed
- *     composed type and claim: σ, and a local map when the stash is pinned;
+ *     composed type and claim: σ, and the layer's own frame when the stash
+ *     has an origin;
  *   - otherwise, when no ancestor owns σ on the axis, a layer whose
  *     constraint plan covers the axis (a composed budget) or that is a
  *     shared-scale scope roots one over its own type and claim.
- * Every other axis inherits ("not a root → inherit").
+ * Every other axis inherits ("not a root → inherit"), and the layer's frame
+ * follows from its own type ({@link frameOf}).
  *
  * Diagnostics stay with the caller: budget failures are reported so `layer`
  * can warn with context, and every root solve is returned for the solver
@@ -207,17 +214,13 @@ export function buildChildScalePlan(
   scopes: ScopeRegistry,
   rootKey: string
 ): ChildScalePlan {
-  const basePosScales: ConstraintPosScales = [
-    inheritedPosScales[0],
-    inheritedPosScales[1],
-  ];
+  const stashScopes: Size<ScopeSolution | undefined> = [undefined, undefined];
   const childScaleFactors: Size<number | undefined> = [
     inheritedScaleFactors?.[0],
     inheritedScaleFactors?.[1],
   ];
   const budgetFailures: ChildScalePlan["budgetFailures"] = [];
   const sharedScaleChecks: ChildScalePlan["sharedScaleChecks"] = [];
-  const stashOriginPx: Size<number | undefined> = [undefined, undefined];
 
   for (const axis of [0, 1] as const) {
     if (!Number.isFinite(layerSize[axis])) continue;
@@ -263,34 +266,26 @@ export function buildChildScalePlan(
       continue;
     }
     childScaleFactors[axis] = scope.sigma;
-    if (!stashed) continue;
-    stashOriginPx[axis] = scope.originPx;
-    // The stash's scope replaces the inherited one on this axis: a pinned
-    // stash hands its children its own map; a free one hands them none (it
-    // seats their baselines at `originPx` itself), never the ancestor's map,
-    // whose σ is another scope's.
-    basePosScales[axis] = scopeMap(space, scope);
+    // The stash's scope replaces the inherited one on this axis, never the
+    // ancestor's map, whose σ is another scope's.
+    if (stashed) stashScopes[axis] = scope;
   }
 
-  // A free layer's own frame has its baseline, data 0, at local 0. So where
-  // no map reaches it, it hands its children the map of that frame: a pinned
-  // child (a rule at `y: "amount"` among free bars) places its data through
-  // it, as it would in any frame with data coordinates.
-  for (const axis of [0, 1] as const) {
-    const sigma = childScaleFactors[axis];
-    if (
-      basePosScales[axis] === undefined &&
-      sigma !== undefined &&
-      selfScaledSpaces[axis] === undefined &&
-      originIs(layerSpace?.[axis], "free")
-    )
-      basePosScales[axis] = { sigma, originPx: 0 };
-  }
+  // The layer's frame: a solved stash's scope, or else the frame its own
+  // type gives it from the scale it was handed (a free layer's frame has its
+  // baseline, data 0, at local 0).
+  const basePosScales = ([0, 1] as const).map((axis) =>
+    stashScopes[axis] !== undefined
+      ? scopeFrame(stashScopes[axis])
+      : frameOf(layerSpace?.[axis], {
+          sigma: childScaleFactors[axis],
+          map: inheritedPosScales[axis],
+        })
+  ) as ConstraintPosScales;
 
   return {
     basePosScales,
     childScaleFactors,
-    stashOriginPx,
     budgetFailures,
     sharedScaleChecks,
   };
@@ -386,7 +381,7 @@ export function buildPositionScalePlan(
       extent,
       layerSize[axis]
     );
-    return scopeMap(space, scope);
+    return scopeFrame(scope);
   };
   return {
     ownsAxis,
@@ -396,13 +391,12 @@ export function buildPositionScalePlan(
   };
 }
 
-/** Decide which data→pixel scales a child receives from an enclosing layer.
- *
- * On axes the layer does not own, forward the inherited/local base scale. On
- * axes the layer owns, forward only to children whose own space is POSITION and
- * whose placement is not already owned by a datum-valued position constraint.
- * This keeps constrained ticks from seeing the scale that placed them while
- * still giving content marks the scale they need for their own geometry. */
+/** Decide which data→pixel scales a child receives from an enclosing layer:
+ * the map the one seating rule hands it in the layer's frame
+ * (`seatInScope`). The frame is the layer's base frame, or on an axis the
+ * layer owns through a datum position, the frame those positions resolve
+ * against. A child whose placement a datum-valued position constraint owns
+ * gets none, so a constrained tick never sees the scale that placed it. */
 export function childPosScalesFor(
   childSpace: Size<UnderlyingSpace> | undefined,
   targetDims: Set<0 | 1> | undefined,
@@ -411,11 +405,9 @@ export function childPosScalesFor(
   effectivePosScales: ConstraintPosScales
 ): ConstraintPosScales {
   const pick = (dim: 0 | 1) => {
-    if (!ownsAxis[dim]) return basePosScales[dim];
-    if (targetDims?.has(dim)) return undefined;
-    return childSpace && originIs(childSpace[dim], "pinned")
-      ? effectivePosScales[dim]
-      : undefined;
+    if (ownsAxis[dim] && targetDims?.has(dim)) return undefined;
+    const frame = ownsAxis[dim] ? effectivePosScales[dim] : basePosScales[dim];
+    return seatInScope(frame, childSpace?.[dim]).childMap;
   };
   return [pick(0), pick(1)];
 }

@@ -911,7 +911,23 @@ console.log("# constraint confluence: child posScale forwarding");
       pxOf(ownedAxisPlan.effectivePosScales[1]!, 5) === 100
   );
 
+  // The one seating rule on unowned axes: a pinned child shares the base
+  // frame, a free child gets a frame of its own with its baseline at 0, and a
+  // child with no data 0 gets none.
   const unowned = childPosScalesFor(
+    [positionSpace, CONTINUOUS(interval(0, 3), "free")],
+    undefined,
+    [false, false],
+    [baseX, baseY],
+    [effectiveX, effectiveY]
+  );
+  ok(
+    "unowned axes seat each child in the base frame",
+    unowned[0] === baseX &&
+      unowned[1]?.sigma === baseY.sigma &&
+      unowned[1]?.originPx === 0
+  );
+  const unownedUndefined = childPosScalesFor(
     [UNDEFINED, UNDEFINED],
     undefined,
     [false, false],
@@ -919,8 +935,8 @@ console.log("# constraint confluence: child posScale forwarding");
     [effectiveX, effectiveY]
   );
   ok(
-    "unowned axes forward base posScales",
-    unowned[0] === baseX && unowned[1] === baseY
+    "a child with no data 0 gets no frame",
+    unownedUndefined[0] === undefined && unownedUndefined[1] === undefined
   );
 
   const ownedPosition = childPosScalesFor(
@@ -1290,9 +1306,10 @@ console.log("# constraint confluence: child scale factor planning");
     "test"
   );
   ok(
-    "self-scaled POSITION axis builds local posScale; a free stash hands none",
+    "a self-scaled axis's frame is its own scope, pinned or free",
     pxOf(selfScaled.basePosScales[0]!, 5) === 50 &&
-      selfScaled.basePosScales[1] === undefined
+      selfScaled.basePosScales[1]?.sigma === 4 &&
+      selfScaled.basePosScales[1]?.originPx === 0
   );
   ok(
     "every self-scaled axis roots its own σ, pinned or free",

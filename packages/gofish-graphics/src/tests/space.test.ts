@@ -16,7 +16,7 @@ import {
   originIs,
 } from "../ast/underlyingSpace";
 import { Extent, impliedExtent, niceScope } from "../ast/extent";
-import { ScopeRegistry } from "../ast/solver/scopes";
+import { ScopeRegistry, seatInScope } from "../ast/solver/scopes";
 import { pxOf } from "../ast/domain";
 import { GoFishNode } from "../ast/_node";
 import {
@@ -298,6 +298,28 @@ console.log("# space: position moves a claim with its data");
     "overlaid with a pinned point at 5 it claims 20σ",
     overlayClaim.width.run(1) === 20,
     `${overlayClaim.width.run(1)}`
+  );
+}
+
+console.log("# space: one seating rule");
+{
+  const frame = { sigma: 2, originPx: 30 };
+  const pinned = seatInScope(frame, CONTINUOUS(interval(5, 9), "pinned"));
+  const free = seatInScope(frame, CONTINUOUS(interval(0, 9), "free"));
+  const none = seatInScope(frame, CONTINUOUS(interval(0, 9), "none"));
+  ok(
+    "a pinned child sits at 0 and shares the frame",
+    pinned.seatPx === 0 && pinned.childMap === frame
+  );
+  ok(
+    "a free child sits at the pixel of data 0, in a frame of its own",
+    free.seatPx === 30 &&
+      free.childMap?.sigma === 2 &&
+      free.childMap?.originPx === 0
+  );
+  ok(
+    "a child with no data 0 sits at 0 with no frame",
+    none.seatPx === 0 && none.childMap === undefined
   );
 }
 

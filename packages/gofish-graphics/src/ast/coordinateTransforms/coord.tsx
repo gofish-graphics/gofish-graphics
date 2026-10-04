@@ -29,7 +29,6 @@ import {
   isUNDEFINED,
   continuousInterval,
   CONTINUOUS,
-  originIs,
   spaceMeasure,
 } from "../underlyingSpace";
 import { impliedExtent } from "../extent";
@@ -39,7 +38,7 @@ import {
 } from "../graphicalOperators/alignment";
 import { axisScale, type AxisMap } from "../domain";
 import { shadowCheckScaleRoot } from "../solver/shadow";
-import { getScopeRegistry, scopeMap } from "../solver/scopes";
+import { getScopeRegistry, scopeFrame, seatInScope } from "../solver/scopes";
 import { axisTitle, TITLE_COLOR, TITLE_FONT_SIZE } from "../axes/elaborate";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
@@ -278,10 +277,10 @@ export const coord = createNodeOperator(
           const fitAxis = (
             axis: 0 | 1,
             budget: number
-          ): [number | undefined, AxisMap | undefined, number | undefined] => {
+          ): [number | undefined, AxisMap | undefined] => {
             // The coord roots its axis's scope like the chart root: one σ
             // from the coord's own type and claim against its budget, and,
-            // for a pinned axis, the map its children share.
+            // when the type has an origin, the frame its children sit in.
             // The coord's own claim: its children's claims overlaid as its
             // type overlays their data, or, on an axis pinned to a declared
             // window, the window's own data width.
@@ -308,24 +307,26 @@ export const coord = createNodeOperator(
             // frame equation content(σ)=budget closes at the boundary. No-op
             // unless GOFISH_SOLVER_CHECK is set.
             shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
-            if (scope === undefined) return [1, undefined, undefined];
-            return [scope.sigma, scopeMap(resolved, scope), scope.originPx];
+            if (scope === undefined) return [1, undefined];
+            return [scope.sigma, scopeFrame(scope)];
           };
-          const [sfX, psX, originX] = fitAxis(0, budget[0]);
-          const [sfY, psY, originY] = fitAxis(1, budget[1]);
-          const childPlaceables = children.map((child) =>
-            child.layout(size, [axisScale(sfX, psX), axisScale(sfY, psY)])
-          );
-          // A free child's local 0 is its baseline, so it sits at the scope's
-          // pixel of data 0; a pinned child shares the coord's frame (the map
-          // places it), and an origin-less one has no 0: both sit at 0.
-          const seat = (child: (typeof children)[number], axis: 0 | 1) =>
-            originIs(child.resolveUnderlyingSpace()[axis], "free")
-              ? ((axis === 0 ? originX : originY) ?? 0)
-              : 0;
-          childPlaceables.forEach((c, i) => {
-            c.place("x", seat(children[i], 0), "baseline");
-            c.place("y", seat(children[i], 1), "baseline");
+          const [sfX, frameX] = fitAxis(0, budget[0]);
+          const [sfY, frameY] = fitAxis(1, budget[1]);
+          // Each child sits in the coord's frame by the one seating rule
+          // (`seatInScope`): a pinned child shares the frame and its map
+          // places it; a free child's baseline sits at the frame's pixel of
+          // data 0; a child with no 0 sits at 0.
+          const childPlaceables = children.map((child) => {
+            const space = child.resolveUnderlyingSpace();
+            const x = seatInScope(frameX, space[0]);
+            const y = seatInScope(frameY, space[1]);
+            const placeable = child.layout(size, [
+              axisScale(sfX, x.childMap),
+              axisScale(sfY, y.childMap),
+            ]);
+            placeable.place("x", x.seatPx, "baseline");
+            placeable.place("y", y.seatPx, "baseline");
+            return placeable;
           });
 
           // Compute bounding box in screen space by transforming sample points

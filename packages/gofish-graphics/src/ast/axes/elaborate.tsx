@@ -973,12 +973,12 @@ export async function elaborateAxes(
       const axisNodes = constrained.flatMap((e) => e.nodes);
       inner = (await (layer as any)([content, ...axisNodes])) as GoFishNode;
       // Where the content sits on each axis. A delta axis says where in its
-      // own frame. A free content (a bar chart's bars) is a magnitude whose
-      // baseline the axis's frame places: left unpinned, the layer seats it
-      // at data 0 of the frame's map, as a pinned layer seats every free
-      // child, so value 0 sits at the 0 tick. Otherwise the content's
-      // baseline is the frame's 0 (a literal pixel pin): a pinned content
-      // shares the frame.
+      // own frame. Otherwise this is the one seating rule (`seatInScope`):
+      // a free content (a bar chart's bars) is a magnitude whose baseline the
+      // axis's frame places, so it is left unpinned and the layer seats it at
+      // data 0 of the frame's map, so value 0 sits at the 0 tick; a pinned
+      // content shares the frame, so its baseline is the frame's 0 (a literal
+      // pixel pin).
       const contentSpace = content._underlyingSpace;
       const contentAt = (dim: 0 | 1) => {
         const at = constrained.find((e) => e.contentAt?.dim === dim)?.contentAt;

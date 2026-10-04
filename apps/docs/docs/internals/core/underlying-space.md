@@ -449,11 +449,15 @@ target. The folds no longer ask whether a child is a magnitude or a position
 except where that question means something. These are the places it does,
 each inherent to what the origin states are:
 
-- **Who applies `originPx`**: a pinned node shares its scope's frame, so it
-  gets the scope's map and places its data through it; a free node has a
-  frame of its own whose 0 is its baseline, so its parent places that
-  baseline at `originPx`. This is the split between "a constraint fixes the
-  baseline" and "the parent sets it".
+- **Who applies `originPx`**: one seating rule (`seatInScope` in
+  `solver/scopes.ts`), used by the render root, a coord, and every layer
+  (a self-scaled stash included). A pinned child shares its parent's frame,
+  so it sits at 0 and places its data through the frame's map; a free child
+  has a frame of its own whose 0 is its baseline (`{σ, 0}`, `frameOf`), so
+  its parent places that baseline at the frame's `originPx`; a child with no
+  data 0 sits at 0 and has no frame. This is the split between "a constraint
+  fixes the baseline" and "the parent sets it". A scope root's frame is its
+  solved scope (`scopeFrame`), whatever its type's origin.
 - **Seating in a fold**: a pinned child sits at its own data coordinates; a
   free child sits there too when the fold seats children on their baselines
   (an overlay, a baseline alignment), and is a box from the aligned edge
@@ -482,10 +486,7 @@ each inherent to what the origin states are:
   space's baseline at its `originPx` (`placeBaseline`; `GoFishNode.
 placedSpace`), so a free root renders an absolute axis, niced about its 0;
   the axis's frame seats the free content's baseline at its data 0 (the
-  content is left unpinned and the frame's map places it). A free layer's own
-  frame has its baseline at local 0, so where no map reaches it, it hands its
-  children the map `{σ, originPx: 0}` of that frame (a rule at `y: "amount"`
-  among free bars places through it).
+  content is left unpinned and the frame's map places it).
 
 A coordinate space is a σ-scope root like any other, so it reports nothing
 upward on either axis: to its parent it is a pixel box. It keeps its own type
@@ -927,11 +928,9 @@ relations between child anchors and never pins. Where a floating component
 lands is the solver's fallback, and its first rule is the **free-child
 origin** (#773). A free child (a baseline magnitude, such as a rect with a data
 `h`) has a baseline that stands for the measure's origin, the value a signed
-`h`/`w` grows from. When the owning layer is anchored on the axis (its own
-space, or the stash it self-scales, is a POSITION), its local frame is the
-frame of the data→pixel map it holds, and that origin has a pixel:
-`pxOf(map, measureOrigin(measure))`. The layer computes this per axis
-(`freeOrigin`). It places unconstrained free children there itself (phase-1
+`h`/`w` grows from. That origin is data 0 of the owning layer's frame, and
+its pixel is the frame's `originPx`, by the one seating rule (`seatInScope`).
+The layer computes this per axis (`freeOrigin`). It places unconstrained free children there itself (phase-1
 placement, and `placeUnplacedChild` for a child the solve left unplaced on an
 axis), and hands it to the solve as one input: in `solveAxisProblem`, a
 component with no pin whose free nodes share one baseline is offset so that
@@ -961,16 +960,17 @@ the difference graph gives a component that holds one no baseline at all, so
 a free node aligned to one of its members does not seat it either. So a bar
 with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
 the rounded −40. A free
-layer is itself seated by its parent at its own baseline, so its free-child
-origin is local 0: applying the map again would count the offset twice, and
-letting the component float would let min-normalization lift a descent off the
-baseline. A layer's self-scaled free stash roots its own σ-scope, so its origin
-is that scope's `originPx` (`descent·σ`), the same rule as the chart root. A layer with no continuous
-space on the axis has no origin, and its components float. Anchored children
-share the layer's frame and stay at 0, as the next paragraph explains.
-`measureOrigin` (`domain.ts`) returns 0 for every measure for now; the origin is
-the additive identity of the measure's algebraic structure, and measures do not
-carry that structure yet.
+layer is itself seated by its parent at its own baseline, so its frame has
+that baseline at local 0 (`frameOf`), and so does its free-child origin:
+applying the map again would count the offset twice, and letting the component
+float would let min-normalization lift a descent off the baseline. A layer's
+self-scaled stash roots its own σ-scope, so its frame is that scope's, with its
+origin at the scope's `originPx` (`descent·σ`), the same rule as the chart
+root. A layer with no data 0 on the axis has no frame, and its components
+float. Anchored children share the layer's frame and stay at 0, as the next
+paragraph explains. Data 0 stands for the additive identity of the measure's
+algebraic structure, and measures do not carry that structure yet (a TODO on
+`seatInScope`).
 
 Otherwise, if no explicit `position` (point or interval), self-placement, or
 other strong pin fixes a connected component and it has no shared free
@@ -1453,9 +1453,10 @@ the explicit size is a **literal** or a **data value**:
     shared domain with the absorbed region's units.
 - **`layout`.** The stashed space gets a **local** scope solved against the
   layer's own resolved box (`solveScope(stashed, stashedClaim, size[dim])`):
-  σ for every stash, a local map too for a pinned one, and `originPx` for a
-  free one (where the layer seats its free children), so each child reads
-  the half it needs. These locals override the inherited posScale /
+  σ for every stash, and, when the stash has an origin, the layer's frame
+  (the scope's map), in which each child sits by the one seating rule
+  (`seatInScope`): a pinned child places its data through it, and a free
+  child's baseline sits at its `originPx`. These locals override the inherited posScale /
   scale factor on that dim — definitionally, since the inherited scale is in
   the parent's foreign units. If the size can't be resolved (NaN), the locals
   are left undefined and the dim degrades to the inherited path rather than

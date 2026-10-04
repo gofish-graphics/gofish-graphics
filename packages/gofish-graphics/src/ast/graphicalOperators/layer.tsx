@@ -5,7 +5,7 @@
 import { GoFishNode, placeUnplacedChild, type ToPixel } from "../_node";
 import type { DisplayList } from "gofish-ir";
 import { shadowCheckScaleRoot } from "../solver/shadow";
-import { getScopeRegistry } from "../solver/scopes";
+import { getScopeRegistry, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
 import {
   Size,
@@ -20,12 +20,11 @@ import {
   isCONTINUOUS,
   isUNDEFINED,
   magnitude,
-  originIs,
 } from "../underlyingSpace";
 import { impliedExtent, type Extent } from "../extent";
 import { isValue } from "../data";
 import { computeSize, foldFinite } from "../../util";
-import { axisScale, measureOrigin, posFn } from "../domain";
+import { axisScale } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
@@ -581,8 +580,7 @@ export const layer = createNodeOperatorSequential(
             getScopeRegistry(node.tryGetRenderSession()),
             node.key ?? node.type
           );
-          const { basePosScales, childScaleFactors, stashOriginPx } =
-            childScalePlan;
+          const { basePosScales, childScaleFactors } = childScalePlan;
           for (const failure of childScalePlan.budgetFailures) {
             // A non-invertible fold-produced Monotonic would otherwise silently
             // vanish the content (spread's `?? 0`); name the axis and budget so
@@ -646,44 +644,33 @@ export const layer = createNodeOperatorSequential(
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
 
-          // Where a free child's baseline goes on each axis (#773). A free
-          // child (a baseline magnitude, e.g. a rect with a data `h`) has no
-          // position of its own; its baseline stands for the measure's origin,
-          // so a signed extent (ascent above, descent below) grows from the
-          // axis's 0 on both sides. Three cases, by this layer's own space:
-          //  - ANCHORED (its space, or the stash it self-scales, is a
-          //    POSITION): its local frame is the frame of the data→pixel map
-          //    it holds, so the origin's pixel is `pxOf(map, origin)`.
-          //  - a self-scaled FREE stash: it roots its own σ-scope like the
-          //    chart root, so the origin is that scope's `originPx`.
-          //  - FREE: the layer is itself a baseline magnitude, seated by its
-          //    parent at its own baseline, so its free children share that
-          //    baseline: local 0. Applying a map here would count the offset
-          //    twice.
-          // Otherwise (no continuous space on the axis) there is no origin.
-          // Unconstrained free children are placed here; constrained ones get
-          // it from the solver's free-origin fallback (`solveAxisProblem`).
-          // Children that are themselves anchored share this layer's frame and
-          // stay at 0.
-          const originOn = (axis: 0 | 1): number | undefined => {
-            const stash = selfScaledSpaces[axis];
-            const own = stash ?? space?.[axis];
-            if (own === undefined) return undefined;
-            if (originIs(own, "pinned"))
-              return posFn(effectivePosScales[axis])?.(
-                measureOrigin(own.measure)
-              );
-            if (!originIs(own, "free")) return undefined;
-            return stash !== undefined ? stashOriginPx[axis] : 0;
-          };
-          const freeOrigin: FreeOrigin = [originOn(0), originOn(1)];
+          // Where a child's baseline goes on each axis (#773), by the one
+          // seating rule (`seatInScope`) in this layer's frame. A free child
+          // (a baseline magnitude, e.g. a rect with a data `h`) has no
+          // position of its own; its baseline sits at the frame's pixel of
+          // data 0, so a signed extent (ascent above, descent below) grows
+          // from the axis's 0 on both sides. The frame is the layer's map
+          // (`effectivePosScales`): a pinned layer's is the map it shares, a
+          // stash's is its own scope, a free layer's has its baseline at local
+          // 0, since its parent seats it there, and a layer with no data 0
+          // has none (`frameOf`). Unconstrained free children are placed
+          // here; constrained ones get the same pixel from the solver's
+          // free-origin fallback (`solveAxisProblem`). A pinned child shares
+          // the frame and stays at 0.
+          const freeOrigin: FreeOrigin = [
+            effectivePosScales[0]?.originPx,
+            effectivePosScales[1]?.originPx,
+          ];
           const baselineFor = (
             cp: (typeof childPlaceables)[number]
           ): [number, number] =>
-            [0, 1].map((axis) => {
-              const s = cp.spaceOn?.(axis as 0 | 1);
-              return originIs(s, "free") ? (freeOrigin[axis] ?? 0) : 0;
-            }) as [number, number];
+            [0, 1].map(
+              (axis) =>
+                seatInScope(
+                  effectivePosScales[axis],
+                  cp.spaceOn?.(axis as 0 | 1)
+                ).seatPx
+            ) as [number, number];
 
           const childPlaceables: ReturnType<
             (typeof children)[number]["layout"]

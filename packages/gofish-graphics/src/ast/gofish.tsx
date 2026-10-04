@@ -28,7 +28,6 @@ import {
   isCONTINUOUS,
   spaceMeasure,
   type UnderlyingSpace,
-  originIs,
 } from "./underlyingSpace";
 import { niceScope, type Extent } from "./extent";
 import { opensFlipScope } from "./coordinateTransforms/bake";
@@ -50,7 +49,8 @@ import {
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import {
   getScopeRegistry,
-  scopeMap,
+  scopeFrame,
+  seatInScope,
   type EqualMeasureAxis,
   type ScopeSolution,
 } from "./solver/scopes";
@@ -681,15 +681,19 @@ export async function layout(
   shadowCheckScaleRoot(niceExtentX, canvasW, rootScaleFactors[0], 0);
   shadowCheckScaleRoot(niceExtentY, canvasH, rootScaleFactors[1], 1);
 
-  // The map a pinned root hands its content: a pinned node shares the
-  // scope's frame, so it places its data through the map. A free node has a
-  // frame of its own whose 0 is its baseline, so it gets σ only and is placed
-  // at `originPx` below (`placeRoot`). That split, who applies the pixel of
-  // data 0, is inherent to the two origin states: a pinned extent's position
-  // is fixed by its data, a free extent's is set by its parent.
+  // The root content sits in the root scope's frame by the one seating rule
+  // (`seatInScope`): a pinned content shares the frame and places its data
+  // through its map; a free content's baseline is placed at `originPx`
+  // below (`placeRoot`) and it gets a frame of its own whose 0 is that
+  // baseline. Who applies the pixel of data 0 is inherent to the two origin
+  // states: a pinned extent's position is fixed by its data, a free
+  // extent's is set by its parent.
+  const rootSeats = ([0, 1] as const).map((axis) =>
+    seatInScope(scopeFrame(rootScopes[axis]), rootSpaces[axis])
+  );
   const posScales: Size<AxisMap | undefined> = [
-    scopeMap(rootSpaces[0], rootScopes[0]),
-    scopeMap(rootSpaces[1], rootScopes[1]),
+    rootSeats[0].childMap,
+    rootSeats[1].childMap,
   ];
 
   // Author each dim's `embedded` flag (point/line/area) now that underlying
@@ -742,7 +746,7 @@ export async function layout(
   // placed at the scope's `originPx` (#773: `descent·σ` above the canvas's
   // low edge, plus any overhead below). A pinned root shares the canvas frame
   // (its map carries `originPx`), and an origin-less root has none: both sit
-  // at 0.
+  // at 0 (`seatInScope`).
   const placeRoot = (axis: 0 | 1) => {
     const name = axis === 0 ? "x" : "y";
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
@@ -750,15 +754,7 @@ export async function layout(
     // descent: adding `descent·σ` there would count it twice (#574).
     if ((axis === 0 ? w : h) === undefined)
       child.pinAnchor(name, offset, "min");
-    else
-      child.place(
-        name,
-        offset +
-          (originIs(rootSpaces[axis], "free")
-            ? (rootScopes[axis]?.originPx ?? 0)
-            : 0),
-        "baseline"
-      );
+    else child.place(name, offset + rootSeats[axis].seatPx, "baseline");
   };
   placeRoot(0);
   placeRoot(1);
