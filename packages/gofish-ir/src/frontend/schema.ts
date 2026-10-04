@@ -340,14 +340,15 @@ export interface ScatterOperator
 }
 
 /** A `scatter` overlap strategy, made by a function call (`separate()`,
- *  `jitter()`). Mirrors JS's `OverlapStrategy`
+ *  `noise()`; `sina()` and `jitter()` make kind `"noise"` with other
+ *  defaults). Mirrors JS's `OverlapStrategy`
  *  (`graphicalOperators/overlap.ts`). */
 export type OverlapStrategyIR =
   | { kind: "separate"; padding?: number }
   | {
-      kind: "jitter";
+      kind: "noise";
       randomness?: "blue" | "quasi" | "uniform";
-      smoothing?: number;
+      smoothing?: number | "silverman";
       padding?: number;
       seed?: number;
     };

@@ -165,12 +165,19 @@ export type {
   TreemapOptions,
 } from "./ast/graphicalOperators/treemap";
 export { pack, circles } from "./ast/graphicalOperators/pack";
-export { separate, jitter } from "./ast/graphicalOperators/overlap";
+export {
+  separate,
+  noise,
+  sina,
+  jitter,
+} from "./ast/graphicalOperators/overlap";
 export type {
   OverlapStrategy,
   SeparateStrategy,
-  JitterStrategy,
-  JitterRandomness,
+  NoiseStrategy,
+  NoiseOptions,
+  NoiseRandomness,
+  NoiseSmoothing,
 } from "./ast/graphicalOperators/overlap";
 export type { PackMethod, PackOptions } from "./ast/graphicalOperators/pack";
 export {

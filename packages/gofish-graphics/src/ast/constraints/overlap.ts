@@ -101,7 +101,7 @@ export function applyOverlapPlacement(
   const side: OverlapSide =
     alignment === "middle" ? "middle" : alignment === "end" ? "end" : "start";
   // Pixels per data unit on the data axis, for a strategy option given in
-  // data units (jitter's `smoothing`).
+  // data units (noise's `smoothing`).
   const sigma = posScales?.[data]?.sigma;
   const offsets = resolveOverlap(
     constraint.strategy,

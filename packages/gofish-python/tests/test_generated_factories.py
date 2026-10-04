@@ -22,6 +22,7 @@ from gofish import (
     group,
     jitter,
     join,
+    noise,
     layer,
     pack,
     palette,
@@ -34,6 +35,7 @@ from gofish import (
     squarify,
     stack,
     separate,
+    sina,
     table,
     text,
     treemap,
@@ -109,13 +111,13 @@ def test_scatter_serializes_separate_overlap():
         separate(padding=-1)
 
 
-def test_scatter_serializes_jitter_overlap():
+def test_scatter_serializes_noise_overlap():
     d = scatter(
-        x="mass", alignment="middle", overlap=jitter(randomness="quasi", smoothing=100)
+        x="mass", alignment="middle", overlap=noise(randomness="quasi", smoothing=100)
     ).to_dict()
-    assert d["overlap"] == {"kind": "jitter", "randomness": "quasi", "smoothing": 100}
-    assert jitter() == {"kind": "jitter"}
-    assert jitter(padding=1, seed=3) == {"kind": "jitter", "padding": 1, "seed": 3}
+    assert d["overlap"] == {"kind": "noise", "randomness": "quasi", "smoothing": 100}
+    assert noise() == {"kind": "noise"}
+    assert noise(padding=1, seed=3) == {"kind": "noise", "padding": 1, "seed": 3}
     # `overlap` is a tagged union: the `kind` picks the branch whose keys are
     # checked, as for any nested option dict.
     with pytest.raises(TypeError):
@@ -123,15 +125,33 @@ def test_scatter_serializes_jitter_overlap():
     with pytest.raises(TypeError):
         scatter(x="mass", overlap={"kind": "separate", "randomness": "blue"})
     with pytest.raises(ValueError):
-        jitter(randomness="pink")
+        noise(randomness="pink")
+    assert noise(smoothing=0) == {"kind": "noise", "smoothing": 0}
     with pytest.raises(ValueError):
-        jitter(smoothing=0)
+        noise(smoothing=-1)
     with pytest.raises(ValueError):
-        jitter(smoothing=float("nan"))
+        noise(smoothing=float("nan"))
     with pytest.raises(ValueError):
-        jitter(seed=float("inf"))
+        noise(smoothing="scott")
     with pytest.raises(ValueError):
-        jitter(seed="1")
+        noise(seed=float("inf"))
+    with pytest.raises(ValueError):
+        noise(seed="1")
+
+
+def test_sina_and_jitter_are_noise_with_other_defaults():
+    import math
+
+    assert sina() == {"kind": "noise", "smoothing": "silverman"}
+    assert noise(smoothing="silverman") == sina()
+    assert jitter() == {"kind": "noise", "randomness": "uniform", "smoothing": math.inf}
+    # Any option overrides the default.
+    assert sina(smoothing=50, padding=1) == {"kind": "noise", "smoothing": 50, "padding": 1}
+    assert jitter(randomness="blue")["randomness"] == "blue"
+    with pytest.raises(ValueError, match="sina: randomness"):
+        sina(randomness="pink")
+    d = scatter(x="mass", alignment="middle", overlap=sina()).to_dict()
+    assert d["overlap"] == {"kind": "noise", "smoothing": "silverman"}
 
 
 def test_non_finite_numbers_are_tagged_in_the_ir():
