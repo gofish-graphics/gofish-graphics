@@ -1683,8 +1683,10 @@ it is load-bearing, because it is exactly how the count axis acquires its
 Each fold passes its axis index and a plain phrase for the composition (a
 `MeasureSite`). The fold does not know what the axis is called, so the node
 whose type hook raised the clash names it on the way out
-(`GoFishNode.axisName`): `x` or `y`, or the name the nearest enclosing
-coordinate space gives it (`r`, `theta`, `lon`, `lat`). The example is a unit,
+(`GoFishNode.axisName`): `x` or `y`, or the name the innermost enclosing
+coordinate space gives it (`r`, `theta`, `lon`, `lat`). It reads the same
+axis scope the name pass uses (`axisScopeFor`), so a space that declares no
+names leaves `x` and `y` even inside a polar one. The example is a unit,
 because a measure says what kind of quantity a column holds; the axis title
 is a separate choice, made with the `axes` option. `field(name, measure)` is
 spelled the same in Python, so one message serves both.

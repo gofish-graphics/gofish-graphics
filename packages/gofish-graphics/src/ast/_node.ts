@@ -926,16 +926,28 @@ export class GoFishNode {
     return this._underlyingSpace;
   }
 
-  /** The name of axis `dim` where this node sits: the name the nearest
+  /** The axis names visible inside this node: the scope {@link
+   *  resolveAliases} gives its children, folded from the root down by
+   *  `axisScopeFor`, so the innermost coordinate space decides. */
+  public axisScope(): AxisScope {
+    const spaces: SpaceDeclaration[] = [];
+    for (let n: GoFishNode | undefined = this; n; n = n.parent)
+      if (n._space) spaces.push(n._space);
+    return spaces.reduceRight(
+      (scope, space) => axisScopeFor(space, scope),
+      BASE_AXIS_SCOPE
+    );
+  }
+
+  /** The name of axis `dim` where this node sits: the name the innermost
    *  enclosing coordinate space gives it (polar's `theta` / `r`, geo's `lon` /
-   *  `lat`), or `x` / `y`. */
+   *  `lat`), or `x` / `y` (also inside a space that declares no names). */
   public axisName(dim: 0 | 1): string {
-    const key = dim === 0 ? "x" : "y";
-    for (let n: GoFishNode | undefined = this; n; n = n.parent) {
-      const alias = n._space?.aliases?.[key];
-      if (alias !== undefined) return alias;
-    }
-    return key;
+    const xy = dim === 0 ? "x" : "y";
+    const named = Object.entries(this.axisScope().names).find(
+      ([name, axis]) => axis === dim && name !== "x" && name !== "y"
+    );
+    return named?.[0] ?? xy;
   }
 
   /** One of this node's axis spaces as the axis machinery sees it: placed

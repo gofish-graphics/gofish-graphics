@@ -301,6 +301,30 @@ console.log("# space: position moves a claim with its data");
   );
 }
 
+console.log("# space: an axis is named by the innermost coordinate space");
+{
+  const layout = () => ({
+    intrinsicDims: [{}, {}],
+    transform: { translate: [undefined, undefined] },
+  });
+  const leaf = new GoFishNode({ type: "leaf", layout }, []);
+  const linear = new GoFishNode({ type: "coord", layout }, [leaf]);
+  linear._space = { type: "linear" };
+  const polar = new GoFishNode({ type: "coord", layout }, [linear]);
+  polar._space = { type: "polar", aliases: { x: "theta", y: "r" } };
+  ok(
+    "inside polar, the axes are theta and r",
+    linear.parent === polar &&
+      polar.axisName(0) === "theta" &&
+      polar.axisName(1) === "r"
+  );
+  ok(
+    "a space that declares no names inside polar leaves x and y",
+    leaf.axisName(0) === "x" && leaf.axisName(1) === "y",
+    `${leaf.axisName(0)}, ${leaf.axisName(1)}`
+  );
+}
+
 console.log("# space: one seating rule");
 {
   const frame = { sigma: 2, originPx: 30 };
