@@ -839,9 +839,9 @@ export const coord = createNodeOperator(
               }
               // The radial axis title. Only the coord knows where its radial
               // ray is, so it titles its own axis here; the chart-level title
-              // pass reads only the root's own space. The title sits at the
-              // ray's outer end, reading along the ray (as Plotly polar and
-              // ggplot's coord_radial do), beside the tick labels. It names
+              // pass reads only the root's own space. The title continues
+              // the ray past its outer end, reading along the ray, so it never
+              // sits on top of the data. It names
               // the axis from the `axes` option's title, else the radial
               // space's measure, else the coordinate space's own name for the
               // axis (`r`) (#621).
@@ -872,17 +872,17 @@ export const coord = createNodeOperator(
                 let deg = (Math.atan2(uy, ux) * 180) / Math.PI;
                 const flipped = deg > 90 || deg < -90;
                 if (flipped) deg += deg > 0 ? -180 : 180;
-                // Beside the tick labels: off the ray on the labels' side.
-                const OFFSET = 32;
-                const [nx, ny] = [uy, -ux];
-                const px = ox + nx * OFFSET;
-                const py = oy + ny * OFFSET;
+                // Past the ray's outer end (past the last tick): the text
+                // starts a gap beyond it and runs outward, away from the data.
+                const GAP = 8;
+                const px = ox + ux * GAP;
+                const py = oy + uy * GAP;
                 items.push({
                   kind: "text",
                   x: px,
                   y: py,
                   text: title,
-                  textAnchor: flipped ? "start" : "end",
+                  textAnchor: flipped ? "end" : "start",
                   dominantBaseline: "middle",
                   fontSize: 11,
                   rotate: deg,

@@ -295,9 +295,9 @@ its children share. A free child is seated at the scope's `originPx`. The
 coord's type is its children's overlay, kept for its own scope; upward it
 reports nothing on either axis, like every σ-scope root: to its parent it is a
 pixel box. So its axes are its own to draw, and so are their titles: the
-radial axis is drawn along the θ = 0 ray, and its title sits at the ray's
-outer end, beside the tick labels and reading along the ray (as Plotly polar
-and ggplot's `coord_radial` do). The title is the `axes` option's `y` title,
+radial axis is drawn along the θ = 0 ray, and its title continues the ray
+past its outer end (past the last tick), reading along the ray, so it never
+sits on top of the data. The title is the `axes` option's `y` title,
 else the radial space's measure, else the space's own name for the axis (`r`)
 (#621). There is deliberately no angular title by default: the ring's tick
 labels say what goes around, and a circle has no single natural place for a
