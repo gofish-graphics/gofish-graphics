@@ -20,7 +20,7 @@ import {
   UnderlyingSpace,
   CONTINUOUS,
 } from "../underlyingSpace";
-import { Extent, envelope } from "../extent";
+import { Extent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { Size } from "../dims";
 import * as Interval from "../../util/interval";
@@ -209,7 +209,7 @@ function overlayClaim(
     const boxes = claiming.filter((c) => !isCONTINUOUS(c.space));
     return boxes.length === 0
       ? undefined
-      : Extent(envelope(boxes.map((c) => c.extent.width)));
+      : Extent(Monotonic.envelope(boxes.map((c) => c.extent.width)));
   }
   const above: Monotonic.Monotonic[] = [];
   const below: Monotonic.Monotonic[] = [];
@@ -223,8 +223,8 @@ function overlayClaim(
       below.push(Monotonic.ZERO);
     }
   }
-  const up = envelope(above);
-  const down = envelope(below);
+  const up = Monotonic.envelope(above);
+  const down = Monotonic.envelope(below);
   return space.origin === "free"
     ? Extent(up, down)
     : Extent(Monotonic.add(up, down));

@@ -130,18 +130,3 @@ export const niceScope = <S extends UnderlyingSpace | undefined>(
     ),
   ];
 };
-
-/** The upper envelope `max_i m_i(σ)` of claims, over σ ≥ 0. Unlike
- *  `Monotonic.max` it keeps lines with a negative slope or a zero line, which
- *  a union's lower reach needs (a pinned interval above 0 reaches down by a
- *  negative amount). Linear and piecewise claims keep an exact envelope. */
-export const envelope = (ms: Monotonic.Monotonic[]): Monotonic.Monotonic =>
-  ms.every((m) => Monotonic.isLinear(m) || Monotonic.isPiecewise(m))
-    ? Monotonic.piecewise(
-        ms.flatMap((m) =>
-          Monotonic.isLinear(m)
-            ? [{ slope: m.slope, intercept: m.intercept }]
-            : (m as Monotonic.Piecewise).pieces
-        )
-      )
-    : Monotonic.unknown((x) => Math.max(...ms.map((m) => m.run(x))));

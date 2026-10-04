@@ -66,19 +66,28 @@ export function linear(slope: number, intercept: number): Linear {
  *  Exact dominance only — not a full convex-hull prune (non-binding interior
  *  pieces may remain, which is harmless: `run`/`inverse` still take the max). */
 function pruneDominated(pieces: Piece[]): Piece[] {
-  const kept: Piece[] = [];
-  for (let i = 0; i < pieces.length; i++) {
-    const b = pieces[i];
-    const dominated = pieces.some((a, j) => {
-      if (j === i) return false;
-      const better = a.slope >= b.slope && a.intercept >= b.intercept;
-      const strict = a.slope > b.slope || a.intercept > b.intercept;
-      // On a tie (identical line) keep only the first occurrence.
-      return better && (strict || j < i);
-    });
-    if (!dominated) kept.push(b);
+  // Sort by slope desc, then intercept desc, then input order; every piece
+  // that could dominate one sits before it, and every piece before it has a
+  // slope at least as steep. So a piece survives exactly when its intercept
+  // beats every earlier intercept. Survivors keep their input order.
+  const order = pieces
+    .map((_, i) => i)
+    .sort(
+      (i, j) =>
+        pieces[j].slope - pieces[i].slope ||
+        pieces[j].intercept - pieces[i].intercept ||
+        i - j
+    );
+  const keep = new Set<number>();
+  let best: number | undefined;
+  for (const i of order) {
+    const { intercept } = pieces[i];
+    if (best === undefined || intercept > best) {
+      keep.add(i);
+      best = intercept;
+    }
   }
-  return kept;
+  return pieces.filter((_, i) => keep.has(i));
 }
 
 /**
@@ -216,16 +225,25 @@ export const adds = (fn: Monotonic, scalar: number): Monotonic => {
   return unknown((x: number) => fn.run(x) + scalar);
 };
 
-export const max = (...args: Monotonic[]): Monotonic => {
-  args = args.filter((arg) => !isZero(arg));
-  if (args.length === 0) return linear(0, 0);
-  // All linear/piecewise → the max is the union of their pieces (one envelope).
-  const allPieces = args.map(piecesOf);
+/** The upper envelope `max_i m_i(σ)` of claims, over σ ≥ 0. Unlike {@link
+ *  max} it keeps lines with a negative slope or a zero line, which a union's
+ *  lower reach needs (a pinned interval above 0 reaches down by a negative
+ *  amount). Linear and piecewise claims keep an exact envelope; an `unknown`
+ *  operand falls back to a max-of-runs closure. */
+export const envelope = (ms: Monotonic[]): Monotonic => {
+  const allPieces = ms.map(piecesOf);
   if (allPieces.every((p): p is Piece[] => p !== undefined)) {
     return piecewise(allPieces.flat());
   }
-  // An `unknown` operand has no envelope — fall back to a max-of-runs closure.
-  return unknown((x: number) => Math.max(...args.map((arg) => arg.run(x))));
+  return unknown((x: number) => Math.max(...ms.map((m) => m.run(x))));
+};
+
+/** The max of claims, ignoring zero claims: the {@link envelope} of the
+ *  non-zero arguments, or the zero claim when none remain. */
+export const max = (...args: Monotonic[]): Monotonic => {
+  args = args.filter((arg) => !isZero(arg));
+  if (args.length === 0) return linear(0, 0);
+  return envelope(args);
 };
 
 /**

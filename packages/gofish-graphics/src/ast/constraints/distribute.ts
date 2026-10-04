@@ -20,7 +20,7 @@ import {
   CONTINUOUS,
   hasOrigin,
 } from "../underlyingSpace";
-import { Extent, envelope, impliedExtent } from "../extent";
+import { Extent, impliedExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import * as Interval from "../../util/interval";
 
@@ -423,7 +423,10 @@ function stackClaim(parts: Extent[]): Monotonic.Monotonic {
         intercept: at.intercept + a.intercept - d.intercept,
       };
     }
-    return Monotonic.add(envelope(reachUp), envelope(reachDown));
+    return Monotonic.add(
+      Monotonic.envelope(reachUp),
+      Monotonic.envelope(reachDown)
+    );
   }
   return Monotonic.unknown((sigma: number) => {
     let at = 0;
