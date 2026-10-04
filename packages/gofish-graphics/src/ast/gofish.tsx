@@ -49,6 +49,7 @@ import {
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import {
   getScopeRegistry,
+  scopeMap,
   type EqualMeasureAxis,
   type ScopeSolution,
 } from "./solver/scopes";
@@ -426,12 +427,16 @@ export async function layout(
   // The root's types and their size claims, niced together (a niced pinned
   // domain implies its claim).
   const rootExtent = child.resolveExtent();
-  const [niceUnderlyingSpaceX, niceExtentX] = rootAxisDemand[0]
-    ? niceScope(child._underlyingSpace![0], rootExtent[0])
-    : [child._underlyingSpace![0], rootExtent[0]];
-  const [niceUnderlyingSpaceY, niceExtentY] = rootAxisDemand[1]
-    ? niceScope(child._underlyingSpace![1], rootExtent[1])
-    : [child._underlyingSpace![1], rootExtent[1]];
+  const [niceUnderlyingSpaceX, niceExtentX] = niceScope(
+    child._underlyingSpace![0],
+    rootExtent[0],
+    rootAxisDemand[0]
+  );
+  const [niceUnderlyingSpaceY, niceExtentY] = niceScope(
+    child._underlyingSpace![1],
+    rootExtent[1],
+    rootAxisDemand[1]
+  );
 
   // y-orientation is a PER-SCOPE property resolved at bake time (issue #629): the
   // bake walk opens a y-up mirror at each topmost continuous-y node and mirrors
@@ -693,12 +698,10 @@ export async function layout(
   // at `originPx` below (`placeRoot`). That split, who applies the pixel of
   // data 0, is inherent to the two origin states: a pinned extent's position
   // is fixed by its data, a free extent's is set by its parent.
-  const posScales: Size<AxisMap | undefined> = [0, 1].map((axis) => {
-    const scope = rootScopes[axis as 0 | 1];
-    return scope !== undefined && originIs(rootSpaces[axis as 0 | 1], "pinned")
-      ? { sigma: scope.sigma, originPx: scope.originPx! }
-      : undefined;
-  }) as Size<AxisMap | undefined>;
+  const posScales: Size<AxisMap | undefined> = [
+    scopeMap(rootSpaces[0], rootScopes[0]),
+    scopeMap(rootSpaces[1], rootScopes[1]),
+  ];
 
   // Author each dim's `embedded` flag (point/line/area) now that underlying
   // space has resolved each coord axis's measure — Route B reads it to keep a

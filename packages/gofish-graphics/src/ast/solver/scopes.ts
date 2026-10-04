@@ -1,15 +1,17 @@
 /**
  * The σ-scope registry — the ONE place σ / posScale is derived.
  *
- * Every continuous axis is one affine map per σ-scope, `px(d) = pxMin + σ·(d −
- * domainMin)`, and σ is solved once per scope at the frame equation
- * `content(σ) = allocated` (`Monotonic.inverse`). One mechanism covers every
- * site:
+ * Every continuous axis is one affine map per σ-scope, `px(d) = σ·d +
+ * originPx` (an {@link AxisMap}), and σ is solved once per scope from its size
+ * claim at the frame equation `claim.width(σ) = allocated`
+ * (`Monotonic.inverse`). The scope's type fixes whether it has an `originPx`.
+ * One mechanism covers every site:
  *
  *   - **scope roots solve** — the render root, an axis with an explicit pixel
  *     size (self-scaling region), a composed-constraint budget that roots its
  *     own scope, a `shared` operator, a coord boundary — each calls
- *     {@link ScopeRegistry.solveSize} / {@link ScopeRegistry.solvePosition};
+ *     {@link ScopeRegistry.solveScope} (or {@link ScopeRegistry.solveSize}
+ *     for a bare frame with no type);
  *   - **everyone else INHERITS** — "not a root → inherit": a non-root site
  *     simply does not call the solve, so the inherited σ propagates unchanged.
  *     This is the structural rule that stops an intermediate from re-rooting.
@@ -22,10 +24,12 @@ import {
   baselineData,
   hasOrigin,
   isCONTINUOUS,
+  originIs,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../underlyingSpace";
 import type { Extent } from "../extent";
+import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
 import type { RenderSession } from "../_node";
 
@@ -45,6 +49,28 @@ export type ScopeKind =
  *  `px(d) = sigma·d + originPx`. An origin-less (`none`) scope has only
  *  differences, so it has a slope and no `originPx`. */
 export type ScopeSolution = { sigma: number; originPx: number | undefined };
+
+/** The map a solved scope hands its content: `sigma·d + originPx` when the
+ *  scope's type is pinned, so its content shares the scope's frame and places
+ *  its data through the map. Undefined for an unsolved scope or any other
+ *  type: a free scope seats its content's baseline at `originPx` itself. */
+export const scopeMap = (
+  space: UnderlyingSpace | undefined,
+  scope: ScopeSolution | undefined
+): AxisMap | undefined =>
+  scope !== undefined && originIs(space, "pinned")
+    ? { sigma: scope.sigma, originPx: scope.originPx! }
+    : undefined;
+
+/** The pixel of data 0 in a box whose claim starts `offset` px above its low
+ *  edge: the claim's baseline sits `claim.descent(σ)` above that, and data 0
+ *  sits `σ·baselineData` below the baseline. */
+const originPxAt = (
+  space: CONTINUOUS_TYPE,
+  claim: Extent,
+  sigma: number,
+  offset = 0
+): number => offset + claim.descent.run(sigma) - sigma * baselineData(space);
 
 /** One axis's contribution to the #582 equal-measure recentering: the
  *  scope's type and size claim, its box, and its solved σ (`unitPx`, the
@@ -149,9 +175,7 @@ export class ScopeRegistry {
     if (sigma === undefined) return undefined;
     return {
       sigma,
-      originPx: hasOrigin(space)
-        ? claim.descent.run(sigma) - sigma * baselineData(space)
-        : undefined,
+      originPx: hasOrigin(space) ? originPxAt(space, claim, sigma) : undefined,
     };
   }
 
@@ -193,9 +217,7 @@ export class ScopeRegistry {
       return {
         sigma: shared,
         originPx: hasOrigin(info.space)
-          ? offset +
-            info.claim.descent.run(shared) -
-            shared * baselineData(info.space)
+          ? originPxAt(info.space, info.claim, shared, offset)
           : undefined,
       };
     };

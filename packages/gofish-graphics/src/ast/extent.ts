@@ -96,11 +96,15 @@ export const padExtent = (extent: Extent, padding: number): Extent =>
  *  kept. The widths are lengths, so this holds for a signed domain too, and
  *  for a delta axis, whose width is niced from 0. Only a space that renders an
  *  axis over its interval ({@link axisOver}), or will once placed (a free
- *  magnitude, {@link placeBaseline}), is niced. */
+ *  magnitude, {@link placeBaseline}), is niced, and only when `demand` says
+ *  some node in the scope draws that axis (nicing is a presentation
+ *  adjustment, so its demand comes from axis views). */
 export const niceScope = <S extends UnderlyingSpace | undefined>(
   space: S,
-  extent: Extent | undefined
+  extent: Extent | undefined,
+  demand = true
 ): [S, Extent | undefined] => {
+  if (!demand) return [space, extent];
   const axis = axisOver(placeBaseline(space));
   if (space === undefined || !isCONTINUOUS(space) || axis === undefined)
     return [space, extent];

@@ -286,14 +286,15 @@ export const layer = createNodeOperatorSequential(
       // — a categorical axis cannot also be a SIZE magnitude.
       const gridC = selectGridConstraint(constraints);
 
-      // Nest space fold: only INSIDE_OUT edges (`dir: 'in'`) derive a
-      // space — `outer = inner + 2·padding` when inner is SIZE — so a
+      // Nest type fold: only INSIDE_OUT edges (`dir: 'in'`) derive a type
+      // — outer takes inner's type when inner is continuous (the padding is
+      // pixels, so it goes on the claim: `outer = inner + 2·padding`) — so a
       // nested pair participates in the union below, hence in a parent's
       // auto-fit solve. Computed in dependency (source-first) order so
       // chained nests compose (A⊇B⊇C: C feeds B feeds A). OUTSIDE_IN
       // edges derive NOTHING here: the outer is a normal child whose own
-      // claim (or fill/undefined) flows through the union, and `inner =
-      // outer − 2p` is purely a layout-time proposal. When inner isn't SIZE,
+      // type and claim flow through the union, and `inner = outer − 2p` is
+      // purely a layout-time proposal. When inner isn't continuous,
       // `nestedSpace` leaves outer as-is and the proposal handles sizing.
       const nestPlan = buildNestPlan(childNodes, constraints);
       const effectiveChildren = applyNestSpacePlan(children, nestPlan);
@@ -314,10 +315,11 @@ export const layer = createNodeOperatorSequential(
 
       // A simple spread expressed as align + distribute. When the
       // constraints match that operator image (see planConstraintComposition),
-      // override the constrained axes with spread's own space folds (SIZE
-      // sum on the distribute axis, the alignment fold on the cross axis).
-      // Applied BEFORE the self-scaling stash below so an explicit-size layer
-      // builds its LOCAL scale from the folded space, exactly like spread.
+      // override the constrained axes with spread's own type folds (the
+      // distribute fold on the distribute axis, the alignment fold on the
+      // cross axis); the claim hook folds their claims the same way. Applied
+      // BEFORE the self-scaling stash so an explicit-size layer roots its
+      // own scope on the folded type, exactly like spread.
       const plan = planConstraintComposition(constraints, childNodes);
       const composed =
         plan !== undefined
@@ -469,9 +471,10 @@ export const layer = createNodeOperatorSequential(
               if (c.covered[axis]) resolved[axis] = c.extents[axis];
           }
           if (t.gridAxes !== undefined) {
+            // A grid track axis is ordinal, so it claims nothing here (the
+            // tracks size at layout time, in `resolveGridTracks`).
             for (const axis of [0, 1] as const)
-              if (!isUNDEFINED(t.gridAxes[axis]))
-                resolved[axis] = impliedExtent(t.gridAxes[axis]);
+              if (!isUNDEFINED(t.gridAxes[axis])) resolved[axis] = undefined;
           }
           // The self-scaling stash (see the type hook): the stashed space
           // keeps the composed claim, and the layer reports what its own
@@ -531,12 +534,12 @@ export const layer = createNodeOperatorSequential(
 
           // Build the LOCAL scale for each self-scaled (stashed) dim against our
           // own pixel box — see selfScaledSpaces above. The recipe (cf. the
-          // gofish.tsx root): POSITION → a posScale mapping the stashed domain
-          // onto [0, size]; SIZE → a scale factor inverting the Monotonic against
-          // size. A POSITION stash touches only `basePosScales`; a SIZE stash
-          // only `childScaleFactors`. When the size can't be resolved (NaN) we
-          // leave the inherited value, degrading to the inherited path rather
-          // than emitting NaN scales.
+          // gofish.tsx root): solve the stash's scope from its type and claim
+          // (`solveScope`). Every stash sets `childScaleFactors`; a pinned one
+          // also hands its children its map in `basePosScales`, and a free
+          // one seats their baselines at its `originPx`. When the size can't
+          // be resolved (NaN) we leave the inherited value, degrading to the
+          // inherited path rather than emitting NaN scales.
           //
           // `basePosScales` is reused below as the floor for `effectivePosScales`
           // and the per-child forwarding (`childScalesFor`), so the override
@@ -615,8 +618,8 @@ export const layer = createNodeOperatorSequential(
 
           // Scale for resolving this layer's datum `position` constraints: an
           // inherited posScale, else a local one the scope registry solves
-          // from the layer's own POSITION domain, its size claim, and its pixel
-          // size (`solvePosition`, the one pinned-scope solve). Only built when
+          // from the layer's own pinned type, its size claim, and its pixel
+          // size (`solveScope`; the map is `sigma·d + originPx`). Only built when
           // the layer actually owns such an axis — it is used solely by
           // applyConstraints below, not passed to children.
           const space = node._underlyingSpace;

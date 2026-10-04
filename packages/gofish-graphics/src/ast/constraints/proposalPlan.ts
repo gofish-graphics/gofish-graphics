@@ -7,7 +7,7 @@ import { isValue } from "../data";
 import { type UnderlyingSpace, originIs } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
-import type { ScopeRegistry } from "../solver/scopes";
+import { scopeMap, type ScopeRegistry } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
@@ -229,14 +229,11 @@ export function buildChildScalePlan(
   // stash sidestepped the (now-deleted) pre-layout nice walk, so the panel's
   // content sized against the RAW domain while a niced width solved an orphan
   // scope. Nicing here (or, without axis demand, leaving the raw domain here)
-  // makes the ONE scope's domain the single source, consumed by both the
-  // position map (`solvePosition`) and any size solve; `niceScope` is
-  // identity on a baseline magnitude (SIZE is never niced). The shared step
-  // below reads the stash again, so transform a local copy.
+  // makes the ONE scope's type and claim the single source of its solve
+  // (`solveScope`, which yields σ and, for a pinned type, the map). The
+  // shared step below reads the stash again, so transform a local copy.
   const nicedSelfScaled = ([0, 1] as const).map((axis) =>
-    selfScaledSpaces[axis] !== undefined && axisDemand(axis)
-      ? niceScope(selfScaledSpaces[axis], selfScaledExtents[axis])
-      : [selfScaledSpaces[axis], selfScaledExtents[axis]]
+    niceScope(selfScaledSpaces[axis], selfScaledExtents[axis], axisDemand(axis))
   ) as [UnderlyingSpace | undefined, Extent | undefined][];
 
   // A self-scaled stash roots its own scope, exactly like the chart root:
@@ -259,9 +256,7 @@ export function buildChildScalePlan(
     // stash hands its children its own map; a free one hands them none (it
     // seats their baselines at `originPx` itself), never the ancestor's map,
     // whose σ is another scope's.
-    basePosScales[axis] = originIs(stashed, "pinned")
-      ? { sigma: scope.sigma, originPx: scope.originPx! }
-      : undefined;
+    basePosScales[axis] = scopeMap(stashed, scope);
   }
 
   if (constraintBudget !== undefined) {
@@ -312,9 +307,7 @@ export function buildChildScalePlan(
     const [sp, ext] =
       nicedSelfScaled[axis][0] !== undefined
         ? nicedSelfScaled[axis]
-        : axisDemand(axis)
-          ? niceScope(layerSpace?.[axis], layerExtent?.[axis])
-          : [layerSpace?.[axis], layerExtent?.[axis]];
+        : niceScope(layerSpace?.[axis], layerExtent?.[axis], axisDemand(axis));
     if (sp === undefined) continue;
     const sf =
       ext !== undefined
@@ -432,18 +425,18 @@ export function buildPositionScalePlan(
   // A layer that owns a datum-position axis roots a local POSITION scope for
   // it; the domain is niced at this solve iff the dim has axis demand.
   const localMap = (axis: 0 | 1) => {
-    const [space, extent] = axisDemand(axis)
-      ? niceScope(layerSpace?.[axis], layerExtent?.[axis])
-      : [layerSpace?.[axis], layerExtent?.[axis]];
+    const [space, extent] = niceScope(
+      layerSpace?.[axis],
+      layerExtent?.[axis],
+      axisDemand(axis)
+    );
     const scope = scopes.solveScope(
       { kind: "datum-position", rootKey, axis },
       space,
       extent,
       layerSize[axis]
     );
-    return scope !== undefined && originIs(space, "pinned")
-      ? { sigma: scope.sigma, originPx: scope.originPx! }
-      : undefined;
+    return scopeMap(space, scope);
   };
   return {
     ownsAxis,

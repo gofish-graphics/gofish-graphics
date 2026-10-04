@@ -44,7 +44,7 @@ import {
 import type { Measure } from "../data";
 import { axisScale, type AxisMap } from "../domain";
 import { shadowCheckScaleRoot } from "../solver/shadow";
-import { getScopeRegistry } from "../solver/scopes";
+import { getScopeRegistry, scopeMap } from "../solver/scopes";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
@@ -349,13 +349,7 @@ export const coord = createNodeOperator(
             // unless GOFISH_SOLVER_CHECK is set.
             shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
             if (scope === undefined) return [1, undefined, undefined];
-            return [
-              scope.sigma,
-              originIs(resolved, "pinned")
-                ? { sigma: scope.sigma, originPx: scope.originPx! }
-                : undefined,
-              scope.originPx,
-            ];
+            return [scope.sigma, scopeMap(resolved, scope), scope.originPx];
           };
           const [sfX, psX, originX] = fitAxis(0, budget[0]);
           const [sfY, psY, originY] = fitAxis(1, budget[1]);
