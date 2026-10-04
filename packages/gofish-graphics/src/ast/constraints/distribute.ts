@@ -302,12 +302,8 @@ export function distributeSpaceFold(
     // This is "shift each part's data interval and pin the origin": a glued
     // stack is a pinned space.
     const { origin } = opts;
-    let at = 0;
-    let lo = 0;
-    let hi = 0;
-    let zero = 0;
-    targets.forEach((s, i) => {
-      const { ascent, descent } = dataSides(s);
+    const sides = targets.map(dataSides);
+    sides.forEach(({ descent }, i) => {
       if (origin.mirrored && descent > 0) {
         const by = opts.measure === undefined ? "" : `"${opts.measure}"`;
         throw new Error(
@@ -321,11 +317,13 @@ export function distributeSpaceFold(
             `negative amount has no meaning there.`
         );
       }
-      if (i === origin.part) zero = at + origin.fraction * (ascent - descent);
-      lo = Math.min(lo, at - descent);
-      hi = Math.max(hi, at + ascent);
-      at += ascent - descent;
     });
+    const { lo, hi, starts } = endToEnd(sides);
+    const part = sides[origin.part];
+    const zero =
+      part === undefined
+        ? 0
+        : starts[origin.part] + origin.fraction * (part.ascent - part.descent);
     return mirrored(
       CONTINUOUS(
         Interval.interval(lo - zero, hi - zero),
@@ -341,6 +339,28 @@ export function distributeSpaceFold(
   // inside. So it is ORDINAL (keyed by `by`, or anonymous for positional
   // keys), or UNDEFINED with no keys, whatever the spacing or pitch.
   return keyed();
+}
+
+/** Parts laid end to end as vectors: each covers `[at − descent, at +
+ *  ascent]` about the running sum `at` of the parts before it. Returns the
+ *  lowest and highest reach (counting the 0 the stack starts at) and each
+ *  part's `at`. The one walk behind a stack's type and its claim. */
+function endToEnd(sides: { ascent: number; descent: number }[]): {
+  lo: number;
+  hi: number;
+  starts: number[];
+} {
+  let at = 0;
+  let lo = 0;
+  let hi = 0;
+  const starts: number[] = [];
+  for (const { ascent, descent } of sides) {
+    starts.push(at);
+    lo = Math.min(lo, at - descent);
+    hi = Math.max(hi, at + ascent);
+    at += ascent - descent;
+  }
+  return { lo, hi, starts };
 }
 
 /**
@@ -426,16 +446,12 @@ function stackClaim(parts: Extent[]): Monotonic.Monotonic {
     );
   }
   return Monotonic.unknown((sigma: number) => {
-    let at = 0;
-    let lo = 0;
-    let hi = 0;
-    for (const part of parts) {
-      const ascent = part.ascent.run(sigma);
-      const descent = part.descent.run(sigma);
-      lo = Math.min(lo, at - descent);
-      hi = Math.max(hi, at + ascent);
-      at += ascent - descent;
-    }
+    const { lo, hi } = endToEnd(
+      parts.map((p) => ({
+        ascent: p.ascent.run(sigma),
+        descent: p.descent.run(sigma),
+      }))
+    );
     return hi - lo;
   });
 }
