@@ -16,7 +16,6 @@ import {
   mergeAllMeasures,
   isCONTINUOUS,
   mirrored,
-  spaceMeasure,
   CONTINUOUS,
   magnitude,
   hasOrigin,
@@ -270,8 +269,10 @@ export function distributeSpaceFold(
 ): UnderlyingSpace {
   const n = targetSpaces.length;
   if (n === 0) return UNDEFINED;
+  // The targets' units unify as types. An ordinal target's measure is its
+  // grouping field, which names a category axis but is no unit.
   const childMeasure = mergeAllMeasures(
-    targetSpaces.map((s) => spaceMeasure(s)),
+    targetSpaces.map((s) => (isCONTINUOUS(s) ? s.measure : undefined)),
     {
       axis: opts.axis,
       where: opts.glue

@@ -502,6 +502,36 @@ console.log("# space: one fold for every origin");
     JSON.stringify(continuousInterval(withDatum)) ===
       JSON.stringify(interval(-20, 40))
   );
+  // An ordinal's measure is its grouping field, not a unit: a datum position
+  // in dollars beside a category spread by "genre" is no measure clash.
+  const genreThenDollars = throws(() =>
+    resolveLayerBaseSpaces([[UNDEFINED, ORDINAL(["a", "b"], "genre")]], {
+      y: interval(0, 5),
+      yMeasure: "dollars",
+    })
+  );
+  ok(
+    "a datum measure does not clash with an ordinal's grouping field",
+    genreThenDollars === null,
+    genreThenDollars ?? ""
+  );
+  const stackOfGenre = throws(() =>
+    distributeSpaceFold(
+      [ORDINAL(["a"], "genre"), CONTINUOUS(interval(0, 3), "free", "dollars")],
+      ["p", "q"],
+      {
+        axis: 1,
+        spacing: 0,
+        anchor: "edge",
+        origin: { part: 0, fraction: 0, mirrored: false },
+      }
+    )
+  );
+  ok(
+    "a spread's unit check skips an ordinal target's grouping field",
+    stackOfGenre === null,
+    stackOfGenre ?? ""
+  );
   // transform.scale is a pixel operation on every claim.
   const pinnedLayer = CONTINUOUS(interval(0, 10), "pinned");
   ok(

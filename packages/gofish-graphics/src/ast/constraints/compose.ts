@@ -41,7 +41,6 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   isCONTINUOUS,
-  spaceMeasure,
   mergeMeasures,
   CONTINUOUS,
 } from "../underlyingSpace";
@@ -167,16 +166,21 @@ function resolveLayerAxisSpace(
     "baseline",
     "pinned"
   );
-  // The position/span constraints' OWN measure is the authoritative unit for
-  // this axis's data domain (they define it); it wins, falling back to the
-  // children's POSITION measure when the constraints are untagged.
+  // The datum and the continuous children share one axis, so their units
+  // unify as types (a clash is an error; an untagged side takes the other's
+  // unit). An ordinal union's measure is its grouping field, which names a
+  // category axis but is no unit, so it takes no part.
   return CONTINUOUS(
     merged,
     "pinned",
-    mergeMeasures(positionMeasure, spaceMeasure(base), {
-      axis,
-      where: "between a position constraint and the marks it sits among",
-    })
+    mergeMeasures(
+      positionMeasure,
+      isCONTINUOUS(base) ? base.measure : undefined,
+      {
+        axis,
+        where: "between a position constraint and the marks it sits among",
+      }
+    )
   );
 }
 

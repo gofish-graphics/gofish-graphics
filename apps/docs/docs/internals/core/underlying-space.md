@@ -1580,7 +1580,10 @@ must merge silently into a tagged one).
 - `forgetOnConflict(a, b)` — a conflict **forgets** (returns `undefined`)
   rather than throwing. Used only for ORDINAL axes, whose measure is the
   grouping field that names a category axis: categories set up no σ, so two
-  grouping fields on one axis lose the name, not the scale.
+  grouping fields on one axis lose the name, not the scale. A grouping field
+  is no unit, so it never enters `mergeMeasures`: a datum position in dollars
+  beside a category spread on the same axis, or a spread whose targets mix a
+  category spread with dollar bars, unifies only the continuous units.
 
 Why one policy: the measures of an axis decide how many σ-scopes it needs,
 which is part of setting up the layout problem, not of solving it. One axis
