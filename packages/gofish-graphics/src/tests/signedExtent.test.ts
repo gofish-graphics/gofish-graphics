@@ -300,6 +300,34 @@ async function main() {
     );
   }
 
+  console.log("\n# a sized spread of magnitudes roots its own scale");
+  {
+    // The spread's x type is ordinal (separate spaces), but its room depends
+    // on σ, so its explicit w roots its own σ-scope: the bars fit the 300 px
+    // box, not the 500 px canvas.
+    const dl = await chart([
+      { c: "a", v: 10 },
+      { c: "b", v: 20 },
+      { c: "c", v: 30 },
+    ])
+      .flow(spread({ by: "c", dir: "x", w: 300 }))
+      .mark(rect({ w: "v", h: 20 }))
+      .toDisplayList({ w: 500, h: 100 });
+    const rs = rectsOf(dl);
+    const span =
+      Math.max(...rs.map((r) => r.x + r.w)) - Math.min(...rs.map((r) => r.x));
+    check(
+      "the bars span the spread's 300 px",
+      Math.abs(span - 300) < 1e-6,
+      `span ${span}`
+    );
+    check(
+      "the bars keep their data ratio",
+      Math.abs(rs[2].w / rs[0].w - 3) < 1e-9,
+      JSON.stringify(rs.map((r) => r.w))
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

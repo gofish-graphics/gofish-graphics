@@ -387,36 +387,26 @@ export const layer = createNodeOperatorSequential(
             layerTypes.resolved[1],
           ];
 
-          // Stash the absorbed anchored extent and report UNDEFINED upward for
-          // any dim with an explicit pixel size — self-scaling region; see
-          // selfScaledSpaces above. (last write wins — may run more than once.)
-          // `node.selfScaledSpace` mirrors the stash for the axis-demand walk
-          // (issue #659): a stashed dim roots its own σ-scope, so an enclosing
-          // scope's nicing-demand walk must not descend past it (presence,
-          // not a separate boolean, is the "self-scaled" marker).
-          selfScaledSpaces[0] = undefined;
-          selfScaledSpaces[1] = undefined;
+          // Report UNDEFINED upward for a continuous dim with an explicit
+          // pixel size: a self-scaling region (see selfScaledSpaces above).
+          // Whether the region roots a σ-scope is the claim hook's decision,
+          // since only the claim says whether there is anything to scale.
+          // (Last write wins; may run more than once.) `node.selfScaledSpace`
+          // keeps the continuous type that no longer flows upward: an
+          // enclosing scope's nicing-demand walk (issue #659) must not
+          // descend past it, and `resolveAxes` reads it to detect SIBLING
+          // self-scaled regions that genuinely share one domain+extent (e.g.
+          // a spread's per-group scatter facets all given the same explicit
+          // pixel width over the same padded data domain), so it can hoist a
+          // single axis to their common ancestor. An ordinal axis still flows
+          // upward (its keys label the parent's axis), so it is not marked.
           node.selfScaledSpace[0] = undefined;
           node.selfScaledSpace[1] = undefined;
           for (const axis of [0, 1] as const) {
             const composed = resolved[axis];
             const dsize = dims[axis].size;
             if (dsize === undefined) continue;
-            // Any continuous composed space is stashed: the layer's box roots
-            // its own σ-scope on the axis, resolved against that box in
-            // `layout` (#651 smell 1: without the stash, a subtree under a
-            // sized layer silently consumed the ancestor's σ). Presence of
-            // the stash IS the "self-scaled" marker — `resolveAxes` reads it
-            // to detect SIBLING self-scaled regions that genuinely share one
-            // domain+extent (e.g. a spread's per-group scatter facets all
-            // given the same explicit pixel width over the same padded data
-            // domain), so it can hoist a single axis to their common
-            // ancestor. An ordinal axis has no scale to absorb, so it is left
-            // as it is.
-            if (isCONTINUOUS(composed)) {
-              selfScaledSpaces[axis] = composed;
-              node.selfScaledSpace[axis] = composed;
-            }
+            if (isCONTINUOUS(composed)) node.selfScaledSpace[axis] = composed;
             // What the layer reports upward. A DATA-valued size (`w:
             // "count"`, #4/#20 — nested mosaic) is a free magnitude claim the
             // ENCLOSING scale solves: the layer is a leaf in its ancestor's
@@ -486,17 +476,26 @@ export const layer = createNodeOperatorSequential(
             for (const axis of [0, 1] as const)
               if (!isUNDEFINED(t.gridAxes[axis])) resolved[axis] = undefined;
           }
-          // The self-scaling stash (see the type hook): the stashed space
-          // keeps the composed claim, and the layer reports what its own
-          // reported type implies (a data-valued size, or nothing).
+          // The self-scaling stash. An explicit size on an axis whose content
+          // claims room roots the layer's own σ-scope there (#651 smell 1:
+          // without it, a subtree under a sized layer silently consumed the
+          // ancestor's σ). Every continuous axis claims, and so does a spread
+          // of magnitudes, whose type is ordinal or undefined but whose room
+          // depends on σ. The stash keeps the composed type and claim, which
+          // `layout` solves against the layer's box, and the layer reports
+          // what its own reported type implies (a data-valued size, or
+          // nothing).
+          selfScaledSpaces[0] = undefined;
+          selfScaledSpaces[1] = undefined;
           selfScaledExtents[0] = undefined;
           selfScaledExtents[1] = undefined;
           for (const axis of [0, 1] as const) {
             if (dims[axis].size === undefined) continue;
-            if (isCONTINUOUS(t.resolved[axis]))
+            if (resolved[axis] !== undefined) {
+              selfScaledSpaces[axis] = t.resolved[axis];
               selfScaledExtents[axis] = resolved[axis];
-            if (isValue(dims[axis].size) || isCONTINUOUS(t.resolved[axis]))
-              resolved[axis] = impliedExtent(spaces[axis]);
+            }
+            resolved[axis] = impliedExtent(spaces[axis]);
           }
           return resolved;
         },

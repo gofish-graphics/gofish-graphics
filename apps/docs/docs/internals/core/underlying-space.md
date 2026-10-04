@@ -1406,8 +1406,12 @@ the explicit size is a **literal** or a **data value**:
     any dim that has an explicit pixel size and whose resolved space is
     continuous (any origin), the real type is **stashed** verbatim and
     `UNDEFINED` is reported upward; the claim hook stashes the matching claim
-    and reports none. An ORDINAL axis has no scale to absorb, so it is left
-    untouched.
+    and reports none. The stash keys on the claim, not on the type's kind:
+    a spread of magnitudes has an ORDINAL (or UNDEFINED) type, which is
+    still reported upward so its keys label the parent's axis, but its room
+    depends on σ, so the layer stashes its type and claim, roots its own
+    scope, and reports no claim. An ordinal axis with no claim has no scale
+    to absorb, so it is left untouched.
   - **Data-valued size** (`w: "count"`, `w: field("count").normalize()`, an
     entry-flagged `size` array). This is the "DATA-DRIVEN operator extent"
     case (#4/#20 — nested mosaic): the layer's own `w`/`h` becomes a `SIZE`
