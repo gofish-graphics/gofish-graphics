@@ -277,18 +277,20 @@ interval. It lives only in the claim. So when bars 25 px apart are lined up
 on a baseline, the data domain is the bars' data, not the bars plus 100 px of
 spacing read as if it were data.
 
-**Ascent and descent (#773).** A baseline magnitude is measured from its
-baseline on both sides, like a font's ascent and descent. In the type the two
-sides are the two ends of the free interval (`dataSides(space)` reads them
-back). In the claim they are two Monotonics. A rect of value 30 has data
-ascent 30 and claims ascent `30σ`; a rect of value −20 has data descent 20
-and claims descent `20σ` (a rect length is signed, while a text, image, or
-treemap size is a nonnegative magnitude). Most extents sit wholly above their baseline and never spell the
-descent. A pinned or origin-less extent is measured from its low edge
-(`baselineData`, see [the differences that remain](#one-continuous-path-and-the-differences-that-remain)), so
-its descent is 0. The claim's `width` is `ascent + descent`, computed once by
-the `Extent` constructor, and it is what a scope solves σ against. The places
-that read the two sides:
+**Ascent and descent (#773).** An extent is measured from its data 0 on both
+sides, like a font's ascent and descent. In the type the two sides are the two
+ends of the interval: the ascent is `max` and the descent is `−min`. In the
+claim they are two Monotonics. A rect of value 30 has data ascent 30 and
+claims ascent `30σ`; a rect of value −20 has data descent 20 and claims
+descent `20σ` (a rect length is signed, while a text, image, or treemap size
+is a nonnegative magnitude). Most extents sit wholly above their data 0 and
+never spell the descent. Every claim is measured from data 0, whatever its
+origin state, so a side can be negative: a pinned `[30, 50]` claims ascent
+`50σ` and descent `−30σ` (its low edge lies `30σ` above its 0), and its width
+is `20σ`. An origin-less interval starts at 0, so its descent is 0. The
+claim's `width` is `ascent + descent`, computed once by the `Extent`
+constructor, and it is what a scope solves σ against. The places that read
+the two sides:
 
 - An overlay of free children (`unionChildSpaces`) is the union of their free
   intervals, so it takes the larger data extent on each side, and its claim
@@ -317,7 +319,10 @@ that read the two sides:
   positives up from 0, all negatives down from 0) is not a stack option: it is
   spelled by grouping by sign first, so that each stack holds one sign. The
   type lays out the parts' data intervals this way, and the claim lays out
-  their claims the same way (`stackClaim`).
+  their claims the same way (`stackClaim`), measured from the stack's 0. A
+  part's tail is where placement puts it (`tailSides`): a free part's tail is
+  its baseline, and a pinned or origin-less part, which has no data baseline
+  for placement, lies above its tail as a box.
 - The 0 of a stack is its **origin**: its first part's tail by default, as
   above. A stack whose `by` column has `HasMidpoint` (see
   [Column types](#column-types-the-chart-schema)) puts its origin at the
@@ -441,11 +446,6 @@ target. The folds no longer ask whether a child is a magnitude or a position
 except where that question means something. These are the places it does,
 each inherent to what the origin states are:
 
-- **Where a claim is measured from** (`baselineData`): a free extent's claim
-  is measured from data 0, a pinned or origin-less one's from its low edge.
-  A claim measures nonnegative extents from a point inside the extent; data 0
-  lies inside every free interval by construction, but can lie outside a
-  pinned one (a scatter over `[30, 50]`).
 - **Who applies `originPx`**: a pinned node shares its scope's frame, so it
   gets the scope's map and places its data through it; a free node has a
   frame of its own whose 0 is its baseline, so its parent places that
@@ -455,7 +455,9 @@ each inherent to what the origin states are:
   free child sits there too when the fold seats children on their baselines
   (an overlay, a baseline alignment), and is a box from the aligned edge
   otherwise; an origin-less child is always a box, and adds nothing to a
-  pinned result's data interval (it has no data 0 to give it).
+  pinned result's data interval (it has no data 0 to give it). A stack seats
+  each part by its tail, as placement does: a free part on its baseline, any
+  other part as a box from its start.
 - **A stack glues, a spread separates**: a stack glues its parts into ONE
   continuous space along its direction (positions are running data totals);
   a spread's result along its direction is a sequence of separate spaces,
@@ -1163,16 +1165,16 @@ self-scaled stash — a chart nested in another chart's mark inherits):
 scope root, pinned or free, solves `claim.width(σ) = box` (`ScopeRegistry.
 solveScope`). Pixel overhead in the claim (a spread's spacing, a nest's
 padding) takes its pixels, and the data part gets the rest. When the axis has
-an origin, the scope then fixes `originPx`: the claim's baseline (data 0 for a
-free extent, the low edge for a pinned one) sits `claim.descent(σ)` above the
-box's low edge, so `originPx = claim.descent(σ) − σ·baselineData`. For a
-pinned claim with no overhead that is `−σ·min`, the domain filling the box as
-it always has; for a free one it is `descent·σ`. An origin-less scope solves σ
-and has no `originPx`. For this to hold, a pinned child's claim must reach its
+an origin, the scope then fixes `originPx`: every claim is measured from data
+0, so data 0 sits `claim.descent(σ)` above the box's low edge, and `originPx =
+claim.descent(σ)`. For a pinned claim with no overhead that is `−σ·min`, the
+domain filling the box as it always has. An origin-less scope solves σ and has
+no `originPx`. For this to hold, a pinned child's claim must reach its
 parent's union intact: `unionChildExtents` places a child at its own data
-coordinates with its claim's baseline at data `b`, reaching `b·σ + ascent`
-above data 0 and `descent − b·σ` below it, the same layout the scope gives
-it. The `Position: outset-left` labels
+coordinates, reaching its own ascent above data 0 and its own descent below
+it, the same layout the scope gives it. The `position` operator, which moves
+its content's data by a datum offset `v`, moves its claim with it (`v·σ` goes
+from the descent to the ascent). The `Position: outset-left` labels
 story is the case that needs it: its rows are bars 25 px apart, pinned by a
 baseline alignment, so the root's claim is `137σ + 100` and σ leaves exactly
 100 px for the spacing.
@@ -1181,9 +1183,9 @@ Nicing widens only the data part of a claim: the niced claim is the claim
 plus `σ·(nicedWidth − dataWidth)`, both widths in data units from the type
 (`niceScope`). The widths are lengths, so this holds for a signed domain and
 for a delta axis alike. The overhead keeps its pixels. Where the widening
-goes follows the axis: a pinned domain's claim is measured from its low edge,
-so its widening is all ascent (the map places the content), while a delta
-axis centers its content in the niced width, so half goes on each side.
+goes follows the axis: an absolute axis's claim is measured from data 0, so
+each side widens by its own niced end, while a delta axis centers its content
+in the niced width, so half goes on each side.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in

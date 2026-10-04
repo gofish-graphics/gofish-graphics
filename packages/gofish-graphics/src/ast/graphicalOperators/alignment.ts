@@ -11,7 +11,6 @@ import {
   mergeAllMeasures,
   forgetAllMeasures,
   dataWidth,
-  baselineData,
   allMirrored,
   mirrored,
   type CONTINUOUS_TYPE,
@@ -175,16 +174,13 @@ export function resolveAlignmentSpace(
 
 /**
  * The claim of an {@link overlay} with result type `space`: the children's
- * claims seated as their types are. A child at its own data coordinates has
- * its claim's baseline at data `b` ({@link baselineData}: 0 for a free child,
- * its min for a pinned one), so at σ it reaches `b·σ + ascent` above the
- * shared 0 and `descent − b·σ` below it; any other child is its box,
- * `[0, width]`. So the pixel overhead
- * the children carry (spacing, padding) stays in the claim even though it is
- * no part of the data interval. The claim is measured from the result's
- * baseline: a free result keeps the larger reach on each side of 0 (so a
- * parent can σ-solve it with every intercept intact), and a pinned or
- * origin-less result is measured from its low edge, so its descent is 0.
+ * claims seated as their types are. Every claim is measured from data 0, so a
+ * child at its own data coordinates reaches its own ascent above the shared 0
+ * and its own descent below it; any other child is its box, `[0, width]`.
+ * So the pixel overhead the children carry (spacing, padding) stays in the
+ * claim even though it is no part of the data interval. The result keeps the
+ * larger reach on each side of 0, so a parent can σ-solve it with every
+ * intercept intact.
  *
  * A result with no data coordinates (ordinal or undefined) still claims when
  * a child with no data coordinates does (a spread of magnitudes: its type is
@@ -213,19 +209,14 @@ function overlayClaim(
   const below: Monotonic.Monotonic[] = [];
   for (const { space: s, extent } of claiming) {
     if (isCONTINUOUS(s) && atOwnData(s, seat)) {
-      const b = baselineData(s);
-      above.push(Monotonic.add(Monotonic.linear(b, 0), extent.ascent));
-      below.push(Monotonic.add(extent.descent, Monotonic.linear(-b, 0)));
+      above.push(extent.ascent);
+      below.push(extent.descent);
     } else {
       above.push(extent.width);
       below.push(Monotonic.ZERO);
     }
   }
-  const up = Monotonic.envelope(above);
-  const down = Monotonic.envelope(below);
-  return space.origin === "free"
-    ? Extent(up, down)
-    : Extent(Monotonic.add(up, down));
+  return Extent(Monotonic.envelope(above), Monotonic.envelope(below));
 }
 
 /** The size claim of a {@link unionChildSpaces} overlay, given the overlay's

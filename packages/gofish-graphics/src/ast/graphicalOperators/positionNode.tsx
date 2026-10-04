@@ -10,6 +10,8 @@ import {
   UnderlyingSpace,
 } from "../underlyingSpace";
 import { GoFishAST } from "../_ast";
+import { Extent } from "../extent";
+import * as Monotonic from "../../util/monotonic";
 
 export type PositionNodeOptions = {
   key?: string;
@@ -29,8 +31,27 @@ const offsetSpace = (
 
   // Shift the data interval by `value` and pin it: a pinned space moves by
   // `value`, a free or difference space hangs its origin at `value`. The claim
-  // is the child's own (see `resolveExtent` below).
+  // moves with it (see `offsetExtent` below).
   return anchorAt(space, value, space.measure ?? getMeasure(offset));
+};
+
+/** The claim of {@link offsetSpace}'s result: a claim is measured from data
+ *  0, so moving the content up by a datum `value` moves `value·σ` from below
+ *  0 to above it. The content keeps its own σ-affine width (pixel overhead
+ *  included), so it sizes as before. */
+const offsetExtent = (
+  space: UnderlyingSpace,
+  extent: Extent | undefined,
+  offset: MaybeValue<number> | undefined
+): Extent | undefined => {
+  if (extent === undefined || !isValue(offset) || !isCONTINUOUS(space))
+    return extent;
+  const value = getValue(offset);
+  if (value === undefined) return extent;
+  return Extent(
+    Monotonic.add(extent.ascent, Monotonic.linear(value, 0)),
+    Monotonic.add(extent.descent, Monotonic.linear(-value, 0))
+  );
 };
 
 export const positionNode = (
@@ -49,10 +70,14 @@ export const positionNode = (
           offsetSpace(child[1], options.y),
         ];
       },
-      // Pinning moves the data interval only: the content keeps its own
-      // σ-affine claim (pixel overhead included), so it sizes as before.
-      resolveExtent: (childExtents) =>
-        childExtents[0] ?? [undefined, undefined],
+      resolveExtent: (childExtents, childSpaces) => {
+        const extent = childExtents[0] ?? [undefined, undefined];
+        const child = childSpaces[0] ?? [UNDEFINED, UNDEFINED];
+        return [
+          offsetExtent(child[0], extent[0], options.x),
+          offsetExtent(child[1], extent[1], options.y),
+        ];
+      },
       layout: (shared, size, scales, children) => {
         if (children.length !== 1) {
           throw new Error("Position operator expects exactly one child");

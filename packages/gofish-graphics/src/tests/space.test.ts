@@ -30,6 +30,8 @@ import {
   distributeSpaceFold,
 } from "../ast/constraints/distribute";
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
+import { positionNode } from "../ast/graphicalOperators/positionNode";
+import { value } from "../ast/data";
 import {
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
@@ -251,6 +253,54 @@ console.log("# space: a type hook cannot read a claim");
   );
 }
 
+console.log("# space: position moves a claim with its data");
+{
+  // position({ y: 10 }, rect({ h: −20 })) is pinned over [−10, 10]. Every
+  // claim is measured from data 0, so its claim moves with it: 10σ on each
+  // side, 20σ in all. Overlaid with a pinned point at 5 it still claims 20σ
+  // (it once passed the free claim through unchanged, read as 35σ).
+  const bar = new GoFishNode(
+    {
+      type: "bar",
+      resolveUnderlyingSpace: () => [
+        UNDEFINED,
+        CONTINUOUS(interval(-20, 0), "free"),
+      ],
+      layout: () => ({
+        intrinsicDims: [{}, {}],
+        transform: { translate: [undefined, undefined] },
+      }),
+    },
+    []
+  );
+  const placed = positionNode({ y: value(10) }, [bar]);
+  const [, space] = placed.resolveUnderlyingSpace();
+  const [, claim] = placed.resolveExtent();
+  ok(
+    "the claim reaches 10σ above and below data 0",
+    JSON.stringify((space as CONTINUOUS_TYPE).dataInterval) ===
+      JSON.stringify(interval(-10, 10)) &&
+      claim!.ascent.run(1) === 10 &&
+      claim!.descent.run(1) === 10
+  );
+  const point = CONTINUOUS(interval(5, 5), "pinned");
+  const overlay = unionChildSpaces([onY(space), onY(point)], 1);
+  const overlayClaim = unionChildExtents(
+    [
+      [undefined, claim],
+      [undefined, impliedExtent(point)],
+    ],
+    [onY(space), onY(point)],
+    1,
+    overlay
+  )!;
+  ok(
+    "overlaid with a pinned point at 5 it claims 20σ",
+    overlayClaim.width.run(1) === 20,
+    `${overlayClaim.width.run(1)}`
+  );
+}
+
 console.log("# space: a scope solves σ from its claim, and the pixel of 0");
 {
   const scopes = new ScopeRegistry();
@@ -263,11 +313,12 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
     Math.abs(plain.sigma - 400 / 137) < 1e-12 &&
       Math.abs(plain.originPx! + 10 * plain.sigma) < 1e-9
   );
-  // 100 px of spacing in the claim keeps its pixels.
+  // 100 px of spacing in the claim keeps its pixels. The claim is measured
+  // from data 0: the domain's low edge lies 10σ above it.
   const spaced = scopes.solveScope(
     meta,
     pinned,
-    Extent(M.linear(137, 100)),
+    Extent(M.linear(147, 100), M.linear(-10, 0)),
     400
   )!;
   const map = { sigma: spaced.sigma, originPx: spaced.originPx! };
@@ -475,8 +526,10 @@ console.log("# space: one fold for every origin");
   );
   const padded = nestedExtent(undefined, inner, impliedExtent(inner), 3)!;
   ok(
-    "and pads its claim on both sides of the baseline",
-    padded.width.run(1) === 10 && padded.descent.run(1) === 3
+    "and pads its claim on both sides, measured from data 0",
+    padded.width.run(1) === 10 &&
+      padded.ascent.run(1) === 12 &&
+      padded.descent.run(1) === -2
   );
   // An origin-less child has no data coordinates to add to a pinned overlay.
   const overlaid = unionChildSpaces(

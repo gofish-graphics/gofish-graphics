@@ -11,7 +11,6 @@ import {
   ORDINAL,
   UNDEFINED,
   UnderlyingSpace,
-  dataSides,
   originIs,
   mergeAllMeasures,
   isCONTINUOUS,
@@ -299,11 +298,11 @@ export function distributeSpaceFold(
     // `[at − descent, at + ascent]` about the running sum `at` of the parts
     // before it, and the extent shifts so the stack's origin sits at 0. So
     // (30, −25, 10, −50) spans [−35, 30], and (5, 10, 20, 40, 25) centered on
-    // the middle of the 20 spans [−25, 75]. A positioned part has descent 0.
-    // This is "shift each part's data interval and pin the origin": a glued
-    // stack is a pinned space.
+    // the middle of the 20 spans [−25, 75]. A part with no data baseline
+    // lies from its start ({@link tailSides}). This is "shift each part's
+    // data interval and pin the origin": a glued stack is a pinned space.
     const { origin } = opts;
-    const sides = targets.map(dataSides);
+    const sides = targets.map(tailSides);
     sides.forEach(({ descent }, i) => {
       if (origin.mirrored && descent > 0) {
         const by = opts.measure === undefined ? "" : `"${opts.measure}"`;
@@ -341,6 +340,27 @@ export function distributeSpaceFold(
   // keys), or UNDEFINED with no keys, whatever the spacing or pitch.
   return keyed();
 }
+
+/** A part's reach on each side of its tail, the point the previous part's
+ *  head meets (placement's `tail` anchor, see {@link RelationAnchor}). A free
+ *  part's tail is its baseline, data 0, so its sides are its interval's ends
+ *  and a negative part reaches back. A pinned or origin-less part has no data
+ *  baseline for placement, so its tail is its start and it lies above it as a
+ *  box. */
+function tailSides(space: CONTINUOUS_TYPE): {
+  ascent: number;
+  descent: number;
+} {
+  const { min, max } = space.dataInterval;
+  return space.origin === "free"
+    ? { ascent: max, descent: -min }
+    : { ascent: max - min, descent: 0 };
+}
+
+/** {@link tailSides} for a part's claim: a free part's claim is measured from
+ *  its data 0, its tail; any other part is its box. */
+const tailClaim = (space: UnderlyingSpace, extent: Extent): Extent =>
+  originIs(space, "free") ? extent : Extent(extent.width);
 
 /** Parts laid end to end as vectors: each covers `[at − descent, at +
  *  ascent]` about the running sum `at` of the parts before it. Returns the
@@ -413,48 +433,67 @@ function chainClaim(
   });
 }
 
-/** The claim of a stack: its parts' claims laid end to end exactly as
- *  {@link distributeSpaceFold} lays their data extents (each part's baseline on
- *  the previous part's head), so any pixel overhead a part carries stays in the
- *  claim. The width of the span the parts cover at σ: the highest head-side
- *  reach minus the lowest tail-side reach, each over the running sums. When
- *  every part's sides are linear the running sums are lines too, so the claim
- *  is an exact envelope (`envelope`); otherwise it is a closure. */
-function stackClaim(parts: Extent[]): Monotonic.Monotonic {
+/** The claim of a stack: its parts' claims ({@link tailClaim}) laid end to
+ *  end exactly as {@link distributeSpaceFold} lays their data extents (each
+ *  part's tail on the previous part's head), so any pixel overhead a part
+ *  carries stays in the claim. Like every claim it is measured from the
+ *  stack's data 0, its origin: the highest reach above the origin and the
+ *  lowest reach below it, over the running sums. When every part's sides are
+ *  linear the running sums are lines too, so each side is an exact envelope
+ *  (`envelope`); otherwise each is a closure. */
+function stackClaim(parts: Extent[], origin: StackOrigin<number>): Extent {
   const sides = parts.flatMap((p) => [p.ascent, p.descent]);
   if (sides.every(Monotonic.isLinear)) {
     const lines = sides as Monotonic.Linear[];
     const reachUp: Monotonic.Monotonic[] = [Monotonic.ZERO];
     const reachDown: Monotonic.Monotonic[] = [Monotonic.ZERO];
-    let at = { slope: 0, intercept: 0 };
+    const starts: Monotonic.Linear[] = [];
+    let at = Monotonic.linear(0, 0);
     for (let i = 0; i < parts.length; i++) {
       const a = lines[2 * i];
       const d = lines[2 * i + 1];
-      reachUp.push(
-        Monotonic.linear(at.slope + a.slope, at.intercept + a.intercept)
-      );
-      reachDown.push(
-        Monotonic.linear(d.slope - at.slope, d.intercept - at.intercept)
-      );
-      at = {
-        slope: at.slope + a.slope - d.slope,
-        intercept: at.intercept + a.intercept - d.intercept,
-      };
+      starts.push(at);
+      reachUp.push(Monotonic.add(at, a));
+      reachDown.push(Monotonic.add(d, Monotonic.smul(-1, at)));
+      at = Monotonic.add(at, a, Monotonic.smul(-1, d)) as Monotonic.Linear;
     }
-    return Monotonic.add(
-      Monotonic.envelope(reachUp),
-      Monotonic.envelope(reachDown)
+    // The origin: the point `fraction` of the way from its part's tail to
+    // its head.
+    const zero =
+      parts[origin.part] === undefined
+        ? Monotonic.ZERO
+        : Monotonic.add(
+            starts[origin.part],
+            Monotonic.smul(
+              origin.fraction,
+              Monotonic.add(
+                lines[2 * origin.part],
+                Monotonic.smul(-1, lines[2 * origin.part + 1])
+              )
+            )
+          );
+    return Extent(
+      Monotonic.add(Monotonic.envelope(reachUp), Monotonic.smul(-1, zero)),
+      Monotonic.add(Monotonic.envelope(reachDown), zero)
     );
   }
-  return Monotonic.unknown((sigma: number) => {
-    const { lo, hi } = endToEnd(
-      parts.map((p) => ({
-        ascent: p.ascent.run(sigma),
-        descent: p.descent.run(sigma),
-      }))
-    );
-    return hi - lo;
-  });
+  const reach = (sigma: number) => {
+    const at = parts.map((p) => ({
+      ascent: p.ascent.run(sigma),
+      descent: p.descent.run(sigma),
+    }));
+    const { lo, hi, starts } = endToEnd(at);
+    const part = at[origin.part];
+    const zero =
+      part === undefined
+        ? 0
+        : starts[origin.part] + origin.fraction * (part.ascent - part.descent);
+    return { up: hi - zero, down: zero - lo };
+  };
+  return Extent(
+    Monotonic.unknown((sigma: number) => reach(sigma).up),
+    Monotonic.unknown((sigma: number) => reach(sigma).down)
+  );
 }
 
 /**
@@ -488,7 +527,10 @@ export function distributeExtentFold(
   if (isCONTINUOUS(space)) {
     if (opts.size !== undefined && isValue(opts.size))
       return impliedExtent(space);
-    return Extent(stackClaim(targetExtents as Extent[]));
+    return stackClaim(
+      targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!)),
+      opts.origin
+    );
   }
   if (
     opts.glue ||

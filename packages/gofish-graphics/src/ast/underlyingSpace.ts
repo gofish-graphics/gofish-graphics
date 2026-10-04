@@ -194,29 +194,6 @@ export const placeBaseline = <T extends UnderlyingSpace | undefined>(
 export const dataWidth = (space: CONTINUOUS_TYPE): number =>
   intervalWidth(space.dataInterval);
 
-/** The data value a space's size claim is measured from: its baseline. A
- *  free extent hangs from its origin, data 0, which lies inside its interval
- *  by construction. A pinned or origin-less extent is measured from its low
- *  edge. This difference is inherent: a claim measures nonnegative extents
- *  from a point inside the extent, and data 0 can lie outside a pinned
- *  interval (a scatter over `[30, 50]`), so the low edge is the one reference
- *  inside every pinned extent. An origin-less extent has no data 0 at all. */
-export const baselineData = (space: CONTINUOUS_TYPE): number =>
-  space.origin === "free" ? 0 : space.dataInterval.min;
-
-/** The data extent on each side of a space's baseline ({@link baselineData}):
- *  `ascent` above it, `descent` below it. A free extent can reach both ways;
- *  a pinned or origin-less one sits wholly above its low edge. */
-export const dataSides = (
-  space: CONTINUOUS_TYPE
-): { ascent: number; descent: number } => {
-  const b = baselineData(space);
-  return {
-    ascent: space.dataInterval.max - b,
-    descent: b - space.dataInterval.min,
-  };
-};
-
 /** Nice the interval a space renders an axis over (issue #659): a pinned
  *  domain's `[min, max]`, or a delta axis's width from 0, rounded to d3-nice
  *  bounds (count 10, matching the axis tick nicing), so a scope solved with

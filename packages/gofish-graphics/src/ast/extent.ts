@@ -14,7 +14,6 @@
 import * as Monotonic from "../util/monotonic";
 import type { Size } from "./dims";
 import {
-  dataSides,
   dataWidth,
   isCONTINUOUS,
   niceContinuous,
@@ -25,18 +24,21 @@ import {
 } from "./underlyingSpace";
 
 /**
- * One axis's size claim, measured from the extent's baseline like a font's
+ * One axis's size claim, measured from the extent's data 0 like a font's
  * ascent and descent: a bar of value 30 claims ascent 30σ, a bar of value −20
- * claims descent 20σ. A pinned or origin-less extent sits wholly above its low
- * edge, so its descent is 0. Every continuous axis has exactly one claim. An
- * ordinal or undefined axis has one only when its content's room depends on
- * σ (a spread of magnitudes: separate spaces, one shared scale), measured as
- * a box (descent 0); otherwise it has none (`undefined`).
+ * claims descent 20σ. Every continuous claim is measured from data 0,
+ * whatever the origin state, so a side can be negative: a pinned `[30, 50]`
+ * claims ascent 50σ and descent −30σ (its low edge lies 30σ above its 0), and
+ * its width is 20σ. An origin-less extent's interval starts at 0, so its
+ * descent is 0. Every continuous axis has exactly one claim. An ordinal or
+ * undefined axis has one only when its content's room depends on σ (a spread
+ * of magnitudes: separate spaces, one shared scale), measured as a box
+ * (descent 0); otherwise it has none (`undefined`).
  */
 export type Extent = {
-  /** The σ-affine extent on the positive side of the baseline. */
+  /** The σ-affine reach above data 0. */
   ascent: Monotonic.Monotonic;
-  /** The σ-affine extent on the negative side of the baseline. */
+  /** The σ-affine reach below data 0. */
   descent: Monotonic.Monotonic;
   /** The total `ascent + descent`, the size a scope solves σ against.
    *  Computed once by {@link Extent} from the pair; never set on its own. */
@@ -53,15 +55,14 @@ export const Extent = (
   width: Monotonic.isZero(descent) ? ascent : Monotonic.add(ascent, descent),
 });
 
-/** The claim a type makes by itself, with no pixel overhead: each side is its
- *  data extent times σ. This is every leaf's claim, and the claim of any
- *  pinned or origin-less result of a fold (those claim exactly their data
- *  width). Only a free result composed from claims (a spread's spacing, a
- *  nest's padding, a fixed pitch, a `transform.scale`) claims more. */
+/** The claim a type makes by itself, with no pixel overhead: each side is
+ *  its data reach from 0 times σ, `max·σ` above and `−min·σ` below. This is
+ *  every leaf's claim. A result composed from claims (a spread's spacing, a
+ *  nest's padding, a fixed pitch, a `transform.scale`) can claim more. */
 export const impliedExtent = (space: UnderlyingSpace): Extent | undefined => {
   if (!isCONTINUOUS(space)) return undefined;
-  const { ascent, descent } = dataSides(space);
-  return Extent(Monotonic.linear(ascent, 0), Monotonic.linear(descent, 0));
+  const { min, max } = space.dataInterval;
+  return Extent(Monotonic.linear(max, 0), Monotonic.linear(-min, 0));
 };
 
 /** {@link impliedExtent} on both axes. */
@@ -112,20 +113,16 @@ export const niceScope = <S extends UnderlyingSpace | undefined>(
   if (extent === undefined) return [niced, undefined];
   const widened =
     dataWidth(niced as CONTINUOUS_TYPE) - dataWidth(space as CONTINUOUS_TYPE);
-  // A pinned domain's niced ends are data, and its claim is measured from the
-  // low edge, so the widening is all ascent (the map places the content). A
-  // free domain's claim is measured from its 0, so each side widens by its
-  // own niced end. A delta axis comes from centering (`middle` alignment), so
-  // the content sits centered in the niced width: half the widening on each
-  // side.
+  // A claim is measured from data 0, so each side of an absolute axis widens
+  // by its own niced end. A delta axis comes from centering (`middle`
+  // alignment), so the content sits centered in the niced width: half the
+  // widening on each side.
   const iv = (space as CONTINUOUS_TYPE).dataInterval;
   const nicedIv = (niced as CONTINUOUS_TYPE).dataInterval;
   const [up, down] =
     axis === "delta"
       ? [widened / 2, widened / 2]
-      : space.origin === "free"
-        ? [nicedIv.max - iv.max, iv.min - nicedIv.min]
-        : [widened, 0];
+      : [nicedIv.max - iv.max, iv.min - nicedIv.min];
   return [
     niced,
     Extent(

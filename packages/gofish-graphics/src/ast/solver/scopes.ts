@@ -21,7 +21,6 @@
  */
 import * as Monotonic from "../../util/monotonic";
 import {
-  baselineData,
   hasOrigin,
   isCONTINUOUS,
   originIs,
@@ -63,14 +62,10 @@ export const scopeMap = (
     : undefined;
 
 /** The pixel of data 0 in a box whose claim starts `offset` px above its low
- *  edge: the claim's baseline sits `claim.descent(σ)` above that, and data 0
- *  sits `σ·baselineData` below the baseline. */
-const originPxAt = (
-  space: CONTINUOUS_TYPE,
-  claim: Extent,
-  sigma: number,
-  offset = 0
-): number => offset + claim.descent.run(sigma) - sigma * baselineData(space);
+ *  edge: a claim is measured from data 0, so data 0 sits `claim.descent(σ)`
+ *  above that. */
+const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
+  offset + claim.descent.run(sigma);
 
 /** One axis's contribution to the #582 equal-measure recentering: the
  *  scope's type and size claim, its box, and its solved σ (`unitPx`, the
@@ -145,11 +140,10 @@ export class ScopeRegistry {
    * continuous scope solves the same frame equation, `claim.width(σ) =
    * allocated`, so any pixel overhead the claim carries (spacing, padding)
    * takes its pixels and the data part gets the rest. A scope whose type has
-   * an origin also fixes `originPx`, the pixel of data 0: the claim's
-   * baseline ({@link baselineData}) sits `claim.descent(σ)` above the box's low
-   * edge, so `originPx = claim.descent(σ) − σ·baselineData`. For a pinned
-   * claim with no overhead that is `−σ·min`, the domain's low edge at 0; for a
-   * free one it is `descent·σ`. A scope whose type has no data coordinates
+   * an origin also fixes `originPx`, the pixel of data 0: a claim is
+   * measured from data 0, so `originPx = claim.descent(σ)` above the box's
+   * low edge. For a pinned claim with no overhead that is `−σ·min`, the
+   * domain's low edge at 0. A scope whose type has no data coordinates
    * (a spread of magnitudes is ordinal) still solves σ from its claim, with no
    * `originPx`. Returns undefined when there is no claim or it cannot
    * determine σ (a claim with no σ in it, such as a zero-width domain).
@@ -175,7 +169,7 @@ export class ScopeRegistry {
     if (sigma === undefined) return undefined;
     return {
       sigma,
-      originPx: hasOrigin(space) ? originPxAt(space, claim, sigma) : undefined,
+      originPx: hasOrigin(space) ? originPxAt(claim, sigma) : undefined,
     };
   }
 
@@ -217,7 +211,7 @@ export class ScopeRegistry {
       return {
         sigma: shared,
         originPx: hasOrigin(info.space)
-          ? originPxAt(info.space, info.claim, shared, offset)
+          ? originPxAt(info.claim, shared, offset)
           : undefined,
       };
     };
