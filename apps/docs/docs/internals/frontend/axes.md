@@ -346,7 +346,11 @@ difference axis), never off the size claim:
 - **DIFFERENCE (continuous, `origin: "none"`)** — bare tick marks at the
   tick values over `[0, w]`, where `w` is the space's width niced from 0
   (`niceContinuous`, the same nicing the scope that sizes the content
-  applies), so the steps are even, plus plain-text labels
+  applies), so the steps are even. A delta axis has no data 0, so its frame
+  is its own: it centers the content in that niced width (the axis's
+  `contentAt`, where the content's baseline is pinned), because a delta axis
+  comes from centering (`middle` alignment) and its slack splits evenly. Plus
+  plain-text labels
   showing the _delta_ between adjacent ticks, pinned at their midpoints
   (`position({ [axis]: datum(midpoint) })`). The delta labels have no tick of
   their own to provide an offset, so they `distribute` off the line (at the

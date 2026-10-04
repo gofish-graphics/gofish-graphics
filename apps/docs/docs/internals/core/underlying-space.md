@@ -1160,7 +1160,10 @@ baseline alignment, so the root's claim is `137σ + 100` and σ leaves exactly
 Nicing widens only the data part of a claim: the niced claim is the claim
 plus `σ·(nicedWidth − dataWidth)`, both widths in data units from the type
 (`niceScope`). The widths are lengths, so this holds for a signed domain and
-for a delta axis alike. The overhead keeps its pixels.
+for a delta axis alike. The overhead keeps its pixels. Where the widening
+goes follows the axis: a pinned domain's claim is measured from its low edge,
+so its widening is all ascent (the map places the content), while a delta
+axis centers its content in the niced width, so half goes on each side.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in

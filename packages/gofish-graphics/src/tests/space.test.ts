@@ -504,9 +504,10 @@ console.log("# space: nicing is gated on an axis over the interval");
     Extent(M.linear(137, 0))
   );
   ok(
-    "a delta axis nices its width from 0, and its claim with it",
+    "a delta axis nices its width, its claim widening by half on each side",
     JSON.stringify(delta!.dataInterval) === JSON.stringify(interval(0, 140)) &&
-      deltaClaim!.width.run(1) === 140
+      deltaClaim!.width.run(1) === 140 &&
+      deltaClaim!.descent.run(1) === 1.5
   );
   const free = CONTINUOUS(interval(0, 137), "free");
   ok(

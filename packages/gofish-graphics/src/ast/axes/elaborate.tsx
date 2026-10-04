@@ -65,6 +65,11 @@ export type AxisElaboration = {
    *  unset (they're just a label row, with no spanning line to center on, so
    *  the title pass falls back to the plot bbox). */
   anchor?: GoFishNode;
+  /** Where the content's baseline sits along this axis, in the axis's own
+   *  data frame: a delta axis has no data 0, so its frame is its own, and it
+   *  centers the content in its niced width. Unset: the content's baseline is
+   *  the frame's 0. */
+  contentAt?: { dim: 0 | 1; at: number };
 };
 
 /** A `labelAngle` value as authored: a plain number applies to every tier of
@@ -493,35 +498,43 @@ function elaborateContinuousAxis(
   });
 }
 
-/** One difference axis: bare tick marks at tick values, delta labels at midpoints. */
+/** One difference axis: bare tick marks at tick values, delta labels at
+ *  midpoints. `space` is the content's space; the axis spans its niced width
+ *  from 0, and the content sits centered in it (`contentAt`): a delta axis
+ *  comes from centering (`middle` alignment), so its slack splits evenly. */
 function elaborateDifferenceAxis(
   dim: 0 | 1,
-  space: CONTINUOUS_TYPE,
+  content: CONTINUOUS_TYPE,
   prefix: string,
   crossFloor?: number,
   side: "start" | "end" = "start"
 ): AxisElaboration {
+  const space = niceContinuous(content);
   // `space` is the axis's niced space (`niceContinuous`), so its width is a
   // nice value from 0 and the ticks step evenly up to it: the scope that sizes
   // the content solves against the same niced width (`niceScope`), so ticks
   // line up with the marks they annotate. The axis line spans [0, width].
   const width = dataWidth(space);
   const tickValues = d3Ticks(0, width, TICK_COUNT);
+  const contentAt = (width - dataWidth(content)) / 2;
   const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
     value: (v + tickValues[i + 1]) / 2,
     text: fmtNum(tickValues[i + 1] - v),
   }));
-  return positionAxis({
-    dim,
-    prefix,
-    lineMin: 0,
-    lineMax: width,
-    tickValues,
-    tickNode: (_v, _i, name) => tickRect(dim).name(name),
-    extraLabels,
-    crossFloor,
-    side,
-  });
+  return {
+    ...positionAxis({
+      dim,
+      prefix,
+      lineMin: 0,
+      lineMax: width,
+      tickValues,
+      tickNode: (_v, _i, name) => tickRect(dim).name(name),
+      extraLabels,
+      crossFloor,
+      side,
+    }),
+    contentAt: { dim, at: contentAt },
+  };
 }
 
 /**
@@ -788,7 +801,7 @@ function elaborationsFor(
     } else if (kind === "delta" && isCONTINUOUS(s)) {
       const e = elaborateDifferenceAxis(
         dim,
-        niceContinuous(s),
+        s,
         prefix,
         crossFloor,
         axisSide(dim)
@@ -957,10 +970,17 @@ export async function elaborateAxes(
       content.name(CONTENT_NAME);
       const axisNodes = constrained.flatMap((e) => e.nodes);
       inner = (await (layer as any)([content, ...axisNodes])) as GoFishNode;
+      // A delta axis says where in its own frame the content sits; elsewhere
+      // the content's baseline is the frame's 0 (a literal pixel pin).
+      const contentAt = (dim: 0 | 1) => {
+        const at = constrained.find((e) => e.contentAt?.dim === dim)?.contentAt;
+        return at === undefined ? 0 : datum(at.at);
+      };
       await inner.relate((g) => [
-        Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
-          g[CONTENT_NAME],
-        ]),
+        Constraint.position(
+          { x: contentAt(0), y: contentAt(1), anchor: "baseline" },
+          [g[CONTENT_NAME]]
+        ),
         ...constrained.flatMap((e) => e.constraints(g)),
       ]);
     }

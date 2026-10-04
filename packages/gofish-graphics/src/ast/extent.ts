@@ -108,11 +108,17 @@ export const niceScope = <S extends UnderlyingSpace | undefined>(
   if (extent === undefined) return [niced, undefined];
   const widened =
     dataWidth(niced as CONTINUOUS_TYPE) - dataWidth(space as CONTINUOUS_TYPE);
+  // A pinned domain's niced ends are data, and its claim is measured from the
+  // low edge, so the widening is all ascent (the map places the content). A
+  // delta axis comes from centering (`middle` alignment), so the content sits
+  // centered in the niced width: half the widening on each side.
+  const [up, down] =
+    axisOver(space) === "delta" ? [widened / 2, widened / 2] : [widened, 0];
   return [
     niced,
     Extent(
-      Monotonic.add(extent.ascent, Monotonic.linear(widened, 0)),
-      extent.descent
+      Monotonic.add(extent.ascent, Monotonic.linear(up, 0)),
+      Monotonic.add(extent.descent, Monotonic.linear(down, 0))
     ),
   ];
 };
