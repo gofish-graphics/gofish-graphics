@@ -21,7 +21,7 @@ import {
   dataWidth,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
-  originIs,
+  axisOver,
 } from "../underlyingSpace";
 
 /**
@@ -713,10 +713,10 @@ function elaborationsFor(
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     const iv = continuousInterval(s);
-    if (originIs(s, "pinned") && iv) {
+    if (axisOver(s) === "absolute" && iv) {
       nices[dim] = d3Nice(iv.min, iv.max, TICK_COUNT);
       floors[dim] = nices[dim]![0];
-    } else if (originIs(s, "none")) {
+    } else if (axisOver(s) === "delta") {
       floors[dim] = 0;
     }
   }
@@ -778,7 +778,8 @@ function elaborationsFor(
     const s = spaceFor(dim);
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
-    if (originIs(s, "pinned")) {
+    const kind = axisOver(s);
+    if (kind === "absolute" && isCONTINUOUS(s)) {
       const e = elaborateContinuousAxis(
         dim,
         nices[dim]!,
@@ -790,7 +791,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
-    } else if (originIs(s, "none")) {
+    } else if (kind === "delta" && isCONTINUOUS(s)) {
       const e = elaborateDifferenceAxis(
         dim,
         s,

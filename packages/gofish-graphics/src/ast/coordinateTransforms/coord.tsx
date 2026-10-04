@@ -24,20 +24,24 @@ import {
   UnderlyingSpace,
   UNDEFINED,
   ORDINAL,
+  isCONTINUOUS,
   isORDINAL,
   isUNDEFINED,
   forgetAllMeasures,
   continuousInterval,
-  type CONTINUOUS_TYPE,
   CONTINUOUS,
   originIs,
 } from "../underlyingSpace";
-import { Extent } from "../extent";
+import { impliedExtent } from "../extent";
+import {
+  overlayOrigin,
+  seatedUnion,
+  unionChildExtents,
+} from "../graphicalOperators/alignment";
 import type { Measure } from "../data";
 import { axisScale, type AxisMap } from "../domain";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry } from "../solver/scopes";
-import * as Monotonic from "../../util/monotonic";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
@@ -179,63 +183,46 @@ export const coord = createNodeOperator(
           // is the frame the user asked for, not a summary of what is in it.
           const declared = coordTransform.dataWindow;
 
-          let xSpace = UNDEFINED;
-          const xChildrenPositionSpaces = children.filter((child) =>
-            originIs(child[0], "pinned")
-          );
-          const xChildrenOrdinalSpaces = children.filter(
-            (child) => child[0].kind === "ordinal"
-          );
-
-          if (
-            xChildrenPositionSpaces.length > 0 &&
-            xChildrenOrdinalSpaces.length === 0
-          ) {
-            const xPos = xChildrenPositionSpaces
-              .map((child) => child[0])
-              .filter((s) => originIs(s, "pinned"));
-            const domain =
-              declared?.[0] ??
-              IntervalLib.unionAll(...xPos.map((s) => continuousInterval(s)!));
-            // A coord transform maps these data positions into its own fixed
-            // coordinate space (e.g. angle/radius). Cross-unit unions are the
-            // transform's business, not the marginal-style corruption the guard
-            // targets, so forget on conflict rather than throwing.
-            const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
-            xSpace = CONTINUOUS(domain, "pinned", xMeasure, coordTransform);
-          } else if (xChildrenOrdinalSpaces.length > 0) {
-            xSpace = unionOrdinal(children, 0);
-          }
-
-          let ySpace = UNDEFINED;
-          const yChildrenPositionSpaces = children.filter((child) =>
-            originIs(child[1], "pinned")
-          );
-          const yChildrenOrdinalSpaces = children.filter(
-            (child) => child[1].kind === "ordinal"
-          );
-
-          if (
-            yChildrenPositionSpaces.length > 0 &&
-            yChildrenOrdinalSpaces.length === 0
-          ) {
-            const yPos = yChildrenPositionSpaces
-              .map((child) => child[1])
-              .filter((s) => originIs(s, "pinned"));
-            const domain =
-              declared?.[1] ??
-              IntervalLib.unionAll(...yPos.map((s) => continuousInterval(s)!));
-            // See the x branch: coord maps into its own coordinate space, so
-            // forget on cross-unit conflict rather than throwing.
-            const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
-            ySpace = CONTINUOUS(domain, "pinned", yMeasure, coordTransform);
-          } else if (yChildrenOrdinalSpaces.length > 0) {
-            ySpace = unionOrdinal(children, 1);
-          }
-
-          const result: Size<UnderlyingSpace> = [xSpace, ySpace];
-          spaceRef.current = result;
-          return result;
+          // Per axis, the coord's fold is the overlay fold (each child seated
+          // on its baseline, the origin of the overlay), with two rules of its
+          // own: any ORDINAL child makes the axis a category axis, and a
+          // declared window pins the axis to that window. A coord transform
+          // maps its children's data into its own fixed coordinate space
+          // (angle/radius), so cross-unit unions are the transform's
+          // business: measures forget on conflict rather than throwing.
+          const axisSpace = (axis: 0 | 1): UnderlyingSpace => {
+            if (children.some((child) => child[axis].kind === "ordinal"))
+              return unionOrdinal(children, axis);
+            const spaces = children.map((child) => child[axis]);
+            const conts = spaces.filter((s) => isCONTINUOUS(s));
+            if (conts.length === 0) return UNDEFINED;
+            const window = declared?.[axis];
+            const origin =
+              window !== undefined ? "pinned" : overlayOrigin(spaces);
+            return CONTINUOUS(
+              window ?? seatedUnion(conts, "baseline", origin),
+              origin,
+              forgetAllMeasures(conts.map((s) => s.measure)),
+              coordTransform
+            );
+          };
+          // The coord roots its own σ-scope on both axes, resolved against
+          // the budget it is given (`layout`): its children's data lives in
+          // the coordinate space, not in its parent's. It keeps its type for
+          // that scope, and reports upward only a pinned or category axis.
+          //
+          // TODO(coord-absorbs-axes): declared shortcut. A coord should report
+          // nothing upward, like a self-scaled layer: its footprint in the
+          // parent is a pixel box, and reporting a free theta extent upward
+          // mixes the angle's data into the parent's x (the flower chart). But
+          // a pinned report is load-bearing today: the chart-level axis title
+          // of a pie names the coord's measure off it, and the root's y-up
+          // flip opens on it. The fix is for those two readers to ask the
+          // coord's own scope; until then the pinned and category reports stay.
+          spaceRef.current = [axisSpace(0), axisSpace(1)];
+          return spaceRef.current.map((s) =>
+            originIs(s, "pinned") || isORDINAL(s) ? s : UNDEFINED
+          ) as Size<UnderlyingSpace>;
         },
         layout: (shared, size, scales, children, node) => {
           // Stage 6b: a coord boundary is a σ-scope root — it re-roots σ for its
@@ -319,79 +306,69 @@ export const coord = createNodeOperator(
           size = budget;
           // Fit the subtree into the coordinate budget, exactly as the ROOT
           // fits content to the canvas (gofish.tsx) — here the budget plays the
-          // role of the canvas. A baseline-magnitude (data SIZE) axis scales by
-          // budget/total via `width.inverse(budget)` so the children fill the
-          // ring; an anchored (data POSITION) axis maps onto [0, budget] via an
-          // anchored map. Only DATA-bound channels consume the scale — a plain
+          // role of the canvas: σ solves the coord's claim against the budget
+          // so the children fill the ring, and a pinned axis also maps its
+          // data onto the budget. Only DATA-bound channels consume the scale — a plain
           // number bypasses both σ and the map (see `computeAesthetic`) — so
           // hand-sized (radian/pixel) stories are unchanged. This is what lets a
           // mark say `w: datum(count)` and have the ring auto-fit.
           const fitAxis = (
             axis: 0 | 1,
             budget: number
-          ): [number | undefined, AxisMap | undefined] => {
-            // An anchored (data POSITION) axis: the coord's own
-            // `resolveUnderlyingSpace` already unioned the children's POSITION
-            // spaces into `spaceRef.current` — reuse it and map onto [0, budget].
-            // This is a POSITION scope only: it has no SIZE scope, so it carries
-            // NO σ (Stage 6c: never fabricate an independent size slope — the map's
-            // own slope IS the scope's σ). A data-bound size on this axis reads the
-            // map difference; a plain-number size bypasses both. The former `1`
-            // placeholder was a fabricated size σ with no scope behind it.
+          ): [number | undefined, AxisMap | undefined, number | undefined] => {
+            // The coord roots its axis's scope like the chart root: one σ
+            // from the coord's own type and claim against its budget, and,
+            // for a pinned axis, the map its children share.
+            // The coord's own claim: its children's claims overlaid as its
+            // type overlays their data, or, on an axis pinned to a declared
+            // window, the window's own data width.
             const resolved = spaceRef.current?.[axis];
-            if (resolved !== undefined && originIs(resolved, "pinned")) {
-              return [
-                undefined,
-                scopes.solvePosition(
-                  { kind: "coord", rootKey: node.key ?? node.type, axis },
-                  resolved,
-                  node.resolveExtent()[axis],
-                  budget
-                ),
-              ];
-            }
-            // A baseline-magnitude (data SIZE) axis: `resolveUnderlyingSpace`
-            // leaves this case UNDEFINED, so sum the children's widths here and
-            // scale by budget/total (`width.inverse(budget)`) to fill the ring.
-            const baseline = children
-              .filter((c) => {
-                const s = (c as GoFishNode)._underlyingSpace?.[axis];
-                return s !== undefined && originIs(s, "free");
-              })
-              .map((c) => c.resolveExtent()[axis]!);
-            if (baseline.length > 0) {
-              const width = Monotonic.add(...baseline.map((e) => e.width));
-              // Stage 6b: the coord boundary's SIZE frame — solved through the one
-              // registry (content(σ)=budget via Monotonic.inverse).
-              const sigma = scopes.solveSize(
-                { kind: "coord", rootKey: node.key ?? node.type, axis },
-                width,
-                budget
-              );
-              // Solver shadow (#39): a coord boundary RE-ROOTS σ for its subtree,
-              // exactly as the root fits content to the canvas — assert the same
-              // frame equation content(σ)=budget closes at the boundary. Pass the
-              // raw inverse (undefined when it fails) so a degenerate re-root is
-              // caught, mirroring shadowCheckScaleRoot at the root. No-op unless
-              // GOFISH_SOLVER_CHECK is set.
-              shadowCheckScaleRoot(
-                Extent(width),
-                budget,
-                sigma ?? undefined,
-                axis
-              );
-              return [sigma ?? 1, undefined];
-            }
-            return [1, undefined];
+            const claim =
+              resolved === undefined
+                ? undefined
+                : coordTransform.dataWindow?.[axis] !== undefined
+                  ? impliedExtent(resolved)
+                  : unionChildExtents(
+                      children.map((c) => c.resolveExtent()),
+                      children.map((c) => c.resolveUnderlyingSpace()),
+                      axis,
+                      resolved
+                    );
+            const scope = scopes.solveScope(
+              { kind: "coord", rootKey: node.key ?? node.type, axis },
+              resolved,
+              claim,
+              budget
+            );
+            // Solver shadow (#39): a coord boundary RE-ROOTS σ for its subtree,
+            // exactly as the root fits content to the canvas — assert the same
+            // frame equation content(σ)=budget closes at the boundary. No-op
+            // unless GOFISH_SOLVER_CHECK is set.
+            shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
+            if (scope === undefined) return [1, undefined, undefined];
+            return [
+              scope.sigma,
+              originIs(resolved, "pinned")
+                ? { sigma: scope.sigma, originPx: scope.originPx! }
+                : undefined,
+              scope.originPx,
+            ];
           };
-          const [sfX, psX] = fitAxis(0, budget[0]);
-          const [sfY, psY] = fitAxis(1, budget[1]);
+          const [sfX, psX, originX] = fitAxis(0, budget[0]);
+          const [sfY, psY, originY] = fitAxis(1, budget[1]);
           const childPlaceables = children.map((child) =>
             child.layout(size, [axisScale(sfX, psX), axisScale(sfY, psY)])
           );
-          childPlaceables.forEach((c) => {
-            c.place("x", 0, "baseline");
-            c.place("y", 0, "baseline");
+          // A free child's local 0 is its baseline, so it sits at the scope's
+          // pixel of data 0; a pinned child shares the coord's frame (the map
+          // places it), and an origin-less one has no 0: both sit at 0.
+          const seat = (child: (typeof children)[number], axis: 0 | 1) =>
+            originIs(child.resolveUnderlyingSpace()[axis], "free")
+              ? ((axis === 0 ? originX : originY) ?? 0)
+              : 0;
+          childPlaceables.forEach((c, i) => {
+            c.place("x", seat(children[i], 0), "baseline");
+            c.place("y", seat(children[i], 1), "baseline");
           });
 
           // Compute bounding box in screen space by transforming sample points

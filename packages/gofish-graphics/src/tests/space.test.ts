@@ -25,6 +25,12 @@ import {
 } from "../ast/graphicalOperators/alignment";
 import * as M from "../util/monotonic";
 import { interval } from "../util/interval";
+import { distributeSpaceFold } from "../ast/constraints/distribute";
+import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
+import {
+  resolveLayerAxisExtent,
+  resolveLayerBaseSpaces,
+} from "../ast/constraints/compose";
 
 let passed = 0;
 let failed = 0;
@@ -246,28 +252,53 @@ console.log("# space: a type hook cannot read a claim");
   );
 }
 
-console.log("# space: a pinned scope solves σ from its claim");
+console.log("# space: a scope solves σ from its claim, and the pixel of 0");
 {
   const scopes = new ScopeRegistry();
   const meta = { kind: "root" as const, rootKey: "t", axis: 0 as const };
-  const pinned = CONTINUOUS(interval(0, 137), "pinned");
+  const pinned = CONTINUOUS(interval(10, 147), "pinned");
   // No overhead: the domain fills the box, as before.
-  const plain = scopes.solvePosition(meta, pinned, impliedExtent(pinned), 400)!;
+  const plain = scopes.solveScope(meta, pinned, impliedExtent(pinned), 400)!;
   ok(
     "with no overhead the domain fills the box",
-    Math.abs(plain.sigma - 400 / 137) < 1e-12 && plain.pxMin === 0
+    Math.abs(plain.sigma - 400 / 137) < 1e-12 &&
+      Math.abs(plain.originPx! + 10 * plain.sigma) < 1e-9
   );
   // 100 px of spacing in the claim keeps its pixels.
-  const spaced = scopes.solvePosition(
+  const spaced = scopes.solveScope(
     meta,
     pinned,
     Extent(M.linear(137, 100)),
     400
   )!;
+  const map = { sigma: spaced.sigma, originPx: spaced.originPx! };
   ok(
     "pixel overhead takes its pixels; the data gets the rest",
     Math.abs(spaced.sigma - 300 / 137) < 1e-12 &&
-      Math.abs(pxOf(spaced, 137) - 300) < 1e-9
+      Math.abs(pxOf(map, 147) - 300) < 1e-9
+  );
+  // A free scope's data 0 sits its descent claim (overhead included) above
+  // the box's low edge.
+  const free = scopes.solveScope(
+    meta,
+    CONTINUOUS(interval(-20, 30), "free"),
+    Extent(M.linear(30, 0), M.linear(20, 5)),
+    105
+  )!;
+  ok(
+    "a free scope seats data 0 at its descent claim",
+    free.sigma === 2 && free.originPx === 45
+  );
+  // An origin-less scope has a slope and no pixel of 0.
+  const none = scopes.solveScope(
+    meta,
+    CONTINUOUS(interval(0, 50), "none"),
+    impliedExtent(CONTINUOUS(interval(0, 50), "none")),
+    100
+  )!;
+  ok(
+    "an origin-less scope has σ and no originPx",
+    none.sigma === 2 && none.originPx === undefined
   );
   // Nicing widens only the data part.
   const [niced, nicedClaim] = niceScope(
@@ -290,6 +321,106 @@ console.log("# space: a pinned scope solves σ from its claim");
   ok(
     "a pinned child spans its data min then its whole claim",
     u.width.run(1) === 10 + 25
+  );
+}
+
+console.log("# space: one fold for every origin");
+{
+  const chainOpts = {
+    spacing: 10,
+    anchor: "edge" as const,
+    origin: { part: 0, fraction: 0, mirrored: false },
+  };
+  // A spread moves each target to its place, so pinned targets chain as
+  // boxes of their data width, like free ones.
+  const pinnedChain = distributeSpaceFold(
+    [
+      CONTINUOUS(interval(5, 9), "pinned"),
+      CONTINUOUS(interval(100, 103), "pinned"),
+    ],
+    [undefined, undefined],
+    chainOpts
+  );
+  ok(
+    "an unkeyed chain of pinned targets is a free chain of their widths",
+    originIs(pinnedChain, "free") &&
+      JSON.stringify(pinnedChain.dataInterval) ===
+        JSON.stringify(interval(0, 7))
+  );
+  // A keyed chain of pinned targets is a category axis (their widths are
+  // spans of positions, not quantities).
+  ok(
+    "a keyed chain of pinned targets is ordinal",
+    distributeSpaceFold(
+      [
+        CONTINUOUS(interval(5, 9), "pinned"),
+        CONTINUOUS(interval(1, 2), "pinned"),
+      ],
+      ["a", "b"],
+      chainOpts
+    ).kind === "ordinal"
+  );
+  // A stack lays out pinned and free parts alike.
+  const mixed = distributeSpaceFold(
+    [
+      CONTINUOUS(interval(0, 4), "free"),
+      CONTINUOUS(interval(10, 13), "pinned"),
+    ],
+    [undefined, undefined],
+    { ...chainOpts, glue: true }
+  );
+  ok(
+    "a stack of free and pinned parts is pinned over their running sums",
+    originIs(mixed, "pinned") &&
+      JSON.stringify(mixed.dataInterval) === JSON.stringify(interval(0, 7))
+  );
+  // A nest pads a pinned inner the same way as a free one.
+  const inner = CONTINUOUS(interval(5, 9), "pinned");
+  ok(
+    "a nest's outer takes a pinned inner's type",
+    nestedSpace(UNDEFINED, inner) === inner
+  );
+  const padded = nestedExtent(undefined, inner, impliedExtent(inner), 3)!;
+  ok(
+    "and pads its claim on both sides of the baseline",
+    padded.width.run(1) === 10 && padded.descent.run(1) === 3
+  );
+  // An origin-less child has no data coordinates to add to a pinned overlay.
+  const overlaid = unionChildSpaces(
+    [
+      onY(CONTINUOUS(interval(30, 50), "pinned")),
+      onY(CONTINUOUS(interval(0, 500), "none")),
+    ],
+    1
+  );
+  ok(
+    "a pinned overlay's data interval ignores an origin-less child",
+    JSON.stringify(continuousInterval(overlaid)) ===
+      JSON.stringify(interval(30, 50))
+  );
+  // A layer's datum domain overlays a free child union too (the layer seats
+  // free children at data 0).
+  const [, withDatum] = resolveLayerBaseSpaces(
+    [[UNDEFINED, CONTINUOUS(interval(-20, 40), "free")]],
+    { y: interval(10, 15) }
+  );
+  ok(
+    "a datum domain is unioned with a free child union",
+    JSON.stringify(continuousInterval(withDatum)) ===
+      JSON.stringify(interval(-20, 40))
+  );
+  // transform.scale is a pixel operation on every claim.
+  const pinnedLayer = CONTINUOUS(interval(0, 10), "pinned");
+  ok(
+    "transform.scale scales a pinned claim",
+    resolveLayerAxisExtent(
+      [[undefined, impliedExtent(pinnedLayer)]],
+      [[UNDEFINED, pinnedLayer]],
+      1,
+      2,
+      undefined,
+      pinnedLayer
+    )!.width.run(1) === 20
   );
 }
 

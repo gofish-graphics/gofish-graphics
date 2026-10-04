@@ -47,16 +47,13 @@ export type Origin = "pinned" | "free" | "none";
  * fixed pitch, `transform.scale`) is never part of it. That overhead lives only
  * in the size claim (`Extent` in `./extent.ts`).
  *
- * A free magnitude is NOT a data axis pinned at 0: the former builds no
- * posScale and composes as a magnitude (measures FORGET on conflict), while
- * the latter builds a posScale and unifies measures as TYPES (THROW on a
- * clash). The distinct origin states keep them apart.
- *
- * TODO(space-unification): the SIZE / POSITION / DIFFERENCE code paths
- * downstream (folds, posScale construction, nicing, axis rendering) still
- * branch on the origin state. Now that all three share one interval shape, a
- * follow-up can collapse many of those branches. See the "Toward one
- * continuous path" section of the underlying-space essay.
+ * A free magnitude is NOT a data axis pinned at 0: the former is placed by
+ * its parent at its baseline and renders no axis, while the latter places its
+ * data through its scope's map and renders an absolute axis. The distinct
+ * origin states keep them apart. The folds and scope solves run one path over
+ * all three; the places that still ask which origin a space has, and why, are
+ * listed in the underlying-space essay ("One continuous path, and the
+ * differences that remain").
  */
 export type CONTINUOUS_TYPE = {
   kind: "continuous";
@@ -152,22 +149,46 @@ export const hasOrigin = (
 ): space is CONTINUOUS_TYPE =>
   originIs(space, "pinned") || originIs(space, "free");
 
+/** The axis a space renders over its data interval, one read of its origin
+ *  state: a pinned space has data coordinates, so it renders an `"absolute"`
+ *  axis; an origin-less one has only differences, so it renders a `"delta"`
+ *  axis; a free magnitude, still waiting for its parent to place it, renders
+ *  none (undefined), and neither does a non-continuous space. */
+export const axisOver = (
+  space: UnderlyingSpace | undefined
+): "absolute" | "delta" | undefined =>
+  originIs(space, "pinned")
+    ? "absolute"
+    : originIs(space, "none")
+      ? "delta"
+      : undefined;
+
 /** The data width of a CONTINUOUS space (the length of its interval). */
 export const dataWidth = (space: CONTINUOUS_TYPE): number =>
   intervalWidth(space.dataInterval);
 
-/** The data extent on each side of a space's baseline. A free extent hangs
- *  from its baseline (`ascent` above, `descent` below). A pinned or
- *  origin-less extent sits wholly above its low edge, so its descent is 0. */
+/** The data value a space's size claim is measured from: its baseline. A
+ *  free extent hangs from its origin, data 0, which lies inside its interval
+ *  by construction. A pinned or origin-less extent is measured from its low
+ *  edge. This difference is inherent: a claim measures nonnegative extents
+ *  from a point inside the extent, and data 0 can lie outside a pinned
+ *  interval (a scatter over `[30, 50]`), so the low edge is the one reference
+ *  inside every pinned extent. An origin-less extent has no data 0 at all. */
+export const baselineData = (space: CONTINUOUS_TYPE): number =>
+  space.origin === "free" ? 0 : space.dataInterval.min;
+
+/** The data extent on each side of a space's baseline ({@link baselineData}):
+ *  `ascent` above it, `descent` below it. A free extent can reach both ways;
+ *  a pinned or origin-less one sits wholly above its low edge. */
 export const dataSides = (
   space: CONTINUOUS_TYPE
-): { ascent: number; descent: number } =>
-  space.origin === "free"
-    ? {
-        ascent: Math.max(space.dataInterval.max, 0),
-        descent: Math.max(-space.dataInterval.min, 0),
-      }
-    : { ascent: dataWidth(space), descent: 0 };
+): { ascent: number; descent: number } => {
+  const b = baselineData(space);
+  return {
+    ascent: space.dataInterval.max - b,
+    descent: b - space.dataInterval.min,
+  };
+};
 
 /** Nice a pinned space's data domain (issue #659). Returns a copy with the
  *  `[min, max]` domain rounded to d3-nice bounds (count 10, matching the axis

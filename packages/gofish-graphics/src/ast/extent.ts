@@ -68,14 +68,6 @@ export const impliedExtents = (
   impliedExtent(spaces[1]),
 ];
 
-/** The overlay of several free claims about one shared baseline: the larger
- *  ascent above it and the larger descent below. */
-export const maxExtent = (extents: Extent[]): Extent =>
-  Extent(
-    Monotonic.max(...extents.map((e) => e.ascent)),
-    Monotonic.max(...extents.map((e) => e.descent))
-  );
-
 /** A claim scaled by a pixel-space `transform.scale` (like translate, a scale
  *  acts on pixels, so it scales the claim but never the data interval). */
 export const scaleExtent = (scale: number, extent: Extent): Extent =>
@@ -115,17 +107,6 @@ export const niceScope = <S extends UnderlyingSpace | undefined>(
     ),
   ];
 };
-
-/** Where a σ-scope root (the chart root, or a layer's self-scaled stash)
- *  seats the baseline of the extent it fits (#773). The scope fits `ascent +
- *  descent` to its box, so the baseline sits `descent·σ` above the box's low
- *  edge. Pinned and origin-less extents have descent 0, and a scope with no
- *  σ on the axis (a pinned root) places through its map instead: 0. */
-export const scopeRootBaseline = (
-  extent: Extent | undefined,
-  sigma: number | undefined
-): number =>
-  extent !== undefined && sigma !== undefined ? extent.descent.run(sigma) : 0;
 
 /** The upper envelope `max_i m_i(σ)` of claims, over σ ≥ 0. Unlike
  *  `Monotonic.max` it keeps lines with a negative slope or a zero line, which

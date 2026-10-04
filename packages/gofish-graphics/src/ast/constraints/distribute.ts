@@ -18,7 +18,7 @@ import {
   mirrored,
   spaceMeasure,
   CONTINUOUS,
-  originIs,
+  hasOrigin,
 } from "../underlyingSpace";
 import { Extent, envelope, impliedExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
@@ -234,19 +234,22 @@ export type DistributeFoldOptions = {
  * explicit-size override and the glue (stack) variant, so phase-3 spread can
  * delegate to it wholesale:
  *
- *  - explicit `opts.size` (a value) → SIZE(value) — the spread's own size wins
- *    over any children-derived claim.
- *  - glue → POSITION over the parts laid end to end from the stack's origin
+ *  - explicit `opts.size` (a value) → free `[0, value]` — the spread's own
+ *    size wins over any children-derived claim.
+ *  - Every other continuous result needs every target to have an origin
+ *    (pinned or free): the chain moves each target to its place, so it reads
+ *    each one as a box of its data extent. Otherwise: ORDINAL(keys) when any
+ *    target is keyed, else UNDEFINED.
+ *  - glue → pinned over the parts laid end to end from the stack's origin
  *    (each part's baseline on the previous part's head; `[0, Σ widths]` when
- *    no part has a descent and the origin is the first part's tail) when
- *    all-POSITION or all-SIZE; ORDINAL(keys) when any child is keyed; else
- *    UNDEFINED.
- *  - non-glue, all-SIZE with some nonzero data extent → SIZE of the chain's
- *    data extent ({@link chainDataExtent}).
- *  - non-glue, any child keyed → ORDINAL.
- *  - non-glue, all-SIZE with no data extent → SIZE of the chain's data extent.
- *  - non-glue, all-POSITION → POSITION([0, Σ widths]).
- *  - anything else → UNDEFINED (caller falls back to its default union).
+ *    no part has a descent and the origin is the first part's tail).
+ *  - non-glue → free over the chain's data extent ({@link chainDataExtent}),
+ *    except that a keyed chain is ORDINAL unless its targets are all free
+ *    with some data extent. That asymmetry is inherent: a free target's width
+ *    is a quantity (a marimekko's column widths), so a chain of them is a
+ *    quantity axis even when keyed; a pinned target's width is a span of its
+ *    own data positions (a facet panel), which adds up to no quantity, so a
+ *    keyed chain of them is a category axis.
  *
  * Every number here is a data extent: spacing and pitch are pixels, so they
  * live only in the claim ({@link distributeExtentFold}).
@@ -278,14 +281,12 @@ export function distributeSpaceFold(
   }
 
   const namedKeys = keys.filter((k): k is string => k !== undefined);
-  // A "free" baseline magnitude composes as a chain; an anchored
-  // data-positioned child sums its data widths. The two paths stay distinct.
-  const allSize = targetSpaces.every((s) => originIs(s, "free"));
-  const allPosition = targetSpaces.every((s) => originIs(s, "pinned"));
-  const sumWidths = (): number =>
-    (targetSpaces as CONTINUOUS_TYPE[])
-      .map(dataWidth)
-      .reduce((a, b) => a + b, 0);
+  const keyed = (): UnderlyingSpace =>
+    namedKeys.length > 0
+      ? ORDINAL(namedKeys, opts.measure, opts.anonymous)
+      : UNDEFINED;
+  if (!targetSpaces.every(hasOrigin)) return keyed();
+  const targets = targetSpaces as CONTINUOUS_TYPE[];
 
   if (opts.glue) {
     // The parts lie end to end as vectors (#773): each covers
@@ -294,76 +295,54 @@ export function distributeSpaceFold(
     // (30, −25, 10, −50) spans [−35, 30], and (5, 10, 20, 40, 25) centered on
     // the middle of the 20 spans [−25, 75]. A positioned part has descent 0.
     // This is "shift each part's data interval and pin the origin": a glued
-    // stack of free parts is a pinned space.
-    if (allSize || allPosition) {
-      const { origin } = opts;
-      let at = 0;
-      let lo = 0;
-      let hi = 0;
-      let zero = 0;
-      (targetSpaces as CONTINUOUS_TYPE[]).forEach((s, i) => {
-        const { ascent, descent } = dataSides(s);
-        if (origin.mirrored && descent > 0) {
-          const by = opts.measure === undefined ? "" : `"${opts.measure}"`;
-          throw new Error(
-            `${by ? `stack({ by: ${by} })` : "stack"}: a centered stack's ` +
-              `parts are nonnegative amounts, but the part for ` +
-              `${keys[i] !== undefined ? `"${keys[i]}"` : `child ${i + 1}`} ` +
-              `is negative. Its \`by\` column${by ? ` ${by}` : ""} has ` +
-              `HasMidpoint (declared ` +
-              `with \`.diverging()\`), so the stack's 0 is the midpoint of its ` +
-              `order and each part lies on the side its level is on; a ` +
-              `negative amount has no meaning there.`
-          );
-        }
-        if (i === origin.part) zero = at + origin.fraction * (ascent - descent);
-        lo = Math.min(lo, at - descent);
-        hi = Math.max(hi, at + ascent);
-        at += ascent - descent;
-      });
-      return mirrored(
-        CONTINUOUS(
-          Interval.interval(lo - zero, hi - zero),
-          "pinned",
-          childMeasure
-        ),
-        origin.mirrored
-      );
-    }
-    if (namedKeys.length > 0)
-      return ORDINAL(namedKeys, opts.measure, opts.anonymous);
-    return UNDEFINED;
+    // stack is a pinned space.
+    const { origin } = opts;
+    let at = 0;
+    let lo = 0;
+    let hi = 0;
+    let zero = 0;
+    targets.forEach((s, i) => {
+      const { ascent, descent } = dataSides(s);
+      if (origin.mirrored && descent > 0) {
+        const by = opts.measure === undefined ? "" : `"${opts.measure}"`;
+        throw new Error(
+          `${by ? `stack({ by: ${by} })` : "stack"}: a centered stack's ` +
+            `parts are nonnegative amounts, but the part for ` +
+            `${keys[i] !== undefined ? `"${keys[i]}"` : `child ${i + 1}`} ` +
+            `is negative. Its \`by\` column${by ? ` ${by}` : ""} has ` +
+            `HasMidpoint (declared ` +
+            `with \`.diverging()\`), so the stack's 0 is the midpoint of its ` +
+            `order and each part lies on the side its level is on; a ` +
+            `negative amount has no meaning there.`
+        );
+      }
+      if (i === origin.part) zero = at + origin.fraction * (ascent - descent);
+      lo = Math.min(lo, at - descent);
+      hi = Math.max(hi, at + ascent);
+      at += ascent - descent;
+    });
+    return mirrored(
+      CONTINUOUS(
+        Interval.interval(lo - zero, hi - zero),
+        "pinned",
+        childMeasure
+      ),
+      origin.mirrored
+    );
   }
 
-  const widths = allSize
-    ? (targetSpaces as CONTINUOUS_TYPE[]).map(dataWidth)
-    : [];
-  const dataDriven = allSize && widths.some((w) => w !== 0);
-
-  // Along a spread chain each child is a box: it contributes its total extent
-  // (ascent + descent), and the composed extent sits above the chain's start.
-  // (A stack, above, keeps the signs instead.)
-  if (dataDriven)
-    return CONTINUOUS(
-      Interval.interval(0, chainDataExtent(widths, opts.anchor)),
-      "free",
-      childMeasure
-    );
-  if (namedKeys.length > 0)
-    return ORDINAL(namedKeys, opts.measure, opts.anonymous);
-  if (allSize)
-    return CONTINUOUS(
-      Interval.interval(0, chainDataExtent(widths, opts.anchor)),
-      "free",
-      childMeasure
-    );
-  if (allPosition)
-    return CONTINUOUS(
-      Interval.interval(0, sumWidths()),
-      "pinned",
-      childMeasure
-    );
-  return UNDEFINED;
+  // Along a spread chain each target is a box: it contributes its total
+  // extent (ascent + descent), and the composed extent sits above the chain's
+  // start. (A stack, above, keeps the signs instead.)
+  const widths = targets.map(dataWidth);
+  const quantity =
+    targets.every((s) => s.origin === "free") && widths.some((w) => w !== 0);
+  if (namedKeys.length > 0 && !quantity) return keyed();
+  return CONTINUOUS(
+    Interval.interval(0, chainDataExtent(widths, opts.anchor)),
+    "free",
+    childMeasure
+  );
 }
 
 /**
@@ -484,9 +463,8 @@ function stackClaim(parts: Extent[]): Monotonic.Monotonic {
  * composes their data extents, so pixel overhead stays in the claim:
  *  - an explicit size claims what its type implies;
  *  - a glued stack lays its parts' claims end to end ({@link stackClaim});
- *  - a chain of pinned children sums their claims;
- *  - a free chain claims the chain of its children's claims with the spacing
- *    or pitch added ({@link chainClaim}), so a parent can solve a scale factor
+ *  - a chain claims the chain of its targets' claims with the spacing or
+ *    pitch added ({@link chainClaim}), so a parent can solve a scale factor
  *    via `Monotonic.inverse` (auto-fit).
  * An ordinal or undefined result has no claim.
  */
@@ -500,7 +478,11 @@ export function distributeExtentFold(
     return impliedExtent(space);
   const parts = targetExtents as Extent[];
   if (opts.glue) return Extent(stackClaim(parts));
-  const widths = parts.map((e) => e.width);
-  if (originIs(space, "pinned")) return Extent(Monotonic.add(...widths));
-  return Extent(chainClaim(widths, opts.spacing, opts.anchor));
+  return Extent(
+    chainClaim(
+      parts.map((e) => e.width),
+      opts.spacing,
+      opts.anchor
+    )
+  );
 }

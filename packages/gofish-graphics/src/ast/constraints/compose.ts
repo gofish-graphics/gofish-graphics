@@ -41,15 +41,15 @@ import { Size } from "../dims";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  continuousInterval,
+  isCONTINUOUS,
   isUNDEFINED,
   spaceMeasure,
   CONTINUOUS,
-  originIs,
 } from "../underlyingSpace";
 import {
   resolveAlignmentExtent,
   resolveAlignmentSpace,
+  seatedUnion,
   unionChildExtents,
   unionChildSpaces,
 } from "../graphicalOperators/alignment";
@@ -108,9 +108,12 @@ export type PositionDomains = {
 };
 
 /** Resolve a layer's default per-axis TYPE before composed constraint-space
- * overrides: union child spaces, and merge datum position/span domains into a
- * pinned space. A `transform.scale` does not touch the type: like translate,
- * it acts on pixels, so it scales only the claim ({@link resolveLayerAxisExtent}). */
+ * overrides: union child spaces, and overlay datum position/span domains
+ * onto that union as a pinned space. The children's union is seated as any
+ * overlay seats a child: a free union on its baseline at data 0 (which is
+ * where the layer places its free children), a pinned one at its own
+ * position. A `transform.scale` does not touch the type: like translate, it
+ * acts on pixels, so it scales only the claim ({@link resolveLayerAxisExtent}). */
 export function resolveLayerAxisSpace(
   childSpaces: Size<UnderlyingSpace>[],
   axis: 0 | 1,
@@ -119,10 +122,14 @@ export function resolveLayerAxisSpace(
 ): UnderlyingSpace {
   const base = unionChildSpaces(childSpaces, axis);
   if (positionDomain === undefined) return base;
-  const baseIv = continuousInterval(base);
-  const merged = baseIv
-    ? Interval.unionAll(baseIv, positionDomain)
-    : positionDomain;
+  const merged = seatedUnion(
+    [
+      ...(isCONTINUOUS(base) ? [base] : []),
+      CONTINUOUS(positionDomain, "pinned"),
+    ],
+    "baseline",
+    "pinned"
+  );
   // The position/span constraints' OWN measure is the authoritative unit for
   // this axis's data domain (they define it); it wins, falling back to the
   // children's POSITION measure when the constraints are untagged.
@@ -150,12 +157,12 @@ export function resolveLayerBaseSpaces(
 }
 
 /** The claim of a layer's default per-axis type `space` (from
- * {@link resolveLayerAxisSpace}). A free union keeps its children's claims,
- * scaled by the layer's `transform.scale` (a pixel-space operation, so it
- * scales the claim and never the data interval). A pinned or difference union
- * claims the union of its children's claims. An axis whose domain the layer's
- * own datum positions widen claims, like its type, the union of the pinned
- * child union (if any) with the datum domain, which claims its data width. */
+ * {@link resolveLayerAxisSpace}): the union of its children's claims, and,
+ * when the layer's own datum positions widen the domain, that union overlaid
+ * with the datum domain (which claims its data width), seated as the type
+ * seats them. Scaled by the layer's `transform.scale`, a pixel-space
+ * operation, so it scales the claim of every origin and never the data
+ * interval. */
 export function resolveLayerAxisExtent(
   childExtents: Size<Extent | undefined>[],
   childSpaces: Size<UnderlyingSpace>[],
@@ -166,25 +173,23 @@ export function resolveLayerAxisExtent(
 ): Extent | undefined {
   const base = unionChildSpaces(childSpaces, axis);
   const baseExtent = unionChildExtents(childExtents, childSpaces, axis, base);
-  if (positionDomain !== undefined) {
-    const datum = CONTINUOUS(positionDomain, "pinned");
-    const parts: [UnderlyingSpace, Extent | undefined][] = [
-      ...(originIs(base, "pinned")
-        ? [[base, baseExtent] as [UnderlyingSpace, Extent | undefined]]
-        : []),
-      [datum, impliedExtent(datum)],
-    ];
-    return unionChildExtents(
-      parts.map(([, e]) => axisSize(e, axis, undefined)),
-      parts.map(([sp]) => axisSize(sp, axis, UNDEFINED)),
-      axis,
-      space
-    );
-  }
-  const extent = baseExtent;
-  return extent !== undefined && originIs(space, "free")
-    ? scaleExtent(scale, extent)
-    : extent;
+  const datum =
+    positionDomain === undefined
+      ? undefined
+      : CONTINUOUS(positionDomain, "pinned");
+  const extent =
+    datum === undefined
+      ? baseExtent
+      : unionChildExtents(
+          [
+            axisSize(baseExtent, axis, undefined),
+            axisSize(impliedExtent(datum), axis, undefined),
+          ],
+          [axisSize(base, axis, UNDEFINED), axisSize(datum, axis, UNDEFINED)],
+          axis,
+          space
+        );
+  return extent === undefined ? undefined : scaleExtent(scale, extent);
 }
 
 /** Build a per-axis Size carrying `value` on `axis` and `other` elsewhere, so
@@ -466,11 +471,9 @@ export function composePlanExtents(
       composed
     );
     extents[axis] = extent;
-    // Only a baseline magnitude ("free", from a distribute) is a budget the
-    // layer σ-solves against via `width.inverse`. An anchored POSITION (from an
-    // align fold) is driven by its posScale, not a σ-budget, so it must NOT
-    // contribute a sizeDomain (else the layer derives a spurious scale factor).
-    if (originIs(composed, "free")) sizeDomain[axis] = extent!.width;
+    // Every continuous composed claim is a budget the layer σ-solves against
+    // via `width.inverse` when the layer roots the axis's scope.
+    if (isCONTINUOUS(composed)) sizeDomain[axis] = extent!.width;
   }
   return {
     covered,

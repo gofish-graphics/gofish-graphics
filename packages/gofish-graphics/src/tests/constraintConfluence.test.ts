@@ -854,10 +854,10 @@ console.log("# constraint confluence: position scale ownership planning");
 console.log("# constraint confluence: child posScale forwarding");
 {
   // AxisMaps standing in for the former closures: pxOf(map, v) reproduces them.
-  const baseX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
-  const baseY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
-  const effectiveX: AxisMap = { sigma: 10, domainMin: 0, pxMin: 0 }; // v * 10
-  const effectiveY: AxisMap = { sigma: 20, domainMin: 0, pxMin: 0 }; // v * 20
+  const baseX: AxisMap = { sigma: 1, originPx: 1 }; // v + 1
+  const baseY: AxisMap = { sigma: 1, originPx: 2 }; // v + 2
+  const effectiveX: AxisMap = { sigma: 10, originPx: 0 }; // v * 10
+  const effectiveY: AxisMap = { sigma: 20, originPx: 0 }; // v * 20
   const positionSpace = CONTINUOUS(interval(0, 10), "pinned");
 
   const noOwnedAxisPlan = buildPositionScalePlan(
@@ -954,8 +954,7 @@ console.log("# constraint confluence: raw placement coordinates");
     compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
       compilePlacementCoordinate(value(5).offset(3), {
         sigma: 10,
-        domainMin: 0,
-        pxMin: 0,
+        originPx: 0,
       }) === 53
   );
   ok(
@@ -1254,8 +1253,8 @@ console.log("# constraint confluence: interval vs point compose bail");
 
 console.log("# constraint confluence: child scale factor planning");
 {
-  const inheritedX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
-  const inheritedY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
+  const inheritedX: AxisMap = { sigma: 1, originPx: 1 }; // v + 1
+  const inheritedY: AxisMap = { sigma: 1, originPx: 2 }; // v + 2
   const positionSpace = CONTINUOUS(interval(0, 10), "pinned");
   const sizeSpace = CONTINUOUS(interval(0, 20), "free");
 
@@ -1279,8 +1278,8 @@ console.log("# constraint confluence: child scale factor planning");
       selfScaled.basePosScales[1] === inheritedY
   );
   ok(
-    "self-scaled SIZE axis builds local child scale factor",
-    selfScaled.childScaleFactors[0] === 2 &&
+    "every self-scaled axis roots its own σ, pinned or free",
+    selfScaled.childScaleFactors[0] === 10 &&
       selfScaled.childScaleFactors[1] === 4
   );
 

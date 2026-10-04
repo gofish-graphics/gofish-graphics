@@ -17,12 +17,7 @@ import {
 } from "../dims";
 import { aesthetic, continuous, posFn } from "../domain";
 import { interval } from "../../util/interval";
-import {
-  ORDINAL,
-  UNDEFINED,
-  UnderlyingSpace,
-  CONTINUOUS,
-} from "../underlyingSpace";
+import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { boxOfDims } from "../geometry";
 import type { DisplayList } from "gofish-ir";

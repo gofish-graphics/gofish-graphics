@@ -49,9 +49,10 @@ types. The claim walk leans on the [monotonic algebra](/internals/core/monotonic
 track, symbolically, how each subtree's size depends on the scale factor — and to
 prune subtrees that don't depend on it at all.
 
-**2 · Layout.** With domains known, each node computes its size. Layout dispatches on
-the continuous space's `origin` state: a `SIZE` (free) dimension resolves through the
-monotonic machinery, a `POSITION` (anchored) dimension through position scales. Bounding boxes
+**2 · Layout.** With domains known, each node computes its size. Every continuous
+scope solves its σ through the monotonic machinery from its size claim; a `POSITION`
+(pinned) dimension then also maps its data through `px(d) = σ·d + originPx`, while
+a `SIZE` (free) dimension is placed by its parent at its baseline. Bounding boxes
 ([the bbox model](/internals/core/bbox)) are the common currency. After layout, a node can
 also describe its shape beyond its box through a lazy `geometry()` (today only an
 enclosing circle), which foreign layouts such as `pack` read (see

@@ -315,9 +315,9 @@ bespoke pipeline hand-coded falls out of ordinary layout:
 one branch per axis flavor — the seam a future public API would override. Since
 the #586 collapse POSITION and DIFFERENCE are no longer distinct space _kinds_
 but two `origin` states of the single `continuous` kind, so the branches
-dispatch on the origin state (`originIs(space, "pinned")` /
-`originIs(space, "none")`) and `isORDINAL` rather
-than a `kind` tag, and the data interval is read off the type alone
+dispatch on one read of the origin state, `axisOver(space)` (`"absolute"`
+for a pinned space, `"delta"` for an origin-less one, none for a free
+magnitude), and `isORDINAL` rather than a `kind` tag, and the data interval is read off the type alone
 (`continuousInterval(space)` for a pinned axis, `dataWidth(space)` for a
 difference axis), never off the size claim:
 

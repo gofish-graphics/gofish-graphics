@@ -11,7 +11,7 @@ import {
   FancyDims,
   Transform,
 } from "../dims";
-import { ORDINAL, UNDEFINED, CONTINUOUS } from "../underlyingSpace";
+import { UNDEFINED, CONTINUOUS } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";

@@ -29,9 +29,8 @@ import {
   spaceMeasure,
   type UnderlyingSpace,
   originIs,
-  hasOrigin,
 } from "./underlyingSpace";
-import { niceScope, scopeRootBaseline } from "./extent";
+import { niceScope } from "./extent";
 import { shadowCheckScaleRoot } from "./solver/shadow";
 import {
   perfNow,
@@ -47,7 +46,11 @@ import {
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
-import { getScopeRegistry, type EqualMeasureAxis } from "./solver/scopes";
+import {
+  getScopeRegistry,
+  type EqualMeasureAxis,
+  type ScopeSolution,
+} from "./solver/scopes";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
 
@@ -610,7 +613,7 @@ export async function layout(
   // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
   // guards, the same path the layout engine already relies on.
   const UNSIZED = NaN;
-  const needsCanvas = (s: UnderlyingSpace) => hasOrigin(s);
+  const needsCanvas = (s: UnderlyingSpace) => isCONTINUOUS(s);
   // Concrete canvas for scaling a CONTINUOUS axis (always a real number).
   const canvasW = w ?? DEFAULT_CANVAS_SIZE;
   const canvasH = h ?? DEFAULT_CANVAS_SIZE;
@@ -625,21 +628,24 @@ export async function layout(
   const scopes = getScopeRegistry(contexts?.session);
   scopes.reset();
 
-  // A pinned CONTINUOUS root builds a data→pixel map over its data interval —
-  // the root POSITION scope solved by the registry, σ from its size claim so
-  // any pixel overhead in the claim keeps its pixels.
-  const posScales: Size<AxisMap | undefined> = [
-    scopes.solvePosition(
+  // The root σ-scope on each continuous axis, solved by the registry from the
+  // root's type and size claim against the canvas: σ, and the pixel of data 0
+  // when the axis has an origin. Equal-measure recentering may replace both.
+  const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
+  const rootClaims = [niceExtentX, niceExtentY] as const;
+  const canvas = [canvasW, canvasH] as const;
+  let rootScopes: Size<ScopeSolution | undefined> = [
+    scopes.solveScope(
       { kind: "root", rootKey: "root", axis: 0 },
-      niceUnderlyingSpaceX,
-      niceExtentX,
-      canvasW
+      rootSpaces[0],
+      rootClaims[0],
+      canvas[0]
     ),
-    scopes.solvePosition(
+    scopes.solveScope(
       { kind: "root", rootKey: "root", axis: 1 },
-      niceUnderlyingSpaceY,
-      niceExtentY,
-      canvasH
+      rootSpaces[1],
+      rootClaims[1],
+      canvas[1]
     ),
   ];
 
@@ -647,69 +653,58 @@ export async function layout(
     console.log("width and height constraints:", layoutW, layoutH);
   }
 
-  // Root scale factor: a baseline magnitude ("free") root inverts its Monotonic
-  // against the canvas — the root SIZE scope, solved by the same registry.
-  // Anchored roots use the posScale (above) instead; a difference root
-  // shrink-to-fits.
-  const rootScaleFactors: Size<number | undefined> = [
-    originIs(niceUnderlyingSpaceX, "free")
-      ? scopes.solveSize(
-          { kind: "root", rootKey: "root", axis: 0 },
-          niceExtentX!.width,
-          canvasW
-        )
-      : undefined,
-    originIs(niceUnderlyingSpaceY, "free")
-      ? scopes.solveSize(
-          { kind: "root", rootKey: "root", axis: 1 },
-          niceExtentY!.width,
-          canvasH
-        )
-      : undefined,
-  ];
-
   // Shared-measure scale equality (#582): when x and y carry the SAME unit of
   // measure, "1 unit on x" and "1 unit on y" are the same quantity, so their
   // data→pixel scales must be equal — a circle stays circular, a 45° line looks
   // 45°. This is type equality, not an opt-in knob: it follows from the measures
   // matching, the same way `circle({ r })` lowers to a `w`/`h` that share a
-  // measure and so cannot render as an ellipse. Each axis's pixels-per-data-unit
-  // comes from its POSITION domain (`canvas / range`) or its baseline-magnitude
-  // σ. The scope-level operation — take the binding (smaller) σ and equate both
-  // axes' scopes — lives on the registry (Stage 6c: the ONE post-solve σ
-  // adjustment, so every slope stays registry-sourced and the dump shows the
-  // FINAL σ). Silently skipped when an axis has no continuous scale to equate.
+  // measure and so cannot render as an ellipse. The scope-level operation —
+  // take the binding (smaller) σ and equate both axes' scopes — lives on the
+  // registry (Stage 6c: the ONE post-solve σ adjustment, so every slope stays
+  // registry-sourced and the dump shows the FINAL σ). Silently skipped when an
+  // axis has no solved scope to equate.
   const measureX = spaceMeasure(niceUnderlyingSpaceX);
   const measureY = spaceMeasure(niceUnderlyingSpaceY);
   if (measureX !== undefined && measureX === measureY) {
     const axisInfo = ([0, 1] as const).map(
       (axis): EqualMeasureAxis | undefined => {
-        const space = axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY;
-        const canvas = axis === 0 ? canvasW : canvasH;
-        const ival = continuousInterval(space);
-        const map = posScales[axis];
-        if (ival !== undefined && ival.max > ival.min && map !== undefined) {
-          return {
-            kind: "position",
-            unitPx: map.sigma,
-            min: ival.min,
-            claim: (axis === 0 ? niceExtentX : niceExtentY)!.width,
-            canvas,
-          };
-        }
-        const sigma = rootScaleFactors[axis];
-        if (sigma !== undefined) return { kind: "size", unitPx: sigma };
-        return undefined;
+        const space = rootSpaces[axis];
+        const scope = rootScopes[axis];
+        return scope !== undefined && isCONTINUOUS(space)
+          ? {
+              space,
+              claim: rootClaims[axis]!,
+              canvas: canvas[axis],
+              unitPx: scope.sigma,
+            }
+          : undefined;
       }
     ) as [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined];
-    scopes.recenterEqualMeasure("root", axisInfo, posScales, rootScaleFactors);
+    rootScopes = scopes.recenterEqualMeasure("root", axisInfo) ?? rootScopes;
   }
+  const rootScaleFactors: Size<number | undefined> = [
+    rootScopes[0]?.sigma,
+    rootScopes[1]?.sigma,
+  ];
 
   // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
   // content(σ)=canvas the whole chart resolves against. No-op unless
   // GOFISH_SOLVER_CHECK is set.
   shadowCheckScaleRoot(niceExtentX, canvasW, rootScaleFactors[0], 0);
   shadowCheckScaleRoot(niceExtentY, canvasH, rootScaleFactors[1], 1);
+
+  // The map a pinned root hands its content: a pinned node shares the
+  // scope's frame, so it places its data through the map. A free node has a
+  // frame of its own whose 0 is its baseline, so it gets σ only and is placed
+  // at `originPx` below (`placeRoot`). That split, who applies the pixel of
+  // data 0, is inherent to the two origin states: a pinned extent's position
+  // is fixed by its data, a free extent's is set by its parent.
+  const posScales: Size<AxisMap | undefined> = [0, 1].map((axis) => {
+    const scope = rootScopes[axis as 0 | 1];
+    return scope !== undefined && originIs(rootSpaces[axis as 0 | 1], "pinned")
+      ? { sigma: scope.sigma, originPx: scope.originPx! }
+      : undefined;
+  }) as Size<AxisMap | undefined>;
 
   // Author each dim's `embedded` flag (point/line/area) now that underlying
   // space has resolved each coord axis's measure — Route B reads it to keep a
@@ -733,7 +728,7 @@ export async function layout(
 
   // Merge the two half-channels into the single per-axis scale carrier handed
   // to layout: σ (size slope) from `rootScaleFactors`, the anchored map from
-  // `posScales`. They are mutually exclusive per axis at the root.
+  // `posScales`.
   const rootScales: Size<AxisScale | undefined> = [
     axisScale(rootScaleFactors[0], posScales[0]),
     axisScale(rootScaleFactors[1], posScales[1]),
@@ -757,9 +752,11 @@ export async function layout(
   // not the write-once `place()`, so it lands even when the root self-placed (a
   // diagram with its own root transform) — `place()` short-circuits a placed axis.
   //
-  // A free (baseline-magnitude) root fits `ascent + descent` to the canvas, so
-  // its baseline sits `descent·σ` above the canvas's low edge (#773,
-  // `scopeRootBaseline`).
+  // A free (baseline-magnitude) root's local 0 is its baseline, so it is
+  // placed at the scope's `originPx` (#773: `descent·σ` above the canvas's
+  // low edge, plus any overhead below). A pinned root shares the canvas frame
+  // (its map carries `originPx`), and an origin-less root has none: both sit
+  // at 0.
   const placeRoot = (axis: 0 | 1) => {
     const name = axis === 0 ? "x" : "y";
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
@@ -771,10 +768,9 @@ export async function layout(
       child.place(
         name,
         offset +
-          scopeRootBaseline(
-            axis === 0 ? niceExtentX : niceExtentY,
-            rootScaleFactors[axis]
-          ),
+          (originIs(rootSpaces[axis], "free")
+            ? (rootScopes[axis]?.originPx ?? 0)
+            : 0),
         "baseline"
       );
   };

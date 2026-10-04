@@ -170,6 +170,9 @@ type ScaleBudget = {
 export type ChildScalePlan = {
   basePosScales: ConstraintPosScales;
   childScaleFactors: Size<number | undefined>;
+  /** Per axis: the pixel of data 0 in a self-scaled stash's scope, where the
+   *  layer seats its free children's baselines. */
+  stashOriginPx: Size<number | undefined>;
   budgetFailures: { axis: 0 | 1; budget: number }[];
   sharedScaleChecks: {
     axis: 0 | 1;
@@ -182,7 +185,8 @@ export type ChildScalePlan = {
  *
  * The plan is ordered to match runtime ownership:
  *   1. inherited scales are copied into fresh child arrays;
- *   2. explicit self-scaled axes override with a local position scale or σ;
+ *   2. explicit self-scaled axes solve their own scope: σ, and a local map
+ *      when the stash is pinned;
  *   3. composed constraint SIZE budgets override child σ on their axes;
  *   4. shared-scale scopes solve σ from the layer's own/scoped space.
  *
@@ -239,26 +243,24 @@ export function buildChildScalePlan(
       : [selfScaledSpaces[axis], selfScaledExtents[axis]]
   ) as [UnderlyingSpace | undefined, Extent | undefined][];
 
+  // A self-scaled stash roots its own scope, exactly like the chart root:
+  // σ for every stash, and, for a pinned one, the local map its children share
+  // (a free stash seats its children's baselines at `originPx` instead).
+  const stashOriginPx: Size<number | undefined> = [undefined, undefined];
   for (const axis of [0, 1] as const) {
     const [stashed, stashedExtent] = nicedSelfScaled[axis];
     if (stashed === undefined || !Number.isFinite(layerSize[axis])) continue;
-    if (originIs(stashed, "pinned")) {
-      basePosScales[axis] =
-        scopes.solvePosition(
-          { kind: "self-scaled", rootKey, axis },
-          stashed,
-          stashedExtent,
-          layerSize[axis]
-        ) ?? inheritedPosScales[axis];
-    }
-    if (originIs(stashed, "free")) {
-      childScaleFactors[axis] =
-        scopes.solveSize(
-          { kind: "self-scaled", rootKey, axis },
-          stashedExtent!.width,
-          layerSize[axis]
-        ) ?? inheritedScaleFactors?.[axis];
-    }
+    const scope = scopes.solveScope(
+      { kind: "self-scaled", rootKey, axis },
+      stashed,
+      stashedExtent,
+      layerSize[axis]
+    );
+    if (scope === undefined) continue;
+    childScaleFactors[axis] = scope.sigma;
+    stashOriginPx[axis] = scope.originPx;
+    if (originIs(stashed, "pinned"))
+      basePosScales[axis] = { sigma: scope.sigma, originPx: scope.originPx! };
   }
 
   if (constraintBudget !== undefined) {
@@ -305,12 +307,12 @@ export function buildChildScalePlan(
           : [layerSpace?.[axis], layerExtent?.[axis]];
     if (sp === undefined) continue;
     const sf = isCONTINUOUS(sp)
-      ? (scopes.solveSize(
+      ? (scopes.solveScope(
           { kind: "shared", rootKey, axis },
-          ext!.width,
-          layerSize[axis],
-          { upperBoundGuess: layerSize[axis] }
-        ) ?? 0)
+          sp,
+          ext,
+          layerSize[axis]
+        )?.sigma ?? 0)
       : undefined;
     if (sf !== undefined) childScaleFactors[axis] = sf;
     sharedScaleChecks.push({ axis, extent: ext, sigma: sf });
@@ -319,6 +321,7 @@ export function buildChildScalePlan(
   return {
     basePosScales,
     childScaleFactors,
+    stashOriginPx,
     budgetFailures,
     sharedScaleChecks,
   };
@@ -406,12 +409,15 @@ export function buildPositionScalePlan(
     const [space, extent] = axisDemand(axis)
       ? niceScope(layerSpace?.[axis], layerExtent?.[axis])
       : [layerSpace?.[axis], layerExtent?.[axis]];
-    return scopes.solvePosition(
+    const scope = scopes.solveScope(
       { kind: "datum-position", rootKey, axis },
       space,
       extent,
       layerSize[axis]
     );
+    return scope !== undefined && originIs(space, "pinned")
+      ? { sigma: scope.sigma, originPx: scope.originPx! }
+      : undefined;
   };
   return {
     ownsAxis,

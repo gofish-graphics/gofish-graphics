@@ -17,14 +17,12 @@ import {
 import {
   UNDEFINED,
   UnderlyingSpace,
-  dataSides,
   isCONTINUOUS,
   isUNDEFINED,
   CONTINUOUS,
   originIs,
-  hasOrigin,
 } from "../underlyingSpace";
-import { impliedExtent, scopeRootBaseline, type Extent } from "../extent";
+import { impliedExtent, type Extent } from "../extent";
 import { getMeasure, getValue, isValue } from "../data";
 import { interval } from "../../util/interval";
 import { computeSize, foldFinite } from "../../util";
@@ -384,60 +382,35 @@ export const layer = createNodeOperatorSequential(
             const composed = resolved[axis];
             const dsize = dims[axis].size;
             if (dsize === undefined) continue;
-            // DATA-DRIVEN operator extent (#4/#20 — nested mosaic). Report a
-            // SIZE claim UPWARD so the ENCLOSING shared scale solves this
-            // operator's pixel extent: the operator is a *leaf* in its
-            // ancestor's scale scope, exactly like a leaf rect with `w:"count"`.
-            // Its subtree is then a fresh scale scope, resolved against the
-            // solved box in `layout` via computeSize. (A LITERAL pixel size
-            // below stays a self-scaling region — a fixed box with its own
-            // units, e.g. a marginal histogram, which must NOT pollute the
-            // ancestor's data domain.)
-            if (isValue(dsize)) {
-              // A data-valued size claim (e.g. `w: "count"`) overrides the
-              // composed content space with its own SIZE claim. If that
-              // composed space had a baseline (an anchored POSITION or a
-              // "free" magnitude — the normal case for a subtree with real
-              // content), stash it before overriding: without this, a
-              // subtree under a data-valued size silently consumed the
-              // ancestor's σ instead of getting its own local scope (#651
-              // smell 1). The stash is baseline-MAGNITUDE form (SIZE) so a
-              // nested sized layer's own descendants get a scale factor, not
-              // just an anchored map. This makes "data-valued size ⇒
-              // self-scaling region" the general rule: the node's box is
-              // solved by the ancestor scope, its interior is a fresh scope
-              // resolved against that box.
-              if (hasOrigin(composed)) {
-                const { ascent, descent } = dataSides(composed);
-                selfScaledSpaces[axis] = CONTINUOUS(
-                  interval(-descent, ascent),
-                  "free",
-                  composed.measure
-                );
-              }
+            // Any continuous composed space is stashed: the layer's box roots
+            // its own σ-scope on the axis, resolved against that box in
+            // `layout` (#651 smell 1: without the stash, a subtree under a
+            // sized layer silently consumed the ancestor's σ). Presence of
+            // the stash IS the "self-scaled" marker — `resolveAxes` reads it
+            // to detect SIBLING self-scaled regions that genuinely share one
+            // domain+extent (e.g. a spread's per-group scatter facets all
+            // given the same explicit pixel width over the same padded data
+            // domain), so it can hoist a single axis to their common
+            // ancestor. An ordinal axis has no scale to absorb, so it is left
+            // as it is.
+            if (isCONTINUOUS(composed)) {
+              selfScaledSpaces[axis] = composed;
+              node.selfScaledSpace[axis] = composed;
+            }
+            // What the layer reports upward. A DATA-valued size (`w:
+            // "count"`, #4/#20 — nested mosaic) is a free magnitude claim the
+            // ENCLOSING scale solves: the layer is a leaf in its ancestor's
+            // scope, exactly like a leaf rect with `w: "count"`. A LITERAL
+            // pixel size is a fixed box with its own units (a marginal
+            // histogram), which must NOT pollute the ancestor's data domain,
+            // so a stashed axis reports UNDEFINED.
+            if (isValue(dsize))
               resolved[axis] = CONTINUOUS(
                 interval(0, getValue(dsize)!),
                 "free",
                 getMeasure(dsize)
               );
-              continue;
-            }
-            const sp = resolved[axis];
-            // Stash anything with a baseline (an anchored POSITION or a "free"
-            // magnitude); a difference / ORDINAL is left untouched (no stash).
-            if (hasOrigin(sp)) {
-              selfScaledSpaces[axis] = sp;
-              // Persist the stashed space itself (presence IS the "self-scaled"
-              // marker) — `resolveAxes` reads this to detect SIBLING self-scaled regions
-              // that genuinely share one domain+extent (e.g. a spread's
-              // per-group scatter facets all given the same explicit pixel
-              // width over the same padded data domain), so it can hoist a
-              // single axis claim to their common ancestor instead of letting
-              // each self-scaled sibling either draw its own duplicate or
-              // (since its space reports UNDEFINED upward) draw none at all.
-              node.selfScaledSpace[axis] = sp;
-              resolved[axis] = UNDEFINED;
-            }
+            else if (isCONTINUOUS(composed)) resolved[axis] = UNDEFINED;
           }
           return resolved;
         },
@@ -504,9 +477,9 @@ export const layer = createNodeOperatorSequential(
           selfScaledExtents[1] = undefined;
           for (const axis of [0, 1] as const) {
             if (dims[axis].size === undefined) continue;
-            if (hasOrigin(t.resolved[axis]))
+            if (isCONTINUOUS(t.resolved[axis]))
               selfScaledExtents[axis] = resolved[axis];
-            if (isValue(dims[axis].size) || hasOrigin(t.resolved[axis]))
+            if (isValue(dims[axis].size) || isCONTINUOUS(t.resolved[axis]))
               resolved[axis] = impliedExtent(spaces[axis]);
           }
           return resolved;
@@ -593,7 +566,8 @@ export const layer = createNodeOperatorSequential(
             getScopeRegistry(node.tryGetRenderSession()),
             node.key ?? node.type
           );
-          const { basePosScales, childScaleFactors } = childScalePlan;
+          const { basePosScales, childScaleFactors, stashOriginPx } =
+            childScalePlan;
           for (const failure of childScalePlan.budgetFailures) {
             // A non-invertible fold-produced Monotonic would otherwise silently
             // vanish the content (spread's `?? 0`); name the axis and budget so
@@ -666,7 +640,7 @@ export const layer = createNodeOperatorSequential(
           //    POSITION): its local frame is the frame of the data→pixel map
           //    it holds, so the origin's pixel is `pxOf(map, origin)`.
           //  - a self-scaled FREE stash: it roots its own σ-scope like the
-          //    chart root (`scopeRootBaseline`): `descent·σ`.
+          //    chart root, so the origin is that scope's `originPx`.
           //  - FREE: the layer is itself a baseline magnitude, seated by its
           //    parent at its own baseline, so its free children share that
           //    baseline: local 0. Applying a map here would count the offset
@@ -685,12 +659,7 @@ export const layer = createNodeOperatorSequential(
                 measureOrigin(own.measure)
               );
             if (!originIs(own, "free")) return undefined;
-            return stash !== undefined
-              ? scopeRootBaseline(
-                  selfScaledExtents[axis],
-                  childScaleFactors[axis]
-                )
-              : 0;
+            return stash !== undefined ? stashOriginPx[axis] : 0;
           };
           const freeOrigin: FreeOrigin = [originOn(0), originOn(1)];
           const baselineFor = (

@@ -287,14 +287,14 @@ matter how it is wrapped:
 
 `coord.layout` is a **scale scope**, exactly like the root fits content to the
 canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. Its
-`fitAxis(axis, budget)` reads the subtree's resolved space on that axis and
-returns a `(scaleFactor, posScale)` to hand each child: a baseline-magnitude
-(data SIZE) axis scales by `width.inverse(budget)` so the children fill the ring
-(`width` is the sum of the children's size claims, each `ascent + descent`,
-read with `resolveExtent()`);
-an anchored (data POSITION) axis maps onto `[0, budget]` via a posScale and
-carries **no** size σ (Stage 6c — a POSITION-only axis has no SIZE scope, so it
-never fabricates one; the map's own slope is the scope's σ). Only
+`fitAxis(axis, budget)` solves the coord's own scope on that axis with the
+same `solveScope` the root uses: σ from the coord's claim (its children's
+claims overlaid, or a declared window's width) against the budget, so the
+children fill the ring, and, for a pinned axis, the map onto the budget that
+its children share. A free child is seated at the scope's `originPx`. The
+coord's type is its children's overlay, kept for its own scope; upward it
+reports only a pinned or category axis (TODO(coord-absorbs-axes): it should
+report nothing). Only
 DATA-bound channels consume these — a plain number bypasses both (see
 `computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
 mark that says `w: datum(count)` (the θ extent) auto-fits. Because the coord is the

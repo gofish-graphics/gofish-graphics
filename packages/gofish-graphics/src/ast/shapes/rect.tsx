@@ -29,7 +29,6 @@ import {
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
 import {
-  ORDINAL,
   UNDEFINED,
   UnderlyingSpace,
   forgetOnConflict,

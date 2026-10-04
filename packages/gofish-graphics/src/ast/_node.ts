@@ -59,10 +59,8 @@ import {
   isCONTINUOUS,
   isORDINAL,
   isUNDEFINED,
-  continuousInterval,
-  dataWidth,
   UnderlyingSpace,
-  originIs,
+  axisOver,
 } from "./underlyingSpace";
 import { impliedExtents, type Extent } from "./extent";
 import { toJSON } from "../util/interval";
@@ -378,7 +376,7 @@ function selfScaledAxisSignature(
   dim: 0 | 1
 ): string | undefined {
   const s = node.selfScaledSpace[dim];
-  if (s === undefined || !(originIs(s, "pinned") || originIs(s, "none")))
+  if (s === undefined || !isCONTINUOUS(s) || axisOver(s) === undefined)
     return undefined;
   return (
     "c:" +
@@ -1273,7 +1271,7 @@ export class GoFishNode {
             (prior.startsWith("o:") && prior !== mySig)
           )
             sig = mySig;
-        } else if (originIs(s, "pinned") || originIs(s, "none")) {
+        } else if (axisOver(s) !== undefined) {
           // Continuous: single-owner — only the root-most unclaimed dim claims.
           if (prior === undefined) sig = AXIS_CLAIM_OPAQUE;
         }

@@ -368,17 +368,17 @@ into-ordinary-nodes treatment axes get. See
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/solver/scopes.ts`
 
 ```typescript
-const posScales = [
-  scopes.solvePosition(meta(0), niceUnderlyingSpaceX, niceExtentX, canvasW),
-  scopes.solvePosition(meta(1), niceUnderlyingSpaceY, niceExtentY, canvasH),
+let rootScopes = [
+  scopes.solveScope(meta(0), rootSpaces[0], rootClaims[0], canvas[0]),
+  scopes.solveScope(meta(1), rootSpaces[1], rootClaims[1], canvas[1]),
 ];
 ```
 
-For a pinned (`POSITION`) axis, `solvePosition` solves σ from the axis's size
-claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such as
-spacing keeps its pixels, and then maps data values to pixels with that σ from
-the canvas's low edge. These scales are used during layout to position
-elements.
+For every continuous root axis, `solveScope` solves σ from the axis's size
+claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such
+as spacing keeps its pixels, and, when the axis has an origin, the pixel of
+data 0 (`originPx`). A pinned axis hands its content the map
+`px(d) = σ·d + originPx`; a free root is placed at `originPx`.
 
 ### Pass 8.5: Embedding Resolution
 

@@ -30,14 +30,13 @@ export const aesthetic = (value: any): AestheticDomain => ({
   value,
 });
 
-/** One continuous axis's data→pixel affine map, with the intercept explicit
- *  instead of closed over a function: `px(d) = pxMin + sigma·(d − domainMin)`.
- *  `sigma` is the map's own slope (px per data unit). By construction it is the
- *  σ of a POSITION σ-scope: every `AxisMap` is produced by the scope registry
- *  (`solvePosition`) or its equal-measure recentering,
- *  so `sigma` is never a free-floating number — it is a scope's solved slope.
- *  Evaluated by {@link pxOf}; the old `posScale(0)` intercept is `pxOf(map, 0)`. */
-export type AxisMap = { sigma: number; domainMin: number; pxMin: number };
+/** One continuous axis's data→pixel affine map: `px(d) = sigma·d + originPx`.
+ *  `sigma` is the map's slope (px per data unit) and `originPx` is the pixel of
+ *  data 0, the baseline, kept in pixels so pixel overhead never has to be
+ *  expressed in data units. Every `AxisMap` is produced by the scope registry
+ *  (`solveScope`) or its equal-measure recentering, so `sigma` is always a
+ *  scope's solved slope. Evaluated by {@link pxOf}. */
+export type AxisMap = { sigma: number; originPx: number };
 
 /** One axis's data→pixel affine scale — the single carrier that replaced the
  *  parallel `scaleFactors` (slope-only) and `posScales` (whole map) channels.
@@ -59,7 +58,7 @@ export type AxisScale = { sigma?: number; map?: AxisMap };
 
 /** Evaluate an anchored map at a data value. */
 export const pxOf = (map: AxisMap, d: number): number =>
-  map.pxMin + map.sigma * (d - map.domainMin);
+  map.sigma * d + map.originPx;
 
 /** The data value a baseline magnitude's baseline stands for on an anchored
  *  axis: the zero a signed `h`/`w` grows from. A layer that owns a data→pixel
