@@ -32,6 +32,7 @@ import {
   continuousInterval,
   CONTINUOUS,
   originIs,
+  spaceMeasure,
 } from "../underlyingSpace";
 import { impliedExtent } from "../extent";
 import {
@@ -211,21 +212,12 @@ export const coord = createNodeOperator(
           };
           // The coord roots its own σ-scope on both axes, resolved against
           // the budget it is given (`layout`): its children's data lives in
-          // the coordinate space, not in its parent's. It keeps its type for
-          // that scope, and reports upward only a pinned or category axis.
-          //
-          // TODO(coord-absorbs-axes): declared shortcut. A coord should report
-          // nothing upward, like a self-scaled layer: its footprint in the
-          // parent is a pixel box, and reporting a free theta extent upward
-          // mixes the angle's data into the parent's x (the flower chart). But
-          // a pinned report is load-bearing today: the chart-level axis title
-          // of a pie names the coord's measure off it, and the root's y-up
-          // flip opens on it. The fix is for those two readers to ask the
-          // coord's own scope; until then the pinned and category reports stay.
+          // the coordinate space, not in its parent's. Like every σ-scope
+          // root it keeps its type for its own scope (its axes and their
+          // titles are drawn here, in `lower`) and reports nothing upward:
+          // to its parent it is a pixel box.
           spaceRef.current = [axisSpace(0), axisSpace(1)];
-          return spaceRef.current.map((s) =>
-            originIs(s, "pinned") || isORDINAL(s) ? s : UNDEFINED
-          ) as Size<UnderlyingSpace>;
+          return [UNDEFINED, UNDEFINED];
         },
         layout: (shared, size, scales, children, node) => {
           // Stage 6b: a coord boundary is a σ-scope root — it re-roots σ for its
@@ -844,6 +836,59 @@ export const coord = createNodeOperator(
                     "gray"
                   )
                 );
+              }
+              // The radial axis title. Only the coord knows where its radial
+              // ray is, so it titles its own axis here; the chart-level title
+              // pass reads only the root's own space. The title sits at the
+              // ray's outer end, reading along the ray (as Plotly polar and
+              // ggplot's coord_radial do), beside the tick labels. It names
+              // the axis from the `axes` option's title, else the radial
+              // space's measure, else the coordinate space's own name for the
+              // axis (`r`) (#621).
+              //
+              // Deliberately no angular (theta) title by default: the ring's
+              // tick labels already say what goes around, and a title has no
+              // natural single place on a circle.
+              const yOpt =
+                typeof axes === "object" && axes !== null ? axes.y : undefined;
+              const explicit =
+                typeof yOpt === "object" && yOpt !== null
+                  ? yOpt.title
+                  : undefined;
+              const title =
+                explicit === false
+                  ? undefined
+                  : (explicit ??
+                    spaceMeasure(ySpace) ??
+                    effectiveTransform.aliases?.y ??
+                    "r");
+              if (title !== undefined) {
+                const [ix, iy] = contentToPixel([x0 - H_GAP, y0]);
+                const [ox, oy] = contentToPixel([x1 - H_GAP, y1]);
+                const len = Math.hypot(ox - ix, oy - iy) || 1;
+                const [ux, uy] = [(ox - ix) / len, (oy - iy) / len];
+                // Reading direction along the ray, kept upright: a ray that
+                // points left reads the other way.
+                let deg = (Math.atan2(uy, ux) * 180) / Math.PI;
+                const flipped = deg > 90 || deg < -90;
+                if (flipped) deg += deg > 0 ? -180 : 180;
+                // Beside the tick labels: off the ray on the labels' side.
+                const OFFSET = 32;
+                const [nx, ny] = [uy, -ux];
+                const px = ox + nx * OFFSET;
+                const py = oy + ny * OFFSET;
+                items.push({
+                  kind: "text",
+                  x: px,
+                  y: py,
+                  text: title,
+                  textAnchor: flipped ? "start" : "end",
+                  dominantBaseline: "middle",
+                  fontSize: 11,
+                  rotate: deg,
+                  role: "overlay",
+                  style: lowerStyle({ fill: "gray" }),
+                });
               }
             }
           }

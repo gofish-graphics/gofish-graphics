@@ -250,7 +250,7 @@ const scopeBox = (node: GoFishAST, composedTy: number): FlipScope => {
  *  stopgap: the deeper fix is for `coord` to DECLARE its own orientation (a node
  *  bit / its own y underlying space) so `declaredYUp` subsumes it — a follow-up to
  *  #629, gated on the open polar/coord orientation redesign (#662). */
-const opensFlipScope = (node: GoFishAST): boolean => {
+export const opensFlipScope = (node: GoFishAST): boolean => {
   if (node instanceof GoFishNode && node._ambientYDown === true) return false;
   const isCoord = (node as { type?: string }).type === "coord";
   const scopeTransparent =

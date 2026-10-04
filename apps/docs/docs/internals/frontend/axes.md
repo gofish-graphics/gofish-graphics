@@ -483,6 +483,12 @@ The two builders `xAxisTitle` / `yAxisTitle` are **pure, exported functions** â€
 the customization seam, exactly like `elaborateAxis` for the axes and
 `legendColumn` for the legend.
 
+A title names an axis the root has: a dim on which the root content's space
+is UNDEFINED gets no chart-level title, even an explicit one. In particular a
+coordinate space reports nothing upward, and it titles its own axes (the
+radial title, see [Flattening the Scenegraph](/internals/layout/coord-flattening)),
+so a pie gets no second, cartesian title.
+
 `elaborateAxisTitles` runs in `layout()` **before** the legend wrap: the legend
 seats itself off the titled content's bbox, so the title must already be in
 place â€” and conversely the title's centering must never see the legend column

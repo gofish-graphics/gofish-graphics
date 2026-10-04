@@ -147,15 +147,9 @@ export const overlayOrigin = (spaces: UnderlyingSpace[]): Origin => {
 /**
  * The underlying space of an alignment axis: the {@link overlay} of the
  * children as the alignment seats them (on their baselines for `baseline`,
- * by their boxes otherwise). Any child that is not continuous leaves the axis
- * with no continuous fold (UNDEFINED).
- *
- * TODO(coord-absorbs-axes): an UNDEFINED child should carry no opinion here,
- * as it does in {@link unionChildSpaces}. Making it so today exposes the
- * coord's pinned theta report (see coord.tsx): in the flower chart a
- * middle-aligned stem (UNDEFINED x) and polar flower (pinned theta) would fold
- * to an origin-less x whose claim carries the flower's angle into the
- * scatter's x. Unify once a coord stops reporting its axes upward.
+ * by their boxes otherwise). UNDEFINED children carry no opinion, as in an
+ * overlay; any other non-continuous child (an ORDINAL) leaves the axis with
+ * no continuous fold (UNDEFINED).
  *
  * The result's origin: `middle` drops it (centering scrambles baselines), and
  * so does an origin-less child (it is absorbing: alignment never pins it).
@@ -171,8 +165,9 @@ export function resolveAlignmentSpace(
   alignment: Alignment,
   axis: 0 | 1
 ): UnderlyingSpace {
-  const conts = spaces.filter(isCONTINUOUS);
-  if (conts.length === 0 || conts.length !== spaces.length) return UNDEFINED;
+  const opinions = spaces.filter((s) => !isUNDEFINED(s));
+  const conts = opinions.filter(isCONTINUOUS);
+  if (conts.length === 0 || conts.length !== opinions.length) return UNDEFINED;
   const origin: Origin =
     alignment === "middle" || conts.some((s) => s.origin === "none")
       ? "none"

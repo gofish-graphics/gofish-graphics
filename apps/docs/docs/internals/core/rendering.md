@@ -98,7 +98,10 @@ continuous y position scale — never by wrapper geometry. Three things fall out
 - **Root vs. nested band.** The **root plot content** mirrors about the authoritative
   canvas frame `[0, finalH]`, carried on `contentNode._rootFlipScope` (stamped by
   `layout()` once `finalH = contentNode.dims.size` is known — the exact frame the old
-  global flip used). The canvas origin `0` is _not_ recoverable from the node's placed
+  global flip used). Whether the root content flips as a whole is the bake's own
+  rule applied to it (`opensFlipScope`): its y is continuous, or it is a `coord`.
+  The chart-level chrome follows exactly that decision; there is no separate
+  "some coord somewhere below" trigger. The canvas origin `0` is _not_ recoverable from the node's placed
   bbox (a shrink-to-fit pin can offset it), so it is stamped rather than re-derived. A
   scope that opens **below** the canvas frame — a facet cell, a mixed-dashboard subtree
   — carries no stamp and mirrors about its own allocated band (`scopeBox`).

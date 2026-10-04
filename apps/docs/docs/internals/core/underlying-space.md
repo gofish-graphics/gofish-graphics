@@ -467,13 +467,12 @@ each inherent to what the origin states are:
 - **Which axis renders** (`axisOver`): pinned renders an absolute axis, none
   a delta axis, free none.
 
-Two places keep a difference that is not inherent, as declared shortcuts
-(TODO(coord-absorbs-axes) in `coord.tsx` and `alignment.ts`): a coord reports
-its pinned and category axes upward but not its free ones, and an alignment
-fold treats an UNDEFINED child as a veto where an overlay treats it as having
-no opinion. Both should go once a coord stops reporting its axes upward (a
-pie's chart-level axis title and the root's y-up flip read that report
-today).
+A coordinate space is a σ-scope root like any other, so it reports nothing
+upward on either axis: to its parent it is a pixel box. It keeps its own type
+for its own scope, solves that scope in `layout`, and draws its own axes and
+their titles in `lower` (see
+[Flattening the Scenegraph](/internals/layout/coord-flattening)). An UNDEFINED
+child carries no opinion in every fold, alignments included.
 
 ## The contract
 

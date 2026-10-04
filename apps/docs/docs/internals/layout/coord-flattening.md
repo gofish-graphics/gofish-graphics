@@ -293,8 +293,16 @@ claims overlaid, or a declared window's width) against the budget, so the
 children fill the ring, and, for a pinned axis, the map onto the budget that
 its children share. A free child is seated at the scope's `originPx`. The
 coord's type is its children's overlay, kept for its own scope; upward it
-reports only a pinned or category axis (TODO(coord-absorbs-axes): it should
-report nothing). Only
+reports nothing on either axis, like every σ-scope root: to its parent it is a
+pixel box. So its axes are its own to draw, and so are their titles: the
+radial axis is drawn along the θ = 0 ray, and its title sits at the ray's
+outer end, beside the tick labels and reading along the ray (as Plotly polar
+and ggplot's `coord_radial` do). The title is the `axes` option's `y` title,
+else the radial space's measure, else the space's own name for the axis (`r`)
+(#621). There is deliberately no angular title by default: the ring's tick
+labels say what goes around, and a circle has no single natural place for a
+title. The chart-level title pass reads only the root's own space, so it adds
+no second title for a coordinate space. Only
 DATA-bound channels consume these — a plain number bypasses both (see
 `computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
 mark that says `w: datum(count)` (the θ extent) auto-fits. Because the coord is the
