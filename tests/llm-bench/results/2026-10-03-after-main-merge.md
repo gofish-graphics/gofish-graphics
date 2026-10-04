@@ -68,3 +68,12 @@ Beeswarm passes in one sample by computing the dodge by hand. Swarm (#969) is
 not on main yet.
 
 These are candidates for issues, not filed issues.
+
+## Note, 2026-10-03: code size counts only the chart expression
+
+Code size now counts only the chart expression, leaving out imports, the
+function shell, `.render(container, { w, h })` and the size constants in every
+arm (see "syntax tokens" in the README). Measured again on this run's GoFish
+programs, the median syntax tokens fall from 165 to 124 (mean 299 to 257) and
+the median magic numbers from 4 to 2 (mean 6.5 to 4.5). The median arithmetic
+operators stay at 1 (mean 9.9 to 9.8).

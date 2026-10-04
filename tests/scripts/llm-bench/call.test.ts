@@ -25,6 +25,7 @@ import {
   type ModelRequest,
 } from "./model";
 import {
+  chartTokens,
   explicitCalculation,
   linesOfCode,
   ModelTokenCounter,
@@ -58,7 +59,7 @@ import {
   unavailablePackage,
   type Extensions,
 } from "./extensions";
-import { ARMS, type Task } from "./tasks";
+import { ARMS, loadReference, type Arm, type Task } from "./tasks";
 
 const connection = () =>
   new Anthropic.APIConnectionError({ message: "Connection error." });
@@ -1150,19 +1151,23 @@ const CC_OK: ClaudeCodeResult = {
 
 // --- code size ---------------------------------------------------------------
 {
+  // Only the chart expression counts: imports, the JS shell, input and
+  // output, and the output size are left out (see codestats.ts).
   const js = [
     "// a comment",
     'import { chart } from "gofish-graphics"; // trailing',
     "/* block",
     "   comment */",
     "",
-    'const url = "http://x"; // the // in the string is not a comment',
-    "export default () => chart(data).render(c, { w: 1.5e2 });",
+    "export default function render(container, data) {",
+    '  const url = "http://x"; // the // in the string is not a comment',
+    "  return chart(data).render(container, { w: 1.5e2, h: 2, axes: true });",
+    "}",
   ].join("\n");
-  assert.equal(linesOfCode(js, "gofish"), 3);
-  // import { chart } from "..." ;  = 7; const url = "..." ; = 5;
-  // export default ( ) => chart ( data ) . render ( c , { w : 1.5e2 } ) ) ; = 21
-  assert.equal(syntaxTokens(js, "gofish"), 33);
+  assert.equal(linesOfCode(js, "gofish"), 2);
+  // const url = "..." ; = 5; chart ( data ) { axes : true } ; = 10
+  assert.equal(syntaxTokens(js, "gofish"), 15);
+  assert.equal(explicitCalculation(js, "gofish").magicNumbers, 0);
   const py = [
     "# comment",
     "import matplotlib.pyplot as plt",
@@ -1170,12 +1175,107 @@ const CC_OK: ClaudeCodeResult = {
     '"""doc',
     'string"""',
     "",
-    "plt.savefig(OUT_PATH, format='svg')",
+    "plt.savefig(os.environ['OUT_PATH'], format='svg')",
   ].join("\n");
-  assert.equal(linesOfCode(py, "matplotlib"), 5);
-  // import matplotlib . pyplot as plt = 6; x = f"..." = 3; """...""" = 1;
-  // plt . savefig ( OUT_PATH , format = 'svg' ) = 10
-  assert.equal(syntaxTokens(py, "matplotlib"), 20);
+  assert.equal(linesOfCode(py, "matplotlib"), 3);
+  // x = f"..." = 3; """...""" = 1
+  assert.equal(syntaxTokens(py, "matplotlib"), 4);
+  // The bar-basic references keep only their chart expressions.
+  const kept = (arm: Arm) =>
+    chartTokens(loadReference("create/bar-basic", arm), arm).join(" ");
+  assert.equal(
+    kept("gofish"),
+    'chart ( data , { axes : true } ) . flow ( spread ( { by : "lake" , dir : "x" } ) ) . mark ( rect ( { h : "count" , fill : "steelblue" } ) ) ;'
+  );
+  assert.equal(
+    kept("plot"),
+    'Plot . plot ( { marks : [ Plot . barY ( data , { x : "lake" , y : "count" , fill : "steelblue" } ) , Plot . ruleY ( [ 0 ] ) , ] , } ) ;'
+  );
+  assert.match(kept("recharts"), /^< BarChart data = \{ data \} margin = /);
+  assert.match(kept("d3"), /^const margin = .* svg \. append \( "g" \)/);
+  assert.doesNotMatch(kept("d3"), /container|"svg"|"viewBox"|= 640/);
+  assert.equal(
+    kept("matplotlib"),
+    'fig , ax = plt . subplots ( ) ax . bar ( [ d [ "lake" ] for d in data ] , [ d [ "count" ] for d in data ] , color = "steelblue" ) ax . set_xlabel ( "lake" ) ax . set_ylabel ( "count" ) fig . tight_layout ( )'
+  );
+  assert.equal(
+    kept("altair"),
+    'chart = ( alt . Chart ( df ) . mark_bar ( color = "steelblue" ) . encode ( x = alt . X ( "lake:N" , sort = None ) , y = "count:Q" ) )'
+  );
+  assert.equal(
+    kept("ggplot2"),
+    'data $ lake <- factor ( data $ lake , levels = unique ( data $ lake ) ) plot <- ggplot ( data , aes ( x = lake , y = count ) ) + geom_col ( fill = "steelblue" )'
+  );
+  // Variants: a path bound to a name, a size held in constants, a transform
+  // chained onto the loader, a `with` block, and d3.create.
+  assert.equal(
+    chartTokens(
+      [
+        "import os, json",
+        "W, H = 640, 400",
+        'out = os.environ["OUT_PATH"]',
+        'df = pd.read_json(os.environ["DATA_PATH"]).sort_values("year")',
+        'with open(os.path.join(os.environ["ASSET_DIR"], "a.png"), "rb") as f:',
+        "    img = f.read()",
+        "fig = plt.figure(figsize=(W / 100, H / 100), dpi=100)",
+        "fig.savefig(out, format='svg')",
+      ].join("\n"),
+      "matplotlib"
+    ).join(" "),
+    'df = . sort_values ( "year" ) fig = plt . figure ( )'
+  );
+  assert.equal(
+    chartTokens(
+      [
+        "library(ggplot2)",
+        "suppressPackageStartupMessages(library(dplyr))",
+        "W <- 6.4",
+        'd <- jsonlite::fromJSON(Sys.getenv("DATA_PATH")) %>% arrange(x)',
+        "p <- ggplot(d, aes(x, y)) +",
+        "  geom_point()",
+        'ggsave(Sys.getenv("OUT_PATH"), p, device = svglite::svglite,',
+        '       width = W, height = 4, units = "in")',
+      ].join("\n"),
+      "ggplot2"
+    ).join(" "),
+    "d <- %>% arrange ( x ) p <- ggplot ( d , aes ( x , y ) ) + geom_point ( )"
+  );
+  assert.equal(
+    chartTokens(
+      [
+        'import * as d3 from "d3";',
+        "export default function render(container, data) {",
+        "  const width = 640, height = 400, pad = 8;",
+        '  const svg = d3.create("svg").attr("width", width).attr("height", height);',
+        '  svg.append("g").attr("width", width - pad);',
+        "  container.append(svg.node());",
+        "}",
+      ].join("\n"),
+      "d3"
+    ).join(" "),
+    'const pad = 8 ; svg . append ( "g" ) . attr ( "width" , width - pad ) ;'
+  );
+  assert.equal(
+    chartTokens(
+      [
+        'import { BarChart, Bar } from "recharts";',
+        "export default function Chart({ data }) {",
+        "  return (",
+        '    <BarChart width={640} height={400} data={data}><Bar dataKey="v" width={9} /></BarChart>',
+        "  );",
+        "}",
+      ].join("\n"),
+      "recharts"
+    ).join(" "),
+    '< BarChart data = { data } > < Bar dataKey = "v" width = { 9 } /> </ BarChart > ;'
+  );
+  assert.equal(
+    chartTokens(
+      "c = alt.Chart(df).mark_bar().properties(width=560, height=330, title='t')\nc.save(os.environ['OUT_PATH'])",
+      "altair"
+    ).join(" "),
+    "c = alt . Chart ( df ) . mark_bar ( ) . properties ( title = 't' )"
+  );
   // Explicit calculation: operators (compound too) and Math/np calls;
   // literals other than 0 and 1.
   assert.deepEqual(
@@ -1185,10 +1285,10 @@ const CC_OK: ClaudeCodeResult = {
     ),
     { arithOps: 7, magicNumbers: 4 }
   );
-  // A namespace import's * is not multiplication.
+  // Imports are left out, so a namespace import's * is not multiplication.
   assert.equal(
     explicitCalculation(
-      'import * as Plot from "@observablehq/plot";\nexport * from "d3";\nx = a * b;',
+      'import * as Plot from "@observablehq/plot";\nx = a * b;',
       "plot"
     ).arithOps,
     1
@@ -1212,10 +1312,10 @@ const CC_OK: ClaudeCodeResult = {
     's <- "a # not a comment"',
     "df |> f() %>% g(y = x %% 2)",
   ].join("\n");
-  assert.equal(linesOfCode(r, "ggplot2"), 4);
-  // library ( ggplot2 ) = 4; x <- c ( 1L , 2.5e3 , .5 ) = 10; s <- "..." = 3;
-  // df |> f ( ) %>% g ( y = x %% 2 ) = 14
-  assert.equal(syntaxTokens(r, "ggplot2"), 31);
+  assert.equal(linesOfCode(r, "ggplot2"), 3);
+  // library(ggplot2) is left out; x <- c ( 1L , 2.5e3 , .5 ) = 10;
+  // s <- "..." = 3; df |> f ( ) %>% g ( y = x %% 2 ) = 14
+  assert.equal(syntaxTokens(r, "ggplot2"), 27);
   // R arithmetic: ^ %/% and the base math functions; df$max is a column.
   assert.deepEqual(
     explicitCalculation(
@@ -1246,13 +1346,14 @@ const CC_OK: ClaudeCodeResult = {
         "bars = base.mark_bar()",
         "text = base.mark_text(dy=-4)",
         "n = 2 + 3",
-        "chart = (bars + text).properties(width=400 - 20)",
+        'chart = (bars + text).properties(title="t", width=400 - 20)',
         "out = alt.hconcat(bars, text) | bars & text",
         "m = n + alt.datum.x",
       ].join("\n"),
       "altair"
     ),
-    { arithOps: 4, magicNumbers: 5 }
+    // The width is output size, left out.
+    { arithOps: 3, magicNumbers: 3 }
   );
   // The same text in a non-grammar arm: every + is arithmetic.
   assert.equal(

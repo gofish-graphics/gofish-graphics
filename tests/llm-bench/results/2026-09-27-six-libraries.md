@@ -68,3 +68,29 @@ row in both tables. On code size it sits with the two grammars: a median of
 | ggplot2         | 94%  | 98%    | 86%             | 0%      | 2 (10.9)                | 253 (344)                   | 24                               | 580.5                                |
 | Altair          | 85%  | 98%    | 64%             | 0%      | 1 (11.4)                | 279 (408)                   | 14.5                             | 637.5                                |
 | Observable Plot | 100% | 100%   | 100%            | 0%      | 1.5 (8.5)               | 236 (328)                   | 13                               | 518                                  |
+
+## Note, 2026-10-03: code size counts only the chart expression
+
+The code-size numbers above count the whole program. That charged the Python
+and R arms for reading the data file and saving the SVG, which the JS arms get
+for free as function arguments. Code size now counts only the chart
+expression: imports, data loading, saving or rendering into the container, the
+function shell and the output size are left out in every arm (see "syntax
+tokens" in the README). Measured again from the same saved programs, with
+extensions off ("old" is the previous rule applied to the same programs, so it
+can differ slightly from the tables above):
+
+| library         | syntax tokens median (mean), old -> new | arith ops median (mean), old -> new | magic numbers median (mean), old -> new | beyond-defaults syntax tokens median, old -> new |
+| --------------- | --------------------------------------- | ----------------------------------- | --------------------------------------- | ------------------------------------------------ |
+| GoFish (skill)  | 139.5 (296) -> 100.5 (254)              | 0 (9.7) -> 0 (9.7)                  | 4 (7.0) -> 2 (5.0)                      | 249.5 -> 209                                     |
+| Recharts        | 357.5 (445) -> 315.5 (404)              | 4.5 (13.7) -> 4.5 (13.7)            | 11 (13.1) -> 9 (11.1)                   | 642.5 -> 598.5                                   |
+| D3              | 661.5 (652) -> 594.5 (587)              | 14 (16.5) -> 14 (16.5)              | 17 (17.2) -> 15 (15.2)                  | 728 -> 668.5                                     |
+| Matplotlib      | 354.5 (398) -> 285.5 (330)              | 8.5 (14.6) -> 8.5 (14.4)            | 12 (13.7) -> 9 (10.5)                   | 535 -> 461.5                                     |
+| ggplot2         | 213 (352) -> 169 (306)                  | 1.5 (12.6) -> 1.5 (12.5)            | 7 (11.8) -> 5 (9.8)                     | 608 -> 560                                       |
+| Altair          | 282.5 (434) -> 233 (383)                | 1.5 (14.7) -> 1.5 (14.7)            | 5 (9.4) -> 3 (7.5)                      | 618 -> 568.5                                     |
+| Observable Plot | 236 (328) -> 201.5 (293)                | 1.5 (8.5) -> 1.5 (8.5)              | 7 (9.2) -> 5 (7.5)                      | 518 -> 478.5                                     |
+
+Every arm loses about 35 to 70 tokens and 2 magic numbers (the output width
+and height). Arithmetic barely moves, because the plumbing does almost no
+arithmetic. The ranking does not change: GoFish still has the smallest code
+and the least explicit calculation.

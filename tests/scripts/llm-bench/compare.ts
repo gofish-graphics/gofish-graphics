@@ -4,8 +4,10 @@
  * pooled, for a condition run in parts), for all single tasks and then per
  * group. Chains are left out, as in the report's other tables.
  *
- * A run from before code statistics were recorded has them filled in from
- * its saved programs (all but model tokens).
+ * The lexical code statistics (syntax tokens, lines, arithmetic operators,
+ * magic numbers) are measured again from the saved programs, so every run is
+ * measured by the current rule (codestats.ts); model tokens are kept as
+ * recorded.
  */
 
 import { existsSync, readFileSync } from "fs";
@@ -22,8 +24,8 @@ import {
 import { GROUPS } from "./tasks";
 
 /** A saved result, with the outcome of results from before outcomes
- *  existed and the code statistics of results from before they were
- *  recorded. */
+ *  existed, and its lexical code statistics measured again from its saved
+ *  programs. */
 export function loadResults(dir: string): JobResult[] {
   return readFileSync(join(dir, "results.jsonl"), "utf8")
     .split("\n")
@@ -31,18 +33,18 @@ export function loadResults(dir: string): JobResult[] {
     .map((l) => {
       const r: JobResult = JSON.parse(l);
       r.outcome ??= r.pass ? "pass" : "fail";
-      if (r.codeStats?.arithOps === undefined) {
-        for (const t of r.turns) {
-          if (!t.code || !existsSync(join(dir, t.code))) continue;
-          const code = readFileSync(join(dir, t.code), "utf8");
-          t.codeStats = {
-            model: NaN,
-            ...t.codeStats,
-            ...lexicalStats(code, r.arm),
-          };
-        }
-        r.codeStats = finalCodeStats(r.turns);
+      for (const t of r.turns) {
+        if (!t.code || !existsSync(join(dir, t.code))) continue;
+        const code = readFileSync(join(dir, t.code), "utf8");
+        t.codeStats = {
+          model: NaN,
+          ...t.codeStats,
+          ...lexicalStats(code, r.arm),
+        };
       }
+      r.codeStats = finalCodeStats(r.turns);
+      for (const s of r.steps ?? [])
+        s.codeStats = finalCodeStats(r.turns.filter((t) => t.step === s.step));
       return r;
     });
 }

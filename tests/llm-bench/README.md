@@ -561,12 +561,13 @@ final program, and the job's are the last step's):
   counts as one token. R uses a small lexer that follows R's own tokens:
   names may hold `.` and `_`, `1L` and `.5` are numbers, and `<-`, `|>`,
   `::` and every `%op%` (such as `%>%` and `%in%`) are one token each.
-- **model tokens**: the program's length in the model's tokens, from the
+- **model tokens**: the whole program's length in the model's tokens
+  (imports and input and output included, since the model wrote them), from the
   Anthropic token-counting endpoint (`messages.countTokens`, which is free
   and is not booked in the ledger). Counts are cached by model and sha256 in
   `tests/tmp/llm-bench/token-cache.json`. Without a key, or offline, it is 4
   characters per token and the column says "(est.)".
-- **lines of code**: lines that are not blank and not only comments.
+- **lines of code**: lines that hold a token of the chart expression.
 - **arithmetic operators**: `+ - * / % **` (and `//` in Python; `^`, `%%`
   and `%/%` in R), their compound assignments, and every call into the
   language's math library: `Math`, `math`, `np` or `numpy`, and in R, which
@@ -579,6 +580,89 @@ final program, and the job's are the last step's):
 
 The last two measure explicit calculation, which a declarative library
 should leave to the library.
+
+Syntax tokens, lines, arithmetic operators and magic numbers count only the
+**chart expression**. The harness hands each arm its input and takes its
+output differently: the JS arms are functions that get `container` and `data`
+as arguments, while the Python and R arms are scripts that read the data from
+a file named by an environment variable and save an SVG file. Counting that
+plumbing would charge the scripts for work the JS arms get for free, so it is
+left out in every arm (the code is `chartExpression` in `codestats.ts`):
+
+1. **Imports**: JS `import` declarations; Python `import` and `from ...
+import` statements and `matplotlib.use(...)`; R `library(...)` and
+   `require(...)`, also inside `suppressPackageStartupMessages(...)`.
+2. **The shell** (JS): `export default function render(container, data) {`
+   with its closing brace, and the body's `return`. The parentheses around a
+   returned JSX element go too, and so does the returned value when it is
+   only a reference to something already built, such as `svg.node()`.
+3. **Input and output**: in Python and R, the call that receives
+   `os.environ[...]` or `Sys.getenv(...)`, together with every call it is the
+   whole argument of. This covers reading the data
+   (`pd.DataFrame(json.load(open(os.environ["DATA_PATH"])))`) or an asset,
+   and saving (`fig.savefig(...)`, `chart.save(...)`, `ggsave(...)` with all
+   its arguments). A `with` block that opens such a file goes with it. In JS,
+   the call that puts the picture into `container`: GoFish's
+   `.render(container, ...)`, the `container.append(...)` around
+   `Plot.plot(...)` (its argument stays), and d3's
+   `d3.select(container).append("svg")` or `d3.create("svg")`. A statement
+   left with only a name to bind is dropped (`df =` once its loader is
+   gone, or `const svg =`); if that name was bound to the path itself
+   (`out = os.environ["OUT_PATH"]`), its later uses count as the path.
+   Anything chained after the loader stays: from
+   `df = pd.read_json(...).sort_values("year")`, the part
+   `df = .sort_values("year")` is counted.
+4. **The output size**, which the harness asks every arm to set: GoFish's `w`
+   and `h` render options (other render options, such as `axes`, stay),
+   Plot's `width` and `height` options, Recharts' `width` and `height` props
+   on the chart component (`BarChart`, `PieChart`, `Treemap`, `Surface` and
+   the like; the props of inner components stay), the root SVG's `width`,
+   `height` and `viewBox` attributes in d3, Altair's `width` and `height` in
+   `.properties(...)` (the call goes when nothing else is in it), and
+   matplotlib's `figsize` and `dpi`. ggplot2's size is inside `ggsave`,
+   which is already gone. A constant that one of these settings uses is
+   dropped with it when it is declared as a plain number (`const W = 540`,
+   `const width = 640, height = 400`, `W, H = 640, 400`, `w <- 6.4`); its
+   other uses stay, the way d3 computes ranges from `width`.
+
+Everything else is the chart expression and counts, including the data
+transforms the chart needs, helper functions and post-processing of the
+rendered SVG. One short example per language, with the plumbing marked
+in a comment:
+
+```js
+import { chart, spread, rect } from "gofish-graphics"; // left out
+export default function render(container, data) {
+  // left out
+  return chart(data, { axes: true }) // `return` left out
+    .flow(spread({ by: "lake", dir: "x" }))
+    .mark(rect({ h: "count", fill: "steelblue" }))
+    .render(container, { w: 540, h: 305 }); // `.render(...)` left out
+} // left out
+```
+
+```python
+import os, pandas as pd, altair as alt     # left out
+df = pd.read_json(os.environ["DATA_PATH"]) # left out
+chart = alt.Chart(df).mark_bar().encode(x="lake:N", y="count:Q").properties(
+    width=560, height=330)                 # `.properties(...)` left out
+chart.save(os.environ["OUT_PATH"], format="svg")  # left out
+```
+
+```r
+library(ggplot2)                                      # left out
+data <- jsonlite::fromJSON(Sys.getenv("DATA_PATH"))   # left out
+plot <- ggplot(data, aes(x = lake, y = count)) + geom_col()
+ggsave(Sys.getenv("OUT_PATH"), plot, device = svglite::svglite,
+       width = 6.4, height = 4, units = "in")         # left out
+```
+
+The binding that hands the chart to the save call (`chart =`, `plot <-`)
+stays: it is two tokens, and dropping it would need a rule about which names
+only feed the output. `tests/scripts/llm-bench/call.test.ts` checks the kept
+tokens of every arm's `create/bar-basic` reference and of the variants above.
+`pnpm llm-bench compare` and `gallery` measure saved programs again by this
+rule, so older runs are comparable.
 
 Two arms overload an arithmetic operator to compose charts. In ggplot2, `+`
 adds layers, scales, labels and themes to a plot; in Altair, `+` layers
