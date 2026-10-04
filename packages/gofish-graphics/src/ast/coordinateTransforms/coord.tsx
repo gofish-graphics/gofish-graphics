@@ -19,6 +19,7 @@ import {
 import { flattenLayout } from "./bake";
 import { orderChildrenForPaint } from "../paintOrder";
 import * as IntervalLib from "../../util/interval";
+import { computeSize } from "../../util";
 import { black } from "../../color";
 import {
   UnderlyingSpace,
@@ -226,6 +227,13 @@ export const coord = createNodeOperator(
           const scopes = getScopeRegistry(node.tryGetRenderSession());
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
+          // An explicit `w`/`h` is the coord's box, as it is a layer's (#535).
+          size = [
+            computeSize(dims[0].size, scales?.[0]?.sigma ?? 1, size[0]) ??
+              size[0],
+            computeSize(dims[1].size, scales?.[1]?.sigma ?? 1, size[1]) ??
+              size[1],
+          ];
           const [origW, origH] = size;
           // The coordinate budget children lay out in, and the transform that
           // maps it to pixels. Two rules, chosen by whether the space supplies
