@@ -27,5 +27,10 @@ def story_default():
                 spacing=0,
             )
         ),
-        {"w": 600, "h": 300, "axes": {"x": True, "y": {"title": "Total Gross"}}},
+        {
+            "w": 600,
+            "h": 300,
+            # TODO(#1017): remove once labelAngle "auto" is the default.
+            "axes": {"x": {"labelAngle": "auto"}, "y": {"title": "Total Gross"}},
+        },
     )
