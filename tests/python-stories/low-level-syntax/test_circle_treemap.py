@@ -17,8 +17,8 @@ def story_default():
             treemap(
                 by=field("Major Genre").drop_nulls(),
                 size="Worldwide Gross",
-                padding_inner=2,
-                padding_outer=2,
+                spacing=2,
+                padding=2,
                 round=True,
             )
         )

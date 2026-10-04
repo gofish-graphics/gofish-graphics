@@ -747,15 +747,15 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.union(t.string, t.ref("FieldAccessor")),
         doc: "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.",
       },
-      paddingInner: {
+      spacing: {
         type: t.number,
         default: 0,
-        doc: "Padding between sibling rectangles.",
+        doc: "Gap between sibling tiles, in pixels.",
       },
-      paddingOuter: {
+      padding: {
         type: t.number,
         default: 0,
-        doc: "Padding around the outer edge of the treemap.",
+        doc: "Inset around the outer edge of the treemap, in pixels.",
       },
       round: {
         type: t.boolean,
@@ -763,16 +763,23 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Round pixel positions and sizes.",
       },
       tile: {
-        type: t.enum(
-          "squarify",
-          "slice",
-          "dice",
-          "binary",
-          "slicedice",
-          "squarifyCircle"
+        type: t.union(
+          t.object({
+            kind: { type: t.enum("squarify"), required: true },
+            ratio: {
+              type: t.number,
+              doc: "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio.",
+            },
+          }),
+          t.object({
+            kind: {
+              type: t.enum("slice", "dice", "binary", "sliceDice"),
+              required: true,
+            },
+          })
         ),
-        default: "squarify",
-        doc: "Tiling strategy.",
+        default: { kind: "squarify" },
+        doc: "The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods.",
       },
       sort: {
         type: t.enum("asc", "desc", "none"),
@@ -782,15 +789,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       size: ch.num(
         "Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group."
       ),
-      flipY: {
-        type: t.boolean,
-        default: false,
-        doc: "Mirror leaf layout top-to-bottom within the treemap box.",
-      },
-      leafIntrinsicRadiusField: {
-        type: t.string,
-        doc: "When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).",
-      },
     },
   }),
 

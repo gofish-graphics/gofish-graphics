@@ -181,33 +181,55 @@ function acceptsDict(type: FieldType): boolean {
   }
 }
 
-/** The field that tells a union's object branches apart: a field every
- *  branch requires, typed as a one-value enum, with a different value in each
- *  branch. Its name is the same in Python and on the wire. */
-function discriminator(branches: FieldType[]): string | undefined {
-  if (!branches.every((b) => b.kind === "object")) return undefined;
-  const groups = branches.map((b) => (b as { fields: FieldGroup }).fields);
-  const constant = (spec: FieldSpec | undefined): string | undefined =>
-    spec?.required && spec.type.kind === "enum" && spec.type.values.length === 1
-      ? spec.type.values[0]
-      : undefined;
-  return Object.keys(groups[0]).find((name) => {
-    if (pyKwarg(name) !== name) return false;
-    const values = groups.map((g) => constant(g[name]));
-    return (
-      values.every((v) => v !== undefined) &&
-      new Set(values).size === values.length
-    );
-  });
+/** The field that tells the branches of a tagged union apart: a dict value's
+ *  `kind` names the branch it means. It is the convention the strategy
+ *  objects (treemap `tile`, pack strategies) already follow. */
+const DISCRIMINATOR = "kind";
+
+/** The `kind` values that select an object branch of a tagged union, or null
+ *  when the branch is not an object whose `kind` field is a string literal or
+ *  an enum (named option types are looked through). */
+function branchTags(type: FieldType): readonly string[] | null {
+  if (type.kind === "ref" && type.name in OPTION_TYPES) {
+    return branchTags(OPTION_TYPES[type.name].type);
+  }
+  if (type.kind !== "object") return null;
+  const tag = type.fields[DISCRIMINATOR]?.type;
+  if (tag?.kind === "enum") return tag.values;
+  if (tag?.kind === "literal" && typeof tag.value === "string") {
+    return [tag.value];
+  }
+  return null;
+}
+
+/** The tagged shape of a union's dict-shaped branches,
+ *  `("tagged", "kind", {kind_value: branch_shape})`, or null when some branch
+ *  has no `kind` tag or two branches share a `kind` value. */
+function taggedShape(branches: FieldType[], where: string): string | null {
+  const byTag = new Map<string, string>();
+  for (const branch of branches) {
+    const tags = branchTags(branch);
+    if (tags === null) return null;
+    const shape = wireShape(branch, where) ?? "None";
+    for (const tag of tags) {
+      if (byTag.has(tag)) return null;
+      byTag.set(tag, shape);
+    }
+  }
+  const entries = [...byTag].map(([tag, shape]) => `${pyStr(tag)}: ${shape}`);
+  return `("tagged", ${pyStr(DISCRIMINATOR)}, {${entries.join(", ")}})`;
 }
 
 /** The key structure of a field type, as the Python literal `_to_wire` reads,
  *  or null when a value of this type has no option keys to rename and passes
  *  through unchanged. Object fields use the same `pyKwarg` rule as top-level
  *  kwargs. A union contributes its one dict-shaped branch (a dict value can
- *  only mean that branch); two dict-shaped branches would leave `_to_wire`
- *  guessing, so they fail generation. A record's keys are data (column names,
- *  axis names), so only its values are walked. */
+ *  only mean that branch). Several dict-shaped branches are allowed only as a
+ *  tagged union: each branch an object whose `kind` field (a literal or enum)
+ *  takes values no other branch takes, so `_to_wire` picks the branch by the
+ *  dict's `kind`. Any other union with several dict-shaped branches would
+ *  leave `_to_wire` guessing, so it fails generation. A record's keys are data
+ *  (column names, axis names), so only its values are walked. */
 function wireShape(type: FieldType, where: string): string | null {
   switch (type.kind) {
     case "object": {
@@ -236,23 +258,14 @@ function wireShape(type: FieldType, where: string): string | null {
       const shapes = dictBranches.map((b) => wireShape(b, where));
       if (shapes.every((sh) => sh === null)) return null;
       if (dictBranches.length === 1) return shapes[0];
-      // Several dict branches: fine when they are objects told apart by one
-      // required field holding a distinct constant (a tagged union, such as
-      // scatter's `overlap: {kind: "separate"} | {kind: "jitter"}`).
-      const tag = discriminator(dictBranches);
-      if (tag === undefined) {
-        throw new Error(
-          `${where}: a union with more than one dict-shaped branch, one of ` +
-            `them with option keys, and no field that tells them apart; a ` +
-            `Python dict value could mean either.`
-        );
-      }
-      const cases = dictBranches.map((b, i) => {
-        const field = (b as { fields: FieldGroup }).fields[tag];
-        const value = (field.type as { values: string[] }).values[0];
-        return `${pyStr(value)}: ${shapes[i] ?? "None"}`;
-      });
-      return `("tagged", ${pyStr(tag)}, {${cases.join(", ")}})`;
+      const tagged = taggedShape(dictBranches, where);
+      if (tagged !== null) return tagged;
+      throw new Error(
+        `${where}: a union with more than one dict-shaped branch, one of ` +
+          `them with option keys, and the branches are not told apart by ` +
+          `distinct \`${DISCRIMINATOR}\` values; a Python dict value could ` +
+          `mean either.`
+      );
     }
     case "array": {
       const sub = wireShape(type.items, `${where}[]`);
@@ -405,8 +418,8 @@ parts.push(
     [
       `# The key structure of each named option type (descriptors.ts OPTION_TYPES):`,
       `# ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),`,
-      `# ("tuple", (shape, ...)), ("record", value_shape), ("tagged", field,`,
-      `# {value: shape}) for objects told apart by one field; None passes a value through.`,
+      `# ("tuple", (shape, ...)), ("record", value_shape),`,
+      `# ("tagged", tag_key, {tag_value: shape}); None passes a value through.`,
       `_OPTION_TYPES: Dict[str, Any] = {`,
       ...optionTypes,
       `}`,
@@ -419,23 +432,15 @@ parts.push(
       `    so only declared option keys are renamed (\`label_angle\` to \`labelAngle\`,`,
       `    by the same rule as top-level kwargs). A key the type does not declare`,
       `    raises TypeError, as an unknown kwarg does. Record keys (column names,`,
-      `    axis names) and values of any other type pass through unchanged.`,
+      `    axis names) and values of any other type pass through unchanged. A`,
+      `    tagged union picks its branch by the dict's tag key (\`kind\`); a missing`,
+      `    or unknown tag raises TypeError.`,
       `    """`,
       `    if shape is None or value is None:`,
       `        return value`,
       `    kind = shape[0]`,
       `    if kind == "ref":`,
       `        return _to_wire(_OPTION_TYPES[shape[1]], value, path)`,
-      `    if kind == "tagged":`,
-      `        if not isinstance(value, dict):`,
-      `            return value`,
-      `        field, cases = shape[1], shape[2]`,
-      `        tag = value.get(field)`,
-      `        if tag not in cases:`,
-      `            raise TypeError(`,
-      `                f"{path}[{field!r}] must be one of {', '.join(map(repr, cases))}, got {tag!r}"`,
-      `            )`,
-      `        return _to_wire(cases[tag], value, path)`,
       `    if kind == "object":`,
       `        if not isinstance(value, dict):`,
       `            return value`,
@@ -455,6 +460,17 @@ parts.push(
       `            wire, sub = fields[key]`,
       `            out[wire] = _to_wire(sub, item, f"{path}[{key!r}]")`,
       `        return out`,
+      `    if kind == "tagged":`,
+      `        if not isinstance(value, dict):`,
+      `            return value`,
+      `        tag, branches = shape[1], shape[2]`,
+      `        expected = ", ".join(map(repr, branches))`,
+      `        if tag not in value:`,
+      `            raise TypeError(f"{path} is missing the key {tag!r}; expected {tag!r} to be one of {expected}")`,
+      `        branch = value[tag]`,
+      `        if not isinstance(branch, str) or branch not in branches:`,
+      `            raise TypeError(f"{path}[{tag!r}] got an unexpected value {branch!r}; expected one of {expected}")`,
+      `        return _to_wire(branches[branch], value, path)`,
       `    if kind == "record":`,
       `        if not isinstance(value, dict):`,
       `            return value`,

@@ -128,6 +128,19 @@ function isExportExempt(
 //   - **Storybook chrome** — story-level `title`, `tags`, and `parameters`
 //     (e.g. the gallery annotation) are presentation metadata. Python stories
 //     key off the file path and `story_*` function name, not these.
+//     `argTypes` (meta- or story-level) is chrome too: it only configures
+//     the Storybook controls panel (control kinds, slider ranges).
+//   - **Unread args** — an `args: {...}` entry whose key the file never
+//     reads cannot reach the spec, so it is dropped before comparing (e.g.
+//     removing a dead `paddingInner` control). A key counts as read when the
+//     file has `args.key`, `args["key"]`, or destructures it (`({ w, h }) =>`
+//     as the `render` parameter, `const { w } = args`); the same goes for a
+//     `render` parameter under another name and for `context.args`. Read
+//     args stay in the comparison: their default values feed the spec, and
+//     the Python story bakes them in. When reads cannot be determined (args
+//     passed whole to a helper, spread, indexed by a computed key), every
+//     entry is kept. The `Args` type that lists the keys is erased with the
+//     other types (below).
 //   - **Retired API names** — the public surface is lowercase-only (#146,
 //     #416): the capitalized spellings (`Chart`, `Layer`, `Spread`, `StackY`,
 //     `Frame`, ...) were aliases or node-level forms of the lowercase
@@ -160,7 +173,7 @@ function isExportExempt(
 
 function stripStorybookChrome(source: string): string {
   const out: string[] = [];
-  let depth = 0; // > 0 while inside a `parameters: {...}` block
+  let depth = 0; // > 0 while inside a `parameters:` / `argTypes:` block
   for (const line of source.split("\n")) {
     if (depth > 0) {
       depth += (line.match(/\{/g) ?? []).length;
@@ -169,7 +182,7 @@ function stripStorybookChrome(source: string): string {
     }
     if (/^\s*tags:\s*\[[^\]]*\],?\s*$/.test(line)) continue;
     if (/^\s*title:\s*.*$/.test(line)) continue; // `meta.title` (nav path)
-    if (/^\s*parameters:\s*\{/.test(line)) {
+    if (/^\s*(parameters|argTypes):\s*\{/.test(line)) {
       depth =
         (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
       continue;
@@ -177,6 +190,174 @@ function stripStorybookChrome(source: string): string {
     out.push(line);
   }
   return out.join("\n");
+}
+
+/** The keys of `args` this file reads, or `undefined` when some read cannot
+ * be resolved to a fixed key (args passed whole, spread, computed index). */
+function readArgKeys(file: ts.SourceFile): Set<string> | undefined {
+  const keys = new Set<string>();
+  let unknown = false;
+
+  /** Record the keys bound by a destructuring pattern over args. */
+  const readPattern = (pattern: ts.BindingName): void => {
+    if (!ts.isObjectBindingPattern(pattern)) {
+      unknown = true; // `const a = args` / array pattern: can't follow
+      return;
+    }
+    for (const el of pattern.elements) {
+      const key = el.propertyName ?? el.name;
+      if (
+        el.dotDotDotToken ||
+        !(ts.isIdentifier(key) || ts.isStringLiteral(key))
+      ) {
+        unknown = true;
+      } else {
+        keys.add(key.text);
+      }
+    }
+  };
+
+  /** Classify one use of an expression that evaluates to the args object. */
+  const readUse = (ref: ts.Node): void => {
+    const parent = ref.parent;
+    if (ts.isPropertyAccessExpression(parent) && parent.expression === ref) {
+      keys.add(parent.name.text);
+    } else if (
+      ts.isElementAccessExpression(parent) &&
+      parent.expression === ref &&
+      ts.isStringLiteralLike(parent.argumentExpression)
+    ) {
+      keys.add(parent.argumentExpression.text);
+    } else if (ts.isVariableDeclaration(parent) && parent.initializer === ref) {
+      readPattern(parent.name);
+    } else if (
+      ts.isParenthesizedExpression(parent) ||
+      ts.isAsExpression(parent) ||
+      ts.isNonNullExpression(parent)
+    ) {
+      readUse(parent);
+    } else {
+      unknown = true;
+    }
+  };
+
+  /** True when `id` names a binding or property rather than reading a value. */
+  const isDeclarationName = (id: ts.Identifier): boolean => {
+    const p = id.parent;
+    return (
+      ((ts.isParameter(p) ||
+        ts.isBindingElement(p) ||
+        ts.isVariableDeclaration(p) ||
+        ts.isPropertyAssignment(p) ||
+        ts.isPropertyAccessExpression(p) ||
+        ts.isMethodDeclaration(p) ||
+        ts.isFunctionDeclaration(p)) &&
+        p.name === id) ||
+      (ts.isBindingElement(p) && p.propertyName === id)
+    );
+  };
+
+  /** Every read of `name` in `body` (an identifier bound to args). */
+  const readIdentifierUses = (body: ts.Node, name: string): void => {
+    const visit = (node: ts.Node): void => {
+      if (ts.isTypeNode(node)) return;
+      if (
+        ts.isIdentifier(node) &&
+        node.text === name &&
+        !isDeclarationName(node)
+      ) {
+        readUse(node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(body);
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isTypeNode(node)) return;
+    // `context.args`: the args object reached through the story context.
+    if (ts.isPropertyAccessExpression(node) && node.name.text === "args") {
+      readUse(node);
+    }
+    // A `render` function's first parameter is the args object.
+    if (
+      (ts.isPropertyAssignment(node) || ts.isMethodDeclaration(node)) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "render"
+    ) {
+      const fn = ts.isMethodDeclaration(node) ? node : node.initializer;
+      if (
+        ts.isArrowFunction(fn) ||
+        ts.isFunctionExpression(fn) ||
+        ts.isMethodDeclaration(fn)
+      ) {
+        const param = fn.parameters[0]?.name;
+        if (param && ts.isIdentifier(param)) {
+          if (param.text !== "args" && fn.body) {
+            readIdentifierUses(fn.body, param.text);
+          }
+        } else if (param) {
+          readPattern(param);
+        }
+      } else {
+        unknown = true; // `render: renderFn` — defined elsewhere
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  // Any value read of an identifier named `args` (render parameters so named,
+  // `const { args } = context`, ...).
+  readIdentifierUses(file, "args");
+  return unknown ? undefined : keys;
+}
+
+/** The source with each `args: {...}` entry whose key the file never reads
+ * removed. Every `args` object is re-emitted as `{ a, b }` from its kept
+ * entries, so a removal leaves no stray comma. */
+function dropUnreadArgs(source: string): string {
+  const file = ts.createSourceFile(
+    "story.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    ts.ScriptKind.TSX
+  );
+  const read = readArgKeys(file);
+  if (!read) return source;
+  const edits: [start: number, end: number, text: string][] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isPropertyAssignment(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "args" &&
+      ts.isObjectLiteralExpression(node.initializer)
+    ) {
+      const obj = node.initializer;
+      const kept = obj.properties.filter((prop) => {
+        const name =
+          ts.isPropertyAssignment(prop) ||
+          ts.isShorthandPropertyAssignment(prop)
+            ? prop.name
+            : undefined;
+        // Spreads, methods, and computed keys are kept: can't name them.
+        if (!name || !(ts.isIdentifier(name) || ts.isStringLiteral(name))) {
+          return true;
+        }
+        return read.has(name.text);
+      });
+      const text = `{ ${kept.map((p) => p.getText(file)).join(", ")} }`;
+      edits.push([obj.getStart(file), obj.getEnd(), text]);
+      return; // outermost `args` object only
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  let out = source;
+  for (const [start, end, text] of edits.reverse()) {
+    out = out.slice(0, start) + text + out.slice(end);
+  }
+  return out;
 }
 
 /** The source with every top-level import declaration removed. */
@@ -312,8 +493,8 @@ function canonicalizeRetiredApiNames(source: string): string {
 }
 
 /** True when the file's change between baseRef's merge-base and HEAD touches
- * only spec-neutral content (Storybook chrome, retired API names, imports,
- * import aliases, type annotations, comments, whitespace). */
+ * only spec-neutral content (Storybook chrome, unread args, retired API
+ * names, imports, import aliases, type annotations, comments, whitespace). */
 function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
   try {
     const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {
@@ -330,7 +511,9 @@ function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
       stripComments(
         eraseTypes(
           canonicalizeRetiredApiNames(
-            stripStorybookChrome(stripImports(resolveImportAliases(s)))
+            stripStorybookChrome(
+              stripImports(resolveImportAliases(dropUnreadArgs(s)))
+            )
           )
         )
       );
@@ -697,7 +880,7 @@ for (const jsFile of modifiedJs) {
         pythonFile,
         changeType: "modified",
         status: "ok",
-        message: `Only spec-neutral content changed (Storybook chrome / retired API names / comments) — no Python update needed`,
+        message: `Only spec-neutral content changed (Storybook chrome / unread args / retired API names / comments) — no Python update needed`,
       });
       console.log(`  OK (spec-neutral): ${jsFile}`);
       continue;
