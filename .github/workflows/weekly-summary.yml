@@ -158,11 +158,13 @@ jobs:
           # an error body. curl does not fail on an error status, so check it
           # explicitly; otherwise a rejected post leaves the job green and the
           # failure goes unnoticed. allowed_mentions.parse = [] keeps a summary
-          # from ever pinging @everyone, roles, or users.
+          # from ever pinging @everyone, roles, or users. flags = 4 is
+          # SUPPRESS_EMBEDS: the PR links stay clickable but Discord does not
+          # unfurl them into GitHub preview cards that bury the summary.
           COUNT=$(jq 'length' chunks.json)
           for i in $(seq 0 $((COUNT - 1))); do
             jq -c --argjson i "$i" \
-              '{content: .[$i], allowed_mentions: {parse: []}}' \
+              '{content: .[$i], allowed_mentions: {parse: []}, flags: 4}' \
               chunks.json > payload.json
             HTTP_CODE=$(curl -sS -X POST "$DISCORD_WEBHOOK_URL?wait=true" \
               -H "Content-Type: application/json" \
