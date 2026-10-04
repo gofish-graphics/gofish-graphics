@@ -44,6 +44,7 @@ import {
   UnderlyingSpace,
   continuousInterval,
   isBaselineMagnitude,
+  isPOSITION,
   isUNDEFINED,
   spaceMeasure,
 } from "../underlyingSpace";
@@ -153,8 +154,9 @@ export function resolveLayerBaseSpaces(
  * {@link resolveLayerAxisSpace}). A free union keeps its children's claims,
  * scaled by the layer's `transform.scale` (a pixel-space operation, so it
  * scales the claim and never the data interval). A pinned or difference union
- * claims the union of its children's claims. An axis whose domain the
- * layer's own datum positions widen claims the data width they imply. */
+ * claims the union of its children's claims. An axis whose domain the layer's
+ * own datum positions widen claims, like its type, the union of the pinned
+ * child union (if any) with the datum domain, which claims its data width. */
 export function resolveLayerAxisExtent(
   childExtents: Size<Extent | undefined>[],
   childSpaces: Size<UnderlyingSpace>[],
@@ -163,8 +165,24 @@ export function resolveLayerAxisExtent(
   positionDomain: Interval.Interval | undefined,
   space: UnderlyingSpace
 ): Extent | undefined {
-  if (positionDomain !== undefined) return impliedExtent(space);
-  const extent = unionChildExtents(childExtents, childSpaces, axis, space);
+  const base = unionChildSpaces(childSpaces, axis);
+  const baseExtent = unionChildExtents(childExtents, childSpaces, axis, base);
+  if (positionDomain !== undefined) {
+    const datum = POSITION(positionDomain);
+    const parts: [UnderlyingSpace, Extent | undefined][] = [
+      ...(isPOSITION(base)
+        ? [[base, baseExtent] as [UnderlyingSpace, Extent | undefined]]
+        : []),
+      [datum, impliedExtent(datum)],
+    ];
+    return unionChildExtents(
+      parts.map(([, e]) => axisSize(e, axis, undefined)),
+      parts.map(([sp]) => axisSize(sp, axis, UNDEFINED)),
+      axis,
+      space
+    );
+  }
+  const extent = baseExtent;
   return extent !== undefined && isBaselineMagnitude(space)
     ? scaleExtent(scale, extent)
     : extent;

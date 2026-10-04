@@ -33,8 +33,8 @@ export const aesthetic = (value: any): AestheticDomain => ({
 /** One continuous axis's data→pixel affine map, with the intercept explicit
  *  instead of closed over a function: `px(d) = pxMin + sigma·(d − domainMin)`.
  *  `sigma` is the map's own slope (px per data unit). By construction it is the
- *  σ of a POSITION σ-scope: every `AxisMap` is produced by {@link computePosScale}
- *  through the scope registry (`solvePosition`) or its equal-measure recentering,
+ *  σ of a POSITION σ-scope: every `AxisMap` is produced by the scope registry
+ *  (`solvePosition`) or its equal-measure recentering,
  *  so `sigma` is never a free-floating number — it is a scope's solved slope.
  *  Evaluated by {@link pxOf}; the old `posScale(0)` intercept is `pxOf(map, 0)`. */
 export type AxisMap = { sigma: number; domainMin: number; pxMin: number };
@@ -91,51 +91,3 @@ export const axisScale = (
   map: AxisMap | undefined
 ): AxisScale | undefined =>
   sigma === undefined && map === undefined ? undefined : { sigma, map };
-
-// creates an affine map transforming the domain to [0, size] or [size, 0] if reverse is true
-export const computePosScale = (
-  domain: ContinuousDomain,
-  size: number,
-  reverse: boolean = false
-): AxisMap => {
-  const [min, max] = domain.value;
-  const scale = size / (max - min);
-  // px(d) = pxMin + sigma·(d − domainMin) reproduces the former closure exactly:
-  // forward  `(d − min)·scale`         → pxMin 0,    sigma  scale;
-  // reverse  `size − (d − min)·scale`  → pxMin size, sigma −scale.
-  return reverse
-    ? { sigma: -scale, domainMin: min, pxMin: size }
-    : { sigma: scale, domainMin: min, pxMin: 0 };
-};
-
-/**
- * Local position scale from a node's resolved POSITION space on one axis:
- * the space's domain mapped affinely onto `[0, size]`, or undefined when the
- * axis isn't POSITION (or has no domain). The shared fallback recipe for a
- * layout node that wasn't handed a scale by its parent (layer, scatter).
- */
-export const posScaleFromSpace = (
-  // Structurally typed to avoid a domain.ts → underlyingSpace.ts import cycle;
-  // only a PINNED continuous space (its data interval is the absolute domain)
-  // produces a scale. A free magnitude and a difference do not.
-  space:
-    | {
-        kind: string;
-        origin?: string;
-        dataInterval?: { min: number; max: number };
-      }
-    | undefined,
-  size: number
-): AxisMap | undefined =>
-  space &&
-  space.kind === "continuous" &&
-  space.origin === "pinned" &&
-  space.dataInterval !== undefined
-    ? computePosScale(
-        continuous({
-          value: [space.dataInterval.min, space.dataInterval.max],
-          measure: "unit",
-        }),
-        size
-      )
-    : undefined;

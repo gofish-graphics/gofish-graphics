@@ -633,9 +633,9 @@ export const layer = createNodeOperatorSequential(
           ];
 
           // Scale for resolving this layer's datum `position` constraints: an
-          // inherited posScale, else a local one mapping the layer's own
-          // POSITION domain onto its pixel size (the shared fallback recipe,
-          // `posScaleFromSpace` — scatter uses the same one). Only built when
+          // inherited posScale, else a local one the scope registry solves
+          // from the layer's own POSITION domain, its size claim, and its pixel
+          // size (`solvePosition`, the one pinned-scope solve). Only built when
           // the layer actually owns such an axis — it is used solely by
           // applyConstraints below, not passed to children.
           const space = node._underlyingSpace;
@@ -644,9 +644,12 @@ export const layer = createNodeOperatorSequential(
           const positionScalePlan = buildPositionScalePlan(
             ownsAxis,
             space,
+            layerExtent,
             size,
             basePosScales,
-            axisDemand
+            axisDemand,
+            getScopeRegistry(node.tryGetRenderSession()),
+            node.key ?? node.type
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
 

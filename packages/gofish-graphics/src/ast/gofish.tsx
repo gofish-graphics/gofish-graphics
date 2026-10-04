@@ -625,17 +625,20 @@ export async function layout(
   const scopes = getScopeRegistry(contexts?.session);
   scopes.reset();
 
-  // An anchored CONTINUOUS root builds a data→pixel map over its data interval —
-  // the root POSITION scope solved by the registry.
+  // A pinned CONTINUOUS root builds a data→pixel map over its data interval —
+  // the root POSITION scope solved by the registry, σ from its size claim so
+  // any pixel overhead in the claim keeps its pixels.
   const posScales: Size<AxisMap | undefined> = [
     scopes.solvePosition(
       { kind: "root", rootKey: "root", axis: 0 },
       niceUnderlyingSpaceX,
+      niceExtentX,
       canvasW
     ),
     scopes.solvePosition(
       { kind: "root", rootKey: "root", axis: 1 },
       niceUnderlyingSpaceY,
+      niceExtentY,
       canvasH
     ),
   ];
@@ -684,13 +687,13 @@ export async function layout(
         const space = axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY;
         const canvas = axis === 0 ? canvasW : canvasH;
         const ival = continuousInterval(space);
-        if (ival !== undefined && ival.max > ival.min) {
-          const range = ival.max - ival.min;
+        const map = posScales[axis];
+        if (ival !== undefined && ival.max > ival.min && map !== undefined) {
           return {
             kind: "position",
-            unitPx: canvas / range,
+            unitPx: map.sigma,
             min: ival.min,
-            range,
+            claim: (axis === 0 ? niceExtentX : niceExtentY)!.width,
             canvas,
           };
         }

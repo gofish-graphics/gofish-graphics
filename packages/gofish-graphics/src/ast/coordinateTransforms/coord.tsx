@@ -35,7 +35,7 @@ import {
 } from "../underlyingSpace";
 import { Extent } from "../extent";
 import type { Measure } from "../data";
-import { posScaleFromSpace, axisScale, type AxisMap } from "../domain";
+import { axisScale, type AxisMap } from "../domain";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry } from "../solver/scopes";
 import * as Monotonic from "../../util/monotonic";
@@ -346,6 +346,7 @@ export const coord = createNodeOperator(
                 scopes.solvePosition(
                   { kind: "coord", rootKey: node.key ?? node.type, axis },
                   resolved,
+                  node.resolveExtent()[axis],
                   budget
                 ),
               ];

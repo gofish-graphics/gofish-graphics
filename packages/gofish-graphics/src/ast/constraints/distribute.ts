@@ -22,7 +22,7 @@ import {
   mirrored,
   spaceMeasure,
 } from "../underlyingSpace";
-import { Extent, impliedExtent } from "../extent";
+import { Extent, envelope, impliedExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import * as Interval from "../../util/interval";
 
@@ -417,8 +417,33 @@ function chainClaim(
 /** The claim of a stack: its parts' claims laid end to end exactly as
  *  {@link distributeSpaceFold} lays their data extents (each part's baseline on
  *  the previous part's head), so any pixel overhead a part carries stays in the
- *  claim. The width of the span the parts cover at σ. */
+ *  claim. The width of the span the parts cover at σ: the highest head-side
+ *  reach minus the lowest tail-side reach, each over the running sums. When
+ *  every part's sides are linear the running sums are lines too, so the claim
+ *  is an exact envelope (`envelope`); otherwise it is a closure. */
 function stackClaim(parts: Extent[]): Monotonic.Monotonic {
+  const sides = parts.flatMap((p) => [p.ascent, p.descent]);
+  if (sides.every(Monotonic.isLinear)) {
+    const lines = sides as Monotonic.Linear[];
+    const reachUp: Monotonic.Monotonic[] = [Monotonic.ZERO];
+    const reachDown: Monotonic.Monotonic[] = [Monotonic.ZERO];
+    let at = { slope: 0, intercept: 0 };
+    for (let i = 0; i < parts.length; i++) {
+      const a = lines[2 * i];
+      const d = lines[2 * i + 1];
+      reachUp.push(
+        Monotonic.linear(at.slope + a.slope, at.intercept + a.intercept)
+      );
+      reachDown.push(
+        Monotonic.linear(d.slope - at.slope, d.intercept - at.intercept)
+      );
+      at = {
+        slope: at.slope + a.slope - d.slope,
+        intercept: at.intercept + a.intercept - d.intercept,
+      };
+    }
+    return Monotonic.add(envelope(reachUp), envelope(reachDown));
+  }
   return Monotonic.unknown((sigma: number) => {
     let at = 0;
     let lo = 0;

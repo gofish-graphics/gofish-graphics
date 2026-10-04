@@ -26,7 +26,7 @@ import {
   type CONTINUOUS_TYPE,
   UnderlyingSpace,
 } from "../underlyingSpace";
-import { Extent, maxExtent } from "../extent";
+import { Extent, envelope, maxExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { Measure } from "../data";
 import type { Size } from "../dims";
@@ -170,30 +170,16 @@ export function resolveAlignmentSpace(
     : mirrored(POSITION(union, measure), allMirrored(conts));
 }
 
-/** The upper envelope `max_i m_i(σ)` of claims, over σ ≥ 0. Unlike
- *  `Monotonic.max` it keeps lines with a negative slope or a zero line, which
- *  a union's lower reach needs (a pinned interval above 0 reaches down by a
- *  negative amount). Linear and piecewise claims keep an exact envelope. */
-const envelope = (ms: Monotonic.Monotonic[]): Monotonic.Monotonic =>
-  ms.every((m) => Monotonic.isLinear(m) || Monotonic.isPiecewise(m))
-    ? Monotonic.piecewise(
-        ms.flatMap((m) =>
-          Monotonic.isLinear(m)
-            ? [{ slope: m.slope, intercept: m.intercept }]
-            : (m as Monotonic.Piecewise).pieces
-        )
-      )
-    : Monotonic.unknown((x) => Math.max(...ms.map((m) => m.run(x))));
-
 /**
  * The claim of a union of continuous children laid out on one axis, mirroring
  * the data intervals the type folds union: at σ a pinned child spans
- * `[min·σ, max·σ]`, and any other child spans `[−descent, ascent]` about the
- * shared 0 (`"baseline"`) or its whole box `[0, width]` from the aligned edge
- * (`"box"`). The claim is the width of the union of those spans, so the pixel
- * overhead the children carry (spacing, padding) stays in the claim even
- * though it is no part of the data interval. A union is measured from its low
- * edge, so its descent is 0.
+ * `[min·σ, min·σ + width(σ)]` (its data min, then its whole claim, which is
+ * how a pinned scope lays it out: see `ScopeRegistry.solvePosition`), and any
+ * other child spans `[−descent, ascent]` about the shared 0 (`"baseline"`) or
+ * its whole box `[0, width]` from the aligned edge (`"box"`). The claim is the
+ * width of the union of those spans, so the pixel overhead the children carry
+ * (spacing, padding) stays in the claim even though it is no part of the data
+ * interval. A union is measured from its low edge, so its descent is 0.
  */
 function unionClaim(
   children: { space: CONTINUOUS_TYPE; extent: Extent }[],
@@ -204,7 +190,7 @@ function unionClaim(
   for (const { space, extent } of children) {
     const iv = continuousInterval(space);
     if (iv !== undefined) {
-      above.push(Monotonic.linear(iv.max, 0));
+      above.push(Monotonic.add(Monotonic.linear(iv.min, 0), extent.width));
       below.push(Monotonic.linear(-iv.min, 0));
     } else if (mode === "baseline") {
       above.push(extent.ascent);

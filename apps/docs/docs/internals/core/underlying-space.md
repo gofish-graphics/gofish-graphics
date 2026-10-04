@@ -143,8 +143,8 @@ its `sigma` and its `map.sigma` — are not independent numbers. Each is the σ 
 distinct σ-scope solved once by the scope registry (below):
 `sigma` is the axis's **SIZE** scope (what a magnitude is scaled by), `map.sigma`
 is the axis's **POSITION** scope (what an anchored coordinate is mapped by). No
-site fabricates either — every `map` comes from `computePosScale` through
-`solvePosition` (or the equal-measure recentering), every `sigma` from
+site fabricates either — every `map` comes from `solvePosition` (or the
+equal-measure recentering), every `sigma` from
 `solveSize` (Stage 6c). Within any one scope there is therefore exactly one slope,
 by construction. When both halves are present and `sigma ≠ map.sigma`, the axis
 genuinely carries **two scopes**, and each half is read by the channel it belongs
@@ -1095,17 +1095,25 @@ layer.layout, on an axis the node scopes (node.shared[axis] — set by
     else → undefined (ORDINAL/UNDEFINED don't need a continuous scale factor)
 ```
 
-**A known gap: a pinned scope does not budget pixel overhead.** A pinned
-scope maps its data interval onto its whole box. Before the split, a free
-extent that carried pixel overhead (a spread's spacing) and was then pinned
-put that overhead into the data domain as if it were data, so the box roughly
-made room for it by accident. Now the overhead stays out of the data domain
-and in the claim, where it belongs, but the pinned scope reads only its type,
-so the overhead lands outside the box: the `Position: outset-left` labels
-story (a pinned row of bars 25 px apart) now overflows its 400 px plot by the
-100 px of spacing. The fix is for a pinned scope to solve σ from its claim
-(`claim.width.inverse(box)`) and map its domain with that σ, which also needs
-a rule for how nicing widens a claim. TODO(pinned-claim-solve).
+**A pinned scope solves σ from its claim, too.** A pinned scope does not map
+its data interval onto its whole box. It solves σ from its size claim exactly
+as a free scope does, `claim.width(σ) = box`, and then lays its data interval
+out with that σ from the box's low edge: `px(d) = σ·(d − min)`
+(`ScopeRegistry.solvePosition`). Pixel overhead in the claim (a spread's
+spacing, a nest's padding) takes its pixels, and the data part gets the rest.
+With no overhead the claim is `dataWidth·σ`, so σ is `box / dataWidth` and the
+domain fills the box, as it always has. For this to hold, a pinned child's
+claim must reach its parent's union intact: `unionChildExtents` places a pinned
+child at `[min·σ, min·σ + width(σ)]`, its data min followed by its whole
+claim, the same layout the scope gives it. The `Position: outset-left` labels
+story is the case that needs it: its rows are bars 25 px apart, pinned by a
+baseline alignment, so the root's claim is `137σ + 100` and σ leaves exactly
+100 px for the spacing.
+
+Nicing widens only the data part of a claim: the niced claim is the claim
+plus `σ·(nicedWidth − dataWidth)`, both widths in data units from the type
+(`niceScope`). The widths are lengths, so this holds for a signed domain, and
+only a pinned type is ever niced. The overhead keeps its pixels.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
@@ -1144,7 +1152,8 @@ propagate the inherited σ, not re-root against its own budget" rule).
 Stage 6b makes those a **single mechanism**. A `ScopeRegistry`
 (`ast/solver/scopes.ts`), created once per render on the `RenderSession`, is the
 one place σ / posScale is derived: `solveSize(frame, allocated)` inverts the σ
-slope, `solvePosition(space, allocated)` builds the anchored `AxisMap`. The
+slope, `solvePosition(space, claim, allocated)` solves the same frame
+equation for a pinned scope and builds its anchored `AxisMap`. The
 derivation sites are now **σ-scope roots** — the render root, an axis with an
 explicit pixel size, a constraint budget that roots its own scope, a
 `sharedScale` operator, and a coord boundary — and each calls the registry.
@@ -1345,7 +1354,7 @@ the explicit size is a **literal** or a **data value**:
     shared domain with the absorbed region's units.
 - **`layout`.** The stashed space gets a **local** scale built against the
   layer's own resolved box: an anchored extent is _both_ a coordinate scale
-  (`posScaleFromSpace(stashed, size[dim])`) _and_ a σ-magnitude (a scale factor
+  (`solvePosition(stashed, stashedClaim, size[dim])`) _and_ a σ-magnitude (a scale factor
   from the stashed claim's `width.inverse(size[dim])`), so the layer builds both and each
   child reads the one it needs. These locals override the inherited posScale /
   scale factor on that dim — definitionally, since the inherited scale is in

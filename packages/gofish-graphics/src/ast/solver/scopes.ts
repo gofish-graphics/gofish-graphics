@@ -18,7 +18,9 @@
  * equation.
  */
 import * as Monotonic from "../../util/monotonic";
-import { posScaleFromSpace, type AxisMap } from "../domain";
+import type { AxisMap } from "../domain";
+import { continuousInterval, type UnderlyingSpace } from "../underlyingSpace";
+import type { Extent } from "../extent";
 import { envFlag } from "../../util";
 import type { RenderSession } from "../_node";
 
@@ -29,18 +31,22 @@ export type ScopeKind =
   | "shared"
   | "coord"
   | "grid"
+  | "datum-position"
   | "recenter";
 
 /** One axis's contribution to the #582 equal-measure recentering: either an
- *  anchored POSITION axis (its data interval and canvas) or a bare SIZE axis
- *  (just its σ). `unitPx` is the axis's pixels-per-data-unit before recentering
- *  — the quantity the two axes must agree on when they share a measure. */
+ *  anchored POSITION axis (its data min, its size claim, and its canvas) or a
+ *  bare SIZE axis (just its σ). `unitPx` is the axis's pixels-per-data-unit
+ *  before recentering — the quantity the two axes must agree on when they
+ *  share a measure. */
 export type EqualMeasureAxis =
   | {
       kind: "position";
       unitPx: number;
       min: number;
-      range: number;
+      /** The pixels the content claims at σ (data width·σ plus any pixel
+       *  overhead), used to center it in the canvas. */
+      claim: Monotonic.Monotonic;
       canvas: number;
     }
   | { kind: "size"; unitPx: number };
@@ -104,42 +110,40 @@ export class ScopeRegistry {
   }
 
   /**
-   * Build the anchored data→pixel map for a POSITION scope root — the space's
-   * `[min,max]` domain onto `[0, allocated]`. Records a scope only when a map
-   * actually results (a non-anchored axis is not a POSITION scope here).
+   * Build the anchored data→pixel map for a pinned scope root. A pinned scope
+   * is a SIZE frame too: σ solves the scope's size claim against its box,
+   * `claim.width(σ) = allocated`, exactly as {@link solveSize} does, so any
+   * pixel overhead the claim carries (a pinned row of bars with spacing, a
+   * padded nest) takes its pixels and the data part gets the rest. The map
+   * then lays the data interval out with that σ from the box's low edge:
+   * `px(d) = σ·(d − min)`. With no overhead the claim is `dataWidth·σ`, so σ
+   * is `allocated / dataWidth`, the domain filling the box.
    *
-   * TODO(pinned-claim-solve): the map spends the whole box on the data
-   * interval, so pixel overhead the scope's size claim carries (a pinned row
-   * of bars with spacing) lands outside the box. Solving σ from the claim
-   * (`claim.width.inverse(allocated)`) and mapping the domain with that σ
-   * would budget it; it needs a rule for how nicing widens a claim. See the
-   * underlying-space essay's "A known gap" note.
+   * A claim with no σ in it (a zero-width domain) cannot be fit; σ is then
+   * `allocated / dataWidth`, the same degenerate map an empty domain has
+   * always had. Returns undefined, and records no scope, for a type that is
+   * not pinned.
    */
   solvePosition(
     meta: ScopeMeta,
-    space:
-      | {
-          kind: string;
-          origin?: string;
-          dataInterval?: { min: number; max: number };
-        }
-      | undefined,
+    space: UnderlyingSpace | undefined,
+    extent: Extent | undefined,
     allocated: number
   ): AxisMap | undefined {
-    const map = posScaleFromSpace(space, allocated);
-    if (map !== undefined && DUMP_SCOPES) {
-      const dom =
-        space && space.origin === "pinned" && space.dataInterval
-          ? `[${space.dataInterval.min},${space.dataInterval.max}]`
-          : "[·]";
+    const iv = space === undefined ? undefined : continuousInterval(space);
+    if (iv === undefined || extent === undefined) return undefined;
+    const sigma =
+      extent.width.inverse(allocated, { upperBoundGuess: allocated }) ??
+      allocated / (iv.max - iv.min);
+    const map: AxisMap = { sigma, domainMin: iv.min, pxMin: 0 };
+    if (DUMP_SCOPES)
       this.entries.push({
         ...meta,
         allocated,
-        frame: `${dom}→[0,${allocated}]`,
-        sigma: map.sigma,
+        frame: `[${iv.min},${iv.max}] ${Monotonic.print(extent.width)}`,
+        sigma,
         hasMap: true,
       });
-    }
     return map;
   }
 
@@ -172,7 +176,7 @@ export class ScopeRegistry {
     for (const axis of [0, 1] as const) {
       const info = axisInfo[axis]!;
       if (info.kind === "position") {
-        const offset = (info.canvas - shared * info.range) / 2; // center slack
+        const offset = (info.canvas - info.claim.run(shared)) / 2; // center slack
         // Same affine map as `(pos − min)·shared + offset`, intercept explicit.
         posScales[axis] = {
           sigma: shared,
@@ -190,7 +194,7 @@ export class ScopeRegistry {
           allocated: info.kind === "position" ? info.canvas : NaN,
           frame:
             info.kind === "position"
-              ? `[${info.min},${info.min + info.range}]→center(σ=${shared})`
+              ? `[${info.min},·]→center(σ=${shared})`
               : `σ:=min(x,y)`,
           sigma: shared,
           hasMap: info.kind === "position",

@@ -15,6 +15,7 @@ import * as Monotonic from "../util/monotonic";
 import type { Size } from "./dims";
 import {
   dataSides,
+  dataWidth,
   isCONTINUOUS,
   isPOSITION,
   niceContinuous,
@@ -93,15 +94,26 @@ export const padExtent = (extent: Extent, padding: number): Extent =>
   );
 
 /** Nice a σ-scope root's type and its claim together (issue #659). Nicing is
- *  a type operation ({@link niceContinuous}); a pinned space's niced domain
- *  then implies its claim. Any other space keeps its type and claim. */
+ *  a type operation ({@link niceContinuous}) that widens only the data part:
+ *  the niced claim is the claim plus `σ·(nicedWidth − dataWidth)`, both widths
+ *  in data units from the type, so any pixel overhead the claim carries is
+ *  kept. The widths are lengths, so this holds for a signed domain too. Only a
+ *  pinned space is niced; any other space keeps its type and claim. */
 export const niceScope = <S extends UnderlyingSpace | undefined>(
   space: S,
   extent: Extent | undefined
 ): [S, Extent | undefined] => {
   if (space === undefined || !isPOSITION(space)) return [space, extent];
   const niced = niceContinuous(space);
-  return [niced, impliedExtent(niced)];
+  if (extent === undefined) return [niced, undefined];
+  const widened = dataWidth(niced as typeof space) - dataWidth(space);
+  return [
+    niced,
+    Extent(
+      Monotonic.add(extent.ascent, Monotonic.linear(widened, 0)),
+      extent.descent
+    ),
+  ];
 };
 
 /** Where a σ-scope root (the chart root, or a layer's self-scaled stash)
@@ -114,3 +126,18 @@ export const scopeRootBaseline = (
   sigma: number | undefined
 ): number =>
   extent !== undefined && sigma !== undefined ? extent.descent.run(sigma) : 0;
+
+/** The upper envelope `max_i m_i(σ)` of claims, over σ ≥ 0. Unlike
+ *  `Monotonic.max` it keeps lines with a negative slope or a zero line, which
+ *  a union's lower reach needs (a pinned interval above 0 reaches down by a
+ *  negative amount). Linear and piecewise claims keep an exact envelope. */
+export const envelope = (ms: Monotonic.Monotonic[]): Monotonic.Monotonic =>
+  ms.every((m) => Monotonic.isLinear(m) || Monotonic.isPiecewise(m))
+    ? Monotonic.piecewise(
+        ms.flatMap((m) =>
+          Monotonic.isLinear(m)
+            ? [{ slope: m.slope, intercept: m.intercept }]
+            : (m as Monotonic.Piecewise).pieces
+        )
+      )
+    : Monotonic.unknown((x) => Math.max(...ms.map((m) => m.run(x))));

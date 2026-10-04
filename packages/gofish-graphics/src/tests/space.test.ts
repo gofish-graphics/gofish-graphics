@@ -22,7 +22,9 @@ import {
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
-import { Extent, impliedExtent } from "../ast/extent";
+import { Extent, impliedExtent, niceScope } from "../ast/extent";
+import { ScopeRegistry } from "../ast/solver/scopes";
+import { pxOf } from "../ast/domain";
 import { GoFishNode } from "../ast/_node";
 import {
   unionChildExtents,
@@ -265,6 +267,53 @@ console.log("# space: a type hook cannot read a claim");
   ok(
     "the claim walk runs after the types",
     leaf.resolveExtent()[0]!.width.run(2) === 10
+  );
+}
+
+console.log("# space: a pinned scope solves σ from its claim");
+{
+  const scopes = new ScopeRegistry();
+  const meta = { kind: "root" as const, rootKey: "t", axis: 0 as const };
+  const pinned = POSITION(interval(0, 137));
+  // No overhead: the domain fills the box, as before.
+  const plain = scopes.solvePosition(meta, pinned, impliedExtent(pinned), 400)!;
+  ok(
+    "with no overhead the domain fills the box",
+    Math.abs(plain.sigma - 400 / 137) < 1e-12 && plain.pxMin === 0
+  );
+  // 100 px of spacing in the claim keeps its pixels.
+  const spaced = scopes.solvePosition(
+    meta,
+    pinned,
+    Extent(M.linear(137, 100)),
+    400
+  )!;
+  ok(
+    "pixel overhead takes its pixels; the data gets the rest",
+    Math.abs(spaced.sigma - 300 / 137) < 1e-12 &&
+      Math.abs(pxOf(spaced, 137) - 300) < 1e-9
+  );
+  // Nicing widens only the data part.
+  const [niced, nicedClaim] = niceScope(
+    POSITION(interval(-3, 44)),
+    Extent(M.linear(47, 100))
+  );
+  ok(
+    "nicing widens the claim by σ·(nicedWidth − dataWidth)",
+    JSON.stringify(continuousInterval(niced!)) ===
+      JSON.stringify(interval(-5, 45)) &&
+      nicedClaim!.width.run(2) === 2 * 50 + 100
+  );
+  // A pinned child's claim reaches the union whole.
+  const u = unionChildExtents(
+    [[Extent(M.linear(10, 25)), undefined]],
+    [[POSITION(interval(2, 12)), UNDEFINED]],
+    0,
+    POSITION(interval(2, 12))
+  )!;
+  ok(
+    "a pinned child spans its data min then its whole claim",
+    u.width.run(1) === 10 + 25
   );
 }
 

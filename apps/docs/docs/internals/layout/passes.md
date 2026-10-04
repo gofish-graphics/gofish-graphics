@@ -365,32 +365,20 @@ into-ordinary-nodes treatment axes get. See
 
 ### Pass 8: Position Scale Computation
 
-**Location**: `src/ast/gofish.tsx:183-202`
+**Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/solver/scopes.ts`
 
 ```typescript
 const posScales = [
-  underlyingSpaceX.kind === "position"
-    ? computePosScale(
-        continuous({
-          value: [underlyingSpaceX.domain!.min, underlyingSpaceX.domain!.max],
-          measure: "unit",
-        }),
-        w
-      )
-    : undefined,
-  underlyingSpaceY.kind === "position"
-    ? computePosScale(
-        continuous({
-          value: [underlyingSpaceY.domain!.min, underlyingSpaceY.domain!.max],
-          measure: "unit",
-        }),
-        h
-      )
-    : undefined,
+  scopes.solvePosition(meta(0), niceUnderlyingSpaceX, niceExtentX, canvasW),
+  scopes.solvePosition(meta(1), niceUnderlyingSpaceY, niceExtentY, canvasH),
 ];
 ```
 
-For `POSITION` spaces, this creates linear scales that map from data values to pixel coordinates. These scales are used during layout to position elements.
+For a pinned (`POSITION`) axis, `solvePosition` solves σ from the axis's size
+claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such as
+spacing keeps its pixels, and then maps data values to pixels with that σ from
+the canvas's low edge. These scales are used during layout to position
+elements.
 
 ### Pass 8.5: Embedding Resolution
 

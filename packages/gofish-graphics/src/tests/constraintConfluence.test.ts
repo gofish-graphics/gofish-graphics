@@ -854,9 +854,12 @@ console.log("# constraint confluence: child posScale forwarding");
   const noOwnedAxisPlan = buildPositionScalePlan(
     [false, false],
     [positionSpace, positionSpace],
+    [impliedExtent(positionSpace), impliedExtent(positionSpace)],
     [100, 200],
     [undefined, undefined],
-    () => false
+    () => false,
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "position scale plan does not synthesize local scales without owned axes",
@@ -867,9 +870,12 @@ console.log("# constraint confluence: child posScale forwarding");
   const ownedAxisPlan = buildPositionScalePlan(
     [true, false],
     [positionSpace, positionSpace],
+    [impliedExtent(positionSpace), impliedExtent(positionSpace)],
     [100, 200],
     [baseX, undefined],
-    () => false
+    () => false,
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "position scale plan preserves base scales and falls back locally when owned",
