@@ -496,7 +496,7 @@ console.log("# space: one fold for every origin");
   const [, withDatum] = resolveLayerBaseSpaces(
     [[UNDEFINED, CONTINUOUS(interval(-20, 40), "free")]],
     { y: interval(10, 15) }
-  );
+  ).spaces;
   ok(
     "a datum domain is unioned with a free child union",
     JSON.stringify(continuousInterval(withDatum)) ===
@@ -512,6 +512,7 @@ console.log("# space: one fold for every origin");
       1,
       2,
       undefined,
+      pinnedLayer,
       pinnedLayer
     )!.width.run(1) === 20
   );

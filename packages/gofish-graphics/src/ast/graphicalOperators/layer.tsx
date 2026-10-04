@@ -269,8 +269,9 @@ export const layer = createNodeOperatorSequential(
     let constraintBudget: ComposeBudget | undefined;
 
     // The layer's composed per-axis types BEFORE the self-scaling stash. A pure
-    // function of the children's types: the type hook reports it (after the
-    // stash), and the claim hook re-derives it to follow the same steps.
+    // function of the children's types: the type hook computes it, reports it
+    // (after the stash), and keeps it in `layerTypes` for the claim hook,
+    // which follows the same steps.
     const composeLayerTypes = (
       children: Size<UnderlyingSpace>[],
       childNodes: GoFishAST[],
@@ -311,7 +312,7 @@ export const layer = createNodeOperatorSequential(
         posDomains,
         placed
       );
-      const resolved: Size<UnderlyingSpace> = [base[0], base[1]];
+      const resolved: Size<UnderlyingSpace> = [base.spaces[0], base.spaces[1]];
 
       // A simple spread expressed as align + distribute. When the
       // constraints match that operator image (see planConstraintComposition),
@@ -327,7 +328,7 @@ export const layer = createNodeOperatorSequential(
           : undefined;
       if (composed !== undefined) {
         for (const axis of [0, 1] as const) {
-          const s = composed[axis];
+          const s = composed.spaces[axis];
           if (s !== undefined) resolved[axis] = s;
         }
       }
@@ -358,6 +359,12 @@ export const layer = createNodeOperatorSequential(
       };
     };
 
+    // The type hook's last composition, read by the claim hook. A node's
+    // claim walk resolves its types first (`GoFishNode.resolveExtent`), and
+    // the type memo and the claim memo are cleared together, so whenever the
+    // claim hook runs, this is the composition behind the current types.
+    let layerTypes: ReturnType<typeof composeLayerTypes> | undefined;
+
     const node = new GoFishNode(
       {
         type: options.box === true ? "box" : "layer",
@@ -369,11 +376,16 @@ export const layer = createNodeOperatorSequential(
           _shared: Size<boolean>,
           constraints
         ) => {
-          const { resolved } = composeLayerTypes(
+          layerTypes = composeLayerTypes(
             children,
             _childNodes,
             constraints ?? []
           );
+          // A copy: the claim hook reads the composition before the stash.
+          const resolved: Size<UnderlyingSpace> = [
+            layerTypes.resolved[0],
+            layerTypes.resolved[1],
+          ];
 
           // Stash the absorbed anchored extent and report UNDEFINED upward for
           // any dim with an explicit pixel size — self-scaling region; see
@@ -421,17 +433,13 @@ export const layer = createNodeOperatorSequential(
         // padding, the base union (scaled by `transform.scale`, which acts on
         // pixels only), the constraint folds, the grid tracks, then the
         // self-scaling stash.
-        resolveExtent: (
-          childExtents,
-          childSpaces,
-          spaces,
-          childNodes,
-          constraints
-        ) => {
-          const t = composeLayerTypes(childSpaces, childNodes, constraints);
+        resolveExtent: (childExtents, _childSpaces, spaces) => {
+          const t = layerTypes;
+          if (t === undefined)
+            throw new Error("[gofish] layer: claim resolved before its type");
           const effectiveExtents = applyNestExtentPlan(
             childExtents,
-            childSpaces,
+            t.effectiveChildren,
             t.nestPlan
           );
           const scale = [
@@ -445,7 +453,8 @@ export const layer = createNodeOperatorSequential(
               0,
               scale[0],
               t.posDomains.x,
-              t.base[0],
+              t.base.union[0],
+              t.base.spaces[0],
               t.placed[0]
             ),
             resolveLayerAxisExtent(
@@ -454,7 +463,8 @@ export const layer = createNodeOperatorSequential(
               1,
               scale[1],
               t.posDomains.y,
-              t.base[1],
+              t.base.union[1],
+              t.base.spaces[1],
               t.placed[1]
             ),
           ];
@@ -462,9 +472,9 @@ export const layer = createNodeOperatorSequential(
           if (t.plan !== undefined && t.composed !== undefined) {
             const c = composePlanExtents(
               t.plan,
+              t.composed,
               effectiveExtents,
-              t.effectiveChildren,
-              t.composed
+              t.effectiveChildren
             );
             constraintBudget = c.budget;
             for (const axis of [0, 1] as const)

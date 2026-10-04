@@ -599,7 +599,7 @@ console.log("# constraint confluence: nest size dependency planning");
       [undefined, undefined],
       [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(4, 0))],
     ],
-    childSpaces,
+    folded,
     insideOutPlan
   );
   ok(
@@ -616,7 +616,7 @@ console.log("# constraint confluence: nest size dependency planning");
 
   // The child is placed by the datum position on y, so its own extent (in
   // its own unit, "child") stays out of the layer's y domain.
-  const resolved = resolveLayerBaseSpaces(
+  const { union, spaces: resolved } = resolveLayerBaseSpaces(
     [
       [
         CONTINUOUS(interval(0, 10), "free"),
@@ -643,6 +643,7 @@ console.log("# constraint confluence: nest size dependency planning");
       0,
       3,
       undefined,
+      union[0],
       resolved[0]
     )!.width.run(1) === 30
   );

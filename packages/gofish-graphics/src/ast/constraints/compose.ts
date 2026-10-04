@@ -92,8 +92,9 @@ export type DistributeSegment = {
 
 export type ComposeBudget = {
   segments: DistributeSegment[];
-  /** Per-axis composed SIZE claim (the max-plus longest path) to invert against
-   *  the allotted size for auto-fit. Undefined when the axis claim isn't SIZE. */
+  /** Per-axis width of the composed claim (the max-plus longest path), which
+   *  a layer that roots the axis's scope inverts against its allotted size.
+   *  Undefined when the plan does not cover the axis. */
   sizeDomain: [
     Monotonic.Monotonic | undefined,
     Monotonic.Monotonic | undefined,
@@ -147,25 +148,20 @@ const withoutPlaced = <T>(
   );
 
 /** Resolve a layer's default per-axis TYPE before composed constraint-space
- * overrides: union child spaces, and overlay datum position/span domains
- * onto that union as a pinned space. The children's union is seated as any
- * overlay seats a child: a free union on its baseline at data 0 (which is
- * where the layer places its free children), a pinned one at its own
- * position. A child a datum position places is left out of the union: it sits
- * where its datum maps, so the datum is what it adds to the domain. A
- * `transform.scale` does not touch the type: like translate, it acts on
- * pixels, so it scales only the claim ({@link resolveLayerAxisExtent}). */
-export function resolveLayerAxisSpace(
-  childSpaces: Size<UnderlyingSpace>[],
+ * overrides: overlay datum position/span domains onto the children's `union`
+ * as a pinned space. The children's union is seated as any overlay seats a
+ * child: a free union on its baseline at data 0 (which is where the layer
+ * places its free children), a pinned one at its own position. A child a
+ * datum position places is left out of the union: it sits where its datum
+ * maps, so the datum is what it adds to the domain. A `transform.scale` does
+ * not touch the type: like translate, it acts on pixels, so it scales only the
+ * claim ({@link resolveLayerAxisExtent}). */
+function resolveLayerAxisSpace(
+  base: UnderlyingSpace,
   axis: 0 | 1,
   positionDomain: Interval.Interval | undefined,
-  positionMeasure: Measure | undefined,
-  placed: Set<number>
+  positionMeasure: Measure | undefined
 ): UnderlyingSpace {
-  const base = unionChildSpaces(
-    withoutPlaced(childSpaces, axis, placed, UNDEFINED),
-    axis
-  );
   if (positionDomain === undefined) return base;
   const merged = seatedUnion(
     [
@@ -188,42 +184,53 @@ export function resolveLayerAxisSpace(
   );
 }
 
+/** A layer's default types, per axis: `union`, the union of the children a
+ *  datum position does not place, and `spaces`, that union with the layer's
+ *  datum domain overlaid ({@link resolveLayerAxisSpace}). The claim half
+ *  ({@link resolveLayerAxisExtent}) reads both. */
+export type LayerBaseSpaces = {
+  union: Size<UnderlyingSpace>;
+  spaces: Size<UnderlyingSpace>;
+};
+
 export function resolveLayerBaseSpaces(
   childSpaces: Size<UnderlyingSpace>[],
   positionDomains: PositionDomains,
   placed: [Set<number>, Set<number>] = [new Set(), new Set()]
-): Size<UnderlyingSpace> {
-  return [
-    resolveLayerAxisSpace(
-      childSpaces,
-      0,
-      positionDomains.x,
-      positionDomains.xMeasure,
-      placed[0]
-    ),
-    resolveLayerAxisSpace(
-      childSpaces,
-      1,
-      positionDomains.y,
-      positionDomains.yMeasure,
-      placed[1]
-    ),
-  ];
+): LayerBaseSpaces {
+  const union: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
+  const spaces: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
+  const domains = [positionDomains.x, positionDomains.y];
+  const measures = [positionDomains.xMeasure, positionDomains.yMeasure];
+  for (const axis of [0, 1] as const) {
+    union[axis] = unionChildSpaces(
+      withoutPlaced(childSpaces, axis, placed[axis], UNDEFINED),
+      axis
+    );
+    spaces[axis] = resolveLayerAxisSpace(
+      union[axis],
+      axis,
+      domains[axis],
+      measures[axis]
+    );
+  }
+  return { union, spaces };
 }
 
-/** The claim of a layer's default per-axis type `space` (from
- * {@link resolveLayerAxisSpace}): the union of its children's claims, and,
- * when the layer's own datum positions widen the domain, that union overlaid
- * with the datum domain (which claims its data width), seated as the type
- * seats them. Scaled by the layer's `transform.scale`, a pixel-space
- * operation, so it scales the claim of every origin and never the data
- * interval. */
+/** The claim of a layer's default per-axis type `space`, given the
+ * children's `base` union ({@link resolveLayerBaseSpaces}): the union of its
+ * children's claims, and, when the layer's own datum positions widen the
+ * domain, that union overlaid with the datum domain (which claims its data
+ * width), seated as the type seats them. Scaled by the layer's
+ * `transform.scale`, a pixel-space operation, so it scales the claim of every
+ * origin and never the data interval. */
 export function resolveLayerAxisExtent(
   allChildExtents: Size<Extent | undefined>[],
   allChildSpaces: Size<UnderlyingSpace>[],
   axis: 0 | 1,
   scale: number,
   positionDomain: Interval.Interval | undefined,
+  base: UnderlyingSpace,
   space: UnderlyingSpace,
   placed: Set<number> = new Set()
 ): Extent | undefined {
@@ -234,7 +241,6 @@ export function resolveLayerAxisExtent(
     placed,
     undefined as Extent | undefined
   );
-  const base = unionChildSpaces(childSpaces, axis);
   const baseExtent = unionChildExtents(childExtents, childSpaces, axis, base);
   const datum =
     positionDomain === undefined
@@ -407,7 +413,7 @@ const foldOptions = (s: Seg) => ({
 
 /** One operand of an axis's max-union: a distribute fold, an align fold, or a
  *  child no fold covers. */
-type Fragment =
+export type Fragment =
   | { kind: "distribute"; seg: Seg; space: UnderlyingSpace }
   | { kind: "align"; al: Al; space: UnderlyingSpace }
   | { kind: "child"; index: number; space: UnderlyingSpace };
@@ -454,19 +460,27 @@ function axisFragments(
   return fragments;
 }
 
-/** The composed per-axis TYPES. Undefined on an axis leaves the default union
- *  in place (no distribute or align on that axis). */
+/** The composed per-axis TYPES, and the max-union operands each was folded
+ *  from (which the claim fold reuses). Undefined on an axis leaves the default
+ *  union in place (no distribute or align on that axis). */
+export type ComposedSpaces = {
+  spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined];
+  fragments: [Fragment[] | undefined, Fragment[] | undefined];
+};
+
 export function composePlanSpaces(
   plan: ComposePlan,
   childSpaces: Size<UnderlyingSpace>[]
-): [UnderlyingSpace | undefined, UnderlyingSpace | undefined] {
+): ComposedSpaces {
   const spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined] = [
     undefined,
     undefined,
   ];
+  const fragments: ComposedSpaces["fragments"] = [undefined, undefined];
   for (const axis of [0, 1] as const) {
-    const fragments = axisFragments(plan, childSpaces, axis);
-    if (fragments === undefined) continue; // keep default union
+    const axisFrags = axisFragments(plan, childSpaces, axis);
+    fragments[axis] = axisFrags;
+    if (axisFrags === undefined) continue; // keep default union
     // This axis is covered by an align/distribute, so the FOLD is authoritative
     // — set it even when UNDEFINED, to OVERRIDE (suppress) the layer's default
     // `unionChildSpaces`. For ORDINAL children the cross-axis fold
@@ -476,26 +490,26 @@ export function composePlanSpaces(
     // pads the off-axis with UNDEFINED, so `spaces[axis]` only ever carries this
     // axis's contribution.)
     spaces[axis] =
-      fragments.length > 0
+      axisFrags.length > 0
         ? unionChildSpaces(
-            fragments.map((f) => axisSize(f.space, axis, UNDEFINED)),
+            axisFrags.map((f) => axisSize(f.space, axis, UNDEFINED)),
             axis
           )
         : UNDEFINED;
   }
-  return spaces;
+  return { spaces, fragments };
 }
 
-/** The composed per-axis CLAIMS for the types `spaces` that
- *  {@link composePlanSpaces} produced, plus the layout budget. Each fold
- *  operand's claim comes from its own claim fold, and the operands overlay as
- *  in {@link unionChildExtents}. An axis the plan does not cover is left
- *  undefined (the default union's claim stands). */
+/** The composed per-axis CLAIMS for the types that {@link composePlanSpaces}
+ *  produced (`composed`, with its fold operands), plus the layout budget.
+ *  Each fold operand's claim comes from its own claim fold, and the operands
+ *  overlay as in {@link unionChildExtents}. An axis the plan does not cover is
+ *  left undefined (the default union's claim stands). */
 export function composePlanExtents(
   plan: ComposePlan,
+  composed: ComposedSpaces,
   childExtents: Size<Extent | undefined>[],
-  childSpaces: Size<UnderlyingSpace>[],
-  spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined]
+  childSpaces: Size<UnderlyingSpace>[]
 ): {
   covered: [boolean, boolean];
   extents: [Extent | undefined, Extent | undefined];
@@ -511,9 +525,9 @@ export function composePlanExtents(
     Monotonic.Monotonic | undefined,
   ] = [undefined, undefined];
   for (const axis of [0, 1] as const) {
-    const fragments = axisFragments(plan, childSpaces, axis);
-    const composed = spaces[axis];
-    if (fragments === undefined || composed === undefined) continue;
+    const fragments = composed.fragments[axis];
+    const space = composed.spaces[axis];
+    if (fragments === undefined || space === undefined) continue;
     covered[axis] = true;
     const fragmentExtent = (f: Fragment): Extent | undefined =>
       f.kind === "distribute"
@@ -535,7 +549,7 @@ export function composePlanExtents(
       fragments.map((f) => axisSize(fragmentExtent(f), axis, undefined)),
       fragments.map((f) => axisSize(f.space, axis, UNDEFINED)),
       axis,
-      composed
+      space
     );
     extents[axis] = extent;
     // Every composed claim is a budget the layer σ-solves against via

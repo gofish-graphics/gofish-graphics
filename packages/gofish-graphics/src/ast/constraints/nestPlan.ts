@@ -131,16 +131,16 @@ export function applyNestSpacePlan(
 }
 
 /** The claim half of {@link applyNestSpacePlan}: the children's claims with
- *  every INSIDE_OUT edge's padding applied, given the children's types. Reads
- *  the types (each derived outer is free exactly when its inner is) but never
- *  writes them. */
+ *  every INSIDE_OUT edge's padding applied, given the children's types after
+ *  the nest type fold (`effectiveSpaces`, from {@link applyNestSpacePlan}).
+ *  Reads the types (each derived outer is free exactly when its inner is) but
+ *  never writes them. */
 export function applyNestExtentPlan(
   childExtents: readonly Size<Extent | undefined>[],
-  childSpaces: readonly Size<UnderlyingSpace>[],
+  effectiveSpaces: readonly Size<UnderlyingSpace>[],
   nestPlan: NestPlan | undefined
 ): Size<Extent | undefined>[] {
   if (nestPlan === undefined) return [...childExtents];
-  const effectiveSpaces = applyNestSpacePlan(childSpaces, nestPlan);
   const effective = childExtents.map(
     (s) => [s[0], s[1]] as Size<Extent | undefined>
   );

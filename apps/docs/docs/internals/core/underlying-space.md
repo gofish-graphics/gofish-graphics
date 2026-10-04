@@ -667,8 +667,9 @@ distribute and align covers, on which axis. The type fold
 (`composePlanSpaces`) and the claim fold (`composePlanExtents`) then evaluate
 the same plan, so the two halves cannot disagree about which fold covers
 which child. The covered-axis type fold — UNDEFINED included — is what
-`composePlanSpaces` reports, and `composePlanExtents` reports its claim and the
-layout budget. At layout time the layer then **solves the budget**:
+`composePlanSpaces` reports, along with the fold operands of each axis, and
+`composePlanExtents` reads those operands back (it does not fold the types
+again) and reports their claim and the layout budget. At layout time the layer then **solves the budget**:
 a fold-produced claim (of any origin) is inverted against the layer's allotted size to
 derive a local scale factor, and distribute-covered fill children are
 proposed slices from the shared proposal plan (`buildDistributeSliceMap`,
@@ -755,8 +756,9 @@ honest one.
 constraint overrides: union child spaces, and overlay datum-valued
 position/span domains on that union as a pinned space (a free union seated at
 data 0, where the layer places its free children), with constraint measures
-taking precedence. Its claim half, `resolveLayerAxisExtent`, overlays the
-claims the same way and applies the layer's `transform.scale` to the result,
+taking precedence. It returns the children's union beside the result. Its
+claim half, `resolveLayerAxisExtent`, takes both and overlays the claims the
+same way and applies the layer's `transform.scale` to the result,
 whatever its origin. A `transform.scale` is a pixel-space operation, like
 translate, so it scales the claim and never the data interval.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
@@ -771,7 +773,8 @@ Nest sizing is split into a dependency plan and concrete layout arithmetic:
 inside-out (`outer = inner + 2·padding`) or outside-in
 (`inner = outer − 2·padding`) and orders children so the source has been laid
 out first. The bottom-up walks apply only the inside-out portion, the type
-walk via `applyNestSpacePlan` and the claim walk via `applyNestExtentPlan`;
+walk via `applyNestSpacePlan` and the claim walk via `applyNestExtentPlan`,
+which reads the types the first one produced;
 once the source has concrete dimensions,
 `applyNestLayoutProposal` does the corresponding layout-time arithmetic on the
 derived axes.
@@ -1395,9 +1398,10 @@ The rule lives in `layer`'s resolver and layout
 the explicit size is a **literal** or a **data value**:
 
 - **`resolveUnderlyingSpace` and `resolveExtent`.** Both hooks follow the
-  same steps (the claim hook re-derives the layer's composed types with the
-  same pure function the type hook uses, `composeLayerTypes`), and each
-  stashes its own half.
+  same steps (the type hook keeps the layer's composed types from
+  `composeLayerTypes`, and the claim hook reads them, since a node resolves
+  its types before its claim and the two memos are cleared together), and
+  each stashes its own half.
   - **Literal pixel size** (`w: 80`). After resolving each axis normally, for
     any dim that has an explicit pixel size and whose resolved space is
     continuous (any origin), the real type is **stashed** verbatim and
