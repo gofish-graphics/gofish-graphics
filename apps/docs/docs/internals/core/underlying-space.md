@@ -150,8 +150,7 @@ distinct σ-scope solved once by the scope registry (below):
 `sigma` is the axis's **SIZE** scope (what a magnitude is scaled by), `map.sigma`
 is the axis's **POSITION** scope (what an anchored coordinate is mapped by). No
 site fabricates either — every scope root solves both from one call,
-`solveScope` (or the equal-measure recentering), and a constraint budget's σ
-from `solveSize` (Stage 6c). Within any one scope there is therefore exactly
+`solveScope` (or the equal-measure recentering). Within any one scope there is therefore exactly
 one slope, by construction. When both halves are present and `sigma ≠ map.sigma`, the axis
 genuinely carries **two scopes**, and each half is read by the channel it belongs
 to — magnitudes read `sigma`, anchored positions read `map`. That happens when a
@@ -1224,7 +1223,7 @@ Stage 6b makes those a **single mechanism**. A `ScopeRegistry`
 (`ast/solver/scopes.ts`), created once per render on the `RenderSession`, is the
 one place σ / posScale is derived: `solveScope(space, claim, allocated)`
 solves a scope root's σ and its `originPx`, and `solveSize(frame, allocated)`
-inverts a bare claim (a constraint budget, a grid's tracks). The
+inverts a bare claim (a grid's tracks). The
 derivation sites are now **σ-scope roots** — the render root, an axis with an
 explicit pixel size, a constraint budget that roots its own scope, a
 `sharedScale` operator, and a coord boundary — and each calls the registry.
@@ -1235,6 +1234,13 @@ explicit pixel size, a constraint budget that roots its own scope, a
 undefined` test that _was_ the guard is now the "is this a scope root?"
 predicate). Because the arithmetic is exactly what the sites ran inline, the
 solved numbers are unchanged; the registry only adds the choke-point.
+
+Within one layer the three roots are one decision per axis, solved once: an
+explicit size roots a scope over the stashed type and claim; otherwise, when no
+ancestor owns σ, a composed constraint budget or a `sharedScale` node roots one
+over the layer's own type and claim. Each is niced at the solve on demand, so
+a budget never re-solves a stash's σ from the raw claim (that split put bar
+tops off their ticks, the #659 symptom).
 
 Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
 printable frame equation — the debuggability bar the σ-affine model was chosen

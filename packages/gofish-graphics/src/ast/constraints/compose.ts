@@ -35,7 +35,6 @@
 // Distribute interleaved with a `position` pin (solve the sum relative to the
 // pin) is not yet modeled; the distribute claim wins on a shared axis for now.
 
-import * as Monotonic from "../../util/monotonic";
 import type { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import {
@@ -92,13 +91,10 @@ export type DistributeSegment = {
 
 export type ComposeBudget = {
   segments: DistributeSegment[];
-  /** Per-axis width of the composed claim (the max-plus longest path), which
-   *  a layer that roots the axis's scope inverts against its allotted size.
-   *  Undefined when the plan does not cover the axis. */
-  sizeDomain: [
-    Monotonic.Monotonic | undefined,
-    Monotonic.Monotonic | undefined,
-  ];
+  /** Per axis: the plan covers it, so the layer's claim there is the composed
+   *  claim, which the layer solves σ against when it roots the axis's scope
+   *  (`buildChildScalePlan`). */
+  covered: [boolean, boolean];
 };
 
 export type PositionDomains = {
@@ -520,10 +516,6 @@ export function composePlanExtents(
     undefined,
     undefined,
   ];
-  const sizeDomain: [
-    Monotonic.Monotonic | undefined,
-    Monotonic.Monotonic | undefined,
-  ] = [undefined, undefined];
   for (const axis of [0, 1] as const) {
     const fragments = composed.fragments[axis];
     const space = composed.spaces[axis];
@@ -552,11 +544,6 @@ export function composePlanExtents(
       space
     );
     extents[axis] = extent;
-    // Every composed claim is a budget the layer σ-solves against via
-    // `width.inverse` when the layer roots the axis's scope, whatever the
-    // composed type (a spread of magnitudes is ordinal, but its room is still
-    // σ-dependent).
-    if (extent !== undefined) sizeDomain[axis] = extent.width;
   }
   return {
     covered,
@@ -567,7 +554,7 @@ export function composePlanExtents(
         spacing,
         order,
       })),
-      sizeDomain,
+      covered,
     },
   };
 }

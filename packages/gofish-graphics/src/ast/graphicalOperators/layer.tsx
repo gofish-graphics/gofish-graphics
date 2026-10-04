@@ -573,7 +573,7 @@ export const layer = createNodeOperatorSequential(
             size,
             inheritedScaleFactors,
             inheritedPosScales,
-            constraintBudget,
+            constraintBudget?.covered ?? [false, false],
             shared,
             axisDemand,
             // Stage 6b: derive every scale this layer roots through the render's

@@ -11,7 +11,6 @@ import { scopeMap, type ScopeRegistry } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
-import type * as Monotonic from "../../util/monotonic";
 import { buildNestPlan, type NestPlan, type NestPlanChild } from "./nestPlan";
 import { isNestConstraint } from "./nest";
 import { isZOrderConstraint } from "./zorder";
@@ -156,13 +155,6 @@ export function childLayoutSizeProposal(
   return sliceByName.get(childName)!;
 }
 
-type ScaleBudget = {
-  sizeDomain: [
-    Monotonic.Monotonic | undefined,
-    Monotonic.Monotonic | undefined,
-  ];
-};
-
 export type ChildScalePlan = {
   basePosScales: ConstraintPosScales;
   childScaleFactors: Size<number | undefined>;
@@ -179,15 +171,18 @@ export type ChildScalePlan = {
 
 /** Build the scales a layer hands to child layout.
  *
- * The plan is ordered to match runtime ownership:
- *   1. inherited scales are copied into fresh child arrays;
- *   2. explicit self-scaled axes solve their own scope: σ, and a local map
- *      when the stash is pinned;
- *   3. composed constraint SIZE budgets override child σ on their axes;
- *   4. shared-scale scopes solve σ from the layer's own/scoped space.
+ * Inherited scales are copied into fresh child arrays, then each axis has at
+ * most one σ-scope root here, solved once (`solveScope`) from one type and
+ * claim, niced at the solve when the scope renders an axis (issue #659):
+ *   - an explicit size (a self-scaled stash) roots a scope over the stashed
+ *     composed type and claim: σ, and a local map when the stash is pinned;
+ *   - otherwise, when no ancestor owns σ on the axis, a layer whose
+ *     constraint plan covers the axis (a composed budget) or that is a
+ *     shared-scale scope roots one over its own type and claim.
+ * Every other axis inherits ("not a root → inherit").
  *
  * Diagnostics stay with the caller: budget failures are reported so `layer`
- * can warn with context, and shared-scale checks are returned for the solver
+ * can warn with context, and every root solve is returned for the solver
  * shadow hook. */
 export function buildChildScalePlan(
   selfScaledSpaces: Size<UnderlyingSpace | undefined>,
@@ -197,7 +192,8 @@ export function buildChildScalePlan(
   layerSize: Size,
   inheritedScaleFactors: Size<number | undefined> | undefined,
   inheritedPosScales: ConstraintPosScales,
-  constraintBudget: ScaleBudget | undefined,
+  // Per axis: the layer's constraint plan covers it (a composed budget).
+  budgetCovers: Size<boolean>,
   shared: Size<boolean>,
   // Demand-driven nicing (issue #659): per-dim "some node in this scope renders
   // an axis" (`GoFishNode.scopeRendersAxis`). A scope this plan roots nices its
@@ -221,105 +217,59 @@ export function buildChildScalePlan(
   ];
   const budgetFailures: ChildScalePlan["budgetFailures"] = [];
   const sharedScaleChecks: ChildScalePlan["sharedScaleChecks"] = [];
-
-  // Nice each axis-demanded self-scaled stash up front (issue #659): a
-  // self-scaled region is a σ-scope root, so when its scope renders an axis on
-  // the dim, its anchored POSITION domain is niced AT this solve — the same
-  // operation the render root applies. The original bug was precisely that this
-  // stash sidestepped the (now-deleted) pre-layout nice walk, so the panel's
-  // content sized against the RAW domain while a niced width solved an orphan
-  // scope. Nicing here (or, without axis demand, leaving the raw domain here)
-  // makes the ONE scope's type and claim the single source of its solve
-  // (`solveScope`, which yields σ and, for a pinned type, the map). The
-  // shared step below reads the stash again, so transform a local copy.
-  const nicedSelfScaled = ([0, 1] as const).map((axis) =>
-    niceScope(selfScaledSpaces[axis], selfScaledExtents[axis], axisDemand(axis))
-  ) as [UnderlyingSpace | undefined, Extent | undefined][];
-
-  // A self-scaled stash roots its own scope, exactly like the chart root:
-  // σ for every stash, and, for a pinned one, the local map its children share
-  // (a free stash seats its children's baselines at `originPx` instead).
   const stashOriginPx: Size<number | undefined> = [undefined, undefined];
+
   for (const axis of [0, 1] as const) {
-    const [stashed, stashedExtent] = nicedSelfScaled[axis];
-    if (stashed === undefined || !Number.isFinite(layerSize[axis])) continue;
+    if (!Number.isFinite(layerSize[axis])) continue;
+    const stashed = selfScaledSpaces[axis] !== undefined;
+    // Structural σ-scope rule: ONLY A SCOPE ROOT SOLVES. A stash always roots
+    // a scope (the layer's box is a pixel scope of its own). A budget or a
+    // shared-scale node roots one only when no ancestor scope owns σ on the
+    // axis: under an inherited σ it is an intermediate, so it inherits
+    // rather than re-deriving σ against its locally allocated size (which
+    // diverges for an equal-slice budget under a coord, where the
+    // distribute axis IS the σ-scaled axis).
+    const rootsScope =
+      stashed ||
+      (inheritedScaleFactors?.[axis] === undefined &&
+        (budgetCovers[axis] || shared[axis]));
+    if (!rootsScope) continue;
+    const [space, claim] = niceScope(
+      stashed ? selfScaledSpaces[axis] : layerSpace?.[axis],
+      stashed ? selfScaledExtents[axis] : layerExtent?.[axis],
+      axisDemand(axis)
+    );
+    if (claim === undefined) continue;
     const scope = scopes.solveScope(
-      { kind: "self-scaled", rootKey, axis },
-      stashed,
-      stashedExtent,
+      {
+        kind: stashed
+          ? "self-scaled"
+          : budgetCovers[axis]
+            ? "constraint-budget"
+            : "shared",
+        rootKey,
+        axis,
+      },
+      space,
+      claim,
       layerSize[axis]
     );
-    if (scope === undefined) continue;
+    sharedScaleChecks.push({ axis, extent: claim, sigma: scope?.sigma });
+    if (scope === undefined) {
+      // A claim that cannot determine σ keeps the inherited factor; a
+      // composed budget reports it, since its content would otherwise vanish.
+      if (budgetCovers[axis])
+        budgetFailures.push({ axis, budget: layerSize[axis] });
+      continue;
+    }
     childScaleFactors[axis] = scope.sigma;
+    if (!stashed) continue;
     stashOriginPx[axis] = scope.originPx;
     // The stash's scope replaces the inherited one on this axis: a pinned
     // stash hands its children its own map; a free one hands them none (it
     // seats their baselines at `originPx` itself), never the ancestor's map,
     // whose σ is another scope's.
-    basePosScales[axis] = scopeMap(stashed, scope);
-  }
-
-  if (constraintBudget !== undefined) {
-    for (const axis of [0, 1] as const) {
-      const dom = constraintBudget.sizeDomain[axis];
-      if (dom === undefined || !Number.isFinite(layerSize[axis])) continue;
-      // Structural σ-scope rule: ONLY A SCOPE ROOT SOLVES. This budget roots a
-      // scope on the axis unless an ancestor scope already owns it — i.e. an
-      // inherited σ is present AND this layer introduced no pixel scope of its
-      // own (no self-scaled space). In that INTERMEDIATE case the inherited σ has
-      // already been copied into `childScaleFactors`, so inherit it: do NOT
-      // re-root by inverting the local σ-fold against the allocated size. The
-      // re-derive-equal cases produce the same σ (no-op); the divergent case is
-      // an equal-slice budget under a coord, where the distribute axis IS the
-      // σ-scaled axis — a nested group would otherwise silently re-derive a
-      // smaller σ.
-      const rootsScope =
-        inheritedScaleFactors?.[axis] === undefined ||
-        selfScaledSpaces[axis] !== undefined;
-      if (!rootsScope) continue;
-      const sf = scopes.solveSize(
-        { kind: "constraint-budget", rootKey, axis },
-        dom,
-        layerSize[axis],
-        { upperBoundGuess: layerSize[axis] }
-      );
-      if (sf !== undefined) childScaleFactors[axis] = sf;
-      else budgetFailures.push({ axis, budget: layerSize[axis] });
-    }
-  }
-
-  for (const axis of [0, 1] as const) {
-    if (!shared[axis] || !Number.isFinite(layerSize[axis])) continue;
-    // The same structural rule as the budget above: only a scope root
-    // solves. A shared-scale node under an ancestor that already owns σ on
-    // the axis (a chart nested in another chart's mark) inherits it.
-    if (
-      inheritedScaleFactors?.[axis] !== undefined &&
-      selfScaledSpaces[axis] === undefined
-    )
-      continue;
-    // A shared-scale scope root: when the scope renders an axis on this dim,
-    // nice its anchored POSITION domain at the solve (issue #659), so the SIZE
-    // σ it derives agrees with the niced position map. The self-scaled stash is
-    // already demand-niced above; the layer's own space is transformed here
-    // (identity without axis demand). The solve reads the claim: a spread of
-    // magnitudes is ordinal but still claims σ-dependent room.
-    const [sp, ext] =
-      nicedSelfScaled[axis][0] !== undefined
-        ? nicedSelfScaled[axis]
-        : niceScope(layerSpace?.[axis], layerExtent?.[axis], axisDemand(axis));
-    if (sp === undefined) continue;
-    const sf =
-      ext !== undefined
-        ? (scopes.solveScope(
-            { kind: "shared", rootKey, axis },
-            sp,
-            ext,
-            layerSize[axis]
-          )?.sigma ?? 0)
-        : undefined;
-    if (sf !== undefined) childScaleFactors[axis] = sf;
-    sharedScaleChecks.push({ axis, extent: ext, sigma: sf });
+    basePosScales[axis] = scopeMap(space, scope);
   }
 
   // A free layer's own frame has its baseline, data 0, at local 0. So where

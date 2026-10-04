@@ -1283,7 +1283,7 @@ console.log("# constraint confluence: child scale factor planning");
     [100, 80],
     [2, 3],
     [inheritedX, inheritedY],
-    undefined,
+    [false, false],
     [false, false],
     () => false,
     new ScopeRegistry(),
@@ -1317,7 +1317,7 @@ console.log("# constraint confluence: child scale factor planning");
     [100, 80],
     [2, 3],
     [inheritedX, inheritedY],
-    { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
+    [true, true],
     [false, false],
     () => false,
     new ScopeRegistry(),
@@ -1339,11 +1339,11 @@ console.log("# constraint confluence: child scale factor planning");
     [undefined, undefined],
     [undefined, undefined],
     [UNDEFINED, UNDEFINED],
-    [undefined, undefined],
+    [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(0, 10))],
     [100, 80],
     [undefined, undefined],
     [inheritedX, inheritedY],
-    { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
+    [true, true],
     [false, false],
     () => false,
     new ScopeRegistry(),
@@ -1368,19 +1368,45 @@ console.log("# constraint confluence: child scale factor planning");
     [100, 80],
     [undefined, undefined],
     [undefined, undefined],
-    { sizeDomain: [Monotonic.linear(10, 0), undefined] },
+    [true, false],
     [true, false],
     () => false,
     new ScopeRegistry(),
     "test"
   );
   ok(
-    "shared scale scope overrides budget scale factor and emits shadow check",
+    "a budget that is also a shared scale solves once, from the layer's claim",
     shared.childScaleFactors[0] === 4 &&
       shared.sharedScaleChecks.length === 1 &&
       shared.sharedScaleChecks[0].axis === 0 &&
       shared.sharedScaleChecks[0].sigma === 4
   );
+  // One σ per scope (#659): a self-scaled stash that a composed budget also
+  // covers solves once, from the NICED claim. Positions (the map) and sizes
+  // (σ) read the same niced domain, so bar tops land on the ticks.
+  {
+    const stash = CONTINUOUS(interval(0, 9.5), "pinned");
+    const plan = buildChildScalePlan(
+      [undefined, stash],
+      [undefined, impliedExtent(stash)],
+      [UNDEFINED, UNDEFINED],
+      [undefined, undefined],
+      [100, 100],
+      [2, 3],
+      [inheritedX, inheritedY],
+      [false, true],
+      [false, false],
+      () => true,
+      new ScopeRegistry(),
+      "test"
+    );
+    ok(
+      "a budget over a self-scaled stash keeps the niced σ",
+      plan.childScaleFactors[1] === 10 && plan.basePosScales[1]?.sigma === 10,
+      JSON.stringify([plan.childScaleFactors, plan.basePosScales])
+    );
+  }
+
   // Only a scope root solves: a shared-scale node under an ancestor that
   // already owns σ (a chart nested in another chart's mark) inherits it.
   const nestedShared = buildChildScalePlan(
@@ -1391,7 +1417,7 @@ console.log("# constraint confluence: child scale factor planning");
     [100, 80],
     [2, 3],
     [inheritedX, inheritedY],
-    undefined,
+    [false, false],
     [true, false],
     () => false,
     new ScopeRegistry(),
