@@ -19,26 +19,27 @@ import {
 import { flattenLayout } from "./bake";
 import { orderChildrenForPaint } from "../paintOrder";
 import * as IntervalLib from "../../util/interval";
+import { computeSize } from "../../util";
 import { black } from "../../color";
 import {
   UnderlyingSpace,
   UNDEFINED,
-  POSITION,
-  SIZE,
-  ORDINAL,
+  isCONTINUOUS,
   isORDINAL,
-  isPOSITION,
   isUNDEFINED,
-  isBaselineMagnitude,
-  forgetAllMeasures,
   continuousInterval,
-  type CONTINUOUS_TYPE,
+  CONTINUOUS,
+  spaceMeasure,
 } from "../underlyingSpace";
-import type { Measure } from "../data";
-import { posScaleFromSpace, axisScale, type AxisMap } from "../domain";
+import { impliedExtent } from "../extent";
+import {
+  unionChildExtents,
+  unionChildSpaces,
+} from "../graphicalOperators/alignment";
+import { axisScale, type AxisMap } from "../domain";
 import { shadowCheckScaleRoot } from "../solver/shadow";
-import { getScopeRegistry } from "../solver/scopes";
-import * as Monotonic from "../../util/monotonic";
+import { getScopeRegistry, scopeFrame, seatInScope } from "../solver/scopes";
+import { axisTitle, TITLE_COLOR, TITLE_FONT_SIZE } from "../axes/elaborate";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
@@ -103,29 +104,6 @@ export type CoordinateTransform = {
 /** The two axes, for the loops that walk both. */
 const AXES = [0, 1] as const;
 
-/** Union all child ORDINAL spaces on `axis` into one ORDINAL, carrying the
- *  grouping measure (FORGET on a clash) so a polar category axis names itself
- *  off its space — the coord-space analogue of `unionChildSpaces`'s ordinal
- *  fold. (Children are tuples; non-ordinal entries on `axis` are ignored.) */
-const unionOrdinal = (
-  children: Size<UnderlyingSpace>[],
-  axis: 0 | 1
-): UnderlyingSpace => {
-  const keys = new Set<string>();
-  const measures: (Measure | undefined)[] = [];
-  // Anonymous only if EVERY contributing ordinal is anonymous.
-  let anonymous = true;
-  for (const child of children) {
-    const s = child[axis];
-    if (isORDINAL(s) && s.domain) {
-      s.domain.forEach((k) => keys.add(k));
-      measures.push(s.measure);
-      if (!s.anonymous) anonymous = false;
-    }
-  }
-  return ORDINAL(Array.from(keys), forgetAllMeasures(measures), anonymous);
-};
-
 export const coord = createNodeOperator(
   (
     {
@@ -180,63 +158,26 @@ export const coord = createNodeOperator(
           // is the frame the user asked for, not a summary of what is in it.
           const declared = coordTransform.dataWindow;
 
-          let xSpace = UNDEFINED;
-          const xChildrenPositionSpaces = children.filter((child) =>
-            isPOSITION(child[0])
-          );
-          const xChildrenOrdinalSpaces = children.filter(
-            (child) => child[0].kind === "ordinal"
-          );
-
-          if (
-            xChildrenPositionSpaces.length > 0 &&
-            xChildrenOrdinalSpaces.length === 0
-          ) {
-            const xPos = xChildrenPositionSpaces
-              .map((child) => child[0])
-              .filter(isPOSITION);
-            const domain =
-              declared?.[0] ??
-              IntervalLib.unionAll(...xPos.map((s) => continuousInterval(s)!));
-            // A coord transform maps these data positions into its own fixed
-            // coordinate space (e.g. angle/radius). Cross-unit unions are the
-            // transform's business, not the marginal-style corruption the guard
-            // targets, so forget on conflict rather than throwing.
-            const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
-            xSpace = POSITION(domain, xMeasure, coordTransform);
-          } else if (xChildrenOrdinalSpaces.length > 0) {
-            xSpace = unionOrdinal(children, 0);
-          }
-
-          let ySpace = UNDEFINED;
-          const yChildrenPositionSpaces = children.filter((child) =>
-            isPOSITION(child[1])
-          );
-          const yChildrenOrdinalSpaces = children.filter(
-            (child) => child[1].kind === "ordinal"
-          );
-
-          if (
-            yChildrenPositionSpaces.length > 0 &&
-            yChildrenOrdinalSpaces.length === 0
-          ) {
-            const yPos = yChildrenPositionSpaces
-              .map((child) => child[1])
-              .filter(isPOSITION);
-            const domain =
-              declared?.[1] ??
-              IntervalLib.unionAll(...yPos.map((s) => continuousInterval(s)!));
-            // See the x branch: coord maps into its own coordinate space, so
-            // forget on cross-unit conflict rather than throwing.
-            const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
-            ySpace = POSITION(domain, yMeasure, coordTransform);
-          } else if (yChildrenOrdinalSpaces.length > 0) {
-            ySpace = unionOrdinal(children, 1);
-          }
-
-          const result: Size<UnderlyingSpace> = [xSpace, ySpace];
-          spaceRef.current = result;
-          return result;
+          // Per axis, the coord's fold is the overlay fold every layer uses
+          // (`unionChildSpaces`), carrying this coord's transform, with one
+          // rule of its own: a declared window pins a continuous axis to that
+          // window, keeping the children's measure.
+          const axisSpace = (axis: 0 | 1): UnderlyingSpace => {
+            const union = unionChildSpaces(children, axis);
+            if (!isCONTINUOUS(union)) return union;
+            const window = declared?.[axis];
+            return window
+              ? CONTINUOUS(window, "pinned", union.measure, coordTransform)
+              : { ...union, coordinateTransform: coordTransform };
+          };
+          // The coord roots its own σ-scope on both axes, resolved against
+          // the budget it is given (`layout`): its children's data lives in
+          // the coordinate space, not in its parent's. Like every σ-scope
+          // root it keeps its type for its own scope (its axes and their
+          // titles are drawn here, in `lower`) and reports nothing upward:
+          // to its parent it is a pixel box.
+          spaceRef.current = [axisSpace(0), axisSpace(1)];
+          return [UNDEFINED, UNDEFINED];
         },
         layout: (shared, size, scales, children, node) => {
           // Stage 6b: a coord boundary is a σ-scope root — it re-roots σ for its
@@ -245,6 +186,13 @@ export const coord = createNodeOperator(
           const scopes = getScopeRegistry(node.tryGetRenderSession());
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
+          // An explicit `w`/`h` is the coord's box, as it is a layer's (#535).
+          size = [
+            computeSize(dims[0].size, scales?.[0]?.sigma ?? 1, size[0]) ??
+              size[0],
+            computeSize(dims[1].size, scales?.[1]?.sigma ?? 1, size[1]) ??
+              size[1],
+          ];
           const [origW, origH] = size;
           // The coordinate budget children lay out in, and the transform that
           // maps it to pixels. Two rules, chosen by whether the space supplies
@@ -320,10 +268,9 @@ export const coord = createNodeOperator(
           size = budget;
           // Fit the subtree into the coordinate budget, exactly as the ROOT
           // fits content to the canvas (gofish.tsx) — here the budget plays the
-          // role of the canvas. A baseline-magnitude (data SIZE) axis scales by
-          // budget/total via `width.inverse(budget)` so the children fill the
-          // ring; an anchored (data POSITION) axis maps onto [0, budget] via an
-          // anchored map. Only DATA-bound channels consume the scale — a plain
+          // role of the canvas: σ solves the coord's claim against the budget
+          // so the children fill the ring, and a pinned axis also maps its
+          // data onto the budget. Only DATA-bound channels consume the scale — a plain
           // number bypasses both σ and the map (see `computeAesthetic`) — so
           // hand-sized (radian/pixel) stories are unchanged. This is what lets a
           // mark say `w: datum(count)` and have the ring auto-fit.
@@ -331,65 +278,55 @@ export const coord = createNodeOperator(
             axis: 0 | 1,
             budget: number
           ): [number | undefined, AxisMap | undefined] => {
-            // An anchored (data POSITION) axis: the coord's own
-            // `resolveUnderlyingSpace` already unioned the children's POSITION
-            // spaces into `spaceRef.current` — reuse it and map onto [0, budget].
-            // This is a POSITION scope only: it has no SIZE scope, so it carries
-            // NO σ (Stage 6c: never fabricate an independent size slope — the map's
-            // own slope IS the scope's σ). A data-bound size on this axis reads the
-            // map difference; a plain-number size bypasses both. The former `1`
-            // placeholder was a fabricated size σ with no scope behind it.
+            // The coord roots its axis's scope like the chart root: one σ
+            // from the coord's own type and claim against its budget, and,
+            // when the type has an origin, the frame its children sit in.
+            // The coord's own claim: its children's claims overlaid as its
+            // type overlays their data, or, on an axis pinned to a declared
+            // window, the window's own data width.
             const resolved = spaceRef.current?.[axis];
-            if (resolved !== undefined && isPOSITION(resolved)) {
-              return [
-                undefined,
-                scopes.solvePosition(
-                  { kind: "coord", rootKey: node.key ?? node.type, axis },
-                  resolved,
-                  budget
-                ),
-              ];
-            }
-            // A baseline-magnitude (data SIZE) axis: `resolveUnderlyingSpace`
-            // leaves this case UNDEFINED, so sum the children's widths here and
-            // scale by budget/total (`width.inverse(budget)`) to fill the ring.
-            const baseline = children
-              .map((c) => (c as GoFishNode)._underlyingSpace?.[axis])
-              .filter((s): s is UnderlyingSpace => s !== undefined)
-              .filter(isBaselineMagnitude);
-            if (baseline.length > 0) {
-              const width = Monotonic.add(...baseline.map((s) => s.width));
-              // Stage 6b: the coord boundary's SIZE frame — solved through the one
-              // registry (content(σ)=budget via Monotonic.inverse).
-              const sigma = scopes.solveSize(
-                { kind: "coord", rootKey: node.key ?? node.type, axis },
-                width,
-                budget
-              );
-              // Solver shadow (#39): a coord boundary RE-ROOTS σ for its subtree,
-              // exactly as the root fits content to the canvas — assert the same
-              // frame equation content(σ)=budget closes at the boundary. Pass the
-              // raw inverse (undefined when it fails) so a degenerate re-root is
-              // caught, mirroring shadowCheckScaleRoot at the root. No-op unless
-              // GOFISH_SOLVER_CHECK is set.
-              shadowCheckScaleRoot(
-                SIZE(width),
-                budget,
-                sigma ?? undefined,
-                axis
-              );
-              return [sigma ?? 1, undefined];
-            }
-            return [1, undefined];
+            const claim =
+              resolved === undefined
+                ? undefined
+                : coordTransform.dataWindow?.[axis] !== undefined
+                  ? impliedExtent(resolved)
+                  : unionChildExtents(
+                      children.map((c) => c.resolveExtent()),
+                      children.map((c) => c.resolveUnderlyingSpace()),
+                      axis,
+                      resolved
+                    );
+            const scope = scopes.solveScope(
+              { kind: "coord", rootKey: node.key ?? node.type, axis },
+              resolved,
+              claim,
+              budget
+            );
+            // Solver shadow (#39): a coord boundary RE-ROOTS σ for its subtree,
+            // exactly as the root fits content to the canvas — assert the same
+            // frame equation content(σ)=budget closes at the boundary. No-op
+            // unless GOFISH_SOLVER_CHECK is set.
+            shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
+            if (scope === undefined) return [1, undefined];
+            return [scope.sigma, scopeFrame(scope)];
           };
-          const [sfX, psX] = fitAxis(0, budget[0]);
-          const [sfY, psY] = fitAxis(1, budget[1]);
-          const childPlaceables = children.map((child) =>
-            child.layout(size, [axisScale(sfX, psX), axisScale(sfY, psY)])
-          );
-          childPlaceables.forEach((c) => {
-            c.place("x", 0, "baseline");
-            c.place("y", 0, "baseline");
+          const [sfX, frameX] = fitAxis(0, budget[0]);
+          const [sfY, frameY] = fitAxis(1, budget[1]);
+          // Each child sits in the coord's frame by the one seating rule
+          // (`seatInScope`): a pinned child shares the frame and its map
+          // places it; a free child's baseline sits at the frame's pixel of
+          // data 0; a child with no 0 sits at 0.
+          const childPlaceables = children.map((child) => {
+            const space = child.resolveUnderlyingSpace();
+            const x = seatInScope(frameX, space[0]);
+            const y = seatInScope(frameY, space[1]);
+            const placeable = child.layout(size, [
+              axisScale(sfX, x.childMap),
+              axisScale(sfY, y.childMap),
+            ]);
+            placeable.place("x", x.seatPx, "baseline");
+            placeable.place("y", y.seatPx, "baseline");
+            return placeable;
           });
 
           // Compute bounding box in screen space by transforming sample points
@@ -785,7 +722,7 @@ export const coord = createNodeOperator(
                   textItem(lx, ly, label, anchor, "middle", 10, "gray")
                 );
               };
-              if (isPOSITION(xSpace) && xIv) {
+              if (xIv) {
                 const xMin = xIv.min;
                 const xMax = xIv.max;
                 const [, nicedMax] = d3Nice(xMin, xMax, 8);
@@ -830,7 +767,7 @@ export const coord = createNodeOperator(
             }
 
             const yIv = continuousInterval(ySpace);
-            if (axesY && isPOSITION(ySpace) && yIv) {
+            if (axesY && yIv) {
               const yMin = yIv.min;
               const yMax = yIv.max;
               const dataToScreenR = (v: number) =>
@@ -862,6 +799,50 @@ export const coord = createNodeOperator(
                     "gray"
                   )
                 );
+              }
+              // The radial axis title. Only the coord knows where its radial
+              // ray is, so it titles its own axis here; the chart-level title
+              // pass reads only the root's own space. The title continues
+              // the ray past its outer end, reading along the ray, so it never
+              // sits on top of the data. It names
+              // the axis from the `axes` option's title, else the radial
+              // space's measure, else the coordinate space's own name for the
+              // axis (`r`) (#621).
+              //
+              // Deliberately no angular (theta) title by default: the ring's
+              // tick labels already say what goes around, and a title has no
+              // natural single place on a circle.
+              const title = axisTitle(
+                typeof axes === "object" && axes !== null ? axes.y : undefined,
+                spaceMeasure(ySpace) ?? effectiveTransform.aliases?.y ?? "r"
+              );
+              if (title !== undefined) {
+                const [ix, iy] = contentToPixel([x0 - H_GAP, y0]);
+                const [ox, oy] = contentToPixel([x1 - H_GAP, y1]);
+                const len = Math.hypot(ox - ix, oy - iy) || 1;
+                const [ux, uy] = [(ox - ix) / len, (oy - iy) / len];
+                // Reading direction along the ray, kept upright: a ray that
+                // points left reads the other way.
+                let deg = (Math.atan2(uy, ux) * 180) / Math.PI;
+                const flipped = deg > 90 || deg < -90;
+                if (flipped) deg += deg > 0 ? -180 : 180;
+                // Past the ray's outer end (past the last tick): the text
+                // starts a gap beyond it and runs outward, away from the data.
+                const GAP = 8;
+                const px = ox + ux * GAP;
+                const py = oy + uy * GAP;
+                items.push({
+                  kind: "text",
+                  x: px,
+                  y: py,
+                  text: title,
+                  textAnchor: flipped ? "end" : "start",
+                  dominantBaseline: "middle",
+                  fontSize: TITLE_FONT_SIZE,
+                  rotate: deg,
+                  role: "overlay",
+                  style: lowerStyle({ fill: TITLE_COLOR }),
+                });
               }
             }
           }

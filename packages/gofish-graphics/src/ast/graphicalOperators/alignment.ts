@@ -3,49 +3,95 @@
 // </gofish-wiki>
 
 import {
-  DIFFERENCE,
   ORDINAL,
-  POSITION,
-  SIZE,
   UNDEFINED,
   isCONTINUOUS,
   isORDINAL,
   isUNDEFINED,
-  mergeMeasures,
   mergeAllMeasures,
   forgetAllMeasures,
-  spaceMeasure,
-  spacePlacement,
-  continuousExtentInterval,
-  continuousInterval,
+  dataWidth,
   allMirrored,
   mirrored,
   type CONTINUOUS_TYPE,
+  type MeasureSite,
+  type Origin,
   UnderlyingSpace,
+  CONTINUOUS,
+  originIs,
 } from "../underlyingSpace";
-import type { Measure } from "../data";
+import { Extent } from "../extent";
+import * as Monotonic from "../../util/monotonic";
 import type { Size } from "../dims";
 import * as Interval from "../../util/interval";
-import * as Monotonic from "../../util/monotonic";
 
 export type Alignment = "start" | "middle" | "end" | "baseline";
+
+/**
+ * How a fold seats a child whose position on the axis is not fixed by its
+ * own data: on its baseline at the shared data 0 (`"baseline"`: an overlay, a
+ * baseline alignment), or by an edge of its box (`"box"`: a start, end, or
+ * middle alignment). A pinned child sits at its own data position either way.
+ */
+type Seat = "baseline" | "box";
+
+/** Whether a child sits in its parent's frame at its own data coordinates:
+ *  a pinned child always, a free child when seated on its baseline. An
+ *  origin-less child has no data 0 to seat, so it is always a box. */
+const atOwnData = (s: CONTINUOUS_TYPE, seat: Seat): boolean =>
+  s.origin === "pinned" || (seat === "baseline" && s.origin === "free");
+
+/** The data interval a child covers in its parent's frame, seated by `seat`
+ *  (see {@link Seat}): its own interval, or a box `[0, width]`. */
+const seatedInterval = (s: CONTINUOUS_TYPE, seat: Seat): Interval.Interval =>
+  atOwnData(s, seat) ? s.dataInterval : Interval.interval(0, dataWidth(s));
+
+/** The data interval of an overlay of `conts` seated by `seat`, whose result
+ *  has origin `origin`. When the result is pinned it has data coordinates,
+ *  and an origin-less child has none to give it (it has no data 0), so it
+ *  adds nothing to the result's data interval; it still takes room through
+ *  its claim. Otherwise every child counts by its seated interval. */
+export const seatedUnion = (
+  conts: CONTINUOUS_TYPE[],
+  seat: Seat,
+  origin: Origin
+): Interval.Interval =>
+  Interval.unionAll(
+    ...conts
+      .filter((s) => origin !== "pinned" || s.origin !== "none")
+      .map((s) => seatedInterval(s, seat))
+  );
+
+/**
+ * The one overlay fold: the union of the children's seated intervals, with
+ * the origin the operator gives the result and the children's measures
+ * unified as types, whatever their origin (a clash is an error; see
+ * {@link mergeMeasures}). Children that all hold amounts on both sides of 0
+ * still do together, when the result has a 0.
+ */
+function overlay(
+  conts: CONTINUOUS_TYPE[],
+  seat: Seat,
+  origin: Origin,
+  site: MeasureSite
+): UnderlyingSpace {
+  const measure = mergeAllMeasures(
+    conts.map((s) => s.measure),
+    site
+  );
+  return mirrored(
+    CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
+    origin !== "none" && allMirrored(conts)
+  );
+}
 
 /**
  * Union child underlying spaces along one axis for overlay-style operators
  * (layer, Porter-Duff). ORDINAL children with a non-empty domain take
  * precedence: if any such child exists, returns ORDINAL(union of keys).
- * Otherwise collects intervals from POSITION domains, DIFFERENCE widths (as
- * [0, w]), and SIZE values (as [0, v]). When at least one child is a true
- * POSITION, returns POSITION(union) — the overlay has a concrete position.
- * When intervals came only from DIFFERENCE/SIZE, returns DIFFERENCE(width of
- * union) — the extent is known but the position is not, preserving the "no
- * inherent position" semantic so axis rendering uses interval (difference)
- * ticks rather than absolute positions.
- *
- * UNDEFINED children carry no opinion and are ignored throughout: the ORDINAL
- * filter skips them, the interval-collection path skips them, and the SIZE gate
- * filters them out before checking whether the remaining children are all SIZE.
- * So a fixed-pixel (UNDEFINED) sibling never vetoes SIZE composition.
+ * Otherwise the result is the {@link overlay} of the continuous children,
+ * each seated on its baseline, with the origin {@link overlayOrigin} gives
+ * it. UNDEFINED children carry no opinion and are ignored throughout.
  */
 export function unionChildSpaces(
   children: Size<UnderlyingSpace>[],
@@ -53,7 +99,7 @@ export function unionChildSpaces(
 ): UnderlyingSpace {
   // ORDINAL with an empty/missing domain is a "no-position" placeholder
   // (e.g. from image shapes without a data-bound position), not a real axis.
-  // Ignore those so sibling POSITION/DIFFERENCE contributions still count.
+  // Ignore those so sibling continuous contributions still count.
   const ordinals = children
     .map((c) => c[axis])
     .filter(isORDINAL)
@@ -74,92 +120,134 @@ export function unionChildSpaces(
   }
 
   const axisSpaces = children.map((c) => c[axis]);
-  const nonUndefined = axisSpaces.filter((s) => !isUNDEFINED(s));
   const conts = axisSpaces.filter(isCONTINUOUS);
   if (conts.length === 0) return UNDEFINED;
-
-  // Pure magnitude overlay — every child is a baseline magnitude ("free":
-  // bars/stacks not yet placed). Keep the symbolic Monotonic so the parent can
-  // σ-solve via `inverse` (preserving piecewise/intercept extents that an
-  // interval-at-σ=1 collapse would bake away). Composing different fields'
-  // magnitudes is legitimate, so measures FORGET on conflict.
-  //
-  // A non-UNDEFINED, non-CONTINUOUS sibling (e.g. an empty `ORDINAL([])` from an
-  // unresolved `ref()`) is NOT a magnitude and VETOES this path — exactly the
-  // old `sized.every(isSIZE)` gate over non-undefined children. Without the veto
-  // the overlay would self-scale (free magnitude) where it used to stay
-  // unanchored (DIFFERENCE), so a sized child overlaid with an unresolved ref
-  // would change geometry. UNDEFINED siblings (fixed-pixel) still never veto.
-  if (
-    nonUndefined.length === conts.length &&
-    conts.every((s) => spacePlacement(s) === "free")
-  ) {
-    return SIZE(
-      Monotonic.max(...conts.map((s) => s.ascent)),
-      forgetAllMeasures(conts.map((s) => s.measure)),
-      Monotonic.max(...conts.map((s) => s.descent))
-    );
-  }
-
-  // Mixed / data-positioned overlay: union the data intervals. This is where a
-  // marginal histogram's count axis (origin 0) would silently union with a
-  // scatter's millimeter axis — so unify measures as TYPES and THROW on a real
-  // clash. Any anchored child gives the overlay a concrete position (POSITION);
-  // an all-unanchored overlay keeps "extent known, position not" (DIFFERENCE).
-  const intervals: ReturnType<typeof Interval.interval>[] = [];
-  let hasAnchored = false;
-  let measure: Measure | undefined;
-  for (const s of conts) {
-    intervals.push(continuousExtentInterval(s));
-    if (spacePlacement(s) === "determined") hasAnchored = true;
-    measure = mergeMeasures(measure, s.measure, "overlay union");
-  }
-  const union = Interval.unionAll(...intervals);
-  return hasAnchored
-    ? mirrored(POSITION(union, measure), allMirrored(conts))
-    : DIFFERENCE(Interval.width(union), measure);
+  return overlay(conts, "baseline", overlayOrigin(axisSpaces), {
+    axis,
+    where: "where marks are drawn on top of each other",
+  });
 }
 
+/** The origin of an overlay of `spaces` (each seated on its baseline): pinned
+ *  when any is pinned (the overlay has a concrete position, and its free
+ *  members sit at data 0); free when every one with an opinion is free (a
+ *  magnitude overlay, still placeable by its parent); none otherwise. A
+ *  non-continuous member with an opinion (an empty `ORDINAL([])` from an
+ *  unresolved `ref()`) has an unknown position, so it keeps the overlay from
+ *  being free. UNDEFINED members carry no opinion. */
+const overlayOrigin = (spaces: UnderlyingSpace[]): Origin => {
+  const opinions = spaces.filter((s) => !isUNDEFINED(s));
+  if (opinions.some((s) => originIs(s, "pinned"))) return "pinned";
+  return opinions.every((s) => originIs(s, "free")) ? "free" : "none";
+};
+
 /**
- * Determine the underlying space for an alignment axis given child spaces and alignment mode.
- * Returns both the space and a flag indicating whether children came from SIZE space
- * (i.e. they have no inherent position — layout must align them).
+ * The underlying space of an alignment axis: the {@link overlay} of the
+ * children as the alignment seats them (on their baselines for `baseline`,
+ * by their boxes otherwise). UNDEFINED children carry no opinion, as in an
+ * overlay; any other non-continuous child (an ORDINAL) leaves the axis with
+ * no continuous fold (UNDEFINED).
+ *
+ * Alignment establishes a shared baseline; it does not place it. So the
+ * result's origin is the overlay's ({@link overlayOrigin}): free when every
+ * child is free (a bar chart's bars, lined up on one baseline, are still one
+ * magnitude a parent can place), pinned when a child is (it fixes the
+ * position), and none when a child has no origin. `middle` drops it
+ * (centering scrambles baselines). What places a free baseline is placement:
+ * a parent constraint, a data anchor, or the scope root (see
+ * `ScopeRegistry.solveScope`).
  */
 export function resolveAlignmentSpace(
   spaces: UnderlyingSpace[],
-  alignment: Alignment
+  alignment: Alignment,
+  axis: 0 | 1
 ): UnderlyingSpace {
-  const conts = spaces.filter(isCONTINUOUS);
-  if (conts.length === 0 || conts.length !== spaces.length) return UNDEFINED;
+  const opinions = spaces.filter((s) => !isUNDEFINED(s));
+  const conts = opinions.filter(isCONTINUOUS);
+  if (conts.length === 0 || conts.length !== opinions.length) return UNDEFINED;
+  const origin: Origin = alignment === "middle" ? "none" : overlayOrigin(conts);
+  return overlay(conts, alignment === "baseline" ? "baseline" : "box", origin, {
+    axis,
+    where: "where marks are lined up",
+  });
+}
 
-  // When every child is a baseline magnitude ("free"), measures FORGET on
-  // conflict — that's how a histogram's count axis carries a "count" tag
-  // forward; mixed/positioned children unify measures as TYPES (throw on a real
-  // clash).
-  const allBaseline = conts.every((s) => spacePlacement(s) === "free");
-  const measure = allBaseline
-    ? forgetAllMeasures(conts.map(spaceMeasure))
-    : mergeAllMeasures(conts.map(spaceMeasure), "alignment");
+/**
+ * The claim of an {@link overlay} with result type `space`: the children's
+ * claims seated as their types are. Every claim is measured from data 0, so a
+ * child at its own data coordinates reaches its own ascent above the shared 0
+ * and its own descent below it; any other child is its box, `[0, width]`.
+ * So the pixel overhead the children carry (spacing, padding) stays in the
+ * claim even though it is no part of the data interval. The result keeps the
+ * larger reach on each side of 0, so a parent can σ-solve it with every
+ * intercept intact.
+ *
+ * A result with no data coordinates (ordinal or undefined) still claims when
+ * a child with no data coordinates does (a spread of magnitudes: its type is
+ * a sequence of separate spaces, its room is σ-dependent): each such child is
+ * its box, so the claim is the envelope of their widths. A continuous child
+ * of such a result is no part of it on this axis (the type folded no
+ * continuous space from it), so neither is its claim. With no such child
+ * there is no claim.
+ */
+function overlayClaim(
+  children: { space: UnderlyingSpace; extent: Extent | undefined }[],
+  seat: Seat,
+  space: UnderlyingSpace
+): Extent | undefined {
+  const claiming = children.filter(
+    (c): c is { space: UnderlyingSpace; extent: Extent } =>
+      c.extent !== undefined
+  );
+  if (!isCONTINUOUS(space)) {
+    const boxes = claiming.filter((c) => !isCONTINUOUS(c.space));
+    return boxes.length === 0
+      ? undefined
+      : Extent(Monotonic.envelope(boxes.map((c) => c.extent.width)));
+  }
+  const above: Monotonic.Monotonic[] = [];
+  const below: Monotonic.Monotonic[] = [];
+  for (const { space: s, extent } of claiming) {
+    if (isCONTINUOUS(s) && atOwnData(s, seat)) {
+      above.push(extent.ascent);
+      below.push(extent.descent);
+    } else {
+      above.push(extent.width);
+      below.push(Monotonic.ZERO);
+    }
+  }
+  return Extent(Monotonic.envelope(above), Monotonic.envelope(below));
+}
 
-  // `middle` DROPS the anchor (centering scrambles baselines); an already
-  // unanchored ("conflict") child can't be re-anchored by alignment (it is
-  // absorbing). Either way the result is unanchored.
-  const drop =
-    alignment === "middle" ||
-    conts.some((s) => spacePlacement(s) === "conflict");
+/** The size claim of a {@link unionChildSpaces} overlay, given the overlay's
+ *  resolved type `space` ({@link overlayClaim}). */
+export function unionChildExtents(
+  childExtents: Size<Extent | undefined>[],
+  childSpaces: Size<UnderlyingSpace>[],
+  axis: 0 | 1,
+  space: UnderlyingSpace
+): Extent | undefined {
+  return overlayClaim(
+    childSpaces.map((c, i) => ({
+      space: c[axis],
+      extent: childExtents[i][axis],
+    })),
+    "baseline",
+    space
+  );
+}
 
-  // Baseline alignment lines the children up at their baselines, so each
-  // extends `[−descent, ascent]` about the shared one. Any other alignment
-  // lines up a box edge or center, so each child is its whole box `[0, width]`
-  // and the union spans the widest. An anchored child keeps its own interval.
-  const extent = (s: CONTINUOUS_TYPE) =>
-    alignment === "baseline"
-      ? continuousExtentInterval(s)
-      : (continuousInterval(s) ?? Interval.interval(0, s.width.run(1)));
-  const union = Interval.unionAll(...conts.map(extent));
-
-  // Children that all hold amounts on both sides of 0 still do together.
-  return drop
-    ? DIFFERENCE(Interval.width(union), measure)
-    : mirrored(POSITION(union, measure), allMirrored(conts));
+/** The size claim of a {@link resolveAlignmentSpace} result `space`
+ *  ({@link overlayClaim}). */
+export function resolveAlignmentExtent(
+  childExtents: (Extent | undefined)[],
+  childSpaces: UnderlyingSpace[],
+  alignment: Alignment,
+  space: UnderlyingSpace
+): Extent | undefined {
+  return overlayClaim(
+    childSpaces.map((s, i) => ({ space: s, extent: childExtents[i] })),
+    alignment === "baseline" ? "baseline" : "box",
+    space
+  );
 }

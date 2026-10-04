@@ -217,10 +217,11 @@ const contentBboxBand = (node: GoFishAST, composedTy: number): FlipScope => {
  *  cell, a `coord`), which mirror about their own allocated band. Falls back to
  *  the content bbox extent when the axis is UNSIZED (allocated NaN).
  *
- *  FIXED-PITCH EXCEPTION: a target chained by a fixed-pitch `distribute` on y
- *  (`anchor: "baseline" | "start" | "middle" | "end"`; see `Placeable.
- *  pitchAnchorY`) is an OVERLAY row, not a tile — its allocated band is just the
- *  leftover slice and bears no relation to its chained anchor. Its scope mirrors
+ *  CHAINED EXCEPTION: a target a spread `distribute` chains on y (see
+ *  `Placeable.pitchAnchorY`) was placed by the chain, so its allocated band is
+ *  just a slice of the spread and bears no relation to where it sits. A
+ *  fixed-pitch row is an overlay at its chained anchor; an edge-chained box
+ *  is stamped `"middle"`, whose mirror keeps the box. Its scope mirrors
  *  about the chained anchor itself (a degenerate height-0 band: y ↦ 2·anchor −
  *  y), the unique mirror that FIXES the anchor pointwise — so the painted
  *  anchors sit exactly where the solver chained them, at exact pitch, and
@@ -250,7 +251,7 @@ const scopeBox = (node: GoFishAST, composedTy: number): FlipScope => {
  *  stopgap: the deeper fix is for `coord` to DECLARE its own orientation (a node
  *  bit / its own y underlying space) so `declaredYUp` subsumes it — a follow-up to
  *  #629, gated on the open polar/coord orientation redesign (#662). */
-const opensFlipScope = (node: GoFishAST): boolean => {
+export const opensFlipScope = (node: GoFishAST): boolean => {
   if (node instanceof GoFishNode && node._ambientYDown === true) return false;
   const isCoord = (node as { type?: string }).type === "coord";
   const scopeTransparent =

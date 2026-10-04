@@ -108,19 +108,21 @@ to `Unknown`. This is the convex piecewise-linear normal form of the (max, +) al
 the same algebra the layout engine composes constraints in (see
 [Constraints as the core](/internals/design/constraints-as-core)).
 
-| Combinator   | Meaning               | Stays closed-form (PWL) when… |
-| ------------ | --------------------- | ----------------------------- |
-| `add(...fs)` | sum of functions      | no argument is `Unknown`      |
-| `smul(k, f)` | scalar multiple       | `f` is not `Unknown`          |
-| `adds(f, k)` | add a constant offset | `f` is not `Unknown`          |
-| `max(...fs)` | pointwise maximum     | no argument is `Unknown`      |
+| Combinator     | Meaning                            | Stays closed-form (PWL) when… |
+| -------------- | ---------------------------------- | ----------------------------- |
+| `add(...fs)`   | sum of functions                   | no argument is `Unknown`      |
+| `smul(k, f)`   | scalar multiple                    | `f` is not `Unknown`          |
+| `adds(f, k)`   | add a constant offset              | `f` is not `Unknown`          |
+| `max(...fs)`   | pointwise maximum                  | no argument is `Unknown`      |
+| `envelope(fs)` | pointwise maximum, zero lines kept | no argument is `Unknown`      |
 
 `ZERO` is the shared zero claim `0σ + 0`, the default descent of an extent
 that sits wholly above its baseline (see
 [Underlying Space](/internals/core/underlying-space)).
 
 `max` is the structural one: the pointwise max of lines is their envelope, so it simply
-**unions the pieces**. `add` stays closed because the sum of two envelopes is again an
+**unions the pieces**. `max` drops zero claims first; `envelope` keeps them, along with
+lines of negative slope, which the lower reach of a union needs. `add` stays closed because the sum of two envelopes is again an
 envelope — `(max_i aᵢ) + (max_j bⱼ) = max_{i,j}(aᵢ + bⱼ)` — i.e. the pairwise sums of the
 pieces. (When every argument is a single line, both fall back to the plain `Linear` fast
 path; the all-linear `add` is one slope-sum and one intercept-sum.)

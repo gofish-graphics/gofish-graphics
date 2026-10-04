@@ -18,6 +18,7 @@ import { Rect } from "../ast/shapes/rect";
 import { value } from "../ast/data";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
+import { Frame } from "../ast/graphicalOperators/frame";
 
 let passed = 0;
 let failed = 0;
@@ -112,7 +113,9 @@ console.log("# coord confluence: weighted data-driven children");
 {
   // Weights 1,2,3 → budget split 1/6, 2/6, 3/6 of 2π regardless of grouping.
   const flat = await leafThetaSizes(dist([wedge(1), wedge(2), wedge(3)]));
-  const nested = await leafThetaSizes(dist([wedge(1), dist([wedge(2), wedge(3)])]));
+  const nested = await leafThetaSizes(
+    dist([wedge(1), dist([wedge(2), wedge(3)])])
+  );
   ok(
     "weighted flat → 60°/120°/180° summing to 2π",
     sameMultiset(flat, [TAU / 6, TAU / 3, TAU / 2]) &&
@@ -137,14 +140,30 @@ console.log("# coord confluence: mixed data-driven + static children");
   );
   ok(
     "mixed: static stays fixed, data wedges share the rest (flat)",
-    flat.length === 3 &&
-      flat.filter((s) => approx(s, fixed)).length === 1,
+    flat.length === 3 && flat.filter((s) => approx(s, fixed)).length === 1,
     JSON.stringify(flat)
   );
   ok(
     "mixed: nesting the data wedges is confluent with flat",
     sameMultiset(flat, nested),
     `flat=${JSON.stringify(flat)} nested=${JSON.stringify(nested)}`
+  );
+}
+
+console.log("# a frame with a coord honors its explicit w/h (#535)");
+{
+  const root: any = await Frame({ coord: polar(), w: 120, h: 80, axes: true }, [
+    dist([wedge(), wedge()]),
+  ]);
+  await root.resolveAliases();
+  root.resolveUnderlyingSpace();
+  root.resolveEmbedding();
+  const placeable: any = root.layout([400, 400], [undefined, undefined]);
+  const [w, h] = [placeable.dims[0].size, placeable.dims[1].size];
+  ok(
+    "the coord's box is the explicit 120 x 80",
+    w === 120 && h === 80,
+    `${w} x ${h}`
   );
 }
 

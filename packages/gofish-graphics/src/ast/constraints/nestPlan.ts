@@ -4,8 +4,14 @@
 
 import type { ConstraintSpec } from ".";
 import type { Dimensions, Size } from "../dims";
-import { isNestConstraint, nestedSpace, type NestConstraint } from "./nest";
+import {
+  isNestConstraint,
+  nestedExtent,
+  nestedSpace,
+  type NestConstraint,
+} from "./nest";
 import type { UnderlyingSpace } from "../underlyingSpace";
+import type { Extent } from "../extent";
 import { buildNameIndex, type NamedNode } from "./shared";
 
 export type NestPlanChild = NamedNode & {
@@ -112,18 +118,53 @@ export function applyNestSpacePlan(
       if (e.padX !== undefined)
         effectiveChildren[i][0] = nestedSpace(
           effectiveChildren[i][0],
-          sourceSpaces[0],
-          e.padX
+          sourceSpaces[0]
         );
       if (e.padY !== undefined)
         effectiveChildren[i][1] = nestedSpace(
           effectiveChildren[i][1],
-          sourceSpaces[1],
-          e.padY
+          sourceSpaces[1]
         );
     }
   }
   return effectiveChildren;
+}
+
+/** The claim half of {@link applyNestSpacePlan}: the children's claims with
+ *  every INSIDE_OUT edge's padding applied, given the children's types after
+ *  the nest type fold (`effectiveSpaces`, from {@link applyNestSpacePlan}).
+ *  Reads the types (each derived outer is free exactly when its inner is) but
+ *  never writes them. */
+export function applyNestExtentPlan(
+  childExtents: readonly Size<Extent | undefined>[],
+  effectiveSpaces: readonly Size<UnderlyingSpace>[],
+  nestPlan: NestPlan | undefined
+): Size<Extent | undefined>[] {
+  if (nestPlan === undefined) return [...childExtents];
+  const effective = childExtents.map(
+    (s) => [s[0], s[1]] as Size<Extent | undefined>
+  );
+  for (const i of nestPlan.order) {
+    for (const e of nestPlan.byDerived.get(i) ?? []) {
+      if (e.dir !== "in") continue;
+      const src = e.sourceIdx;
+      if (e.padX !== undefined)
+        effective[i][0] = nestedExtent(
+          effective[i][0],
+          effectiveSpaces[src][0],
+          effective[src][0],
+          e.padX
+        );
+      if (e.padY !== undefined)
+        effective[i][1] = nestedExtent(
+          effective[i][1],
+          effectiveSpaces[src][1],
+          effective[src][1],
+          e.padY
+        );
+    }
+  }
+  return effective;
 }
 
 /** Classify each nest by which side carries the size, resolve a single

@@ -235,22 +235,24 @@ const [underlyingSpaceX, underlyingSpaceY] = child.resolveUnderlyingSpace();
 
 **Implementation**: `src/ast/_node.ts:212-223`
 
-This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered.
+This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered. A second walk over the same tree, `resolveExtent()`, then computes each continuous dimension's **size claim** (an `Extent`: σ-affine `ascent`, `descent`, and `width` Monotonics) from the children's claims and the already-resolved types. Types never read claims; layout reads both.
 
 **Underlying Space Kinds** (defined in `src/ast/underlyingSpace.ts`). Since the
 #586 collapse there are only three _kinds_ — `continuous`, `ordinal`,
 `undefined` — and the old POSITION / DIFFERENCE / SIZE trichotomy is now three
 **`origin` states** of the single `continuous` kind (read via the
-`isPOSITION` / `isDIFFERENCE` / `isBaselineMagnitude` predicates):
+`originOf(space)` read):
 
-- **`CONTINUOUS`**: one data-driven extent, a `width` Monotonic in σ plus an
-  `origin`:
-  - `origin: number` — **POSITION**: anchored at a data coordinate (e.g.
-    `x: value(5)`); builds a position scale (niced per σ-scope at the scope's
-    solve, when an axis views the scope — issue #659), absolute axis.
+- **`CONTINUOUS`**: one data-driven extent, a signed `dataInterval` in data
+  units about its local origin plus an `origin` state:
+  - `origin: "pinned"` — **POSITION**: the interval is the absolute data
+    domain (e.g. `x: value(5)`); builds a position scale (niced per σ-scope at
+    the scope's solve, when an axis views the scope — issue #659), absolute
+    axis.
   - `origin: "free"` — **SIZE**: a baseline magnitude, sized but unplaced (e.g.
-    `h: "value"` with no min); no position scale.
-  - `origin: "impossible"` — **DIFFERENCE**: unanchorable, only differences are
+    `h: "value"` with no min), `[−descent, ascent]` about its baseline; no
+    position scale.
+  - `origin: "none"` — **DIFFERENCE**: unanchorable, only differences are
     meaningful (stacked/centered); delta axis over `[0, width]`.
 - **`ORDINAL`**: Discrete categorical scale (e.g., `spread("category")`)
 - **`UNDEFINED`**: No data-driven encoding
@@ -274,9 +276,10 @@ For a vertical bar chart where:
 
 - X-axis: `spread("category")` → `ORDINAL` space
 - Y-axis: `h: "value"` → `SIZE` space (if no min) or `POSITION` space (if min is specified).
-  The `SIZE` space is `baselineSpan(value)`: the value's positive part is its
+  The `SIZE` space is `CONTINUOUS(interval(0, value), "free")`: the value's positive part is its
   ascent and its negative part its descent, so a negative bar extends below
-  its baseline.
+  its baseline. A rect writes no claim hook, so its claim is the one its type
+  implies: `value·σ` on the matching side.
 
 The logic in `resolveUnderlyingSpace` checks:
 
@@ -284,14 +287,14 @@ The logic in `resolveUnderlyingSpace` checks:
 if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
   underlyingSpaceX = ORDINAL([]);
 } else if (isAesthetic(dims[0].min) && isValue(dims[0].size)) {
-  underlyingSpaceX = DIFFERENCE(getValue(dims[0].size)!);
+  underlyingSpaceX = CONTINUOUS(interval(0, getValue(dims[0].size)!), "none");
 } else if (!isValue(dims[0].min) && isValue(dims[0].size)) {
-  underlyingSpaceX = baselineSpan(getValue(dims[0].size)!);
+  underlyingSpaceX = CONTINUOUS(interval(0, getValue(dims[0].size)!), "free");
 } else {
   const min = isValue(dims[0].min) ? getValue(dims[0].min) : 0;
   const size = isValue(dims[0].size) ? getValue(dims[0].size) : 0;
   const domain = interval(min, min + size);
-  underlyingSpaceX = POSITION(domain);
+  underlyingSpaceX = CONTINUOUS(domain, "pinned");
 }
 ```
 
@@ -367,32 +370,20 @@ into-ordinary-nodes treatment axes get. See
 
 ### Pass 8: Position Scale Computation
 
-**Location**: `src/ast/gofish.tsx:183-202`
+**Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/solver/scopes.ts`
 
 ```typescript
-const posScales = [
-  underlyingSpaceX.kind === "position"
-    ? computePosScale(
-        continuous({
-          value: [underlyingSpaceX.domain!.min, underlyingSpaceX.domain!.max],
-          measure: "unit",
-        }),
-        w
-      )
-    : undefined,
-  underlyingSpaceY.kind === "position"
-    ? computePosScale(
-        continuous({
-          value: [underlyingSpaceY.domain!.min, underlyingSpaceY.domain!.max],
-          measure: "unit",
-        }),
-        h
-      )
-    : undefined,
+let rootScopes = [
+  scopes.solveScope(meta(0), rootSpaces[0], rootClaims[0], canvas[0]),
+  scopes.solveScope(meta(1), rootSpaces[1], rootClaims[1], canvas[1]),
 ];
 ```
 
-For `POSITION` spaces, this creates linear scales that map from data values to pixel coordinates. These scales are used during layout to position elements.
+For every continuous root axis, `solveScope` solves σ from the axis's size
+claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such
+as spacing keeps its pixels, and, when the axis has an origin, the pixel of
+data 0 (`originPx`). A pinned axis hands its content the map
+`px(d) = σ·d + originPx`; a free root is placed at `originPx`.
 
 ### Pass 8.5: Embedding Resolution
 
@@ -437,12 +428,13 @@ This is where the actual positioning and sizing happens. Each node's `layout` fu
 It applies layout algorithms (stacking, positioning, etc.), calculates intrinsic dimensions for each node, and handles nested layouts and complex arrangements.
 
 **Inferring an omitted `w`/`h`.** The chart-level `w` and `h` are optional. An
-omitted dimension is resolved per axis from that axis's root underlying space:
+omitted dimension is resolved per axis from the root's size claim on it:
 
-- A **POSITION** or **data-driven SIZE** axis (a scatter axis, or bar heights
-  `= value`) has data to scale into pixels, so it falls back to a concrete canvas
-  (`DEFAULT_CANVAS_SIZE = 400`).
-- An **ORDINAL** or **UNDEFINED** axis (a bar chart's category axis, or a bare
+- An axis with a **claim** (a scatter axis, bar heights `= value`, or bar
+  widths `= value` laid side by side, whose spread is ordinal but whose room is
+  σ-dependent) has data to scale into pixels, so it falls back to a concrete
+  canvas (`DEFAULT_CANVAS_SIZE = 400`).
+- An axis with **no claim** (a bar chart's category axis, or a bare
   fixed-size shape) has nothing to scale, so it lays out _unsized_: marks keep
   their default sizes (a mark treats a non-finite size as "use my default" via its
   `Number.isFinite` guards) and the operator shrinks to fit.

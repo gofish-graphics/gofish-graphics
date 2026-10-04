@@ -25,14 +25,12 @@ import type { FlipScope } from "./_displayObject";
 import type { Size } from "./dims";
 import {
   continuousInterval,
-  hasBaseline,
-  isBaselineMagnitude,
   isCONTINUOUS,
-  scopeRootBaseline,
-  niceContinuous,
   spaceMeasure,
   type UnderlyingSpace,
 } from "./underlyingSpace";
+import { niceScope, type Extent } from "./extent";
+import { opensFlipScope } from "./coordinateTransforms/bake";
 import { shadowCheckScaleRoot } from "./solver/shadow";
 import {
   perfNow,
@@ -42,13 +40,20 @@ import {
   perfSetCount,
 } from "./perf";
 import {
+  axisTitle,
   elaborateAxes,
   elaborateAxisTitles,
   labelRowSettingsFromAngles,
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
-import { getScopeRegistry, type EqualMeasureAxis } from "./solver/scopes";
+import {
+  getScopeRegistry,
+  scopeFrame,
+  seatInScope,
+  type EqualMeasureAxis,
+  type ScopeSolution,
+} from "./solver/scopes";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
 
@@ -213,46 +218,21 @@ function manualLabelRowSettings(
 // `layout()` for the full behavior, including the shrink-to-fit case).
 const DEFAULT_CANVAS_SIZE = 400;
 
-// string: custom title, false: no title, undefined: infer from encoding
-function resolveAxisTitle(
-  axisOpt: AxisOptions | undefined
-): string | false | undefined {
-  if (axisOpt === undefined || axisOpt === false) return false;
-  if (axisOpt === true) return undefined; // infer from the space measure
-  return axisOpt.title;
-}
-
+// A chart-level axis is titled only when `axes` turns it on (`true`, or a
+// dim's entry that is not `false`); its title is then `axisTitle`'s.
 function resolveAxisTitles(
   axes: AxesOptions | undefined,
   measures?: { x?: string; y?: string }
 ): { xTitle: string | undefined; yTitle: string | undefined } {
-  let xTitleOpt: string | false | undefined = false;
-  let yTitleOpt: string | false | undefined = false;
-  if (axes === true) {
-    xTitleOpt = undefined;
-    yTitleOpt = undefined;
-  } else if (axes && typeof axes === "object") {
-    xTitleOpt = resolveAxisTitle(axes.x);
-    yTitleOpt = resolveAxisTitle(axes.y);
-  }
-  return {
-    xTitle: xTitleOpt === false ? undefined : (xTitleOpt ?? measures?.x),
-    yTitle: yTitleOpt === false ? undefined : (yTitleOpt ?? measures?.y),
+  const title = (dim: "x" | "y"): string | undefined => {
+    if (axes === true) return measures?.[dim];
+    const opt = axes && typeof axes === "object" ? axes[dim] : undefined;
+    return opt === undefined || opt === false
+      ? undefined
+      : axisTitle(opt, measures?.[dim]);
   };
+  return { xTitle: title("x"), yTitle: title("y") };
 }
-
-/** True if `node` or any descendant is a `coord` node (polar/clock/wavy). A
- *  coordinate system flips its own scope (`resolveNodeFlip` in bake), so the
- *  chart-level chrome must follow it to the visual edge even when the root y is
- *  UNDEFINED (a pie's `count` has no cartesian y). The right convention for
- *  polar/coord is still open (#662); until then the presence of one anywhere is a
- *  chrome-mirror trigger. */
-const subtreeHasCoord = (node: GoFishNode): boolean => {
-  if (node.type === "coord") return true;
-  for (const k of node.children ?? [])
-    if (k instanceof GoFishNode && subtreeHasCoord(k)) return true;
-  return false;
-};
 
 export async function layout(
   {
@@ -433,12 +413,19 @@ export async function layout(
     child.scopeRendersAxis(0),
     child.scopeRendersAxis(1),
   ];
-  const niceUnderlyingSpaceX = rootAxisDemand[0]
-    ? niceContinuous(child._underlyingSpace![0])
-    : child._underlyingSpace![0];
-  const niceUnderlyingSpaceY = rootAxisDemand[1]
-    ? niceContinuous(child._underlyingSpace![1])
-    : child._underlyingSpace![1];
+  // The root's types and their size claims, niced together (a niced pinned
+  // domain implies its claim).
+  const rootExtent = child.resolveExtent();
+  const [niceUnderlyingSpaceX, niceExtentX] = niceScope(
+    child._underlyingSpace![0],
+    rootExtent[0],
+    rootAxisDemand[0]
+  );
+  const [niceUnderlyingSpaceY, niceExtentY] = niceScope(
+    child._underlyingSpace![1],
+    rootExtent[1],
+    rootAxisDemand[1]
+  );
 
   // y-orientation is a PER-SCOPE property resolved at bake time (issue #629): the
   // bake walk opens a y-up mirror at each topmost continuous-y node and mirrors
@@ -456,31 +443,29 @@ export async function layout(
   //    y-down unless the explicit global `options.yUp` flips the whole canvas.
   //  - `rootFlipsWhole`: whether the ROOT content node itself opens ONE canvas-
   //    wide flip scope that its whole subtree inherits (mirrors about `[0, finalH]`)
-  //    — a continuous root y (a plain bar/line chart) or the global override. It
-  //    stays NARROW: a per-scope opener BELOW the root (a `coord`, a continuous
+  //    — the bake's own rule applied to the root content (`opensFlipScope`: a
+  //    continuous root y, as in a plain bar/line chart, or a root `coord`, as
+  //    in a pie) or the global override. It stays NARROW: a per-scope opener BELOW the root (a `coord`, a continuous
   //    subtree inside an UNDEFINED-root free-space mix, or a facet cell) mirrors
   //    about its OWN band, never this canvas frame, and an ORDINAL root does NOT
   //    flip as a whole (a faceted scatter keeps its panels in natural order; its
   //    shared continuous axis is instead defaulted to the bottom edge, see the
-  //    axis-side note below). This gates the `_rootFlipScope` stamp. #629.
-  //  - `chromeFlipsY`: whether the ROOT frame the chrome annotates mirrors about
-  //    the canvas — so a chart's chrome (y-title, legend column, colorbar, and an
-  //    ordinal-x title) box-mirrors to the same VISUAL edge as the flipped
-  //    content. It is `rootFlipsWhole` PLUS a `coord` at the root: a pie/clock has
-  //    an UNDEFINED root y (no cartesian flip) but its `coord` opens its own scope
-  //    that fills the canvas, so its chrome must still follow. It deliberately does
-  //    NOT fire on a continuous DESCENDANT under an ordinal/undefined root (a
-  //    faceted stack, a unit chart): that content flips per-scope BELOW the root,
-  //    the root chrome frame does not mirror, and a chart-level title that
-  //    mirrored there would split from its (unflipped) axis. The chart-level
-  //    CONTINUOUS x-axis is the one exception, handled by seating it (and its
-  //    title) on the far edge directly — see the axis-side note. This gates the
-  //    `_chromeFrame` stamp and the legend's abstract frame. See #629/#143/#16.
+  //    axis-side note below). It also decides whether the ROOT frame the chrome
+  //    annotates mirrors about the canvas, so a chart's chrome (y-title, legend
+  //    column, colorbar, and an ordinal-x title) box-mirrors to the same VISUAL
+  //    edge as the flipped content: the chrome follows exactly the root's own
+  //    flip. It does not fire on a continuous DESCENDANT under an
+  //    ordinal/undefined root (a faceted stack, a unit chart): that content
+  //    flips per-scope BELOW the root, the root chrome frame does not mirror,
+  //    and a chart-level title that mirrored there would split from its
+  //    (unflipped) axis. The chart-level CONTINUOUS x-axis is the one
+  //    exception, handled by seating it (and its title) on the far edge
+  //    directly — see the axis-side note. This gates the `_rootFlipScope` and
+  //    `_chromeFrame` stamps and the legend's abstract frame. #629/#143/#16.
   const chromeYUp = yUp;
-  const rootFlipsWhole = yUp || isCONTINUOUS(niceUnderlyingSpaceY);
-  const chromeFlipsY = rootFlipsWhole || subtreeHasCoord(child);
+  const rootFlipsWhole = yUp || opensFlipScope(child);
   //  - `xTitleSeatsFar`: a CONTINUOUS x-axis whose frame does NOT flip at all
-  //    (`!chromeFlipsY` — an ordinal cross y AND no `coord`: a horizontal bar, a
+  //    (`!rootFlipsWhole` — an ordinal cross y AND no `coord`: a horizontal bar, a
   //    faceted stack). `elaborateAxes` seats such a line on the FAR edge directly
   //    (no mirror), so its title is authored to match and its box-mirror is
   //    suppressed below — the two stay together at the visual bottom instead of the
@@ -492,7 +477,7 @@ export async function layout(
   const xTitleSeatsFar =
     xSideOpt === undefined &&
     isCONTINUOUS(niceUnderlyingSpaceX) &&
-    !chromeFlipsY;
+    !rootFlipsWhole;
 
   // Reference to the content node whose extent defines the final canvas
   // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
@@ -518,7 +503,15 @@ export async function layout(
   // ordinal → grouping field), read from `titleMeasures` (the OUTERMOST grouping,
   // captured pre-elaboration). An axis whose space carries no measure (e.g. a
   // magnitude whose measures forgot on conflict) simply gets no title.
-  const { xTitle, yTitle } = resolveAxisTitles(axes, titleMeasures);
+  // A title names an axis the root has: a dim the root has no space on (the
+  // root is a coordinate space, whose axes and their titles it draws itself,
+  // or has nothing data-driven there) gets no chart-level title.
+  const titles = resolveAxisTitles(axes, titleMeasures);
+  const rootHasAxis = (dim: 0 | 1) =>
+    (dim === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY).kind !==
+    "undefined";
+  const xTitle = rootHasAxis(0) ? titles.xTitle : undefined;
+  const yTitle = rootHasAxis(1) ? titles.yTitle : undefined;
   // The elaborated x-title node, when there is one — the chrome-frame stamp
   // below needs its identity to exempt a far-seated title from the box-mirror.
   let xTitleNode: GoFishNode | undefined;
@@ -577,13 +570,13 @@ export async function layout(
     // (`_ambientYDown`, #629): its INTERIOR renders in the ambient frame, where a
     // `Spread({dir:"y"})` already reads top→bottom — no `reverse` unless the
     // whole canvas is forced y-up by `options.yUp` (`chromeYUp`). Its BOX aligns
-    // against the plot's abstract frame (`chromeFlipsY`) and is box-mirrored by
+    // against the plot's abstract frame (`rootFlipsWhole`) and is box-mirrored by
     // the bake when the plot flips, landing top-aligned on screen. #143/#16/#629.
     child = await elaborateLegend(
       child,
       unitScale as CategoricalScale | ContinuousColorScale,
       chromeYUp,
-      chromeFlipsY
+      rootFlipsWhole
     );
     legendAdded = true;
     await reresolve(child);
@@ -595,26 +588,26 @@ export async function layout(
     debugUnderlyingSpaceTree(child);
   }
 
-  // An omitted overall dimension is resolved per axis from its root underlying
-  // space:
-  //  - POSITION / data-driven SIZE (a scatter axis, or bar heights = value):
-  //    there's data to scale into pixels, so fall back to a concrete canvas
-  //    (DEFAULT_CANVAS_SIZE).
-  //  - ORDINAL / UNDEFINED (a bar chart's category axis, or a bare fixed-size
-  //    shape): nothing to scale, so lay out *unsized* — marks keep their default
+  // An omitted overall dimension is resolved per axis from the root's size
+  // claim:
+  //  - a claim (a scatter axis, bar heights = value, bar widths = value laid
+  //    side by side): there's data to scale into pixels, so fall back to a
+  //    concrete canvas (DEFAULT_CANVAS_SIZE).
+  //  - no claim (a bar chart's category axis, or a bare fixed-size shape):
+  //    nothing to scale, so lay out *unsized* — marks keep their default
   //    sizes and the operator shrinks to fit. The natural extent is recovered by
   //    the `finalDim` readback below, so the SVG is still sized concretely.
   // Unsized axes are handed `UNSIZED` (NaN); marks treat a non-finite size as
   // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
   // guards, the same path the layout engine already relies on.
   const UNSIZED = NaN;
-  const needsCanvas = (s: UnderlyingSpace) => hasBaseline(s);
-  // Concrete canvas for scaling a CONTINUOUS axis (always a real number).
+  const needsCanvas = (claim: Extent | undefined) => claim !== undefined;
+  // Concrete canvas for scaling a claimed axis (always a real number).
   const canvasW = w ?? DEFAULT_CANVAS_SIZE;
   const canvasH = h ?? DEFAULT_CANVAS_SIZE;
   // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
-  const layoutW = w ?? (needsCanvas(niceUnderlyingSpaceX) ? canvasW : UNSIZED);
-  const layoutH = h ?? (needsCanvas(niceUnderlyingSpaceY) ? canvasH : UNSIZED);
+  const layoutW = w ?? (needsCanvas(niceExtentX) ? canvasW : UNSIZED);
+  const layoutH = h ?? (needsCanvas(niceExtentY) ? canvasH : UNSIZED);
 
   // The render's σ-scope registry: the ONE place σ / posScale is derived
   // (Stage 6b). The root is the first scope root; every other scope (self-scaled
@@ -623,18 +616,24 @@ export async function layout(
   const scopes = getScopeRegistry(contexts?.session);
   scopes.reset();
 
-  // An anchored CONTINUOUS root builds a data→pixel map over its data interval —
-  // the root POSITION scope solved by the registry.
-  const posScales: Size<AxisMap | undefined> = [
-    scopes.solvePosition(
+  // The root σ-scope on each continuous axis, solved by the registry from the
+  // root's type and size claim against the canvas: σ, and the pixel of data 0
+  // when the axis has an origin. Equal-measure recentering may replace both.
+  const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
+  const rootClaims = [niceExtentX, niceExtentY] as const;
+  const canvas = [canvasW, canvasH] as const;
+  let rootScopes: Size<ScopeSolution | undefined> = [
+    scopes.solveScope(
       { kind: "root", rootKey: "root", axis: 0 },
-      niceUnderlyingSpaceX,
-      canvasW
+      rootSpaces[0],
+      rootClaims[0],
+      canvas[0]
     ),
-    scopes.solvePosition(
+    scopes.solveScope(
       { kind: "root", rootKey: "root", axis: 1 },
-      niceUnderlyingSpaceY,
-      canvasH
+      rootSpaces[1],
+      rootClaims[1],
+      canvas[1]
     ),
   ];
 
@@ -642,69 +641,60 @@ export async function layout(
     console.log("width and height constraints:", layoutW, layoutH);
   }
 
-  // Root scale factor: a baseline magnitude ("free") root inverts its Monotonic
-  // against the canvas — the root SIZE scope, solved by the same registry.
-  // Anchored roots use the posScale (above) instead; a difference root
-  // shrink-to-fits.
-  const rootScaleFactors: Size<number | undefined> = [
-    isBaselineMagnitude(niceUnderlyingSpaceX)
-      ? scopes.solveSize(
-          { kind: "root", rootKey: "root", axis: 0 },
-          niceUnderlyingSpaceX.width,
-          canvasW
-        )
-      : undefined,
-    isBaselineMagnitude(niceUnderlyingSpaceY)
-      ? scopes.solveSize(
-          { kind: "root", rootKey: "root", axis: 1 },
-          niceUnderlyingSpaceY.width,
-          canvasH
-        )
-      : undefined,
-  ];
-
   // Shared-measure scale equality (#582): when x and y carry the SAME unit of
   // measure, "1 unit on x" and "1 unit on y" are the same quantity, so their
   // data→pixel scales must be equal — a circle stays circular, a 45° line looks
   // 45°. This is type equality, not an opt-in knob: it follows from the measures
   // matching, the same way `circle({ r })` lowers to a `w`/`h` that share a
-  // measure and so cannot render as an ellipse. Each axis's pixels-per-data-unit
-  // comes from its POSITION domain (`canvas / range`) or its baseline-magnitude
-  // σ. The scope-level operation — take the binding (smaller) σ and equate both
-  // axes' scopes — lives on the registry (Stage 6c: the ONE post-solve σ
-  // adjustment, so every slope stays registry-sourced and the dump shows the
-  // FINAL σ). Silently skipped when an axis has no continuous scale to equate.
+  // measure and so cannot render as an ellipse. The scope-level operation —
+  // take the binding (smaller) σ and equate both axes' scopes — lives on the
+  // registry (Stage 6c: the ONE post-solve σ adjustment, so every slope stays
+  // registry-sourced and the dump shows the FINAL σ). Silently skipped when an
+  // axis has no solved scope to equate.
   const measureX = spaceMeasure(niceUnderlyingSpaceX);
   const measureY = spaceMeasure(niceUnderlyingSpaceY);
   if (measureX !== undefined && measureX === measureY) {
     const axisInfo = ([0, 1] as const).map(
       (axis): EqualMeasureAxis | undefined => {
-        const space = axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY;
-        const canvas = axis === 0 ? canvasW : canvasH;
-        const ival = continuousInterval(space);
-        if (ival !== undefined && ival.max > ival.min) {
-          const range = ival.max - ival.min;
-          return {
-            kind: "position",
-            unitPx: canvas / range,
-            min: ival.min,
-            range,
-            canvas,
-          };
-        }
-        const sigma = rootScaleFactors[axis];
-        if (sigma !== undefined) return { kind: "size", unitPx: sigma };
-        return undefined;
+        const space = rootSpaces[axis];
+        const scope = rootScopes[axis];
+        return scope !== undefined && isCONTINUOUS(space)
+          ? {
+              space,
+              claim: rootClaims[axis]!,
+              canvas: canvas[axis],
+              unitPx: scope.sigma,
+            }
+          : undefined;
       }
     ) as [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined];
-    scopes.recenterEqualMeasure("root", axisInfo, posScales, rootScaleFactors);
+    rootScopes = scopes.recenterEqualMeasure("root", axisInfo) ?? rootScopes;
   }
+  const rootScaleFactors: Size<number | undefined> = [
+    rootScopes[0]?.sigma,
+    rootScopes[1]?.sigma,
+  ];
 
   // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
   // content(σ)=canvas the whole chart resolves against. No-op unless
   // GOFISH_SOLVER_CHECK is set.
-  shadowCheckScaleRoot(niceUnderlyingSpaceX, canvasW, rootScaleFactors[0], 0);
-  shadowCheckScaleRoot(niceUnderlyingSpaceY, canvasH, rootScaleFactors[1], 1);
+  shadowCheckScaleRoot(niceExtentX, canvasW, rootScaleFactors[0], 0);
+  shadowCheckScaleRoot(niceExtentY, canvasH, rootScaleFactors[1], 1);
+
+  // The root content sits in the root scope's frame by the one seating rule
+  // (`seatInScope`): a pinned content shares the frame and places its data
+  // through its map; a free content's baseline is placed at `originPx`
+  // below (`placeRoot`) and it gets a frame of its own whose 0 is that
+  // baseline. Who applies the pixel of data 0 is inherent to the two origin
+  // states: a pinned extent's position is fixed by its data, a free
+  // extent's is set by its parent.
+  const rootSeats = ([0, 1] as const).map((axis) =>
+    seatInScope(scopeFrame(rootScopes[axis]), rootSpaces[axis])
+  );
+  const posScales: Size<AxisMap | undefined> = [
+    rootSeats[0].childMap,
+    rootSeats[1].childMap,
+  ];
 
   // Author each dim's `embedded` flag (point/line/area) now that underlying
   // space has resolved each coord axis's measure — Route B reads it to keep a
@@ -728,7 +718,7 @@ export async function layout(
 
   // Merge the two half-channels into the single per-axis scale carrier handed
   // to layout: σ (size slope) from `rootScaleFactors`, the anchored map from
-  // `posScales`. They are mutually exclusive per axis at the root.
+  // `posScales`.
   const rootScales: Size<AxisScale | undefined> = [
     axisScale(rootScaleFactors[0], posScales[0]),
     axisScale(rootScaleFactors[1], posScales[1]),
@@ -752,9 +742,11 @@ export async function layout(
   // not the write-once `place()`, so it lands even when the root self-placed (a
   // diagram with its own root transform) — `place()` short-circuits a placed axis.
   //
-  // A free (baseline-magnitude) root fits `ascent + descent` to the canvas, so
-  // its baseline sits `descent·σ` above the canvas's low edge (#773,
-  // `scopeRootBaseline`).
+  // A free (baseline-magnitude) root's local 0 is its baseline, so it is
+  // placed at the scope's `originPx` (#773: `descent·σ` above the canvas's
+  // low edge, plus any overhead below). A pinned root shares the canvas frame
+  // (its map carries `originPx`), and an origin-less root has none: both sit
+  // at 0 (`seatInScope`).
   const placeRoot = (axis: 0 | 1) => {
     const name = axis === 0 ? "x" : "y";
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
@@ -762,16 +754,7 @@ export async function layout(
     // descent: adding `descent·σ` there would count it twice (#574).
     if ((axis === 0 ? w : h) === undefined)
       child.pinAnchor(name, offset, "min");
-    else
-      child.place(
-        name,
-        offset +
-          scopeRootBaseline(
-            axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY,
-            rootScaleFactors[axis]
-          ),
-        "baseline"
-      );
+    else child.place(name, offset + rootSeats[axis].seatPx, "baseline");
   };
   placeRoot(0);
   placeRoot(1);
@@ -819,17 +802,15 @@ export async function layout(
   // bake reads `node._chromeFrame` instead of searching up through the
   // scope-transparent wrappers on every visit. The frame is the WHOLE-plot canvas
   // band: the chart-level chrome spans the whole plot, so it mirrors about the
-  // canvas even when the content flips per-scope BELOW the root (a `coord`'s own
-  // scope) — which is why the gate is the whole-subtree `chromeFlipsY`, not the
-  // narrower root-only `rootFlipsWhole`. The bake box-mirrors a chrome box about it (its interior
+  // canvas when the root content flips (`rootFlipsWhole`). The bake box-mirrors a chrome box about it (its interior
   // still renders ambient). Only when the plot mirrors somewhere — otherwise
-  // chrome passes through unchanged, and a re-layout that turns `chromeFlipsY`
+  // chrome passes through unchanged, and a re-layout that turns `rootFlipsWhole`
   // false stamps nothing (the chrome subtrees are freshly rebuilt by the
   // elaboration passes each layout, so no stale frame survives). The walk stops
   // at `contentNode` (never descends into the plot) and at the outermost ambient
   // node of each chrome subtree (its descendants render ambient — a second mirror
   // would double-flip). #629 chrome-frame finding.
-  if (chromeFlipsY) {
+  if (rootFlipsWhole) {
     const frame = canvasFrame;
     const stampChrome = (n: GoFishNode): void => {
       if (n === contentNode) return;

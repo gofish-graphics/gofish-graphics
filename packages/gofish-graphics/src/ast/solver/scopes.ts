@@ -1,15 +1,17 @@
 /**
  * The σ-scope registry — the ONE place σ / posScale is derived.
  *
- * Every continuous axis is one affine map per σ-scope, `px(d) = pxMin + σ·(d −
- * domainMin)`, and σ is solved once per scope at the frame equation
- * `content(σ) = allocated` (`Monotonic.inverse`). One mechanism covers every
- * site:
+ * Every continuous axis is one affine map per σ-scope, `px(d) = σ·d +
+ * originPx` (an {@link AxisMap}), and σ is solved once per scope from its size
+ * claim at the frame equation `claim.width(σ) = allocated`
+ * (`Monotonic.inverse`). The scope's type fixes whether it has an `originPx`.
+ * One mechanism covers every site:
  *
  *   - **scope roots solve** — the render root, an axis with an explicit pixel
  *     size (self-scaling region), a composed-constraint budget that roots its
  *     own scope, a `shared` operator, a coord boundary — each calls
- *     {@link ScopeRegistry.solveSize} / {@link ScopeRegistry.solvePosition};
+ *     {@link ScopeRegistry.solveScope} (or {@link ScopeRegistry.solveSize}
+ *     for a bare frame with no type);
  *   - **everyone else INHERITS** — "not a root → inherit": a non-root site
  *     simply does not call the solve, so the inherited σ propagates unchanged.
  *     This is the structural rule that stops an intermediate from re-rooting.
@@ -18,7 +20,15 @@
  * equation.
  */
 import * as Monotonic from "../../util/monotonic";
-import { posScaleFromSpace, type AxisMap } from "../domain";
+import {
+  hasOrigin,
+  isCONTINUOUS,
+  originIs,
+  type CONTINUOUS_TYPE,
+  type UnderlyingSpace,
+} from "../underlyingSpace";
+import type { Extent } from "../extent";
+import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
 import type { RenderSession } from "../_node";
 
@@ -29,21 +39,78 @@ export type ScopeKind =
   | "shared"
   | "coord"
   | "grid"
+  | "datum-position"
   | "recenter";
 
-/** One axis's contribution to the #582 equal-measure recentering: either an
- *  anchored POSITION axis (its data interval and canvas) or a bare SIZE axis
- *  (just its σ). `unitPx` is the axis's pixels-per-data-unit before recentering
- *  — the quantity the two axes must agree on when they share a measure. */
-export type EqualMeasureAxis =
-  | {
-      kind: "position";
-      unitPx: number;
-      min: number;
-      range: number;
-      canvas: number;
-    }
-  | { kind: "size"; unitPx: number };
+/** A solved σ-scope on one axis: its slope `sigma` (px per data unit) and,
+ *  when the scope's type has an origin, `originPx`, the pixel of data 0 (the
+ *  baseline) in the scope's box. The map of the scope is
+ *  `px(d) = sigma·d + originPx`. An origin-less (`none`) scope has only
+ *  differences, so it has a slope and no `originPx`. */
+export type ScopeSolution = { sigma: number; originPx: number | undefined };
+
+/** The frame a solved scope places its content in, `px(d) = sigma·d +
+ *  originPx`, or undefined for an unsolved scope or one with no origin (only
+ *  differences). */
+export const scopeFrame = (
+  scope: ScopeSolution | undefined
+): AxisMap | undefined =>
+  scope?.originPx === undefined
+    ? undefined
+    : { sigma: scope.sigma, originPx: scope.originPx };
+
+/** The frame a node with type `space` places its children in, given the
+ *  scale it was handed (its parent's frame's map, and its σ). A pinned node
+ *  shares its parent's frame. A free node has a frame of its own whose 0 is
+ *  its baseline, `{σ, 0}` (its parent places that baseline). A node with no
+ *  data 0 has no frame. */
+export const frameOf = (
+  space: UnderlyingSpace | undefined,
+  handed: { sigma?: number; map?: AxisMap }
+): AxisMap | undefined => {
+  if (originIs(space, "pinned")) return handed.map;
+  if (!originIs(space, "free")) return undefined;
+  const sigma = handed.map?.sigma ?? handed.sigma;
+  return sigma === undefined ? undefined : { sigma, originPx: 0 };
+};
+
+/** The one seating rule: where a child with type `child` sits in its
+ *  parent's `frame` on one axis (`seatPx`, the pixel its baseline is placed
+ *  at), and the map it is handed (`childMap`, its own frame, {@link
+ *  frameOf}). A pinned child shares the frame: it sits at 0 and places its
+ *  data through the frame's map. A free child's position is set by its
+ *  parent: its baseline sits at the frame's `originPx`, the pixel of data 0,
+ *  and its own frame has that baseline at 0. A child with no data 0 sits at
+ *  0 and has no frame.
+ *
+ *  TODO(#773 follow-up): data 0 is the additive identity of the measure's
+ *  algebraic structure (an ordered additive group's 0). Measures don't carry
+ *  their structure yet, so every measure is treated as a group with identity
+ *  0. A torsor-valued measure (dates, temperatures) has no identity and
+ *  should reject bars. */
+export const seatInScope = (
+  frame: AxisMap | undefined,
+  child: UnderlyingSpace | undefined
+): { seatPx: number; childMap: AxisMap | undefined } => ({
+  seatPx: originIs(child, "free") ? (frame?.originPx ?? 0) : 0,
+  childMap: frameOf(child, { map: frame }),
+});
+
+/** The pixel of data 0 in a box whose claim starts `offset` px above its low
+ *  edge: a claim is measured from data 0, so data 0 sits `claim.descent(σ)`
+ *  above that. */
+const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
+  offset + claim.descent.run(sigma);
+
+/** One axis's contribution to the #582 equal-measure recentering: the
+ *  scope's type and size claim, its box, and its solved σ (`unitPx`, the
+ *  quantity the two axes must agree on when they share a measure). */
+export type EqualMeasureAxis = {
+  space: CONTINUOUS_TYPE;
+  claim: Extent;
+  canvas: number;
+  unitPx: number;
+};
 
 /** Identity of the scope being solved — its root node label and the axis. */
 export interface ScopeMeta {
@@ -104,32 +171,41 @@ export class ScopeRegistry {
   }
 
   /**
-   * Build the anchored data→pixel map for a POSITION scope root — the space's
-   * `[min,max]` domain onto `[0, allocated]`. Records a scope only when a map
-   * actually results (a non-anchored axis is not a POSITION scope here).
+   * Solve a scope root on one axis from its type and size claim. Every
+   * continuous scope solves the same frame equation, `claim.width(σ) =
+   * allocated`, so any pixel overhead the claim carries (spacing, padding)
+   * takes its pixels and the data part gets the rest. A scope whose type has
+   * an origin also fixes `originPx`, the pixel of data 0: a claim is
+   * measured from data 0, so `originPx = claim.descent(σ)` above the box's
+   * low edge. For a pinned claim with no overhead that is `−σ·min`, the
+   * domain's low edge at 0. A scope whose type has no data coordinates
+   * (a spread of magnitudes is ordinal) still solves σ from its claim, with no
+   * `originPx`. Returns undefined when there is no claim or it cannot
+   * determine σ (a claim with no σ in it, such as a zero-width domain).
    */
-  solvePosition(
+  solveScope(
     meta: ScopeMeta,
-    space:
-      | { kind: string; dataDomain?: { min: number; max: number } | "delta" }
-      | undefined,
+    space: UnderlyingSpace | undefined,
+    claim: Extent | undefined,
     allocated: number
-  ): AxisMap | undefined {
-    const map = posScaleFromSpace(space, allocated);
-    if (map !== undefined && DUMP_SCOPES) {
-      const dom =
-        space && space.dataDomain && space.dataDomain !== "delta"
-          ? `[${space.dataDomain.min},${space.dataDomain.max}]`
-          : "[·]";
+  ): ScopeSolution | undefined {
+    if (space === undefined || claim === undefined) return undefined;
+    const sigma = claim.width.inverse(allocated, {
+      upperBoundGuess: allocated,
+    });
+    if (DUMP_SCOPES)
       this.entries.push({
         ...meta,
         allocated,
-        frame: `${dom}→[0,${allocated}]`,
-        sigma: map.sigma,
-        hasMap: true,
+        frame: `${isCONTINUOUS(space) ? `${space.origin}[${space.dataInterval.min},${space.dataInterval.max}]` : space.kind} ${Monotonic.print(claim.width)}`,
+        sigma,
+        hasMap: hasOrigin(space),
       });
-    }
-    return map;
+    if (sigma === undefined) return undefined;
+    return {
+      sigma,
+      originPx: hasOrigin(space) ? originPxAt(claim, sigma) : undefined,
+    };
   }
 
   /**
@@ -138,53 +214,43 @@ export class ScopeRegistry {
    * on x" and "1 unit on y" are the same quantity, so their data→pixel scales
    * must be EQUAL — a circle stays circular. The two axes' independently-solved
    * scopes are therefore collapsed into ONE shared σ (the binding, smaller
-   * `unitPx`); the other axis takes slack, centered by convention. A POSITION
-   * axis writes back a recentered anchored map; a SIZE axis writes back its σ
-   * (content stays origin-anchored — SIZE-slack centering is deferred).
+   * `unitPx`); the other axis takes slack, centered by convention: its content
+   * (the claim at the shared σ) is centered in its canvas, and its `originPx`
+   * follows from where that puts the claim's baseline.
    *
    * This is the ONE place a post-solve σ adjustment happens, so it lives on the
    * registry (not inlined in `gofish.tsx`): every slope a render produces is
    * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a `recenter`
-   * entry per axis). Mutates `posScales`
-   * / `rootScaleFactors` in place; a no-op unless both axes have a continuous
-   * scale to equate.
+   * entry per axis). Returns the recentered solutions; a no-op (undefined)
+   * unless both axes have a solved scope.
    */
   recenterEqualMeasure(
     rootKey: string,
-    axisInfo: [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined],
-    posScales: (AxisMap | undefined)[],
-    rootScaleFactors: (number | undefined)[]
-  ): void {
+    axisInfo: [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined]
+  ): [ScopeSolution, ScopeSolution] | undefined {
     const [ax, ay] = axisInfo;
-    if (ax === undefined || ay === undefined) return;
+    if (ax === undefined || ay === undefined) return undefined;
     const shared = Math.min(ax.unitPx, ay.unitPx); // binding axis wins
-    for (const axis of [0, 1] as const) {
-      const info = axisInfo[axis]!;
-      if (info.kind === "position") {
-        const offset = (info.canvas - shared * info.range) / 2; // center slack
-        // Same affine map as `(pos − min)·shared + offset`, intercept explicit.
-        posScales[axis] = {
-          sigma: shared,
-          domainMin: info.min,
-          pxMin: offset,
-        };
-      } else {
-        rootScaleFactors[axis] = shared;
-      }
+    const solve = (info: EqualMeasureAxis, axis: 0 | 1): ScopeSolution => {
+      const offset = (info.canvas - info.claim.width.run(shared)) / 2; // center slack
       if (DUMP_SCOPES)
         this.entries.push({
           kind: "recenter",
           rootKey,
           axis,
-          allocated: info.kind === "position" ? info.canvas : NaN,
-          frame:
-            info.kind === "position"
-              ? `[${info.min},${info.min + info.range}]→center(σ=${shared})`
-              : `σ:=min(x,y)`,
+          allocated: info.canvas,
+          frame: `center(σ=${shared})`,
           sigma: shared,
-          hasMap: info.kind === "position",
+          hasMap: hasOrigin(info.space),
         });
-    }
+      return {
+        sigma: shared,
+        originPx: hasOrigin(info.space)
+          ? originPxAt(info.claim, shared, offset)
+          : undefined,
+      };
+    };
+    return [solve(ax, 0), solve(ay, 1)];
   }
 
   /** Print one line per scope: root kind/key, axis, allocated px, the frame

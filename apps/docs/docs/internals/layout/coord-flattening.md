@@ -233,9 +233,12 @@ The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
   `_ambientYDown` chrome subtree renders in the ambient frame and is **box-mirrored** about
   the plot's frame — stamped directly on the chrome nodes by `layout()` as `_chromeFrame`
   (no walk-time search).
-- **Fixed-pitch exception.** A target chained by a fixed-pitch `distribute` on y
-  (`anchor: "baseline" | "start" | "middle" | "end"`) carries `pitchAnchorY` — the anchor the
-  chain related, stamped by `lowerDistributePlacement`. A fixed-pitch chain is an **overlay**,
+- **Chained exception.** A target a spread `distribute` chains on y carries
+  `pitchAnchorY` — the anchor the chain fixed, stamped by `lowerDistributePlacement`: the
+  pitch anchor (`"baseline" | "start" | "middle" | "end"`) of a fixed-pitch chain, and
+  `"middle"` for an edge chain, which fixes the whole box (the mirror about a box's middle
+  keeps the box, so signed bars spread down a category axis stay packed edge to edge). A
+  spread separates, so its targets can open their own scopes. A fixed-pitch chain is an **overlay**,
   not a tiling: the target's allocated band is just the leftover slice (`(h − (n−1)·pitch)/n`)
   and bears no relation to where its chained anchor sits, so mirroring about it would displace
   every painted anchor by the slice height (and a connector reading the same rows from outside
@@ -245,7 +248,7 @@ The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
   where the placement solver chained them, at exact pitch, and content rises above its
   baseline (a ridgeline row's silhouette grows up from its own zero line). The layout side
   accounts for that painted extent too: the space fold attributes the chain's amplitude
-  allowance to the painted side (`composeSize` in constraints/distribute.ts), the enclosing
+  allowance to the painted side (`chainClaim` in constraints/distribute.ts), the enclosing
   layer folds each such row's MIRRORED band into its bbox (`paintedYBand` in layer.tsx),
   and `render()` attributes y overhangs by painted side (an unflipped root's negative min
   is the painted TOP), so the resulting negative min is reserved as a painted-TOP gutter —
@@ -287,13 +290,23 @@ matter how it is wrapped:
 
 `coord.layout` is a **scale scope**, exactly like the root fits content to the
 canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. Its
-`fitAxis(axis, budget)` reads the subtree's resolved space on that axis and
-returns a `(scaleFactor, posScale)` to hand each child: a baseline-magnitude
-(data SIZE) axis scales by `width.inverse(budget)` so the children fill the ring
-(`width` is the sum of the children's total extents, each `ascent + descent`);
-an anchored (data POSITION) axis maps onto `[0, budget]` via a posScale and
-carries **no** size σ (Stage 6c — a POSITION-only axis has no SIZE scope, so it
-never fabricates one; the map's own slope is the scope's σ). Only
+`fitAxis(axis, budget)` solves the coord's own scope on that axis with the
+same `solveScope` the root uses: σ from the coord's claim (its children's
+claims overlaid, or a declared window's width) against the budget, so the
+children fill the ring, and, for a pinned axis, the map onto the budget that
+its children share. A free child is seated at the scope's `originPx`. The
+coord's type is its children's overlay, kept for its own scope; upward it
+reports nothing on either axis, like every σ-scope root: to its parent it is a
+pixel box, and an explicit `w`/`h` sizes that box as it sizes a layer's (a
+`Frame` with a `coord` forwards its dims, #535). So its axes are its own to draw, and so are their titles: the
+radial axis is drawn along the θ = 0 ray, and its title continues the ray
+past its outer end (past the last tick), reading along the ray, so it never
+sits on top of the data. The title is the `axes` option's `y` title,
+else the radial space's measure, else the space's own name for the axis (`r`)
+(#621). There is deliberately no angular title by default: the ring's tick
+labels say what goes around, and a circle has no single natural place for a
+title. The chart-level title pass reads only the root's own space, so it adds
+no second title for a coordinate space. Only
 DATA-bound channels consume these — a plain number bypasses both (see
 `computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
 mark that says `w: datum(count)` (the θ extent) auto-fits. Because the coord is the

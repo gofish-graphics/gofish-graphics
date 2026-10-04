@@ -191,7 +191,7 @@ function resolveExtents(
   // (untagged entries unify with anything) and throws on a real conflict.
   mergeAllMeasures(
     datumEntries.map((v) => getMeasure(v)),
-    `cut: \`size\` datum() weights carry incompatible measures`
+    { where: "in the datum() weights of a cut's size" }
   );
 
   const weightTotal =

@@ -52,6 +52,17 @@ must be `baseline`, not `start`: `start` pins the _bounding-box_ corner, which
 slides the marks off the tick grid once the box overhangs the origin (nested
 facet labels, negative bars).
 
+One case leaves the content unpinned on a dim: a **free** content (a bar
+chart's bars, lined up on one baseline, are one free magnitude; alignment
+shares a baseline but does not pin it). The render root places a free
+space's baseline (`placeBaseline`, `GoFishNode.placedSpace`), so it owns an
+absolute axis over it, niced about its 0. In the inner tier the free content
+is left unpinned on that dim, and the tier, pinned by its axis's datum
+domain, seats it as a pinned layer seats every free child: its baseline at
+the map's data 0. So value 0 sits at the 0 tick, negative bars included. (A
+literal-pixel pin there would put the baseline at the frame's 0, the niced
+domain's low end.)
+
 Everything else then seats around the stationary content in **negative gutter
 space** (into the SVG padding): the axis line distributes off the content's
 near edge, tick marks align flush with the line, labels hang outward. Keeping
@@ -315,10 +326,11 @@ bespoke pipeline hand-coded falls out of ordinary layout:
 one branch per axis flavor — the seam a future public API would override. Since
 the #586 collapse POSITION and DIFFERENCE are no longer distinct space _kinds_
 but two `origin` states of the single `continuous` kind, so the branches
-dispatch on the `isPOSITION` / `isDIFFERENCE` / `isORDINAL` predicates rather
-than a `kind` tag, and the data interval is read uniformly via
-`continuousInterval(space)` (`[origin, origin + width.run(1)]`) instead of a
-per-kind `.domain` / `.width` field:
+dispatch on one read of the origin state, `axisOver(space)` (`"absolute"`
+for a pinned space, `"delta"` for an origin-less one, none for a free
+magnitude), and `isORDINAL` rather than a `kind` tag, and the data interval is read off the type alone
+(`continuousInterval(space)` for a pinned axis, `dataWidth(space)` for a
+difference axis), never off the size claim:
 
 - **POSITION (continuous, numeric origin)** — `d3.nice` + `d3.ticks` over the
   interval; an axis line
@@ -342,8 +354,14 @@ per-kind `.domain` / `.width` field:
   both sides of 0 hold amounts measured away from it, so each tick is labeled
   with its distance from 0 (`60 40 20 0 20 40 60`). The label follows from the
   space's type; there is no format option.
-- **DIFFERENCE (continuous, `origin: "impossible"`)** — bare tick marks at the
-  tick values over `[0, width.run(1)]`, plus plain-text labels
+- **DIFFERENCE (continuous, `origin: "none"`)** — bare tick marks at the
+  tick values over `[0, w]`, where `w` is the space's width niced from 0
+  (`niceContinuous`, the same nicing the scope that sizes the content
+  applies), so the steps are even. A delta axis has no data 0, so its frame
+  is its own: it centers the content in that niced width (the axis's
+  `contentAt`, where the content's baseline is pinned), because a delta axis
+  comes from centering (`middle` alignment) and its slack splits evenly. Plus
+  plain-text labels
   showing the _delta_ between adjacent ticks, pinned at their midpoints
   (`position({ [axis]: datum(midpoint) })`). The delta labels have no tick of
   their own to provide an offset, so they `distribute` off the line (at the
@@ -392,7 +410,7 @@ siblings:
   `resolveAxes` alone reads.
 - A node whose own space collapsed to `UNDEFINED` on `dim` computes
   `sharedSelfScaledChildSignature`: if **every** direct child is self-scaled on
-  `dim` with an **identical** signature (same `dataDomain` + `width` +
+  `dim` with an **identical** signature (same `dataInterval` + `origin` +
   `measure` — at least two children, so there's an actual sibling group), the
   node claims the axis itself, right there, instead of leaving each child to
   fend for itself. It stashes the representative shared space onto
@@ -479,6 +497,12 @@ title on its anchor:
 The two builders `xAxisTitle` / `yAxisTitle` are **pure, exported functions** —
 the customization seam, exactly like `elaborateAxis` for the axes and
 `legendColumn` for the legend.
+
+A title names an axis the root has: a dim on which the root content's space
+is UNDEFINED gets no chart-level title, even an explicit one. In particular a
+coordinate space reports nothing upward, and it titles its own axes (the
+radial title, see [Flattening the Scenegraph](/internals/layout/coord-flattening)),
+so a pie gets no second, cartesian title.
 
 `elaborateAxisTitles` runs in `layout()` **before** the legend wrap: the legend
 seats itself off the titled content's bbox, so the title must already be in

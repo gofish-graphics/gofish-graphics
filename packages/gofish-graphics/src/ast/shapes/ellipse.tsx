@@ -1,11 +1,10 @@
 import { computeAesthetic } from "../../util";
-import * as Monotonic from "../../util/monotonic";
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
-import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
+import { getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
@@ -17,14 +16,7 @@ import {
   Transform,
 } from "../dims";
 import { aesthetic, continuous, posFn } from "../domain";
-import { interval } from "../../util/interval";
-import {
-  ORDINAL,
-  POSITION,
-  SIZE,
-  UNDEFINED,
-  UnderlyingSpace,
-} from "../underlyingSpace";
+import { UnderlyingSpace, pointOrMagnitude } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { boxOfDims } from "../geometry";
 import type { DisplayList } from "gofish-ir";
@@ -63,46 +55,10 @@ export const Ellipse = ({
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
       ) => {
-        let wDomain = isValue(dims[0].size)
-          ? Monotonic.linear(getValue(dims[0].size!), 0)
-          : Monotonic.linear(0, dims[0].size ?? 0);
-        let hDomain = isValue(dims[1].size)
-          ? Monotonic.linear(getValue(dims[1].size!), 0)
-          : Monotonic.linear(0, dims[1].size ?? 0);
-        if (aspectRatio !== undefined && aspectRatio > 0) {
-          const wIsData = isValue(dims[0].size);
-          const hIsData = isValue(dims[1].size);
-          if (wIsData && !hIsData) {
-            hDomain = Monotonic.linear(
-              (wDomain as Monotonic.Linear).slope / aspectRatio,
-              0
-            );
-          } else if (hIsData && !wIsData) {
-            wDomain = Monotonic.linear(
-              (hDomain as Monotonic.Linear).slope * aspectRatio,
-              0
-            );
-          }
-        }
-
-        const resolveAxis = (
-          axis: 0 | 1,
-          axisDomain: Monotonic.Monotonic
-        ): UnderlyingSpace => {
-          const d = dims[axis];
-          if (isValue(d.min)) {
-            // position; treat it like a position space w/ a single element
-            const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min), getMeasure(d.min));
-          }
-          if (isValue(d.size)) {
-            // data-driven size only — literals are handled at layout time.
-            return SIZE(axisDomain, getMeasure(d.size));
-          }
-          return UNDEFINED;
-        };
-
-        return [resolveAxis(0, wDomain), resolveAxis(1, hDomain)];
+        return [
+          pointOrMagnitude(dims[0].min, dims[0].size),
+          pointOrMagnitude(dims[1].min, dims[1].size),
+        ];
       },
       layout: (shared, size, scales, children) => {
         let w = isValue(dims[0].size)

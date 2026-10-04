@@ -9,7 +9,10 @@ import * as Monotonic from "../util/monotonic";
 import type { AlignConstraint } from "../ast/constraints/align";
 import type { DistributeConstraint } from "../ast/constraints/distribute";
 import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
-import { gridCellSizeByName, gridTracksFromSizes } from "../ast/constraints/grid";
+import {
+  gridCellSizeByName,
+  gridTracksFromSizes,
+} from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import {
   compilePlacementCoordinate,
@@ -26,12 +29,14 @@ import type { ZAboveConstraint } from "../ast/constraints/zorder";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
 import {
+  applyNestExtentPlan,
   applyNestLayoutProposal,
   applyNestSpacePlan,
   buildNestPlan,
 } from "../ast/constraints/nestPlan";
 import {
-  composeConstraintSpaces,
+  planConstraintComposition,
+  resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
 } from "../ast/constraints/compose";
 import {
@@ -46,7 +51,15 @@ import {
 } from "../ast/constraints/proposalPlan";
 import { discretePosition, value } from "../ast/data";
 import { pxOf, type AxisMap } from "../ast/domain";
-import { POSITION, SIZE, UNDEFINED } from "../ast/underlyingSpace";
+import {
+  UNDEFINED,
+  continuousInterval,
+  dataWidth,
+  spaceMeasure,
+  CONTINUOUS,
+  originIs,
+} from "../ast/underlyingSpace";
+import { Extent, impliedExtent } from "../ast/extent";
 import { ScopeRegistry } from "../ast/solver/scopes";
 import { interval } from "../util/interval";
 
@@ -208,11 +221,7 @@ const distributeWithSpacing = (
 });
 
 // The interval form of `position`, replacing the retired `Constraint.span`.
-const span = (
-  name: string,
-  min: number,
-  max: number
-): PositionConstraint => ({
+const span = (name: string, min: number, max: number): PositionConstraint => ({
   type: "position",
   x: [min, max],
   anchor: "middle",
@@ -220,13 +229,12 @@ const span = (
   children: [child(name)],
 });
 
-const namedNode = (name: string, width?: number) =>
-  ({
-    _name: name,
-    key: name,
-    args: { dims: [{ size: width }, { size: 10 }] },
-    children: [],
-  });
+const namedNode = (name: string, width?: number) => ({
+  _name: name,
+  key: name,
+  args: { dims: [{ size: width }, { size: 10 }] },
+  children: [],
+});
 
 function nestPlanSignature(constraints: NestConstraint[]): string {
   const children = [
@@ -450,7 +458,11 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
 
   // grid + align on a NON-cell child C: C's center is aligned (middle x) to the
   // grid cell A. The two constraints compose and are order-independent.
-  const alignAC: AlignConstraint = { type: "align", x: "middle", children: [A, C] };
+  const alignAC: AlignConstraint = {
+    type: "align",
+    x: "middle",
+    children: [A, C],
+  };
   const withAlign = (order: Constraint[]) => {
     const t = contentTargets();
     t.set("C", makePlaceable(10, 10));
@@ -563,23 +575,37 @@ console.log("# constraint confluence: nest size dependency planning");
 
   const childSpaces = [
     [UNDEFINED, UNDEFINED],
-    [SIZE(Monotonic.linear(10, 0)), SIZE(Monotonic.linear(4, 0))],
+    [CONTINUOUS(interval(0, 10), "free"), CONTINUOUS(interval(0, 4), "free")],
   ] as const;
-  const folded = applyNestSpacePlan(childSpaces, {
+  const insideOutPlan = {
     order: [1, 0],
     byDerived: new Map([
       [
         0,
-        [{ derivedIdx: 0, sourceIdx: 1, dir: "in", padX: 3, padY: 2 }],
+        [{ derivedIdx: 0, sourceIdx: 1, dir: "in" as const, padX: 3, padY: 2 }],
       ],
     ]),
-  });
+  };
+  const folded = applyNestSpacePlan(childSpaces, insideOutPlan);
   ok(
-    "inside-out nest space fold derives padded SIZE space",
-    folded[0][0].kind === "continuous" &&
-      folded[0][0].width.run(1) === 16 &&
-      folded[0][1].kind === "continuous" &&
-      folded[0][1].width.run(1) === 8
+    "inside-out nest space fold derives a free outer with the inner's data extent",
+    originIs(folded[0][0], "free") &&
+      dataWidth(folded[0][0]) === 10 &&
+      originIs(folded[0][1], "free") &&
+      dataWidth(folded[0][1]) === 4
+  );
+  const foldedClaims = applyNestExtentPlan(
+    [
+      [undefined, undefined],
+      [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(4, 0))],
+    ],
+    folded,
+    insideOutPlan
+  );
+  ok(
+    "inside-out nest claim fold pads the inner claim (padding is pixels)",
+    foldedClaims[0][0]!.width.run(1) === 16 &&
+      foldedClaims[0][1]!.width.run(1) === 8
   );
   ok(
     "nest space fold copies child spaces instead of mutating input",
@@ -588,25 +614,59 @@ console.log("# constraint confluence: nest size dependency planning");
       childSpaces[0][0] === UNDEFINED
   );
 
-  const resolved = resolveLayerBaseSpaces(
-    [[SIZE(Monotonic.linear(10, 0)), POSITION(interval(5, 15), "child")]],
-    [3, 1],
-    { y: interval(0, 20), yMeasure: "pin" }
+  // The child is placed by the datum position on y, so its own extent (in
+  // its own unit, "child") stays out of the layer's y domain.
+  const { union, spaces: resolved } = resolveLayerBaseSpaces(
+    [
+      [
+        CONTINUOUS(interval(0, 10), "free"),
+        CONTINUOUS(interval(5, 15), "pinned", "child"),
+      ],
+    ],
+    { y: interval(0, 20), yMeasure: "pin" },
+    [new Set(), new Set([0])]
   );
   ok(
-    "base space resolution scales free magnitudes with transform.scale",
-    resolved[0].kind === "continuous" &&
-      resolved[0].dataDomain === undefined &&
-      resolved[0].width.run(1) === 30
+    "transform.scale leaves the free magnitude's data extent alone",
+    originIs(resolved[0], "free") && dataWidth(resolved[0]) === 10
   );
   ok(
-    "base space resolution merges datum domains and prefers constraint measure",
-    resolved[1].kind === "continuous" &&
-      resolved[1].dataDomain !== undefined &&
-      resolved[1].dataDomain !== "delta" &&
-      resolved[1].dataDomain.min === 0 &&
-      resolved[1].dataDomain.max === 20 &&
-      resolved[1].measure === "pin"
+    "transform.scale scales the free magnitude's claim",
+    resolveLayerAxisExtent(
+      [[Extent(Monotonic.linear(10, 0)), undefined]],
+      [
+        [
+          CONTINUOUS(interval(0, 10), "free"),
+          CONTINUOUS(interval(5, 15), "pinned", "child"),
+        ],
+      ],
+      0,
+      3,
+      undefined,
+      union[0],
+      resolved[0]
+    )!.width.run(1) === 30
+  );
+  const pinned = continuousInterval(resolved[1]);
+  ok(
+    "a datum-placed child's own extent and measure stay out of the domain",
+    pinned !== undefined &&
+      pinned.min === 0 &&
+      pinned.max === 20 &&
+      spaceMeasure(resolved[1]) === "pin"
+  );
+  let clash: string | undefined;
+  try {
+    resolveLayerBaseSpaces(
+      [[UNDEFINED, CONTINUOUS(interval(5, 15), "pinned", "child")]],
+      { y: interval(0, 20), yMeasure: "pin" }
+    );
+  } catch (e) {
+    clash = (e as Error).message;
+  }
+  ok(
+    "an unplaced child in another unit than the datum domain is a type error",
+    clash !== undefined && /different measures/.test(clash)
   );
 }
 
@@ -687,9 +747,7 @@ console.log("# constraint confluence: distribute size proposals");
   const layerSize: [number, number] = [300, 200];
   const gridCell: [number, number] = [90, 40];
   const gridCellByName = new Map<string, [number, number]>([["A", gridCell]]);
-  const sliceByName = new Map<string, [number, number]>([
-    ["A", [100, 200]],
-  ]);
+  const sliceByName = new Map<string, [number, number]>([["A", [100, 200]]]);
   ok(
     "grid cell proposal (its track extent) overrides distribute slice",
     childLayoutSizeProposal("A", layerSize, gridCellByName, sliceByName) ===
@@ -731,10 +789,7 @@ console.log("# constraint confluence: grid proposal ownership");
     selectGridConstraint([grid2]) === grid2
   );
 
-  const throwsWith = (
-    constraints: Constraint[],
-    fragment: string
-  ): boolean => {
+  const throwsWith = (constraints: Constraint[], fragment: string): boolean => {
     try {
       selectGridConstraint(constraints);
       return false;
@@ -816,18 +871,21 @@ console.log("# constraint confluence: position scale ownership planning");
 console.log("# constraint confluence: child posScale forwarding");
 {
   // AxisMaps standing in for the former closures: pxOf(map, v) reproduces them.
-  const baseX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
-  const baseY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
-  const effectiveX: AxisMap = { sigma: 10, domainMin: 0, pxMin: 0 }; // v * 10
-  const effectiveY: AxisMap = { sigma: 20, domainMin: 0, pxMin: 0 }; // v * 20
-  const positionSpace = POSITION(interval(0, 10));
+  const baseX: AxisMap = { sigma: 1, originPx: 1 }; // v + 1
+  const baseY: AxisMap = { sigma: 1, originPx: 2 }; // v + 2
+  const effectiveX: AxisMap = { sigma: 10, originPx: 0 }; // v * 10
+  const effectiveY: AxisMap = { sigma: 20, originPx: 0 }; // v * 20
+  const positionSpace = CONTINUOUS(interval(0, 10), "pinned");
 
   const noOwnedAxisPlan = buildPositionScalePlan(
     [false, false],
     [positionSpace, positionSpace],
+    [impliedExtent(positionSpace), impliedExtent(positionSpace)],
     [100, 200],
     [undefined, undefined],
-    () => false
+    () => false,
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "position scale plan does not synthesize local scales without owned axes",
@@ -838,9 +896,12 @@ console.log("# constraint confluence: child posScale forwarding");
   const ownedAxisPlan = buildPositionScalePlan(
     [true, false],
     [positionSpace, positionSpace],
+    [impliedExtent(positionSpace), impliedExtent(positionSpace)],
     [100, 200],
     [baseX, undefined],
-    () => false
+    () => false,
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "position scale plan preserves base scales and falls back locally when owned",
@@ -850,7 +911,23 @@ console.log("# constraint confluence: child posScale forwarding");
       pxOf(ownedAxisPlan.effectivePosScales[1]!, 5) === 100
   );
 
+  // The one seating rule on unowned axes: a pinned child shares the base
+  // frame, a free child gets a frame of its own with its baseline at 0, and a
+  // child with no data 0 gets none.
   const unowned = childPosScalesFor(
+    [positionSpace, CONTINUOUS(interval(0, 3), "free")],
+    undefined,
+    [false, false],
+    [baseX, baseY],
+    [effectiveX, effectiveY]
+  );
+  ok(
+    "unowned axes seat each child in the base frame",
+    unowned[0] === baseX &&
+      unowned[1]?.sigma === baseY.sigma &&
+      unowned[1]?.originPx === 0
+  );
+  const unownedUndefined = childPosScalesFor(
     [UNDEFINED, UNDEFINED],
     undefined,
     [false, false],
@@ -858,8 +935,8 @@ console.log("# constraint confluence: child posScale forwarding");
     [effectiveX, effectiveY]
   );
   ok(
-    "unowned axes forward base posScales",
-    unowned[0] === baseX && unowned[1] === baseY
+    "a child with no data 0 gets no frame",
+    unownedUndefined[0] === undefined && unownedUndefined[1] === undefined
   );
 
   const ownedPosition = childPosScalesFor(
@@ -910,8 +987,7 @@ console.log("# constraint confluence: raw placement coordinates");
     compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
       compilePlacementCoordinate(value(5).offset(3), {
         sigma: 10,
-        domainMin: 0,
-        pxMin: 0,
+        originPx: 0,
       }) === 53
   );
   ok(
@@ -1180,11 +1256,7 @@ console.log("# constraint confluence: interval vs point compose bail");
   const childNodes = [
     { _name: "A", key: "A" },
     { _name: "B", key: "B" },
-  ] as unknown as Parameters<typeof composeConstraintSpaces>[1];
-  const childSpaces: Parameters<typeof composeConstraintSpaces>[2] = [
-    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
-    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
-  ];
+  ] as unknown as Parameters<typeof planConstraintComposition>[1];
   const distAB = distribute(["A", "B"]);
   const pureInterval: PositionConstraint = {
     type: "position",
@@ -1203,49 +1275,46 @@ console.log("# constraint confluence: interval vs point compose bail");
   };
   ok(
     "pure-interval position composes with a distribute (span-like)",
-    composeConstraintSpaces(
-      [distAB, pureInterval],
-      childNodes,
-      childSpaces
-    ) !== undefined
+    planConstraintComposition([distAB, pureInterval], childNodes) !== undefined
   );
   ok(
     "point+interval position bails composition (conservatively point-form)",
-    composeConstraintSpaces(
-      [distAB, pointPlusInterval],
-      childNodes,
-      childSpaces
-    ) === undefined
+    planConstraintComposition([distAB, pointPlusInterval], childNodes) ===
+      undefined
   );
 }
 
 console.log("# constraint confluence: child scale factor planning");
 {
-  const inheritedX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
-  const inheritedY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
-  const positionSpace = POSITION(interval(0, 10));
-  const sizeSpace = SIZE(Monotonic.linear(20, 0));
+  const inheritedX: AxisMap = { sigma: 1, originPx: 1 }; // v + 1
+  const inheritedY: AxisMap = { sigma: 1, originPx: 2 }; // v + 2
+  const positionSpace = CONTINUOUS(interval(0, 10), "pinned");
+  const sizeSpace = CONTINUOUS(interval(0, 20), "free");
 
   const selfScaled = buildChildScalePlan(
     [positionSpace, sizeSpace],
+    [impliedExtent(positionSpace), impliedExtent(sizeSpace)],
     [UNDEFINED, UNDEFINED],
+    [undefined, undefined],
     [100, 80],
     [2, 3],
     [inheritedX, inheritedY],
-    undefined,
+    [false, false],
     [false, false],
     () => false,
     new ScopeRegistry(),
     "test"
   );
   ok(
-    "self-scaled POSITION axis builds local posScale",
+    "a self-scaled axis's frame is its own scope, pinned or free",
     pxOf(selfScaled.basePosScales[0]!, 5) === 50 &&
-      selfScaled.basePosScales[1] === inheritedY
+      selfScaled.basePosScales[1]?.sigma === 4 &&
+      selfScaled.basePosScales[1]?.originPx === 0
   );
   ok(
-    "self-scaled SIZE axis builds local child scale factor",
-    selfScaled.childScaleFactors[0] === 2 && selfScaled.childScaleFactors[1] === 4
+    "every self-scaled axis roots its own σ, pinned or free",
+    selfScaled.childScaleFactors[0] === 10 &&
+      selfScaled.childScaleFactors[1] === 4
   );
 
   // Scale-root scoping (#618): an INTERMEDIATE distribute — inherited scale
@@ -1259,11 +1328,13 @@ console.log("# constraint confluence: child scale factor planning");
   // coordConfluence.test.ts.)
   const intermediate = buildChildScalePlan(
     [undefined, undefined],
+    [undefined, undefined],
     [UNDEFINED, UNDEFINED],
+    [undefined, undefined],
     [100, 80],
     [2, 3],
     [inheritedX, inheritedY],
-    { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
+    [true, true],
     [false, false],
     () => false,
     new ScopeRegistry(),
@@ -1283,11 +1354,13 @@ console.log("# constraint confluence: child scale factor planning");
   // applies: re-derive from the fold, and a non-invertible fold is reported.
   const rootBudget = buildChildScalePlan(
     [undefined, undefined],
+    [undefined, undefined],
     [UNDEFINED, UNDEFINED],
+    [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(0, 10))],
     [100, 80],
     [undefined, undefined],
     [inheritedX, inheritedY],
-    { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
+    [true, true],
     [false, false],
     () => false,
     new ScopeRegistry(),
@@ -1306,22 +1379,71 @@ console.log("# constraint confluence: child scale factor planning");
 
   const shared = buildChildScalePlan(
     [undefined, undefined],
-    [SIZE(Monotonic.linear(25, 0)), UNDEFINED],
+    [undefined, undefined],
+    [CONTINUOUS(interval(0, 25), "free"), UNDEFINED],
+    [impliedExtent(CONTINUOUS(interval(0, 25), "free")), undefined],
     [100, 80],
-    [2, 3],
-    [inheritedX, inheritedY],
-    { sizeDomain: [Monotonic.linear(10, 0), undefined] },
+    [undefined, undefined],
+    [undefined, undefined],
+    [true, false],
     [true, false],
     () => false,
     new ScopeRegistry(),
     "test"
   );
   ok(
-    "shared scale scope overrides budget scale factor and emits shadow check",
+    "a budget that is also a shared scale solves once, from the layer's claim",
     shared.childScaleFactors[0] === 4 &&
       shared.sharedScaleChecks.length === 1 &&
       shared.sharedScaleChecks[0].axis === 0 &&
       shared.sharedScaleChecks[0].sigma === 4
+  );
+  // One σ per scope (#659): a self-scaled stash that a composed budget also
+  // covers solves once, from the NICED claim. Positions (the map) and sizes
+  // (σ) read the same niced domain, so bar tops land on the ticks.
+  {
+    const stash = CONTINUOUS(interval(0, 9.5), "pinned");
+    const plan = buildChildScalePlan(
+      [undefined, stash],
+      [undefined, impliedExtent(stash)],
+      [UNDEFINED, UNDEFINED],
+      [undefined, undefined],
+      [100, 100],
+      [2, 3],
+      [inheritedX, inheritedY],
+      [false, true],
+      [false, false],
+      () => true,
+      new ScopeRegistry(),
+      "test"
+    );
+    ok(
+      "a budget over a self-scaled stash keeps the niced σ",
+      plan.childScaleFactors[1] === 10 && plan.basePosScales[1]?.sigma === 10,
+      JSON.stringify([plan.childScaleFactors, plan.basePosScales])
+    );
+  }
+
+  // Only a scope root solves: a shared-scale node under an ancestor that
+  // already owns σ (a chart nested in another chart's mark) inherits it.
+  const nestedShared = buildChildScalePlan(
+    [undefined, undefined],
+    [undefined, undefined],
+    [CONTINUOUS(interval(0, 25), "free"), UNDEFINED],
+    [impliedExtent(CONTINUOUS(interval(0, 25), "free")), undefined],
+    [100, 80],
+    [2, 3],
+    [inheritedX, inheritedY],
+    [false, false],
+    [true, false],
+    () => false,
+    new ScopeRegistry(),
+    "test"
+  );
+  ok(
+    "a shared scale node under an inherited σ inherits it",
+    nestedShared.childScaleFactors[0] === 2 &&
+      nestedShared.sharedScaleChecks.length === 0
   );
 }
 
@@ -1543,13 +1665,10 @@ console.log("# constraint confluence: contradictions are diagnosed");
   };
   ok(
     "conflicting intervals throw naming both owners in either declaration order",
-    spanThrows([spanA10_30, spanA10_40]) &&
-      spanThrows([spanA10_40, spanA10_30])
+    spanThrows([spanA10_30, spanA10_40]) && spanThrows([spanA10_40, spanA10_30])
   );
 
-  const spanPositionThrows = (
-    constraints: PositionConstraint[]
-  ): boolean => {
+  const spanPositionThrows = (constraints: PositionConstraint[]): boolean => {
     try {
       solvePlacementConstraints(
         constraints,

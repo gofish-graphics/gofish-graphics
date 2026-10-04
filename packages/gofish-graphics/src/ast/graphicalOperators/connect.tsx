@@ -30,8 +30,8 @@ import { Domain, axisScale } from "../domain";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  isPOSITION,
   isPositioningSpace,
+  originIs,
 } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import {
@@ -394,7 +394,7 @@ export const connect = createNodeOperator(
               children.length >= 2 &&
               children.every((c) => {
                 const s = connectionSpaceOf(c);
-                return s !== undefined && isPOSITION(s);
+                return originIs(s, "pinned");
               }));
 
           // Resolve the curve. An omitted/`"auto"` curve smooths with the

@@ -6,7 +6,7 @@ import { Size, displayTranslate } from "../dims";
 import { pixelBox } from "../displayList/lowerHelpers";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
-import { unionChildSpaces } from "./alignment";
+import { unionChildExtents, unionChildSpaces } from "./alignment";
 import { assertNoPaintOrder } from "../paintOrder";
 
 type BlendMode = "color" | "multiply" | "screen" | "overlay" | "luminosity";
@@ -53,6 +53,10 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             children: Size<UnderlyingSpace>[],
             _childNodes: GoFishAST[]
           ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
+          resolveExtent: (childExtents, childSpaces, spaces) => [
+            unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
+            unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
+          ],
           layout: (_shared, size, scales, layoutChildren) => {
             requireTwoChildren(layoutChildren);
 
@@ -229,6 +233,10 @@ export const mask = createNodeOperator(
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
+        resolveExtent: (childExtents, childSpaces, spaces) => [
+          unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
+          unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
+        ],
         layout: (_shared, size, scales, layoutChildren) => {
           requireTwoChildren(layoutChildren);
 

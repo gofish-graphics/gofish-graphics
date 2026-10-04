@@ -79,12 +79,14 @@ horizontal bar chart does not (ordinal category axis), and a box-and-whisker bui
 primitives flips with no opt-in. `options.yUp` still forces a **global** y-up ambient.
 
 **Root placement of a free root (#773).** When the root's space on an axis is a
-baseline magnitude, `layout()` solves σ so `ascent + descent` (the total
-`width`) fills the given canvas, and places the root's baseline `descent·σ`
-above the canvas's low edge (`scopeRootBaseline`, the rule a layer's
-self-scaled free stash uses too), so a signed area or bar chart under `scatter`
-keeps its negative side on the canvas. An anchored root has no root σ and
-places through its posScale; every other root has descent 0. This applies only
+baseline magnitude, `layout()` solves σ so the root's size claim
+`ascent + descent` (the claim's total `width`, from `resolveExtent()`) fills
+the given canvas, and places the root's baseline at the scope's `originPx`,
+`descent·σ` above the canvas's low edge (the rule a layer's self-scaled free
+stash uses too), so a signed area or bar chart under `scatter` keeps its
+negative side on the canvas. A pinned root solves σ the same way and hands its
+content the map `px(d) = σ·d + originPx`, through which the content places
+itself, so it sits at 0. This applies only
 to a given dimension: a shrink-to-fit root pins its content's `min` edge, which
 already includes the descent, so adding it there would count it twice (#574).
 See
@@ -96,7 +98,10 @@ continuous y position scale — never by wrapper geometry. Three things fall out
 - **Root vs. nested band.** The **root plot content** mirrors about the authoritative
   canvas frame `[0, finalH]`, carried on `contentNode._rootFlipScope` (stamped by
   `layout()` once `finalH = contentNode.dims.size` is known — the exact frame the old
-  global flip used). The canvas origin `0` is _not_ recoverable from the node's placed
+  global flip used). Whether the root content flips as a whole is the bake's own
+  rule applied to it (`opensFlipScope`): its y is continuous, or it is a `coord`.
+  The chart-level chrome follows exactly that decision; there is no separate
+  "some coord somewhere below" trigger. The canvas origin `0` is _not_ recoverable from the node's placed
   bbox (a shrink-to-fit pin can offset it), so it is stamped rather than re-derived. A
   scope that opens **below** the canvas frame — a facet cell, a mixed-dashboard subtree
   — carries no stamp and mirrors about its own allocated band (`scopeBox`).

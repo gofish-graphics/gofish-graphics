@@ -3,7 +3,7 @@ import { GoFishNode } from "../_node";
 import { boxOfDims } from "../geometry";
 import { GoFishAST } from "../_ast";
 import { displayTranslate, Size } from "../dims";
-import { POSITION, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
+import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { nameableMark, type NameableMark } from "../marks/createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
@@ -103,7 +103,10 @@ export const Polygon = ({
         _childNodes: GoFishAST[]
       ): Size<UnderlyingSpace> =>
         dataBound
-          ? [POSITION(interval(minX, maxX)), POSITION(interval(minY, maxY))]
+          ? [
+              CONTINUOUS(interval(minX, maxX), "pinned"),
+              CONTINUOUS(interval(minY, maxY), "pinned"),
+            ]
           : [UNDEFINED, UNDEFINED],
       layout: (_shared, _size, scales) => {
         if (!dataBound) {

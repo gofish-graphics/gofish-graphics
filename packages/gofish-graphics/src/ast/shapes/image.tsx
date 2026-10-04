@@ -1,9 +1,7 @@
-import * as Monotonic from "../../util/monotonic";
 import { computeAesthetic } from "../../util";
 import { posFn, pxOf } from "../domain";
-import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
-import { getMeasure, getValue, isAesthetic, isValue } from "../data";
+import { getValue, isValue } from "../data";
 import {
   Dimensions,
   displayTranslate,
@@ -12,13 +10,7 @@ import {
   FancyDims,
   Transform,
 } from "../dims";
-import {
-  DIFFERENCE,
-  ORDINAL,
-  POSITION,
-  SIZE,
-  UNDEFINED,
-} from "../underlyingSpace";
+import { glyphAxis } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
@@ -255,35 +247,9 @@ export const Image = ({
         const xPos = dims[0].center ?? dims[0].min;
         const yPos = dims[1].center ?? dims[1].min;
 
-        const resolveAxis = (axis: 0 | 1, pos: any) => {
-          if (isValue(pos)) {
-            const min = getValue(pos) ?? 0;
-            if (isValue(dims[axis].size)) {
-              return DIFFERENCE(
-                getValue(dims[axis].size)!,
-                getMeasure(dims[axis].size)
-              );
-            }
-            return POSITION(interval(min, min), getMeasure(pos));
-          }
-          if (isAesthetic(pos) && isValue(dims[axis].size)) {
-            return DIFFERENCE(
-              getValue(dims[axis].size)!,
-              getMeasure(dims[axis].size)
-            );
-          }
-          if (!isValue(pos) && isValue(dims[axis].size)) {
-            return SIZE(
-              Monotonic.linear(getValue(dims[axis].size)!, 0),
-              getMeasure(dims[axis].size)
-            );
-          }
-          // No data position, no data size — image's intrinsic dimensions
-          // are resolved at layout time via resolveRenderedDimensions.
-          return UNDEFINED;
-        };
-
-        return [resolveAxis(0, xPos), resolveAxis(1, yPos)];
+        // With no data position or size, the image's intrinsic dimensions are
+        // resolved at layout time via resolveRenderedDimensions.
+        return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
       },
       layout: (shared, size, scales, children) => {
         // For data-bound (Value-wrapped) dims, map from data units to pixels via

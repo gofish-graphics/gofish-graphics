@@ -58,14 +58,14 @@ import { color6 } from "../color";
 import { orderByLevels, type HasOrder } from "./schema";
 import {
   isCONTINUOUS,
-  isDIFFERENCE,
   isORDINAL,
-  isPOSITION,
   isUNDEFINED,
-  continuousInterval,
-  spacePlacement,
   UnderlyingSpace,
+  axisOver,
+  placeBaseline,
+  MeasureClash,
 } from "./underlyingSpace";
+import { impliedExtents, type Extent } from "./extent";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
@@ -176,10 +176,11 @@ export type Placeable = {
    *  `rect({})`), so the size cell is free for the constraint to own. Optional
    *  for the same reason as the other constraint write hooks. */
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
-  /** Stamped by a FIXED-PITCH `distribute` (`anchor` ≠ "edge") on `dir: "y"`:
-   *  the anchor the chain related on this target. A fixed-pitch chain is an
-   *  overlay, not a tiling — the target's allocated y band is just the leftover
-   *  slice and bears no relation to where its chained anchor sits — so if this
+  /** Stamped by a spread `distribute` on `dir: "y"`: the anchor the chain
+   *  fixed on this target (for an edge chain, which fixes the whole box,
+   *  `"middle"`, whose mirror keeps the box in place). The chain places the
+   *  target itself — the target's allocated y band is just a slice of the
+   *  spread's height and bears no relation to where it sits — so if this
    *  node later opens its own y-up flip scope, the scope mirrors about THIS
    *  anchor (a point reflection; see `scopeBox` in coordinateTransforms/bake.ts)
    *  rather than the allocated band. That keeps the PAINTED anchor coincident
@@ -314,6 +315,28 @@ export type ResolveUnderlyingSpace = (
   constraints: ConstraintSpec[]
 ) => FancySize<UnderlyingSpace>;
 
+/**
+ * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis
+ * whose type is not continuous). It runs in its own walk, after every type is
+ * resolved, so it may read the node's own resolved `spaces` and its children's
+ * types as well as the children's claims. The type hook
+ * ({@link ResolveUnderlyingSpace}) receives no claims at all, so the
+ * dependency runs one way: claims may read types, types never read claims.
+ * Optional: a node that adds no pixel overhead claims what its types imply
+ * ({@link impliedExtents}).
+ */
+export type ResolveExtent = (
+  childExtents: Size<Extent | undefined>[],
+  childSpaces: Size<UnderlyingSpace>[],
+  spaces: Size<UnderlyingSpace>,
+  childNodes: (GoFishNode | GoFishRef)[],
+  constraints: ConstraintSpec[]
+) => Size<Extent | undefined>;
+
+/** Depth of type-hook calls in progress. A claim walk started from inside a
+ *  type hook throws: types never read claims. */
+let typeWalkDepth = 0;
+
 /** Dev gate: set `GOFISH_CONFLICT_CHECK=1` to surface
  *  OVER-DETERMINATION the `BBox` ledger detects but the placement commit silently
  *  absorbs — a single owner writing inconsistent keys on an axis (the
@@ -357,12 +380,13 @@ function selfScaledAxisSignature(
   dim: 0 | 1
 ): string | undefined {
   const s = node.selfScaledSpace[dim];
-  if (s === undefined || !(isPOSITION(s) || isDIFFERENCE(s))) return undefined;
+  if (s === undefined || !isCONTINUOUS(s) || axisOver(s) === undefined)
+    return undefined;
   return (
     "c:" +
     JSON.stringify({
-      d: s.dataDomain,
-      w: s.width,
+      d: s.dataInterval,
+      o: s.origin,
       m: s.measure,
     })
   );
@@ -455,7 +479,9 @@ export class GoFishNode {
    *  {@link INTERNAL_visibleWhile}); undefined on the static path. */
   public __gfVisible?: Map<object, () => boolean>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
+  private _resolveExtent: ResolveExtent;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
+  public _extent?: Size<Extent | undefined> = undefined;
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}) — the node's sole draw
    *  description. Absent on operators that never lower themselves (their
@@ -658,6 +684,7 @@ export class GoFishNode {
       type,
       args,
       resolveUnderlyingSpace,
+      resolveExtent,
       layout,
       lower,
       geometry,
@@ -668,6 +695,7 @@ export class GoFishNode {
       type: string;
       args?: any;
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
+      resolveExtent?: ResolveExtent;
       layout: Layout;
       lower?: Lower;
       geometry?: GeometryFn;
@@ -678,6 +706,8 @@ export class GoFishNode {
   ) {
     this.uid = `node-${GoFishNode.uidCounter++}`;
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
+    this._resolveExtent =
+      resolveExtent ?? ((_ce, _cs, spaces) => impliedExtents(spaces));
     this._layout = layout;
     this._lower = lower;
     this._ownLower = lower;
@@ -871,15 +901,97 @@ export class GoFishNode {
     if (this._underlyingSpace) {
       return this._underlyingSpace;
     }
-    this._underlyingSpace = elaborateSize(
-      this._resolveUnderlyingSpace(
-        this.children.map((child) => child.resolveUnderlyingSpace()),
-        this.children,
-        this.shared,
-        this.constraints
-      )
+    const childSpaces = this.children.map((child) =>
+      child.resolveUnderlyingSpace()
     );
+    typeWalkDepth++;
+    try {
+      this._underlyingSpace = elaborateSize(
+        this._resolveUnderlyingSpace(
+          childSpaces,
+          this.children,
+          this.shared,
+          this.constraints
+        )
+      );
+    } catch (e) {
+      // A measure clash knows its axis index; this node knows what that axis
+      // is called here (`x`, `y`, or a coordinate space's own name).
+      throw e instanceof MeasureClash
+        ? e.named((axis) => this.axisName(axis))
+        : e;
+    } finally {
+      typeWalkDepth--;
+    }
     return this._underlyingSpace;
+  }
+
+  /** The axis names visible inside this node: the scope {@link
+   *  resolveAliases} gives its children, folded from the root down by
+   *  `axisScopeFor`, so the innermost coordinate space decides. */
+  public axisScope(): AxisScope {
+    const spaces: SpaceDeclaration[] = [];
+    for (let n: GoFishNode | undefined = this; n; n = n.parent)
+      if (n._space) spaces.push(n._space);
+    return spaces.reduceRight(
+      (scope, space) => axisScopeFor(space, scope),
+      BASE_AXIS_SCOPE
+    );
+  }
+
+  /** The name of axis `dim` where this node sits: the name the innermost
+   *  enclosing coordinate space gives it (polar's `theta` / `r`, geo's `lon` /
+   *  `lat`), or `x` / `y` (also inside a space that declares no names). */
+  public axisName(dim: 0 | 1): string {
+    const xy = dim === 0 ? "x" : "y";
+    const named = Object.entries(this.axisScope().names).find(
+      ([name, axis]) => axis === dim && name !== "x" && name !== "y"
+    );
+    return named?.[0] ?? xy;
+  }
+
+  /** One of this node's axis spaces as the axis machinery sees it: placed
+   *  ({@link placeBaseline}) when this node is the render root, the scope root
+   *  that seats a free baseline at the scope's `originPx`, so the root of a
+   *  bar chart renders an absolute value axis over its free bars. Anywhere
+   *  else a free space is still waiting for its parent to place it. */
+  public placedSpace(space: UnderlyingSpace): UnderlyingSpace {
+    return this.parent === undefined ? placeBaseline(space) : space;
+  }
+
+  /**
+   * This node's per-axis size claims ({@link Extent}), memoized. Resolves the
+   * types first (claims may read them), then the children's claims, then this
+   * node's own claim hook. Every continuous axis gets a claim; a
+   * non-continuous axis claims only when its content's room is σ-dependent
+   * (a spread of magnitudes).
+   */
+  public resolveExtent(): Size<Extent | undefined> {
+    if (this._extent) return this._extent;
+    if (typeWalkDepth > 0)
+      throw new Error(
+        `[gofish] ${this.type}: a size claim was read during type inference. ` +
+          `Types never read claims; compute this from the types instead.`
+      );
+    const spaces = this.resolveUnderlyingSpace();
+    const childSpaces = this.children.map((c) => c.resolveUnderlyingSpace());
+    const childExtents = this.children.map((c) => c.resolveExtent());
+    const extent = this._resolveExtent(
+      childExtents,
+      childSpaces,
+      spaces,
+      this.children,
+      this.constraints
+    );
+    for (const dim of [0, 1] as const) {
+      if (isCONTINUOUS(spaces[dim]) && extent[dim] === undefined)
+        throw new Error(
+          `[gofish] ${this.type}: axis ${dim} has a continuous type but no ` +
+            `size claim. Every continuous axis has a claim.`
+        );
+    }
+    this._extent = extent;
+    return extent;
   }
 
   /**
@@ -891,6 +1003,7 @@ export class GoFishNode {
    */
   public clearUnderlyingSpace(): void {
     this._underlyingSpace = undefined;
+    this._extent = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
     });
@@ -1201,7 +1314,7 @@ export class GoFishNode {
             (prior.startsWith("o:") && prior !== mySig)
           )
             sig = mySig;
-        } else if (isPOSITION(s) || isDIFFERENCE(s)) {
+        } else if (axisOver(this.placedSpace(s)) !== undefined) {
           // Continuous: single-owner — only the root-most unclaimed dim claims.
           if (prior === undefined) sig = AXIS_CLAIM_OPAQUE;
         }
@@ -2063,12 +2176,7 @@ export const debugNodeTree = (node: GoFishNode | GoFishAST): void =>
 
 const formatSpace = (s: UnderlyingSpace): string => {
   if (isCONTINUOUS(s)) {
-    const placement = spacePlacement(s);
-    return placement === "determined"
-      ? `position(${toJSON(continuousInterval(s)!)})`
-      : placement === "free"
-        ? `size(${s.width.run(1)})`
-        : `difference(${s.width.run(1)})`;
+    return `${s.origin}(${toJSON(s.dataInterval)})`;
   }
   if (isORDINAL(s)) return `ordinal(${s.domain})`;
   if (isUNDEFINED(s)) return `undefined`;

@@ -14,15 +14,17 @@ import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
 import { datum } from "../data";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
-  isPOSITION,
   isORDINAL,
-  isDIFFERENCE,
   isCONTINUOUS,
   isUNDEFINED,
-  continuousInterval,
+  dataWidth,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
+  axisOver,
+  niceContinuous,
+  originIs,
 } from "../underlyingSpace";
+import type { AxisOptions } from "../gofish";
 
 /**
  * Axis elaboration: turn an inferred axis into ordinary GoFish shapes +
@@ -65,6 +67,11 @@ export type AxisElaboration = {
    *  unset (they're just a label row, with no spanning line to center on, so
    *  the title pass falls back to the plot bbox). */
   anchor?: GoFishNode;
+  /** Where the content's baseline sits along this axis, in the axis's own
+   *  data frame: a delta axis has no data 0, so its frame is its own, and it
+   *  centers the content in its niced width. Unset: the content sits as its
+   *  type says (see the inner tier in `elaborateAxes`). */
+  contentAt?: { dim: 0 | 1; at: number };
 };
 
 /** A `labelAngle` value as authored: a plain number applies to every tier of
@@ -493,41 +500,43 @@ function elaborateContinuousAxis(
   });
 }
 
-/** One difference axis: bare tick marks at tick values, delta labels at midpoints. */
+/** One difference axis: bare tick marks at tick values, delta labels at
+ *  midpoints. `space` is the content's space; the axis spans its niced width
+ *  from 0, and the content sits centered in it (`contentAt`): a delta axis
+ *  comes from centering (`middle` alignment), so its slack splits evenly. */
 function elaborateDifferenceAxis(
   dim: 0 | 1,
-  space: CONTINUOUS_TYPE,
+  content: CONTINUOUS_TYPE,
   prefix: string,
   crossFloor?: number,
   side: "start" | "end" = "start"
 ): AxisElaboration {
-  // Scale over the RAW width (not a niced max) so the tick scale equals the
-  // content's own width-based scaleFactor (size/width) and ticks line up with
-  // the marks they annotate. The axis line spans [0, width]; ticks are nice
-  // values within it. (The old bespoke path used v*scaleFactor for the same.)
-  const width = space.width.run(1);
-  const base = d3Ticks(0, width, TICK_COUNT);
-  // End cap: the line's far end always carries a tick (the old bespoke axis
-  // got this by overshooting to the next nice value; here the scale must stay
-  // anchored to the content's size/width factor, so the cap sits at `width`
-  // itself) — and the final, possibly partial, interval still gets its delta.
-  const tickValues =
-    base.length > 0 && base[base.length - 1] < width ? [...base, width] : base;
+  const space = niceContinuous(content);
+  // `space` is the axis's niced space (`niceContinuous`), so its width is a
+  // nice value from 0 and the ticks step evenly up to it: the scope that sizes
+  // the content solves against the same niced width (`niceScope`), so ticks
+  // line up with the marks they annotate. The axis line spans [0, width].
+  const width = dataWidth(space);
+  const tickValues = d3Ticks(0, width, TICK_COUNT);
+  const contentAt = (width - dataWidth(content)) / 2;
   const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
     value: (v + tickValues[i + 1]) / 2,
     text: fmtNum(tickValues[i + 1] - v),
   }));
-  return positionAxis({
-    dim,
-    prefix,
-    lineMin: 0,
-    lineMax: width,
-    tickValues,
-    tickNode: (_v, _i, name) => tickRect(dim).name(name),
-    extraLabels,
-    crossFloor,
-    side,
-  });
+  return {
+    ...positionAxis({
+      dim,
+      prefix,
+      lineMin: 0,
+      lineMax: width,
+      tickValues,
+      tickNode: (_v, _i, name) => tickRect(dim).name(name),
+      extraLabels,
+      crossFloor,
+      side,
+    }),
+    contentAt: { dim, at: contentAt },
+  };
 }
 
 /**
@@ -701,7 +710,7 @@ function elaborationsFor(
   // so an ordinary (non-self-scaled) space is never overridden.
   const spaceFor = (dim: 0 | 1): UnderlyingSpace =>
     !isUNDEFINED(space[dim])
-      ? space[dim]
+      ? node.placedSpace(space[dim])
       : (node.hoistedAxisSpace?.[dim] ?? space[dim]);
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
@@ -712,11 +721,11 @@ function elaborationsFor(
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
-    const iv = continuousInterval(s);
-    if (isPOSITION(s) && iv) {
-      nices[dim] = d3Nice(iv.min, iv.max, TICK_COUNT);
+    if (axisOver(s) === "absolute") {
+      const niced = niceContinuous(s) as CONTINUOUS_TYPE;
+      nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
       floors[dim] = nices[dim]![0];
-    } else if (isDIFFERENCE(s)) {
+    } else if (axisOver(s) === "delta") {
       floors[dim] = 0;
     }
   }
@@ -778,7 +787,8 @@ function elaborationsFor(
     const s = spaceFor(dim);
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
-    if (isPOSITION(s)) {
+    const kind = axisOver(s);
+    if (kind === "absolute" && isCONTINUOUS(s)) {
       const e = elaborateContinuousAxis(
         dim,
         nices[dim]!,
@@ -790,7 +800,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
-    } else if (isDIFFERENCE(s)) {
+    } else if (kind === "delta" && isCONTINUOUS(s)) {
       const e = elaborateDifferenceAxis(
         dim,
         s,
@@ -962,10 +972,28 @@ export async function elaborateAxes(
       content.name(CONTENT_NAME);
       const axisNodes = constrained.flatMap((e) => e.nodes);
       inner = (await (layer as any)([content, ...axisNodes])) as GoFishNode;
+      // Where the content sits on each axis. A delta axis says where in its
+      // own frame. Otherwise this is the one seating rule (`seatInScope`):
+      // a free content (a bar chart's bars) is a magnitude whose baseline the
+      // axis's frame places, so it is left unpinned and the layer seats it at
+      // data 0 of the frame's map, so value 0 sits at the 0 tick; a pinned
+      // content shares the frame, so its baseline is the frame's 0 (a literal
+      // pixel pin).
+      const contentSpace = content._underlyingSpace;
+      const contentAt = (dim: 0 | 1) => {
+        const at = constrained.find((e) => e.contentAt?.dim === dim)?.contentAt;
+        if (at !== undefined) return datum(at.at);
+        return originIs(contentSpace?.[dim], "free") ? undefined : 0;
+      };
+      const seat = { x: contentAt(0), y: contentAt(1) };
       await inner.relate((g) => [
-        Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
-          g[CONTENT_NAME],
-        ]),
+        ...(seat.x === undefined && seat.y === undefined
+          ? []
+          : [
+              Constraint.position({ ...seat, anchor: "baseline" }, [
+                g[CONTENT_NAME],
+              ]),
+            ]),
         ...constrained.flatMap((e) => e.constraints(g)),
       ]);
     }
@@ -1017,8 +1045,20 @@ export async function elaborateAxes(
 // title's centering must never see the legend column (it'd drag the title
 // off-center). Same ordering argument the legend pass makes about itself.
 
-const TITLE_FONT_SIZE = 11;
-const TITLE_COLOR = "gray";
+export const TITLE_FONT_SIZE = 11;
+export const TITLE_COLOR = "gray";
+
+/** The title of a drawn axis from its `axes` option: the option's `title`,
+ *  none when it is `false`, and otherwise `inferred` (the axis's measure, or
+ *  a name the caller falls back to). Whether the axis is drawn at all is the
+ *  caller's rule. */
+export function axisTitle(
+  opt: AxisOptions | undefined,
+  inferred: string | undefined
+): string | undefined {
+  const title = typeof opt === "object" && opt !== null ? opt.title : undefined;
+  return title === false ? undefined : (title ?? inferred);
+}
 const TITLE_CONTENT_GAP = 8; // gap between a title and the full content bbox
 const TITLE_CONTENT_NAME = "__titleContent";
 const X_TITLE_ANCHOR_NAME = "__xTitleAnchor";

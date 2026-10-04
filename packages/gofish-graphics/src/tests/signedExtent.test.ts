@@ -14,13 +14,13 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import {
-  SIZE,
-  baselineSpan,
-  isPOSITION,
   continuousInterval,
   type CONTINUOUS_TYPE,
+  CONTINUOUS,
+  originIs,
 } from "../ast/underlyingSpace";
-import { nestedSpace } from "../ast/constraints/nest";
+import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
+import { Extent } from "../ast/extent";
 import { resolveAlignmentSpace } from "../ast/graphicalOperators/alignment";
 import { solveAxisProblem } from "../ast/constraints/differenceGraph";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
@@ -29,6 +29,7 @@ import { ref } from "../ast/shapes/ref";
 import { createName } from "../ast/createName";
 import { GoFishRef } from "../ast/_ref";
 import * as M from "../util/monotonic";
+import { interval } from "../util/interval";
 
 const { chart, scatter, stack, spread, rect } = GoFish as any;
 
@@ -90,13 +91,27 @@ async function main() {
 
   console.log("\n# a nest pads both sides of its inner extent");
   {
-    const inner = SIZE(M.linear(10, 0), undefined, M.linear(4, 0));
-    const outer = nestedSpace(SIZE(M.ZERO), inner, 2) as CONTINUOUS_TYPE;
+    const inner = CONTINUOUS(interval(-4, 10), "free");
+    const outer = nestedSpace(
+      CONTINUOUS(interval(0, 0), "free"),
+      inner
+    ) as CONTINUOUS_TYPE;
     check(
-      "ascent + padding and descent + padding",
-      outer.ascent.run(1) === 12 && outer.descent.run(1) === 6
+      "the outer type keeps the inner data extent (padding is pixels)",
+      JSON.stringify(outer.dataInterval) ===
+        JSON.stringify((inner as CONTINUOUS_TYPE).dataInterval)
     );
-    check("width is inner width + 2·padding", outer.width.run(1) === 18);
+    const claim = nestedExtent(
+      Extent(M.ZERO),
+      inner,
+      Extent(M.linear(10, 0), M.linear(4, 0)),
+      2
+    )!;
+    check(
+      "claim: ascent + padding and descent + padding",
+      claim.ascent.run(1) === 12 && claim.descent.run(1) === 6
+    );
+    check("claim width is inner width + 2·padding", claim.width.run(1) === 18);
   }
 
   console.log("\n# a chain seats only the baselines it leaves free");
@@ -172,11 +187,12 @@ async function main() {
 
   console.log("\n# the alignment union depends on the alignment");
   {
-    const up = SIZE(M.linear(10, 0));
-    const down = SIZE(M.ZERO, undefined, M.linear(20, 0));
+    const up = CONTINUOUS(interval(0, 10), "free");
+    const down = CONTINUOUS(interval(-20, 0), "free");
     const span = (alignment: "baseline" | "start" | "end") => {
-      const s = resolveAlignmentSpace([up, down], alignment);
-      return isPOSITION(s) ? continuousInterval(s) : undefined;
+      // Alignment establishes a shared baseline; it does not pin it.
+      const s = resolveAlignmentSpace([up, down], alignment, 1);
+      return originIs(s, "free") ? s.dataInterval : undefined;
     };
     check(
       "baseline: [−descent, ascent] about the shared baseline",
@@ -197,13 +213,18 @@ async function main() {
     // The running sums of (30, −25, 10, −50) are 0, 30, 5, 15, −35, so the
     // stack spans [−35, 30]. With only positive parts it is [0, Σ].
     const fold = (values: number[]) => {
-      const s = distributeSpaceFold(values.map((v) => baselineSpan(v)), [], {
-        spacing: 0,
-        anchor: "edge",
-        glue: true,
-        origin: { part: 0, fraction: 0, mirrored: false },
-      });
-      return isPOSITION(s) ? continuousInterval(s) : undefined;
+      const s = distributeSpaceFold(
+        values.map((v) => CONTINUOUS(interval(0, v), "free")),
+        [],
+        {
+          axis: 1,
+          spacing: 0,
+          anchor: "edge",
+          glue: true,
+          origin: { part: 0, fraction: 0, mirrored: false },
+        }
+      );
+      return originIs(s, "pinned") ? continuousInterval(s) : undefined;
     };
     check(
       "a signed stack spans its running sums",
@@ -247,13 +268,15 @@ async function main() {
       }),
       JSON.stringify(stacked)
     );
-    // A spread packs the same bars as boxes, 8px apart, signs aside.
+    // A spread packs the same bars as boxes, 8px apart, signs aside. It
+    // separates them into a category axis, which reads top down.
     const spreadOut = rectsOf(await render(spread({ by: "k", dir: "y" })));
     check(
       "a spread still packs boxes edge to edge",
       spreadOut.every(
         (r, i) =>
-          i === 0 || Math.abs(r.y + r.h + 8 - spreadOut[i - 1].y) < 1e-9
+          i === 0 ||
+          Math.abs(spreadOut[i - 1].y + spreadOut[i - 1].h + 8 - r.y) < 1e-9
       ),
       JSON.stringify(spreadOut)
     );
@@ -274,6 +297,34 @@ async function main() {
       "an optional Placeable probe reads undefined, not a path segment",
       (ref(tok) as any).spaceOn === undefined &&
         (ref(tok) as any).setExtent === undefined
+    );
+  }
+
+  console.log("\n# a sized spread of magnitudes roots its own scale");
+  {
+    // The spread's x type is ordinal (separate spaces), but its room depends
+    // on σ, so its explicit w roots its own σ-scope: the bars fit the 300 px
+    // box, not the 500 px canvas.
+    const dl = await chart([
+      { c: "a", v: 10 },
+      { c: "b", v: 20 },
+      { c: "c", v: 30 },
+    ])
+      .flow(spread({ by: "c", dir: "x", w: 300 }))
+      .mark(rect({ w: "v", h: 20 }))
+      .toDisplayList({ w: 500, h: 100 });
+    const rs = rectsOf(dl);
+    const span =
+      Math.max(...rs.map((r) => r.x + r.w)) - Math.min(...rs.map((r) => r.x));
+    check(
+      "the bars span the spread's 300 px",
+      Math.abs(span - 300) < 1e-6,
+      `span ${span}`
+    );
+    check(
+      "the bars keep their data ratio",
+      Math.abs(rs[2].w / rs[0].w - 3) < 1e-9,
+      JSON.stringify(rs.map((r) => r.w))
     );
   }
 

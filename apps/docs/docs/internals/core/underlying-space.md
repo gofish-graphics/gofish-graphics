@@ -5,6 +5,7 @@ order: 10
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/underlyingSpace.ts
+  - packages/gofish-graphics/src/ast/extent.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/alignment.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
@@ -33,15 +34,22 @@ covers:
 # The underlying space tree
 
 Every node in a GoFish scenegraph carries two pieces of information about
-its spatial structure: the kind of data space the node has established on
-each of its two axes (x and y), and any per-axis Monotonic that captures
-how visual size depends on a scale factor. Together these form an
-intermediate representation called the **underlying space tree**.
+each of its two axes (x and y):
 
-The data structure lives at `src/ast/underlyingSpace.ts`.
-The traversal that builds it lives at `_node.ts`'s `resolveUnderlyingSpace()`.
-Layout, axis rendering, posScale construction, and ordinal scale building
-all consume the tree afterwards.
+- its **type**: the kind of data space the node has established there, and
+  for a continuous axis the data interval it covers. A type says what the
+  axis _means_. It has no σ in it.
+- its **size claim** (an `Extent`): how much room the node's content needs
+  on that axis, as Monotonic functions of the scale factor σ. A claim says
+  how big the content _is_.
+
+The types form an intermediate representation called the **underlying space
+tree**. The claims are computed by a second walk over the same tree, after
+every type is known. The types live at `src/ast/underlyingSpace.ts`, and the
+claims at `src/ast/extent.ts`. The two walks are `_node.ts`'s
+`resolveUnderlyingSpace()` and `resolveExtent()`. Layout, axis rendering,
+posScale construction, and ordinal scale building all consume both
+afterwards.
 
 This doc explains what the tree is, why it exists, what each space kind
 means, and where to look in the code. If you're adding an operator that
@@ -90,29 +98,35 @@ Every continuous axis is, in the end, one affine map — per **σ-scope** (the
 region over which a single scale is shared):
 
 ```
-px(d) = pxMin + σ·(d − domainMin)          σ = pixels per data unit
+px(d) = σ·d + originPx          σ = pixels per data unit
 ```
 
-`σ` (sigma) is the slope: pixels per unit of data. `domainMin` is the low edge
-of the data interval. Per node and axis there is exactly one position unknown —
-the **baseline**, the screen coordinate of the node's local data-0. Three things
-that the word "origin" historically ran together must be kept distinct, because
-each lives at a different stage of the pipeline:
+`σ` (sigma) is the slope: pixels per unit of data. `originPx` is the pixel of
+data 0, the **baseline**: the screen coordinate of the node's local data-0, and
+the one position unknown per node and axis. It is kept in pixels, so pixel
+overhead before the data (padding or spacing on the low side) is simply part
+of where data 0 lands, never a data value divided by σ. The origin state of an
+axis is literally the status of `originPx`: **pinned** means something fixes it
+(a data anchor, or a scope's box edge plus overhead), **free** means it is a
+gauge the parent sets (a free node's local 0 is its baseline, and its parent
+translates it), and **none** means there is no data 0, so there is no
+`originPx` at all, only differences. Three things that the word "origin"
+historically ran together must be kept distinct, because each lives at a
+different stage of the pipeline:
 
 - **alignment** is a _constraint_: equations between per-node baselines
   (`baseline_A = baseline_B`, and analogous relations for other anchors). It says
   nothing about pixels; it only records which baselines must agree.
-- **placement** (`free | determined | conflict`) is the _abstract value_: is the
-  baseline subsystem under-determined, solvable, or inconsistent? This is all
-  that bottom-up space resolution can know — it runs before pixels exist, so it
-  computes the _determinacy_ of the baseline, not the baseline itself.
-- **the intercept** is the _concrete value_: the solved shared baseline of a
-  σ-scope, in pixels — `pxMin` above, read as `posScale(0)`. It exists only after
-  σ and the frame anchor resolve, so it is always a **derived read**, never
-  stored state.
+- **the origin state** (`free | pinned | none`) is the _abstract value_: is the
+  baseline under-determined, fixed, or impossible? This is all that bottom-up
+  space resolution can know — it runs before pixels exist, so it computes the
+  _determinacy_ of the baseline, not the baseline itself.
+- **`originPx`** is the _concrete value_: the solved baseline of a σ-scope, in
+  pixels. It exists only after σ and the frame anchor resolve, so it is always
+  a **derived read**, never stored state.
 
-A false friend to never conflate with that intercept: the `width` Monotonic
-carries its _own_ intercept — the σ-independent pixel part of an _extent_
+A false friend to never conflate with that intercept: a claim's `width`
+Monotonic carries its _own_ intercept — the σ-independent pixel part of an _extent_
 (spacing, fixed chrome), the intercept of the size-vs-σ line `size = slope·σ +
 intercept`. That is an intercept of the size equation, not of the data→screen
 map; the two never mean the same thing.
@@ -123,8 +137,8 @@ map; the two never mean the same thing.
 has no committed baseline, so its intercept is implicit in where its parent
 places it (baseline placement + `transform.translate`) and never travels with the
 scale. `map` is the _whole_ anchored map, with the intercept explicit as data
-rather than closed over a function: `px(d) = pxMin + sigma·(d − domainMin)`,
-evaluated by `pxOf` (the old `posScale(0)` intercept is `pxOf(map, 0)`). So
+rather than closed over a function: `px(d) = sigma·d + originPx`, evaluated by
+`pxOf`. So
 "anchored" shows up operationally as "has a `map`"; "unanchored" as "has only a
 `sigma`." This single record replaced the former two parallel
 channels (`scaleFactors` = slope-only, `posScales` = whole map) in Stage 4 of
@@ -135,10 +149,9 @@ its `sigma` and its `map.sigma` — are not independent numbers. Each is the σ 
 distinct σ-scope solved once by the scope registry (below):
 `sigma` is the axis's **SIZE** scope (what a magnitude is scaled by), `map.sigma`
 is the axis's **POSITION** scope (what an anchored coordinate is mapped by). No
-site fabricates either — every `map` comes from `computePosScale` through
-`solvePosition` (or the equal-measure recentering), every `sigma` from
-`solveSize` (Stage 6c). Within any one scope there is therefore exactly one slope,
-by construction. When both halves are present and `sigma ≠ map.sigma`, the axis
+site fabricates either — every scope root solves both from one call,
+`solveScope` (or the equal-measure recentering). Within any one scope there is therefore exactly
+one slope, by construction. When both halves are present and `sigma ≠ map.sigma`, the axis
 genuinely carries **two scopes**, and each half is read by the channel it belongs
 to — magnitudes read `sigma`, anchored positions read `map`. That happens when a
 sub-budget layer scales size against a local extent but positions against an
@@ -208,68 +221,95 @@ generation.
 
 ## The three space kinds
 
-Each axis (x and y) of each node carries one of `continuous`, `ordinal`, or
-`undefined`. The continuous kind stores two facts: its σ-affine _size_, as an
-**`ascent`** and a **`descent`** (two Monotonics, see below), and a
-**`dataDomain`** (a _data-space_ fact: the axis range, if any). The **`placement`** (the _layout_ fact: is this extent positioned) is not a
-third stored field — it is a **derived view** of `dataDomain`'s shape, a bare
-determinacy lattice read via `spacePlacement(space)`:
+Each axis (x and y) of each node has a type of one of three kinds:
+`continuous`, `ordinal`, or `undefined`. A continuous type stores one data
+fact in one shape for every continuous axis: a signed **`dataInterval`** in
+data units about the axis's local origin, plus the state of that origin,
+**`origin`**. The origin state is the whole _placement_ fact (is this extent
+positioned?): `pinned` has committed a position, `free` can still be given
+one, and `none` can never have one. Every such question is the one read
+`originOf(space)` (or `originIs(space, "pinned")`, and `hasOrigin(space)` for
+pinned-or-free):
 
 ```ts
 // underlyingSpace.ts
-type Placement = "free" | "determined" | "conflict";
-
-type DataDomain = Interval | "delta" | undefined;
+type Origin = "pinned" | "free" | "none";
 
 type CONTINUOUS_TYPE = {
   kind: "continuous";
-  ascent: Monotonic;      // σ-affine extent above the baseline (local 0)
-  descent: Monotonic;     // σ-affine extent below the baseline
-  width: Monotonic;       // ascent + descent, computed by CONTINUOUS
-  dataDomain: DataDomain; // data-space extent AND the sole placement carrier
+  dataInterval: Interval; // signed data extent about the local origin
+  origin: Origin; // where that origin sits
   measure?: Measure;
+  mirrored?: true;
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
-
-// placement is in bijection with dataDomain's shape:
-const spacePlacement = (s: CONTINUOUS_TYPE): Placement =>
-  s.dataDomain === undefined ? "free"        // sized, position not yet committed (a bar's height)
-    : s.dataDomain === "delta" ? "conflict"  // no absolute position possible (a centered streamgraph band)
-      : "determined";                        // committed to a DATA interval (a scatter point's x)
 ```
 
-**Ascent and descent (#773).** A baseline magnitude is measured from its
-baseline on both sides, like a font's ascent and descent. A rect of value 30
-has ascent `30σ` and descent 0; a rect of value −20 has ascent 0 and descent
-`20σ` (`baselineSpan(v)`, used only by `rect`: a rect length is signed, while
-a text, image, or treemap size is a nonnegative magnitude). `SIZE(ascent,
-measure, descent = ZERO)` is the one constructor; most extents sit wholly above
-their baseline and never spell the descent. `width` is `ascent + descent`,
-computed once by the `CONTINUOUS` constructor, and it is what a scope solves σ
-against. An anchored or difference extent sits
-wholly above its low edge, so its descent is 0. Every consumer that only needs
-the total (σ solves, distribute sums, grid claims) reads `width`;
-the consumers that place things about the baseline read the pair:
+The three origin states are the old `POSITION` / `SIZE` / `DIFFERENCE`, and
+there is one constructor for all of them, `CONTINUOUS(interval, origin,
+measure?)`:
 
-- `unionChildSpaces`' all-free branch combines children per side:
-  `SIZE(max of ascents, max of descents)`. This keeps both the σ-affine
-  intercepts and the negative side, so a `group` of signed bars keeps both.
-- `continuousExtentInterval` collapses a free extent to
-  `[−descent.run(1), ascent.run(1)]`. Under `baseline` alignment,
-  `resolveAlignmentSpace` (spread's cross axis) unions these, so a signed bar
-  chart is anchored over a domain that includes its negative values. Under
+- **pinned**: the local origin _is_ data 0, so the interval is the absolute
+  data domain. A scatter's x axis over `[30, 50]` is
+  `CONTINUOUS(interval(30, 50), "pinned")`.
+- **free**: the extent hangs from a baseline that nothing has placed yet, and
+  the interval is `[−descent, ascent]` about it. A bar of value `v` is
+  `CONTINUOUS(interval(0, v), "free")`, which is `[0, 30]` for 30 and
+  `[−20, 0]` for −20. Marks build it with `magnitude(size)`, which also
+  carries the datum's measure.
+- **none**: there is no origin at all, only a width, so the interval is
+  `[0, width]` and only differences along it mean anything. A middle-aligned
+  overlay is one.
+
+Because the three share one shape, **pinning a free extent is "shift the
+interval and pin the origin"**: `anchorAt(space, at)` turns `free [−d, a]`
+into `pinned [at − d, at + a]`. Every place that pins does exactly this, in
+data: a glued stack shifts each part by the running sum of the parts before
+it, and the `position` operator shifts by its datum offset. Alignment does not
+pin: it establishes a shared baseline (see below). What places a free
+baseline is placement: a parent constraint, a data anchor, or the scope root
+(`placeBaseline`).
+
+**The data interval has no σ in it.** Pixel overhead (a spread's spacing, a
+nest's padding, a fixed pitch, a `transform.scale`) is never part of the data
+interval. It lives only in the claim. So when bars 25 px apart are lined up
+on a baseline, the data domain is the bars' data, not the bars plus 100 px of
+spacing read as if it were data.
+
+**Ascent and descent (#773).** An extent is measured from its data 0 on both
+sides, like a font's ascent and descent. In the type the two sides are the two
+ends of the interval: the ascent is `max` and the descent is `−min`. In the
+claim they are two Monotonics. A rect of value 30 has data ascent 30 and
+claims ascent `30σ`; a rect of value −20 has data descent 20 and claims
+descent `20σ` (a rect length is signed, while a text, image, or treemap size
+is a nonnegative magnitude). Most extents sit wholly above their data 0 and
+never spell the descent. Every claim is measured from data 0, whatever its
+origin state, so a side can be negative: a pinned `[30, 50]` claims ascent
+`50σ` and descent `−30σ` (its low edge lies `30σ` above its 0), and its width
+is `20σ`. An origin-less interval starts at 0, so its descent is 0. The
+claim's `width` is `ascent + descent`, computed once by the `Extent`
+constructor, and it is what a scope solves σ against. The places that read
+the two sides:
+
+- An overlay of free children (`unionChildSpaces`) is the union of their free
+  intervals, so it takes the larger data extent on each side, and its claim
+  (`unionChildExtents`) takes the larger claim on each side, which keeps the
+  σ-affine intercepts. So a `group` of signed bars keeps both sides.
+- Under `baseline` alignment, `resolveAlignmentSpace` (spread's cross axis)
+  unions the children's intervals about the shared baseline, so a signed bar
+  chart is pinned over a domain that includes its negative values. Under
   `start`, `end`, or `middle` alignment the children line up at a box edge or
   center instead, so each child counts as its whole box `[0, width]` and the
   union spans the widest.
-- `nestedSpace` pads each side of the inner extent: ascent + padding and
-  descent + padding.
+- A nest pads its claim on each side: ascent + padding and descent + padding
+  (`nestedExtent`). Its type keeps the inner's data interval.
 - `anchorAt` puts the baseline at the given coordinate:
-  `[origin − descent, origin + ascent]`.
+  `[at − descent, at + ascent]`.
 - A scope root over a free extent (the chart root, or a layer's self-scaled
-  free stash) fits `ascent + descent` to its box and seats the baseline
-  `descent·σ` above the box's low edge (`scopeRootBaseline`).
-
+  free stash) fits the claim's `ascent + descent` to its box and seats the
+  baseline at the scope's `originPx`: `descent·σ` above the box's low edge,
+  overhead below the baseline included.
 - A stack lays its parts end to end, in order, as vectors. Each part's
   baseline sits on the previous part's head, where the head is the baseline
   moved by `ascent − descent`, so a negative part goes back. The stack spans
@@ -277,7 +317,12 @@ the consumers that place things about the baseline read the pair:
   parts (30, −25, 10, −50) have running sums 0, 30, 5, 15, −35, so the stack
   spans `[−35, 30]`. Parts that cancel overlap. A diverging stacked bar (all
   positives up from 0, all negatives down from 0) is not a stack option: it is
-  spelled by grouping by sign first, so that each stack holds one sign.
+  spelled by grouping by sign first, so that each stack holds one sign. The
+  type lays out the parts' data intervals this way, and the claim lays out
+  their claims the same way (`stackClaim`), measured from the stack's 0. A
+  part's tail is where placement puts it (`tailSides`): a free part's tail is
+  its baseline, and a pinned or origin-less part, which has no data baseline
+  for placement, lies above its tail as a box.
 - The 0 of a stack is its **origin**: its first part's tail by default, as
   above. A stack whose `by` column has `HasMidpoint` (see
   [Column types](#column-types-the-chart-schema)) puts its origin at the
@@ -291,16 +336,13 @@ the consumers that place things about the baseline read the pair:
   `CONTINUOUS_TYPE.mirrored`; see `StackOrigin`): both sides of 0 hold
   amounts measured away from it, so an axis over it labels each tick with its
   distance from 0. A union stays mirrored only when every part is.
-- A spread along an axis still sums total extents (each child's
-  `ascent + descent`) as boxes above the chain's start.
+- A spread lays its parts by the same chain fold as a stack (`chainFold`),
+  with a different step: an edge chain lays each part's box after the
+  previous one's end plus the spacing, and a fixed-pitch chain lays each
+  part's anchor one pitch from the previous one's. A baseline-pitched part
+  keeps its signed sides about its baseline; any other part is a box.
 
-With every descent 0, all of this reduces to the single `width` the space
-carried before.
-
-The committed coordinate itself (the old `placement.at`) is not a separate
-payload: it is simply the `dataDomain` interval's `min`, read back with
-`continuousInterval(space)?.min`. Storing it twice was redundant — it always
-equaled `dataDomain.min` — so placement collapses to a bare lattice.
+With every descent 0, all of this reduces to a single width.
 
 `ORDINAL` carries a `measure` too (the grouping field, e.g. `"lake"`) — the
 discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
@@ -336,74 +378,127 @@ knots are the positions on the connection axis, that axis draws the run's
 parameter; the `step` curve reads this (along with `inferred.parameterAxis`
 for a parameter taken from the path tier) to hold every other coordinate.
 
-The guide a space supports keys on **`dataDomain`** (data-space), never on
-placement:
+The guide a space supports keys on the **origin state** (data-space), never
+on the claim:
 
-| `dataDomain`       | guide                        | typical `placement` | example                       |
-| ------------------ | ---------------------------- | ------------------- | ----------------------------- |
-| an `Interval`      | quantitative (absolute) axis | `determined`        | scatter x, stacked-bar y      |
-| `"delta"`          | magnitude / delta guide      | `conflict`          | streamgraph centered count    |
-| `undefined`        | none (a legend, not an axis) | `free`              | a bar's height before placing |
-| (kind `ordinal`)   | labels at laid-out keys      | —                   | bars by category, facets      |
-| (kind `undefined`) | no guide                     | —                   | an aesthetic / literal-px dim |
+| type               | guide                        | `placement`  | example                       |
+| ------------------ | ---------------------------- | ------------ | ----------------------------- |
+| `pinned`           | quantitative (absolute) axis | `determined` | scatter x, stacked-bar y      |
+| `none`             | magnitude / delta guide      | `conflict`   | streamgraph centered count    |
+| `free`             | none (a legend, not an axis) | `free`       | a bar's height before placing |
+| (kind `ordinal`)   | labels at laid-out keys      | —            | bars by category, facets      |
+| (kind `undefined`) | no guide                     | —            | an aesthetic / literal-px dim |
 
 These map directly onto the σ-affine layout solve (see
 [the one equation](#the-one-equation-and-three-roles-for-one-unknown),
-[Size resolution](#size-resolution), and the solver): `width` is the abstract
-**SIZE** (slope·σ + intercept), and `placement` is the abstract **value** of the
-baseline — its _determinacy_ (free / determined / conflict), not its pixel
-intercept. The underlying-space pass is essentially an _abstract interpretation_
-of the solve: it computes the structure (which extents are sized, which are
-positioned) bottom-up before the concrete pixels — and therefore the concrete
-baseline intercept — exist. Deriving `placement` from `dataDomain` is what lets
-alignment ask "is this child already positioned?" directly (see
-[The contract](#the-contract)) instead of reconstructing it.
+[Size resolution](#size-resolution), and the solver): the claim's `width` is
+the abstract **SIZE** (slope·σ + intercept), and `placement` is the abstract
+**value** of the baseline — its _determinacy_ (free / determined / conflict),
+not its pixel intercept. The underlying-space pass is essentially an
+_abstract interpretation_ of the solve: it computes the structure (which
+extents are sized, which are positioned) bottom-up before the concrete pixels
+— and therefore the concrete baseline intercept — exist. Reading `placement`
+off the origin state is what lets alignment ask "is this child already
+positioned?" directly (see [The contract](#the-contract)) instead of
+reconstructing it.
 
-This shape is the endpoint of issue #586's collapse. The old
-`POSITION`/`SIZE`/`DIFFERENCE` were one semantic thing — a data-driven extent —
-observed at three pipeline stages; carrying that as three kinds baked a _stage_
-distinction into the _type_. A first cut collapsed them to a single overloaded
-`origin: number | "free" | "impossible"` scalar, but that conflated the layout
-fact with the data fact (a baseline magnitude vs a data axis anchored at 0 —
-which build no posScale vs a posScale). Keeping the layout fact _derived from_
-`dataDomain` keeps them distinct while storing only one field. There is no
-scalar "anchor" builder type either — a second spelling of the same three-way
-split would just be `Placement` with a payload again. The three placement cases
-ARE the three named constructors (`POSITION` anchored, `SIZE` free,
-`DIFFERENCE` conflict), plus `anchorAt(space, min)` for re-anchoring an
-existing space at a data coordinate (the domain min, not a zero point) while
-preserving its σ-affine width. Each constructor fixes `dataDomain`, from which
-placement falls out:
-
-- a former `SIZE` (`rect({ h: "count" })`) has `dataDomain: undefined` → placement `free`;
-- a former `POSITION([a, b])` has `dataDomain: [a, b]` → placement `determined` (at `a`);
-- a former `DIFFERENCE(w)` has `dataDomain: "delta"` → placement `conflict`.
+This shape is the endpoint of issue #586's collapse and of the type/claim
+split after it. The old `POSITION`/`SIZE`/`DIFFERENCE` were one semantic thing
+— a data-driven extent — observed at three pipeline stages; carrying that as
+three kinds baked a _stage_ distinction into the _type_. A first cut collapsed
+them to a single overloaded `origin: number | "free" | "impossible"` scalar,
+but that conflated the layout fact with the data fact (a baseline magnitude vs
+a data axis anchored at 0 — which build no posScale vs a posScale). The next
+form kept one `dataDomain` field (`Interval | "delta" | undefined`) next to
+the claim in one record, so a free extent's data size existed only inside its
+claim, and every fold that pinned a free extent had to read the claim at σ = 1
+to find it, pixel overhead included. The current form gives every continuous
+type one interval about its own origin and keeps the origin state separate
+from it, so a free magnitude and a data axis pinned at 0 stay distinct
+(`free [0, 10]` vs `pinned [0, 10]`) and pinning is a shift.
 
 The pre/post-solve distinction is handled by _when_ σ is substituted, not by
-_which kind_: σ is always `width.inverse(size)`, and the extent at σ is always
-`width.run(σ)`. The one genuine state transition is **`middle`-alignment drops
-the anchor** — centering scrambles the children's baselines, so the result has
-`dataDomain: "delta"` (the streamgraph), which derives placement `conflict`. A
-`conflict` placement is absorbing: no alignment re-anchors it.
+_which kind_: σ is always the claim's `width.inverse(size)`, and the extent at
+σ is always `width.run(σ)`. The one genuine state transition is
+**`middle`-alignment drops the origin** — centering scrambles the children's
+baselines, so the result is origin-less (the streamgraph). An origin-less
+extent is absorbing: no fold gives it an origin back.
 
-`isDIFFERENCE` keys on `dataDomain === "delta"` — the same field placement
-derives from — so the two never disagree. The anchored data interval is read
-back with `continuousInterval(space)`, which is simply the `dataDomain` when it
-is an interval (used by posScale construction and axis nicing) and `undefined`
-otherwise; its `.min` is the committed baseline coordinate (the old
-`placement.at`).
+The pinned data interval is read back with `continuousInterval(space)`
+(used by posScale construction and axis nicing), which is `undefined` for a
+free or origin-less space. The folds that union extents regardless of
+pinning read `space.dataInterval` directly.
 
 These kinds map closely to Stevens's statistical data types, but not cleanly:
-an `Interval` `dataDomain` covers both interval and ratio, and `"delta"` is
+a pinned interval covers both interval and ratio, and an origin-less one is
 _weaker_ than interval — only within-instance differences are defined. `ordinal`
 isn't "a band scale"; it's a statement that the values are discrete keys whose
 spatial allocation is the responsibility of layout. `undefined` represents
 spaces with no data-driven information (the literal-pixel value is handled at
 layout time by `computeAesthetic`).
 
+### One continuous path, and the differences that remain
+
+The three origin states share one interval shape, and the code runs one path
+over it. One scope solve (`solveScope`) serves every continuous scope root:
+σ from the claim, and, when the axis has an origin, `originPx` from where the
+claim's baseline lands. One overlay fold (`overlay` in `alignment.ts`) serves
+layers, Porter-Duff operators, alignments, and coords: the union of the
+children's seated intervals. One chain fold serves every spread and stack
+target. The folds no longer ask whether a child is a magnitude or a position
+except where that question means something. These are the places it does,
+each inherent to what the origin states are:
+
+- **Who applies `originPx`**: one seating rule (`seatInScope` in
+  `solver/scopes.ts`), used by the render root, a coord, and every layer
+  (a self-scaled stash included). A pinned child shares its parent's frame,
+  so it sits at 0 and places its data through the frame's map; a free child
+  has a frame of its own whose 0 is its baseline (`{σ, 0}`, `frameOf`), so
+  its parent places that baseline at the frame's `originPx`; a child with no
+  data 0 sits at 0 and has no frame. This is the split between "a constraint
+  fixes the baseline" and "the parent sets it". A scope root's frame is its
+  solved scope (`scopeFrame`), whatever its type's origin.
+- **Seating in a fold**: a pinned child sits at its own data coordinates; a
+  free child sits there too when the fold seats children on their baselines
+  (an overlay, a baseline alignment), and is a box from the aligned edge
+  otherwise; an origin-less child is always a box, and adds nothing to a
+  pinned result's data interval (it has no data 0 to give it). A stack seats
+  each part by its tail, as placement does: a free part on its baseline, any
+  other part as a box from its start.
+- **A stack glues, a spread separates**: a stack glues its parts into ONE
+  continuous space along its direction (positions are running data totals);
+  a spread's result along its direction is a sequence of separate spaces,
+  ORDINAL by its keys (anonymous for positional keys) or UNDEFINED, whatever
+  its spacing or pitch, and each target keeps its own continuous space
+  inside. Its room is its claim: a spread of magnitudes (free targets, or
+  targets that are themselves spreads of magnitudes) shares the enclosing
+  scope's σ, so it claims the chain of their claims plus spacing, on an
+  ordinal or undefined type; a spread of pinned frames (facet panels) claims
+  nothing, and each panel roots its own scope in its slice. A marimekko is a
+  stack, so its widths still add up to one axis.
+- **Alignment establishes a baseline; it does not pin**: aligning or
+  overlaying free children gives a free result with one shared baseline
+  (`overlayOrigin`: pinned only when a child is pinned, none when a child has
+  no origin, and none for `middle`). The bars of a bar chart are one free
+  magnitude until the scope root places its baseline.
+- **Which axis renders** (`axisOver`): pinned renders an absolute axis, none
+  a delta axis, free none, until placed. The render root places a free
+  space's baseline at its `originPx` (`placeBaseline`; `GoFishNode.
+placedSpace`), so a free root renders an absolute axis, niced about its 0;
+  the axis's frame seats the free content's baseline at its data 0 (the
+  content is left unpinned and the frame's map places it).
+
+A coordinate space is a σ-scope root like any other, so it reports nothing
+upward on either axis: to its parent it is a pixel box. It keeps its own type
+for its own scope, solves that scope in `layout`, and draws its own axes and
+their titles in `lower` (see
+[Flattening the Scenegraph](/internals/layout/coord-flattening)). An UNDEFINED
+child carries no opinion in every fold, alignments included.
+
 ## The contract
 
-Each node implements `_resolveUnderlyingSpace`:
+Each node implements two hooks, one per half. The type hook,
+`_resolveUnderlyingSpace`:
 
 ```ts
 type ResolveUnderlyingSpace = (
@@ -414,9 +509,47 @@ type ResolveUnderlyingSpace = (
 ) => FancySize<UnderlyingSpace>;
 ```
 
-Returns the node's own `[xSpace, ySpace]`, computed bottom-up from the
-already-resolved child spaces. The traversal is memoized at `_node.ts`'s
-`resolveUnderlyingSpace()`.
+returns the node's own `[xSpace, ySpace]`, computed bottom-up from the
+already-resolved child types. The claim hook, `_resolveExtent`:
+
+```ts
+type ResolveExtent = (
+  childExtents: Size<Extent | undefined>[], // one [x, y] claim pair per child
+  childSpaces: Size<UnderlyingSpace>[], // the children's resolved types
+  spaces: Size<UnderlyingSpace>, // this node's own resolved types
+  childNodes: GoFishAST[],
+  constraints: ConstraintSpec[]
+) => Size<Extent | undefined>;
+```
+
+returns the node's own claim pair, computed bottom-up from the children's
+claims, with every type already resolved. Both traversals are memoized on the
+node (`resolveUnderlyingSpace()` and `resolveExtent()`), and
+`clearUnderlyingSpace()` drops both.
+
+**Why two walks, and why this direction.** A type never depends on a claim:
+the data interval a stack or an overlay covers is a sum or union of its
+children's data intervals, not of their pixel sizes. A claim does depend on
+types: a pinned overlay's claim is the width of the union of its children's
+spans, and where a pinned child sits in that union is a type fact. So the
+claim walk runs second and reads the types, and the type walk never sees a
+claim. The direction is enforced, not just followed. `UnderlyingSpace` holds
+no Monotonic and `underlyingSpace.ts` does not import `extent.ts`, the type
+hook's arguments carry no claim, and `resolveExtent()` throws if it is called
+while a type hook is running. One walk returning a pair would have let a type
+fold reach into the claim half next to it, which is exactly the coupling the
+split removes.
+
+**Most nodes write only the type hook.** The claim hook is optional. A node
+without one claims what its types imply (`impliedExtents`): each side of a
+continuous axis is its data extent times σ, with no pixel overhead. That is
+every leaf mark. The nodes that write a claim hook are the ones whose claim
+is more than their data: the ones that add pixels (a spread's spacing or
+pitch, a nest's padding, a `transform.scale`), the ones that compose their
+children's claims (an overlay, an alignment, a stack), and the pass-throughs
+that keep their child's claim as it is (`offset`, the `position` operator,
+a `ref`). Every continuous axis has exactly one claim, and no other axis
+has one; `resolveExtent()` checks this.
 
 The `constraints` argument lets constraints participate in space resolution —
 each positioning-constraint kind carries a **space fold**, a typing rule that
@@ -429,21 +562,28 @@ composes its targets' spaces into the layer's claim on that axis:
   discrete scatter slots, which resolve directly from the already-known layer
   size.) That domain is what the layer later turns into a data→pixel scale to
   resolve those constraints.
-- `Constraint.distribute` contributes the stack fold (`distributeSpaceFold`,
-  `constraints/distribute.ts`): data-driven continuous targets compose to
-  `SIZE(Monotonic.add(...) + spacing·(n−1))` (a `free` magnitude); with
-  `glue: true` (stack semantics) the extents are laid end to end and committed
-  to an anchored `POSITION` over the range of their running sums (`[0, Σ]`
-  when no part has a descent); constant-sized keyed targets fall back to
-  ORDINAL.
-  (A former POSITION's pixel extent at σ=1 is `width.run(1) = b−a`, so the
-  unified `width`-based sum subsumes the old separate POSITION-sum branch.)
+- `Constraint.distribute` contributes the stack fold, as a type fold
+  (`distributeSpaceFold`, `constraints/distribute.ts`) and a claim fold
+  (`distributeExtentFold`). The chain moves every target to its place, so it
+  reads each one, pinned or free, as a box. A spread separates: its type is
+  ORDINAL of its keys, or UNDEFINED, and a spread of magnitudes claims the
+  chain of the targets' claims with the spacing added (`chainFold`; for an
+  edge chain, the sum of the widths plus `spacing·(n−1)`) for the enclosing
+  scope to solve σ against (see
+  [the differences that remain](#one-continuous-path-and-the-differences-that-remain)).
+  With `glue: true` (stack semantics) the extents are laid end to end and
+  pinned over the range of their running sums (`[0, Σ]` when no part has a
+  descent), in data for the type and in claims for the claim, by the same
+  chain fold (`chainFold`).
+  A target with no origin (a difference or a non-continuous axis) leaves only
+  the ORDINAL of the keys, if any.
 - `Constraint.align` contributes the alignment fold (`resolveAlignmentSpace`)
   on its axis — but only for a point-anchor value;
   `"span"`/`"size"` (#726, below) contribute nothing to the space fold, since
   their target is UNDEFINED on that axis by construction.
-- `Constraint.nest` contributes the nesting fold (`nestedSpace`,
-  `constraints/nest.ts`) and a deterministic dependency plan
+- `Constraint.nest` contributes the nesting fold (`nestedSpace` for the type,
+  `nestedExtent` for the claim, `constraints/nest.ts`) and a deterministic
+  dependency plan
   (`constraints/nestPlan.ts`). It is the first _size-setting_ constraint: on
   each constrained axis `outer = inner + 2·padding`, with padding always known,
   so the unknown is _which_ side is derived. The nest plan dispatches on which
@@ -452,18 +592,20 @@ composes its targets' spaces into the layer's claim on that axis:
   outer not →
   **inside-out** (`outer = inner + 2·padding`); outer sized, or neither (the
   layer sizes outer) → **outside-in** (`inner = outer − 2·padding` — CSS
-  padding). Only the **inside-out** direction folds a space here: outer's request
-  is a `Monotonic.adds` of inner's, which stays monotone (hence invertible), so a
-  nested pair participates in auto-fit exactly like a stack — a parent
-  spread/layer solving a scale factor sees outer as inner shifted up by the
-  constant padding. The layer derives these outer spaces in dependency order
+  padding). Only the **inside-out** direction folds here: outer's type is
+  inner's type, whatever its origin (padding is pixels, so it is no part of
+  the type), and outer's claim is inner's padded on both sides of its
+  baseline, a `Monotonic.adds`, which stays monotone
+  (hence invertible), so a nested pair participates in auto-fit exactly like a
+  stack — a parent spread/layer solving a scale factor sees outer as inner
+  shifted up by the constant padding. The layer derives these outer spaces in dependency order
   (source before derived) so chained nests compose (A⊇B⊇C: C's request feeds
   B's, B's feeds A's), then feeds them into the union below. The **outside-in**
   direction derives _nothing_ at space-resolution time — outer's own claim (or
   fill/undefined) flows through the union normally, and `inner = outer −
 2·padding` is handled purely as a layout-time pixel proposal. (Likewise when an
-  inside-out inner is not SIZE — fixed-pixel or position-pinned content — there
-  is no rule to fold; the proposal `inner.dims + 2·padding` sizes outer.) At most
+  inside-out inner is not continuous — fixed-pixel content — there is no rule
+  to fold; the proposal `inner.dims + 2·padding` sizes outer.) At most
   one nest may derive a given (node, axis), and a nest that resolves
   inside-out on one axis and outside-in on the other is rejected as mixed — the
   layer enforces both at constraint-collection time (see [[size-claims]]).
@@ -479,7 +621,7 @@ composes its targets' spaces into the layer's claim on that axis:
   edges ⇒ a size), and a third, dependent write is a structured
   over-determination report rather than a silent last-writer-wins. An interval's
   datum endpoints feed the axis's POSITION domain via `collectPositionDomains`
-  (like a point coordinate does), and `composeConstraintSpaces` treats an
+  (like a point coordinate does), and `planConstraintComposition` treats an
   interval position as an **extent-establisher** (like a distribute), so the
   cross-axis `align` fold still runs — a histogram is an interval position on x
   plus an `align` on y, and it is that align fold (SIZE→POSITION) that makes the
@@ -525,10 +667,16 @@ fold is authoritative and overrides the layer's default `unionChildSpaces` —
 cross-axis children: the alignment fold is UNDEFINED (no anchored axis), and if
 the default union were allowed to win it would resurrect an ORDINAL space and a
 spurious axis (a waffle's chunked-row index leaking a row "axis"). The
-covered-axis fold — UNDEFINED included — is what `composeConstraintSpaces`
-reports (`constraints/compose.ts`). At layout time the layer then **solves the
-budget**:
-a fold-produced SIZE claim is inverted against the layer's allotted size to
+composition is planned once from the constraints and the child nodes alone
+(`planConstraintComposition`, `constraints/compose.ts`): which children each
+distribute and align covers, on which axis. The type fold
+(`composePlanSpaces`) and the claim fold (`composePlanExtents`) then evaluate
+the same plan, so the two halves cannot disagree about which fold covers
+which child. The covered-axis type fold — UNDEFINED included — is what
+`composePlanSpaces` reports, along with the fold operands of each axis, and
+`composePlanExtents` reads those operands back (it does not fold the types
+again) and reports their claim and the layout budget. At layout time the layer then **solves the budget**:
+a fold-produced claim (of any origin) is inverted against the layer's allotted size to
 derive a local scale factor, and distribute-covered fill children are
 proposed slices from the shared proposal plan (`buildDistributeSliceMap`,
 `constraints/proposalPlan.ts`, using `sliceExtent` from
@@ -559,31 +707,43 @@ its end and its head its start, so the next part starts where it ends.
 `"middle"` is the
 old `mode: "center"` under its new name; `"start"`/`"end"`/`"baseline"` are new
 fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
-(`constraints/shared.ts`'s `AlignAnchor`). The space fold
-(`distributeSpaceFold`'s `composeSize`) is `(n−1)·spacing` of chain plus an
-amplitude ALLOWANCE attributed to the side of the chain where children's
-content actually extends relative to the chained anchor (the painted side —
-fixed-pitch rows mirror about their anchor at paint, below):
+(`constraints/shared.ts`'s `AlignAnchor`). The claim is the one chain fold
+(`chainFold` in `distribute.ts`) that also lays out a stack: each part sits
+about its chain point by a seat, the next chain point is one step on, and the
+claim is the highest reach above the chain's start plus the lowest reach
+below it, over every part. Only the seat and the step differ. A pitched
+chain's anchors step down the axis one pitch at a time, as its rows read
+(the rows mirror about their anchors at paint, below), and each part sits
+about its anchor:
 
-- `"middle"`: half above, half below every anchor — the exact symmetric
-  `h_first/2 + (n−1)·s + h_last/2` (the original center-mode form, unchanged).
-- `"baseline"` / `"start"`: content rises entirely ABOVE each anchor, so the
-  allowance sits above the chain head: `max_k(h_k − k·s)⁺ + (n−1)·s` (k in
-  chain order — the binding row is whichever peak clears the rows chained
-  above it; for a ridgeline that's usually the first row).
-- `"end"`: the mirror image — allowance below the chain tail:
-  `max_k(h_k − (n−1−k)·s)⁺ + (n−1)·s`.
+- `"middle"`: half its width above the anchor, half below.
+- `"baseline"`: its own signed sides, ascent above and descent below.
+- `"start"`: its whole width above the anchor.
+- `"end"`: its whole width below the anchor.
 
-The per-k max assumes each child's extent lies wholly on one side of its
-anchor (true for SIZE claims — baseline magnitudes) and that the fold's child
-order is the chain order (compose.ts passes placement order).
+So with one-sided parts the claim is `(n−1)·s` plus the tallest reach past
+the chain's end rows: `max_k(h_k − k·s)⁺ + (n−1)·s` for `"start"` (k in
+chain order, the binding row being whichever peak clears the rows chained
+above it; for a ridgeline that's usually the first row). A `"middle"` row
+taller than both end rows binds too, and a `"baseline"` row's descent counts
+below its anchor. The fold runs in Monotonics, so an all-linear chain's
+claim is an exact envelope that a scope inverts exactly (before, a pitched
+chain's claim was a closure, solved by a numeric search that could overshoot
+its box by a fraction of a pixel). The fold's child order is the chain order
+(compose.ts passes placement order).
 
-A fixed-pitch chain also has a PAINT-side handshake. The chain is an overlay,
-not a tiling — its targets' allocated slices are just the leftover budget — so
-if a chained target later opens its own y-up flip scope, mirroring about the
-allocated band would displace every painted anchor away from where the solver
-chained it. `lowerDistributePlacement` therefore stamps the chained anchor on
-each y-chained target (`Placeable.pitchAnchorY`), and the bake's scope-band
+The type fold has no data part of the chain: a spread separates, so its type
+is ordinal (or undefined) whatever its pitch, and the chain lives only in the
+claim.
+
+A spread chain on y also has a PAINT-side handshake. The chain places its
+targets itself — their allocated slices are just slices of the spread's
+height — so if a chained target later opens its own y-up flip scope (a
+spread separates, so its targets can), mirroring about the allocated band
+would displace it from where the solver chained it. `lowerDistributePlacement`
+therefore stamps the anchor the chain fixed on each y-chained target
+(`Placeable.pitchAnchorY`: the pitch anchor of a fixed-pitch chain, and
+`"middle"` for an edge chain, which fixes the whole box), and the bake's scope-band
 decision (`scopeBox` in `coordinateTransforms/bake.ts`) mirrors such a scope
 about that anchor pointwise (`y ↦ 2·anchor − y`), keeping the painted anchors
 exactly at the solved pitch — see
@@ -604,10 +764,15 @@ y-up scope, the fixed-pitch-under-ordinal-spread case; inside a whole-plot
 flip the rows would inherit that scope and the plain layout band would be the
 honest one.
 
-`resolveLayerBaseSpaces` is the default bottom-up axis resolver before composed
-constraint overrides: union child spaces, apply `transform.scale` to free
-magnitudes, and merge datum-valued position/span domains with constraint
-measures taking precedence.
+`resolveLayerBaseSpaces` is the default bottom-up type resolver before composed
+constraint overrides: union child spaces, and overlay datum-valued
+position/span domains on that union as a pinned space (a free union seated at
+data 0, where the layer places its free children), with constraint measures
+taking precedence. It returns the children's union beside the result. Its
+claim half, `resolveLayerAxisExtent`, takes both and overlays the claims the
+same way and applies the layer's `transform.scale` to the result,
+whatever its origin. A `transform.scale` is a pixel-space operation, like
+translate, so it scales the claim and never the data interval.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
 the cell's own track extent (grid), else distribute slice for that named child,
 else the full layer box.
@@ -619,8 +784,10 @@ Nest sizing is split into a dependency plan and concrete layout arithmetic:
 `buildNestPlan` decides, per constrained pair, whether the source size flows
 inside-out (`outer = inner + 2·padding`) or outside-in
 (`inner = outer − 2·padding`) and orders children so the source has been laid
-out first. The bottom-up space pass applies only the inside-out portion via
-`applyNestSpacePlan`; once the source has concrete dimensions,
+out first. The bottom-up walks apply only the inside-out portion, the type
+walk via `applyNestSpacePlan` and the claim walk via `applyNestExtentPlan`,
+which reads the types the first one produced;
+once the source has concrete dimensions,
 `applyNestLayoutProposal` does the corresponding layout-time arithmetic on the
 derived axes.
 Grid is a **track equation** under the same unified sizing rule, not a separate
@@ -761,11 +928,9 @@ relations between child anchors and never pins. Where a floating component
 lands is the solver's fallback, and its first rule is the **free-child
 origin** (#773). A free child (a baseline magnitude, such as a rect with a data
 `h`) has a baseline that stands for the measure's origin, the value a signed
-`h`/`w` grows from. When the owning layer is anchored on the axis (its own
-space, or the stash it self-scales, is a POSITION), its local frame is the
-frame of the data→pixel map it holds, and that origin has a pixel:
-`pxOf(map, measureOrigin(measure))`. The layer computes this per axis
-(`freeOrigin`). It places unconstrained free children there itself (phase-1
+`h`/`w` grows from. That origin is data 0 of the owning layer's frame, and
+its pixel is the frame's `originPx`, by the one seating rule (`seatInScope`).
+The layer computes this per axis (`freeOrigin`). It places unconstrained free children there itself (phase-1
 placement, and `placeUnplacedChild` for a child the solve left unplaced on an
 axis), and hands it to the solve as one input: in `solveAxisProblem`, a
 component with no pin whose free nodes share one baseline is offset so that
@@ -795,16 +960,17 @@ the difference graph gives a component that holds one no baseline at all, so
 a free node aligned to one of its members does not seat it either. So a bar
 with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
 the rounded −40. A free
-layer is itself seated by its parent at its own baseline, so its free-child
-origin is local 0: applying the map again would count the offset twice, and
-letting the component float would let min-normalization lift a descent off the
-baseline. A layer's self-scaled free stash roots its own σ-scope, so its origin
-is `descent·σ`, the same rule as the chart root. A layer with no continuous
-space on the axis has no origin, and its components float. Anchored children
-share the layer's frame and stay at 0, as the next paragraph explains.
-`measureOrigin` (`domain.ts`) returns 0 for every measure for now; the origin is
-the additive identity of the measure's algebraic structure, and measures do not
-carry that structure yet.
+layer is itself seated by its parent at its own baseline, so its frame has
+that baseline at local 0 (`frameOf`), and so does its free-child origin:
+applying the map again would count the offset twice, and letting the component
+float would let min-normalization lift a descent off the baseline. A layer's
+self-scaled stash roots its own σ-scope, so its frame is that scope's, with its
+origin at the scope's `originPx` (`descent·σ`), the same rule as the chart
+root. A layer with no data 0 on the axis has no frame, and its components
+float. Anchored children share the layer's frame and stay at 0, as the next
+paragraph explains. Data 0 stands for the additive identity of the measure's
+algebraic structure, and measures do not carry that structure yet (a TODO on
+`seatInScope`).
 
 Otherwise, if no explicit `position` (point or interval), self-placement, or
 other strong pin fixes a connected component and it has no shared free
@@ -818,7 +984,7 @@ scatter panel over `[1955, 2010]`, anchored to the shared y data scale, should
 not be pulled to `posScale(0)` (data-zero, far below 1955). So `align` leaves it
 alone: **a target anchored to a data (POSITION) scope on a posScale axis, with a
 non-`middle` anchor, is not moved** — `align` shares the frame (it still unions
-the children's `dataDomain`) but supplies no baseline. Its baseline is already
+the children's data intervals) but supplies no baseline. Its baseline is already
 `posScale(0)` of the shared scope, so all such panels co-locate by construction.
 
 **The guard asks the solver, not the space pass (Stage 6f).** This is the
@@ -826,14 +992,15 @@ blindingly-obvious final form the whole design arc was reaching for. The questio
 "is this target already positioned?" is answered by the placement solve's own
 authority record — the `PlacementOwnershipPlan` — through one predicate,
 `isDataPositioned(axis, name)`. The fact it reads (which children are anchored to
-a POSITION scope on each axis) is a pure **data/scope** fact — a child's
-`dataDomain` is present on that axis — collected _once_ at the layer boundary and
+a POSITION scope on each axis) is a pure **data/scope** fact — a child's type
+on that axis has a data position (it is pinned or origin-less, anything but
+free) — collected _once_ at the layer boundary and
 handed to the solve as an explicit ownership input. The constraint path no longer
 reconstructs the space pass's `free`/`determined`/`conflict` lattice by calling a
 `placementOn` method on the target mid-lowering; there is no layout fact derived
-from the space pass in the guards anymore. (`spacePlacement` still computes that
-lattice for the space folds themselves — the `union`/`middle`/anchored decisions —
-which is where a determinacy read belongs.)
+from the space pass in the guards anymore. (The space folds themselves still read
+the origin state — the `union`/`middle`/anchored decisions — which is where a
+determinacy read belongs.)
 
 When alignment does write an anchor relation, it asks
 `Placeable.localAnchor(axis, anchor)` for the anchor's coordinate in the
@@ -857,15 +1024,16 @@ Three patterns cover most operators:
 
 **Leaf shapes** (`rect`, `ellipse`, `petal`, `text`, `image`) decide the
 kind from their props. A rect with data-bound `h` emits
-`baselineSpan(value)` on y (a `free` magnitude: the value's positive part as
-ascent, its negative part as descent); the same
-rect with literal `y` and `y2` emits `POSITION([y, y2])`. Constants (no
+`CONTINUOUS(interval(0, value), "free")` on y (the value's positive part as
+ascent, its negative part as descent); the same rect with literal `y` and `y2`
+emits `CONTINUOUS(interval(y, y2), "pinned")`. Constants (no
 data-bound dim) emit `UNDEFINED` — the literal pixel value is handled at
 layout time by `computeAesthetic`, not via the underlying-space tree. (The
 old anomaly where a literal-pixel `min` plus a data size made `DIFFERENCE`
 while an absent `min` made `SIZE` is gone: both are `CONTINUOUS`, differing
-only in their `placement`/`dataDomain` — an off-scale pixel min is a
-difference, an absent min is a `free` magnitude.)
+only in their origin state — an off-scale pixel min is a difference, an
+absent min is a `free` magnitude.) A leaf writes no claim hook: its claim is
+the one its type implies.
 
 **Compositional operators** (`spread`, `stack`, `layer`, `enclose`)
 combine children's spaces. `spread({ glue: false })` keeps the magnitude
@@ -877,18 +1045,22 @@ magnitudes to an anchored axis. Since the operator/constraint
 unification, these folds have one home: spread's resolver _is_
 `distributeSpaceFold` on the stack axis and `resolveAlignmentSpace` on the
 cross axis — the same functions the constraint path uses (see
-[The contract](#the-contract)). `layer` and overlay-style operators use
-`unionChildSpaces` (`alignment.ts`), which keeps the symbolic Monotonics
-(the per-side max of ascents and of descents) when every child is a baseline
-magnitude (`placement: free`) and otherwise
-unions data intervals. UNDEFINED children carry no opinion and are ignored
-throughout, so a fixed-pixel (UNDEFINED) sibling never vetoes the
-magnitude-preserving path (it would otherwise degrade the union to an
-unanchored extent).
+[The contract](#the-contract)), each with its claim half
+(`distributeExtentFold`, `resolveAlignmentExtent`). `layer` and overlay-style
+operators use `unionChildSpaces` (`alignment.ts`). All of them are the one
+overlay fold: the union of the children's seated intervals (each on its
+baseline for an overlay), with the result's origin pinned when any child is,
+free when every child is, and none otherwise; its claim half,
+`unionChildExtents`, overlays the claims the same way, keeping the symbolic
+Monotonics (the per-side max of the ascent and descent claims) for a free
+result. UNDEFINED children carry no opinion and are ignored throughout, so a
+fixed-pixel (UNDEFINED) sibling never vetoes the magnitude-preserving path.
 
-**Coordinate-transform operators** (`coord`) annotate the resulting
-space with the transform that will later map underlying positions to
-display positions, but otherwise pass the kind through.
+**Coordinate-transform operators** (`coord`) fold their children with the
+same overlay fold (a category axis wins, a declared window pins), annotate the
+result with the transform that will later map underlying positions to display
+positions, and keep it for their own σ-scope; see
+[Flattening the Scenegraph](/internals/layout/coord-flattening).
 
 ## Worked example: stacked bar chart
 
@@ -899,23 +1071,25 @@ chart(seafood)
 ```
 
 Each `rect` starts with a data-driven height and no data-driven y
-position: `[UNDEFINED, SIZE(Monotonic.linear(count, 0))]` — a magnitude
-anchored at origin 0.
+position: its type is `[UNDEFINED, free [0, count]]`, and its claim on y is the implied `count·σ`.
 
 The vertical `stack` (which is `spread({ glue: true, dir: "y" })`) glues
 each lake's species rects together. Its stack-direction children are all
-continuous magnitudes, so it sums their widths at scale 1 and emits
-`POSITION([0, total_lake_sum])` on y. The alignment direction (x) of the
-stack is UNDEFINED because each rect's x is UNDEFINED.
+free magnitudes, so it lays their data intervals end to end and pins the
+result: `pinned [0, total_lake_sum]` on y, claiming the parts' claims end
+to end (`total_lake_sum·σ`). The alignment direction (x) of the stack is
+UNDEFINED because each rect's x is UNDEFINED.
 
 The horizontal `spread` separates lakes. Its children are now stacks
-with `[UNDEFINED on x, POSITION([0, total]) on y]`. Stack direction (x):
+with `[UNDEFINED on x, pinned [0, total] on y]`. Stack direction (x):
 no children are continuous, but they're named (the "by" key produces lake
 keys) → `ORDINAL(["Lake A", ..., "Lake F"])`. Alignment direction (y):
-all children are anchored continuous → `POSITION(unionAll([0, total_i]))`
-= `POSITION([0, max_total])`.
+the children are pinned → `pinned unionAll([0, total_i])`
+= `pinned [0, max_total]`. (Lining up unstacked bars instead gives a free
+`[0, max]`: alignment shares a baseline, it does not pin. The render root then
+places that baseline and renders the same absolute axis.)
 
-So the root underlying space is `[ORDINAL(lakes), POSITION([0, max_total])]`.
+So the root underlying space is `[ORDINAL(lakes), pinned [0, max_total]]`.
 The y-axis renders quantitative ticks (POSITION); the x-axis renders
 ordinal labels at laid-out positions (ORDINAL); both follow from the
 tree, with no special "bar chart" rule.
@@ -973,27 +1147,55 @@ size).
 
 ## Layout dispatch
 
-After `resolveUnderlyingSpace`, layout proceeds on a single principle:
-**a continuous extent's scale factor is `width.inverse(size)`, and an
-anchored one _also_ builds a position scale**. Before the [#586
+After both walks, layout proceeds on a single principle:
+**a continuous extent's scale factor is its claim's `width.inverse(size)`, and
+a pinned one _also_ builds a position scale** from its type. Before the [#586
 collapse](#the-three-space-kinds) this was a three-way switch on the kind
 (`SIZE` inverted a Monotonic, `POSITION` divided by an interval width,
-`DIFFERENCE` divided by a width); a former POSITION/DIFFERENCE width is
-just `linear(extent, 0)`, so `width.inverse(size) = size / extent`
-reproduces both divisions, and the switch folds away:
+`DIFFERENCE` divided by a width); a pinned or origin-less claim with no pixel
+overhead is just `linear(dataWidth, 0)`, so `width.inverse(size) = size /
+dataWidth` reproduces both divisions, and the switch folds away:
 
 ```
 gofish.tsx (root):
-  if root[axis] is a free magnitude            → sigma = width.inverse(canvas)
-  if root[axis].dataDomain is an interval       → map = an AxisMap over it
+  if root[axis] is a free magnitude     → sigma = claim[axis].width.inverse(canvas)
+  if root[axis] is pinned               → map = an AxisMap over its data interval
   pass one `AxisScale` = { sigma?, map? } downward per axis — a child reads
   `sigma` for size, `map` for data position (they're mutually exclusive at root)
 
 layer.layout, on an axis the node scopes (node.shared[axis] — set by
-`spread`/`stack`'s `sharedScale`; default [false, false] is a no-op):
-    if myUSpace[axis].kind === "continuous" → space.width.inverse(size[axis])
-    else → undefined (ORDINAL/UNDEFINED don't need a continuous scale factor)
+`spread`/`stack`'s `sharedScale` and on every chart's content; default
+[false, false] is a no-op), when it roots the scope (no inherited σ, or a
+self-scaled stash — a chart nested in another chart's mark inherits):
+    if claim[axis] exists → claim[axis].width.inverse(size[axis])
+    else → undefined (no σ-dependent room, e.g. an ordinal of fixed boxes)
 ```
+
+**Every scope solves σ from its claim, and `originPx` from its baseline.** A
+scope root, pinned or free, solves `claim.width(σ) = box` (`ScopeRegistry.
+solveScope`). Pixel overhead in the claim (a spread's spacing, a nest's
+padding) takes its pixels, and the data part gets the rest. When the axis has
+an origin, the scope then fixes `originPx`: every claim is measured from data
+0, so data 0 sits `claim.descent(σ)` above the box's low edge, and `originPx =
+claim.descent(σ)`. For a pinned claim with no overhead that is `−σ·min`, the
+domain filling the box as it always has. An origin-less scope solves σ and has
+no `originPx`. For this to hold, a pinned child's claim must reach its
+parent's union intact: `unionChildExtents` places a child at its own data
+coordinates, reaching its own ascent above data 0 and its own descent below
+it, the same layout the scope gives it. The `position` operator, which moves
+its content's data by a datum offset `v`, moves its claim with it (`v·σ` goes
+from the descent to the ascent). The `Position: outset-left` labels
+story is the case that needs it: its rows are bars 25 px apart, pinned by a
+baseline alignment, so the root's claim is `137σ + 100` and σ leaves exactly
+100 px for the spacing.
+
+Nicing widens only the data part of a claim: the niced claim is the claim
+plus `σ·(nicedWidth − dataWidth)`, both widths in data units from the type
+(`niceScope`). The widths are lengths, so this holds for a signed domain and
+for a delta axis alike. The overhead keeps its pixels. Where the widening
+goes follows the axis: an absolute axis's claim is measured from data 0, so
+each side widens by its own niced end, while a delta axis centers its content
+in the niced width, so half goes on each side.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
@@ -1031,8 +1233,9 @@ propagate the inherited σ, not re-root against its own budget" rule).
 
 Stage 6b makes those a **single mechanism**. A `ScopeRegistry`
 (`ast/solver/scopes.ts`), created once per render on the `RenderSession`, is the
-one place σ / posScale is derived: `solveSize(frame, allocated)` inverts the σ
-slope, `solvePosition(space, allocated)` builds the anchored `AxisMap`. The
+one place σ / posScale is derived: `solveScope(space, claim, allocated)`
+solves a scope root's σ and its `originPx`, and `solveSize(frame, allocated)`
+inverts a bare claim (a grid's tracks). The
 derivation sites are now **σ-scope roots** — the render root, an axis with an
 explicit pixel size, a constraint budget that roots its own scope, a
 `sharedScale` operator, and a coord boundary — and each calls the registry.
@@ -1043,6 +1246,13 @@ explicit pixel size, a constraint budget that roots its own scope, a
 undefined` test that _was_ the guard is now the "is this a scope root?"
 predicate). Because the arithmetic is exactly what the sites ran inline, the
 solved numbers are unchanged; the registry only adds the choke-point.
+
+Within one layer the three roots are one decision per axis, solved once: an
+explicit size roots a scope over the stashed type and claim; otherwise, when no
+ancestor owns σ, a composed constraint budget or a `sharedScale` node roots one
+over the layer's own type and claim. Each is niced at the solve on demand, so
+a budget never re-solves a stash's σ from the raw claim (that split put bar
+tops off their ticks, the #659 symptom).
 
 Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
 printable frame equation — the debuggability bar the σ-affine model was chosen
@@ -1063,8 +1273,8 @@ frame equation is solved once and the posScale is a derived view of that solve.
 Stage 6c makes the registry the _sole_ producer of every slope, so that "by
 construction" holds everywhere the carrier flows. Two former exceptions closed:
 a coord boundary's POSITION axis used to hand down a fabricated `σ = 1` alongside
-its map (a scope-less slope that no consumer read) — it now carries no size σ at
-all, since a POSITION-only axis has no SIZE scope; and the #582 equal-measure
+its map (a scope-less slope that no consumer read) — it now hands down the one
+σ its scope solves, which its map shares; and the #582 equal-measure
 recentering (equating x and y when they share a unit of measure) used to rewrite
 the root's σ inline in `gofish.tsx`, off the registry's books. It is now a named
 `recenterEqualMeasure` operation _on_ the registry, so the dump records the FINAL
@@ -1093,13 +1303,18 @@ position map, axis ticks) reads the same rounded domain. `niceContinuous`
 (`underlyingSpace.ts`) is the one nicing function; the non-coord scope roots
 apply it at their solve sites — the render root (`gofish.tsx`), the self-scaled
 stash and the shared-scale step (`buildChildScalePlan`), and the layer-local
-datum-position scale (`buildPositionScalePlan`). It touches only anchored
-POSITION domains — never SIZE magnitudes, never deltas — and a **coord scope
-never nices** (its domains map into a fixed coordinate range; rounding them
-would break the mapping).
+datum-position scale (`buildPositionScalePlan`). It nices exactly the spaces
+that render an axis over their interval (`axisOver`), or will once placed: a
+pinned domain's two ends, a free one's two ends about its 0 (the absolute
+axis of the scope that places its baseline; each side of the claim widens by
+its own end), and a delta axis's width from 0, so a delta axis steps evenly
+(ticks 20, 40, …, 160 rather than 20, 40, …, 140 and a last step of 7). A
+**coord scope never
+nices** (its domains map into a fixed coordinate range; rounding them would
+break the mapping).
 
-And it is **demand-driven**: a scope nices its POSITION domain **iff at least
-one node in the scope renders an axis on that dim**. Nicing is a presentation
+And it is **demand-driven**: a scope nices its domain **iff at least one node
+in the scope renders an axis on that dim**. Nicing is a presentation
 adjustment whose demand comes from axis views — with no axis there is no tick
 grid to round for, so axis-less content stays at the honest raw scale; with an
 axis, content and ticks share the one niced domain, which is the contract.
@@ -1119,9 +1334,9 @@ a region shares it, and the region is scanned once per render however many
 scopes ask. A layer asks only when it roots a scope the answer changes (most
 layers, e.g. one per keyframe mark under a `time.sequence`, root none), so the
 solve takes the demand as a per-axis read, `axisDemand(dim)`.
-Tick elaboration nices node-locally with the same
-`d3.nice`, applied to the axis-owning node's domain — the same union domain
-that bubbled to the scope root — so elaboration and the solve cannot disagree.
+Tick elaboration nices node-locally with the same `niceContinuous`, applied to
+the axis-owning node's space — the same union that bubbled to the scope root —
+so elaboration and the solve cannot disagree.
 
 The facet corollaries fall out of the one rule: shared-scale facets all render
 the parent scope's identical niced axis, and free-scale facets are their own
@@ -1145,7 +1360,7 @@ container box) so the pieces sum to the whole.
 This is precisely SIZE resolution. A row of `datum(n)`-sized children under a
 shared size scale composes into a Monotonic whose inverse against the
 available extent solves for the scale factor that makes the siblings fill it
-(see [Layout dispatch](#layout-dispatch)). `space.width.inverse(size)` is
+(see [Layout dispatch](#layout-dispatch)). `claim.width.inverse(size)` is
 the normalization step; the `datum(n)` weights are the flex factors. The
 `cut` operator's relative form, `cut(source, { size: [datum(1), datum(2)] })`,
 slices a region in a 1:2 ratio by normalizing those weights over the source's
@@ -1200,13 +1415,21 @@ The rule lives in `layer`'s resolver and layout
 (`graphicalOperators/layer.tsx`), in two halves, and it branches on whether
 the explicit size is a **literal** or a **data value**:
 
-- **`resolveUnderlyingSpace`.**
+- **`resolveUnderlyingSpace` and `resolveExtent`.** Both hooks follow the
+  same steps (the type hook keeps the layer's composed types from
+  `composeLayerTypes`, and the claim hook reads them, since a node resolves
+  its types before its claim and the two memos are cleared together), and
+  each stashes its own half.
   - **Literal pixel size** (`w: 80`). After resolving each axis normally, for
-    any dim that has an explicit pixel size and whose resolved space **has a
-    baseline** (`hasBaseline` — `placement` is `free` or `determined`, i.e. not
-    a difference), the real space is **stashed** verbatim and `UNDEFINED` is
-    reported upward. ORDINAL and difference (`placement: conflict`) extents
-    are left untouched.
+    any dim that has an explicit pixel size and whose resolved space is
+    continuous (any origin), the real type is **stashed** verbatim and
+    `UNDEFINED` is reported upward; the claim hook stashes the matching claim
+    and reports none. The stash keys on the claim, not on the type's kind:
+    a spread of magnitudes has an ORDINAL (or UNDEFINED) type, which is
+    still reported upward so its keys label the parent's axis, but its room
+    depends on σ, so the layer stashes its type and claim, roots its own
+    scope, and reports no claim. An ordinal axis with no claim has no scale
+    to absorb, so it is left untouched.
   - **Data-valued size** (`w: "count"`, `w: field("count").normalize()`, an
     entry-flagged `size` array). This is the "DATA-DRIVEN operator extent"
     case (#4/#20 — nested mosaic): the layer's own `w`/`h` becomes a `SIZE`
@@ -1214,10 +1437,12 @@ the explicit size is a **literal** or a **data value**:
     layer's pixel extent — the layer is a leaf in its ancestor's scope,
     exactly like a leaf `rect({ w: "count" })`. But that leaves the layer's
     own _composed content_ (its children's real space) needing somewhere to
-    go: if the composed space `hasBaseline`, it is stashed (in baseline-
-    **magnitude** form, `SIZE(width, measure)`, not the anchored POSITION a
-    fold might have returned) before being overridden by the new data-valued
-    `SIZE` claim. This is what makes "data-valued size ⇒ self-scaling
+    go: if the composed space is continuous, it is stashed as it is,
+    together with the composed claim, before being overridden by the new
+    data-valued claim. (It used to be converted to a free magnitude first, so
+    that its descendants would get a σ and not only a map; a pinned stash now
+    solves both, so the conversion, which dropped the content's position, is
+    gone.) This is what makes "data-valued size ⇒ self-scaling
     region" the **general** rule (fixed #651 smell 1: without the stash, a
     subtree under a data-valued size silently consumed the _ancestor's_ σ
     instead of getting its own local scope): the node's own box is solved by
@@ -1226,11 +1451,12 @@ the explicit size is a **literal** or a **data value**:
   - A parent layer's `unionChildSpaces` ignores an axis reported `UNDEFINED`
     (no opinion — see [The contract](#the-contract)) instead of polluting a
     shared domain with the absorbed region's units.
-- **`layout`.** The stashed space gets a **local** scale built against the
-  layer's own resolved box: an anchored extent is _both_ a coordinate scale
-  (`posScaleFromSpace(stashed, size[dim])`) _and_ a σ-magnitude (a scale factor
-  from `stashed.width.inverse(size[dim])`), so the layer builds both and each
-  child reads the one it needs. These locals override the inherited posScale /
+- **`layout`.** The stashed space gets a **local** scope solved against the
+  layer's own resolved box (`solveScope(stashed, stashedClaim, size[dim])`):
+  σ for every stash, and, when the stash has an origin, the layer's frame
+  (the scope's map), in which each child sits by the one seating rule
+  (`seatInScope`): a pinned child places its data through it, and a free
+  child's baseline sits at its `originPx`. These locals override the inherited posScale /
   scale factor on that dim — definitionally, since the inherited scale is in
   the parent's foreign units. If the size can't be resolved (NaN), the locals
   are left undefined and the dim degrades to the inherited path rather than
@@ -1245,7 +1471,7 @@ the explicit size is a **literal** or a **data value**:
 
 Note that a histogram's count axis is **anchored, not origin-less**, at the
 frame boundary. Under start/end/baseline alignment, `resolveAlignmentSpace`
-(`alignment.ts`) folds the baseline magnitudes into `POSITION([0, max])` — it
+(`alignment.ts`) folds the baseline magnitudes into `pinned [0, max]` — it
 commits the data-driven extents to an anchored axis so they can be aligned.
 Without the self-scaling rule, that count POSITION would union straight into
 the shared axes as if it were data units; the rule is what keeps the absorbed
@@ -1347,7 +1573,7 @@ measure**.
 
 ```ts
 // underlyingSpace.ts
-export type CONTINUOUS_TYPE = { kind: "continuous"; ascent: Monotonic; descent: Monotonic; width: Monotonic; dataDomain: DataDomain; measure?: Measure; ... };
+export type CONTINUOUS_TYPE = { kind: "continuous"; dataInterval: Interval; origin: Origin; measure?: Measure; ... };
 ```
 
 **Merging.** Two helpers in `underlyingSpace.ts` decide what happens when two
@@ -1358,20 +1584,26 @@ must merge silently into a tagged one).
 
 - `mergeMeasures(a, b, context)` — unify as **types**. Equal measures unify to
   themselves; two _different_ defined measures are a type error and it
-  **throws**. This is the guard on the shared union: `unionChildSpaces`'
-  mixed/data-positioned interval collection (`alignment.ts`) and
-  `resolveAlignmentSpace`'s non-baseline branch (not every child a `free`
-  magnitude) use it, so overlaying a count axis onto a millimeter axis fails
-  loudly instead of corrupting the domain.
+  **throws**. This is the one policy for every continuous composition, and it
+  is decided by the measures alone, never by the origin state: overlays and
+  alignments (`alignment.ts`), spreads and stacks (`distributeSpaceFold`),
+  coords, and a layer's datum domain all use it. So overlaying a count axis
+  onto a millimeter axis fails loudly instead of corrupting the domain, and so
+  does stacking or overlaying two magnitudes in different units.
 - `forgetOnConflict(a, b)` — a conflict **forgets** (returns `undefined`)
-  rather than throwing. Used where composing differently-measured magnitudes
-  is legitimate: stacking two different fields' extents produces a real
-  magnitude that carries no single unit, so the baseline-magnitude path
-  (every child `placement: free`) in `unionChildSpaces` forgets on conflict,
-  and `resolveAlignmentSpace`'s baseline reduce uses it too.
+  rather than throwing. Used only for ORDINAL axes, whose measure is the
+  grouping field that names a category axis: categories set up no σ, so two
+  grouping fields on one axis lose the name, not the scale. A grouping field
+  is no unit, so it never enters `mergeMeasures`: a datum position in dollars
+  beside a category spread on the same axis, or a spread whose targets mix a
+  category spread with dollar bars, unifies only the continuous units.
 
-So the rule of thumb: **aligning/overlaying siblings throws on a unit clash;
-composing them into a new extent forgets.**
+Why one policy: the measures of an axis decide how many σ-scopes it needs,
+which is part of setting up the layout problem, not of solving it. One axis
+holds one measure and one σ. An axis that genuinely needs two (a dual-axis
+chart) is multi-scale (#525), not a unit to forget. Two fields that are the
+same unit (a movie's US and worldwide gross, both dollars) say so with
+`field(name, measure)`; their field names alone are different measures.
 
 **Where measures come from** is itself a small type system with three sources,
 checked (not silently prioritized) in `resolveMeasure` (`channels.ts`):
@@ -1422,29 +1654,42 @@ size (a bubble's area) stays a flat point. See the embedding-resolution pass und
 carries the same resolved measure, and `collectPositionDomains` folds those per
 axis with `mergeMeasures` — so a layer's own positioning constraints in clashing
 units (an interval coordinate with one endpoint in `mm` and the other in `inch`)
-throw at the source. The layer's `resolveAxis` (`layer.tsx`) then
-treats this constraint-domain measure as the axis's unit: it **prefers** the
-constraint measure and falls back to the children's POSITION measure only when
-the coordinates are untagged (literal pixels). It deliberately does _not_
-strict-unify the two — a self-scaling child (a `scatter`'s pie glyph) can leak
-its own inner unit into the children's space, and that leak is not a competing
-claim about the scatter's data axis. This restores the unit tag the scatter
+throw at the source. The layer then unifies this constraint-domain measure with
+its children's, as types, like any other composition. A child that a datum
+position places (`datumPlacedChildren`, `compose.ts`) is left out of that
+union altogether: it sits where its datum maps, so its own extent and measure
+are in its own frame (a `scatter`'s circle sized in its own units, a pie glyph
+in its angle), not in the axis's data. This restores the unit tag the scatter
 operator's reduction onto constraints had dropped.
 
 **Propagation through the baseline → anchored conversion.** A histogram's
 count axis is all baseline magnitudes (origin 0) at the children, and
 `resolveAlignmentSpace`'s start/end/baseline path folds them into
-`POSITION([0, max])`. That conversion carries the merged child measure forward
-(a `forgetOnConflict` reduce) — it is load-bearing, because it is exactly how
-the count POSITION acquires its `"count"` tag so a later overlay union can
-recognize it as foreign and refuse.
+`pinned [0, max]`. That conversion carries the unified child measure forward —
+it is load-bearing, because it is exactly how the count axis acquires its
+`"count"` tag so a later overlay union can recognize it as foreign and refuse.
 
-**The error and its remedies.** A clash from `mergeMeasures` reads:
+**The error and its remedies.** A clash from `mergeMeasures` is a
+`MeasureClash`, and it reads, for a grouped bar chart over two gross columns:
 
-> Cannot unify underlying spaces with different measures: `"A"` and `"B"`. If
-> these are the same units, assert that with `field(name, measure)` or
-> `datum(v, measure)`. If they are different units, give the inner chart an
-> explicit `w`/`h` so it becomes a self-scaling region.
+> The y axis combines two different measures, "Worldwide Gross" and "US
+> Gross" (where marks are lined up). One axis can show only one measure.
+> If both are the same kind of quantity, give them the same measure, e.g. if
+> both are dollars, field("Worldwide Gross", "dollars") and field("US Gross",
+> "dollars"). To title the axis, use the axes option (its title).
+> If they are different kinds of quantity, each needs its own axis: give the
+> inner chart its own w and h so it scales on its own.
+
+Each fold passes its axis index and a plain phrase for the composition (a
+`MeasureSite`). The fold does not know what the axis is called, so the node
+whose type hook raised the clash names it on the way out
+(`GoFishNode.axisName`): `x` or `y`, or the name the innermost enclosing
+coordinate space gives it (`r`, `theta`, `lon`, `lat`). It reads the same
+axis scope the name pass uses (`axisScopeFor`), so a space that declares no
+names leaves `x` and `y` even inside a polar one. The example is a unit,
+because a measure says what kind of quantity a column holds; the axis title
+is a separate choice, made with the `axes` option. `field(name, measure)` is
+spelled the same in Python, so one message serves both.
 
 The two remedies are the two escape hatches this essay already describes:
 annotate to declare the units _are_ the same (collapsing them to one measure),
@@ -1605,9 +1850,9 @@ units) that must never silently union with it.
 Conceptually, axis inference splits into two independent questions:
 
 1. **What guide could this space support?** Answered by the space's
-   `dataDomain`. An interval `dataDomain` permits a quantitative axis. A
-   `"delta"` one permits a magnitude guide but not an axis with a meaningful
-   zero. A `free` magnitude (no `dataDomain`) wants a legend, not an axis.
+   origin state. A pinned interval permits a quantitative axis. An
+   origin-less one permits a magnitude guide but not an axis with a
+   meaningful zero. A `free` magnitude wants a legend, not an axis.
    ORDINAL permits labels at laid-out keys. UNDEFINED contributes nothing.
 2. **Should that guide be drawn here?** Independent of the kind. The root
    of a stacked bar may have a POSITION y-space that permits a
@@ -1654,7 +1899,7 @@ implemented today.
 
 ## Adding a new operator
 
-Three things to consider:
+Four things to consider:
 
 1. **What kinds of children does it expect?** If your operator only ever
    sees anchored, data-positioned children, you don't need to handle the
@@ -1672,6 +1917,11 @@ Three things to consider:
    style overlays use `unionChildSpaces`. `position` is a pass-through.
    Match the existing patterns in `graphicalOperators/` and don't
    reinvent the merge logic per-operator.
+4. **Does it add pixels, or compose or pass through its children's claims?**
+   If so, write a claim hook (`resolveExtent`) next to the type hook, using
+   the claim half of the fold you used for the type (`unionChildExtents`,
+   `distributeExtentFold`, ...). If not, leave it out: the node then claims
+   what its types imply. Never put pixels into a type.
 
 If your operator is layout-time-only (no contribution to the kind tree),
 return `[UNDEFINED, UNDEFINED]` and rely on the children to drive
@@ -1701,8 +1951,10 @@ companion thesis repo).
 
 ## Pointers
 
-- The data definitions and constructors: `src/ast/underlyingSpace.ts`.
-- The traversal driver: `_node.ts`'s `resolveUnderlyingSpace()`.
+- The type definitions and constructors: `src/ast/underlyingSpace.ts`.
+- The claim record and its helpers: `src/ast/extent.ts`.
+- The traversal drivers: `_node.ts`'s `resolveUnderlyingSpace()` and
+  `resolveExtent()`.
 - Per-shape resolvers:
   `src/ast/shapes/{rect,ellipse,petal,text,image}.tsx`.
 - Per-operator resolvers (each colocated with the operator):

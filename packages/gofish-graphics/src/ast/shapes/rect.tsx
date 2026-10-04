@@ -29,13 +29,11 @@ import {
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
 import {
-  DIFFERENCE,
-  ORDINAL,
-  POSITION,
-  baselineSpan,
   UNDEFINED,
   UnderlyingSpace,
-  forgetOnConflict,
+  mergeMeasures,
+  CONTINUOUS,
+  magnitude,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
@@ -102,9 +100,13 @@ export const Rect = ({
         const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
           if (isValue(d.min) && isValue(d.max)) {
-            return POSITION(
+            return CONTINUOUS(
               interval(getValue(d.min)!, getValue(d.max)!),
-              forgetOnConflict(getMeasure(d.min), getMeasure(d.max))
+              "pinned",
+              mergeMeasures(getMeasure(d.min), getMeasure(d.max), {
+                axis,
+                where: "between a rect's two ends",
+              })
             );
           }
           if (!isValue(d.min) && !isValue(d.size)) {
@@ -114,17 +116,21 @@ export const Rect = ({
             return UNDEFINED;
           }
           if (isAesthetic(d.min) && isValue(d.size)) {
-            return DIFFERENCE(getValue(d.size)!, getMeasure(d.size));
+            return magnitude(d.size, "none");
           }
           if (!isValue(d.min) && isValue(d.size)) {
             // No data position; data-driven size → a span from the baseline,
             // signed: a negative value extends below it (#773).
-            return baselineSpan(getValue(d.size)!, getMeasure(d.size));
+            return magnitude(d.size);
           }
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
           const size = isValue(d.size) ? getValue(d.size)! : 0;
-          return POSITION(interval(min, min + size), getMeasure(d.min));
+          return CONTINUOUS(
+            interval(min, min + size),
+            "pinned",
+            getMeasure(d.min)
+          );
         };
 
         return [resolveAxis(0), resolveAxis(1)];

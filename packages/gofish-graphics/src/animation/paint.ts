@@ -21,7 +21,7 @@ import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../ast/_node";
 import { displayTranslate, type Transform } from "../ast/dims";
 import { isValue } from "../ast/data";
-import { isBaselineMagnitude, isDIFFERENCE } from "../ast/underlyingSpace";
+import { originIs } from "../ast/underlyingSpace";
 import { readLive } from "../interaction/live";
 import {
   readChannel,
@@ -62,7 +62,7 @@ function sizeAxesOf(node: GoFishNode): [boolean, boolean] {
   const dims = node.args?.dims as { size?: unknown }[] | undefined;
   const axis = (a: 0 | 1): boolean => {
     const space = node._underlyingSpace?.[a];
-    if (space && (isBaselineMagnitude(space) || isDIFFERENCE(space)))
+    if (space && (originIs(space, "free") || originIs(space, "none")))
       return true;
     return isValue(dims?.[a]?.size);
   };
