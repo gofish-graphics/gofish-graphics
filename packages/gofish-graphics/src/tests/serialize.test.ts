@@ -323,7 +323,7 @@ async function main() {
         scatter({
           x: "v",
           alignment: "middle",
-          overlap: jitter({ randomness: "uniform", smoothing: Infinity }),
+          overlap: jitter(),
         })
       )
       .mark(circle({ r: 3 }));

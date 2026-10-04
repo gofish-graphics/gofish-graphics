@@ -567,7 +567,8 @@ itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
 
 The second consumer is `scatter`'s `overlap` option, `separate()` (#969) or
-`jitter()` (#970).
+`noise()` (#970, #1014). `sina()` and `jitter()` are `noise()` with other
+defaults filled in, so they reach layout as the same `{kind: "noise"}` object.
 `scatter` elaborates to a layer with a `position` constraint per child on each
 axis a field places, and an `align` on every other ("free") axis. With an
 overlap strategy, the free axis gets an `overlap` constraint
@@ -579,13 +580,25 @@ each child's `enclosingCircle`, asks the strategy
 alignment line, and pins each child there. A strategy returns one free-axis
 number per child, so it cannot move the data axis. `applyConstraints` also
 passes the data axis's pixels per data unit (the layer's position-scale
-`sigma`), which `jitter` needs for its `smoothing` window in data units. The
+`sigma`), which `noise` needs to turn a `smoothing` bandwidth in data units
+into pixels. `smoothing: Infinity` and `smoothing: "silverman"` need no scale:
+Silverman's rule reads the dots' own pixel positions, and on a linear axis the
+rule in pixels is the rule in data units times the scale. The
 strategies share one broad phase, `NeighborGrid`, a uniform grid of square
 cells kept as lists in insertion order: `separate` buckets placed dots on the
-data axis, and `jitter`'s `"blue"` on both axes. `separate` merges each dot's
+data axis, and `noise`'s `"blue"` on both axes. `separate` merges each dot's
 blocked intervals into disjoint runs in one sorted sweep and takes the nearest
-free candidate. `jitter`'s outline is a box-kernel count over a sorted sliding
-window (`jitterOutline`). A scatter with an overlap strategy reports no
+free candidate. `noise`'s outline (`noiseOutline`) is a Gaussian density
+estimate: each dot adds a bell with standard deviation `smoothing`, and the
+outline follows the sum. The bells are summed on a grid, not pair by pair:
+each dot's weight is split between its two nearest grid points, the grid is
+convolved with the bell cut off at four bandwidths, and each dot reads the sum
+back by linear interpolation, the way R's `density()` bins. At the ends of the
+data range the sum is divided by the part of the bell at that point that lies
+inside the range, so a cut off bell does not thin the ends; this keeps the
+outline's total size about the same for every bandwidth. The narrowest bell
+is as tall as one dot spread over one dot width, so a lone dot sits on the
+line. A scatter with an overlap strategy reports no
 size on its free axis in the space pass (a fixed-pixel dot's space is
 `UNDEFINED` there), and its real extent comes from where the children land, in
 the layer's box fold, the way a text label's extent is measured at layout.

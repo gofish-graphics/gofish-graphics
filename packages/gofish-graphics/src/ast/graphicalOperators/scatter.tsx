@@ -298,7 +298,9 @@ export type ScatterOptions = {
   /**
    * How children keep clear of each other on the free axis (the axis no field
    * places), made by a function call: `separate({ padding })` is a beeswarm,
-   * `jitter({ randomness, smoothing })` spreads dots inside a density outline.
+   * `noise({ randomness, smoothing })` spreads dots inside a density outline,
+   * `sina()` is noise with a violin outline, and `jitter()` is noise in a
+   * flat band.
    * The strategy takes the place of the align on that axis and grows from the
    * `alignment` line: `"middle"` both ways, `"start"`/`"baseline"` to
    * the positive side, `"end"` to the negative side. Omit it, and every

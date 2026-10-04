@@ -16,9 +16,12 @@ import * as GoFish from "../../dist/index.js";
 import {
   separateOffsets,
   separate,
+  noise,
+  sina,
   jitter,
-  jitterOffsets,
-  jitterOutline,
+  noiseOffsets,
+  noiseOutline,
+  silvermanBandwidth,
   resolveOverlap,
   sideSign,
   type OverlapItem,
@@ -27,7 +30,7 @@ import {
 import { lcg } from "../util/lcg";
 
 const { chart, scatter, spread, circle, polar } = GoFish as any;
-const jitterDist = (GoFish as any).jitter;
+const noiseDist = (GoFish as any).noise;
 
 declare const process: { exit(code: number): never };
 
@@ -324,7 +327,7 @@ console.log("# scatter overlap: rendered");
   );
 }
 
-console.log("# jitter: outline and offsets");
+console.log("# noise: outline and offsets");
 {
   const rand = lcg(11);
   const normal = () =>
@@ -351,91 +354,215 @@ console.log("# jitter: outline and offsets");
     }
     return s;
   };
-  const dotArea = area(jitterOutline(spreadItems, 0));
-  for (const w of [20, 60]) {
-    const smoothArea = area(jitterOutline(spreadItems, 0, w));
+  const dotArea = area(noiseOutline(spreadItems, 0));
+  for (const w of [5, 20, 80]) {
+    const smoothArea = area(noiseOutline(spreadItems, 0, w));
     check(
-      `smoothing ${w}px keeps the outline's total size (within 25%)`,
+      `bandwidth ${w}px keeps the outline's total size (within 25%)`,
       Math.abs(smoothArea / dotArea - 1) < 0.25,
       `${smoothArea.toFixed(0)} vs ${dotArea.toFixed(0)}`
     );
   }
-  const flat = jitterOutline(items, 0, Infinity);
+  const flat = noiseOutline(items, 0, Infinity);
   check(
     "smoothing Infinity gives a flat outline",
     Array.from(flat).every((h) => Math.abs(h - flat[0]) < 1e-9) && flat[0] > 0,
     `${flat[0]}`
   );
-  const lone = jitterOutline(
+  const lone = noiseOutline(
     [
       { at: 0, r: 2 },
+      { at: 50.3, r: 2 },
       { at: 100, r: 2 },
     ],
     0
   );
-  check("a lone dot sits on the line", lone[0] === 0 && lone[1] === 0);
+  check("a lone dot sits on the line", lone[1] === 0, `${lone[1]}`);
+  // At the ends of the data range, the edge correction lifts a lone dot a
+  // little: part of its bell falls outside the range.
+  check(
+    "a lone dot at an end of the range barely moves (under 0.15 dot widths)",
+    lone[0] < 0.15 * 4 && lone[2] < 0.15 * 4,
+    `${lone[0]}, ${lone[2]}`
+  );
+  const tied = noiseOutline(
+    [
+      { at: 0, r: 2 },
+      { at: 50, r: 2 },
+      { at: 50, r: 2 },
+      { at: 100, r: 2 },
+    ],
+    0
+  );
+  check(
+    "two tied dots get the band of two dots (one pitch each way)",
+    Math.abs(tied[1] - 4) < 0.02 && tied[1] === tied[2],
+    `${tied[1]}`
+  );
+  // Two piles far apart: a bandwidth below their distance keeps two peaks,
+  // with an empty gap between them.
+  const bimodal: OverlapItem[] = [
+    ...Array.from({ length: 50 }, (_, i) => ({ at: 100 + (i % 10), r: 2 })),
+    { at: 150, r: 2 },
+    ...Array.from({ length: 50 }, (_, i) => ({ at: 200 + (i % 10), r: 2 })),
+  ];
+  const twoPeaks = noiseOutline(bimodal, 0, 8);
+  check(
+    "the outline follows the data: two piles give two peaks",
+    twoPeaks[50] < 0.01 && twoPeaks[0] > 10 && twoPeaks[51] > 10,
+    `${twoPeaks[0]}, ${twoPeaks[50]}, ${twoPeaks[51]}`
+  );
+  // The grid sum matches the exact sum over every pair of dots.
+  {
+    const sigma = 6;
+    const pitch = 4;
+    const lo = Math.min(...spreadItems.map((it) => it.at)) - pitch / 2;
+    const hi = Math.max(...spreadItems.map((it) => it.at)) + pitch / 2;
+    const Phi = (z: number) => {
+      // Numeric integral of the standard normal from -8 to z.
+      let s = 0;
+      const steps = 4000;
+      const a = -8;
+      const h = (z - a) / steps;
+      for (let k = 0; k <= steps; k++) {
+        const t = a + k * h;
+        s += (k === 0 || k === steps ? 0.5 : 1) * Math.exp((-t * t) / 2);
+      }
+      return (s * h) / Math.sqrt(2 * Math.PI);
+    };
+    const got = noiseOutline(spreadItems, 0, sigma);
+    let worst = 0;
+    for (const i of [0, 7, 99, 250, 399]) {
+      const x = spreadItems[i].at;
+      let sum = 0;
+      for (const it of spreadItems)
+        sum += Math.exp(-((x - it.at) ** 2) / (2 * sigma * sigma));
+      const inside =
+        sigma *
+        Math.sqrt(2 * Math.PI) *
+        (Phi((hi - x) / sigma) - Phi((lo - x) / sigma));
+      const want = Math.max(0, (pitch * sum) / inside - 1) * pitch;
+      worst = Math.max(worst, Math.abs(got[i] - want) / Math.max(want, 1));
+    }
+    check(
+      "the grid sum agrees with the exact Gaussian sum (within 0.5%)",
+      worst < 0.005,
+      `${worst}`
+    );
+  }
+  check(
+    "Silverman's rule matches R's bw.nrd0",
+    Math.abs(
+      silvermanBandwidth([1, 2, 3, 4, 10].map((at) => ({ at, r: 1 })))! -
+        0.973585
+    ) < 1e-5
+  );
+  check(
+    "Silverman's rule falls back to the standard deviation when the IQR is 0",
+    Math.abs(
+      silvermanBandwidth([1, 1, 1, 1, 5].map((at) => ({ at, r: 1 })))! -
+        1.166865
+    ) < 1e-5
+  );
+  check(
+    "Silverman's rule gives no bandwidth for one value",
+    silvermanBandwidth([3, 3, 3].map((at) => ({ at, r: 1 }))) === undefined
+  );
 
   for (const randomness of ["blue", "quasi", "uniform"] as const) {
     const opts = { randomness, padding: 0, seed: 3 };
-    const a = jitterOffsets(items, "middle", opts);
-    const b = jitterOffsets(items, "middle", opts);
+    const a = noiseOffsets(items, "middle", opts);
+    const b = noiseOffsets(items, "middle", opts);
     check(
       `${randomness}: the same seed gives the same offsets`,
       a.every((y, i) => y === b[i])
     );
-    const half = jitterOutline(items, 0);
+    const half = noiseOutline(items, 0);
     check(
       `${randomness}: every offset stays inside the outline`,
       a.every((y, i) => Math.abs(y) <= half[i] + 1e-9)
     );
-    const start = jitterOffsets(items, "start", opts);
+    const start = noiseOffsets(items, "start", opts);
     check(
       `${randomness}: start keeps every dot on the positive side`,
       start.every((y, i) => y >= items[i].r - 1e-9)
     );
   }
   const otherSeed = (randomness: "blue" | "uniform" | "quasi") =>
-    jitterOffsets(items, "middle", { randomness, padding: 0, seed: 4 });
+    noiseOffsets(items, "middle", { randomness, padding: 0, seed: 4 });
   for (const randomness of ["blue", "uniform"] as const)
     check(
       `${randomness}: another seed gives other offsets`,
       otherSeed(randomness).some(
         (y, i) =>
           y !==
-          jitterOffsets(items, "middle", { randomness, padding: 0, seed: 3 })[i]
+          noiseOffsets(items, "middle", { randomness, padding: 0, seed: 3 })[i]
       )
     );
-  const q = resolveOverlap(jitter({ randomness: "quasi" }), items, "middle");
+  const q = resolveOverlap(noise({ randomness: "quasi" }), items, "middle");
   check(
     "quasi needs no seed: the default and seeded runs agree",
     q.every((y, i) => y === otherSeed("quasi")[i])
   );
 }
 
-console.log("# jitter(): strategy objects");
+console.log("# noise(), sina(), jitter(): strategy objects");
 {
   check(
-    "jitter() is a plain object",
-    JSON.stringify(jitter()) === '{"kind":"jitter"}'
+    "noise() is a plain object",
+    JSON.stringify(noise()) === '{"kind":"noise"}'
   );
   check(
-    "an unknown randomness throws",
-    (await errorOf(() => jitter({ randomness: "pink" as any })))?.includes(
-      "randomness"
+    "sina() is noise with a Silverman bandwidth",
+    JSON.stringify(sina()) === '{"kind":"noise","smoothing":"silverman"}'
+  );
+  check(
+    "jitter() is noise with uniform offsets in a flat band",
+    JSON.stringify(jitter()) ===
+      JSON.stringify({ kind: "noise", randomness: "uniform", smoothing: Infinity })
+  );
+  check(
+    "options override the wrapper defaults",
+    JSON.stringify(sina({ smoothing: 3, randomness: "quasi" })) ===
+      '{"kind":"noise","randomness":"quasi","smoothing":3}' &&
+      jitter({ randomness: "blue" }).randomness === "blue"
+  );
+  check(
+    "an unknown randomness throws, naming the factory called",
+    (await errorOf(() => sina({ randomness: "pink" as any })))?.includes(
+      "sina: randomness"
     ) === true
   );
   check(
     "a non-positive smoothing throws",
-    (await errorOf(() => jitter({ smoothing: 0 })))?.includes("smoothing") ===
+    (await errorOf(() => noise({ smoothing: 0 })))?.includes("smoothing") ===
       true
   );
   check(
+    "an unknown smoothing name throws",
+    (await errorOf(() => noise({ smoothing: "scott" as any })))?.includes(
+      "silverman"
+    ) === true
+  );
+  check(
     "smoothing Infinity is accepted in JS",
-    jitter({ smoothing: Infinity }).smoothing === Infinity
+    noise({ smoothing: Infinity }).smoothing === Infinity
+  );
+  const items = [0, 1, 1, 2, 2, 2, 3, 3, 4].map((at) => ({ at: at * 3, r: 2 }));
+  check(
+    "sina and jitter need no data scale (no unit to convert)",
+    resolveOverlap(sina(), items, "middle").length === items.length &&
+      resolveOverlap(jitter(), items, "middle").length === items.length
+  );
+  check(
+    "a finite smoothing with no data scale throws",
+    (
+      await errorOf(() => resolveOverlap(noise({ smoothing: 2 }), items, "middle"))
+    )?.includes("data units") === true
   );
 }
 
-console.log("# scatter overlap jitter: rendered");
+console.log("# scatter overlap noise: rendered");
 {
   const rand = lcg(5);
   const rows = Array.from({ length: 200 }, () => ({
@@ -447,18 +574,18 @@ console.log("# scatter overlap jitter: rendered");
       .mark(circle({ r: 3 }))
       .toDisplayList({ w: 400, h: 200 });
   const plain = circlesOf(await render());
-  const jittered = circlesOf(await render(jitterDist({ smoothing: 5 })));
+  const jittered = circlesOf(await render(noiseDist({ smoothing: 5 })));
   check(
-    "jitter leaves every dot's data-axis position alone",
+    "noise leaves every dot's data-axis position alone",
     plain.length === jittered.length &&
       plain.every((c, i) => Math.abs(c.cx - jittered[i].cx) < 1e-6)
   );
   const ys = jittered.map((c) => c.cy);
   check(
-    "jitter moves the dots along the free axis",
+    "noise moves the dots along the free axis",
     Math.max(...ys) - Math.min(...ys) > 6
   );
-  const again = circlesOf(await render(jitterDist({ smoothing: 5 })));
+  const again = circlesOf(await render(noiseDist({ smoothing: 5 })));
   check(
     "a jittered render is the same every time",
     again.every((c, i) => c.cy === jittered[i].cy)

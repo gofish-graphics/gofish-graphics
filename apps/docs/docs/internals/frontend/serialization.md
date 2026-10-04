@@ -252,7 +252,7 @@ MongoDB Extended JSON:
 ```
 
 It is one mechanism for every number in the document (an option such as
-`jitter`'s `smoothing`, a channel value, a data row), at the serialization
+`noise`'s `smoothing`, a channel value, a data row), at the serialization
 boundary, with no per-field rule:
 
 - A writer encodes the whole document as it makes it: JS `toJSON` (through
@@ -583,7 +583,7 @@ guess. The one exception is a tagged union: when every dict branch is an
 object whose `kind` field is a literal or enum, and no two branches share a
 `kind` value (treemap's `tile`: `{kind: "squarify", ratio?}` or
 `{kind: "slice" | "dice" | ...}`; scatter's `overlap`:
-`{kind: "separate", ...}` or `{kind: "jitter", ...}`), the generator emits a
+`{kind: "separate", ...}` or `{kind: "noise", ...}`), the generator emits a
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
 branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the

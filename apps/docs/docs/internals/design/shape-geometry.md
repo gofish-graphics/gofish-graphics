@@ -19,7 +19,9 @@ status: speculative
 > shapes are kept apart by their enclosing circle; the option is named `overlap`, and
 > there is no priority option yet (data order). Jitter shipped next to it as
 > `overlap: jitter({ randomness, smoothing })` (#970), a density outline rather
-> than a collision search. See
+> than a collision search. It was later renamed `noise()` with a Gaussian
+> outline, and `sina()` and `jitter()` became `noise()` with other defaults
+> (#1014). See
 > [Layout Calculation](/internals/layout/passes).
 >
 > **Status: design proposal (2026-09-29).** Nothing here is implemented. It grew out of the

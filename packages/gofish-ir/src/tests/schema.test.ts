@@ -612,7 +612,7 @@ console.log("\n# Non-finite numbers");
           {
             type: "scatter",
             x: "v",
-            overlap: { kind: "jitter", smoothing },
+            overlap: { kind: "noise", smoothing },
           },
         ],
         mark: { type: "circle", r: 3 },
@@ -643,6 +643,13 @@ console.log("\n# Non-finite numbers");
     channel.valid,
     JSON.stringify(channel.errors)
   );
+  const silverman = validate(doc("silverman"));
+  check(
+    'noise smoothing accepts "silverman" (sina())',
+    silverman.valid,
+    JSON.stringify(silverman.errors)
+  );
+  check("noise smoothing rejects another name", !validate(doc("scott")).valid);
 
   const raw = {
     a: Infinity,

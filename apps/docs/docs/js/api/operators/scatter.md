@@ -76,10 +76,19 @@ There are two strategies. They differ in what sets the width of the cloud.
   The counts set the width exactly: where many dots share a value, the cloud
   grows tall. The result is a beeswarm. `padding` is the number of pixels kept
   between neighboring dots. The default is 0.
-- `jitter({ randomness?, smoothing?, padding?, seed? })` spreads the dots
+- `noise({ randomness?, smoothing?, padding?, seed? })` spreads the dots
   inside an outline. The outline is wide where many dots share a part of the
   data axis and narrow where few do, so it shows the shape of the
   distribution. The dots are placed inside it and may touch.
+
+Two more functions make `noise` with other defaults. Any option you pass
+replaces the default.
+
+| Function   | Same as                                                 | Looks like                         |
+| ---------- | ------------------------------------------------------- | ---------------------------------- |
+| `noise()`  | `noise()`                                               | an outline that follows every pile |
+| `sina()`   | `noise({ smoothing: "silverman" })`                     | a violin filled with dots          |
+| `jitter()` | `noise({ randomness: "uniform", smoothing: Infinity })` | classic jitter in a flat band      |
 
 ::: gofish
 
@@ -109,7 +118,7 @@ because that word names a family of layouts: greedy ones like this one,
 force-directed ones, and packed ones. The name comes from the separation
 constraints of constraint layout, as in WebCoLa and VPSC.
 
-The same data with `jitter()`:
+The same data with `noise()`:
 
 ::: gofish
 
@@ -123,7 +132,7 @@ gf.chart(
     gf.scatter({
       x: "Body Mass (g)",
       alignment: "middle",
-      overlap: gf.jitter(),
+      overlap: gf.noise(),
     })
   )
   .mark(gf.circle({ r: 3, fill: "Species" }))
@@ -132,25 +141,76 @@ gf.chart(
 
 :::
 
-`jitter` takes these options:
+And with `sina()`, which gives each species a smooth violin outline:
+
+::: gofish
+
+```js
+gf.chart(
+  penguins.filter((p) => p["Body Mass (g)"] !== null),
+  { axes: true }
+)
+  .flow(
+    gf.spread({ by: "Species", dir: "y", spacing: 16 }),
+    gf.scatter({
+      x: "Body Mass (g)",
+      alignment: "middle",
+      overlap: gf.sina(),
+    })
+  )
+  .mark(gf.circle({ r: 3, fill: "Species" }))
+  .render(root, { w: 560, h: 320 });
+```
+
+:::
+
+### How the outline is made
+
+Each dot adds a small bell-shaped bump to the outline, centered on its own
+value. The bump is tallest at the dot and fades smoothly to zero on both
+sides. The outline is the sum of all the bumps. So a dot near a point on the
+data axis counts a lot there, a dot a little farther away counts less, and a
+dot far away counts almost nothing. Only each bump is bell-shaped. The sum
+follows the data: it can have several peaks, lean to one side, or show a
+spike where many dots share one value.
+
+The width of each bump is the `smoothing` option. This width is called the
+bandwidth. A narrow bandwidth keeps small spikes in the data. A wide one
+blurs them into a broad hill. Changing it changes the shape of the outline
+but not its total size.
+
+At the two ends of the data, part of each bump would fall past the last dot,
+where there are no dots. The outline makes up for that part, so the ends
+are not drawn too thin.
+
+### Options
+
+`noise`, `sina` and `jitter` take these options:
 
 - `randomness` says how the dots are placed inside the outline.
-  - `"blue"` is the default. Each dot tries a few spots and takes the one
-    farthest from the dots already placed. The cloud looks even, with no
-    clumps and no rows.
+  - `"blue"` is the default for `noise` and `sina`. Each dot tries a few
+    spots and takes the one farthest from the dots already placed. The cloud
+    looks even, with no clumps and no rows.
   - `"quasi"` spreads the dots by rank with a fixed sequence, as ggbeeswarm's
     quasirandom does. It is the fastest, so use it for very large data. Faint
     regular patterns can show in it.
   - `"uniform"` draws each offset at random, as classic jitter does. Dots can
-    clump and leave gaps.
-- `smoothing` is a width in data units of the data axis, for example grams.
-  The outline counts the dots within that window. By default the window is
-  one dot wide, so the outline follows the data closely, and a pile of equal
-  values shows as a spike. A larger `smoothing` gives a smoother outline. It
-  changes the outline's shape but not its total size. `smoothing: Infinity`
-  makes the outline flat, a band of fixed width. With `randomness: "uniform"`,
-  that is classic jitter, as in seaborn's `stripplot` or ggplot's
-  `position_jitter`.
+    clump and leave gaps. It is the default for `jitter`.
+- `smoothing` is the bandwidth of each bump, in data units of the data axis,
+  for example grams. It can be:
+  - a number. The default for `noise` is the narrowest bump, about one dot
+    wide, so the outline follows the data closely, and a pile of equal values
+    shows as a spike. A smaller number counts as that narrowest bump.
+  - `"silverman"`, the default for `sina`. The bandwidth is worked out from
+    the data with Silverman's rule of thumb, `0.9 · min(sd, IQR / 1.34) ·
+n^(-1/5)`, separately for each group. This is the rule that ggforce's
+    `geom_sina` and R's `density()` use, so the outline is the curve a violin
+    plot draws. Spread out data gets wider bumps, and more data gets narrower
+    ones. When every dot in a group has the same value, it uses the narrowest
+    bump.
+  - `Infinity`, the default for `jitter`. Every bump is flat, so the outline
+    is a band of fixed width. With `randomness: "uniform"`, that is classic
+    jitter, as in seaborn's `stripplot` or ggplot's `position_jitter`.
 - `padding` is a number of pixels added to each dot's width. The default
   is 0.
 - `seed` seeds the `"blue"` and `"uniform"` placements. The default is
@@ -158,7 +218,7 @@ gf.chart(
   that changes between renders can change how a distribution looks; see
   Correll, "Teru Teru Bōzu: Defensive Raincloud Plots" (2023).
 
-Both strategies grow from the `alignment` line:
+Every strategy grows from the `alignment` line:
 
 - `"middle"` grows on both sides of the line.
 - `"start"` and `"baseline"` grow on the positive side. Each dot's start edge
@@ -170,7 +230,7 @@ circle [`pack`](/js/api/operators/pack) uses.
 
 The cloud is as tall as its dots need. It does not shrink to fit the space it
 is given, so a dense beeswarm can grow past it. To make it smaller, use smaller
-dots or less padding. `jitter` does not make it smaller: its outline also
+dots or less padding. `noise` does not make it smaller: its outline also
 grows with the counts, and it leaves extra room so the dots can spread.
 
 Some cases are errors:

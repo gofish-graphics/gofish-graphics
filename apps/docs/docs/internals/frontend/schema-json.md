@@ -1251,13 +1251,20 @@ for the API.
               "type": "object",
               "properties": {
                 "kind": {
-                  "enum": ["jitter"]
+                  "enum": ["noise"]
                 },
                 "randomness": {
                   "enum": ["blue", "quasi", "uniform"]
                 },
                 "smoothing": {
-                  "$ref": "#/$defs/Number"
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "enum": ["silverman"]
+                    }
+                  ]
                 },
                 "padding": {
                   "$ref": "#/$defs/Number"
@@ -1269,7 +1276,7 @@ for the API.
               "required": ["kind"]
             }
           ],
-          "description": "How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. jitter({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis; randomness \"blue\" (default), \"quasi\" or \"uniform\"; smoothing is the outline's counting window in data units (default one dot width). Both grow from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only."
+          "description": "How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is \"blue\" (default), \"quasi\" or \"uniform\". smoothing is the bandwidth of each bell in data units (default one dot wide), Infinity for a flat band, or \"silverman\" to compute it from the data. sina() is noise with smoothing \"silverman\" (a violin outline), and jitter() is noise with randomness \"uniform\" and smoothing Infinity (classic jitter); both make kind \"noise\". Both kinds grow from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only."
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"

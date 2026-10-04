@@ -1940,52 +1940,35 @@ def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
     return {"kind": "separate"} if padding is None else {"kind": "separate", "padding": padding}
 
 
-def jitter(
-    *,
-    randomness: Optional[str] = None,
-    smoothing: Optional[float] = None,
-    padding: Optional[float] = None,
-    seed: Optional[float] = None,
+def _make_noise(
+    name: str,
+    randomness: Optional[str],
+    smoothing: Optional[Union[float, str]],
+    padding: Optional[float],
+    seed: Optional[float],
 ) -> Dict[str, Any]:
-    """
-    The ``jitter()`` overlap strategy for :func:`scatter`. Each dot keeps its
-    position on the data axis and gets an offset on the axis no field places,
-    inside an outline that follows how many dots share that part of the data
-    axis.
-
-        chart(penguins).flow(
-            scatter(x="Body Mass (g)", alignment="middle",
-                    overlap=jitter(randomness="quasi", smoothing=100))
-        ).mark(circle(r=3))
-
-    Mirrors JS ``jitter({ randomness, smoothing, padding, seed })``; the
-    strategy is a plain object on the wire, ``{"kind": "jitter", ...}``.
-
-    Args:
-        randomness: ``"blue"`` (default) keeps each dot far from its
-            neighbors, ``"quasi"`` spreads dots by rank (fastest),
-            ``"uniform"`` draws seeded uniform offsets.
-        smoothing: Width, in data units of the data axis, of the window that
-            counts dots to set the outline. Default: one dot width.
-            ``math.inf`` gives a flat outline (classic fixed-band jitter).
-        padding: Pixels added to each dot's width. Default 0.
-        seed: Seed for ``"blue"`` and ``"uniform"``. Default 0.
-    """
+    """Check the options and build the ``{"kind": "noise", ...}`` object;
+    ``name`` is the function the user called, for the error messages."""
     if randomness is not None and randomness not in ("blue", "quasi", "uniform"):
         raise ValueError(
-            f'jitter: randomness must be "blue", "quasi" or "uniform", got {randomness!r}'
+            f'{name}: randomness must be "blue", "quasi" or "uniform", got {randomness!r}'
         )
-    if smoothing is not None and not smoothing > 0:
+    if smoothing is not None and smoothing != "silverman" and not (
+        isinstance(smoothing, (int, float))
+        and not isinstance(smoothing, bool)
+        and smoothing > 0
+    ):
         raise ValueError(
-            f"jitter: smoothing must be a positive number (or math.inf), got {smoothing}"
+            f'{name}: smoothing must be a positive number of data units, math.inf, '
+            f'or "silverman", got {smoothing!r}'
         )
     if padding is not None and not (padding >= 0 and math.isfinite(padding)):
-        raise ValueError(f"jitter: padding must be a finite non-negative number, got {padding}")
+        raise ValueError(f"{name}: padding must be a finite non-negative number, got {padding}")
     if seed is not None and not (
         isinstance(seed, (int, float)) and not isinstance(seed, bool) and math.isfinite(seed)
     ):
-        raise ValueError(f"jitter: seed must be a number, got {seed}")
-    out: Dict[str, Any] = {"kind": "jitter"}
+        raise ValueError(f"{name}: seed must be a number, got {seed}")
+    out: Dict[str, Any] = {"kind": "noise"}
     for key, value in (
         ("randomness", randomness),
         ("smoothing", smoothing),
@@ -1995,6 +1978,101 @@ def jitter(
         if value is not None:
             out[key] = value
     return out
+
+
+def noise(
+    *,
+    randomness: Optional[str] = None,
+    smoothing: Optional[Union[float, str]] = None,
+    padding: Optional[float] = None,
+    seed: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    The ``noise()`` overlap strategy for :func:`scatter`. Each dot keeps its
+    position on the data axis and gets an offset on the axis no field places,
+    inside an outline that follows how many dots share that part of the data
+    axis. Each dot adds a small bell-shaped bump, and the outline is the sum
+    of the bumps. :func:`sina` and :func:`jitter` are this strategy with other
+    defaults.
+
+        chart(penguins).flow(
+            scatter(x="Body Mass (g)", alignment="middle",
+                    overlap=noise(randomness="quasi", smoothing=100))
+        ).mark(circle(r=3))
+
+    Mirrors JS ``noise({ randomness, smoothing, padding, seed })``; the
+    strategy is a plain object on the wire, ``{"kind": "noise", ...}``.
+
+    Args:
+        randomness: ``"blue"`` (default) keeps each dot far from its
+            neighbors, ``"quasi"`` spreads dots by rank (fastest),
+            ``"uniform"`` draws seeded uniform offsets.
+        smoothing: The bandwidth of each dot's bell, in data units of the
+            data axis. Default: one dot wide. ``math.inf`` gives a flat
+            outline (classic fixed-band jitter). ``"silverman"`` computes it
+            from the data, as :func:`sina` does.
+        padding: Pixels added to each dot's width. Default 0.
+        seed: Seed for ``"blue"`` and ``"uniform"``. Default 0.
+    """
+    return _make_noise("noise", randomness, smoothing, padding, seed)
+
+
+def sina(
+    *,
+    randomness: Optional[str] = None,
+    smoothing: Optional[Union[float, str]] = None,
+    padding: Optional[float] = None,
+    seed: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    A sina plot: :func:`noise` with ``smoothing="silverman"``, a bandwidth
+    computed per group from the data by Silverman's rule of thumb, as
+    ggforce's ``geom_sina`` does. The outline is the smooth curve a violin
+    plot draws, filled with dots. Any option overrides the default.
+
+        chart(penguins).flow(
+            spread(by="Species", dir="y"),
+            scatter(x="Body Mass (g)", alignment="middle", overlap=sina()),
+        ).mark(circle(r=3))
+
+    Mirrors JS ``sina({ ... })``; on the wire it is
+    ``{"kind": "noise", "smoothing": "silverman", ...}``.
+    """
+    return _make_noise(
+        "sina",
+        randomness,
+        "silverman" if smoothing is None else smoothing,
+        padding,
+        seed,
+    )
+
+
+def jitter(
+    *,
+    randomness: Optional[str] = None,
+    smoothing: Optional[Union[float, str]] = None,
+    padding: Optional[float] = None,
+    seed: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Classic jitter: :func:`noise` with ``randomness="uniform"`` and
+    ``smoothing=math.inf``, so the dots get uniform random offsets in a flat
+    band. Any option overrides the default.
+
+        chart(penguins).flow(
+            scatter(x="Body Mass (g)", alignment="middle", overlap=jitter())
+        ).mark(circle(r=3))
+
+    Mirrors JS ``jitter({ ... })``; on the wire it is
+    ``{"kind": "noise", "randomness": "uniform", "smoothing": Infinity, ...}``.
+    """
+    return _make_noise(
+        "jitter",
+        "uniform" if randomness is None else randomness,
+        math.inf if smoothing is None else smoothing,
+        padding,
+        seed,
+    )
 
 
 def squarify(*, ratio: Optional[Union[int, float]] = None) -> Dict[str, Any]:
