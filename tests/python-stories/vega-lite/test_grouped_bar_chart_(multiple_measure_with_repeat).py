@@ -19,9 +19,9 @@ def story_default():
         .mark(
             spread(
                 [
-                    # Both columns are dollars, so they share one value axis.
-                    rect(h=field("Worldwide Gross", "dollars"), fill=datum("Worldwide Gross")),
-                    rect(h=field("US Gross", "dollars"), fill=datum("US Gross")),
+                    # Both columns are gross revenue, so they share one value axis titled by that measure.
+                    rect(h=field("Worldwide Gross", "Total Gross"), fill=datum("Worldwide Gross")),
+                    rect(h=field("US Gross", "Total Gross"), fill=datum("US Gross")),
                 ],
                 dir="x",
                 spacing=0,

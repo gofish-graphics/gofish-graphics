@@ -27,9 +27,9 @@ export const Default: StoryObj<Args> = {
       .flow(spread({ by: "Major Genre",  dir: "x" }))
       .mark(
         spread({ dir: "x", spacing: 0 }, [
-          // Both columns are dollars, so they share one value axis.
-          rect({ h: field("Worldwide Gross", "dollars"), fill: v("Worldwide Gross") }),
-          rect({ h: field("US Gross", "dollars"), fill: v("US Gross") }),
+          // Both columns are gross revenue, so they share one value axis titled by that measure.
+          rect({ h: field("Worldwide Gross", "Total Gross"), fill: v("Worldwide Gross") }),
+          rect({ h: field("US Gross", "Total Gross"), fill: v("US Gross") }),
         ])
       )
       .render(container, { w: args.w, h: args.h });
