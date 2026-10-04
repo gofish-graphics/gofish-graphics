@@ -40,6 +40,7 @@ import {
 import { axisScale, type AxisMap } from "../domain";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry, scopeMap } from "../solver/scopes";
+import { axisTitle, TITLE_COLOR, TITLE_FONT_SIZE } from "../axes/elaborate";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
@@ -720,7 +721,7 @@ export const coord = createNodeOperator(
                   textItem(lx, ly, label, anchor, "middle", 10, "gray")
                 );
               };
-              if (originIs(xSpace, "pinned") && xIv) {
+              if (xIv) {
                 const xMin = xIv.min;
                 const xMax = xIv.max;
                 const [, nicedMax] = d3Nice(xMin, xMax, 8);
@@ -765,7 +766,7 @@ export const coord = createNodeOperator(
             }
 
             const yIv = continuousInterval(ySpace);
-            if (axesY && originIs(ySpace, "pinned") && yIv) {
+            if (axesY && yIv) {
               const yMin = yIv.min;
               const yMax = yIv.max;
               const dataToScreenR = (v: number) =>
@@ -810,19 +811,10 @@ export const coord = createNodeOperator(
               // Deliberately no angular (theta) title by default: the ring's
               // tick labels already say what goes around, and a title has no
               // natural single place on a circle.
-              const yOpt =
-                typeof axes === "object" && axes !== null ? axes.y : undefined;
-              const explicit =
-                typeof yOpt === "object" && yOpt !== null
-                  ? yOpt.title
-                  : undefined;
-              const title =
-                explicit === false
-                  ? undefined
-                  : (explicit ??
-                    spaceMeasure(ySpace) ??
-                    effectiveTransform.aliases?.y ??
-                    "r");
+              const title = axisTitle(
+                typeof axes === "object" && axes !== null ? axes.y : undefined,
+                spaceMeasure(ySpace) ?? effectiveTransform.aliases?.y ?? "r"
+              );
               if (title !== undefined) {
                 const [ix, iy] = contentToPixel([x0 - H_GAP, y0]);
                 const [ox, oy] = contentToPixel([x1 - H_GAP, y1]);
@@ -845,10 +837,10 @@ export const coord = createNodeOperator(
                   text: title,
                   textAnchor: flipped ? "end" : "start",
                   dominantBaseline: "middle",
-                  fontSize: 11,
+                  fontSize: TITLE_FONT_SIZE,
                   rotate: deg,
                   role: "overlay",
-                  style: lowerStyle({ fill: "gray" }),
+                  style: lowerStyle({ fill: TITLE_COLOR }),
                 });
               }
             }

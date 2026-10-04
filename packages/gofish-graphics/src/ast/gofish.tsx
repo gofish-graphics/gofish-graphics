@@ -41,6 +41,7 @@ import {
   perfSetCount,
 } from "./perf";
 import {
+  axisTitle,
   elaborateAxes,
   elaborateAxisTitles,
   labelRowSettingsFromAngles,
@@ -217,32 +218,20 @@ function manualLabelRowSettings(
 // `layout()` for the full behavior, including the shrink-to-fit case).
 const DEFAULT_CANVAS_SIZE = 400;
 
-// string: custom title, false: no title, undefined: infer from encoding
-function resolveAxisTitle(
-  axisOpt: AxisOptions | undefined
-): string | false | undefined {
-  if (axisOpt === undefined || axisOpt === false) return false;
-  if (axisOpt === true) return undefined; // infer from the space measure
-  return axisOpt.title;
-}
-
+// A chart-level axis is titled only when `axes` turns it on (`true`, or a
+// dim's entry that is not `false`); its title is then `axisTitle`'s.
 function resolveAxisTitles(
   axes: AxesOptions | undefined,
   measures?: { x?: string; y?: string }
 ): { xTitle: string | undefined; yTitle: string | undefined } {
-  let xTitleOpt: string | false | undefined = false;
-  let yTitleOpt: string | false | undefined = false;
-  if (axes === true) {
-    xTitleOpt = undefined;
-    yTitleOpt = undefined;
-  } else if (axes && typeof axes === "object") {
-    xTitleOpt = resolveAxisTitle(axes.x);
-    yTitleOpt = resolveAxisTitle(axes.y);
-  }
-  return {
-    xTitle: xTitleOpt === false ? undefined : (xTitleOpt ?? measures?.x),
-    yTitle: yTitleOpt === false ? undefined : (yTitleOpt ?? measures?.y),
+  const title = (dim: "x" | "y"): string | undefined => {
+    if (axes === true) return measures?.[dim];
+    const opt = axes && typeof axes === "object" ? axes[dim] : undefined;
+    return opt === undefined || opt === false
+      ? undefined
+      : axisTitle(opt, measures?.[dim]);
   };
+  return { xTitle: title("x"), yTitle: title("y") };
 }
 
 export async function layout(

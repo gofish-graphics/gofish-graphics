@@ -24,6 +24,7 @@ import {
   niceContinuous,
   originIs,
 } from "../underlyingSpace";
+import type { AxisOptions } from "../gofish";
 
 /**
  * Axis elaboration: turn an inferred axis into ordinary GoFish shapes +
@@ -1044,8 +1045,20 @@ export async function elaborateAxes(
 // title's centering must never see the legend column (it'd drag the title
 // off-center). Same ordering argument the legend pass makes about itself.
 
-const TITLE_FONT_SIZE = 11;
-const TITLE_COLOR = "gray";
+export const TITLE_FONT_SIZE = 11;
+export const TITLE_COLOR = "gray";
+
+/** The title of a drawn axis from its `axes` option: the option's `title`,
+ *  none when it is `false`, and otherwise `inferred` (the axis's measure, or
+ *  a name the caller falls back to). Whether the axis is drawn at all is the
+ *  caller's rule. */
+export function axisTitle(
+  opt: AxisOptions | undefined,
+  inferred: string | undefined
+): string | undefined {
+  const title = typeof opt === "object" && opt !== null ? opt.title : undefined;
+  return title === false ? undefined : (title ?? inferred);
+}
 const TITLE_CONTENT_GAP = 8; // gap between a title and the full content bbox
 const TITLE_CONTENT_NAME = "__titleContent";
 const X_TITLE_ANCHOR_NAME = "__xTitleAnchor";
