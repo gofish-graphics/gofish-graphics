@@ -135,7 +135,7 @@ export function unionChildSpaces(
  *  non-continuous member with an opinion (an empty `ORDINAL([])` from an
  *  unresolved `ref()`) has an unknown position, so it keeps the overlay from
  *  being free. UNDEFINED members carry no opinion. */
-export const overlayOrigin = (spaces: UnderlyingSpace[]): Origin => {
+const overlayOrigin = (spaces: UnderlyingSpace[]): Origin => {
   const opinions = spaces.filter((s) => !isUNDEFINED(s));
   if (opinions.some((s) => isCONTINUOUS(s) && s.origin === "pinned"))
     return "pinned";

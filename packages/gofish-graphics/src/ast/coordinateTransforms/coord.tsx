@@ -24,12 +24,9 @@ import { black } from "../../color";
 import {
   UnderlyingSpace,
   UNDEFINED,
-  ORDINAL,
   isCONTINUOUS,
   isORDINAL,
   isUNDEFINED,
-  forgetAllMeasures,
-  mergeAllMeasures,
   continuousInterval,
   CONTINUOUS,
   originIs,
@@ -37,11 +34,9 @@ import {
 } from "../underlyingSpace";
 import { impliedExtent } from "../extent";
 import {
-  overlayOrigin,
-  seatedUnion,
   unionChildExtents,
+  unionChildSpaces,
 } from "../graphicalOperators/alignment";
-import type { Measure } from "../data";
 import { axisScale, type AxisMap } from "../domain";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry, scopeMap } from "../solver/scopes";
@@ -109,29 +104,6 @@ export type CoordinateTransform = {
 /** The two axes, for the loops that walk both. */
 const AXES = [0, 1] as const;
 
-/** Union all child ORDINAL spaces on `axis` into one ORDINAL, carrying the
- *  grouping measure (FORGET on a clash) so a polar category axis names itself
- *  off its space — the coord-space analogue of `unionChildSpaces`'s ordinal
- *  fold. (Children are tuples; non-ordinal entries on `axis` are ignored.) */
-const unionOrdinal = (
-  children: Size<UnderlyingSpace>[],
-  axis: 0 | 1
-): UnderlyingSpace => {
-  const keys = new Set<string>();
-  const measures: (Measure | undefined)[] = [];
-  // Anonymous only if EVERY contributing ordinal is anonymous.
-  let anonymous = true;
-  for (const child of children) {
-    const s = child[axis];
-    if (isORDINAL(s) && s.domain) {
-      s.domain.forEach((k) => keys.add(k));
-      measures.push(s.measure);
-      if (!s.anonymous) anonymous = false;
-    }
-  }
-  return ORDINAL(Array.from(keys), forgetAllMeasures(measures), anonymous);
-};
-
 export const coord = createNodeOperator(
   (
     {
@@ -186,30 +158,17 @@ export const coord = createNodeOperator(
           // is the frame the user asked for, not a summary of what is in it.
           const declared = coordTransform.dataWindow;
 
-          // Per axis, the coord's fold is the overlay fold (each child seated
-          // on its baseline, the origin of the overlay), with two rules of its
-          // own: any ORDINAL child makes the axis a category axis, and a
-          // declared window pins the axis to that window. Measures unify as
-          // types, as in every continuous composition: two units on one
-          // coordinate axis would share one σ.
+          // Per axis, the coord's fold is the overlay fold every layer uses
+          // (`unionChildSpaces`), carrying this coord's transform, with one
+          // rule of its own: a declared window pins a continuous axis to that
+          // window, keeping the children's measure.
           const axisSpace = (axis: 0 | 1): UnderlyingSpace => {
-            if (children.some((child) => child[axis].kind === "ordinal"))
-              return unionOrdinal(children, axis);
-            const spaces = children.map((child) => child[axis]);
-            const conts = spaces.filter((s) => isCONTINUOUS(s));
-            if (conts.length === 0) return UNDEFINED;
+            const union = unionChildSpaces(children, axis);
+            if (!isCONTINUOUS(union)) return union;
             const window = declared?.[axis];
-            const origin =
-              window !== undefined ? "pinned" : overlayOrigin(spaces);
-            return CONTINUOUS(
-              window ?? seatedUnion(conts, "baseline", origin),
-              origin,
-              mergeAllMeasures(
-                conts.map((s) => s.measure),
-                { axis, where: "inside a coordinate space" }
-              ),
-              coordTransform
-            );
+            return window
+              ? CONTINUOUS(window, "pinned", union.measure, coordTransform)
+              : { ...union, coordinateTransform: coordTransform };
           };
           // The coord roots its own σ-scope on both axes, resolved against
           // the budget it is given (`layout`): its children's data lives in

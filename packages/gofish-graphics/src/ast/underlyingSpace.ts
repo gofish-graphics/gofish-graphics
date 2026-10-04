@@ -79,7 +79,7 @@ export type CONTINUOUS_TYPE = {
    *  chart's parts left of the center are counts too. An axis over it labels
    *  each tick with its distance from 0. A union keeps it only when every
    *  part has it ({@link allMirrored}).
-   *  TODO(#995): layer axis merging, coord, and anchorAt drop it. */
+   *  TODO(#995): layer axis merging, a coord's declared window, and anchorAt drop it. */
   mirrored?: true;
 };
 
