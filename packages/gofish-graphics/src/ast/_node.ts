@@ -31,6 +31,7 @@ import {
   axisScopeFor,
   BASE_AXIS_SCOPE,
   type AxisScope,
+  type SpaceDeclaration,
   type AxisScopeHook,
 } from "./dims";
 import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
@@ -645,11 +646,12 @@ export class GoFishNode {
    */
   public _elaborateInAxisScope?: AxisScopeHook;
   /**
-   * Axis names a `coord` node declares for its subtree (the transform's
-   * `aliases`, e.g. `{ x: "theta", y: "r" }`). Read by {@link resolveAliases} to
-   * rebind the axis-name scope while walking into this coord.
+   * The space a `coord` node opens for its subtree: the transform's axis
+   * names (`aliases`, e.g. `{ x: "theta", y: "r" }`) and its type. Read by
+   * {@link resolveAliases} to rebind the axis scope while walking into this
+   * coord.
    */
-  public _aliases?: { x?: string; y?: string };
+  public _space?: SpaceDeclaration;
   constructor(
     {
       key,
@@ -940,8 +942,7 @@ export class GoFishNode {
     outer: AxisScope,
     work: (() => Promise<void>)[]
   ): void {
-    const inner =
-      this.type === "coord" ? axisScopeFor(this._aliases ?? {}) : outer;
+    const inner = this._space ? axisScopeFor(this._space, outer) : outer;
     const hook = this._elaborateInAxisScope;
     if (hook) {
       work.push(async () => {

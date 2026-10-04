@@ -331,10 +331,26 @@ export interface ScatterOperator
    *  point, `{ min, max }` the span, `{ center }` the point. */
   dims?: AxisDims;
   alignment?: string;
+  /** How children keep clear of each other on the free axis. Default: none
+   *  (every child sits on the alignment line). */
+  overlap?: OverlapStrategyIR;
   axes?: AxesOptions;
   w?: ChannelValue;
   h?: ChannelValue;
 }
+
+/** A `scatter` overlap strategy, made by a function call (`separate()`,
+ *  `jitter()`). Mirrors JS's `OverlapStrategy`
+ *  (`graphicalOperators/overlap.ts`). */
+export type OverlapStrategyIR =
+  | { kind: "separate"; padding?: number }
+  | {
+      kind: "jitter";
+      randomness?: "blue" | "quasi" | "uniform";
+      smoothing?: number;
+      padding?: number;
+      seed?: number;
+    };
 
 /**
  * Per-node axis-rendering override. Mirrors the JS-side `AxesOptions` /

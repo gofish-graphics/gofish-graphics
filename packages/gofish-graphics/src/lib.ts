@@ -165,6 +165,13 @@ export type {
   TreemapOptions,
 } from "./ast/graphicalOperators/treemap";
 export { pack, circles } from "./ast/graphicalOperators/pack";
+export { separate, jitter } from "./ast/graphicalOperators/overlap";
+export type {
+  OverlapStrategy,
+  SeparateStrategy,
+  JitterStrategy,
+  JitterRandomness,
+} from "./ast/graphicalOperators/overlap";
 export type { PackMethod, PackOptions } from "./ast/graphicalOperators/pack";
 export {
   enclose,

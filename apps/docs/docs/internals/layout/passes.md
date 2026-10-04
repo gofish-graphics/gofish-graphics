@@ -11,6 +11,8 @@ covers:
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
+  - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
+  - packages/gofish-graphics/src/ast/constraints/overlap.ts
 ---
 
 # Layout and Render Passes in GoFish Graphics
@@ -192,12 +194,15 @@ its names against `inner` and calls `.relate()`, which is async. A spread given 
 own `dims` runs the layer's dims hook first, then its own.
 
 `resolveAliases` is a top-down pass (run before underlying space, which reads the
-dims and the constraints) that carries the **axis scope**, a map from name to axis
+dims and the constraints) that carries the **axis scope**, whose `names` map each name to an axis,
 starting at `{ x: 0, y: 1 }`. Every `coord` replaces the scope for its subtree with
 `x`, `y`, and the names its transform declares. Most transforms (`linear`, `wavy`,
 `bipolar`, `arcLengthPolar`) declare none, so inside them only `x`/`y` are visible:
 a name has a meaning only inside the space that declares it, and the innermost coord
-wins. The walk is synchronous: it queues each node's hook with its two scopes, in
+wins. A coord declares its space on its node (`_space`: the transform's `aliases`
+and `type`). The scope also carries `warpedBy`, the type of the nearest enclosing
+space that is not linear, for work that is only correct in a linear one (scatter's
+`overlap`). The walk is synchronous: it queues each node's hook with its two scopes, in
 pre-order. The pass then runs the queue one hook at a time, in
 that order. It does not run them concurrently, because an operator's `.relate()`
 walks the subtree to build its environment and must not interleave with a
@@ -560,6 +565,34 @@ Geometry exists only after layout, so a parent cannot yet read it while sizing.
 That is why `pack` keeps its children at their pixel size and does not fit
 itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
+
+The second consumer is `scatter`'s `overlap` option, `separate()` (#969) or
+`jitter()` (#970).
+`scatter` elaborates to a layer with a `position` constraint per child on each
+axis a field places, and an `align` on every other ("free") axis. With an
+overlap strategy, the free axis gets an `overlap` constraint
+(`constraints/overlap.ts`) in place of the `align`. It is not a difference
+constraint, so the placement solver never sees it: `applyConstraints` runs it
+after the solve, when each child's position on the data axis is known. It reads
+each child's `enclosingCircle`, asks the strategy
+(`graphicalOperators/overlap.ts`) for each circle center's offset from the
+alignment line, and pins each child there. A strategy returns one free-axis
+number per child, so it cannot move the data axis. `applyConstraints` also
+passes the data axis's pixels per data unit (the layer's position-scale
+`sigma`), which `jitter` needs for its `smoothing` window in data units. The
+strategies share one broad phase, `NeighborGrid`, a uniform grid of square
+cells kept as lists in insertion order: `separate` buckets placed dots on the
+data axis, and `jitter`'s `"blue"` on both axes. `separate` merges each dot's
+blocked intervals into disjoint runs in one sorted sweep and takes the nearest
+free candidate. `jitter`'s outline is a box-kernel count over a sorted sliding
+window (`jitterOutline`). A scatter with an overlap strategy reports no
+size on its free axis in the space pass (a fixed-pixel dot's space is
+`UNDEFINED` there), and its real extent comes from where the children land, in
+the layer's box fold, the way a text label's extent is measured at layout.
+So a beeswarm takes the room its dots need and does not shrink to fit. It throws
+inside a non-linear coordinate space, where the layout frame is not the screen
+(#1002); the axis scope the scatter elaborates in carries the nearest
+non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 
 ### Pass 10: Placement
 

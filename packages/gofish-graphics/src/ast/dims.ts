@@ -131,25 +131,45 @@ export const mapAxisDims = <A, B>(
  * `x`/`y` are always present and always mean axis 0/1; a coordinate space adds
  * the names it declares (polar `theta`/`r`, geo `lon`/`lat`).
  */
-export type AxisScope = Readonly<Record<string, Direction>>;
+export type AxisScope = {
+  readonly names: Readonly<Record<string, Direction>>;
+  /** The type of the nearest enclosing coordinate space that is not linear
+   *  (`"polar"`, `"geo"`, ...), if any: there the layout frame is not the
+   *  screen. */
+  readonly warpedBy?: string;
+};
 
-/** The scope outside every coordinate space that declares names. */
-export const BASE_AXIS_SCOPE: AxisScope = { x: 0, y: 1 };
+/** The scope outside every coordinate space. */
+export const BASE_AXIS_SCOPE: AxisScope = { names: { x: 0, y: 1 } };
+
+/** What a `coord` node declares about the space it opens: the names its
+ *  transform gives the axes (none for most spaces) and the transform's type. */
+export type SpaceDeclaration = {
+  aliases?: { x?: string; y?: string };
+  type: string;
+};
 
 /** The scope inside a coordinate space: `x`/`y` plus the names its transform
- *  declares in `aliases` (none for most spaces). Every space establishes its
- *  own scope, so the innermost one wins and an outer space's names are not
- *  visible inside it. */
-export const axisScopeFor = (aliases: {
-  x?: string;
-  y?: string;
-}): AxisScope => {
-  if (aliases.x === undefined && aliases.y === undefined)
-    return BASE_AXIS_SCOPE;
-  const scope: Record<string, Direction> = { ...BASE_AXIS_SCOPE };
-  if (aliases.x !== undefined) scope[aliases.x] = 0;
-  if (aliases.y !== undefined) scope[aliases.y] = 1;
-  return scope;
+ *  declares in `aliases`. Every space establishes its own names, so the
+ *  innermost one wins and an outer space's names are not visible inside it.
+ *  `warpedBy` is the space's own type unless it is linear, in which case the
+ *  outer scope's carries through. */
+export const axisScopeFor = (
+  space: SpaceDeclaration,
+  outer: AxisScope
+): AxisScope => {
+  const { aliases = {} } = space;
+  const warpedBy = space.type === "linear" ? outer.warpedBy : space.type;
+  let names = BASE_AXIS_SCOPE.names;
+  if (aliases.x !== undefined || aliases.y !== undefined) {
+    const own: Record<string, Direction> = { ...BASE_AXIS_SCOPE.names };
+    if (aliases.x !== undefined) own[aliases.x] = 0;
+    if (aliases.y !== undefined) own[aliases.y] = 1;
+    names = own;
+  }
+  return names === BASE_AXIS_SCOPE.names && warpedBy === undefined
+    ? BASE_AXIS_SCOPE
+    : { names, warpedBy };
 };
 
 /** Resolve an axis name against `scope`, or throw an error that lists the
@@ -159,11 +179,11 @@ export const resolveAxisName = (
   name: AxisName,
   where: string
 ): Direction => {
-  const axis = scope[name];
+  const axis = scope.names[name];
   if (axis !== undefined) return axis;
-  const names = Object.keys(scope).join(", ");
+  const names = Object.keys(scope.names).join(", ");
   throw new Error(
-    scope === BASE_AXIS_SCOPE
+    scope.names === BASE_AXIS_SCOPE.names
       ? `${where}: the innermost enclosing coordinate space (if any) does ` +
         `not declare the axis name "${name}", so only ${names} are ` +
         `available here. Put the mark directly inside a coordinate space ` +
@@ -401,7 +421,7 @@ export const translateForAnchor = (
   value - localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
 
 export const elaborateDirection = (direction: FancyDirection): Direction =>
-  typeof direction === "number" ? direction : BASE_AXIS_SCOPE[direction];
+  typeof direction === "number" ? direction : BASE_AXIS_SCOPE.names[direction];
 
 export type Position = [number | undefined, number | undefined];
 

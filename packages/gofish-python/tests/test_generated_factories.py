@@ -20,6 +20,7 @@ from gofish import (
     circles,
     dice,
     group,
+    jitter,
     join,
     layer,
     pack,
@@ -29,8 +30,10 @@ from gofish import (
     slice_dice,
     rect,
     spread,
+    scatter,
     squarify,
     stack,
+    separate,
     table,
     text,
     treemap,
@@ -94,6 +97,73 @@ def test_pack_serializes_by_and_method():
     assert d["method"] == {"kind": "circles"}
     assert pack().to_dict()["type"] == "pack"
     assert "method" not in pack().to_dict()
+
+
+def test_scatter_serializes_separate_overlap():
+    d = scatter(x="mass", alignment="middle", overlap=separate(padding=1)).to_dict()
+    assert d["type"] == "scatter"
+    assert d["overlap"] == {"kind": "separate", "padding": 1}
+    assert separate() == {"kind": "separate"}
+    assert "overlap" not in scatter(x="mass").to_dict()
+    with pytest.raises(ValueError):
+        separate(padding=-1)
+
+
+def test_scatter_serializes_jitter_overlap():
+    d = scatter(
+        x="mass", alignment="middle", overlap=jitter(randomness="quasi", smoothing=100)
+    ).to_dict()
+    assert d["overlap"] == {"kind": "jitter", "randomness": "quasi", "smoothing": 100}
+    assert jitter() == {"kind": "jitter"}
+    assert jitter(padding=1, seed=3) == {"kind": "jitter", "padding": 1, "seed": 3}
+    # `overlap` is a tagged union: the `kind` picks the branch whose keys are
+    # checked, as for any nested option dict.
+    with pytest.raises(TypeError):
+        scatter(x="mass", overlap={"kind": "swarm"})
+    with pytest.raises(TypeError):
+        scatter(x="mass", overlap={"kind": "separate", "randomness": "blue"})
+    with pytest.raises(ValueError):
+        jitter(randomness="pink")
+    with pytest.raises(ValueError):
+        jitter(smoothing=0)
+    with pytest.raises(ValueError):
+        jitter(smoothing=float("nan"))
+    with pytest.raises(ValueError):
+        jitter(seed=float("inf"))
+    with pytest.raises(ValueError):
+        jitter(seed="1")
+
+
+def test_non_finite_numbers_are_tagged_in_the_ir():
+    import json
+    import math
+
+    from gofish import chart, circle
+
+    ir = (
+        chart([{"v": 1.0}, {"v": math.inf}])
+        .flow(scatter(x="v", overlap=jitter(smoothing=math.inf)))
+        .mark(circle(r=3))
+        .to_ir()
+    )
+    overlap = ir["operators"][0]["overlap"]
+    assert overlap["smoothing"] == {"$numberDouble": "Infinity"}
+    # The document is strict JSON: no bare Infinity / NaN.
+    json.dumps(ir, allow_nan=False)
+    from gofish._nonfinite import encode_non_finite
+
+    assert encode_non_finite([-math.inf, math.nan, 2.0, "x"]) == [
+        {"$numberDouble": "-Infinity"},
+        {"$numberDouble": "NaN"},
+        2.0,
+        "x",
+    ]
+    # Nothing to encode: the same object back (and unchanged parts shared).
+    finite = {"a": [1.0, {"b": "x"}], "c": 2}
+    assert encode_non_finite(finite) is finite
+    mixed = {"keep": [1.0], "inf": math.inf}
+    out = encode_non_finite(mixed)
+    assert out["keep"] is mixed["keep"] and out is not mixed
 
 
 def test_pack_combinator_form():

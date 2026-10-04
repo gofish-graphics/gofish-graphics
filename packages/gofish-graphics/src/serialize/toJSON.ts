@@ -19,7 +19,7 @@
  * essay at `apps/docs/docs/internals/frontend/serialization.md`.
  */
 
-import type { Frontend } from "gofish-ir";
+import { Frontend } from "gofish-ir";
 import type { ChartBuilder, Mark, Operator } from "./registry";
 import { GoFishRef } from "../ast/_ref";
 
@@ -70,12 +70,21 @@ function readTag(value: unknown): SerializeTag | undefined {
 export async function toJSON(
   chart: ChartBuilder<any>
 ): Promise<Frontend.FrontendIRDocument> {
-  const root = await chartBuilderToChartIR(chart);
-  return {
+  return document(await chartBuilderToChartIR(chart));
+}
+
+/**
+ * Wrap a root in the IR document envelope, with every non-finite number
+ * (`Infinity`, `-Infinity`, `NaN`) in its tagged form, since JSON has no
+ * spelling for them (see gofish-ir's `nonFinite.ts`). A reader decodes them
+ * with `Serialize.readIR` before rebuilding the chart.
+ */
+function document(root: Frontend.FrontendIRDocument["root"]) {
+  return Frontend.encodeNonFinite<Frontend.FrontendIRDocument>({
     irVersion: 0,
     ir: "gofish-frontend",
     root,
-  };
+  });
 }
 
 /**
@@ -91,7 +100,7 @@ export async function toJSONLayer(
     charts: await Promise.all(charts.map(chartBuilderToChartIR)),
     ...(Object.keys(options ?? {}).length > 0 ? { options } : {}),
   };
-  return { irVersion: 0, ir: "gofish-frontend", root };
+  return document(root);
 }
 
 /**
@@ -107,7 +116,7 @@ export async function toJSONRawMark(
     mark: await markToIR(mark),
     ...(options && Object.keys(options).length > 0 ? { options } : {}),
   };
-  return { irVersion: 0, ir: "gofish-frontend", root };
+  return document(root);
 }
 
 // ---------------------------------------------------------------------------
