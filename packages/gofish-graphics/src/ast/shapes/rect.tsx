@@ -31,7 +31,7 @@ import { computeAesthetic, computeSize } from "../../util";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  forgetOnConflict,
+  mergeMeasures,
   CONTINUOUS,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
@@ -102,7 +102,7 @@ export const Rect = ({
             return CONTINUOUS(
               interval(getValue(d.min)!, getValue(d.max)!),
               "pinned",
-              forgetOnConflict(getMeasure(d.min), getMeasure(d.max))
+              mergeMeasures(getMeasure(d.min), getMeasure(d.max), "rect")
             );
           }
           if (!isValue(d.min) && !isValue(d.size)) {

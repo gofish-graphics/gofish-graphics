@@ -44,6 +44,7 @@ import {
   isCONTINUOUS,
   isUNDEFINED,
   spaceMeasure,
+  mergeMeasures,
   CONTINUOUS,
 } from "../underlyingSpace";
 import {
@@ -56,7 +57,7 @@ import {
 import { impliedExtent, scaleExtent, type Extent } from "../extent";
 import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
-import type { Measure } from "../data";
+import { isValue, type Measure } from "../data";
 import {
   distributeChildrenInPlacementOrder,
   distributeOrigin,
@@ -107,20 +108,65 @@ export type PositionDomains = {
   yMeasure?: Measure;
 };
 
+/** Per axis, the direct children a `position` constraint places by a datum
+ *  coordinate (a point or an interval) on that axis. Such a child sits where
+ *  its datum maps, so its own extent is in its own frame (a scatter's circle
+ *  is sized in its own units), not in the axis's data. */
+export function datumPlacedChildren(
+  constraints: ConstraintSpec[],
+  childNodes: GoFishAST[]
+): [Set<number>, Set<number>] {
+  const index = buildNameIndex(childNodes);
+  const placed: [Set<number>, Set<number>] = [new Set(), new Set()];
+  for (const c of constraints) {
+    if (c.type !== "position") continue;
+    const coords = [c.x, c.y] as const;
+    for (const axis of [0, 1] as const) {
+      const coord = coords[axis];
+      if (coord === undefined || !(isValue(coord) || isPositionInterval(coord)))
+        continue;
+      for (const ref of c.children) {
+        const i = index.get(ref.name);
+        if (i !== undefined) placed[axis].add(i);
+      }
+    }
+  }
+  return placed;
+}
+
+/** `children` with the axis of every child in `placed` left out (UNDEFINED,
+ *  or no claim): what the layer's own union sees once datum-placed children
+ *  are set aside. */
+const withoutPlaced = <T>(
+  children: Size<T>[],
+  axis: 0 | 1,
+  placed: Set<number>,
+  empty: T
+): Size<T>[] =>
+  children.map((c, i) =>
+    placed.has(i) ? axisSize(empty, axis, c[1 - axis]) : c
+  );
+
 /** Resolve a layer's default per-axis TYPE before composed constraint-space
  * overrides: union child spaces, and overlay datum position/span domains
  * onto that union as a pinned space. The children's union is seated as any
  * overlay seats a child: a free union on its baseline at data 0 (which is
  * where the layer places its free children), a pinned one at its own
- * position. A `transform.scale` does not touch the type: like translate, it
- * acts on pixels, so it scales only the claim ({@link resolveLayerAxisExtent}). */
+ * position. A child a datum position places is left out of the union: it sits
+ * where its datum maps, so the datum is what it adds to the domain. A
+ * `transform.scale` does not touch the type: like translate, it acts on
+ * pixels, so it scales only the claim ({@link resolveLayerAxisExtent}). */
 export function resolveLayerAxisSpace(
   childSpaces: Size<UnderlyingSpace>[],
   axis: 0 | 1,
   positionDomain: Interval.Interval | undefined,
-  positionMeasure: Measure | undefined
+  positionMeasure: Measure | undefined,
+  placed: Set<number>
 ): UnderlyingSpace {
-  const base = unionChildSpaces(childSpaces, axis);
+  const base = unionChildSpaces(
+    withoutPlaced(childSpaces, axis, placed, UNDEFINED),
+    axis
+  );
   if (positionDomain === undefined) return base;
   const merged = seatedUnion(
     [
@@ -133,25 +179,32 @@ export function resolveLayerAxisSpace(
   // The position/span constraints' OWN measure is the authoritative unit for
   // this axis's data domain (they define it); it wins, falling back to the
   // children's POSITION measure when the constraints are untagged.
-  return CONTINUOUS(merged, "pinned", positionMeasure ?? spaceMeasure(base));
+  return CONTINUOUS(
+    merged,
+    "pinned",
+    mergeMeasures(positionMeasure, spaceMeasure(base), "position constraint")
+  );
 }
 
 export function resolveLayerBaseSpaces(
   childSpaces: Size<UnderlyingSpace>[],
-  positionDomains: PositionDomains
+  positionDomains: PositionDomains,
+  placed: [Set<number>, Set<number>] = [new Set(), new Set()]
 ): Size<UnderlyingSpace> {
   return [
     resolveLayerAxisSpace(
       childSpaces,
       0,
       positionDomains.x,
-      positionDomains.xMeasure
+      positionDomains.xMeasure,
+      placed[0]
     ),
     resolveLayerAxisSpace(
       childSpaces,
       1,
       positionDomains.y,
-      positionDomains.yMeasure
+      positionDomains.yMeasure,
+      placed[1]
     ),
   ];
 }
@@ -164,13 +217,21 @@ export function resolveLayerBaseSpaces(
  * operation, so it scales the claim of every origin and never the data
  * interval. */
 export function resolveLayerAxisExtent(
-  childExtents: Size<Extent | undefined>[],
-  childSpaces: Size<UnderlyingSpace>[],
+  allChildExtents: Size<Extent | undefined>[],
+  allChildSpaces: Size<UnderlyingSpace>[],
   axis: 0 | 1,
   scale: number,
   positionDomain: Interval.Interval | undefined,
-  space: UnderlyingSpace
+  space: UnderlyingSpace,
+  placed: Set<number> = new Set()
 ): Extent | undefined {
+  const childSpaces = withoutPlaced(allChildSpaces, axis, placed, UNDEFINED);
+  const childExtents = withoutPlaced(
+    allChildExtents,
+    axis,
+    placed,
+    undefined as Extent | undefined
+  );
   const base = unionChildSpaces(childSpaces, axis);
   const baseExtent = unionChildExtents(childExtents, childSpaces, axis, base);
   const datum =

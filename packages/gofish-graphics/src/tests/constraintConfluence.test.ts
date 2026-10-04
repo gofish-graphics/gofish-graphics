@@ -614,6 +614,8 @@ console.log("# constraint confluence: nest size dependency planning");
       childSpaces[0][0] === UNDEFINED
   );
 
+  // The child is placed by the datum position on y, so its own extent (in
+  // its own unit, "child") stays out of the layer's y domain.
   const resolved = resolveLayerBaseSpaces(
     [
       [
@@ -621,7 +623,8 @@ console.log("# constraint confluence: nest size dependency planning");
         CONTINUOUS(interval(5, 15), "pinned", "child"),
       ],
     ],
-    { y: interval(0, 20), yMeasure: "pin" }
+    { y: interval(0, 20), yMeasure: "pin" },
+    [new Set(), new Set([0])]
   );
   ok(
     "transform.scale leaves the free magnitude's data extent alone",
@@ -645,11 +648,24 @@ console.log("# constraint confluence: nest size dependency planning");
   );
   const pinned = continuousInterval(resolved[1]);
   ok(
-    "base space resolution merges datum domains and prefers constraint measure",
+    "a datum-placed child's own extent and measure stay out of the domain",
     pinned !== undefined &&
       pinned.min === 0 &&
       pinned.max === 20 &&
       spaceMeasure(resolved[1]) === "pin"
+  );
+  let clash: string | undefined;
+  try {
+    resolveLayerBaseSpaces(
+      [[UNDEFINED, CONTINUOUS(interval(5, 15), "pinned", "child")]],
+      { y: interval(0, 20), yMeasure: "pin" }
+    );
+  } catch (e) {
+    clash = (e as Error).message;
+  }
+  ok(
+    "an unplaced child in another unit than the datum domain is a type error",
+    clash !== undefined && /different measures/.test(clash)
   );
 }
 

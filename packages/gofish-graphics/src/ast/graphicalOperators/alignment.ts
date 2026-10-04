@@ -63,8 +63,8 @@ export const seatedUnion = (
 
 /**
  * The one overlay fold: the union of the children's seated intervals, with
- * the origin the operator gives the result and the children's measures merged
- * (forgetting on a clash only when every child is free; see
+ * the origin the operator gives the result and the children's measures
+ * unified as types, whatever their origin (a clash is an error; see
  * {@link mergeMeasures}). Children that all hold amounts on both sides of 0
  * still do together, when the result has a 0.
  */
@@ -74,12 +74,10 @@ function overlay(
   origin: Origin,
   context: string
 ): UnderlyingSpace {
-  const measure = conts.every((s) => s.origin === "free")
-    ? forgetAllMeasures(conts.map((s) => s.measure))
-    : mergeAllMeasures(
-        conts.map((s) => s.measure),
-        context
-      );
+  const measure = mergeAllMeasures(
+    conts.map((s) => s.measure),
+    context
+  );
   return mirrored(
     CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
     origin !== "none" && allMirrored(conts)

@@ -71,8 +71,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
     msg ?? "did not throw"
   );
 
-  // Two baseline magnitudes (the old SIZE) in different fields compose into a
-  // real extent that carries no single unit — this must NOT throw, just forget.
+  // Two baseline magnitudes in different fields on one axis are the same type
+  // error: the measure policy does not depend on the origin.
   const dollarsMag = CONTINUOUS(interval(0, 100), "free", "dollars");
   const unitsMag = CONTINUOUS(interval(0, 50), "free", "units");
   let composed: UnderlyingSpace | undefined;
@@ -80,14 +80,13 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
     composed = unionChildSpaces([onY(dollarsMag), onY(unitsMag)], 1);
   });
   ok(
-    "overlay of two baseline magnitudes with clashing measures FORGETS (no throw)",
-    magMsg === null,
-    magMsg ?? ""
+    "overlay of two baseline magnitudes with clashing measures THROWS too",
+    magMsg !== null && /different measures/.test(magMsg),
+    magMsg ?? "did not throw"
   );
   ok(
-    "...and the forgotten composition is itself a baseline magnitude",
-    composed !== undefined && originIs(composed, "free"),
-    composed && JSON.stringify(composed)
+    "...and nothing was composed",
+    composed === undefined
   );
 }
 

@@ -13,7 +13,7 @@ import {
   UnderlyingSpace,
   dataSides,
   dataWidth,
-  forgetAllMeasures,
+  mergeAllMeasures,
   isCONTINUOUS,
   mirrored,
   spaceMeasure,
@@ -254,7 +254,7 @@ export type DistributeFoldOptions = {
  * Every number here is a data extent: spacing and pitch are pixels, so they
  * live only in the claim ({@link distributeExtentFold}).
  *
- * Measures forget-merge on conflict, like spread. `keys` are the targets'
+ * Measures unify as types (a clash is an error). `keys` are the targets'
  * ordinal keys (node.key) in the same order as `targetSpaces`; only used to
  * pick the ORDINAL branch. This is ref-independent (plain arrays) so spread can
  * call it with its positional children and the layer with its name-resolved
@@ -267,8 +267,9 @@ export function distributeSpaceFold(
 ): UnderlyingSpace {
   const n = targetSpaces.length;
   if (n === 0) return UNDEFINED;
-  const childMeasure = forgetAllMeasures(
-    targetSpaces.map((s) => spaceMeasure(s))
+  const childMeasure = mergeAllMeasures(
+    targetSpaces.map((s) => spaceMeasure(s)),
+    opts.glue ? "stack" : "spread"
   );
 
   // Explicit size on the stack axis dominates the children-derived claim.

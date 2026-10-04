@@ -66,6 +66,7 @@ import {
   composePlanExtents,
   composePlanSpaces,
   planConstraintComposition,
+  datumPlacedChildren,
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
   type ComposeBudget,
@@ -304,7 +305,12 @@ export const layer = createNodeOperatorSequential(
       // is what lets the layer build a position scale at layout time so
       // `Constraint.position` can map data values to pixels.
       const posDomains = collectPositionDomains(constraints);
-      const base = resolveLayerBaseSpaces(effectiveChildren, posDomains);
+      const placed = datumPlacedChildren(constraints, childNodes);
+      const base = resolveLayerBaseSpaces(
+        effectiveChildren,
+        posDomains,
+        placed
+      );
       const resolved: Size<UnderlyingSpace> = [base[0], base[1]];
 
       // A simple spread expressed as align + distribute. When the
@@ -342,6 +348,7 @@ export const layer = createNodeOperatorSequential(
         nestPlan,
         effectiveChildren,
         posDomains,
+        placed,
         base,
         plan,
         composed,
@@ -442,7 +449,8 @@ export const layer = createNodeOperatorSequential(
               0,
               scale[0],
               t.posDomains.x,
-              t.base[0]
+              t.base[0],
+              t.placed[0]
             ),
             resolveLayerAxisExtent(
               effectiveExtents,
@@ -450,7 +458,8 @@ export const layer = createNodeOperatorSequential(
               1,
               scale[1],
               t.posDomains.y,
-              t.base[1]
+              t.base[1],
+              t.placed[1]
             ),
           ];
           constraintBudget = undefined;

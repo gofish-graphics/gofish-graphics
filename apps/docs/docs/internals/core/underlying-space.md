@@ -1532,20 +1532,23 @@ must merge silently into a tagged one).
 
 - `mergeMeasures(a, b, context)` — unify as **types**. Equal measures unify to
   themselves; two _different_ defined measures are a type error and it
-  **throws**. This is the guard on the shared union: `unionChildSpaces`'
-  mixed/data-positioned interval collection (`alignment.ts`) and
-  `resolveAlignmentSpace`'s non-baseline branch (not every child a `free`
-  magnitude) use it, so overlaying a count axis onto a millimeter axis fails
-  loudly instead of corrupting the domain.
+  **throws**. This is the one policy for every continuous composition, and it
+  is decided by the measures alone, never by the origin state: overlays and
+  alignments (`alignment.ts`), spreads and stacks (`distributeSpaceFold`),
+  coords, and a layer's datum domain all use it. So overlaying a count axis
+  onto a millimeter axis fails loudly instead of corrupting the domain, and so
+  does stacking or overlaying two magnitudes in different units.
 - `forgetOnConflict(a, b)` — a conflict **forgets** (returns `undefined`)
-  rather than throwing. Used where composing differently-measured magnitudes
-  is legitimate: stacking two different fields' extents produces a real
-  magnitude that carries no single unit, so the baseline-magnitude path
-  (every child `placement: free`) in `unionChildSpaces` forgets on conflict,
-  and `resolveAlignmentSpace`'s baseline reduce uses it too.
+  rather than throwing. Used only for ORDINAL axes, whose measure is the
+  grouping field that names a category axis: categories set up no σ, so two
+  grouping fields on one axis lose the name, not the scale.
 
-So the rule of thumb: **aligning/overlaying siblings throws on a unit clash;
-composing them into a new extent forgets.**
+Why one policy: the measures of an axis decide how many σ-scopes it needs,
+which is part of setting up the layout problem, not of solving it. One axis
+holds one measure and one σ. An axis that genuinely needs two (a dual-axis
+chart) is multi-scale (#525), not a unit to forget. Two fields that are the
+same unit (a movie's US and worldwide gross, both dollars) say so with
+`field(name, measure)`; their field names alone are different measures.
 
 **Where measures come from** is itself a small type system with three sources,
 checked (not silently prioritized) in `resolveMeasure` (`channels.ts`):
@@ -1596,22 +1599,20 @@ size (a bubble's area) stays a flat point. See the embedding-resolution pass und
 carries the same resolved measure, and `collectPositionDomains` folds those per
 axis with `mergeMeasures` — so a layer's own positioning constraints in clashing
 units (an interval coordinate with one endpoint in `mm` and the other in `inch`)
-throw at the source. The layer's `resolveAxis` (`layer.tsx`) then
-treats this constraint-domain measure as the axis's unit: it **prefers** the
-constraint measure and falls back to the children's POSITION measure only when
-the coordinates are untagged (literal pixels). It deliberately does _not_
-strict-unify the two — a self-scaling child (a `scatter`'s pie glyph) can leak
-its own inner unit into the children's space, and that leak is not a competing
-claim about the scatter's data axis. This restores the unit tag the scatter
+throw at the source. The layer then unifies this constraint-domain measure with
+its children's, as types, like any other composition. A child that a datum
+position places (`datumPlacedChildren`, `compose.ts`) is left out of that
+union altogether: it sits where its datum maps, so its own extent and measure
+are in its own frame (a `scatter`'s circle sized in its own units, a pie glyph
+in its angle), not in the axis's data. This restores the unit tag the scatter
 operator's reduction onto constraints had dropped.
 
 **Propagation through the baseline → anchored conversion.** A histogram's
 count axis is all baseline magnitudes (origin 0) at the children, and
 `resolveAlignmentSpace`'s start/end/baseline path folds them into
-`pinned [0, max]`. That conversion carries the merged child measure forward
-(a `forgetOnConflict` reduce) — it is load-bearing, because it is exactly how
-the count POSITION acquires its `"count"` tag so a later overlay union can
-recognize it as foreign and refuse.
+`pinned [0, max]`. That conversion carries the unified child measure forward —
+it is load-bearing, because it is exactly how the count axis acquires its
+`"count"` tag so a later overlay union can recognize it as foreign and refuse.
 
 **The error and its remedies.** A clash from `mergeMeasures` reads:
 

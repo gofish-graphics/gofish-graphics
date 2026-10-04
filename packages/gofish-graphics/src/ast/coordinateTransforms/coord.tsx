@@ -28,6 +28,7 @@ import {
   isORDINAL,
   isUNDEFINED,
   forgetAllMeasures,
+  mergeAllMeasures,
   continuousInterval,
   CONTINUOUS,
   originIs,
@@ -186,10 +187,9 @@ export const coord = createNodeOperator(
           // Per axis, the coord's fold is the overlay fold (each child seated
           // on its baseline, the origin of the overlay), with two rules of its
           // own: any ORDINAL child makes the axis a category axis, and a
-          // declared window pins the axis to that window. A coord transform
-          // maps its children's data into its own fixed coordinate space
-          // (angle/radius), so cross-unit unions are the transform's
-          // business: measures forget on conflict rather than throwing.
+          // declared window pins the axis to that window. Measures unify as
+          // types, as in every continuous composition: two units on one
+          // coordinate axis would share one σ.
           const axisSpace = (axis: 0 | 1): UnderlyingSpace => {
             if (children.some((child) => child[axis].kind === "ordinal"))
               return unionOrdinal(children, axis);
@@ -202,7 +202,10 @@ export const coord = createNodeOperator(
             return CONTINUOUS(
               window ?? seatedUnion(conts, "baseline", origin),
               origin,
-              forgetAllMeasures(conts.map((s) => s.measure)),
+              mergeAllMeasures(
+                conts.map((s) => s.measure),
+                "coordinate space"
+              ),
               coordTransform
             );
           };

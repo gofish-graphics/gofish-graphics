@@ -287,12 +287,19 @@ export const spaceMeasure = (
     : undefined;
 
 /**
- * Unify two measures as TYPES (the Stage-1 guard). Undefined is permissive —
- * it means "no claim", so it unifies with anything and yields the other side.
- * Two equal measures unify to themselves. Two *different* defined measures are
- * a type error: unioning spaces in incompatible units (e.g. a marginal
- * histogram's count axis vs. a scatter's millimeters) is silent corruption, so
- * we throw loudly instead.
+ * Unify two measures as TYPES. Undefined is permissive — it means "no claim",
+ * so it unifies with anything and yields the other side. Two equal measures
+ * unify to themselves. Two *different* defined measures are a type error:
+ * unioning extents in incompatible units onto one axis (a marginal
+ * histogram's count axis vs. a scatter's millimeters) would give two units one
+ * σ, so we throw loudly instead.
+ *
+ * This is the one policy for every continuous composition (overlays,
+ * alignments, spreads, stacks, coords, a layer's datum domain), whatever the
+ * origin of the extents: the measures of an axis decide how many σ-scopes it
+ * needs, which is part of setting up the layout problem, not of solving it.
+ * One axis holds one measure; an axis that needs two (a dual-axis chart) is
+ * multi-scale (#525), not a forgotten unit.
  */
 export const mergeMeasures = (
   a: Measure | undefined,
@@ -313,9 +320,9 @@ export const mergeMeasures = (
 
 /**
  * Like {@link mergeMeasures}, but a conflict *forgets* (returns undefined)
- * instead of throwing. Used where composing differently-measured spaces is
- * legitimate — e.g. stacking two different fields' SIZEs: the composed extent
- * is real but carries no single unit.
+ * instead of throwing. Used only for ORDINAL axes, whose measure is the
+ * grouping field that names a category axis: categories set up no σ, so two
+ * grouping fields on one axis lose the name, not the scale.
  */
 export const forgetOnConflict = (
   a: Measure | undefined,
