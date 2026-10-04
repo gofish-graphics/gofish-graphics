@@ -33,7 +33,7 @@ export function freeBaselineOffset(
   axis: Axis
 ): number | undefined {
   const space = target.spaceOn?.(axisIndex(axis));
-  if (space === undefined || !originIs(space, "free")) return undefined;
+  if (!originIs(space, "free")) return undefined;
   return anchorOffset(target, axis, "baseline");
 }
 

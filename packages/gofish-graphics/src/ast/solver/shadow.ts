@@ -268,9 +268,8 @@ function anchorCoord(
     const lo = localAnchorPoint("min", min, size);
     const hi = localAnchorPoint("max", min, size);
     const tail =
-      (space !== undefined && originIs(space, "free")
-        ? anchorCoord(t, idx, "baseline")
-        : undefined) ?? lo;
+      (originIs(space, "free") ? anchorCoord(t, idx, "baseline") : undefined) ??
+      lo;
     return anchor === "tail" ? tail : lo + hi - tail;
   }
   // start/middle/end are the box keys — the same single derivation every other

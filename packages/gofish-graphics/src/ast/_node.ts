@@ -938,12 +938,12 @@ export class GoFishNode {
     return key;
   }
 
-  /** This node's space `space` on `dim` as the axis machinery sees it: placed
+  /** One of this node's axis spaces as the axis machinery sees it: placed
    *  ({@link placeBaseline}) when this node is the render root, the scope root
    *  that seats a free baseline at the scope's `originPx`, so the root of a
    *  bar chart renders an absolute value axis over its free bars. Anywhere
    *  else a free space is still waiting for its parent to place it. */
-  public placedSpace(dim: 0 | 1, space: UnderlyingSpace): UnderlyingSpace {
+  public placedSpace(space: UnderlyingSpace): UnderlyingSpace {
     return this.parent === undefined ? placeBaseline(space) : space;
   }
 
@@ -1302,7 +1302,7 @@ export class GoFishNode {
             (prior.startsWith("o:") && prior !== mySig)
           )
             sig = mySig;
-        } else if (axisOver(this.placedSpace(dim, s)) !== undefined) {
+        } else if (axisOver(this.placedSpace(s)) !== undefined) {
           // Continuous: single-owner — only the root-most unclaimed dim claims.
           if (prior === undefined) sig = AXIS_CLAIM_OPAQUE;
         }

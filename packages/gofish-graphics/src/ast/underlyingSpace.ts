@@ -440,7 +440,7 @@ export class MeasureClash extends Error {
  * grouping field that names a category axis: categories set up no σ, so two
  * grouping fields on one axis lose the name, not the scale.
  */
-export const forgetOnConflict = (
+const forgetOnConflict = (
   a: Measure | undefined,
   b: Measure | undefined
 ): Measure | undefined => {

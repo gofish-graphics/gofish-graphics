@@ -394,7 +394,7 @@ export const connect = createNodeOperator(
               children.length >= 2 &&
               children.every((c) => {
                 const s = connectionSpaceOf(c);
-                return s !== undefined && originIs(s, "pinned");
+                return originIs(s, "pinned");
               }));
 
           // Resolve the curve. An omitted/`"auto"` curve smooths with the

@@ -19,6 +19,7 @@ import {
   type Origin,
   UnderlyingSpace,
   CONTINUOUS,
+  originIs,
 } from "../underlyingSpace";
 import { Extent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
@@ -137,11 +138,8 @@ export function unionChildSpaces(
  *  being free. UNDEFINED members carry no opinion. */
 const overlayOrigin = (spaces: UnderlyingSpace[]): Origin => {
   const opinions = spaces.filter((s) => !isUNDEFINED(s));
-  if (opinions.some((s) => isCONTINUOUS(s) && s.origin === "pinned"))
-    return "pinned";
-  return opinions.every((s) => isCONTINUOUS(s) && s.origin === "free")
-    ? "free"
-    : "none";
+  if (opinions.some((s) => originIs(s, "pinned"))) return "pinned";
+  return opinions.every((s) => originIs(s, "free")) ? "free" : "none";
 };
 
 /**

@@ -710,7 +710,7 @@ function elaborationsFor(
   // so an ordinary (non-self-scaled) space is never overridden.
   const spaceFor = (dim: 0 | 1): UnderlyingSpace =>
     !isUNDEFINED(space[dim])
-      ? node.placedSpace(dim, space[dim])
+      ? node.placedSpace(space[dim])
       : (node.hoistedAxisSpace?.[dim] ?? space[dim]);
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that

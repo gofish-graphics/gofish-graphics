@@ -683,9 +683,7 @@ export const layer = createNodeOperatorSequential(
           ): [number, number] =>
             [0, 1].map((axis) => {
               const s = cp.spaceOn?.(axis as 0 | 1);
-              return s !== undefined && originIs(s, "free")
-                ? (freeOrigin[axis] ?? 0)
-                : 0;
+              return originIs(s, "free") ? (freeOrigin[axis] ?? 0) : 0;
             }) as [number, number];
 
           const childPlaceables: ReturnType<
