@@ -15,6 +15,7 @@ import {
   allMirrored,
   mirrored,
   type CONTINUOUS_TYPE,
+  type MeasureSite,
   type Origin,
   UnderlyingSpace,
   CONTINUOUS,
@@ -72,11 +73,11 @@ function overlay(
   conts: CONTINUOUS_TYPE[],
   seat: Seat,
   origin: Origin,
-  context: string
+  site: MeasureSite
 ): UnderlyingSpace {
   const measure = mergeAllMeasures(
     conts.map((s) => s.measure),
-    context
+    site
   );
   return mirrored(
     CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
@@ -121,7 +122,10 @@ export function unionChildSpaces(
   const axisSpaces = children.map((c) => c[axis]);
   const conts = axisSpaces.filter(isCONTINUOUS);
   if (conts.length === 0) return UNDEFINED;
-  return overlay(conts, "baseline", overlayOrigin(axisSpaces), "overlay union");
+  return overlay(conts, "baseline", overlayOrigin(axisSpaces), {
+    axis,
+    where: "where marks are drawn on top of each other",
+  });
 }
 
 /** The origin of an overlay of `spaces` (each seated on its baseline): pinned
@@ -164,7 +168,8 @@ export const overlayOrigin = (spaces: UnderlyingSpace[]): Origin => {
  */
 export function resolveAlignmentSpace(
   spaces: UnderlyingSpace[],
-  alignment: Alignment
+  alignment: Alignment,
+  axis: 0 | 1
 ): UnderlyingSpace {
   const conts = spaces.filter(isCONTINUOUS);
   if (conts.length === 0 || conts.length !== spaces.length) return UNDEFINED;
@@ -172,12 +177,10 @@ export function resolveAlignmentSpace(
     alignment === "middle" || conts.some((s) => s.origin === "none")
       ? "none"
       : "pinned";
-  return overlay(
-    conts,
-    alignment === "baseline" ? "baseline" : "box",
-    origin,
-    "alignment"
-  );
+  return overlay(conts, alignment === "baseline" ? "baseline" : "box", origin, {
+    axis,
+    where: "where marks are lined up",
+  });
 }
 
 /**

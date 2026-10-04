@@ -274,15 +274,15 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
   // A point datum's measure; literals carry none. An interval's `[min,max]`
   // endpoints unify their two measures the same way (mixed units are a conflict).
   const coordMeasure = (
-    coord: PositionConstraint["x"] | undefined
+    coord: PositionConstraint["x"] | undefined,
+    axis: 0 | 1
   ): Measure | undefined => {
     if (coord === undefined) return undefined;
     return isPositionInterval(coord)
-      ? mergeMeasures(
-          getMeasure(coord[0]),
-          getMeasure(coord[1]),
-          "position interval endpoints"
-        )
+      ? mergeMeasures(getMeasure(coord[0]), getMeasure(coord[1]), {
+          axis,
+          where: "at the two ends of a position range",
+        })
       : getMeasure(coord);
   };
   const coordInterval = (
@@ -297,16 +297,14 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
     if (c.type !== "position") continue;
     x = unionIv(x, coordInterval(c.x));
     y = unionIv(y, coordInterval(c.y));
-    xMeasure = mergeMeasures(
-      xMeasure,
-      coordMeasure(c.x),
-      "position constraints"
-    );
-    yMeasure = mergeMeasures(
-      yMeasure,
-      coordMeasure(c.y),
-      "position constraints"
-    );
+    xMeasure = mergeMeasures(xMeasure, coordMeasure(c.x, 0), {
+      axis: 0,
+      where: "across position constraints",
+    });
+    yMeasure = mergeMeasures(yMeasure, coordMeasure(c.y, 1), {
+      axis: 1,
+      where: "across position constraints",
+    });
   }
   return { x, y, xMeasure, yMeasure };
 }

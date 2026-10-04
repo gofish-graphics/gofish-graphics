@@ -1617,12 +1617,25 @@ count axis is all baseline magnitudes (origin 0) at the children, and
 it is load-bearing, because it is exactly how the count axis acquires its
 `"count"` tag so a later overlay union can recognize it as foreign and refuse.
 
-**The error and its remedies.** A clash from `mergeMeasures` reads:
+**The error and its remedies.** A clash from `mergeMeasures` is a
+`MeasureClash`, and it reads, for a grouped bar chart over two gross columns:
 
-> Cannot unify underlying spaces with different measures: `"A"` and `"B"`. If
-> these are the same units, assert that with `field(name, measure)` or
-> `datum(v, measure)`. If they are different units, give the inner chart an
-> explicit `w`/`h` so it becomes a self-scaling region.
+> The y axis combines two different measures, "Worldwide Gross" and "US
+> Gross" (where marks are lined up). One axis can show only one measure.
+> If both are the same kind of quantity, give them the same measure, e.g. if
+> both are dollars, field("Worldwide Gross", "dollars") and field("US Gross",
+> "dollars"). To title the axis, use the axes option (its title).
+> If they are different kinds of quantity, each needs its own axis: give the
+> inner chart its own w and h so it scales on its own.
+
+Each fold passes its axis index and a plain phrase for the composition (a
+`MeasureSite`). The fold does not know what the axis is called, so the node
+whose type hook raised the clash names it on the way out
+(`GoFishNode.axisName`): `x` or `y`, or the name the nearest enclosing
+coordinate space gives it (`r`, `theta`, `lon`, `lat`). The example is a unit,
+because a measure says what kind of quantity a column holds; the axis title
+is a separate choice, made with the `axes` option. `field(name, measure)` is
+spelled the same in Python, so one message serves both.
 
 The two remedies are the two escape hatches this essay already describes:
 annotate to declare the units _are_ the same (collapsing them to one measure),

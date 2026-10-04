@@ -190,7 +190,7 @@ async function main() {
     const up = CONTINUOUS(interval(0, 10), "free");
     const down = CONTINUOUS(interval(-20, 0), "free");
     const span = (alignment: "baseline" | "start" | "end") => {
-      const s = resolveAlignmentSpace([up, down], alignment);
+      const s = resolveAlignmentSpace([up, down], alignment, 1);
       return originIs(s, "pinned") ? continuousInterval(s) : undefined;
     };
     check(
@@ -216,6 +216,7 @@ async function main() {
         values.map((v) => CONTINUOUS(interval(0, v), "free")),
         [],
         {
+          axis: 1,
           spacing: 0,
           anchor: "edge",
           glue: true,

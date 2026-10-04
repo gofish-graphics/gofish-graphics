@@ -312,19 +312,67 @@ export const spaceMeasure = (
 export const mergeMeasures = (
   a: Measure | undefined,
   b: Measure | undefined,
-  context?: string
+  site: MeasureSite
 ): Measure | undefined => {
   if (a === undefined) return b;
   if (b === undefined) return a;
   if (a === b) return a;
-  throw new Error(
-    `Cannot unify underlying spaces with different measures: ` +
-      `"${a}" and "${b}"${context ? ` (${context})` : ""}.\n` +
-      `If these are the same units, assert that with field(name, measure) ` +
-      `or datum(v, measure). If they are different units, give the inner ` +
-      `chart an explicit w/h so it becomes a self-scaling region.`
-  );
+  throw new MeasureClash(a, b, site);
 };
+
+/** Where two measures meet: the axis (0 or 1) when the clash is on an axis,
+ *  and a plain phrase for the composition, read as "(... )" in the message,
+ *  e.g. "where marks are lined up". */
+export type MeasureSite = { axis?: 0 | 1; where: string };
+
+/**
+ * The error for two different measures on one axis. It is raised where the
+ * measures meet, which knows the axis index but not the axis's name (`x`,
+ * `y`, or a coordinate space's own name such as `r`). The node whose type
+ * hook raised it names the axis from where it sits in the tree
+ * ({@link MeasureClash.named}) before it reaches the user.
+ */
+export class MeasureClash extends Error {
+  constructor(
+    readonly a: Measure,
+    readonly b: Measure,
+    readonly site: MeasureSite,
+    readonly axisName?: string
+  ) {
+    super(MeasureClash.message(a, b, site, axisName));
+    this.name = "MeasureClash";
+  }
+
+  /** This clash with its axis named, or itself when it has no axis or is
+   *  already named. */
+  named(name: (axis: 0 | 1) => string): MeasureClash {
+    return this.site.axis === undefined || this.axisName !== undefined
+      ? this
+      : new MeasureClash(this.a, this.b, this.site, name(this.site.axis));
+  }
+
+  static message(
+    a: Measure,
+    b: Measure,
+    site: MeasureSite,
+    axisName: string | undefined
+  ): string {
+    const subject =
+      site.axis === undefined
+        ? "This chart combines"
+        : `The ${axisName ?? (site.axis === 0 ? "x" : "y")} axis combines`;
+    return (
+      `${subject} two different measures, "${a}" and "${b}" (${site.where}). ` +
+      `One axis can show only one measure.\n` +
+      `If both are the same kind of quantity, give them the same measure, ` +
+      `e.g. if both are dollars, field("${a}", "dollars") and ` +
+      `field("${b}", "dollars"). To title the axis, use the axes option ` +
+      `(its title).\n` +
+      `If they are different kinds of quantity, each needs its own axis: ` +
+      `give the inner chart its own w and h so it scales on its own.`
+    );
+  }
+}
 
 /**
  * Like {@link mergeMeasures}, but a conflict *forgets* (returns undefined)
@@ -353,9 +401,9 @@ const foldMeasures = (
  */
 export const mergeAllMeasures = (
   ms: (Measure | undefined)[],
-  context?: string
+  site: MeasureSite
 ): Measure | undefined =>
-  foldMeasures(ms, (acc, m) => mergeMeasures(acc, m, context));
+  foldMeasures(ms, (acc, m) => mergeMeasures(acc, m, site));
 
 /**
  * Fold an array of measures with {@link forgetOnConflict} (a conflict forgets

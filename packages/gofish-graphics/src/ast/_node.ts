@@ -61,6 +61,7 @@ import {
   isUNDEFINED,
   UnderlyingSpace,
   axisOver,
+  MeasureClash,
 } from "./underlyingSpace";
 import { impliedExtents, type Extent } from "./extent";
 import { toJSON } from "../util/interval";
@@ -909,10 +910,28 @@ export class GoFishNode {
           this.constraints
         )
       );
+    } catch (e) {
+      // A measure clash knows its axis index; this node knows what that axis
+      // is called here (`x`, `y`, or a coordinate space's own name).
+      throw e instanceof MeasureClash
+        ? e.named((axis) => this.axisName(axis))
+        : e;
     } finally {
       typeWalkDepth--;
     }
     return this._underlyingSpace;
+  }
+
+  /** The name of axis `dim` where this node sits: the name the nearest
+   *  enclosing coordinate space gives it (polar's `theta` / `r`, geo's `lon` /
+   *  `lat`), or `x` / `y`. */
+  public axisName(dim: 0 | 1): string {
+    const key = dim === 0 ? "x" : "y";
+    for (let n: GoFishNode | undefined = this; n; n = n.parent) {
+      const alias = n._aliases?.[key];
+      if (alias !== undefined) return alias;
+    }
+    return key;
   }
 
   /**

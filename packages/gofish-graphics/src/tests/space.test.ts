@@ -320,9 +320,86 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   );
 }
 
+console.log("# space: a measure clash says what to do");
+{
+  const gross = throws(() =>
+    unionChildSpaces(
+      [
+        onY(CONTINUOUS(interval(0, 10), "free", "Worldwide Gross")),
+        onY(CONTINUOUS(interval(0, 5), "free", "US Gross")),
+      ],
+      1
+    )
+  );
+  ok(
+    "the message names the axis, both measures, and the composition",
+    gross !== null &&
+      gross.startsWith(
+        'The y axis combines two different measures, "Worldwide Gross" and ' +
+          '"US Gross" (where marks are drawn on top of each other). One axis ' +
+          "can show only one measure."
+      ),
+    gross ?? "did not throw"
+  );
+  ok(
+    "and suggests a shared unit-style measure and the axes option",
+    gross !== null &&
+      gross.includes(
+        'field("Worldwide Gross", "dollars") and field("US Gross", "dollars")'
+      ) &&
+      gross.includes("use the axes option") &&
+      gross.includes("give the inner chart its own w and h")
+  );
+  // A node names the axis from where it sits: inside a polar coord, the y
+  // axis is `r`.
+  const layout = () => ({
+    intrinsicDims: [{}, {}],
+    transform: { translate: [undefined, undefined] },
+  });
+  const leaf = (m: string) =>
+    new GoFishNode(
+      {
+        type: "leaf",
+        resolveUnderlyingSpace: () => [
+          UNDEFINED,
+          CONTINUOUS(interval(0, 1), "free", m),
+        ],
+        layout,
+      },
+      []
+    );
+  const overlayNode = new GoFishNode(
+    {
+      type: "overlay",
+      resolveUnderlyingSpace: (spaces) => [
+        UNDEFINED,
+        unionChildSpaces(spaces, 1),
+      ],
+      layout,
+    },
+    [leaf("a"), leaf("b")]
+  );
+  const polar = new GoFishNode(
+    {
+      type: "coord",
+      resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+      layout,
+    },
+    [overlayNode]
+  );
+  polar._aliases = { x: "theta", y: "r" };
+  const inPolar = throws(() => overlayNode.resolveUnderlyingSpace());
+  ok(
+    "inside a coordinate space the axis takes the space's name",
+    inPolar !== null && inPolar.startsWith("The r axis combines"),
+    inPolar ?? "did not throw"
+  );
+}
+
 console.log("# space: one fold for every origin");
 {
   const chainOpts = {
+    axis: 0 as const,
     spacing: 10,
     anchor: "edge" as const,
     origin: { part: 0, fraction: 0, mirrored: false },

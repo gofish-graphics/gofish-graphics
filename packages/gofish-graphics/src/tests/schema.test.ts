@@ -195,7 +195,14 @@ async function main() {
       distributeSpaceFold(
         values.map((v) => CONTINUOUS(interval(0, v), "free")),
         values.map((_, i) => `k${i}`),
-        { spacing: 0, anchor: "edge", glue: true, measure: "r", origin }
+        {
+          axis: 1,
+          spacing: 0,
+          anchor: "edge",
+          glue: true,
+          measure: "r",
+          origin,
+        }
       ) as CONTINUOUS_TYPE;
     const odd = fold([5, 10, 20, 40, 25], {
       part: 2,

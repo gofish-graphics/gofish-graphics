@@ -182,7 +182,10 @@ export function resolveLayerAxisSpace(
   return CONTINUOUS(
     merged,
     "pinned",
-    mergeMeasures(positionMeasure, spaceMeasure(base), "position constraint")
+    mergeMeasures(positionMeasure, spaceMeasure(base), {
+      axis,
+      where: "between a position constraint and the marks it sits among",
+    })
   );
 }
 
@@ -394,6 +397,7 @@ export function planConstraintComposition(
 }
 
 const foldOptions = (s: Seg) => ({
+  axis: s.dAxis,
   spacing: s.spacing,
   anchor: s.anchor,
   glue: s.glue,
@@ -438,7 +442,8 @@ function axisFragments(
     // start/end/baseline, unanchored for `middle`, union otherwise.
     const space = resolveAlignmentSpace(
       a.idx.map((i) => childSpaces[i][axis]),
-      a.anchor
+      a.anchor,
+      axis
     );
     if (!isUNDEFINED(space)) fragments.push({ kind: "align", al: a, space });
   }

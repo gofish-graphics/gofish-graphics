@@ -204,7 +204,7 @@ export const coord = createNodeOperator(
               origin,
               mergeAllMeasures(
                 conts.map((s) => s.measure),
-                "coordinate space"
+                { axis, where: "inside a coordinate space" }
               ),
               coordTransform
             );

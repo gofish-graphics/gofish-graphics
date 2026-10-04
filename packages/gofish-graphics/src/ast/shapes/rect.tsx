@@ -102,7 +102,10 @@ export const Rect = ({
             return CONTINUOUS(
               interval(getValue(d.min)!, getValue(d.max)!),
               "pinned",
-              mergeMeasures(getMeasure(d.min), getMeasure(d.max), "rect")
+              mergeMeasures(getMeasure(d.min), getMeasure(d.max), {
+                axis,
+                where: "between a rect's two ends",
+              })
             );
           }
           if (!isValue(d.min) && !isValue(d.size)) {

@@ -208,6 +208,8 @@ export function lowerDistributePlacement(
 /** The options a distribute fold reads (shared by the type fold and the claim
  *  fold, so both see one chain). */
 export type DistributeFoldOptions = {
+  /** The axis the chain runs along. */
+  axis: 0 | 1;
   spacing: number;
   anchor: AlignAnchor | "edge";
   glue?: boolean;
@@ -269,7 +271,12 @@ export function distributeSpaceFold(
   if (n === 0) return UNDEFINED;
   const childMeasure = mergeAllMeasures(
     targetSpaces.map((s) => spaceMeasure(s)),
-    opts.glue ? "stack" : "spread"
+    {
+      axis: opts.axis,
+      where: opts.glue
+        ? "where marks are stacked"
+        : "where marks are laid side by side",
+    }
   );
 
   // Explicit size on the stack axis dominates the children-derived claim.
