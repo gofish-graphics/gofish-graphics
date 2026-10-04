@@ -8,6 +8,8 @@ import math
 import re
 import uuid
 
+from ._nonfinite import encode_non_finite
+
 T = TypeVar("T")
 
 
@@ -43,16 +45,7 @@ class Operator:
         return new_op
 
     def label(
-        self,
-        accessor: Union[str, "FieldAccessor"],
-        position: Optional[str] = None,
-        fontSize: Optional[int] = None,
-        color: Optional[str] = None,
-        offset: Optional[int] = None,
-        rotate: Optional[int] = None,
-        font_family: Optional[str] = None,
-        font_weight: Optional[Union[int, str]] = None,
-        font_style: Optional[str] = None,
+        self, accessor: Union[str, "FieldAccessor"], **options: Any
     ) -> "Operator":
         """Attach a per-group label to this operator (traversal form).
 
@@ -72,31 +65,16 @@ class Operator:
 
         Python has no function-accessor form; use one of the above.
 
+        `options` are the label options (``position``, ``font_size``,
+        ``color``, ...), the same as on :meth:`Mark.label`; see the generated
+        ``_label_opts`` or the docs options table.
+
         Returns:
             New Operator (same subclass as self) with the label appended.
         """
         new_op = type(self)(self.op_type, **self.kwargs)
         new_op._translate = self._translate
-        label_spec: Dict[str, Any] = {
-            "accessor": dict(accessor) if isinstance(accessor, FieldAccessor) else accessor
-        }
-        if position is not None:
-            label_spec["position"] = position
-        if fontSize is not None:
-            label_spec["fontSize"] = fontSize
-        if color is not None:
-            label_spec["color"] = color
-        if offset is not None:
-            label_spec["offset"] = offset
-        if rotate is not None:
-            label_spec["rotate"] = rotate
-        if font_family is not None:
-            label_spec["fontFamily"] = font_family
-        if font_weight is not None:
-            label_spec["fontWeight"] = font_weight
-        if font_style is not None:
-            label_spec["fontStyle"] = font_style
-        new_op._labels = [*self._labels, label_spec]
+        new_op._labels = [*self._labels, _label_spec(accessor, options)]
         return new_op
 
     def to_dict(self) -> dict:
@@ -241,7 +219,7 @@ class Token:
 
     Mirrors JS `createName(tag) -> Token`
     (`packages/gofish-graphics/src/ast/createName.ts`). Each Token carries
-    an opaque UUID `id` so two `createName("box")` calls in different
+    an opaque UUID `id` so two `create_name("box")` calls in different
     components don't collide, plus a `tag` string used as the scope-map
     path segment for both `.relate(lambda box: ...)` callbacks and
     outer `ref(t).box` navigation.
@@ -255,7 +233,7 @@ class Token:
         return {"__gofish_token": self.id, "__tag": self.tag}
 
 
-def createName(tag: str) -> Token:
+def create_name(tag: str) -> Token:
     """Mint a hygienic token. See `Token`."""
     return Token(tag)
 
@@ -266,7 +244,7 @@ def mark(fn: Callable) -> Callable:
 
     Calling the decorated function eagerly runs `fn(**props)` to produce
     a Mark tree, then flags the result as a scope boundary. Internal names
-    declared via `createName(...)` therefore don't leak to outer scope.
+    declared via `create_name(...)` therefore don't leak to outer scope.
 
     Mirrors JS `createMark(shapeFn)`
     (`packages/gofish-graphics/src/ast/withGoFish.ts:525`). Channel
@@ -311,7 +289,7 @@ class Mark:
         self._children: Optional[List["Mark"]] = _children
         # When True, the harness wraps the resulting JS Mark in a
         # `node.scope()` post-pass so that internal names declared via
-        # `createName(...)` don't leak to outer scope. Set by the
+        # `create_name(...)` don't leak to outer scope. Set by the
         # `@mark` decorator.
         self._is_scope: bool = False
         # When set, the harness invokes the JS-side mark with this datum
@@ -358,12 +336,12 @@ class Mark:
     def name(self, name_or_token: Union[str, "Token"]) -> "Mark":
         """
         Set a layer name on this mark for cross-chart referencing via
-        `ref(...)` / `selectAll(...)` as chart data (string form) or
-        hygienic in-component naming (`createName(...)` token form).
+        `ref(...)` / `select_all(...)` as chart data (string form) or
+        hygienic in-component naming (`create_name(...)` token form).
 
         Args:
             name_or_token: A bare string for flat naming, or a `Token`
-                returned by `createName()` for hygienic scoping inside a
+                returned by `create_name()` for hygienic scoping inside a
                 `@mark`-decorated component.
 
         Returns:
@@ -429,16 +407,7 @@ class Mark:
         return CutMark("cut", source=self, dir=dir, size=size, inset=inset)
 
     def label(
-        self,
-        accessor: Union[str, "FieldAccessor"],
-        position: Optional[str] = None,
-        fontSize: Optional[int] = None,
-        color: Optional[str] = None,
-        offset: Optional[int] = None,
-        rotate: Optional[int] = None,
-        font_family: Optional[str] = None,
-        font_weight: Optional[Union[int, str]] = None,
-        font_style: Optional[str] = None,
+        self, accessor: Union[str, "FieldAccessor"], **options: Any
     ) -> "Mark":
         """
         Attach a label to this mark. Calling `.label()` more than once
@@ -451,15 +420,9 @@ class Mark:
                 true by construction for a `by` field; raises otherwise), or
                 a `field(...)` aggregate (`field("count").sum()`, etc.)
                 folding the group's rows to one value.
-            position: Label position (e.g. "center", "outset-top", "inset-bottom-start")
-            fontSize: Font size in pixels
-            color: Label color (auto-contrasted if omitted)
-            offset: Offset from shape edge in pixels
-            rotate: Rotation angle in degrees
-            font_family: Font family passed straight through to the label's
-                text node (defaults to the elaborator's own font family)
-            font_weight: Font weight (e.g. `"bold"` or a numeric weight)
-            font_style: Font style (e.g. `"italic"`)
+            **options: Label options (``position``, ``font_size``, ``color``,
+                ...): see the generated ``_label_opts`` or the docs options
+                table. An unknown option raises TypeError.
 
         Returns:
             New Mark (same subclass as self) with the label appended
@@ -468,26 +431,7 @@ class Mark:
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        label_spec: Dict[str, Any] = {
-            "accessor": dict(accessor) if isinstance(accessor, FieldAccessor) else accessor
-        }
-        if position is not None:
-            label_spec["position"] = position
-        if fontSize is not None:
-            label_spec["fontSize"] = fontSize
-        if color is not None:
-            label_spec["color"] = color
-        if offset is not None:
-            label_spec["offset"] = offset
-        if rotate is not None:
-            label_spec["rotate"] = rotate
-        if font_family is not None:
-            label_spec["fontFamily"] = font_family
-        if font_weight is not None:
-            label_spec["fontWeight"] = font_weight
-        if font_style is not None:
-            label_spec["fontStyle"] = font_style
-        new_mark._labels = [*self._labels, label_spec]
+        new_mark._labels = [*self._labels, _label_spec(accessor, options)]
         return new_mark
 
     def to_dict(self) -> dict:
@@ -554,6 +498,11 @@ class Mark:
         Chart/Frame wrapper, which is what gives byte-identical output to a
         JS storybook export that renders a mark directly.
         """
+        return encode_non_finite(self._ir())
+
+    def _ir(self) -> dict:
+        """``to_ir()`` before its non-finite numbers are encoded: the form a
+        parent document nests, so the document is encoded once, at its top."""
         return {"type": "raw-mark", "mark": self.to_dict()}
 
     def render(
@@ -686,11 +635,25 @@ from ._generated import (  # noqa: E402
     _table_opts,
     _treemap_opts,
     _treemap_combinator_opts,
+    _spread_combinator_opts,
+    _stack_combinator_opts,
     _pack_opts,
     _line_opts,
     _ribbon_opts,
+    _layer_opts,
+    _chart_opts,
+    _label_opts,
     _polar_config,
 )
+
+
+def _label_spec(accessor: Union[str, "FieldAccessor"], options: Dict[str, Any]) -> dict:
+    """One `.label(accessor, **options)` call's wire entry, shared by
+    `Mark.label` and `Operator.label`."""
+    return {
+        "accessor": dict(accessor) if isinstance(accessor, FieldAccessor) else accessor,
+        **_label_opts(**options),
+    }
 
 
 # Low-level constraint surface — mirrors JS `Constraint.align` / `Constraint.distribute`
@@ -1160,7 +1123,7 @@ class ChartBuilder:
 
         Args:
             data: Input data, or a `_RefProxy` (`ref(name)` /
-                `selectAll(name)`) for cross-chart references
+                `select_all(name)`) for cross-chart references
             options: Chart options (w, h, coord, color, etc.)
             operators: List of operators to apply
         """
@@ -1232,7 +1195,7 @@ class ChartBuilder:
         marks (so ``.layer(chart().flow(group(by=...)).mark(ribbon()))`` connects
         what you just drew), while ``chart(table)`` drives the tier from another
         dataset (resolve back into the chart with
-        ``resolve(..., from_=selectAll(...))``). Returns a ``LayerBuilder`` so
+        ``resolve(..., from_=select_all(...))``). Returns a ``LayerBuilder`` so
         tiers keep chaining: ``.layer(a).layer(b)``. Mirrors the JS ``.layer()``.
 
         The auto-naming/``selectAll`` wiring for an empty-scope ``child`` is
@@ -1262,7 +1225,7 @@ class ChartBuilder:
         can reference it (mirrors JS `chart.resolve().name(...)`).
 
         Args:
-            name_or_token: A flat string name, or a `Token` from `createName(...)`.
+            name_or_token: A flat string name, or a `Token` from `create_name(...)`.
 
         Returns:
             New ChartBuilder carrying the name.
@@ -1274,18 +1237,15 @@ class ChartBuilder:
         new_builder._name = name_or_token
         return new_builder
 
-    def zOrder(self, value: float) -> "ChartBuilder":
-        """Set z-order for this chart when rendered inside a Layer."""
+    def z_order(self, value: float) -> "ChartBuilder":
+        """Set z-order for this chart when rendered inside a Layer. Mirrors
+        JS ``chart(...).zOrder(n)``."""
         new_builder = ChartBuilder(
             self.data, self.options, self.operators, z_order=value
         )
         new_builder._mark = self._mark
         new_builder._name = self._name
         return new_builder
-
-    def zIndex(self, value: float) -> "ChartBuilder":
-        """Alias for zOrder()."""
-        return self.zOrder(value)
 
     def facet(self, *, by: str, **kwargs: Any) -> "ChartBuilder":
         """
@@ -1320,16 +1280,21 @@ class ChartBuilder:
         Returns:
             Dictionary representing the chart IR
         """
+        return encode_non_finite(self._ir())
+
+    def _ir(self) -> dict:
+        """``to_ir()`` before its non-finite numbers are encoded (see
+        ``Mark._ir``)."""
         if self._mark is None:
             raise ValueError("Chart must have a mark before converting to IR")
 
         # Serialize data: a `_RefProxy` used as chart data (`ref(name)` or
-        # `selectAll(name)`) becomes a select spec; an empty `chart()` scope
+        # `select_all(name)`) becomes a select spec; an empty `chart()` scope
         # inside a `.layer(...)` chain becomes `{"type": "previous-tier"}` (JS's
         # `LayerBuilder.wireTiers()` derives the auto-name/selectAll wiring from
         # this marker — see `_PREVIOUS_LAYER_MARKS`); otherwise None. The select
         # wire shape is `{"type": "select", "layer": <name>, "mode": "one"|"all"}`
-        # — "one" for a singular `ref(name)`, "all" for `selectAll(name)`.
+        # — "one" for a singular `ref(name)`, "all" for `select_all(name)`.
         if self._uses_previous_marks():
             data_ir: Any = {"type": "previous-tier"}
         elif isinstance(self.data, _RefProxy):
@@ -1340,7 +1305,7 @@ class ChartBuilder:
             ):
                 raise ValueError(
                     "a ref used as chart data must be a flat single-name "
-                    "selection (e.g. `ref(\"bars\")` / `selectAll(\"bars\")`); "
+                    "selection (e.g. `ref(\"bars\")` / `select_all(\"bars\")`); "
                     "token/path refs cannot serialize as chart data"
                 )
             data_ir = {
@@ -1404,7 +1369,7 @@ class ChartBuilder:
         from .widget import GoFishChartWidget
         from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
 
-        # Ref-data charts (`ref(name)` / `selectAll(name)`) have no data of
+        # Ref-data charts (`ref(name)` / `select_all(name)`) have no data of
         # their own — they borrow nodes from a sibling chart.
         if isinstance(self.data, _RefProxy):
             arrow_data = empty_placeholder_arrow_bytes()
@@ -1492,15 +1457,11 @@ def spread(
         by: Field name to partition by (operator form only), or a
             ``field(...)`` accessor carrying domain ops
             (``field("site").sort("yield")``). Omit for per-item spread.
-        **options: dir ("x", "y", or an axis name the enclosing coordinate
-            space declares, such as "theta"), spacing, alignment, sharedScale,
-            anchor, glue.
-            Also `w`/`h` — a field name or pixel number sizing this operator's
-            box (data-driven operator extent, e.g. a mosaic's column width), and
-            `size` — a field name, pixel number, or ``field(...)`` accessor
-            sizing each split entry along the stack axis;
-            `size=field("count").normalize()` makes it a space-filling spine
-            (the mosaic/marimekko conditional axis).
+        **options: The generated ``_spread_opts`` core's options (the
+            combinator form's: ``_spread_combinator_opts``); see the docs
+            options table. ``dir`` is required. ``size=field("count").normalize()``
+            makes the stack axis a space-filling spine (the mosaic/marimekko
+            conditional axis).
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -1516,11 +1477,11 @@ def spread(
                 "spread() combinator form (with children) does not accept "
                 "`by` — the layout is over the explicit child list, not data."
             )
-        # Combinator form: the low-level `Spread`/`SpreadOptions` factory
-        # additionally takes the full box-dims passthrough (x/y/w/h/key/...),
-        # which the fluent operator's IR doesn't — stays open (see the `w`/`h` drift
-        # note on COMBINATOR_MARKS.spread in the descriptor table).
-        return Mark("spread", _children=list(children), **options)
+        return Mark(
+            "spread",
+            _children=list(children),
+            **_spread_combinator_opts(**options),
+        )
     if by is not None:
         options["by"] = by
     return Operator("spread", **_spread_opts(**options))
@@ -1536,7 +1497,10 @@ def layer(
 
     - **Chart tiers** — ``layer([chart(...), chart(...)])`` stacks each chart and
       emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``).
-      Options are keyword arguments: ``layer([chart1, chart2], coord=clock())``.
+      Options are keyword arguments: ``layer([chart1, chart2], coord=clock())``,
+      the same chart-level options ``chart()`` takes (the generated
+      ``_chart_opts``), so nested keys are snake_case
+      (``axes={"x": {"label_angle": 45}}``).
     - **Marks** — ``layer([rect(...).name("a"), ...])`` wraps child marks in a
       layer node (returns a ``RelatableMark`` that renders directly), with
       ``.relate(...)`` for clauses that relate the marks::
@@ -1549,10 +1513,13 @@ def layer(
     Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
     charts and marks.
     """
-    # Chart tiers → LayerBuilder; marks → combinator mark.
+    # Chart tiers → LayerBuilder; marks → combinator mark. Chart-tier options
+    # take the chart-level option set, spelled and checked as in `chart()`.
     if children and all(isinstance(c, ChartBuilder) for c in children):
-        return LayerBuilder(list(children), options or None)
-    return RelatableMark("layer", _children=list(children), **options)
+        return LayerBuilder(list(children), _chart_opts(**options) or None)
+    return RelatableMark(
+        "layer", _children=list(children), **_layer_opts(**options)
+    )
 
 
 # `enclose` is generated (packages/gofish-python/gofish/_generated.py) —
@@ -1585,7 +1552,7 @@ class _RefProxy(Mark):
     def __init__(self, selection: list, multiplicity: Optional[str] = None):
         super().__init__("ref", selection=list(selection))
         # None means singular (`ref(name)`); "all" means the plural
-        # `selectAll(name)` — one ref per matching node. Only meaningful when
+        # `select_all(name)` — one ref per matching node. Only meaningful when
         # the proxy is used as chart data; ignored for inline-layout refs.
         self.multiplicity = multiplicity
 
@@ -1628,13 +1595,13 @@ class _RefProxy(Mark):
         return named
 
     def to_dict(self) -> dict:
-        # `selectAll(...)` is a plural chart-data selector — it has no
+        # `select_all(...)` is a plural chart-data selector — it has no
         # inline-layout meaning. Chart-data serialization is handled by
         # `ChartBuilder.to_ir`, not here.
         if self.multiplicity == "all":
             raise ValueError(
-                "selectAll(...) cannot be used inline in a layout; pass it "
-                'as chart data: chart(selectAll("name"))'
+                "select_all(...) cannot be used inline in a layout; pass it "
+                'as chart data: chart(select_all("name"))'
             )
         # Serialize each selection segment: tokens become sentinel dicts;
         # primitives pass through unchanged.
@@ -1669,7 +1636,7 @@ def ref(target: Union[str, Token]) -> _RefProxy:
     Reference a previously-named node by selection.
 
     - `ref("name")` — flat string selection.
-    - `ref(token)` — Token returned by `createName(...)`. Subsequent
+    - `ref(token)` — Token returned by `create_name(...)`. Subsequent
       `.attr` / `[i]` / `.path(...)` calls extend the selection.
 
     Two roles, both spelled `ref(...)`:
@@ -1678,7 +1645,7 @@ def ref(target: Union[str, Token]) -> _RefProxy:
       (spread/layer/arrow) to insert an already-named-and-resolved node.
     - **As chart data**: `chart(ref("bars"))` borrows the single node named
       "bars" from a sibling chart (requires exactly one match). The plural
-      counterpart is `selectAll("bars")`.
+      counterpart is `select_all("bars")`.
 
     Mirrors JS `ref(...)` (`packages/gofish-graphics/src/ast/shapes/ref.tsx:86`).
     """
@@ -1724,14 +1691,11 @@ def stack(
         by: Field name to partition by (operator form only), or a
             ``field(...)`` accessor carrying domain ops
             (``field("site").sort("yield")``). Omit for per-item stack.
-        **options: dir ("x", "y", or a coordinate-space axis name such as
-            "theta"), alignment, sharedScale, anchor. Also `w`/`h` —
-            a field name or pixel number sizing this operator's box (data-driven
-            operator extent, e.g. a mosaic's column width), and `size` — a
-            field name, pixel number, or ``field(...)`` accessor sizing each
-            split entry along the stack axis; `size=field("count").normalize()`
-            makes it a space-filling spine (the mosaic/marimekko conditional
-            axis).
+        **options: The generated ``_stack_opts`` core's options (the
+            combinator form's: ``_stack_combinator_opts``); see the docs
+            options table. ``dir`` is required. ``size=field("count").normalize()``
+            makes the stack axis a space-filling spine (the mosaic/marimekko
+            conditional axis).
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -1747,16 +1711,14 @@ def stack(
                 "stack() combinator form (with children) does not accept "
                 "`by` — the layout is over the explicit child list, not data."
             )
-        # Combinator form stays open — see the matching note in spread().
-        return Mark("stack", _children=list(children), **options)
+        return Mark(
+            "stack",
+            _children=list(children),
+            **_stack_combinator_opts(**options),
+        )
     if by is not None:
         options["by"] = by
-    # Stays open (not routed through `_stack_opts`'s closed signature): real
-    # stories pass `spacing`/`y`/`h`/`label` to the stack OPERATOR even
-    # though schema.ts's `StackOperator` doesn't declare them — pre-existing
-    # wire-level drift beyond this stage's scope to resolve (would need a
-    # schema.ts change, not just a Python-wrapper one).
-    return Operator("stack", **options)
+    return Operator("stack", **_stack_opts(**options))
 
 
 def derive(fn: Callable) -> DeriveOperator:
@@ -1798,14 +1760,14 @@ def resolve(cols: List[str], *, from_: Any, key: Optional[str] = None) -> Operat
     """Resolve reference columns into the drawn nodes they name.
 
     For each row, the values in ``cols`` are matched against the keyed nodes of
-    ``from_`` (a ``selectAll(layerName)``) and replaced in place with the
+    ``from_`` (a ``select_all(layer_name)``) and replaced in place with the
     matching node ref — a many-to-one dereference (no fan-out, grain preserved).
     Backs node-link edges and label anchoring; pair with ``.layer(chart(table))``
     and ``line(from_=..., to=...)``.
 
     Args:
         cols: Column names holding references to resolve in place.
-        from_: ``selectAll(layerName)`` (or a layer-name string) whose nodes the
+        from_: ``select_all(layer_name)`` (or a layer-name string) whose nodes the
             columns are matched against.
         key: Optional match field; defaults to the field those nodes were grouped
             by (e.g. ``scatter(by="id")`` ⇒ match on ``id``).
@@ -1816,13 +1778,13 @@ def resolve(cols: List[str], *, from_: Any, key: Optional[str] = None) -> Operat
     if isinstance(from_, _RefProxy):
         selection = from_._sel()
         if len(selection) != 1 or not isinstance(selection[0], str):
-            raise ValueError('resolve(from_=...) must be selectAll("layerName")')
+            raise ValueError('resolve(from_=...) must be select_all("layer_name")')
         from_name = selection[0]
     elif isinstance(from_, str):
         from_name = from_
     else:
         raise TypeError(
-            'resolve(from_=...) expects selectAll(name) or a layer-name string'
+            'resolve(from_=...) expects select_all(name) or a layer-name string'
         )
     op_kwargs: Dict[str, Any] = {"cols": list(cols), "from": from_name}
     if key is not None:
@@ -1878,17 +1840,11 @@ def scatter(
         by: Field name to group by, or a ``field(...)`` accessor carrying
             domain ops (``field("site").sort("yield")``). Omit for per-item
             scatter.
-        **options:
-            x, y: Field-name accessors (str) for position; or arrays for
-                  combinator form. Required: at least one of x, y, xMin/xMax,
-                  yMin/yMax.
-            xMin, xMax, yMin, yMax: Range-form accessors (str) — children span
-                                    [xMin[i], xMax[i]] in data space.
-            dims: Placement by axis name — "x"/"y", or a name the enclosing
-                  coordinate space declares (polar "theta"/"r"). A bare value
-                  is the point, {"min", "max"} the span, e.g.
-                  ``dims={"theta": "bearing", "r": "distance"}``.
-            alignment: "start" | "middle" | "end" | "baseline".
+        **options: The generated ``_scatter_opts`` core's options; see the
+            docs options table. Give at least one of ``x``, ``y``,
+            ``x_min``/``x_max``, ``y_min``/``y_max``, or ``dims`` (placement
+            by axis name, e.g. ``dims={"theta": "bearing", "r": "distance"}``
+            in polar).
 
     Returns:
         Operator object
@@ -1921,7 +1877,7 @@ def treemap(
             [rect(fill=datum(genre)).bind_data({"worldwideGross": gross}, genre)
              for genre, gross in groups],
             size=[gross for genre, gross in groups],
-            paddingInner=2,
+            spacing=2,
         ).render(w=700, h=420)
 
     Args:
@@ -1931,12 +1887,16 @@ def treemap(
             ``spread``/``group``), or a ``field(...)`` accessor carrying domain
             ops (``field("site").sort("yield")``, ``field("genre").drop_nulls()``).
             Without ``by``, one leaf is emitted per row.
-        **options: ``size`` (a field name, pixel number, or ``field(...)``
-            accessor sizing each leaf's tile area — entry-flagged, one value
-            per split entry), ``tile``, ``sort``, ``flipY``, ``paddingInner``,
-            ``paddingOuter``, ``round``, ``leafIntrinsicRadiusField``.
+        **options: The generated ``_treemap_opts`` core's options (the
+            combinator form's: ``_treemap_combinator_opts``); see the docs
+            options table. ``size`` sizes each leaf's tile area, one value
+            per split entry. ``tile`` takes a strategy: ``squarify()`` (the
+            default), ``slice()``, ``dice()``, ``binary()``, or
+            ``slice_dice()``.
 
-    Mirrors JS ``treemap({ by, size, tile, sort, flipY, ... })`` in
+    The largest tile (under the default sort) lands at the top left.
+
+    Mirrors JS ``treemap({ by, size, tile, sort, spacing, ... })`` in
     ``.flow()`` and ``treemap({ size, ... }, marks)`` as a combinator.
 
     Returns:
@@ -1956,6 +1916,220 @@ def treemap(
     if by is not None:
         options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))
+
+
+def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
+    """
+    The ``separate()`` overlap strategy for :func:`scatter`: it keeps dots
+    apart, so no two overlap, and the result is a beeswarm. Each dot keeps its
+    position on the data axis and moves along the axis no field places, to the
+    free spot nearest the ``alignment`` line (Observable Plot's ``dodge``).
+
+        chart(penguins).flow(
+            scatter(x="Body Mass (g)", alignment="middle", overlap=separate(padding=1))
+        ).mark(circle(r=3))
+
+    Mirrors JS ``separate({ padding })``; the strategy is a plain object on the
+    wire, ``{"kind": "separate", "padding": ...}``.
+
+    Args:
+        padding: Pixels kept between neighboring dots. Default 0.
+    """
+    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
+        raise ValueError(f"separate: padding must be a finite non-negative number, got {padding}")
+    return {"kind": "separate"} if padding is None else {"kind": "separate", "padding": padding}
+
+
+def _is_real(v: Any) -> bool:
+    """A real number: an int or float, not a bool."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _make_noise(
+    name: str,
+    randomness: Optional[str],
+    smoothing: Optional[Union[float, str]],
+    padding: Optional[float],
+    seed: Optional[float],
+) -> Dict[str, Any]:
+    """Check the options and build the ``{"kind": "noise", ...}`` object;
+    ``name`` is the function the user called, for the error messages."""
+    if randomness is not None and randomness not in ("blue", "quasi", "uniform"):
+        raise ValueError(
+            f'{name}: randomness must be "blue", "quasi" or "uniform", got {randomness!r}'
+        )
+    if smoothing is not None and smoothing != "silverman" and not (
+        _is_real(smoothing) and smoothing >= 0
+    ):
+        raise ValueError(
+            f'{name}: smoothing must be a non-negative number of data units, math.inf, '
+            f'or "silverman", got {smoothing!r}'
+        )
+    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
+        raise ValueError(f"{name}: padding must be a finite non-negative number, got {padding}")
+    if seed is not None and not (_is_real(seed) and math.isfinite(seed)):
+        raise ValueError(f"{name}: seed must be a number, got {seed}")
+    out: Dict[str, Any] = {"kind": "noise"}
+    for key, value in (
+        ("randomness", randomness),
+        ("smoothing", smoothing),
+        ("padding", padding),
+        ("seed", seed),
+    ):
+        if value is not None:
+            out[key] = value
+    return out
+
+
+def noise(
+    *,
+    randomness: Optional[str] = None,
+    smoothing: Optional[Union[float, str]] = None,
+    padding: Optional[float] = None,
+    seed: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    The ``noise()`` overlap strategy for :func:`scatter`. Each dot keeps its
+    position on the data axis and gets an offset on the axis no field places,
+    inside an outline that follows how many dots share that part of the data
+    axis. Each dot adds a small bell-shaped bump, and the outline is the sum
+    of the bumps. :func:`sina` and :func:`jitter` are this strategy with other
+    defaults.
+
+        chart(penguins).flow(
+            scatter(x="Body Mass (g)", alignment="middle",
+                    overlap=noise(randomness="quasi", smoothing=100))
+        ).mark(circle(r=3))
+
+    Mirrors JS ``noise({ randomness, smoothing, padding, seed })``; the
+    strategy is a plain object on the wire, ``{"kind": "noise", ...}``.
+
+    Args:
+        randomness: ``"blue"`` (default) keeps each dot far from its
+            neighbors, ``"quasi"`` spreads dots by rank (fastest),
+            ``"uniform"`` draws seeded uniform offsets.
+        smoothing: The bandwidth of each dot's bell, in data units of the
+            data axis. Default 0: no smoothing beyond the dots' own size.
+            ``math.inf`` gives a flat outline (classic fixed-band jitter).
+            ``"silverman"`` computes it from the data, as :func:`sina` does.
+        padding: Pixels added to each dot's width. Default 0.
+        seed: Seed for ``"blue"`` and ``"uniform"``. Default 0.
+    """
+    return _make_noise("noise", randomness, smoothing, padding, seed)
+
+
+def sina(
+    *,
+    randomness: Optional[str] = None,
+    smoothing: Optional[Union[float, str]] = None,
+    padding: Optional[float] = None,
+    seed: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    A sina plot: :func:`noise` with ``smoothing="silverman"``, a bandwidth
+    computed per group from the data by Silverman's rule of thumb, as
+    ggforce's ``geom_sina`` does. The outline is the smooth curve a violin
+    plot draws, filled with dots. Any option overrides the default.
+
+        chart(penguins).flow(
+            spread(by="Species", dir="y"),
+            scatter(x="Body Mass (g)", alignment="middle", overlap=sina()),
+        ).mark(circle(r=3))
+
+    Mirrors JS ``sina({ ... })``; on the wire it is
+    ``{"kind": "noise", "smoothing": "silverman", ...}``.
+
+    Args: as :func:`noise`.
+    """
+    return _make_noise(
+        "sina",
+        randomness,
+        "silverman" if smoothing is None else smoothing,
+        padding,
+        seed,
+    )
+
+
+def jitter(
+    *,
+    randomness: Optional[str] = None,
+    smoothing: Optional[Union[float, str]] = None,
+    padding: Optional[float] = None,
+    seed: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Classic jitter: :func:`noise` with ``randomness="uniform"`` and
+    ``smoothing=math.inf``, so the dots get uniform random offsets in a flat
+    band. Any option overrides the default.
+
+        chart(penguins).flow(
+            scatter(x="Body Mass (g)", alignment="middle", overlap=jitter())
+        ).mark(circle(r=3))
+
+    Mirrors JS ``jitter({ ... })``; on the wire it is
+    ``{"kind": "noise", "randomness": "uniform", "smoothing": Infinity, ...}``.
+
+    Args: as :func:`noise`.
+    """
+    return _make_noise(
+        "jitter",
+        "uniform" if randomness is None else randomness,
+        math.inf if smoothing is None else smoothing,
+        padding,
+        seed,
+    )
+
+
+def squarify(*, ratio: Optional[Union[int, float]] = None) -> Dict[str, Any]:
+    """
+    The ``squarify()`` tiling strategy for :func:`treemap` (the default):
+    make tiles as close as possible to the aspect ``ratio``: the longer side
+    over the shorter side, so at least 1, with no orientation chosen. Omitted, ``ratio`` is d3's default, the golden ratio.
+    ``squarify(ratio=1)`` aims for square tiles, which suits one circle per
+    leaf.
+
+    Mirrors JS ``squarify({ ratio })``; on the wire it is the plain object
+    ``{"kind": "squarify", "ratio": ...}``.
+    """
+    if ratio is None:
+        return {"kind": "squarify"}
+    return {"kind": "squarify", "ratio": ratio}
+
+
+def slice() -> Dict[str, Any]:
+    """
+    The ``slice()`` tiling strategy for :func:`treemap`: lay the tiles out in
+    one column, stacked along y. Mirrors JS ``slice()``; on the wire it is
+    ``{"kind": "slice"}``.
+    """
+    return {"kind": "slice"}
+
+
+def dice() -> Dict[str, Any]:
+    """
+    The ``dice()`` tiling strategy for :func:`treemap`: lay the tiles out in
+    one row, side by side along x. Mirrors JS ``dice()``; on the wire it is
+    ``{"kind": "dice"}``.
+    """
+    return {"kind": "dice"}
+
+
+def binary() -> Dict[str, Any]:
+    """
+    The ``binary()`` tiling strategy for :func:`treemap`: split the tiles into
+    two halves of near-equal weight, recursively. Mirrors JS ``binary()``; on
+    the wire it is ``{"kind": "binary"}``.
+    """
+    return {"kind": "binary"}
+
+
+def slice_dice() -> Dict[str, Any]:
+    """
+    The ``slice_dice()`` tiling strategy for :func:`treemap`: alternate slice
+    and dice by depth. Mirrors JS ``sliceDice()``; on the wire it is
+    ``{"kind": "sliceDice"}``.
+    """
+    return {"kind": "sliceDice"}
 
 
 def circles() -> Dict[str, Any]:
@@ -2027,7 +2201,8 @@ def table(
     Args:
         by: Dict with `x` and `y` keys naming the two fields, e.g.
             ``table(by={"x": "model", "y": "year"})``.
-        **options: spacing (number or [x_sp, y_sp] tuple), numCols.
+        **options: The generated ``_table_opts`` core's options; see the
+            docs options table.
 
     Returns:
         Operator object
@@ -2443,11 +2618,8 @@ def assign_gradient_color(gradient_config: dict, t: float) -> str:
 # Coordinate transforms
 
 
-# `_polar_config` is generated (packages/gofish-python/gofish/_generated.py)
-# from the shared `polarFields` group in the descriptor table — imported
-# above. `clock()`/`polar()`/`wavy()` stay hand-written thin wrappers (the
-# snake_case-kwarg convention and the `clock`-vs-`polar` type-tag dispatch
-# aren't part of the descriptor).
+# `clock()`/`polar()` are hand-written because the `clock`-vs-`polar` type
+# tag isn't part of the descriptor; both call the generated `_polar_config`.
 
 
 def clock(
@@ -2535,13 +2707,13 @@ def wavy() -> dict:
 # Layer selection
 
 
-def selectAll(layer_name: str) -> _RefProxy:
+def select_all(layer_name: str) -> _RefProxy:
     """
     Select all named nodes from a sibling chart — one ref per matching node.
 
     The plural counterpart of passing `ref(name)` as chart data (which
     requires exactly one match). Used as the `chart(...)` data argument:
-    `chart(selectAll("bars"))`.
+    `chart(select_all("bars"))`.
 
     Args:
         layer_name: Name of the layer to select (set via mark.name())
@@ -2753,8 +2925,8 @@ def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
     lambda that renames a length column to "lo"/"hi":
 
         scatter(
-            xMin=field("lo", measure="Beak Length (mm)"),
-            xMax=field("hi", measure="Beak Length (mm)"),
+            x_min=field("lo", measure="Beak Length (mm)"),
+            x_max=field("hi", measure="Beak Length (mm)"),
         )
 
     Built-in transforms like `bin()` declare their output provenance, which now
@@ -2826,31 +2998,7 @@ def repeat(row: dict, field: str) -> List[dict]:
 # drops a phantom `fontWeight=` (also nowhere in JS).
 
 
-def line(
-    children: Optional[List["Mark"]] = None,
-    *,
-    dir: Optional[str] = None,
-    source: Optional[
-        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
-    ] = None,
-    target: Optional[
-        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
-    ] = None,
-    fill: Optional[str] = None,
-    stroke: Optional[str] = None,
-    strokeWidth: Optional[int] = None,
-    strokeDasharray: Optional[str] = None,
-    opacity: Optional[float] = None,
-    mixBlendMode: Optional[str] = None,
-    curve: Optional[Union[str, Dict[str, Any]]] = None,
-    from_: Optional[str] = None,
-    to: Optional[str] = None,
-    along: Optional[str] = None,
-    emX: Optional[bool] = None,
-    emY: Optional[bool] = None,
-    w: Optional[Union[int, float, str]] = None,
-    h: Optional[Union[int, float, str]] = None,
-) -> Mark:
+def line(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     """Line mark — a center-mode connector (the path between mark centers).
 
     Three forms:
@@ -2863,61 +3011,29 @@ def line(
         is inferred from the flow, or pinned with ``along="year"`` (names a
         flow tier by its ``by`` field — that tier becomes the path, every
         other grouping tier splits). A refs bag spells an explicit split
-        structurally instead: ``chart(selectAll(...)).flow(group(by="species"
+        structurally instead: ``chart(select_all(...)).flow(group(by="species"
         )).mark(line())``.
       - pairwise form ``line(from_=..., to=...)`` over rows whose ``from``/``to``
         columns hold refs (one segment per row, after :func:`resolve`).
 
-    ``strokeDasharray`` (e.g. ``"12"``) draws a dashed line, matching
+    ``stroke_dasharray`` (e.g. ``"12"``) draws a dashed line, matching
     ``enclose``'s option of the same name.
 
-    ``emX``/``emY``/``w``/``h`` are blank-fusion anchor keys: placed directly
+    ``em_x``/``em_y``/``w``/``h`` are blank-fusion anchor keys: placed directly
     in ``.mark(...)`` position, ``line(...)`` elaborates to an invisible
     anchor tier (a ``blank()`` carrying just these four keys) plus this
     connector. ``line`` itself ignores them.
+
+    The options are the generated ``_line_opts`` core's (see the docs options
+    table); an unknown option raises TypeError.
     """
-    kwargs = _line_opts(
-        dir=dir,
-        source=source,
-        target=target,
-        fill=fill,
-        stroke=stroke,
-        strokeWidth=strokeWidth,
-        strokeDasharray=strokeDasharray,
-        opacity=opacity,
-        mixBlendMode=mixBlendMode,
-        curve=curve,
-        from_=from_,
-        to=to,
-        along=along,
-        emX=emX,
-        emY=emY,
-        w=w,
-        h=h,
-    )
+    kwargs = _line_opts(**options)
     if children is not None:
         return Mark("line", _children=list(children), **kwargs)
     return Mark("line", **kwargs)
 
 
-def ribbon(
-    children: Optional[List["Mark"]] = None,
-    *,
-    dir: Optional[str] = None,
-    fill: Optional[str] = None,
-    stroke: Optional[str] = None,
-    strokeWidth: Optional[int] = None,
-    opacity: Optional[float] = None,
-    mixBlendMode: Optional[str] = None,
-    curve: Optional[Union[str, Dict[str, Any]]] = None,
-    from_: Optional[str] = None,
-    to: Optional[str] = None,
-    along: Optional[str] = None,
-    emX: Optional[bool] = None,
-    emY: Optional[bool] = None,
-    w: Optional[Union[int, float, str]] = None,
-    h: Optional[Union[int, float, str]] = None,
-) -> Mark:
+def ribbon(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     """Ribbon mark — an edge-mode connector: a filled band between the facing
     edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
@@ -2928,27 +3044,15 @@ def ribbon(
     :func:`line`), and pairwise form ``ribbon(from_=..., to=...)`` (one band
     per row, after :func:`resolve`).
 
-    ``emX``/``emY``/``w``/``h`` are blank-fusion anchor keys: placed directly
+    ``em_x``/``em_y``/``w``/``h`` are blank-fusion anchor keys: placed directly
     in ``.mark(...)`` position, ``ribbon(...)`` elaborates to an invisible
     anchor tier (a ``blank()`` carrying just these four keys) plus this
     connector. ``ribbon`` itself ignores them.
+
+    The options are the generated ``_ribbon_opts`` core's (see the docs
+    options table); an unknown option raises TypeError.
     """
-    kwargs = _ribbon_opts(
-        dir=dir,
-        fill=fill,
-        stroke=stroke,
-        strokeWidth=strokeWidth,
-        opacity=opacity,
-        mixBlendMode=mixBlendMode,
-        curve=curve,
-        from_=from_,
-        to=to,
-        along=along,
-        emX=emX,
-        emY=emY,
-        w=w,
-        h=h,
-    )
+    kwargs = _ribbon_opts(**options)
     if children is not None:
         return Mark("ribbon", _children=list(children), **kwargs)
     return Mark("ribbon", **kwargs)
@@ -2972,7 +3076,7 @@ class CutMark(Mark):
     """The `{type:"cut", ...}` IR node — a sliced source shape.
 
     Stored params live in `kwargs` (`source` is a `Mark`, `dir`/`size`/`inset`
-    are plain values) so the inherited `.name()` / `.zOrder()` clone path works;
+    are plain values) so the inherited `.name()` / `.z_order()` clone path works;
     `to_dict()` serializes the source mark and drops `None` options.
     """
 
@@ -3103,6 +3207,7 @@ def chart(
         axes=False                     # no axes
         axes={"x": True, "y": False}   # per-dimension on/off
         axes={"x": {"title": "Year"}}  # custom title (title=False suppresses it)
+        axes={"x": {"label_angle": 45}}  # rotate x labels (also "side")
 
         chart(data, axes=True)
         chart(data, axes={"x": {"title": "Year"}, "y": True})
@@ -3116,16 +3221,21 @@ def chart(
 
         chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
 
+    Keys inside the per-axis dict are snake_case like every kwarg; an
+    unknown key (or a camelCase one such as ``"labelAngle"``) raises
+    TypeError.
+
     Args:
-        data: Input data, or `ref(name)` / `selectAll(name)` for cross-chart
+        data: Input data, or `ref(name)` / `select_all(name)` for cross-chart
             layer references
-        **options: Chart options as keywords — ``axes``, ``color``, ``coord``,
-            ``padding``, ``schema``, ...
+        **options: Chart options as keywords — ``w``, ``h``, ``coord``,
+            ``color``, ``axes``, ``legend``, ``padding``, ``schema``. Any
+            other keyword raises TypeError.
 
     Returns:
         ChartBuilder instance
     """
-    return ChartBuilder(data, options or None)
+    return ChartBuilder(data, _chart_opts(**options) or None)
 
 
 class LayerBuilder:
@@ -3191,9 +3301,14 @@ class LayerBuilder:
         ``layer([chart1, chart2])`` leaves it off and renders as the low-level
         combinator, mirroring JS ``layer([...])``.
         """
+        return encode_non_finite(self._ir())
+
+    def _ir(self) -> dict:
+        """``to_ir()`` before its non-finite numbers are encoded (see
+        ``Mark._ir``)."""
         result: dict = {
             "type": "layer",
-            "charts": [child.to_ir() for child in self.children],
+            "charts": [child._ir() for child in self.children],
             "options": self.options,
         }
         if self._builder_chain:

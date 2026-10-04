@@ -31,8 +31,12 @@ from urllib.parse import urlparse
 def _sanitize_for_json(obj):
     """Make values JSON-safe.
 
-    - NaN/Infinity floats → None (json.dumps writes the literal `NaN`, which
-      the harness's JSON.parse rejects).
+    - ±Infinity floats → the IR's tagged form `{"$numberDouble": "Infinity"}`
+      (gofish's `_nonfinite.py`), which the harness decodes back to a number.
+      json.dumps would write a bare `Infinity`, which JSON.parse rejects.
+    - NaN floats → None: in rows (pandas' missing value) NaN means "no
+      value", which JS spells `null`. Spec fields never get here as NaN:
+      `to_ir()` has already tagged them.
     - pandas Timestamps and other "stringifiable" non-native types →
       `str(obj)` so a Seattle-weather `date` column survives the round-trip
       as the same `YYYY-MM-DD HH:MM:SS` string the harness would have seen
@@ -41,9 +45,9 @@ def _sanitize_for_json(obj):
     if obj is None or isinstance(obj, (bool, int, str)):
         return obj
     if isinstance(obj, float):
-        if math.isnan(obj) or math.isinf(obj):
+        if math.isnan(obj):
             return None
-        return obj
+        return encode_number(obj)
     if isinstance(obj, dict):
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
@@ -59,6 +63,8 @@ def _sanitize_for_json(obj):
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "packages/gofish-python"))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "tests"))
+
+from gofish._nonfinite import encode_number  # noqa: E402
 
 # Registry: lambdaId → Python function
 _registry: dict = {}
@@ -179,7 +185,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 child_payload: {operators, mark, options, data, zOrder}
                   data is the canonical Frontend.DataIR shape:
                     - {"type": "inline", "rows": [...]} for inline rows
-                    - {"type": "select", "layer": name, "mode": ...} for ref/selectAll data
+                    - {"type": "select", "layer": name, "mode": ...} for ref/select_all data
                   See packages/gofish-ir/src/frontend/schema.ts.
 
                 A bare `Mark` tier (a component-level annotation via
@@ -193,12 +199,12 @@ class DeriveHandler(BaseHTTPRequestHandler):
                         mark_ids.append(lambda_id)
                         _registry[lambda_id] = rows_fn
                     return (
-                        {"type": "raw-mark", "mark": child.to_dict()},
+                        child.to_ir(),
                         mark_ids,
                     )
                 child_ir = child.to_ir()
                 if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
-                    # `_RefProxy` (ref/selectAll) → {"type": "select", ...};
+                    # `_RefProxy` (ref/select_all) → {"type": "select", ...};
                     # an empty `chart()` scope inside a `.layer(...)` chain →
                     # {"type": "previous-tier"} (JS's LayerBuilder derives the
                     # auto-name/selectAll wiring from that marker — see

@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from gofish import chart, circle, palette, treemap
+from gofish import chart, circle, palette, squarify, treemap
 
 
 def story_default():
@@ -26,12 +26,11 @@ def story_default():
             treemap(
                 h="fare",
                 size="fare",
-                paddingInner=0,
-                tile="squarifyCircle",
+                spacing=0,
+                tile=squarify(ratio=1),
                 sort="desc",
-                flipY=True,
             )
         )
-        .mark(circle(fill="survived", stroke="#ccc", strokeWidth=1)),
+        .mark(circle(fill="survived", stroke="#ccc", stroke_width=1)),
         {"w": 1000, "h": 320},
     )

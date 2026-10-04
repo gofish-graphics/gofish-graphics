@@ -11,6 +11,8 @@ covers:
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
+  - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
+  - packages/gofish-graphics/src/ast/constraints/overlap.ts
 ---
 
 # Layout and Render Passes in GoFish Graphics
@@ -192,12 +194,15 @@ its names against `inner` and calls `.relate()`, which is async. A spread given 
 own `dims` runs the layer's dims hook first, then its own.
 
 `resolveAliases` is a top-down pass (run before underlying space, which reads the
-dims and the constraints) that carries the **axis scope**, a map from name to axis
+dims and the constraints) that carries the **axis scope**, whose `names` map each name to an axis,
 starting at `{ x: 0, y: 1 }`. Every `coord` replaces the scope for its subtree with
 `x`, `y`, and the names its transform declares. Most transforms (`linear`, `wavy`,
 `bipolar`, `arcLengthPolar`) declare none, so inside them only `x`/`y` are visible:
 a name has a meaning only inside the space that declares it, and the innermost coord
-wins. The walk is synchronous: it queues each node's hook with its two scopes, in
+wins. A coord declares its space on its node (`_space`: the transform's `aliases`
+and `type`). The scope also carries `warpedBy`, the type of the nearest enclosing
+space that is not linear, for work that is only correct in a linear one (scatter's
+`overlap`). The walk is synchronous: it queues each node's hook with its two scopes, in
 pre-order. The pass then runs the queue one hook at a time, in
 that order. It does not run them concurrently, because an operator's `.relate()`
 walks the subtree to build its environment and must not interleave with a
@@ -552,6 +557,57 @@ Geometry exists only after layout, so a parent cannot yet read it while sizing.
 That is why `pack` keeps its children at their pixel size and does not fit
 itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
+
+The second consumer is `scatter`'s `overlap` option, `separate()` (#969) or
+`noise()` (#970, #1014). `sina()` and `jitter()` are `noise()` with other
+defaults filled in, so they reach layout as the same `{kind: "noise"}` object.
+`scatter` elaborates to a layer with a `position` constraint per child on each
+axis a field places, and an `align` on every other ("free") axis. With an
+overlap strategy, the free axis gets an `overlap` constraint
+(`constraints/overlap.ts`) in place of the `align`. It is not a difference
+constraint, so the placement solver never sees it: `applyConstraints` runs it
+after the solve, when each child's position on the data axis is known. It reads
+each child's `enclosingCircle`, asks the strategy
+(`graphicalOperators/overlap.ts`) for each circle center's offset from the
+alignment line, and pins each child there. A strategy returns one free-axis
+number per child, so it cannot move the data axis. `applyConstraints` also
+passes the data axis's pixels per data unit (the layer's position-scale
+`sigma`), which `noise` needs to turn a `smoothing` bandwidth in data units
+into pixels. `smoothing: 0` (the default), `smoothing: Infinity` and
+`smoothing: "silverman"` need no scale. 0 and Infinity are the same in any
+unit. Silverman's rule reads the dots' own pixel positions, and on a linear
+axis the rule in pixels is the rule in data units times the scale. The
+strategies share one broad phase, `NeighborGrid`, a uniform grid of square
+cells kept as lists in insertion order: `separate` buckets placed dots on the
+data axis, and `noise`'s `"blue"` on both axes. `separate` merges each dot's
+blocked intervals into disjoint runs in one sorted sweep and takes the nearest
+free candidate. `noise`'s outline (`noiseOutline`) is a Gaussian density
+estimate in two steps. First each dot is blurred by a bell of the
+`smoothing` bandwidth `s`, which estimates where the data is. Then each dot is
+blurred by its own footprint, a bell of `σ_dot = pitch/√(2π)` whose peak is
+one dot spread over one dot width. Gaussians compose by adding variances, so
+each dot adds one bell with `σ = √(σ_dot² + s²)`, and the outline follows the
+sum. The bells are summed on a grid, not pair by pair:
+each dot's weight is split between its two nearest grid points, the grid is
+convolved with the bell cut off at four bandwidths, and each dot reads the sum
+back by linear interpolation, the way R's `density()` bins. At the ends of the
+data range the sum is divided by the part of the smoothing bell (bandwidth
+`s`, not `σ`) at that point that lies inside the range, so a cut off bell
+does not thin the ends; this keeps the outline's total size about the same
+for every bandwidth. The footprint step is not corrected, since it is the
+dot's size, not missing data. With `s = 0` (the
+default, and what Silverman's rule gives for fewer than two dots or equal
+values) the bell is the footprint alone and nothing is corrected, so a lone
+dot sits on the line even at the end of the range. The footprint is the
+smallest blur, since a smaller bell would let dots with nearly equal values
+draw on top of each other. A scatter with an overlap strategy reports no
+size on its free axis in the space pass (a fixed-pixel dot's space is
+`UNDEFINED` there), and its real extent comes from where the children land, in
+the layer's box fold, the way a text label's extent is measured at layout.
+So a beeswarm takes the room its dots need and does not shrink to fit. It throws
+inside a non-linear coordinate space, where the layout frame is not the screen
+(#1002); the axis scope the scatter elaborates in carries the nearest
+non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 
 ### Pass 10: Placement
 

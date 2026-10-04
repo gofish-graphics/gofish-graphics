@@ -30,15 +30,34 @@ import {
   type Origin,
   type RefMarkIR,
 } from "./schema.js";
+import { isNonFiniteNumberIR, isTaggedInfinity } from "./nonFinite.js";
 import {
+  LABEL_OPTIONS,
   LEAF_MARKS,
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,
   OPERATORS,
+  OPTION_TYPES,
   resolveFields,
   type FieldSpec,
   type FieldType,
 } from "./descriptors.js";
+
+/**
+ * Is `value` a number as the IR carries it: a JSON number, or the tagged
+ * form of `Infinity` / `-Infinity` (see `nonFinite.ts`)? The tagged `NaN` is
+ * not: a NaN where a number is expected is always a bug, so it fails loudly.
+ */
+function isIRNumber(value: unknown): boolean {
+  return typeof value === "number" || isTaggedInfinity(value);
+}
+
+/** The error for a value that is not an IR number. */
+function notANumber(value: unknown, expected = "number"): string {
+  return isNonFiniteNumberIR(value)
+    ? `expected ${expected}, got NaN`
+    : `expected ${expected}, got ${typeNameOf(value)}`;
+}
 
 export interface ValidationError {
   /** Dotted path into the document. */
@@ -359,12 +378,18 @@ function walkFieldType(
         push(path, `expected string, got ${typeNameOf(value)}`);
       return;
     case "number":
-      if (typeof value !== "number")
-        push(path, `expected number, got ${typeNameOf(value)}`);
+      if (!isIRNumber(value)) push(path, notANumber(value));
       return;
     case "boolean":
       if (typeof value !== "boolean")
         push(path, `expected boolean, got ${typeNameOf(value)}`);
+      return;
+    case "literal":
+      if (value !== type.value)
+        push(
+          path,
+          `expected ${JSON.stringify(type.value)}, got ${JSON.stringify(value)}`
+        );
       return;
     case "any":
       return;
@@ -398,7 +423,11 @@ function walkFieldType(
     case "union": {
       // Valid if ANY branch matches cleanly (no errors raised by that branch).
       for (const branch of type.options) {
-        const probe: Context = { strict: false, errors: [], warnings: [] };
+        const probe: Context = {
+          strict: ctx.strict,
+          errors: [],
+          warnings: [],
+        };
         walkFieldType(branch, value, path, probe, (p, m) =>
           probe.errors.push({ path: p, message: m })
         );
@@ -446,9 +475,16 @@ function walkFieldType(
         return;
       }
       // Nested object fields validate the same way as top-level descriptor
-      // fields (required/optional), but do NOT reject unrecognized keys —
-      // matching the pre-descriptor behavior (e.g. `table.by` never rejected
-      // extra keys, even in strict mode).
+      // fields (required/optional). Strict mode also rejects a key the
+      // object does not declare (an `axes` entry other than x/y, a misspelled
+      // axis option).
+      if (ctx.strict) {
+        for (const k of Object.keys(value)) {
+          if (!(k in type.fields)) {
+            push(`${path}.${k}`, `unknown field "${k}" (strict)`);
+          }
+        }
+      }
       for (const [name, spec] of Object.entries(type.fields)) {
         const has =
           name in value && value[name] !== undefined && value[name] !== null;
@@ -505,18 +541,23 @@ function walkAxisDimsValue(value: unknown, path: string, ctx: Context): void {
   }
 }
 
-/** Resolve a `t.ref(name)` against the small set of authored envelope
- *  shapes already validated elsewhere in this file. */
+/** Resolve a `t.ref(name)`: a named option type (`OPTION_TYPES`) walks with
+ *  the generic field-type interpreter; any other name is one of the authored
+ *  envelope shapes validated elsewhere in this file. */
 function walkRefType(
   name: string,
   value: unknown,
   path: string,
   ctx: Context
 ): void {
+  const optionType = OPTION_TYPES[name];
+  if (optionType !== undefined) {
+    walkFieldType(optionType.type, value, path, ctx, (p, message) =>
+      ctx.errors.push({ path: p, message })
+    );
+    return;
+  }
   switch (name) {
-    case "AxesOptions":
-      walkAxesOptions(value, path, ctx);
-      return;
     case "LabelIR":
       walkLabel(value, path, ctx);
       return;
@@ -616,8 +657,13 @@ function walkTranslate(node: unknown, path: string, ctx: Context): void {
  */
 function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   if (value === null) return;
-  if (typeof value === "string") return;
-  if (typeof value === "number") return;
+  if (typeof value === "string" || typeof value === "number") return;
+  if (isNonFiniteNumberIR(value)) {
+    // The tagged infinities are numbers; the tagged NaN never is.
+    if (!isTaggedInfinity(value))
+      ctx.errors.push({ path, message: notANumber(value, "channel value") });
+    return;
+  }
   if (typeof value === "boolean") return;
   if (typeof value !== "object") {
     ctx.errors.push({
@@ -630,7 +676,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   const obj = value as Record<string, unknown>;
   if ("__gofish_lambda" in obj) return; // Python-bridge sentinel
   if (obj.type === "datum") {
-    if (obj.offset !== undefined && typeof obj.offset !== "number") {
+    if (obj.offset !== undefined && !isIRNumber(obj.offset)) {
       ctx.errors.push({
         path: `${path}.offset`,
         message: 'datum "offset" must be a number (post-scale pixel offset)',
@@ -651,7 +697,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
               message: 'colorOp "op" must be "lighten" or "darken"',
             });
           }
-          if (typeof cop?.amount !== "number") {
+          if (!isIRNumber(cop?.amount)) {
             ctx.errors.push({
               path: `${path}.colorOps[${i}].amount`,
               message: 'colorOp "amount" must be a number',
@@ -767,9 +813,7 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       if (value.values !== undefined) {
         if (
           !Array.isArray(value.values) ||
-          !value.values.every(
-            (v) => typeof v === "string" || typeof v === "number"
-          )
+          !value.values.every((v) => typeof v === "string" || isIRNumber(v))
         ) {
           ctx.errors.push({
             path: `${path}.values`,
@@ -782,10 +826,10 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
     case "bin":
       if (
         value.thresholds !== undefined &&
-        typeof value.thresholds !== "number" &&
+        !isIRNumber(value.thresholds) &&
         !(
           Array.isArray(value.thresholds) &&
-          value.thresholds.every((t) => typeof t === "number")
+          value.thresholds.every((t) => isIRNumber(t))
         )
       ) {
         ctx.errors.push({
@@ -799,48 +843,6 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       // reverse/dropNulls/normalize/sum/mean/count/distinct carry no extra fields.
       return;
   }
-}
-
-/**
- * `axes` — per-node axis-rendering override. Either a boolean (apply to
- * both dims) or an object `{ x?: AxisOptions, y?: AxisOptions }` where each
- * AxisOptions is a boolean or `{ title?: string | false }`.
- */
-function walkAxesOptions(value: unknown, path: string, ctx: Context): void {
-  if (typeof value === "boolean") return;
-  if (!isObject(value)) {
-    ctx.errors.push({
-      path,
-      message: `axes must be boolean or {x?, y?}, got ${typeNameOf(value)}`,
-    });
-    return;
-  }
-  for (const k of ["x", "y"]) {
-    if (k in value) walkAxisOption(value[k], `${path}.${k}`, ctx);
-  }
-  if (ctx.strict) rejectUnknown(value, ["x", "y"], path, ctx);
-}
-
-function walkAxisOption(value: unknown, path: string, ctx: Context): void {
-  if (typeof value === "boolean") return;
-  if (value === undefined) return;
-  if (!isObject(value)) {
-    ctx.errors.push({
-      path,
-      message: `axis option must be boolean or { title? }, got ${typeNameOf(value)}`,
-    });
-    return;
-  }
-  if ("title" in value) {
-    const t = value.title;
-    if (t !== false && typeof t !== "string") {
-      ctx.errors.push({
-        path: `${path}.title`,
-        message: `axis title must be a string or false, got ${typeNameOf(t)}`,
-      });
-    }
-  }
-  if (ctx.strict) rejectUnknown(value, ["title"], path, ctx);
 }
 
 function walkMark(node: unknown, path: string, ctx: Context): void {
@@ -968,9 +970,9 @@ function walkCutSize(value: unknown, path: string, ctx: Context): void {
   }
   value.forEach((item, i) => {
     const p = `${path}[${i}]`;
-    if (typeof item === "number") return;
+    if (isIRNumber(item)) return;
     if (isObject(item) && item.type === "datum") {
-      if (item.offset !== undefined && typeof item.offset !== "number") {
+      if (item.offset !== undefined && !isIRNumber(item.offset)) {
         ctx.errors.push({
           path: `${p}.offset`,
           message: 'datum "offset" must be a number',
@@ -1162,32 +1164,7 @@ function walkLabelSpec(node: unknown, path: string, ctx: Context): void {
       message: `expected a string or field(...) accessor object, got ${typeNameOf(node.accessor)}`,
     });
   }
-  optionalField(node, "position", path, ctx, expectString);
-  optionalField(node, "fontSize", path, ctx, expectNumber);
-  optionalField(node, "color", path, ctx, expectString);
-  optionalField(node, "offset", path, ctx, expectNumber);
-  optionalField(node, "rotate", path, ctx, expectNumber);
-  optionalField(node, "fontFamily", path, ctx, expectString);
-  optionalField(node, "fontWeight", path, ctx, expectStringOrNumber);
-  optionalField(node, "fontStyle", path, ctx, expectString);
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      [
-        "accessor",
-        "position",
-        "fontSize",
-        "color",
-        "offset",
-        "rotate",
-        "fontFamily",
-        "fontWeight",
-        "fontStyle",
-      ],
-      path,
-      ctx
-    );
-  }
+  walkDescriptorFields(node, path, ctx, LABEL_OPTIONS, ["accessor"]);
 }
 
 function walkLabel(node: unknown, path: string, ctx: Context): void {
@@ -1367,25 +1344,7 @@ function expectString(value: unknown, path: string, ctx: Context): void {
 }
 
 function expectNumber(value: unknown, path: string, ctx: Context): void {
-  if (typeof value !== "number") {
-    ctx.errors.push({
-      path,
-      message: `expected number, got ${typeNameOf(value)}`,
-    });
-  }
-}
-
-function expectStringOrNumber(
-  value: unknown,
-  path: string,
-  ctx: Context
-): void {
-  if (typeof value !== "string" && typeof value !== "number") {
-    ctx.errors.push({
-      path,
-      message: `expected string or number, got ${typeNameOf(value)}`,
-    });
-  }
+  if (!isIRNumber(value)) ctx.errors.push({ path, message: notANumber(value) });
 }
 
 function expectBoolean(value: unknown, path: string, ctx: Context): void {

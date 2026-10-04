@@ -18,7 +18,7 @@ chart(data).flow(
     spread(by="origin", dir="x"),
     derive(lambda d: normalize(d, "count")),
     stack(by="cylinders", dir="y"),
-).mark(rect(h="count", fill="origin", stroke="white", strokeWidth=2)).render(
+).mark(rect(h="count", fill="origin", stroke="white", stroke_width=2)).render(
     w=500, h=300, axes=True
 )
 ```
@@ -98,7 +98,7 @@ from gofish import bin, chart, derive, rect, scatter
 # bin edges auto-tag as "Beak Length (mm)" — no field(..., measure=...) needed:
 chart(penguins, h=80).flow(
     derive(bin("Beak Length (mm)")),
-    scatter(xMin="start", xMax="end"),
+    scatter(x_min="start", x_max="end"),
 ).mark(rect(h="count"))
 ```
 
@@ -112,8 +112,8 @@ from gofish import chart, derive, field, rect, scatter
 
 chart(data, h=80).flow(
     derive(my_transform),  # renames a length column to "lo"/"hi"
-    scatter(xMin=field("lo", measure="Beak Length (mm)"),
-            xMax=field("hi", measure="Beak Length (mm)")),
+    scatter(x_min=field("lo", measure="Beak Length (mm)"),
+            x_max=field("hi", measure="Beak Length (mm)")),
 ).mark(rect(h="count"))
 ```
 

@@ -152,8 +152,33 @@ export {
   type Curve,
   type CurveSpec,
 } from "./ast/graphicalOperators/routers";
-export { treemap } from "./ast/graphicalOperators/treemap";
+export {
+  treemap,
+  squarify,
+  slice,
+  dice,
+  binary,
+  sliceDice,
+} from "./ast/graphicalOperators/treemap";
+export type {
+  TreemapTile,
+  TreemapOptions,
+} from "./ast/graphicalOperators/treemap";
 export { pack, circles } from "./ast/graphicalOperators/pack";
+export {
+  separate,
+  noise,
+  sina,
+  jitter,
+} from "./ast/graphicalOperators/overlap";
+export type {
+  OverlapStrategy,
+  SeparateStrategy,
+  NoiseStrategy,
+  NoiseOptions,
+  NoiseRandomness,
+  NoiseSmoothing,
+} from "./ast/graphicalOperators/overlap";
 export type { PackMethod, PackOptions } from "./ast/graphicalOperators/pack";
 export {
   enclose,

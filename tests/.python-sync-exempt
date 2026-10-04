@@ -33,6 +33,11 @@ packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx::PolarText
 # Syntax/Pack are ported.
 packages/gofish-graphics/stories/forwardsyntax/Pack.stories.tsx::NestedByCount
 
+# separate: MixedRadii computes each pixel radius in a JS function mark, which
+# cannot cross the bridge. Forward Syntax/Separate::PenguinMass and ::OneSided
+# are ported.
+packages/gofish-graphics/stories/forwardsyntax/Separate.stories.tsx::MixedRadii
+
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
 

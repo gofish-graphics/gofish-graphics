@@ -27,7 +27,7 @@ def _planet_row():
                 h=p["radius"] * 2,
                 fill=p["color"],
                 stroke="#333",
-                strokeWidth=3,
+                stroke_width=3,
             ).name(p["name"])
             for p in PLANETS
         ],
@@ -78,7 +78,7 @@ def story_planets_with_label_above_no_spacing():
         layer([_planet_row()]).relate(
             lambda Mercury: [
                 spread(
-                    [text(text="Mercury", debugBoundingBox=True), Mercury],
+                    [text(text="Mercury", debug_bounding_box=True), Mercury],
                     dir="y",
                     spacing=0,
                     alignment="middle",
@@ -94,7 +94,7 @@ def story_planets_with_label_below_no_spacing():
         layer([_planet_row()]).relate(
             lambda Mercury: [
                 spread(
-                    [Mercury, text(text="Mercury", debugBoundingBox=True)],
+                    [Mercury, text(text="Mercury", debug_bounding_box=True)],
                     dir="y",
                     spacing=0,
                     alignment="middle",

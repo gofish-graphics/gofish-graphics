@@ -57,10 +57,10 @@ INLINE_BADGE_SVG = (
 def _image_card(title, subtitle, image_node):
     return spread(
         [
-            text(text=title, fontSize=14, fill="#0f172a"),
+            text(text=title, font_size=14, fill="#0f172a"),
             rect(w=180, h=2, fill="#cbd5e1"),
             image_node,
-            text(text=subtitle, fontSize=12, fill="#475569"),
+            text(text=subtitle, font_size=12, fill="#475569"),
         ],
         dir="y",
         spacing=6,
@@ -106,7 +106,7 @@ def story_labeled_rows():
                         image(href=BOTTLE_JPG, w=60, h=60),
                         text(
                             text="Square thumbnail with color marker",
-                            fontSize=14,
+                            font_size=14,
                             fill="#0f172a",
                         ),
                     ],
@@ -120,7 +120,7 @@ def story_labeled_rows():
                         image(href=BOTTLE_PHOTO_PNG, w=92, h=60),
                         text(
                             text="Wide thumbnail mixed with text",
-                            fontSize=14,
+                            font_size=14,
                             fill="#0f172a",
                         ),
                     ],
@@ -134,7 +134,7 @@ def story_labeled_rows():
                         image(href=FLOWER_PNG, w=44, h=60),
                         text(
                             text="Tall thumbnail with matching row layout",
-                            fontSize=14,
+                            font_size=14,
                             fill="#0f172a",
                         ),
                     ],

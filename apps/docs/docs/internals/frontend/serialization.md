@@ -9,6 +9,7 @@ covers:
   - packages/gofish-ir/src/frontend/validate.ts
   - packages/gofish-ir/src/frontend/jsonSchema.ts
   - packages/gofish-ir/src/frontend/descriptors.ts
+  - packages/gofish-ir/src/frontend/nonFinite.ts
   - packages/gofish-graphics/src/serialize/toJSON.ts
   - packages/gofish-graphics/src/serialize/fromJSON.ts
   - packages/gofish-graphics/src/serialize/registry.ts
@@ -132,7 +133,9 @@ than a serialized field). Operators are a flat list (`derive`, `resolve`,
 `join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
 `pack`). `pack`'s `method` is a strategy object made by a function call
 (`circles()` in both languages), so on the wire it is plain data,
-`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. Note `join`
+`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. `treemap`'s
+`tile` works the same way (`squarify({ ratio })`, `slice()`, `dice()`,
+`binary()`, `sliceDice()`; e.g. `{ "kind": "squarify", "ratio": 1 }`). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
@@ -234,6 +237,46 @@ shorthand path) or one of three explicit tagged objects:
 - `literal(x)` → `{type: "literal", value: x}` — inline constant, not scaled.
 
 These three mirror Vega-Lite's `field` / `datum` / `value` trichotomy.
+
+### Non-finite numbers
+
+JSON has no `Infinity`, `-Infinity` or `NaN`. `JSON.stringify` writes them as
+`null`, and Python's `json.dumps` writes a bare `Infinity`, which `JSON.parse`
+rejects. So the IR carries each one as a tagged object, the canonical form of
+MongoDB Extended JSON:
+
+```json
+{ "$numberDouble": "Infinity" }
+{ "$numberDouble": "-Infinity" }
+{ "$numberDouble": "NaN" }
+```
+
+It is one mechanism for every number in the document (an option such as
+`noise`'s `smoothing`, a channel value, a data row), at the serialization
+boundary, with no per-field rule:
+
+- A writer encodes the whole document as it makes it: JS `toJSON` (through
+  `Frontend.encodeNonFinite`, gofish-ir's `frontend/nonFinite.ts`) and Python
+  `to_ir()` (`gofish/_nonfinite.py`). The test derive server encodes the
+  infinities in what it sends the same way.
+- A reader decodes in one place, `Serialize.readIR` (`fromJSON.ts`), which
+  parses JSON text if it is given text and decodes the tags. The parity
+  harness calls it once per spec and once per derive response, the widget once
+  per spec trait (and hands the result down), and `buildChart` reads its own
+  arguments through it. The other reconstruction functions (`mapMark`,
+  `mapOperator`, ...) take what `readIR` returns.
+- The validator accepts the tagged `Infinity` and `-Infinity` wherever it
+  expects a number, through one check (`isIRNumber`), and the JSON Schema has
+  one shared `Number` def that every number field points to. A tagged `NaN`
+  where a number is expected is an error: a NaN option is always a bug. Data
+  rows are untyped, so a NaN there round-trips.
+- The test derive server keeps its old rule for a NaN in rows: it sends
+  `null`, which is how pandas' missing value reads in JS.
+
+The tag was chosen over protobuf's JSON mapping (a bare string `"Infinity"`
+in a number field) because a string already means a field name in a channel
+value, so a bare string would be ambiguous there; a tagged object is not, in
+any position.
 
 ### `.relate()` clauses
 
@@ -347,16 +390,27 @@ were silently dropped at render).
 collapses three of those four into one authored table: one entry per
 construct (operator, leaf mark, combinator mark, coord transform) listing
 its fields in a small type DSL (`t.string`, `t.number`, `t.enum(...)`,
-`t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
-pointer at an authored envelope `$def`, and so on — see the file's `t`/`ch`
+`t.literal(v)` for exactly one value, such as the `false` in an axis
+title's `string | false`, `t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
+pointer at a named type, and so on — see the file's `t`/`ch`
 exports). Shared field groups (`boxDims`, the ten closed x/y/w/h box channels plus the open `dims` bag
 keyed by axis name; `paint`, the five paint channels) are declared once and pulled
 into a mark's entry by reference, so most mark entries list only the
 fields genuinely their own.
 
+Two smaller tables sit beside the construct entries. `OPTION_TYPES` declares
+the nested option objects a field points at by name, in the same type DSL:
+today `AxesOptions` (a boolean, or `{x, y}`) and `AxisOptions` (a boolean, or
+`{title, side, labelAngle}`). A `t.ref(name)` resolves against it first, so
+the validator, the JSON Schema, and the Python generator all read one
+declaration of the axes option. `CHART_OPTIONS` lists the chart-level
+options (`w`, `h`, `coord`, `color`, `axes`, `legend`, `padding`, `schema`),
+mirroring the JS `ChartOptions`. Only the Python generator reads it so far;
+the validator and the schema still take `ChartIR.options` as an open object.
+
 **What's still authored, not in the table**: the envelope
 (`ChartIR`/`LayerIR`/`DataIR`/`MarkIR` union, `ChannelValue`,
-`ConstraintIR`, `LabelIR`, `TranslateIR`, `AxesOptions`) and `cut`/`offset`/
+`ConstraintIR`, `LabelIR`, `TranslateIR`) and `cut`/`offset`/
 `ref` — these are structural or recursive shapes rather than flat field
 bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
 of those files the doc comment marks as "stays hand-written below").
@@ -391,8 +445,9 @@ unknown`) even though they aren't really open on the JS side (a mark's
   against a leaf mark's field list as "guaranteed accepted."
 - **`jsonSchema.ts`** builds one `$def` per operator (`SpreadOperator`,
   `TableOperator`, …) and one per leaf mark (`RectMark`, `TextMark`, …)
-  from the table (`buildOperatorDefs()` / `buildLeafMarkDefs()`), merged
-  into the hand-written `$defs` object. Operator `$defs` are
+  from the table (`buildOperatorDefs()` / `buildLeafMarkDefs()`), and one
+  per named option type (`buildOptionTypeDefs()`), merged into the
+  hand-written `$defs` object. Operator `$defs` are
   `additionalProperties: false` (schema-level strict, matching
   `validate.ts`'s operator behavior); leaf-mark `$defs` stay
   `additionalProperties: true` so an external strict consumer of the
@@ -407,7 +462,8 @@ unknown`) even though they aren't really open on the JS side (a mark's
   `::: gofish-ref rect` under its `## Parameters` heading, and the
   container (`docs/.vitepress/markdown-it-gofish-ref.ts`) renders the
   construct's `doc` line plus an Option/Type/Default/Description table —
-  JS field names and a TS-ish type on a JS page, `py` kwarg names and a
+  JS field names and a TS-ish type on a JS page, snake case kwarg names
+  (from `pyKwarg`, see § Generating the Python factory layer) and a
   Python type on a Python page, with the shared groups (`boxDims`,
   `paint`) folded into a collapsed block. So an option's one-line
   description lives in its `doc` string and reaches the reader and the
@@ -463,8 +519,10 @@ The validator at
 [`validate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/validate.ts)
 covers the same shapes, generically interpreting the descriptor table as
 described above, plus the structural checks for the hand-authored parts
-(e.g. `table.by` requires `{x, y}`, `spread`/`stack`/`scatter` accept an
-`axes` override of shape `AxesOptions`). It runs in permissive mode by
+(e.g. `table.by` requires `{x, y}`). A field typed with a named option type,
+such as the `axes` override on `spread`/`stack`/`scatter`, is walked by the
+same generic interpreter against its `OPTION_TYPES` entry. In strict mode a
+nested object rejects a key it does not declare. It runs in permissive mode by
 default (unknown fields ignored, for forward-compat) and strict mode in
 CI tests — "strict" here composes with the operator-reject/leaf-mark-warn
 split above, it doesn't override it.
@@ -484,7 +542,57 @@ package export, so it needs `pnpm --filter gofish-ir build` to have run
 first) and emits `gofish/_generated.py` — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
 --exit-code`) rather than a build-time step, matching the "commit the
-generated Python" norm Altair and Plotly.py both follow. It emits:
+generated Python" norm Altair and Plotly.py both follow.
+
+Python kwargs are in snake case, while the wire stays in camel case. One
+function in `descriptors.ts`, `pyKwarg(fieldName)`, gives each field's
+Python name: the field name in snake case (`strokeWidth` becomes
+`stroke_width`, `emX` becomes `em_x`), with a trailing underscore when that
+is a Python keyword (`from` becomes `from_`). Every generated function lists
+its `(wireKey, pyName)` pairs and builds its IR dict under the wire key, so
+`rect(stroke_width=2)` serializes as `{"strokeWidth": 2}`, and
+`rect(strokeWidth=2)` is a `TypeError`. The docs options tables call the
+same function. Hand-written wrappers take `**options` and pass them to a
+generated core, so none renames by hand: `.label(accessor, **options)` on
+marks and operators calls `_label_opts`, built from `LABEL_OPTIONS` (the
+options of a `LabelSpecIR`, which the JSON Schema's `LabelIR` and the
+validator also read), and `line`/`ribbon` call `_line_opts`/`_ribbon_opts`.
+
+A nested option dict follows the same rule, by its declared type. The
+generator compiles a field's type into a small Python literal that records
+only its key structure: for an object, each Python key (from `pyKwarg`)
+paired with its wire key and the shape of its value. A field whose type has
+no option keys compiles to nothing and its value passes through as is. The
+generated module holds one entry per named option type (`_OPTION_TYPES`) and
+one interpreter, `_to_wire`, which every generated function calls on such a
+field. So `chart(data, axes={"x": {"label_angle": 45}})` serializes as
+`{"axes": {"x": {"labelAngle": 45}}}`, and an undeclared key, including the
+camelCase `"labelAngle"`, is a `TypeError` that names the expected keys.
+Python's `chart()` now goes through a generated `_chart_opts` core built from
+`CHART_OPTIONS`, so an unknown chart keyword is a `TypeError` too. The
+chart-tier form `layer([chart1, chart2], **options)` takes its options
+through the same core, so they are spelled and checked as in `chart()`.
+
+The conversion is driven by the declared type, never by the dict itself, so
+dicts whose keys are data keep them: a `record` type's keys (a `schema` keyed
+by column name, the axis names of `dims`) are never renamed, and a field
+typed `any` (`color=palette({...})` keyed by category, `coord`) passes
+through whole. Two rules keep this honest. A union may have only one branch
+that a dict could match, or generation fails, since `_to_wire` would have to
+guess. The one exception is a tagged union: when every dict branch is an
+object whose `kind` field is a literal or enum, and no two branches share a
+`kind` value (treemap's `tile`: `{kind: "squarify", ratio?}` or
+`{kind: "slice" | "dice" | ...}`; scatter's `overlap`:
+`{kind: "separate", ...}` or `{kind: "noise", ...}`), the generator emits a
+`("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
+the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
+branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
+few refs the generator lists as already in wire form (`FieldAccessor`, built
+by `field(...)`; `AxisDimsValue`, whose plain dict could be a channel value
+or an interval), or generation fails, so a new nested type has to be
+declared before Python can take it.
+
+It emits:
 
 - Closed-signature **leaf mark** factories (`rect`, `circle`, `ellipse`,
   `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
@@ -495,12 +603,16 @@ generated Python" norm Altair and Plotly.py both follow. It emits:
   killing four previously hand-copied wire-name tables.
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
-  `layer`, `pack`, the polar coord family) — just the kwargs→dict half. The
+  `layer`, `pack`, the polar coord family), with separate combinator-form
+  cores for `spread`, `stack`, and `treemap` (their combinator entries add
+  `key`; `spread` and `stack` also include the whole `boxDims` group, since
+  JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
+  `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 
 `derive`/`resolve`/`join` (real RPC-bridge/ref-shape/DataFrame logic) and
-`palette`/`gradient`/`field`/`datum`/`normalize`/`repeat`/`ref`/`selectAll`
+`palette`/`gradient`/`field`/`datum`/`normalize`/`repeat`/`ref`/`select_all`
 (not in the descriptor table at all) stay fully hand-written in `ast.py`,
 alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
 widget/RPC layer — see

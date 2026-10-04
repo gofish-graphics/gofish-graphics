@@ -908,7 +908,10 @@ export const coord = createNodeOperator(
     );
     // Declare this space's axis names (e.g. polar `{ x: "theta", y: "r" }`) so
     // resolveAliases can rebind the axis-name scope for the coord's subtree.
-    coordNode._aliases = coordTransform.aliases;
+    coordNode._space = {
+      aliases: coordTransform.aliases,
+      type: coordTransform.type,
+    };
     // The coord's own box lives in its parent's space, so its `dims` option
     // resolves against the parent's names (the hook's `outer` scope).
     coordNode._elaborateInAxisScope = deferAxisDims(fancyDims, dims);

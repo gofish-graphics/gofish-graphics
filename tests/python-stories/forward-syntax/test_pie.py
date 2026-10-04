@@ -32,6 +32,6 @@ def story_rose():
             stack(by="Type", dir="y"),
             derive(lambda d: [{**row, "Death": math.sqrt(row["Death"])} for row in d]),
         )
-        .mark(rect(w=(math.pi * 2) / 12, emX=True, h="Death", fill="Type")),
+        .mark(rect(w=(math.pi * 2) / 12, em_x=True, h="Death", fill="Type")),
         {"w": 400, "h": 400, "axes": True},
     )

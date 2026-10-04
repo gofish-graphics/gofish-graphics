@@ -27,10 +27,10 @@ def _label_texts():
         text(
             text=label["text"],
             fill=label["color"],
-            fontSize=28,
-            fontFamily=FONT_FAMILY,
-            textAnchor="start",
-            debugBoundingBox=True,
+            font_size=28,
+            font_family=FONT_FAMILY,
+            text_anchor="start",
+            debug_bounding_box=True,
         )
         for label in LABELS
     ]

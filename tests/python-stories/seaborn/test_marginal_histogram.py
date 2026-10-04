@@ -50,7 +50,7 @@ def story_default():
         chart(data, h=80)
         .flow(
             derive(bin("Beak Length (mm)")),
-            scatter(xMin="start", xMax="end"),
+            scatter(x_min="start", x_max="end"),
         )
         .mark(rect(h="count", fill="steelblue"))
         .name("topHist")
@@ -60,7 +60,7 @@ def story_default():
         chart(data, w=80)
         .flow(
             derive(bin("Beak Depth (mm)")),
-            scatter(yMin="start", yMax="end"),
+            scatter(y_min="start", y_max="end"),
         )
         .mark(rect(w="count", fill="steelblue"))
         .name("rightHist")

@@ -27,6 +27,6 @@ def story_default():
             # survival share within each class column (conditional), fills height
             stack(by="survived", dir="y", size=field("count").normalize()),
         )
-        .mark(rect(fill="survived", stroke="white", strokeWidth=1)),
+        .mark(rect(fill="survived", stroke="white", stroke_width=1)),
         {"w": 520, "h": 420},
     )

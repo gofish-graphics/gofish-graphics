@@ -17,14 +17,14 @@ def story_default():
             treemap(
                 by=field("Major Genre").drop_nulls(),
                 size="Worldwide Gross",
-                paddingInner=2,
-                paddingOuter=2,
+                spacing=2,
+                padding=2,
                 round=True,
             )
         )
         .mark(
-            circle(fill="Major Genre", stroke=GRAY, strokeWidth=1).label(
-                "Major Genre", position="center", color="white", fontSize=12
+            circle(fill="Major Genre", stroke=GRAY, stroke_width=1).label(
+                "Major Genre", position="center", color="white", font_size=12
             )
         ),
         {"w": 700, "h": 420},

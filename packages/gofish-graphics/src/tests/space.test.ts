@@ -390,7 +390,7 @@ console.log("# space: a measure clash says what to do");
     },
     [overlayNode]
   );
-  polar._aliases = { x: "theta", y: "r" };
+  polar._space = { aliases: { x: "theta", y: "r" }, type: "polar" };
   const inPolar = throws(() => overlayNode.resolveUnderlyingSpace());
   ok(
     "inside a coordinate space the axis takes the space's name",

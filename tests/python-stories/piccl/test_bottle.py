@@ -53,12 +53,12 @@ def story_default():
                         image(href=BOTTLE_PNG, h=datum(100)),
                         rect(h="amount", w=175, fill="#00ff00"),
                     ],
-                    blendMode="color",
+                    blend_mode="color",
                 ).name("bottle"),
                 rect(h=1, fill="#666", w=175, y="amount").name("line"),
                 text(
                     text=lambda d: f"{d['amount']}%",
-                    fontSize=35,
+                    font_size=35,
                     fill="#666",
                 ).name("label"),
             ]).relate(lambda bottle, line, label: [

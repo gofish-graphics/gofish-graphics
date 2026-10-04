@@ -19,7 +19,7 @@ ellipse(w=24, h=30, fill="#e15759")
 ## Signature
 
 ```python
-ellipse(w=None, h=None, fill=None, stroke=None, strokeWidth=None,
+ellipse(w=None, h=None, fill=None, stroke=None, stroke_width=None,
         opacity=None, debug=None) -> Mark
 ```
 

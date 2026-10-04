@@ -54,7 +54,7 @@ INLINE_BADGE_SVG = (
 def _labeled_image(label, image_node):
     return stack(
         [
-            text(text=label, fontSize=14, fill="#1f2937"),
+            text(text=label, font_size=14, fill="#1f2937"),
             image_node,
         ],
         dir="y",

@@ -10,7 +10,7 @@ the cross-tier `layer` + `ref` pattern used in test_pulley.py.
 from gofish import (
     Constraint,
     arrow,
-    createName,
+    create_name,
     ellipse,
     enclose,
     layer,
@@ -101,8 +101,8 @@ def array_entry(value: int, color: str, highlight: bool):
             ellipse(w=26, h=26, fill="rgba(255,255,255,0.6)").name("circle"),
             text(
                 text=str(value),
-                fontFamily="serif",
-                fontSize=14,
+                font_family="serif",
+                font_size=14,
                 fill="orangered" if highlight else "black",
             ).name("label"),
         ]
@@ -120,10 +120,10 @@ def story_insertion_sort():
     # Per-cell name tokens, keyed by [stage][index] — a fresh token per cell
     # per stage, since the same value can appear in many stages/positions.
     entry_names = [
-        [createName(f"entry-{s}-{i}") for i in range(len(stage["ar"]))]
+        [create_name(f"entry-{s}-{i}") for i in range(len(stage["ar"]))]
         for s, stage in enumerate(stages)
     ]
-    row_names = [createName(f"row-{s}") for s in range(len(stages))]
+    row_names = [create_name(f"row-{s}") for s in range(len(stages))]
 
     rows = []
     for stage, stage_data in enumerate(stages):
@@ -151,7 +151,7 @@ def story_insertion_sort():
                 ry=8,
                 fill="none",
                 stroke="black",
-                strokeWidth=2,
+                stroke_width=2,
             ).name(row_names[stage]),
         ]
 
@@ -179,8 +179,8 @@ def story_insertion_sort():
                     ry=12,
                     fill="none",
                     stroke="teal",
-                    strokeWidth=4,
-                    strokeDasharray="12",
+                    stroke_width=4,
+                    stroke_dasharray="12",
                 )
             )
 
@@ -188,8 +188,8 @@ def story_insertion_sort():
             row_children.append(
                 arrow(
                     [ref(entry_names[stage][from_]), ref(entry_names[stage][to])],
-                    padStart=0,
-                    padEnd=4,
+                    pad_start=0,
+                    pad_end=4,
                     straights=False,
                     flip=True,
                 )
@@ -210,10 +210,10 @@ def story_insertion_sort():
                         [
                             text(
                                 text=_stage_label(stage, len(stages)),
-                                fontFamily="serif",
-                                fontStyle="italic",
-                                fontWeight=300,
-                                fontSize=14,
+                                font_family="serif",
+                                font_style="italic",
+                                font_weight=300,
+                                font_size=14,
                                 fill="gray",
                             ),
                             ref(row_names[stage]),

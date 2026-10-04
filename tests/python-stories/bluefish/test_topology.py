@@ -171,7 +171,7 @@ def three_point_topology(
             x = (i - 1) * SPACING
             labels.append(
                 position(
-                    [text(text=p, fontStyle="italic")],
+                    [text(text=p, font_style="italic")],
                     x=x - 4,
                     y=10,
                 )
@@ -186,7 +186,7 @@ def three_point_topology(
                 h=outer_box["h"],
                 fill="none",
                 stroke="black",
-                strokeWidth=3,
+                stroke_width=3,
             )
         ],
         x=outer_box["centerX"] - outer_box["w"] / 2,
@@ -204,7 +204,7 @@ def three_point_topology(
                     points=ac_neighbourhood_points(),
                     fill="none" if overdraw else raw_color,
                     stroke="black",
-                    strokeWidth=3,
+                    stroke_width=3,
                     opacity=1 if overdraw else TOPOLOGY_OPACITY,
                 )
             )
@@ -219,7 +219,7 @@ def three_point_topology(
                         h=box["h"],
                         fill="none" if overdraw else raw_color,
                         stroke="black",
-                        strokeWidth=3,
+                        stroke_width=3,
                         opacity=1 if overdraw else TOPOLOGY_OPACITY,
                     )
                 ],

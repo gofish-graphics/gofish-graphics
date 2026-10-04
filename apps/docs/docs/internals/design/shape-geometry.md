@@ -7,6 +7,23 @@ status: speculative
 
 # Shape geometry beyond boxes
 
+> **Update (2026-10-03).** `geometry()` with `enclosingCircle` and `pack` shipped in
+> #968. The dodge layout (§4.5) shipped as `scatter`'s
+> `overlap: separate({ padding })` (#969). It was briefly named `swarm()`,
+> which §6 below still uses. It is not `dodge` because ggplot2's
+> `position_dodge` means grouped bars, and not `beeswarm` because that names a
+> family of layouts; the name follows the separation constraints of WebCoLa and
+> VPSC. The open questions in §6 were answered this way: the free-axis size is
+> measured at layout, like text, so a beeswarm takes the room its dots need; it keeps dots apart
+> in screen space and throws under a non-linear coordinate space (#1002); other
+> shapes are kept apart by their enclosing circle; the option is named `overlap`, and
+> there is no priority option yet (data order). Jitter shipped next to it as
+> `overlap: jitter({ randomness, smoothing })` (#970), a density outline rather
+> than a collision search. It was later renamed `noise()` with a Gaussian
+> outline, and `sina()` and `jitter()` became `noise()` with other defaults
+> (#1014). See
+> [Layout Calculation](/internals/layout/passes).
+>
 > **Status: design proposal (2026-09-29).** Nothing here is implemented. It grew out of the
 > LLM benchmark pilot ([#955](https://github.com/gofish-graphics/gofish-graphics/issues/955)),
 > where GoFish was the only library without a `dodge` (beeswarm) layout, and out of the
@@ -336,7 +353,7 @@ the linear scaling. d3 handles this by packing twice, and we would need the same
 workaround or a different padding rule.
 
 **Decided (2026-09-29): the first version is a declared shortcut.** Geometry is available
-only after layout, which is exact for placement, because pack and swarm read their
+only after layout, which is exact for placement, because pack and separate read their
 children's geometry inside their own `layout()`. It is not enough for sizing. Pack works
 bottom up, so to report its size in the space pass it needs its children's enclosing
 radii before layout. So the first `circlePack` keeps radii in pixels, does not fit itself

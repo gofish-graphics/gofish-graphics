@@ -257,6 +257,10 @@ export interface SpreadOperator
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
+  /** Position of this operator's box in the parent's space (pixels): the JS
+   *  `Spread` spreads its `FancyDims` into the box, as treemap's does. */
+  x?: ChannelValue;
+  y?: ChannelValue;
   /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
    *  this operator's box, reported as a SIZE claim to the enclosing scale. */
   w?: ChannelValue;
@@ -290,11 +294,11 @@ export interface StackOperator
   sharedScale?: boolean;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
-  /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
-   *  this operator's box, reported as a SIZE claim to the enclosing scale. */
+  /** Box position, extent, and per-entry size — see `SpreadOperator`. */
+  x?: ChannelValue;
+  y?: ChannelValue;
   w?: ChannelValue;
   h?: ChannelValue;
-  /** Per-entry stack-axis extent (#700 Phase 2) — see SpreadOperator.size. */
   size?: ChannelValue;
   axes?: AxesOptions;
 }
@@ -327,24 +331,49 @@ export interface ScatterOperator
    *  point, `{ min, max }` the span, `{ center }` the point. */
   dims?: AxisDims;
   alignment?: string;
+  /** How children keep clear of each other on the free axis. Default: none
+   *  (every child sits on the alignment line). */
+  overlap?: OverlapStrategyIR;
   axes?: AxesOptions;
   w?: ChannelValue;
   h?: ChannelValue;
 }
 
+/** A `scatter` overlap strategy, made by a function call (`separate()`,
+ *  `noise()`; `sina()` and `jitter()` make kind `"noise"` with other
+ *  defaults). Mirrors JS's `OverlapStrategy`
+ *  (`graphicalOperators/overlap.ts`). */
+export type OverlapStrategyIR =
+  | { kind: "separate"; padding?: number }
+  | {
+      kind: "noise";
+      randomness?: "blue" | "quasi" | "uniform";
+      smoothing?: number | "silverman";
+      padding?: number;
+      seed?: number;
+    };
+
 /**
  * Per-node axis-rendering override. Mirrors the JS-side `AxesOptions` /
- * `AxisOptions` from `gofish-graphics/src/ast/gofish.tsx`.
+ * `AxisOptions` from `gofish-graphics/src/ast/gofish.tsx`; the field docs live
+ * on `OPTION_TYPES` in descriptors.ts, which the validator, the JSON Schema,
+ * and the Python generator all read.
  *
  * - `true` / `false` — show or hide both x and y axes.
  * - Object form — independently control each dimension.
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
- * object with an optional `title` (string for custom title, `false` to
- * suppress).
+ * object: `title` (string for a custom title, `false` to suppress), `side`
+ * (the frame edge), and `labelAngle` (label rotation in degrees).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-export type AxisOptions = boolean | { title?: string | false };
+export type AxisOptions =
+  | boolean
+  | {
+      title?: string | false;
+      side?: "start" | "end";
+      labelAngle?: number | number[] | "auto";
+    };
 
 export interface TableOperator
   extends BaseIRNode,
@@ -369,6 +398,15 @@ export interface LogOperator
   prefix?: string;
 }
 
+/** A `treemap` tiling strategy, made by a function call (`squarify()`,
+ *  `slice()`, `dice()`, `binary()`, `sliceDice()`). */
+export type TreemapTileIR =
+  | { kind: "squarify"; ratio?: number }
+  | { kind: "slice" }
+  | { kind: "dice" }
+  | { kind: "binary" }
+  | { kind: "sliceDice" };
+
 /**
  * `treemap({...})` — d3-hierarchy treemap layout over the flow's rows,
  * fare/weight-proportional. Dual-form like `spread`/`stack`/`scatter`/
@@ -388,21 +426,16 @@ export interface TreemapOperator
    *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
    *  emitted per row. */
   by?: string | FieldAccessor;
-  paddingInner?: number;
-  paddingOuter?: number;
+  /** Gap between sibling tiles, in pixels. Default 0. */
+  spacing?: number;
+  /** Inset around the outer edge of the treemap, in pixels. Default 0. */
+  padding?: number;
   round?: boolean;
-  tile?:
-    | "squarify"
-    | "slice"
-    | "dice"
-    | "binary"
-    | "slicedice"
-    | "squarifyCircle";
+  /** The tiling strategy. Default `{ kind: "squarify" }`. */
+  tile?: TreemapTileIR;
   sort?: "asc" | "desc" | "none";
   /** Per-leaf weight driving tile area (entry-flagged per split entry). */
   size?: ChannelValue;
-  flipY?: boolean;
-  leafIntrinsicRadiusField?: string;
   /** Position of the box the treemap tiles into, in the parent's space. Both
    *  forms spread `FancyDims` into `elaborateDims`, so the box's position is as
    *  real an option as its size — unlike `w`/`h` these carry no channel

@@ -53,7 +53,7 @@ layer([
 
 `.z_order()` is available on every `Mark`. The chart-composing form of
 [`layer`](/python/api/core/chart) (which overlays whole charts) exposes the
-same control on a `ChartBuilder` as `.zOrder()`.
+same control on a `ChartBuilder` as `.z_order()`.
 
 ## Notes
 

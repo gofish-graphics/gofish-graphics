@@ -19,6 +19,8 @@ import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { Constraint, type ConstraintSpec } from "../constraints";
 import { axisName, ensureChildNames } from "../constraints/shared";
+import { createOverlapConstraint } from "../constraints/overlap";
+import type { OverlapStrategy } from "./overlap";
 
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
   if (typeof value === "object" && value !== null && "value" in value) {
@@ -39,6 +41,9 @@ export type ScatterProps = {
   /** Per-child placement by axis name; see {@link ScatterOptions}. */
   dims?: AxisDims<PositionValue[]>;
   alignment?: Alignment;
+  /** How children on a free axis keep clear of each other; see
+   *  {@link ScatterOptions.overlap}. */
+  overlap?: OverlapStrategy;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 } & Omit<FancyDims<MaybeValue<number>>, "dims">;
 
@@ -123,6 +128,25 @@ const isPlaced = (axes: AxisPlacement[], axis: Direction): boolean => {
   return axis === 0 ? placed.x : placed.y;
 };
 
+/**
+ * An overlap strategy keeps children clear of each other in the layout frame.
+ * That frame is the screen only in a linear space: under polar or any other
+ * warping space, layout happens in the data plane, and circles that do not
+ * overlap there can overlap once warped (or the reverse). So refuse it there.
+ * The axis scope carries the nearest such space (`warpedBy`).
+ *
+ * TODO(#1002): separate dots in screen space under a non-linear coordinate transform.
+ */
+function assertLinearSpace(scope: AxisScope): void {
+  if (scope.warpedBy !== undefined)
+    throw new Error(
+      `scatter: \`overlap\` works only in a linear coordinate space, but ` +
+        `this scatter is inside a "${scope.warpedBy}" space. It keeps children ` +
+        `clear of each other in the layout frame, which a non-linear space ` +
+        `warps (#1002).`
+    );
+}
+
 const Scatter = createNodeOperator(
   async (
     options: ScatterProps,
@@ -138,6 +162,7 @@ const Scatter = createNodeOperator(
       yMax,
       dims,
       alignment = "baseline",
+      overlap,
       axes,
       ...fancyDims
     } = options;
@@ -173,6 +198,7 @@ const Scatter = createNodeOperator(
     // (`theta`, `lon`, ...), so the per-axis placement, and the constraints
     // built from it, wait for the resolveAliases pass.
     node._elaborateInAxisScope = async (_outer, inner) => {
+      if (overlap !== undefined) assertLinearSpace(inner);
       const placement = scatterAxes(
         { x, y, xMin, xMax, yMin, yMax },
         dims,
@@ -206,11 +232,29 @@ const Scatter = createNodeOperator(
         });
         // A cross-axis align over the (data-positioned) points: it shares the
         // frame; `align` leaves the points where their own scale puts them by
-        // reading their abstract placement (no guard flag needed).
-        ([0, 1] as const).forEach((axis) => {
-          if (!isPlaced(placement, axis))
-            cs.push(Constraint.align({ [axisName(axis)]: alignment }, refs));
-        });
+        // reading their abstract placement (no guard flag needed). An overlap
+        // strategy takes the align's place: it grows the children away from
+        // the same line, keeping them clear of each other.
+        const freeAxes = ([0, 1] as const).filter(
+          (axis) => !isPlaced(placement, axis)
+        );
+        if (overlap !== undefined && freeAxes.length === 0)
+          throw new Error(
+            "scatter: `overlap` moves children along an axis no field " +
+              "places, but both x and y are placed by fields here. Drop one " +
+              "of them, or drop `overlap`."
+          );
+        for (const axis of freeAxes)
+          cs.push(
+            overlap !== undefined
+              ? createOverlapConstraint(
+                  axisName(axis),
+                  alignment,
+                  overlap,
+                  refs
+                )
+              : Constraint.align({ [axisName(axis)]: alignment }, refs)
+          );
         return cs;
       });
     };
@@ -251,6 +295,18 @@ export type ScatterOptions = {
   yMin?: string | MaybeValue<number>[];
   yMax?: string | MaybeValue<number>[];
   alignment?: "start" | "middle" | "end" | "baseline";
+  /**
+   * How children keep clear of each other on the free axis (the axis no field
+   * places), made by a function call: `separate({ padding })` is a beeswarm,
+   * `noise({ randomness, smoothing })` spreads dots inside a density outline,
+   * `sina()` is noise with a violin outline, and `jitter()` is noise in a
+   * flat band.
+   * The strategy takes the place of the align on that axis and grows from the
+   * `alignment` line: `"middle"` both ways, `"start"`/`"baseline"` to
+   * the positive side, `"end"` to the negative side. Omit it, and every
+   * child sits on the line. Only in a linear coordinate space.
+   */
+  overlap?: OverlapStrategy;
   debug?: boolean;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
   w?: MaybeValue<number>;

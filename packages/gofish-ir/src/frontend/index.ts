@@ -17,17 +17,27 @@ export {
 } from "./examples.js";
 export { FRONTEND_IR_JSON_SCHEMA } from "./jsonSchema.js";
 export {
+  encodeNonFinite,
+  decodeNonFinite,
+  type NonFiniteNumberIR,
+} from "./nonFinite.js";
+export {
   t,
   ch,
   group,
   resolveFields,
+  pyKwarg,
   OPERATORS,
   LEAF_MARKS,
   COMBINATOR_MARKS,
   COORDS,
+  OPTION_TYPES,
+  CHART_OPTIONS,
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,
   PY_LEAF_BASE_KWARGS,
+  PY_OPERATOR_BASE_KWARGS,
+  LABEL_OPTIONS,
   boxDims,
   paint,
   SHARED_FIELD_GROUPS,

@@ -158,7 +158,7 @@ for the API.
           "type": "object"
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "name": {
           "type": "string",
@@ -241,53 +241,12 @@ for the API.
       "type": "object",
       "properties": {
         "x": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "y": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         }
       }
-    },
-    "AxesOptions": {
-      "description": "Per-node axis-rendering override. Boolean toggles both dimensions; object form lets x and y differ. Each `AxisOption` is `true`/`false`, or `{ title?: string | false }` to set or suppress the title.",
-      "oneOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "x": {
-              "$ref": "#/$defs/AxisOption"
-            },
-            "y": {
-              "$ref": "#/$defs/AxisOption"
-            }
-          }
-        }
-      ]
-    },
-    "AxisOption": {
-      "oneOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "title": {
-              "oneOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "const": false
-                }
-              ]
-            }
-          }
-        }
-      ]
     },
     "FieldAccessor": {
       "description": "Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
@@ -336,7 +295,7 @@ for the API.
                     "type": "string"
                   },
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   }
                 ]
               },
@@ -363,12 +322,12 @@ for the API.
             "thresholds": {
               "oneOf": [
                 {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 },
                 {
                   "type": "array",
                   "items": {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   }
                 }
               ]
@@ -459,10 +418,10 @@ for the API.
           "const": "offset"
         },
         "x": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "y": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "children": {
           "type": "array",
@@ -501,13 +460,13 @@ for the API.
           "$ref": "#/$defs/CutSize"
         },
         "inset": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "name": {
           "type": "string"
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -531,7 +490,7 @@ for the API.
           "items": {
             "oneOf": [
               {
-                "type": "number"
+                "$ref": "#/$defs/Number"
               },
               {
                 "type": "object",
@@ -545,7 +504,7 @@ for the API.
                     "type": "string"
                   },
                   "offset": {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   },
                   "colorOps": {
                     "type": "array",
@@ -557,7 +516,7 @@ for the API.
                           "enum": ["lighten", "darken"]
                         },
                         "amount": {
-                          "type": "number"
+                          "$ref": "#/$defs/Number"
                         }
                       }
                     }
@@ -620,7 +579,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"
@@ -650,7 +609,7 @@ for the API.
                     "type": "string"
                   },
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   }
                 ]
               }
@@ -664,7 +623,7 @@ for the API.
           "$ref": "#/$defs/LabelIR"
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -693,36 +652,62 @@ for the API.
                 ]
               },
               "position": {
-                "type": "string"
+                "type": "string",
+                "description": "Label position, e.g. \"center\", \"outset-top\", \"inset-bottom-start\"."
               },
               "fontSize": {
-                "type": "number"
+                "$ref": "#/$defs/Number",
+                "description": "Font size in pixels."
               },
               "color": {
-                "type": "string"
+                "type": "string",
+                "description": "Label color. Omitted, it is chosen to contrast with the mark."
               },
               "offset": {
-                "type": "number"
+                "$ref": "#/$defs/Number",
+                "description": "Offset from the shape's edge in pixels."
               },
               "rotate": {
-                "type": "number"
+                "$ref": "#/$defs/Number",
+                "description": "Rotation in degrees."
               },
               "fontFamily": {
-                "type": "string"
+                "type": "string",
+                "description": "Font family of the label's text node. Omitted, the elaborator's own font family."
               },
               "fontWeight": {
                 "oneOf": [
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   },
                   {
                     "type": "string"
                   }
-                ]
+                ],
+                "description": "Font weight, e.g. \"bold\" or a numeric weight."
               },
               "fontStyle": {
-                "type": "string"
+                "type": "string",
+                "description": "Font style, e.g. \"italic\"."
               }
+            }
+          }
+        }
+      ]
+    },
+    "Number": {
+      "description": "A number. JSON has no Infinity, so +/-Infinity travel as the tagged object { \"$numberDouble\": \"Infinity\" | \"-Infinity\" } (MongoDB Extended JSON). A tagged \"NaN\" is not a valid number here.",
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "object",
+          "required": ["$numberDouble"],
+          "additionalProperties": false,
+          "properties": {
+            "$numberDouble": {
+              "enum": ["Infinity", "-Infinity"]
             }
           }
         }
@@ -771,7 +756,7 @@ for the API.
           "type": "string"
         },
         {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         {
           "type": "boolean"
@@ -804,7 +789,7 @@ for the API.
               "type": "string"
             },
             "offset": {
-              "type": "number",
+              "$ref": "#/$defs/Number",
               "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."
             }
           }
@@ -948,7 +933,7 @@ for the API.
           "type": "array",
           "items": {
             "type": "object",
-            "properties": {}
+            "additionalProperties": {}
           },
           "description": "The right-hand table, inlined as JSON rows."
         },
@@ -994,7 +979,7 @@ for the API.
           "description": "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Gap between children, px.",
           "default": 8
         },
@@ -1025,6 +1010,14 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -1080,7 +1073,7 @@ for the API.
           "description": "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity."
         },
         "glue": {
@@ -1109,6 +1102,14 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -1232,6 +1233,51 @@ for the API.
           "description": "Cross-axis alignment for the axis without an explicit position.",
           "default": "baseline"
         },
+        "overlap": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": ["separate"]
+                },
+                "padding": {
+                  "$ref": "#/$defs/Number"
+                }
+              },
+              "required": ["kind"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": ["noise"]
+                },
+                "randomness": {
+                  "enum": ["blue", "quasi", "uniform"]
+                },
+                "smoothing": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "enum": ["silverman"]
+                    }
+                  ]
+                },
+                "padding": {
+                  "$ref": "#/$defs/Number"
+                },
+                "seed": {
+                  "$ref": "#/$defs/Number"
+                }
+              },
+              "required": ["kind"]
+            }
+          ],
+          "description": "How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is \"blue\" (default), \"quasi\" or \"uniform\". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or \"silverman\" to compute it from the data. sina() is noise with smoothing \"silverman\" (a violin outline), and jitter() is noise with randomness \"uniform\" and smoothing Infinity (classic jitter); both make kind \"noise\". Both kinds grow from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only."
+        },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
         },
@@ -1285,7 +1331,7 @@ for the API.
         "spacing": {
           "oneOf": [
             {
-              "type": "number"
+              "$ref": "#/$defs/Number"
             },
             {
               "type": "array",
@@ -1293,10 +1339,10 @@ for the API.
               "maxItems": 2,
               "prefixItems": [
                 {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 },
                 {
-                  "type": "number"
+                  "$ref": "#/$defs/Number"
                 }
               ]
             }
@@ -1305,7 +1351,7 @@ for the API.
           "default": 0
         },
         "numCols": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Explicit column count (falls back to the number of distinct column keys)."
         },
         "label": {
@@ -1398,14 +1444,14 @@ for the API.
           ],
           "description": "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row."
         },
-        "paddingInner": {
-          "type": "number",
-          "description": "Padding between sibling rectangles.",
+        "spacing": {
+          "$ref": "#/$defs/Number",
+          "description": "Gap between sibling tiles, in pixels.",
           "default": 0
         },
-        "paddingOuter": {
-          "type": "number",
-          "description": "Padding around the outer edge of the treemap.",
+        "padding": {
+          "$ref": "#/$defs/Number",
+          "description": "Inset around the outer edge of the treemap, in pixels.",
           "default": 0
         },
         "round": {
@@ -1414,16 +1460,34 @@ for the API.
           "default": true
         },
         "tile": {
-          "enum": [
-            "squarify",
-            "slice",
-            "dice",
-            "binary",
-            "slicedice",
-            "squarifyCircle"
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": ["squarify"]
+                },
+                "ratio": {
+                  "$ref": "#/$defs/Number",
+                  "description": "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio."
+                }
+              },
+              "required": ["kind"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": ["slice", "dice", "binary", "sliceDice"]
+                }
+              },
+              "required": ["kind"]
+            }
           ],
-          "description": "Tiling strategy.",
-          "default": "squarify"
+          "description": "The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+          "default": {
+            "kind": "squarify"
+          }
         },
         "sort": {
           "enum": ["asc", "desc", "none"],
@@ -1433,15 +1497,6 @@ for the API.
         "size": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group."
-        },
-        "flipY": {
-          "type": "boolean",
-          "description": "Mirror leaf layout top-to-bottom within the treemap box.",
-          "default": false
-        },
-        "leafIntrinsicRadiusField": {
-          "type": "string",
-          "description": "When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field])."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -1613,12 +1668,12 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1.",
           "default": 1
         },
@@ -1631,17 +1686,17 @@ for the API.
           "description": "Internal per-node key override."
         },
         "rx": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Corner radius, x.",
           "default": 0
         },
         "ry": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Corner radius, y.",
           "default": 0
         },
         "aspectRatio": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "w/h ratio to enforce; the constraining axis wins when both are data-driven."
         },
         "debug": {
@@ -1660,7 +1715,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1689,12 +1744,12 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
           "default": 1
         },
@@ -1714,7 +1769,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1786,17 +1841,17 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1.",
           "default": 1
         },
         "aspectRatio": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "w/h ratio to enforce. When both dims are data-driven, the constraining axis is used."
         },
         "debug": {
@@ -1815,7 +1870,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1887,7 +1942,7 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
@@ -1907,7 +1962,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1988,7 +2043,7 @@ for the API.
           "description": "Stroke color."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
@@ -1997,7 +2052,7 @@ for the API.
           "description": "Raw SVG filter attribute."
         },
         "fontSize": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Font size in pixels.",
           "default": 12
         },
@@ -2013,7 +2068,7 @@ for the API.
         "fontWeight": {
           "oneOf": [
             {
-              "type": "number"
+              "$ref": "#/$defs/Number"
             },
             {
               "type": "string"
@@ -2027,7 +2082,7 @@ for the API.
           "default": false
         },
         "rotate": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Rotation in degrees, applied in the chart's y-up world frame about the text anchor.",
           "default": 0
         },
@@ -2049,7 +2104,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"
@@ -2128,7 +2183,7 @@ for the API.
           "description": "Raw SVG filter attribute."
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
         "preserveAspectRatio": {
@@ -2152,7 +2207,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2178,10 +2233,10 @@ for the API.
                 "maxItems": 2,
                 "prefixItems": [
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   },
                   {
-                    "type": "number"
+                    "$ref": "#/$defs/Number"
                   }
                 ]
               }
@@ -2202,12 +2257,12 @@ for the API.
           "description": "Stroke color. Defaults to `fill`."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1, applied to both fill and stroke.",
           "default": 1
         },
@@ -2227,7 +2282,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2281,7 +2336,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2306,7 +2361,7 @@ for the API.
           "description": "Line color."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Line thickness in pixels.",
           "default": 1
         },
@@ -2315,7 +2370,7 @@ for the API.
           "description": "Raw SVG stroke-dasharray (e.g. \"12\") for a dashed line."
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
         "mixBlendMode": {
@@ -2376,7 +2431,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"
@@ -2404,12 +2459,12 @@ for the API.
           "description": "Stroke color."
         },
         "strokeWidth": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "type": "number",
+          "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
         "mixBlendMode": {
@@ -2463,7 +2518,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"
@@ -2498,7 +2553,7 @@ for the API.
           }
         },
         "zOrder": {
-          "type": "number"
+          "$ref": "#/$defs/Number"
         },
         "debug": {
           "type": "boolean"
@@ -2544,6 +2599,72 @@ for the API.
           "$ref": "#/$defs/MarkFnMark"
         }
       ]
+    },
+    "AxisOptions": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": false
+                }
+              ],
+              "description": "Axis title. A string sets it; false suppresses the inferred title."
+            },
+            "side": {
+              "enum": ["start", "end"],
+              "description": "Which frame edge the axis sits on: \"start\" is the near (origin) edge, \"end\" the far edge. Omitted, a continuous x-axis sits at the visual bottom."
+            },
+            "labelAngle": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Number"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Number"
+                  }
+                },
+                {
+                  "enum": ["auto"]
+                }
+              ],
+              "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; \"auto\" picks 0, 45, or 90 degrees per label row so labels do not collide."
+            }
+          }
+        }
+      ],
+      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle."
+    },
+    "AxesOptions": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/AxisOptions",
+              "description": "Options for the x axis."
+            },
+            "y": {
+              "$ref": "#/$defs/AxisOptions",
+              "description": "Options for the y axis."
+            }
+          }
+        }
+      ],
+      "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own."
     }
   }
 }

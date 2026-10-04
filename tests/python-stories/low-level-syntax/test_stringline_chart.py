@@ -56,7 +56,7 @@ def story_default():
             # stack, so it resolves to a straight polyline between stops.
             [ref(_dot_name(d)) for d in train_rows],
             dir="y",
-            strokeWidth=1,
+            stroke_width=1,
         )
         for train_rows in group_by(rows, "Train").values()
     ]
