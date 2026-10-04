@@ -495,6 +495,42 @@ console.log("# space: one fold for every origin");
     "a spread of magnitudes claims their chained claims plus spacing",
     freeClaim !== undefined && freeClaim.width.run(2) === 4 * 2 + 3 * 2 + 10
   );
+  // A fixed-pitch chain folds the parts' sides, not only their widths: a
+  // baseline row keeps its descent below its anchor, and a tall middle row
+  // binds even when it is neither first nor last.
+  const pitched = (
+    targets: CONTINUOUS_TYPE[],
+    anchor: "baseline" | "middle"
+  ) => {
+    const opts = { ...chainOpts, anchor, spacing: 30 };
+    return distributeExtentFold(
+      targets.map(impliedExtent),
+      targets,
+      distributeSpaceFold(targets, ["a", "b", "c"], opts),
+      opts
+    )!.width.run(1);
+  };
+  ok(
+    "a baseline chain counts a row's descent below its anchor",
+    pitched(
+      [
+        CONTINUOUS(interval(-10, 20), "free"),
+        CONTINUOUS(interval(0, 5), "free"),
+      ],
+      "baseline"
+    ) === 50
+  );
+  ok(
+    "a middle chain's tallest row binds wherever it sits",
+    pitched(
+      [
+        CONTINUOUS(interval(0, 2), "free"),
+        CONTINUOUS(interval(0, 100), "free"),
+        CONTINUOUS(interval(0, 2), "free"),
+      ],
+      "middle"
+    ) === 100
+  );
   ok(
     "a spread of pinned frames claims nothing",
     distributeExtentFold(

@@ -336,8 +336,11 @@ the two sides:
   `CONTINUOUS_TYPE.mirrored`; see `StackOrigin`): both sides of 0 hold
   amounts measured away from it, so an axis over it labels each tick with its
   distance from 0. A union stays mirrored only when every part is.
-- A spread along an axis still sums total extents (each child's
-  `ascent + descent`) as boxes above the chain's start.
+- A spread lays its parts by the same chain fold as a stack (`chainFold`),
+  with a different step: an edge chain lays each part's box after the
+  previous one's end plus the spacing, and a fixed-pitch chain lays each
+  part's anchor one pitch from the previous one's. A baseline-pitched part
+  keeps its signed sides about its baseline; any other part is a box.
 
 With every descent 0, all of this reduces to a single width.
 
@@ -563,13 +566,14 @@ composes its targets' spaces into the layer's claim on that axis:
   (`distributeExtentFold`). The chain moves every target to its place, so it
   reads each one, pinned or free, as a box. A spread separates: its type is
   ORDINAL of its keys, or UNDEFINED, and a spread of magnitudes claims the
-  chain of the targets' claims with the spacing added (`chainClaim`,
-  `Monotonic.add(...) + spacing·(n−1)` for an edge chain) for the enclosing
+  chain of the targets' claims with the spacing added (`chainFold`; for an
+  edge chain, the sum of the widths plus `spacing·(n−1)`) for the enclosing
   scope to solve σ against (see
   [the differences that remain](#one-continuous-path-and-the-differences-that-remain)).
   With `glue: true` (stack semantics) the extents are laid end to end and
   pinned over the range of their running sums (`[0, Σ]` when no part has a
-  descent), in data for the type and in claims for the claim (`stackClaim`).
+  descent), in data for the type and in claims for the claim, by the same
+  chain fold (`chainFold`).
   A target with no origin (a difference or a non-continuous axis) leaves only
   the ORDINAL of the keys, if any.
 - `Constraint.align` contributes the alignment fold (`resolveAlignmentSpace`)
@@ -702,24 +706,30 @@ its end and its head its start, so the next part starts where it ends.
 `"middle"` is the
 old `mode: "center"` under its new name; `"start"`/`"end"`/`"baseline"` are new
 fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
-(`constraints/shared.ts`'s `AlignAnchor`). The claim fold (`chainClaim` in
-`distribute.ts`) is `(n−1)·spacing` of chain plus an amplitude ALLOWANCE
-attributed to the side of the chain where children's content actually extends
-relative to the chained anchor (the painted side — fixed-pitch rows mirror
-about their anchor at paint, below):
+(`constraints/shared.ts`'s `AlignAnchor`). The claim is the one chain fold
+(`chainFold` in `distribute.ts`) that also lays out a stack: each part sits
+about its chain point by a seat, the next chain point is one step on, and the
+claim is the highest reach above the chain's start plus the lowest reach
+below it, over every part. Only the seat and the step differ. A pitched
+chain's anchors step down the axis one pitch at a time, as its rows read
+(the rows mirror about their anchors at paint, below), and each part sits
+about its anchor:
 
-- `"middle"`: half above, half below every anchor — the exact symmetric
-  `h_first/2 + (n−1)·s + h_last/2` (the original center-mode form, unchanged).
-- `"baseline"` / `"start"`: content rises entirely ABOVE each anchor, so the
-  allowance sits above the chain head: `max_k(h_k − k·s)⁺ + (n−1)·s` (k in
-  chain order — the binding row is whichever peak clears the rows chained
-  above it; for a ridgeline that's usually the first row).
-- `"end"`: the mirror image — allowance below the chain tail:
-  `max_k(h_k − (n−1−k)·s)⁺ + (n−1)·s`.
+- `"middle"`: half its width above the anchor, half below.
+- `"baseline"`: its own signed sides, ascent above and descent below.
+- `"start"`: its whole width above the anchor.
+- `"end"`: its whole width below the anchor.
 
-The per-k max assumes each child's extent lies wholly on one side of its
-anchor (true for SIZE claims — baseline magnitudes) and that the fold's child
-order is the chain order (compose.ts passes placement order).
+So with one-sided parts the claim is `(n−1)·s` plus the tallest reach past
+the chain's end rows: `max_k(h_k − k·s)⁺ + (n−1)·s` for `"start"` (k in
+chain order, the binding row being whichever peak clears the rows chained
+above it; for a ridgeline that's usually the first row). A `"middle"` row
+taller than both end rows binds too, and a `"baseline"` row's descent counts
+below its anchor. The fold runs in Monotonics, so an all-linear chain's
+claim is an exact envelope that a scope inverts exactly (before, a pitched
+chain's claim was a closure, solved by a numeric search that could overshoot
+its box by a fraction of a pixel). The fold's child order is the chain order
+(compose.ts passes placement order).
 
 The type fold has no data part of the chain: a spread separates, so its type
 is ordinal (or undefined) whatever its pitch, and the chain lives only in the

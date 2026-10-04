@@ -318,18 +318,9 @@ export function distributeSpaceFold(
         );
       }
     });
-    const { lo, hi, starts } = endToEnd(sides);
-    const part = sides[origin.part];
-    const zero =
-      part === undefined
-        ? 0
-        : starts[origin.part] + origin.fraction * (part.ascent - part.descent);
+    const { ascent, descent } = chainFold(numbers, sides, STACK, 0, origin);
     return mirrored(
-      CONTINUOUS(
-        Interval.interval(lo - zero, hi - zero),
-        "pinned",
-        childMeasure
-      ),
+      CONTINUOUS(Interval.interval(-descent, ascent), "pinned", childMeasure),
       origin.mirrored
     );
   }
@@ -347,10 +338,7 @@ export function distributeSpaceFold(
  *  and a negative part reaches back. A pinned or origin-less part has no data
  *  baseline for placement, so its tail is its start and it lies above it as a
  *  box. */
-function tailSides(space: CONTINUOUS_TYPE): {
-  ascent: number;
-  descent: number;
-} {
+function tailSides(space: CONTINUOUS_TYPE): Sides<number> {
   const { min, max } = space.dataInterval;
   return space.origin === "free"
     ? { ascent: max, descent: -min }
@@ -362,137 +350,159 @@ function tailSides(space: CONTINUOUS_TYPE): {
 const tailClaim = (space: UnderlyingSpace, extent: Extent): Extent =>
   originIs(space, "free") ? extent : Extent(extent.width);
 
-/** Parts laid end to end as vectors: each covers `[at − descent, at +
- *  ascent]` about the running sum `at` of the parts before it. Returns the
- *  lowest and highest reach (counting the 0 the stack starts at) and each
- *  part's `at`. The one walk behind a stack's type and its claim. */
-function endToEnd(sides: { ascent: number; descent: number }[]): {
-  lo: number;
-  hi: number;
-  starts: number[];
-} {
-  let at = 0;
-  let lo = 0;
-  let hi = 0;
-  const starts: number[] = [];
-  for (const { ascent, descent } of sides) {
-    starts.push(at);
-    lo = Math.min(lo, at - descent);
-    hi = Math.max(hi, at + ascent);
-    at += ascent - descent;
-  }
-  return { lo, hi, starts };
-}
+/** A part's reach on each side of a point on the chain: above it and below
+ *  it. Numbers for a data extent, Monotonics for a claim. */
+type Sides<T> = { ascent: T; descent: T };
+
+/** The arithmetic {@link chainFold} runs in: plain numbers (a data extent, or
+ *  a claim at one σ) or Monotonics (a claim as a function of σ). */
+type Arith<T> = {
+  zero: T;
+  /** A σ-independent amount (a spacing, in pixels). */
+  constant: (c: number) => T;
+  add: (...xs: T[]) => T;
+  scale: (k: number, x: T) => T;
+  /** The upper envelope of `xs`. */
+  max: (xs: T[]) => T;
+};
+
+const numbers: Arith<number> = {
+  zero: 0,
+  constant: (c) => c,
+  add: (...xs) => xs.reduce((sum, x) => sum + x, 0),
+  scale: (k, x) => k * x,
+  max: (xs) => Math.max(...xs),
+};
+
+const monotonics: Arith<Monotonic.Monotonic> = {
+  zero: Monotonic.ZERO,
+  constant: (c) => Monotonic.linear(0, c),
+  add: Monotonic.add,
+  scale: Monotonic.smul,
+  max: Monotonic.envelope,
+};
+
+/** How a chain lays its parts: where each part sits about its chain point
+ *  (its seat), and how far the next chain point is from this one (its step).
+ *  Only the step differs between a stack and a spread. */
+type ChainRule = {
+  seat: <T>(A: Arith<T>, part: Sides<T>) => Sides<T>;
+  step: <T>(A: Arith<T>, part: Sides<T>, spacing: number) => T;
+};
+
+const box = <T>(A: Arith<T>, part: Sides<T>): T =>
+  A.add(part.ascent, part.descent);
+
+/** A stack lays each part's tail on the previous part's head, the tail moved
+ *  by `ascent − descent` (its parts are {@link tailSides}). */
+const STACK: ChainRule = {
+  seat: (_A, part) => part,
+  step: (A, part) => A.add(part.ascent, A.scale(-1, part.descent)),
+};
+
+/** A spread chain (a non-glued distribute): `"edge"` lays each part's box
+ *  `spacing` after the previous one's end; a fixed-pitch anchor lays each
+ *  part's anchor `spacing` from the previous one's. A pitched chain steps
+ *  down the axis, as its rows read: content above the anchor (`start`,
+ *  `baseline`) rises over the rows chained after it, and content below it
+ *  (`end`) hangs under the rows chained before it. A baseline-anchored part
+ *  keeps its signed sides about its baseline; any other part is its box,
+ *  seated by its anchor. */
+const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
+  seat: (A, part) => {
+    const w = box(A, part);
+    switch (anchor) {
+      case "baseline":
+        return part;
+      case "middle":
+        return { ascent: A.scale(0.5, w), descent: A.scale(0.5, w) };
+      case "end":
+        return { ascent: A.zero, descent: w };
+      default: // "start", "edge"
+        return { ascent: w, descent: A.zero };
+    }
+  },
+  step: (A, part, spacing) =>
+    anchor === "edge"
+      ? A.add(box(A, part), A.constant(spacing))
+      : A.constant(-spacing),
+});
 
 /**
- * The size claim of a spread chain whose children claim `widths` (in chain
- * order), `spacing` pixels apart.
+ * The one chain fold behind a stack's type and claim and a spread's claim:
+ * lay `parts` along the axis by `rule`, from a first chain point at 0, and
+ * return the highest reach above `origin` and the lowest reach below it, over
+ * every part's seat (and the 0 the chain starts at). `origin` is the point
+ * `fraction` of the way from its part's chain point to the next one (a
+ * stack's tail to head, {@link StackOrigin}); omitted, it is the chain's
+ * start.
  *
- * Fixed-pitch extents: `(n−1)·spacing` of chain plus an amplitude ALLOWANCE
- * attributed to the side of the chain where content actually extends,
- * relative to the chained anchor (the painted side — a fixed-pitch chain's
- * rows mirror about their chained anchor at paint, see `pitchAnchorY`):
- *  - "middle": content extends half above / half below every anchor — the
- *    EXACT symmetric form `h_first/2 + (n−1)·s + h_last/2` (unchanged; the
- *    original center mode).
- *  - "baseline" / "start": content rises entirely ABOVE each anchor, so the
- *    allowance sits above the chain HEAD: `max_k(h_k − k·s)⁺ + (n−1)·s`
- *    (k in chain order — the binding row is whichever peak clears the rows
- *    chained above it).
- *  - "end": the mirror image — content hangs BELOW each anchor, allowance
- *    below the chain TAIL: `max_k(h_k − (n−1−k)·s)⁺ + (n−1)·s`.
- * The per-k max assumes each child's extent lies wholly on one side of its
- * anchor (true for SIZE claims — baseline magnitudes) and that the fold's
- * child order is the chain order (compose.ts passes placement order).
+ * It runs in numbers (a data extent, or a claim at one σ) or in Monotonics
+ * (a claim as a function of σ, exact and invertible while the parts are
+ * linear or piecewise).
  */
-function chainClaim(
-  widths: Monotonic.Monotonic[],
+function chainFold<T>(
+  A: Arith<T>,
+  parts: Sides<T>[],
+  rule: ChainRule,
   spacing: number,
-  anchor: AlignAnchor | "edge"
-): Monotonic.Monotonic {
-  const n = widths.length;
-  if (anchor === "edge")
-    return Monotonic.adds(Monotonic.add(...widths), spacing * (n - 1));
-  if (anchor === "middle")
-    return Monotonic.unknown(
-      (scaleFactor: number) =>
-        widths[0].run(scaleFactor) / 2 +
-        spacing * (n - 1) +
-        widths[n - 1].run(scaleFactor) / 2
-    );
-  return Monotonic.unknown((scaleFactor: number) => {
-    let allowance = 0;
-    for (let k = 0; k < n; k++) {
-      const pitchesFromAnchoredEnd = anchor === "end" ? n - 1 - k : k;
-      allowance = Math.max(
-        allowance,
-        widths[k].run(scaleFactor) - spacing * pitchesFromAnchoredEnd
-      );
-    }
-    return Math.max(0, allowance) + spacing * (n - 1);
+  origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false }
+): Sides<T> {
+  const up: T[] = [A.zero];
+  const down: T[] = [A.zero];
+  let at = A.zero;
+  let zero = A.zero;
+  parts.forEach((part, k) => {
+    const seat = rule.seat(A, part);
+    const step = rule.step(A, part, spacing);
+    up.push(A.add(at, seat.ascent));
+    down.push(A.add(seat.descent, A.scale(-1, at)));
+    if (k === origin.part) zero = A.add(at, A.scale(origin.fraction, step));
+    at = A.add(at, step);
   });
+  return {
+    ascent: A.add(A.max(up), A.scale(-1, zero)),
+    descent: A.add(A.max(down), zero),
+  };
 }
 
-/** The claim of a stack: its parts' claims ({@link tailClaim}) laid end to
- *  end exactly as {@link distributeSpaceFold} lays their data extents (each
- *  part's tail on the previous part's head), so any pixel overhead a part
- *  carries stays in the claim. Like every claim it is measured from the
- *  stack's data 0, its origin: the highest reach above the origin and the
- *  lowest reach below it, over the running sums. When every part's sides are
- *  linear the running sums are lines too, so each side is an exact envelope
- *  (`envelope`); otherwise each is a closure. */
-function stackClaim(parts: Extent[], origin: StackOrigin<number>): Extent {
-  const sides = parts.flatMap((p) => [p.ascent, p.descent]);
-  if (sides.every(Monotonic.isLinear)) {
-    const lines = sides as Monotonic.Linear[];
-    const reachUp: Monotonic.Monotonic[] = [Monotonic.ZERO];
-    const reachDown: Monotonic.Monotonic[] = [Monotonic.ZERO];
-    const starts: Monotonic.Linear[] = [];
-    let at = Monotonic.linear(0, 0);
-    for (let i = 0; i < parts.length; i++) {
-      const a = lines[2 * i];
-      const d = lines[2 * i + 1];
-      starts.push(at);
-      reachUp.push(Monotonic.add(at, a));
-      reachDown.push(Monotonic.add(d, Monotonic.smul(-1, at)));
-      at = Monotonic.add(at, a, Monotonic.smul(-1, d)) as Monotonic.Linear;
-    }
-    // The origin: the point `fraction` of the way from its part's tail to
-    // its head.
-    const zero =
-      parts[origin.part] === undefined
-        ? Monotonic.ZERO
-        : Monotonic.add(
-            starts[origin.part],
-            Monotonic.smul(
-              origin.fraction,
-              Monotonic.add(
-                lines[2 * origin.part],
-                Monotonic.smul(-1, lines[2 * origin.part + 1])
-              )
-            )
-          );
-    return Extent(
-      Monotonic.add(Monotonic.envelope(reachUp), Monotonic.smul(-1, zero)),
-      Monotonic.add(Monotonic.envelope(reachDown), zero)
+/** {@link chainFold} over claims, as one Extent. With every part linear or
+ *  piecewise it is exact; otherwise the fold runs in numbers at each σ, so a
+ *  closure walks the parts once per evaluation. */
+function chainClaim(
+  parts: Extent[],
+  rule: ChainRule,
+  spacing: number,
+  origin?: StackOrigin<number>
+): Extent {
+  if (
+    parts.every(
+      (p) => !Monotonic.isUnknown(p.ascent) && !Monotonic.isUnknown(p.descent)
+    )
+  ) {
+    const { ascent, descent } = chainFold(
+      monotonics,
+      parts,
+      rule,
+      spacing,
+      origin
     );
+    return Extent(ascent, descent);
   }
-  const reach = (sigma: number) => {
-    const at = parts.map((p) => ({
-      ascent: p.ascent.run(sigma),
-      descent: p.descent.run(sigma),
-    }));
-    const { lo, hi, starts } = endToEnd(at);
-    const part = at[origin.part];
-    const zero =
-      part === undefined
-        ? 0
-        : starts[origin.part] + origin.fraction * (part.ascent - part.descent);
-    return { up: hi - zero, down: zero - lo };
-  };
+  const at = (sigma: number) =>
+    chainFold(
+      numbers,
+      parts.map((p) => ({
+        ascent: p.ascent.run(sigma),
+        descent: p.descent.run(sigma),
+      })),
+      rule,
+      spacing,
+      origin
+    );
   return Extent(
-    Monotonic.unknown((sigma: number) => reach(sigma).up),
-    Monotonic.unknown((sigma: number) => reach(sigma).down)
+    Monotonic.unknown((sigma) => at(sigma).ascent),
+    Monotonic.unknown((sigma) => at(sigma).descent)
   );
 }
 
@@ -501,9 +511,9 @@ function stackClaim(parts: Extent[], origin: StackOrigin<number>): Extent {
  * targets' claims. It composes the targets' claims the way the type fold
  * composes their data extents, so pixel overhead stays in the claim:
  *  - an explicit size claims what its type implies;
- *  - a glued stack lays its parts' claims end to end ({@link stackClaim});
- *  - a spread chain of free targets claims the chain of their claims with the
- *    spacing or pitch added ({@link chainClaim}), so a parent can solve a
+ *  - a glued stack lays its parts' claims end to end, and a spread chain of
+ *    free targets lays their claims with the spacing or pitch added, both by
+ *    the one chain fold ({@link chainFold}), so a parent can solve a
  *    scale factor via `Monotonic.inverse` (auto-fit). Its type is ordinal
  *    (the targets are separate spaces), but its room is still σ-dependent,
  *    so the claim is there for the enclosing scope to solve against.
@@ -527,8 +537,10 @@ export function distributeExtentFold(
   if (isCONTINUOUS(space)) {
     if (opts.size !== undefined && isValue(opts.size))
       return impliedExtent(space);
-    return stackClaim(
+    return chainClaim(
       targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!)),
+      STACK,
+      0,
       opts.origin
     );
   }
@@ -542,12 +554,9 @@ export function distributeExtentFold(
     )
   )
     return undefined;
-  const parts = targetExtents as Extent[];
+  // The chain's type has no data coordinates, so its claim is a box.
   return Extent(
-    chainClaim(
-      parts.map((e) => e.width),
-      opts.spacing,
-      opts.anchor
-    )
+    chainClaim(targetExtents as Extent[], spreadRule(opts.anchor), opts.spacing)
+      .width
   );
 }
