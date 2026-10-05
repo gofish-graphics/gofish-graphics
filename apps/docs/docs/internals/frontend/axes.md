@@ -22,22 +22,45 @@ engine has no axis-specific code at all.
 
 ## The elaboration pass
 
-`elaborateAxes` (`src/ast/axes/elaborate.tsx`) runs inside `gofish.tsx`'s
+`elaborateChrome` (`src/ast/axes/elaborate.tsx`) runs inside `gofish.tsx`'s
 `layout()`, _after_ `resolveUnderlyingSpace` (so domains are known) and
 `resolveAxes` (which flags which node owns an axis on each dimension — and leaves
 persistent `axisDemand` stamps that later gate demand-driven domain nicing at the
 σ-scope solves, issue #659). Tick values come from `d3.nice` applied node-locally
 to the owning node's POSITION domain — the same function the owning scope's
 solve applies to the same union domain, so ticks and content agree by
-construction. It walks the node tree **bottom-up**;
-any node `resolveAxes` flagged (`axis.x` / `axis.y === true | "budget"`) is replaced
-by up to two `Layer` tiers wrapping the original content plus the elaborated axis
-shapes:
+construction. It walks the node tree **bottom-up**.
+Each node that owns chrome is replaced by rings of `Layer`s around the original
+content. Each ring holds the rings inside it plus its own shapes, and seats its
+shapes past everything inside it:
 
 ```
-inner = Layer([ content.name("__axisContent"), ...continuous/difference shapes ])
-root  = Layer([ inner.name("__axisInner"), ...ordinal labels ])
+inner  = Layer([ content.name("__axisContent"), ...continuous/difference shapes ])
+axes   = Layer([ inner.name("__axisInner"), ...ordinal labels ])
+titles = Layer([ axes.name("__titleContent"), ...title anchors, ...titles ])
+root   = Layer([ titles.name("__legendContent"), legend ])
 ```
+
+A node gets only the rings it has shapes for. Its chrome is:
+
+- the axes `resolveAxes` assigned it (the first two rings);
+- a title on each of those axes that the `axisTitle` option of
+  `ChromeOptions` names (see [Axis titles](#axis-titles));
+- the legend that the `legend` option gives it (see
+  [Legends](/internals/frontend/legends)).
+
+The node's identity (name, key, visibility) moves onto the outermost ring. That
+ring also records the boxes inside it as `GoFishNode.chrome`:
+
+- `chrome.content` is the node without chrome.
+- `chrome.withAxes` is the content with its axis gutters and category label
+  rows. Titles and the legend are seated around this box, and the render root
+  uses it as its frame on the canvas (see
+  [Layout & Render Passes](/internals/layout/passes)).
+- The outermost ring itself is the box with all chrome.
+
+Tick and category labels are chrome, so they lie outside `chrome.content`.
+Code that needs a node's box without its axes reads `chrome.content`.
 
 The **inner tier** holds the constraint-pinned axes (continuous/difference); the
 **outer tier** holds the ordinal label rows, which need the inner tier fully laid
@@ -97,7 +120,7 @@ when specified it is honored **literally** (frame-relative: `"start"`=near,
 `"end"`=far), bypassing the bottom-default so a caller can force the opposite edge.
 `resolveAxisSides` returns `undefined` for an unspecified side precisely so the
 elaboration can tell an explicit `"start"` apart from the default. The per-dim
-side is threaded `elaborateAxes → elaborationsFor → elaborate{Continuous,
+side is threaded `elaborateChrome → elaborationsFor → elaborate{Continuous,
 Difference,Ordinal}Axis`, and each seating decision reads the resolved edge:
 `gutterConstraints` flips the `innerAlign` edge and the `distribute`/standoff
 order, the ordinal label row flips its `distribute([label, content])` pair, and the
@@ -106,10 +129,9 @@ pair (`tickMark`) is a plain spread, which reads in pixel order, so it orders it
 two parts by the axis's SCREEN side (the side in axis order, turned into the screen
 side by the owner's cross direction) to keep the tick facing the content.
 
-Chart-level **axis titles** (`elaborateAxisTitles`) are ordinary shapes seated by
-constraints in the title wrapper's axis order. `gofish.tsx` gives each title the same
-side as its axis (the explicit `side`, else `defaultAxisSide`), so the two always land
-together.
+**Axis titles** are ordinary shapes seated by constraints in the title ring's axis
+order. `elaborationsFor` returns the side it chose for each axis, and the title ring
+uses that same side, so a title and its axis always land on the same edge.
 
 ### Label rotation (`labelAngle`)
 
@@ -117,7 +139,7 @@ The public `axes: { x: { labelAngle: number | number[] | "auto" } }` option (#74
 to per-tier arrays afterward) rotates a tick or category label about its anchor,
 authored **screen-clockwise** to match Vega-Lite's `labelAngle`. It is threaded the
 same way `side` is —
-`elaborateAxes → elaborationsFor → elaborate{Continuous,Ordinal}Axis → tickMark` /
+`elaborateChrome → elaborationsFor → elaborate{Continuous,Ordinal}Axis → tickMark` /
 `elaborateOrdinalAxis` — landing on the `Text` mark's `rotate` prop, which is
 SVG's rotation, clockwise on screen, so it passes through unchanged. A number or
 array is a manual, always-on
@@ -184,12 +206,11 @@ ordinal-axis-owning node is, since **ordinal axes nest**: `resolveAxes` lets a
 distinct ordinal grouping claim its own axis at every depth (`_node.ts`'s
 `resolveAxes`), so a grouped bar chart has one node owning the city axis and,
 independently, one sibling-node-per-city each owning that city's year axis — a
-DEEPER call in the bottom-up `elaborateAxes` walk always elaborates an inner
+DEEPER call in the bottom-up `elaborateChrome` walk always elaborates an inner
 tier before an ancestor elaborates an outer one on the same dim.
 
 The tier index is computed by bubbling a per-dim `tierCounts: [number, number]`
-UP through the recursion, exactly like `titleAnchors` bubbles up axis-line
-anchors: `elaborateAxes` folds it as a `Math.max` over its own children's
+UP through the recursion: `elaborateChrome` folds it as a `Math.max` over its own children's
 returned `tierCounts` (a node's tier count only depends on ITS OWN subtree, so
 sibling subtrees elsewhere in the tree — e.g. two independent grouped-bar
 regions — don't interfere with each other), then calls `elaborationsFor` with
@@ -442,68 +463,48 @@ elaborated axis share a coordinate frame.
 
 ## Axis titles
 
-Axis titles are elaborated too, by a second pass in the same file —
-`elaborateAxisTitles`. It differs from `elaborateAxes` in kind: where the axis
-pass wraps _every_ node that owns an axis anywhere in the tree, the title pass is
-a single wrap at the chart root carrying **at most one title per dim**. The two
-title strings are resolved by `gofish.tsx`'s `layout()` from the chart-level
-`axes` options plus the inferred `axisFields` (the field names the chart builder
-mapped to each axis), and `layout()` calls the pass only when at least one is
-present.
+A title is a ring of the chrome of the node that owns its axis. `elaborateChrome`
+asks the `axisTitle` option of `ChromeOptions` for the title of each axis the
+node draws. It passes the measure of that axis, read off the node's own space
+before elaboration re-resolves it. That is why a grouped bar chart's x title
+names the outer grouping ("lake") and not the inner one ("species"): the inner
+axes inserted below the root would change the root's space after elaboration.
 
-A title is placed **relative to the axis shape it describes**, not the plot. The
-axis pass already builds an axis-line node per position-like dim; `AxisElaboration`
-carries it as an optional `anchor`, and `elaborateAxes` bubbles those lines up the
-recursion as a per-dim `titleAnchors` pair. Any dim a node owns an axis on is
-**claimed** outright: the slot is overwritten with that node's own anchor — the
-axis line for a position-like axis, or `undefined` for an **ordinal** one, which
-has no spanning line. Because the walk is bottom-up, the **root-most** owner wins —
-so a chart-level title describes the outermost axis, not an inner facet's. The
-clearing matters for faceted charts: the root owns the ordinal facet axis while
-each facet owns a continuous axis on the _same_ dim, and without the claim the
-first facet's line would bubble past the root and drag the title onto one
-subchart; with it, the title falls back to the plot node — the span of the whole
-ordinal group. (Multiple same-dim owners across _sibling_ facets are ambiguous:
-they overwrite the same slot, so the last-visited one wins. Disambiguating that —
-a per-facet title — is out of scope; a comment in the source flags it.)
+The chart's `axes` options describe the chrome of the chart root, so `layout()`
+answers `axisTitle` only for the root. It titles each axis the root owns that
+the options turn on, with the option's `title` or else the measure. Axes owned
+deeper in the tree, e.g. the per-panel axes of the Gapminder panels, get no
+title. The mechanism does not depend on this choice. A nested chart that
+passed its own options would title its own axes through the same ring.
 
-`elaborateAxisTitles` then wraps the content in one more `Layer` and centers each
-title on its anchor:
+A coordinate space owns no cartesian axes (`resolveAxes` clears them), so a
+pie gets no cartesian title. It titles its own axes (the radial title, see
+[Flattening the Scenegraph](/internals/layout/coord-flattening)).
 
-- The anchor per dim is `anchors[dim] ?? plotNode` — the axis line if one exists
-  (continuous/difference), else the plot node. The fallback covers **ordinal**
-  axes (just a label row, no spanning line, UNDEFINED space elaborates nothing)
-  and untitled-axis dims: the plot's own bbox stands in.
-- It is referenced with a `ref(anchorNode)` stand-in — the same direct-node `ref`
-  form `elaborateOrdinalAxis` uses. The title layer is outermost, so by the time
-  the constraints read the ref the axis line / plot is already placed; the ref
-  resolves to that placement, so `align({ [dim]: "middle" }, [ref, title])` moves
-  only the title onto the line's center.
-- A `distribute` then seats the title GAP (`TITLE_CONTENT_GAP = 8`) outside the
-  **full** content bbox — past the tick/ordinal label rows, not just the plot —
-  so it never overlaps them. Listing the title _before_ the content in the pair
-  makes `distribute`'s backward walk place the title's far edge outside the
-  content's near edge.
-- The y-title is built with the `Text` `rotate: 90` option so it reads
-  bottom-to-top in the left gutter; the x-title is horizontal below the plot.
+The title ring (`axisTitles`) centers each title on the axis shape it
+describes, not on the plot:
 
-The two builders `xAxisTitle` / `yAxisTitle` are **pure, exported functions** —
-the customization seam, exactly like `elaborateAxis` for the axes and
-`legendColumn` for the legend.
+- The anchor is the axis line when the axis has one (continuous or
+  difference). `AxisElaboration` carries it as `anchor`. An ordinal axis is a
+  row of labels with no spanning line, so its title centers on the owner's
+  content box instead.
+- The anchor is referenced with a `ref(anchorNode)` stand-in, the same
+  direct-node `ref` form `elaborateOrdinalAxis` uses. The anchor sits in a ring
+  inside the title ring, so it is placed by the time the constraints read the
+  ref, and `align({ [dim]: "middle" }, [ref, title])` moves only the title.
+- A `distribute` then seats the title `TITLE_CONTENT_GAP = 8` pixels past the
+  ring inside it, which holds the tick and category label rows, so the title
+  never overlaps them. Listing the title before the box seats it on the start
+  edge, and after the box on the end edge.
+- The y title is built with the `Text` `rotate: -90` option, so it reads
+  bottom to top in the left gutter. The x title is horizontal.
 
-A title names an axis the root has: a dim on which the root content's space
-is UNDEFINED gets no chart-level title, even an explicit one. In particular a
-coordinate space reports nothing upward, and it titles its own axes (the
-radial title, see [Flattening the Scenegraph](/internals/layout/coord-flattening)),
-so a pie gets no second, cartesian title.
+The legend ring is outside the title ring, so the legend is seated past the
+titles, and the title centering never sees the legend column.
 
-`elaborateAxisTitles` runs in `layout()` **before** the legend wrap: the legend
-seats itself off the titled content's bbox, so the title must already be in
-place — and conversely the title's centering must never see the legend column
-(it would drag the title off-center). The pre-title content node is also what
-defines the inferred canvas when `w`/`h` are omitted, so a long title can't
-inflate it. See [Layout & Render Passes](/internals/layout/passes) and
-[Legends](/internals/frontend/legends).
+The two builders `xAxisTitle` and `yAxisTitle` are pure, exported functions.
+They are the place to change how a title looks, like `legendColumn` for the
+legend.
 
 ## What this replaced
 
@@ -515,8 +516,8 @@ feeds the pass, and its persistent `axisDemand` stamps drive the demand-driven
 per-scope domain nicing at the σ-scope solves); the former `resolveNiceDomains`
 tree walk is gone (issue #659 — nicing now happens once per σ-scope, at the
 solve). The chart-level `axes` option
-still drives both the axis pass and the title pass above. Axis titles used to
+still drives both the axes and their titles. Axis titles used to
 render as raw `<text>` elements in `gofish.tsx`'s `render()` behind fixed
-40px margins; that bespoke path is gone too, replaced by the title elaboration
-described above. Polar/coord axes are still drawn by `coord.tsx` and are not yet
+40px margins, and later as one wrapper around the whole chart. Both are gone:
+a title is now a ring of its axis owner's chrome. Polar/coord axes are still drawn by `coord.tsx` and are not yet
 elaborated.

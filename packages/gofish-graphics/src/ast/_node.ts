@@ -532,7 +532,7 @@ export class GoFishNode {
   private _zOrder: number | undefined = undefined;
   private renderSession?: RenderSession;
   // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
-  // elaboration pass (`elaborateAxes`), which wraps owning nodes in a Layer of
+  // elaboration pass (`elaborateChrome`), which wraps owning nodes in a Layer of
   // ordinary tick/label shapes.
   // true     = owns the axis (gets elaborated into shapes here)
   // "budget" = a layer sibling owns it; also elaborated (overlapping siblings
@@ -577,6 +577,16 @@ export class GoFishNode {
     UnderlyingSpace | undefined,
   ];
   public _axisOverride?: { x?: boolean; y?: boolean };
+  /**
+   * Set on the outermost ring of chrome that chrome elaboration
+   * (`elaborateChrome` in axes/elaborate.tsx) wraps around a node: the boxes
+   * inside it. This node's own box is the box WITH chrome (axes, titles,
+   * legend); `content` is the node it dresses, the box WITHOUT chrome;
+   * `withAxes` is the content with its axis gutters and category label rows,
+   * the box its titles and legend are seated around. Tick and category labels
+   * are chrome, not ink of the content: they sit outside `content`.
+   */
+  public chrome?: { content: GoFishNode; withAxes: GoFishNode };
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
   public _ordinalKeyMap?: Record<string, GoFishNode>;

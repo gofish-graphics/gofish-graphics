@@ -80,9 +80,10 @@ pins the root's start edge to the frame's start, which already includes any desc
 so adding it would count it twice (#574). See
 [Underlying Space](/internals/core/underlying-space).
 
-**Chrome is ordinary content.** Axis titles, the legend column and the colorbar are
-elaborated at the root as ordinary y-down shapes. Their seating constraints run in
-the wrapper's axis order like any other constraint, and the sides are chosen with the
+**Chrome is ordinary content.** Axes, axis titles, the legend column and the
+colorbar are elaborated as ordinary y-down shapes, in rings around the node that
+owns them (the root, for titles and the legend). Their seating constraints run in
+the ring's axis order like any other constraint, and the sides are chosen with the
 same `axisDirection` (a title follows its axis line; the legend tops out with the
 content: the `end` of a y that grows upward, the `start` of one that reads top-down).
 Nothing inside them is mirrored, so legend rows read top to bottom with no `reverse`
@@ -127,7 +128,7 @@ children, node)`, which returns that node's `DisplayItem[]` fragment.
 `.label(...)` contributes nothing special here. It used to lower a raw `TextItem`
 alongside the labeled mark's own fragment (`lowerLabelItems`); a label is now
 **elaborated** into a real `Text` node + constraints before layout even runs
-(`src/ast/labels/elaborate.tsx`, the same technique `elaborateAxes` uses for tick
+(`src/ast/labels/elaborate.tsx`, the same technique `elaborateChrome` uses for tick
 labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
 ordinary sibling shape with its own `_lower` fragment.
 

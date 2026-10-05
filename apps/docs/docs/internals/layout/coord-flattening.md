@@ -258,8 +258,8 @@ sits on top of the data. The title is the `axes` option's `y` title,
 else the radial space's measure, else the space's own name for the axis (`r`)
 (#621). There is deliberately no angular title by default: the ring's tick
 labels say what goes around, and a circle has no single natural place for a
-title. The chart-level title pass reads only the root's own space, so it adds
-no second title for a coordinate space. Only
+title. A coordinate space owns no cartesian axes, so it gets no second,
+cartesian title. Only
 DATA-bound channels consume these — a plain number bypasses both (see
 `computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
 mark that says `w: datum(count)` (the θ extent) auto-fits. Because the coord is the

@@ -299,7 +299,7 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 }
 ```
 
-### Pass 7: Axis Elaboration
+### Pass 7: Chrome Elaboration
 
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
 
@@ -316,13 +316,15 @@ level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
 later gates per-scope domain nicing at the σ-scope solves (issue #659), since
 `resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
 driven at each scope's own solve (below). Then
-`elaborateAxes` **rewrites the tree**: each axis-owning node is wrapped in
-`Layer` tiers containing ordinary `rect`/`text`/`spread` axis shapes wired with
-`align`/`distribute`/`position` constraints. Axes are not a privileged node
-type and there is no axis-specific code later in the pipeline — after this
-pass they are just nodes. Because the rewrite inserts new nodes and moves
-keys onto wrappers, the affected resolution passes (color, names, labels,
-underlying space) rerun on the new tree. Domain nicing is not a tree pass at
+`elaborateChrome` **rewrites the tree**. Each node that owns chrome (axes,
+axis titles, a legend) is wrapped in rings of `Layer`s containing ordinary
+`rect`/`text`/`spread` shapes wired with `align`/`distribute`/`position`
+constraints. Chrome is not a privileged node type, and there is no
+chrome-specific code later in the pipeline. After this pass it is just nodes.
+Because the rewrite inserts new nodes and moves keys onto wrappers, the name,
+alias, and underlying space passes rerun on the new tree. The color scale does
+not: it was final before the pass, and chrome adds no data colors. Label
+elaboration follows and reruns the same passes. Domain nicing is not a tree pass at
 all: each σ-scope nices its own POSITION domain at its solve, if some node in
 its space-flow region renders that dim's axis.
 
@@ -330,44 +332,28 @@ See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
-**Axis-title elaboration** follows the axis block and runs _before_ the legend.
-The chart-level title _text_ for each dim is read off the **resolved space's
-`measure`** — a continuous axis names itself by its unit, an ordinal axis by its
-grouping field. There is no syntactic field-name fallback: a space with no
-measure simply has no title. The measure is captured **pre-elaboration** (before
-the axis block inserts the inner per-facet ordinal axis nodes, whose finer
-grouping would otherwise bubble up and win the root union), so the chart-level
-title names the OUTERMOST grouping (`lake`, not the inner `species`).
-`elaborateAxisTitles` then wraps
-the chart in one more
-`Layer` carrying up to two title `Text` nodes — the x-title horizontal below the
-plot, the y-title rotated to read bottom-to-top in the left gutter — each
-centered on the axis line it describes via a `ref()` stand-in (`elaborateAxes`
-hands back those axis-line nodes as `titleAnchors`; an ordinal or absent axis
-has no line, so the title falls back to centering on the plot node). Two extra
-references thread through here:
+The chart's options describe the chrome of the chart root. `layout()` passes
+`elaborateChrome` two answers that apply only to the root:
 
-- `plotNode` — the original root content, captured _before_ `elaborateAxes`, so
-  it survives every wrapping pass and stands in as the fallback title anchor.
-- `contentNode` — the node captured _just before_ the title wrap (and so before
-  the legend wrap too). It is what `finalW`/`finalH` read off below, so a long
-  title or a tall legend can never inflate the inferred canvas; their extents
-  past the content are reserved separately as measured gutters instead.
+- **Axis titles.** The root titles each axis it owns that the `axes` option
+  turns on. The title text is the option's `title`, or else the axis's
+  `measure` (a continuous axis names itself by its unit, an ordinal axis by its
+  grouping field). A space with no measure has no title. The measure is read
+  off the root's space before elaboration re-resolves it, so the title names
+  the OUTERMOST grouping (`lake`, not the inner `species`).
+- **The legend.** The color scale is resolved once, from the root, so the root
+  carries the legend whenever the scale has something to show and the `legend`
+  option is not `false`.
 
-The ordering is deliberate: titles must be seated before the legend, because the
-legend distributes off the titled content's bbox — and conversely the title's
-centering must never see the legend column (it would drag the title off-center).
-This is the same elaborate-into-ordinary-nodes treatment axes and legends get;
-the former bespoke render-time title path is gone. See
-[Axes](/internals/frontend/axes) for the title recipe and the
-sibling-facet anchor limitation.
-
-**Legend elaboration** follows the title block in the same `layout()`, gated on a
-non-empty color map (not on the `axes` option). `elaborateLegend` wraps the chart
-root in a `Layer` holding the content plus a swatch column of `rect`/`text` rows,
-seated to the right with `align`/`distribute` constraints — the same elaborate-
-into-ordinary-nodes treatment axes get. See
-[Legends](/internals/frontend/legends).
+Each title is a ring seated past the root's axes and centered on the axis line
+it describes. The legend is the ring outside that, so it is seated past the
+titles. The outermost ring records the boxes inside it as `GoFishNode.chrome`:
+`content` (the root without chrome) and `withAxes` (the root with its axis
+gutters and category label rows). `layout()` uses `withAxes` as the root's
+frame: its size is the inferred canvas when `w`/`h` are omitted, and its axis
+direction is the root's. So a long title or a tall legend never inflates the
+inferred canvas, and their extents past it are reserved as measured gutters.
+See [Axes](/internals/frontend/axes) and [Legends](/internals/frontend/legends).
 
 ### Pass 8: Position Scale Computation
 
@@ -806,8 +792,7 @@ paints each item into an `<svg>`.
 
 `render()` draws **no chart chrome of its own** — no axis lines, tick marks, tick
 labels, ordinal category labels, _or titles_, and no legend swatches. All of it
-was elaborated into ordinary nodes during layout (see Pass 7: Axis Elaboration,
-the title block that follows it, and the legend block) and renders as part of the
+was elaborated into ordinary nodes during layout (see Pass 7: Chrome Elaboration) and renders as part of the
 node tree like any other shape. The former bespoke render-time path (hand-written
 `<text>` title elements behind fixed `Y_TITLE_MARGIN` / `X_TITLE_MARGIN` gutters)
 has been deleted, so `render()` has zero chart-chrome special cases left.
@@ -843,14 +828,14 @@ seated past the canvas — marginal histogram bands, wide diagram nodes**), wher
 
 **Why the right side is special.** Left, bottom, and top each have a single kind
 of overhang (chrome or displaced content) and run through `reserve()` uniformly.
-The right side carries _two_ kinds that must be reserved _differently_: a legend
-column historically reserves `legendOverhang + pad`, while displaced content
+The right side carries _two_ kinds that must be reserved _differently_: a chart
+with a legend column historically reserves its overhang plus `pad`, while displaced content
 (like a marginal band) should run through `reserve()` like the other gutters. The
 two cannot be unified by magnitude — a single-row legend overhangs by roughly the
 same few pixels as a wide rightmost x-tick label, yet the legend must be _added_
-to the width while the tick spill must be _absorbed_ into `pad`. Only the
-color-scale flag (`legendAdded`) can tell them apart, so the legend keeps its own
-gated `rightOverhang` term; everything else flows through `rightContentOverhang`
+to the width while the tick spill must be _absorbed_ into `pad`. Only whether
+the root carries a legend can tell them apart, so a chart with a legend reports
+its right overhang as `rightOverhang`; everything else flows through `rightContentOverhang`
 and `reserve()`. This is the one place a chart-chrome flag still influences
 sizing — kept deliberately, because the distinction is semantic, not geometric.
 
@@ -1030,7 +1015,7 @@ last artifact still drawn here; they too are now elaborated during layout
 The bespoke legend-rendering pass that used to live here (a `<For>` over
 `scaleContext.unit.color` hand-placing swatches behind a fixed `LEGEND_MARGIN`)
 was **deleted**. Color legends are now elaborated into ordinary GoFish nodes
-during layout (see Pass 7: Axis Elaboration, which the legend pass follows, and
+during layout (see Pass 7: Chrome Elaboration, and
 [Legends](/internals/frontend/legends)), so they render through the normal
 node-tree pass above with no special casing.
 
@@ -1070,7 +1055,7 @@ This creates:
 4. **Underlying Space Resolution**:
    - X-axis: `ORDINAL` (from `spread`)
    - Y-axis: `SIZE` (height is data-driven, no position)
-5. **Axis Elaboration** (if `axes` enabled): the chart is wrapped in layers
+5. **Chrome Elaboration** (axes when `axes` is enabled): the chart is wrapped in layers
    carrying the y tick marks/labels (constraint-pinned at their data values)
    and the per-category x labels (`ref`-bound to the bars)
 6. **Layout Calculation**:

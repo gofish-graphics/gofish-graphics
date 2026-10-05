@@ -87,8 +87,8 @@ constraint solver express alignment and distribution as equations over sibling
 boxes rather than as order-sensitive imperative writes.
 
 **Chrome is just more tree.** Axes, legends, and axis titles are not privileged
-render-time fixtures. Before layout, elaboration passes rewrite each of them into
-ordinary marks and constraints — `Layer`-wrapped `Rect`/`Text` nodes seated by
+render-time fixtures. Before layout, chrome elaboration rewrites each of them into
+ordinary marks and constraints, in rings around the node that owns them — `Layer`-wrapped `Rect`/`Text` nodes seated by
 `align`/`distribute`/`position` — so chrome flows through the same three passes
 as the data marks. **Axes are recursive**: every node can render its own
 resolved underlying-space type as an axis, so a nested grouping (a grouped or

@@ -1857,7 +1857,7 @@ labels, ORDINAL → labels at laid-out keys.
 Selection is no longer tied to the root. A faceted chart tags an axis on each
 facet-owning node, and an outer operator can suppress an axis its child would
 otherwise produce. The flags are consumed by the **axis elaboration pass**
-(`elaborateAxes`, `src/ast/axes/elaborate.tsx`), which wraps each flagged node
+(`elaborateChrome`, `src/ast/axes/elaborate.tsx`), which wraps each flagged node
 in a `Layer` of ordinary tick/label shapes constrained to the inferred domain —
 so axes are not a privileged node type and the layout engine carries no
 axis-specific budget machinery. See [Axes](/internals/frontend/axes) for the

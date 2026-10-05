@@ -54,10 +54,10 @@ per-instance and per-group labeling; see `resolveLabelTargets` below.
 ## The elaboration pass
 
 `elaborateLabels` (`src/ast/labels/elaborate.tsx`) runs inside `gofish.tsx`'s
-`layout()`, immediately after axis elaboration and before the
-contentNode/title/legend passes — so a label's own bbox is folded into what
-those later passes measure, and a label may target a node the axis pass just
-wrapped. It has two phases:
+`layout()`, immediately after chrome elaboration, so a label may target a node
+the chrome pass just wrapped. A label inside a node's content is inside that
+node's chrome rings, so at layout time the rings seat their axes, titles, and
+legend past it. It has two phases:
 
 1. **`resolveLabelTargets`** — a single top-down walk that pushes each node's
    `_labels` array down to its children whenever the node has children but no
@@ -118,7 +118,7 @@ placed):
    content at its own origin. The content is referenced by the label
    constraints below, and a constraint-referenced child skips the layer's
    phase-1 baseline placement; this re-states that placement explicitly, the
-   same pin `elaborateAxes`/`elaborateLegend` use for the same reason.
+   same pin every chrome ring (`wrapRing` in `axes/elaborate.tsx`) uses for the same reason.
 2. Per target × spec, the constraints `buildLabelConstraints` derives from the
    spec's `LabelPosition` (below), relating the spec's `Text` to a
    `ref(target)` stand-in.

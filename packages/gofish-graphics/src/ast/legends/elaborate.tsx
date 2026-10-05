@@ -8,7 +8,8 @@ import { Text } from "../shapes/text";
 import { Spread } from "../graphicalOperators/spread";
 import { layer } from "../graphicalOperators/layer";
 import { Constraint } from "../constraints";
-import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
+import { fmtNum } from "../elaborationUtils";
+import type { ChromeRing } from "../axes/elaborate";
 import { ticks as d3Ticks } from "d3-array";
 import { datum } from "../data";
 import type { CategoricalScale, ContinuousColorScale } from "../gofish";
@@ -18,12 +19,11 @@ import { keysDownTheScreen } from "../constraints/distribute";
 /**
  * Legend elaboration: turn the resolved color scale into ordinary GoFish shapes
  * + constraints, the same way axes/elaborate.tsx turns an axis into
- * Rect/Text/Spread/Layer nodes. This replaces the bespoke render-time legend
- * (the `<For>` over `scaleContext.unit.color` in gofish.tsx that hand-placed
- * swatches at `translate(width + pad*3, ...)` behind a fixed `LEGEND_MARGIN`):
- * the legend is no longer a privileged render-time fixture, it's a subtree
- * wrapped in a `Layer` beside the content, participating in normal layout (so
- * its extent is measured, not reserved as a constant).
+ * Rect/Text/Spread/Layer nodes. The legend is the outermost ring of its
+ * owner's chrome (`legendRing`, placed by `elaborateChrome`), so it takes
+ * part in normal layout and its extent is measured, not reserved as a
+ * constant. The color scale is resolved once for the whole render, from the
+ * root, so the root owns the legend.
  *
  * A **categorical** scale yields a swatch column (`legendColumn`); a
  * **continuous** (gradient) scale yields a colorbar (`legendColorbar`) — a
@@ -39,7 +39,6 @@ const ROW_GAP = 8; // vertical gap between legend rows
 const LABEL_FONT_SIZE = 10;
 const LABEL_COLOR = "gray";
 const LEGEND_CONTENT_GAP = 20; // gap between content and the legend column
-const CONTENT_NAME = "__legendContent";
 const LEGEND_NAME = "__legend";
 
 /** One legend row: a color swatch followed by its label, aligned on a row. */
@@ -237,61 +236,38 @@ export async function legendColorbar(
 }
 
 /**
- * Wrap `node` in a Layer with a legend seated to its right — a swatch column
- * for a categorical scale, or a colorbar for a continuous (gradient) one.
- * Mirrors the axes/elaborate.tsx wrapper recipe (identity move → layer wrap →
- * constrain via the name→ref map → identity restore, via
- * `wrapPreservingIdentity`).
+ * The legend ring of `owner`'s chrome (see `elaborateChrome` in
+ * axes/elaborate.tsx): a swatch column for a categorical scale, or a colorbar
+ * for a continuous (gradient) one, seated just right of the box inside the
+ * ring (the owner with its axes and titles) and top-aligned with it.
  *
- * The caller owns the "is there anything to draw?" guard (a non-empty color map
- * or a continuous scale); this always wraps and returns the new root.
+ * `owner` is the node the legend describes, without its chrome: a
+ * categorical legend lists its entries in the order `owner` lays them down
+ * the screen, when it does (see `seriesDownTheScreen`), and "top" is read in
+ * the axis order of the rings around it.
  */
-export async function elaborateLegend(
-  node: GoFishNode,
+export async function legendRing(
   scale: CategoricalScale | ContinuousColorScale,
-  /** The plot the legend describes: a categorical legend lists its entries
-   *  in the order the plot lays them down the screen, when it does (see
-   *  `seriesDownTheScreen`). */
-  content: GoFishNode
-): Promise<GoFishNode> {
+  owner: GoFishNode
+): Promise<ChromeRing> {
   const legend =
     "scaleFn" in scale
       ? await legendColorbar(scale.scaleFn, scale.domain)
-      : await legendColumn(legendEntries(scale.color, content));
+      : await legendColumn(legendEntries(scale.color, owner));
   // The legend tops out with the content: "top" is the end of a y that grows
   // upward and the start of one that reads top-down.
-  const top = wrapperDirection(node, 1) === -1 ? "end" : "start";
-  return wrapPreservingIdentity(node, async (content) => {
-    content.name(CONTENT_NAME);
-
-    const root = (await (layer as any)([content, legend])) as GoFishNode;
-
-    // Constraint order matters: the content pin places the anchor the others read.
-    await root.relate((g) => [
-      // Pin the content at its origin; it never moves.
-      Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
-        g[CONTENT_NAME],
-      ]),
-      // Seat the column just right of the full content bbox (incl. axis labels).
+  const top = wrapperDirection(owner, 1) === -1 ? "end" : "start";
+  return {
+    nodes: [legend],
+    constraints: (g, inner) => [
+      // Seat the column just right of the full box inside (incl. axis labels
+      // and titles).
       Constraint.distribute({ dir: "x", spacing: LEGEND_CONTENT_GAP }, [
-        g[CONTENT_NAME],
+        g[inner],
         g[LEGEND_NAME],
       ]),
-      // Top-align the column with the content top.
-      Constraint.align({ y: top }, [g[CONTENT_NAME], g[LEGEND_NAME]]),
-    ]);
-    return root;
-  });
-}
-
-/**
- * Measured width the seated legend column adds past the content width. The
- * wrapper's max bbox includes the swatch column that the `distribute({dir:"x"})`
- * constraint above seated to the right of the content, so this is exactly the
- * `LEGEND_CONTENT_GAP` plus the column width to reserve on the right. `max!`,
- * not `?.max ?? 0`: the wrapper layer always emits a placed max here — a silent
- * 0 would clip the legend and mask the bug.
- */
-export function legendOverhang(wrapper: GoFishNode, contentW: number): number {
-  return Math.max(0, wrapper.dims[0].max! - contentW);
+      // Top-align the column with the box's top.
+      Constraint.align({ y: top }, [g[inner], g[LEGEND_NAME]]),
+    ],
+  };
 }

@@ -29,12 +29,7 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { niceScope, type Extent } from "./extent";
-import {
-  axisDirection,
-  fromFrameStart,
-  orientScales,
-  wrapperDirection,
-} from "./axisDirection";
+import { axisDirection, fromFrameStart, orientScales } from "./axisDirection";
 import { shadowCheckScaleRoot } from "./solver/shadow";
 import {
   perfNow,
@@ -45,9 +40,7 @@ import {
 } from "./perf";
 import {
   axisTitle,
-  elaborateAxes,
-  elaborateAxisTitles,
-  defaultAxisSide,
+  elaborateChrome,
   labelRowSettingsFromAngles,
   type LabelRowSettings,
 } from "./axes/elaborate";
@@ -59,7 +52,7 @@ import {
   type EqualMeasureAxis,
   type ScopeSolution,
 } from "./solver/scopes";
-import { elaborateLegend, legendOverhang } from "./legends/elaborate";
+import { legendRing } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
 
 export type CategoricalScale = {
@@ -231,19 +224,19 @@ function manualLabelRowSettings(
 const DEFAULT_CANVAS_SIZE = 400;
 
 // A chart-level axis is titled only when `axes` turns it on (`true`, or a
-// dim's entry that is not `false`); its title is then `axisTitle`'s.
-function resolveAxisTitles(
+// dim's entry that is not `false`); its title is then `axisTitle`'s, with the
+// axis's measure as the inferred name.
+function chartAxisTitle(
   axes: AxesOptions | undefined,
-  measures?: { x?: string; y?: string }
-): { xTitle: string | undefined; yTitle: string | undefined } {
-  const title = (dim: "x" | "y"): string | undefined => {
-    if (axes === true) return measures?.[dim];
-    const opt = axes && typeof axes === "object" ? axes[dim] : undefined;
-    return opt === undefined || opt === false
-      ? undefined
-      : axisTitle(opt, measures?.[dim]);
-  };
-  return { xTitle: title("x"), yTitle: title("y") };
+  dim: 0 | 1,
+  measure: string | undefined
+): string | undefined {
+  if (axes === true) return measure;
+  const opt =
+    axes && typeof axes === "object" ? axes[dim === 0 ? "x" : "y"] : undefined;
+  return opt === undefined || opt === false
+    ? undefined
+    : axisTitle(opt, measure);
 }
 
 export async function layout(
@@ -311,46 +304,15 @@ export async function layout(
   child.resolveUnderlyingSpace();
   perfAdd("resolve", perfNow() - __tResolve);
 
-  // Chart-level axis TITLE measure, captured PRE-elaboration. The root space
-  // here carries the OUTERMOST grouping's measure (the outer operator's fold is
-  // authoritative over its subtree), e.g. a grouped bar's x = "lake". After
-  // axis elaboration inserts the inner (per-facet) ordinal axis nodes, the
-  // re-resolved root unions those up and a finer grouping's measure ("species")
-  // can win — but the chart-level title should name the outermost axis, so we
-  // read it before that. (Nicing changes domains, not measures, so pre/post
-  // agree except for this elaboration bubble-up.)
-  const titleMeasures = {
-    x: spaceMeasure(child._underlyingSpace?.[0]),
-    y: spaceMeasure(child._underlyingSpace?.[1]),
-  };
-
-  // The original root content object stays in the tree as the plot after any
-  // wrapping below (axis / legend / title elaboration each wrap, never replace,
-  // the content). Captured here so the title pass can center on it as the
-  // fallback anchor when a dim has no elaborated axis line. If axis elaboration
-  // changes nothing, `plotNode === child`.
-  const plotNode = child;
-
-  // Per-dim axis-line node for chart-level title centering (root-most owner
-  // wins). Defaults to no anchors when the `axes` block below doesn't run.
-  let titleAnchors: [GoFishNode | undefined, GoFishNode | undefined] = [
-    undefined,
-    undefined,
-  ];
-
   // Re-resolve after an elaboration pass rewrote `child`. The inserted nodes
   // need the session and name resolution (a `ref()` stand-in resolves its
   // target here, or layout throws "Selected node not found"), and because
   // `resolveUnderlyingSpace` memoizes while a rewrite moves keys onto fresh
-  // wrappers, every cached space is cleared and recomputed from scratch.
-  //
-  // `withColorScale` is for the AXIS pass only: the color scale must be final
-  // before the legend pass consumes it, and the later passes insert chrome with
-  // non-literal fills ("gray" titles, swatches) that would otherwise be folded
-  // into the palette as if they were data values.
-  const reresolve = async (n: GoFishNode, withColorScale = false) => {
+  // wrappers, every cached space is cleared and recomputed from scratch. The
+  // color scale is NOT re-resolved: it was final before chrome was elaborated
+  // (the legend shows it), and chrome adds no data colors.
+  const reresolve = async (n: GoFishNode) => {
     if (contexts?.session) n.setRenderSession(contexts.session);
-    if (withColorScale) n.resolveColorScale();
     n.resolveNames();
     // The inserted chrome is built from operators (Spread) whose constraints
     // install in this pass; nodes resolved before are consumed and untouched.
@@ -359,13 +321,13 @@ export async function layout(
     n.resolveUnderlyingSpace();
   };
 
-  // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
   const __tAxes = perfNow();
+  // Axis ownership: which node draws each axis (`resolveAxes`). Which dims
+  // the chart-level `axes` option enables: `true` → both. For an `{ x?, y? }`
+  // object, a dim is enabled unless it is explicitly `false` — an unspecified
+  // (undefined) dim still shows (specifying one axis doesn't disable the
+  // other); only `false` suppresses.
   if (axes) {
-    // Which dims the chart-level `axes` option enables. `true` → both. For an
-    // `{ x?, y? }` object, a dim is enabled unless it is explicitly `false` —
-    // an unspecified (undefined) dim still shows (specifying one axis doesn't
-    // disable the other); only `false` suppresses.
     const enabled = new Set<0 | 1>();
     if (axes === true) {
       enabled.add(0);
@@ -375,34 +337,49 @@ export async function layout(
       if (axes.y !== false) enabled.add(1);
     }
     child.resolveAxes(new Map(), enabled);
+  }
 
-    // Axis elaboration: turn inferred axes into ordinary shapes + constraints.
-    // Wraps axis-owning content in a Layer with tick/label shapes and clears the
-    // handled axis flags; the new subtree is then re-resolved below. A flag the
-    // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
-    // consumes `node.axis`.
-    const elaborated = await elaborateAxes(
-      child,
-      resolveAxisSides(axes),
-      labelRowSettings ?? manualLabelRowSettings(axes)
-    );
-    titleAnchors = elaborated.titleAnchors;
-    if (elaborated.changed) {
-      child = elaborated.node;
-      await reresolve(child, true);
-    }
+  // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
+  // chrome wraps itself in it, as ordinary shapes + constraints — its axes,
+  // their titles, its legend. The chart's options describe the chrome of the
+  // chart ROOT: its axes are titled (with the measure of the axis, so the
+  // outermost grouping names it), and it carries the legend, because the
+  // color scale is resolved once, from the root, for the whole render.
+  // `legend: false` drops the legend; the color scale still paints the marks.
+  const chartRoot = child;
+  const unitScale = contexts?.session.scaleContext.unit;
+  const hasLegend =
+    legend !== false &&
+    ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
+      isContinuousColorScale(unitScale));
+  const elaborated = await elaborateChrome(child, {
+    sides: resolveAxisSides(axes),
+    labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
+    axisTitle: (owner, dim, measure) =>
+      owner === chartRoot ? chartAxisTitle(axes, dim, measure) : undefined,
+    legend: async (owner) =>
+      owner === chartRoot && hasLegend
+        ? legendRing(
+            unitScale as CategoricalScale | ContinuousColorScale,
+            owner
+          )
+        : undefined,
+  });
+  if (elaborated.changed) {
+    child = elaborated.node;
+    await reresolve(child);
   }
 
   // Label elaboration: turn every `.label(...)` spec into a real `Text` node +
-  // constraints (src/ast/labels/elaborate.tsx), the same technique the axis
-  // pass above uses. Runs after axis elaboration (a label may target a node
-  // an axis pass just wrapped) and before the contentNode/title/legend passes
-  // below, so a label's own bbox is folded into what those passes measure.
+  // constraints (src/ast/labels/elaborate.tsx), the same technique the chrome
+  // pass above uses. Runs after chrome elaboration (a label may target a node
+  // the chrome pass just wrapped).
   const labelRes = await elaborateLabels(child);
   if (labelRes.changed) {
     child = labelRes.node;
     await reresolve(child);
   }
+  perfAdd("axes", perfNow() - __tAxes);
 
   // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
   // applied AT the scope's solve (there is no pre-layout tree walk), and it is
@@ -432,99 +409,6 @@ export async function layout(
     rootExtent[1],
     rootAxisDemand[1]
   );
-
-  // Reference to the content node whose extent defines the final canvas
-  // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
-  // and the legend pass wrap `child`, so `contentNode` keeps pointing at the
-  // PRE-title, pre-legend content. This matters two ways:
-  //  - The inferred canvas is measured off the content, never inflated by a long
-  //    title or a tall legend column.
-  //  - Title, legend, and constraint-displaced extents past the content are
-  //    reserved separately as measured per-side overhangs (`leftOverhang`,
-  //    `bottomOverhang`, `topOverhang`, the legend `rightOverhang`, and the
-  //    non-legend `rightContentOverhang` below).
-  const contentNode = child;
-
-  // Axis-title elaboration: seat up to two title Text nodes (x below, y rotated
-  // left) as ordinary shapes + constraints (src/ast/axes/elaborate.tsx), each
-  // centered on the axis line it describes via a `ref()` stand-in (falling back
-  // to the plot node). Runs BEFORE the legend block on purpose: the legend
-  // distributes off the titled content's bbox, and title centering must never
-  // see the legend column. Title Texts resolve UNDEFINED spaces on both dims, so
-  // the wrapper preserves the content's underlying spaces and the nice spaces
-  // captured above remain valid. The caller owns the "any title?" guard.
-  // The title names each axis off its space `measure` (continuous → unit,
-  // ordinal → grouping field), read from `titleMeasures` (the OUTERMOST grouping,
-  // captured pre-elaboration). An axis whose space carries no measure (e.g. a
-  // magnitude whose measures forgot on conflict) simply gets no title.
-  // A title names an axis the root has: a dim the root has no space on (the
-  // root is a coordinate space, whose axes and their titles it draws itself,
-  // or has nothing data-driven there) gets no chart-level title.
-  const titles = resolveAxisTitles(axes, titleMeasures);
-  const rootHasAxis = (dim: 0 | 1) =>
-    (dim === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY).kind !==
-    "undefined";
-  const xTitle = rootHasAxis(0) ? titles.xTitle : undefined;
-  const yTitle = rootHasAxis(1) ? titles.yTitle : undefined;
-  if (xTitle !== undefined || yTitle !== undefined) {
-    // Each title seats on the same side as its axis line (the axis's own
-    // default, or the explicit `side`), in the plot's axis order.
-    const baseSides = resolveAxisSides(axes);
-    const titleSides: ["start" | "end", "start" | "end"] = [
-      baseSides[0] ??
-        defaultAxisSide(
-          0,
-          niceUnderlyingSpaceX,
-          wrapperDirection(contentNode, 1)
-        ),
-      baseSides[1] ??
-        defaultAxisSide(
-          1,
-          niceUnderlyingSpaceY,
-          wrapperDirection(contentNode, 0)
-        ),
-    ];
-    const titled = await elaborateAxisTitles(child, {
-      xTitle,
-      yTitle,
-      anchors: titleAnchors,
-      plotNode,
-      sides: titleSides,
-    });
-    child = titled;
-    await reresolve(child);
-  }
-
-  // Legend elaboration: turn the color scale into an ordinary subtree seated
-  // beside the (now possibly titled) content (src/ast/legends/elaborate.tsx) —
-  // a swatch column for a categorical scale, or a colorbar for a continuous
-  // (gradient) one. Runs after the last resolveColorScale (it consumes the
-  // resolved scale; legend fills are literal strings, never isValue, so the
-  // scale pass is NOT re-run). The wrapper preserves the content's underlying
-  // spaces (unionChildSpaces ignores the legend's UNDEFINED spaces), so the
-  // nice spaces captured above remain valid.
-  // `legend: false` (the chart option) suppresses this pass entirely: the
-  // color scale still paints the marks, only the chrome is dropped. Mirrors
-  // `axes: false`, and nothing downstream reserves space for a legend that
-  // was never added (`legendAdded` stays false).
-  let legendAdded = false;
-  const unitScale = contexts?.session.scaleContext.unit;
-  const hasLegend =
-    legend !== false &&
-    ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
-      isContinuousColorScale(unitScale));
-  if (hasLegend && unitScale) {
-    // The legend reads top→bottom; its rows follow the plot's own stacking
-    // when the color series are stacked along a y axis (see `elaborateLegend`).
-    child = await elaborateLegend(
-      child,
-      unitScale as CategoricalScale | ContinuousColorScale,
-      contentNode
-    );
-    legendAdded = true;
-    await reresolve(child);
-  }
-  perfAdd("axes", perfNow() - __tAxes);
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
@@ -667,14 +551,21 @@ export async function layout(
     axisScale(rootScaleFactors[1], rootMaps[1]),
   ];
 
+  // The root's frame on the canvas is its box with axes: the root content
+  // with its axis gutters and category label rows, without the titles and
+  // legend seated around them (see `GoFishNode.chrome`). Its extent sizes a
+  // shrink-to-fit canvas, so a long title or a tall legend column never
+  // inflates the canvas; whatever lies outside the canvas is reserved as a
+  // measured overhang below.
+  const plot = child.chrome?.withAxes ?? child;
   // The root scales are solved in the root's own axis order; the canvas hands
   // them down in pixels, so a root whose y grows upward receives them reflected
-  // (and `layout()` reads them back in its own order). The root's order is the
-  // plot content's: the chrome wrappers seat the content at their own origin
-  // and only add chrome around it.
+  // (and `layout()` reads them back in its own order). The root's order is its
+  // frame's: the chrome rings seat what they wrap at their own origin and only
+  // add chrome around it.
   const rootDirection = [
-    axisDirection(contentNode, 0),
-    axisDirection(contentNode, 1),
+    axisDirection(plot, 0),
+    axisDirection(plot, 1),
   ] as const;
   const __tSolve = perfNow();
   child.layout(
@@ -687,14 +578,13 @@ export async function layout(
   scopes.dump();
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
-  // canvas default when the content didn't report one. Read off `contentNode`
-  // (== `child` when no title/legend wrapper), never an outer wrapper — so the
-  // canvas stays content-relative; title and legend extents are reserved
-  // separately as measured gutters below. Sizes do not depend on placement, so
-  // this is known before the root is placed.
+  // canvas default when the content didn't report one. Read off the root's
+  // frame (`plot`), so title and legend extents are reserved separately as
+  // measured gutters below. Sizes do not depend on placement, so this is
+  // known before the root is placed.
   const finalDim = (i: 0 | 1, given: number | undefined): number => {
     if (given !== undefined) return given;
-    const s = contentNode.dims[i]?.size;
+    const s = plot.dims[i]?.size;
     return s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE;
   };
   const finalW = finalDim(0, w);
@@ -761,22 +651,20 @@ export async function layout(
   // a placed extent here — a silent 0 would clip the overhang and mask a layout
   // bug, so assert it's present.
   //
-  // The RIGHT side has two distinct kinds of overhang that must be reserved
-  // DIFFERENTLY, and they overlap in magnitude so the color-scale flag — not the
-  // size — is what tells them apart:
-  //  - A legend swatch column reserves `legendOverhang + pad` (see the width
-  //    formula in `render`). Gated on `legendAdded`: a single-row legend can
-  //    overhang as little as ~6px — the same as a wide rightmost x-tick label —
-  //    so we cannot recover this from magnitude alone.
-  //  - Otherwise, content displaced past the canvas by a constraint (e.g. a
-  //    marginal histogram's right band) flows through `reserve()` like the other
-  //    three gutters: a small x-tick spill is absorbed into `pad` (plain axis
-  //    charts stay byte-identical) and a large band reserves its full extent.
-  // TOP, LEFT, BOTTOM have only the second (chrome / displaced-content) kind.
-  const rightOverhang = legendAdded ? legendOverhang(child, finalW) : 0;
-  const rightContentOverhang = legendAdded
-    ? 0
-    : Math.max(0, child.dims[0].max! - finalW);
+  // The RIGHT side is reserved one of two ways, and the two overlap in
+  // magnitude, so whether the root carries a legend — not the size — is what
+  // tells them apart:
+  //  - Beside a legend column, the overhang reserves itself plus a full `pad`
+  //    (see the width formula in `render`). A single-row legend can overhang
+  //    as little as ~6px — the same as a wide rightmost x-tick label — so
+  //    this cannot be recovered from magnitude alone.
+  //  - Otherwise, it flows through `reserve()` like the other three gutters:
+  //    a small x-tick spill is absorbed into `pad` and a large band (content
+  //    displaced past the canvas by a constraint, e.g. a marginal
+  //    histogram's right band) reserves its full extent.
+  const right = Math.max(0, child.dims[0].max! - finalW);
+  const rightOverhang = hasLegend ? right : 0;
+  const rightContentOverhang = hasLegend ? 0 : right;
   const topOverhang = Math.max(0, -child.dims[1].min!);
   const bottomOverhang = Math.max(0, child.dims[1].max! - finalH);
   const leftOverhang = Math.max(0, -child.dims[0].min!);
@@ -800,7 +688,7 @@ export async function layout(
     bottomOverhang,
     // The fields a rendered legend shows: the color scale's fields when the
     // legend was drawn, none when it was suppressed or had nothing to show.
-    legendFields: legendAdded
+    legendFields: hasLegend
       ? new Set(
           (unitScale as { fields?: Set<string> } | undefined)?.fields ?? []
         )
@@ -1349,15 +1237,13 @@ export const render = (
   const bottomReserve = reserve(bottomOverhang);
   const topReserve = reserve(topOverhang);
 
-  // Right gutter = legend reservation + non-legend reserve. `rightOverhang` is
-  // the legend column's overhang (0 when there's no legend); it keeps a full
-  // `pad` margin beyond the column — the legend's historical reservation — via
-  // `reserve(rightContentOverhang)`, whose floor is `pad` (so a legend chart
-  // reserves `legendOverhang + pad`, byte-identical). `rightContentOverhang` is
-  // any NON-legend content displaced past the right edge (a marginal band);
-  // routing it through the same `reserve()` as the other gutters absorbs a small
-  // x-tick spill into `pad` (plain axis charts stay byte-identical) and reserves
-  // a large band's full extent plus `EDGE_GAP`. The right gutter bears no root
+  // Right gutter: `rightOverhang` is the overhang of a chart that carries a
+  // legend (0 otherwise); it keeps a full `pad` margin beyond it via
+  // `reserve(rightContentOverhang)`, whose floor is `pad`. `rightContentOverhang`
+  // is the overhang of a chart without one; routing it through the same
+  // `reserve()` as the other gutters absorbs a small x-tick spill into `pad`
+  // and reserves a large band's full extent plus `EDGE_GAP`. The right gutter
+  // bears no root
   // <g> translate, so it needn't be pixel-snapped — a fractional width is
   // harmless (legend overhangs are fractional text widths).
   // Two-pass render: lower the baked scenegraph into the display-list IR, then
