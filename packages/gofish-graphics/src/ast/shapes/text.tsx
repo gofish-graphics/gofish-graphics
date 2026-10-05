@@ -19,7 +19,6 @@ import {
   rectItemFromBox,
   roleFor,
 } from "../displayList/lowerHelpers";
-import { axisDirection } from "../axisDirection";
 type TextDimensions = {
   width: number;
   height: number;
@@ -277,7 +276,7 @@ export const Text = ({
         // is the `textAnchor` point, which for the default `"start"` is again
         // the box's start edge.
         const height = maxY - minY;
-        const up = axisDirection(node, 1) === -1;
+        const up = node.yFrame.direction === -1;
         const glyphDy = up ? -maxY : -minY;
 
         const positionX =

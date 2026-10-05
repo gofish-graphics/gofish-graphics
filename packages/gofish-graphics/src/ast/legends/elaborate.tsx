@@ -8,12 +8,11 @@ import { Text } from "../shapes/text";
 import { Spread } from "../graphicalOperators/spread";
 import { layer } from "../graphicalOperators/layer";
 import { Constraint } from "../constraints";
-import { fmtNum } from "../elaborationUtils";
-import type { ChromeRing } from "../axes/elaborate";
+import { breadthFirst, fmtNum, type ChromeRing } from "../elaborationUtils";
 import { ticks as d3Ticks } from "d3-array";
 import { datum } from "../data";
 import type { CategoricalScale, ContinuousColorScale } from "../gofish";
-import { wrapperDirection } from "../axisDirection";
+import { orientSide, wrapperDirection } from "../axisDirection";
 import { keysDownTheScreen } from "../constraints/distribute";
 
 /**
@@ -72,27 +71,23 @@ export async function legendColumn(
 
 /**
  * The order the plot lays its color series down the screen, when it lays
- * them out along y: the parts of the first chain in `content` (breadth
- * first) whose parts are all legend entries, top to bottom, as that chain
- * reports them ({@link keysDownTheScreen}). Undefined when no chain lays the
- * legend's entries out down the screen; the legend then keeps the color
- * scale's order. A chain of one part orders nothing.
+ * them out along y: the chain of the outermost operator that splits by a
+ * field the color scale encodes (its parts record that field as
+ * `__splitBy`), top to bottom, as that chain reports them
+ * ({@link keysDownTheScreen}). Undefined when no such operator lays its parts
+ * out down the screen; the legend then keeps the color scale's order.
  */
 function seriesDownTheScreen(
   content: GoFishNode,
-  legendKeys: Set<string>
+  fields: ReadonlySet<string>
 ): string[] | undefined {
-  const queue: GoFishNode[] = [content];
-  while (queue.length > 0) {
-    const n = queue.shift()!;
+  for (const n of breadthFirst(content)) {
+    const splitsByColor = n.children.some((c) =>
+      fields.has((c as { __splitBy?: string }).__splitBy as string)
+    );
+    if (!splitsByColor) continue;
     const keys = keysDownTheScreen(n);
-    if (
-      keys !== undefined &&
-      keys.length > 1 &&
-      keys.every((k) => legendKeys.has(String(k)))
-    )
-      return keys.map(String);
-    for (const c of n.children) if (c instanceof GoFishNode) queue.push(c);
+    if (keys !== undefined) return keys;
   }
   return undefined;
 }
@@ -101,14 +96,15 @@ function seriesDownTheScreen(
  *  to bottom: the order the plot lays them down the screen (see
  *  {@link seriesDownTheScreen}), else the color scale's order. */
 function legendEntries(
-  colorMap: Map<any, string>,
+  scale: CategoricalScale,
   content: GoFishNode
 ): Map<any, string> {
-  const byKey = new Map([...colorMap.keys()].map((k) => [String(k), k]));
-  const order = seriesDownTheScreen(content, new Set(byKey.keys()));
+  const colorMap = scale.color;
+  const order = seriesDownTheScreen(content, scale.fields ?? new Set());
   if (order === undefined) return colorMap;
+  const byKey = new Map([...colorMap.keys()].map((k) => [String(k), k]));
   const keys = [
-    ...order.map((k) => byKey.get(k)),
+    ...order.filter((k) => byKey.has(k)).map((k) => byKey.get(k)),
     ...[...colorMap.keys()].filter((k) => !order.includes(String(k))),
   ];
   return new Map(keys.map((k) => [k, colorMap.get(k)!]));
@@ -253,10 +249,9 @@ export async function legendRing(
   const legend =
     "scaleFn" in scale
       ? await legendColorbar(scale.scaleFn, scale.domain)
-      : await legendColumn(legendEntries(scale.color, owner));
-  // The legend tops out with the content: "top" is the end of a y that grows
-  // upward and the start of one that reads top-down.
-  const top = wrapperDirection(owner, 1) === -1 ? "end" : "start";
+      : await legendColumn(legendEntries(scale, owner));
+  // The legend tops out with the content.
+  const top = orientSide("start", wrapperDirection(owner));
   return {
     nodes: [legend],
     constraints: (g, inner) => [

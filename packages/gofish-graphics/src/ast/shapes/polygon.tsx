@@ -1,5 +1,4 @@
 import { packEnclose } from "d3-hierarchy";
-import { axisDirection } from "../axisDirection";
 import { GoFishNode } from "../_node";
 import { boxOfDims } from "../geometry";
 import { GoFishAST } from "../_ast";
@@ -159,7 +158,7 @@ export const Polygon = ({
         node
       ): DisplayList.DisplayItem[] => {
         const [tx, ty] = displayTranslate(transform);
-        const d = axisDirection(node, 1);
+        const d = node.yFrame.direction;
         const displayPoints: Ring = localRef.current.map(([x, y]) => [
           x + tx,
           d * y + ty,
@@ -199,7 +198,7 @@ export const Polygon = ({
       geometry: ({ intrinsicDims }, _children, node) => ({
         box: boxOfDims(intrinsicDims, node.type),
         enclosingCircle: () => {
-          const d = axisDirection(node, 1);
+          const d = node.yFrame.direction;
           const e = packEnclose(
             localRef.current.map(([x, y]) => ({ x, y: d * y, r: 0 }))
           );

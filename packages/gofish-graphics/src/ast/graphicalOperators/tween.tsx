@@ -65,7 +65,6 @@ import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable, type ToPixel } from "../_node";
 import { GoFishRef } from "../_ref";
-import { axisDirection } from "../axisDirection";
 import { resolveColorChannel } from "../../color";
 import {
   fadeItem,
@@ -533,7 +532,7 @@ export const tween = createNodeOperator(
           // keyframes' own boxes were measured. The run was measured in this
           // node's axis order, so its y reads through the node's direction.
           const [tx, ty] = displayTranslate(transform);
-          const yDirection = axisDirection(node, 1);
+          const yDirection = node.yFrame.direction;
           const toLocalPixel = ([px, py]: [number, number]): [number, number] =>
             toPixel([px + tx, yDirection * py + ty]);
 

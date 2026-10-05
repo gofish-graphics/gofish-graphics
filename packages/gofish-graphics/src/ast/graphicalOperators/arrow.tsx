@@ -1,5 +1,4 @@
 import { GoFishAST } from "../_ast";
-import { axisDirection } from "../axisDirection";
 import { GoFishNode, type ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
@@ -105,7 +104,7 @@ export const arrow = createNodeOperator(
 
           // The arrow is computed in the arrow's axis order; `lower` draws
           // pixels, so reflect its y (and its angles) through the direction.
-          const d = axisDirection(node, 1);
+          const d = node.yFrame.direction;
           return {
             intrinsicDims: [
               {

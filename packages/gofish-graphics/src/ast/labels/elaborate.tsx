@@ -6,14 +6,17 @@ import chroma from "chroma-js";
 import { luv } from "culori";
 import { GoFishNode } from "../_node";
 import { Text } from "../shapes/text";
-import { layer } from "../graphicalOperators/layer";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
 import type { AlignAnchor } from "../constraints/shared";
-import { wrapPreservingIdentity } from "../elaborationUtils";
+import { wrapPreservingIdentity, wrapRing } from "../elaborationUtils";
 import { getValue, type MaybeValue } from "../data";
 import { resolveColorChannel } from "../../color";
-import { wrapperDirection, type AxisDirection } from "../axisDirection";
+import {
+  orientSide,
+  wrapperDirection,
+  type AxisDirection,
+} from "../axisDirection";
 import {
   type LabelPosition,
   type LabelSpec,
@@ -136,43 +139,33 @@ function resolveLabelTargets(node: GoFishNode): void {
 /**
  * Which bbox anchor of the TARGET corresponds to a given visual edge, in the
  * axis order of the frame the label constraints run in (`yDirection`, that
- * frame's y direction, see `axisDirection.ts`).
- *
- * `left`/`right` map literally (`left` → bbox min/`"start"`, `right` → bbox
- * max/`"end"`): x always runs with the pixels.
- *
- * `top`/`bottom` follow the y direction: in a frame whose y grows upward (a
- * continuous y, direction −1) `top` is the bbox MAX (`"end"`); in a frame that
- * reads top-down (+1) `top` is the bbox MIN (`"start"`).
+ * frame's y direction). x always runs with the pixels, so `left` is
+ * `"start"` and `right` is `"end"`; `top`/`bottom` are the screen's start
+ * and end edges read through the y direction (`orientSide`).
  */
 function edgeAnchor(
   edge: "top" | "bottom" | "left" | "right",
   yDirection: AxisDirection
 ): AlignAnchor {
-  const up = yDirection === -1;
   switch (edge) {
     case "right":
       return "end";
     case "left":
       return "start";
     case "top":
-      return up ? "end" : "start";
+      return orientSide("start", yDirection);
     case "bottom":
-      return up ? "start" : "end";
+      return orientSide("end", yDirection);
   }
 }
 
 /**
  * Map a `LabelAlignment` (the label option's cross-axis token) to the
- * `AlignAnchor` used to align the label against its target's bbox.
- *
- * For a `top`/`bottom` edge the cross axis is x, which is direction-invariant
- * — the mapping is literal (`start` → left edge, `end` → right edge).
- *
- * For a `left`/`right` edge the cross axis is y, so — like {@link edgeAnchor}
- * — the mapping depends on the y direction: per `LabelPosition`'s documented
- * semantics, `start` means "top" and `end` means "bottom", and which bbox
- * anchor ("start"/"end") that visual side is depends on which way y runs.
+ * `AlignAnchor` used to align the label against its target's bbox. Per
+ * `LabelPosition`'s documented semantics `start` is the left or the top of
+ * the screen and `end` the right or the bottom, so on a `left`/`right` edge
+ * (cross axis y) it reads through the y direction, as {@link edgeAnchor}
+ * does.
  */
 function crossAlignAnchor(
   edge: "top" | "bottom" | "left" | "right",
@@ -181,9 +174,7 @@ function crossAlignAnchor(
 ): AlignAnchor {
   if (align === "center") return "middle";
   const yCross = edge === "left" || edge === "right";
-  const invert = yCross && yDirection === -1;
-  if (!invert) return align === "start" ? "start" : "end";
-  return align === "start" ? "end" : "start";
+  return orientSide(align, yCross ? yDirection : 1);
 }
 
 /** `anchor === "end"` (bbox max) pads INWARD with a negative pitch; `"start"`
@@ -281,10 +272,8 @@ async function wrapWithLabelTexts(
 ): Promise<GoFishNode> {
   // The label constraints run in the wrapper's axis order, which is the
   // wrapped node's: the wrapper's spaces are the node's.
-  const yDirection = wrapperDirection(node, 1);
+  const yDirection = wrapperDirection(node);
   return wrapPreservingIdentity(node, async (content) => {
-    content.name(CONTENT_NAME);
-
     const refs: GoFishNode[] = [];
     const texts: GoFishNode[] = [];
     const pending: { refName: string; textName: string; spec: LabelSpec }[] =
@@ -325,31 +314,16 @@ async function wrapWithLabelTexts(
       }
     }
 
-    const built = (await (layer as any)([
-      content,
-      ...refs,
-      ...texts,
-    ])) as GoFishNode;
-
-    await built.relate((g) => {
-      const cs: any[] = [
-        // Pin the content at its own origin first — constraints apply in
-        // order and placement is first-write-wins, so every label constraint
-        // below (which reads a target via its `ref()`) sees it already
-        // placed and only moves the label `Text`.
-        Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
-          g[CONTENT_NAME],
-        ]),
-      ];
-      for (const { refName, textName, spec } of pending) {
-        cs.push(
-          ...buildLabelConstraints(spec, g[refName], g[textName], yDirection)
-        );
-      }
-      return cs;
+    // The content is seated at its own origin first, so every label
+    // constraint (which reads a target via its `ref()`) sees it already
+    // placed and only moves the label `Text`.
+    return wrapRing(content, CONTENT_NAME, {
+      nodes: [...refs, ...texts],
+      constraints: (g) =>
+        pending.flatMap(({ refName, textName, spec }) =>
+          buildLabelConstraints(spec, g[refName], g[textName], yDirection)
+        ),
     });
-
-    return built;
   });
 }
 

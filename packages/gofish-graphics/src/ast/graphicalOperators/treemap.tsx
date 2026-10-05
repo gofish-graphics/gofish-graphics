@@ -11,7 +11,7 @@ import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 
 import { GoFishNode, Placeable } from "../_node";
 import { GoFishAST } from "../_ast";
-import { axisDirection, fromFrameStart } from "../axisDirection";
+import { fromFrameStart } from "../axisDirection";
 import { createNodeOperator } from "../withGoFish";
 import {
   FancyDims,
@@ -163,7 +163,7 @@ const Treemap = createNodeOperator(
           return [axisSpace(0), axisSpace(1)];
         },
         layout: (_shared, size, scales, childAsts, node) => {
-          const yDirection = axisDirection(node, 1);
+          const yDirection = node.yFrame.direction;
           const xPos = computeAesthetic(
             dims[0].min,
             posFn(scales?.[0]?.map)!,

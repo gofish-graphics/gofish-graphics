@@ -29,7 +29,12 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { niceScope, type Extent } from "./extent";
-import { axisDirection, fromFrameStart, orientScales } from "./axisDirection";
+import {
+  fromFrameStart,
+  orientScales,
+  orientSide,
+  yDirection,
+} from "./axisDirection";
 import { shadowCheckScaleRoot } from "./solver/shadow";
 import {
   perfNow,
@@ -39,7 +44,6 @@ import {
   perfSetCount,
 } from "./perf";
 import {
-  axisTitle,
   elaborateChrome,
   labelRowSettingsFromAngles,
   type LabelRowSettings,
@@ -223,22 +227,6 @@ function manualLabelRowSettings(
 // `layout()` for the full behavior, including the shrink-to-fit case).
 const DEFAULT_CANVAS_SIZE = 400;
 
-// A chart-level axis is titled only when `axes` turns it on (`true`, or a
-// dim's entry that is not `false`); its title is then `axisTitle`'s, with the
-// axis's measure as the inferred name.
-function chartAxisTitle(
-  axes: AxesOptions | undefined,
-  dim: 0 | 1,
-  measure: string | undefined
-): string | undefined {
-  if (axes === true) return measure;
-  const opt =
-    axes && typeof axes === "object" ? axes[dim === 0 ? "x" : "y"] : undefined;
-  return opt === undefined || opt === false
-    ? undefined
-    : axisTitle(opt, measure);
-}
-
 export async function layout(
   {
     w,
@@ -342,28 +330,29 @@ export async function layout(
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
   // chrome wraps itself in it, as ordinary shapes + constraints — its axes,
   // their titles, its legend. The chart's options describe the chrome of the
-  // chart ROOT: its axes are titled (with the measure of the axis, so the
-  // outermost grouping names it), and it carries the legend, because the
-  // color scale is resolved once, from the root, for the whole render.
-  // `legend: false` drops the legend; the color scale still paints the marks.
-  const chartRoot = child;
+  // chart ROOT, stamped on it as its request: its axes are titled (with the
+  // measure of the axis, so the outermost grouping names it), and it carries
+  // the legend, because the color scale is resolved once, from the root, for
+  // the whole render. The legend is built here, from the root as it is laid
+  // out, before any chrome wraps the nodes inside it. `legend: false` drops
+  // the legend; the color scale still paints the marks.
   const unitScale = contexts?.session.scaleContext.unit;
   const hasLegend =
     legend !== false &&
     ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
       isContinuousColorScale(unitScale));
+  child._chromeRequest = {
+    axes,
+    legend: hasLegend
+      ? await legendRing(
+          unitScale as CategoricalScale | ContinuousColorScale,
+          child
+        )
+      : undefined,
+  };
   const elaborated = await elaborateChrome(child, {
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
-    axisTitle: (owner, dim, measure) =>
-      owner === chartRoot ? chartAxisTitle(axes, dim, measure) : undefined,
-    legend: async (owner) =>
-      owner === chartRoot && hasLegend
-        ? legendRing(
-            unitScale as CategoricalScale | ContinuousColorScale,
-            owner
-          )
-        : undefined,
   });
   if (elaborated.changed) {
     child = elaborated.node;
@@ -563,15 +552,9 @@ export async function layout(
   // (and `layout()` reads them back in its own order). The root's order is its
   // frame's: the chrome rings seat what they wrap at their own origin and only
   // add chrome around it.
-  const rootDirection = [
-    axisDirection(plot, 0),
-    axisDirection(plot, 1),
-  ] as const;
+  const rootYDirection = yDirection(plot);
   const __tSolve = perfNow();
-  child.layout(
-    [layoutW, layoutH],
-    orientScales(rootScales, 1, rootDirection[1])
-  );
+  child.layout([layoutW, layoutH], orientScales(rootScales, 1, rootYDirection));
   perfAdd("solve", perfNow() - __tSolve);
   // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
   // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
@@ -615,15 +598,11 @@ export async function layout(
   const placeRoot = (axis: 0 | 1) => {
     const name = axis === 0 ? "x" : "y";
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
-    const direction = rootDirection[axis];
+    const direction = axis === 0 ? 1 : rootYDirection;
     const frame = axis === 0 ? finalW : finalH;
     const atFrameStart = (p: number) => fromFrameStart(p, frame, direction);
     if ((axis === 0 ? w : h) === undefined)
-      child.pinAnchor(
-        name,
-        atFrameStart(offset),
-        direction === 1 ? "min" : "max"
-      );
+      child.pinAnchor(name, atFrameStart(offset), orientSide("min", direction));
     else
       child.place(
         name,
@@ -640,7 +619,7 @@ export async function layout(
     const map = rootScales[axis]?.map;
     if (map === undefined) return undefined;
     const origin = child.projectedTranslate(axis as 0 | 1) ?? 0;
-    const direction = rootDirection[axis];
+    const direction = axis === 0 ? 1 : rootYDirection;
     return (v: number) => origin + direction * pxOf(map, v);
   }) as PixelPosScales;
 

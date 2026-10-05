@@ -69,14 +69,18 @@ import { impliedExtents, type Extent } from "./extent";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
-import type { ScaleContext } from "./gofish";
+import type { AxesOptions, ScaleContext } from "./gofish";
+import type { ChromeRing } from "./elaborationUtils";
 import type { TokenContext } from "./tokenContext";
 import {
-  axisDirection,
+  CANVAS_FRAME,
   orientDims,
   orientScales,
   orientTransform,
   orientView,
+  yDirection,
+  yFrameIn,
+  type YFrame,
 } from "./axisDirection";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
@@ -587,6 +591,13 @@ export class GoFishNode {
    * are chrome, not ink of the content: they sit outside `content`.
    */
   public chrome?: { content: GoFishNode; withAxes: GoFishNode };
+  /**
+   * The chrome this node is asked to carry beyond the axes `resolveAxes`
+   * assigned it: a title on each axis it draws (from the `axes` options) and
+   * a legend ring. The chart options stamp it on the chart root; chrome
+   * elaboration reads it and clears it.
+   */
+  public _chromeRequest?: { axes?: AxesOptions; legend?: ChromeRing };
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
   public _ordinalKeyMap?: Record<string, GoFishNode>;
@@ -615,6 +626,8 @@ export class GoFishNode {
    * correct polar axis (theta vs radial).
    */
   public axisDir?: 0 | 1;
+  /** Memo for {@link yFrame}; cleared with the spaces. */
+  private _yFrame?: YFrame;
   /**
    * The part of this node's elaboration that depends on which axis an axis
    * NAME means: a mark's `dims` option (e.g. `{ theta: { size: 0.5 } }`,
@@ -880,6 +893,22 @@ export class GoFishNode {
     return this._underlyingSpace;
   }
 
+  /**
+   * This node's y frame (see `axisDirection.ts`): its y direction and whether
+   * it sits in a coordinate space, read off its resolved spaces and its
+   * parent's frame. Resolved once, top-down; cleared with the spaces
+   * (`clearUnderlyingSpace`), which every rewrite of the tree re-resolves.
+   */
+  public get yFrame(): YFrame {
+    if (this._yFrame !== undefined) return this._yFrame;
+    if (this._underlyingSpace === undefined)
+      throw new Error(
+        `[gofish] ${this.type}: its y direction was read before its spaces ` +
+          `were resolved.`
+      );
+    return (this._yFrame = yFrameIn(this, this.parent?.yFrame ?? CANVAS_FRAME));
+  }
+
   /** The axis names visible inside this node: the scope {@link
    *  resolveAliases} gives its children, folded from the root down by
    *  `axisScopeFor`, so the innermost coordinate space decides. */
@@ -957,6 +986,7 @@ export class GoFishNode {
    */
   public clearUnderlyingSpace(): void {
     this._underlyingSpace = undefined;
+    this._yFrame = undefined;
     this._extent = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
@@ -1348,8 +1378,8 @@ export class GoFishNode {
    * way in when the two directions differ (`orientScales`).
    */
   public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
-    const direction = axisDirection(this, 1);
-    const parentDirection = axisDirection(this.parent, 1);
+    const direction = this.yFrame.direction;
+    const parentDirection = yDirection(this.parent);
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
       size,

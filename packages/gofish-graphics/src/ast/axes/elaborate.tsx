@@ -6,11 +6,16 @@ import { GoFishNode } from "../_node";
 import { Rect } from "../shapes/rect";
 import { Text } from "../shapes/text";
 import { Spread } from "../graphicalOperators/spread";
-import { layer } from "../graphicalOperators/layer";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
 import type { AlignAnchor } from "../constraints/shared";
-import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
+import {
+  breadthFirst,
+  fmtNum,
+  wrapPreservingIdentity,
+  wrapRing,
+  type ChromeRing,
+} from "../elaborationUtils";
 import { datum } from "../data";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
@@ -25,14 +30,18 @@ import {
   originIs,
   spaceMeasure,
 } from "../underlyingSpace";
-import type { AxisOptions } from "../gofish";
-import { wrapperDirection, type AxisDirection } from "../axisDirection";
+import type { AxesOptions, AxisOptions } from "../gofish";
+import {
+  orientSide,
+  wrapperDirection,
+  type AxisDirection,
+} from "../axisDirection";
 
 /**
  * The edge an axis on `dim` seats on when its `side` is not given, in the
  * owner's axis order (`"start"` or `"end"`). A continuous x axis sits at the
- * visual BOTTOM: the `start` of a y that grows upward (`crossDirection` −1),
- * the `end` of a y that reads top-down. Every other axis takes `"start"` in
+ * bottom of the screen (`crossDirection` is its owner's y direction). Every
+ * other axis takes `"start"` in
  * its frame: a y axis sits on the left, and a category x axis sits at the
  * start of its y (the bottom of a bar chart, the top of a heatmap).
  */
@@ -42,7 +51,7 @@ export function defaultAxisSide(
   crossDirection: AxisDirection
 ): "start" | "end" {
   if (dim === 1 || space === undefined || !isCONTINUOUS(space)) return "start";
-  return crossDirection === -1 ? "start" : "end";
+  return orientSide("end", crossDirection);
 }
 
 /**
@@ -75,6 +84,10 @@ const AXIS_CONTENT_GAP = 6; // gap between axis line and content
 const TICK_COUNT = 10;
 const LABEL_FONT_SIZE = 10;
 const AXIS_COLOR = "gray";
+
+/** Per-dim [x, y] axis edge, in the owner's axis order; undefined = none
+ *  given (an option) or no axis on that dim (an owner's result). */
+type AxisSides = ["start" | "end" | undefined, "start" | "end" | undefined];
 
 export type AxisElaboration = {
   /** Shapes to add as siblings of the content inside the wrapping layer. */
@@ -236,7 +249,7 @@ function tickMark(
   crossDirection: AxisDirection,
   labelAngle?: number
 ): GoFishNode {
-  const atPixelStart = (side === "start") === (crossDirection === 1);
+  const atPixelStart = side === orientSide("start", crossDirection);
   const text = Text({
     text: label,
     fontSize: LABEL_FONT_SIZE,
@@ -669,18 +682,13 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
   // the real (later-sibling) band — collapsing every label past the first onto
   // one slot. Level-order makes "shallower wins" hold globally, not just within
   // a subtree, so the bands always claim their keys before any datum node.
-  const queue: GoFishNode[] = [node];
-  while (queue.length > 0) {
-    const n = queue.shift()!;
+  for (const n of breadthFirst(node)) {
     if (n._ordinalKeyMap) {
       for (const k of Object.keys(n._ordinalKeyMap)) {
         if (!(k in out)) out[k] = n._ordinalKeyMap[k];
       }
     }
     if (n.key !== undefined && !(n.key in out)) out[n.key] = n;
-    n.children.forEach((c) => {
-      if (c instanceof GoFishNode) queue.push(c);
-    });
   }
   return out;
 }
@@ -704,7 +712,7 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  */
 function elaborationsFor(
   node: GoFishNode,
-  sides: ["start" | "end" | undefined, "start" | "end" | undefined],
+  sides: AxisSides,
   labelSettings: LabelRowSettings = () => undefined,
   tierCounts: [number, number] = [0, 0]
 ): {
@@ -716,8 +724,9 @@ function elaborationsFor(
   /** Per-dim [x, y]: did this node own (and elaborate) an axis on that dim at
    *  all — including an ordinal one, which contributes no `anchors` entry. */
   owned: [boolean, boolean];
-  /** Per-dim [x, y]: the edge each axis seats on, in the node's axis order. */
-  sides: ["start" | "end", "start" | "end"];
+  /** Per-dim [x, y]: the edge each owned axis seats on, in the node's axis
+   *  order; undefined on a dim the node owns no axis on. */
+  sides: AxisSides;
   /** Per-dim ordinal-tier count, incremented for each dim this node claimed
    *  an ordinal axis on (see the doc comment above). */
   tierCounts: [number, number];
@@ -729,7 +738,7 @@ function elaborationsFor(
       refBased: [],
       anchors: [undefined, undefined],
       owned: [false, false],
-      sides: ["start", "start"],
+      sides: [undefined, undefined],
       tierCounts,
     };
   // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
@@ -771,9 +780,11 @@ function elaborationsFor(
   const owned: [boolean, boolean] = [false, false];
   // Which edge each axis seats on, in the axis order of the wrapper it is
   // seated in: the explicit `side`, else the default (`defaultAxisSide`).
+  // The direction of the axis across `dim`, in that wrapper: only y has one.
+  const crossDirection = (dim: 0 | 1): AxisDirection =>
+    dim === 0 ? wrapperDirection(node) : 1;
   const axisSide = (dim: 0 | 1): "start" | "end" =>
-    sides[dim] ??
-    defaultAxisSide(dim, spaceFor(dim), wrapperDirection(node, cross(dim)));
+    sides[dim] ?? defaultAxisSide(dim, spaceFor(dim), crossDirection(dim));
   // `tier` is 0 for a continuous/difference axis (always single-tier) or the
   // bubbled-up ordinal tier index (0 = innermost) for an ordinal one. Returns
   // the full hanging-point descriptor (see `LabelRotation`), not just the
@@ -805,7 +816,7 @@ function elaborationsFor(
         prefix,
         crossFloor,
         axisSide(dim),
-        wrapperDirection(node, cross(dim)),
+        crossDirection(dim),
         resolvedLabelRotation({ dim, kind: "continuous", tier: 0 }),
         s.mirrored === true
       );
@@ -853,7 +864,10 @@ function elaborationsFor(
     refBased,
     anchors,
     owned,
-    sides: [axisSide(0), axisSide(1)],
+    sides: [
+      owned[0] ? axisSide(0) : undefined,
+      owned[1] ? axisSide(1) : undefined,
+    ],
     tierCounts: outTierCounts,
   };
 }
@@ -876,54 +890,14 @@ function elaborationsFor(
 // The node's identity (name, key, visibility) moves onto the outermost ring,
 // which records the boxes inside it as `chrome` (see `GoFishNode.chrome`).
 
-/** One ring of chrome: its shapes, and the constraints that seat them past
- *  the box inside the ring (named `inner`), built from the ring's
- *  name→ref map. */
-export type ChromeRing = {
-  nodes: GoFishNode[];
-  constraints: (g: Record<string, any>, inner: string) => any[];
-};
-
-/** Which chrome the chart asks for, beyond the axes `resolveAxes` assigned. */
+/** How the chrome a chart asks for is drawn, beyond the axes `resolveAxes`
+ *  assigned and the requests stamped on nodes (`GoFishNode._chromeRequest`). */
 export type ChromeOptions = {
   /** Per-dim axis `side`; undefined = the axis's default edge. */
-  sides?: ["start" | "end" | undefined, "start" | "end" | undefined];
+  sides?: AxisSides;
   /** How each axis label row is drawn. */
   labelSettings?: LabelRowSettings;
-  /** The title of the axis `owner` draws on `dim`, given the measure that
-   *  axis shows (read before elaboration, so the outermost grouping names
-   *  its axis); undefined = untitled. */
-  axisTitle?: (
-    owner: GoFishNode,
-    dim: 0 | 1,
-    measure: string | undefined
-  ) => string | undefined;
-  /** The legend ring `owner` carries, if any (see `legends/elaborate.tsx`).
-   *  `owner` is the node without its chrome. */
-  legend?: (owner: GoFishNode) => Promise<ChromeRing | undefined>;
 };
-
-/** Wrap `inner` in one ring: a `layer` of `inner` (named `name`) and the
- *  ring's shapes. `inner` is seated first (constraints apply in order and
- *  placement is first-write-wins, so the box the ring reads is placed before
- *  anything seats off it): at `seat`, by its baseline. A seat with neither
- *  axis given leaves `inner` to the layer. */
-async function wrapRing(
-  inner: GoFishNode,
-  name: string,
-  ring: ChromeRing,
-  seat: { x?: any; y?: any } = { x: 0, y: 0 }
-): Promise<GoFishNode> {
-  inner.name(name);
-  const root = (await (layer as any)([inner, ...ring.nodes])) as GoFishNode;
-  await root.relate((g) => [
-    ...(seat.x === undefined && seat.y === undefined
-      ? []
-      : [Constraint.position({ ...seat, anchor: "baseline" }, [g[name]])]),
-    ...ring.constraints(g, name),
-  ]);
-  return root;
-}
 
 /**
  * Recursively elaborate chrome. Children are processed first (bottom-up) so an
@@ -931,9 +905,9 @@ async function wrapRing(
  * inherits the wrapped node's `key`/`_name` so faceting and external refs keep
  * resolving to it.
  *
- * What a node owns: the axes `resolveAxes` assigned it, a title on each of
- * those that `options.axisTitle` names, and the legend `options.legend`
- * gives it.
+ * What a node owns: the axes `resolveAxes` assigned it, and what its
+ * `_chromeRequest` asks for: a title on each of those axes that the `axes`
+ * options name, and a legend ring.
  *
  * It also bubbles up `tierCounts` — the per-dim count of ordinal axis tiers
  * elaborated so far in this subtree — purely as an output (nothing is passed
@@ -986,16 +960,18 @@ export async function elaborateChrome(
   );
   // A title names an axis this node draws. The measure is read off the
   // node's own space, which elaboration has not re-resolved yet.
+  const request = node._chromeRequest;
+  node._chromeRequest = undefined;
   const titles = ([0, 1] as const).map((dim) =>
-    owned[dim]
-      ? options.axisTitle?.(
-          node,
+    owned[dim] && request !== undefined
+      ? chartAxisTitle(
+          request.axes,
           dim,
           spaceMeasure(node._underlyingSpace?.[dim])
         )
       : undefined
   ) as [string | undefined, string | undefined];
-  const legend = await options.legend?.(node);
+  const legend = request?.legend;
 
   if (
     constrained.length === 0 &&
@@ -1091,6 +1067,23 @@ export async function elaborateChrome(
 export const TITLE_FONT_SIZE = 11;
 export const TITLE_COLOR = "gray";
 
+/** The title of the axis on `dim` from the chart's `axes` options: it is
+ *  titled only when `axes` turns it on (`true`, or a dim's entry that is not
+ *  `false`); its title is then {@link axisTitle}'s, with the axis's measure
+ *  as the inferred name. */
+function chartAxisTitle(
+  axes: AxesOptions | undefined,
+  dim: 0 | 1,
+  measure: string | undefined
+): string | undefined {
+  if (axes === true) return measure;
+  const opt =
+    axes && typeof axes === "object" ? axes[dim === 0 ? "x" : "y"] : undefined;
+  return opt === undefined || opt === false
+    ? undefined
+    : axisTitle(opt, measure);
+}
+
 /** The title of a drawn axis from its `axes` option: the option's `title`,
  *  none when it is `false`, and otherwise `inferred` (the axis's measure, or
  *  a name the caller falls back to). Whether the axis is drawn at all is the
@@ -1145,7 +1138,7 @@ export function yAxisTitle(text: string): GoFishNode {
 function axisTitles(
   titles: [string | undefined, string | undefined],
   anchors: [GoFishNode, GoFishNode],
-  sides: ["start" | "end", "start" | "end"]
+  sides: AxisSides
 ): ChromeRing {
   const [xTitle, yTitle] = titles;
   const refs: GoFishNode[] = [];

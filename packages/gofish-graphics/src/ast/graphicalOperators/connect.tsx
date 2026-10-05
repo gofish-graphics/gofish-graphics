@@ -8,7 +8,6 @@ import {
   transformPath,
 } from "../../path";
 import { GoFishAST } from "../_ast";
-import { axisDirection } from "../axisDirection";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
@@ -925,7 +924,7 @@ export const connect = createNodeOperator(
           // local pixel map so each path point lands at its absolute pixel.
           // The paths were built in the connector's axis order; reading their
           // y through its direction gives pixels.
-          const yDirection = axisDirection(node, 1);
+          const yDirection = node.yFrame.direction;
           const [tx, ty] = displayTranslate(transform);
           const offsetToPixel: ToPixel = ([px, py]) =>
             toPixel([px + tx, py + ty]);

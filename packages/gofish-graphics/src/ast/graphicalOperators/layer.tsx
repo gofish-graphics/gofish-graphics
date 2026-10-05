@@ -31,7 +31,7 @@ import { bakeChildren } from "../coordinateTransforms/bake";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { NestedOperand, nestedGap } from "../constraints/nestedOperand";
-import { axisDirection, orientView, rawPlaceable } from "../axisDirection";
+import { fromFrameStart, orientView, rawPlaceable } from "../axisDirection";
 import type { RigidAttachment } from "../constraints/placementSolver";
 import {
   applyConstraints,
@@ -501,7 +501,7 @@ export const layer = createNodeOperatorSequential(
         layout: (shared, size, scales, children, node) => {
           // This layer's y direction: its children and constraints are read
           // in this axis order (see `axisDirection.ts`).
-          const direction = axisDirection(node, 1);
+          const direction = node.yFrame.direction;
           // Split the incoming single-carrier scale into its two half-channels
           // for the proposal planning below: σ (size slope) feeds sizing and the
           // child σ forwarding; the anchored map feeds `position` constraints and
@@ -684,13 +684,7 @@ export const layer = createNodeOperatorSequential(
                   cp.spaceOn?.(axis as 0 | 1)
                 ).seatPx
             );
-            const raw = rawPlaceable(cp);
-            // A `ref` holds its target's box, seated as its target is.
-            const seated = raw instanceof GoFishRef ? raw.targetNode : raw;
-            if (
-              direction === -1 ||
-              axisDirection(seated as GoFishNode | undefined, 1) === 1
-            )
+            if (direction === -1 || children[i].yFrame.direction === 1)
               return [bx, by];
             const frame = Number.isFinite(childFrames[i])
               ? childFrames[i]
@@ -834,15 +828,17 @@ export const layer = createNodeOperatorSequential(
                   direction
                 ) as unknown as (typeof childPlaceables)[number]
               );
-              const gap: [number, number] =
-                direction === 1
-                  ? gapPx
-                  : [
-                      gapPx[0],
-                      (containerPx.dims[1].size ?? 0) -
-                        gapPx[1] -
-                        (op.node.dims[1].size ?? 0),
-                    ];
+              // The same offset in this layer's axis order: from the
+              // container's start edge to the operand's, which is its top
+              // when y reads top-down and its bottom when y grows upward.
+              const gap: [number, number] = [
+                gapPx[0],
+                fromFrameStart(
+                  gapPx[1],
+                  containerPx.dims[1].size ?? 0,
+                  direction
+                ) - (direction === 1 ? 0 : (op.node.dims[1].size ?? 0)),
+              ];
               rigid.set(name, { container, gap });
             }
 
@@ -915,23 +911,27 @@ export const layer = createNodeOperatorSequential(
           for (const i of relateOrder.afterSolve) layoutChild(i);
 
           // Calculate the bounding box of all children (NaN-safe; see
-          // foldFinite for why undefined extents are skipped).
-          const minX = foldFinite(
-            childPlaceables.map((cp) => cp.dims[0].min),
-            Math.min
-          );
-          const maxX = foldFinite(
-            childPlaceables.map((cp) => cp.dims[0].max),
-            Math.max
-          );
-          const minY = foldFinite(
-            childPlaceables.map((cp) => cp.dims[1].min),
-            Math.min
-          );
-          const maxY = foldFinite(
-            childPlaceables.map((cp) => cp.dims[1].max),
-            Math.max
-          );
+          // foldFinite for why undefined extents are skipped). Each child's
+          // box is read once.
+          const mins: [(number | undefined)[], (number | undefined)[]] = [
+            [],
+            [],
+          ];
+          const maxs: [(number | undefined)[], (number | undefined)[]] = [
+            [],
+            [],
+          ];
+          for (const cp of childPlaceables) {
+            const d = cp.dims;
+            for (const axis of [0, 1] as const) {
+              mins[axis].push(d[axis].min);
+              maxs[axis].push(d[axis].max);
+            }
+          }
+          const minX = foldFinite(mins[0], Math.min);
+          const maxX = foldFinite(maxs[0], Math.max);
+          const minY = foldFinite(mins[1], Math.min);
+          const maxY = foldFinite(maxs[1], Math.max);
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
 

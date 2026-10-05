@@ -20,7 +20,11 @@ import {
   hasOrigin,
 } from "../underlyingSpace";
 import { Extent, impliedExtent } from "../extent";
-import { axisDirection } from "../axisDirection";
+import {
+  inCoordinateSpace,
+  yDirection,
+  type FramedNode,
+} from "../axisDirection";
 import * as Monotonic from "../../util/monotonic";
 import * as Interval from "../../util/interval";
 
@@ -127,9 +131,7 @@ export function distributeChildrenInPlacementOrder(
 
 /** The minimal node shape {@link keysDownTheScreen} reads (duck-typed: a
  *  `GoFishNode`, without importing it). */
-type DistributingNode = {
-  type?: string;
-  parent?: DistributingNode;
+type DistributingNode = FramedNode & {
   constraints: readonly { type: string }[];
   children: readonly unknown[];
 };
@@ -156,9 +158,7 @@ export function keysDownTheScreen(
     (c): c is DistributeConstraint =>
       c.type === "distribute" && (c as DistributeConstraint).dir === "y"
   );
-  if (chain === undefined) return undefined;
-  for (let n: DistributingNode | undefined = node; n; n = n.parent)
-    if (n.type === "coord") return undefined;
+  if (chain === undefined || inCoordinateSpace(node)) return undefined;
   const byName = new Map<string, unknown>();
   for (const child of node.children) {
     const name = (child as { _name?: unknown })._name;
@@ -169,7 +169,7 @@ export function keysDownTheScreen(
   );
   if (keys.some((k) => k === undefined)) return undefined;
   const down = keys as string[];
-  return axisDirection(node as never, 1) === -1 ? [...down].reverse() : down;
+  return yDirection(node) === -1 ? [...down].reverse() : down;
 }
 
 export function distributePlacementAnchors({
