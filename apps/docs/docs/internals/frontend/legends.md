@@ -37,9 +37,11 @@ A legend is the outermost ring of the chrome of the node that owns the color
 encoding (see [Axes](/internals/frontend/axes#the-elaboration-pass) for how
 `elaborateChrome` builds the rings). The color scale is resolved once for the
 whole render, by a walk from the chart root (`resolveColorScale`), so the root
-owns it. `layout()` answers the `legend` option of `ChromeOptions` only for the
-root. It returns `legendRing(scale, root)` when the scale has something to
-show: a non-empty categorical color map, or a continuous color scale. The
+owns it. `layout()` builds `legendRing(scale, root)` when the scale has
+something to show (a non-empty categorical color map, or a continuous color
+scale) and stamps it on the root's chrome request, before chrome elaboration
+wraps any node of the tree; `elaborateChrome` seats it as the root's outermost
+ring. The
 `axes` option plays no part, so a legend appears whenever a color encoding
 resolved.
 
@@ -68,19 +70,21 @@ root = Layer([ titled.name("__legendContent"), legend ])
 [Axis direction](/internals/layout/passes#axis-direction)): the entries are listed
 top to bottom in the order they are given.
 
-The order is the one the plot lays its series out in down the screen, when it
-lays them out along y, and the color scale's own otherwise. The legend does not
-work that out from the shape of the plot. Each operator that chains its parts
+The order is the one the plot lays its color series out in down the screen,
+when it lays them out along y, and the color scale's own otherwise. The legend
+does not work that out from the shape of the plot. Each operator that chains its parts
 along y (a stack or a spread, a `distribute` on y) reports the keys of its parts
 in the order they read down the screen (`keysDownTheScreen` in
 `constraints/distribute.ts`): its placement order, reversed when its y grows
 upward, because such a chain lays its first part at the bottom. A stack reports
 its chain whatever the signs of its parts. Inside a coordinate space the chain's
 y is a coordinate of that space (a polar radius), not the screen's, so it reports
-no order. The legend reads these reports off the content it describes
-(`seriesDownTheScreen`, breadth first) and takes the first chain whose parts are
-all legend entries. So a stacked bar chart lists its last series first, the one at
-the top of each bar. The legend follows the plot; the plot's stacking rule never
+no order. The legend links to its series structurally, by field: the color scale
+records the fields it encodes, and an operator that splits its data by a field
+records that field on each of its parts (`__splitBy`). The legend takes the
+chain of the outermost operator (breadth first, `seriesDownTheScreen`) that
+splits by a field the color scale encodes and lays its parts out along y. So a
+stacked bar chart lists its last series first, the one at the top of each bar. The legend follows the plot; the plot's stacking rule never
 reads the legend.
 
 A continuous (gradient) colorbar is a continuous value axis, so it grows upward:
@@ -104,8 +108,8 @@ the first one places the box the other two read:
    right of the box, which includes the axis labels and titles.
 3. `align({ y: top }, [box, column])` top-aligns the column with the box. The
    constraint runs in the ring's axis order, so "top" is the `end` of a y that
-   grows upward and the `start` of one that reads top-down (a heatmap). The
-   ring reads this off `wrapperDirection` of the root.
+   grows upward and the `start` of one that reads top-down (a heatmap):
+   `orientSide("start", wrapperDirection(root))`.
 
 The outermost ring inherits the root's `key` and `_name`, so faceting, refs, and
 `selectAll` keep resolving to it.

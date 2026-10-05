@@ -233,11 +233,10 @@ where that meets the canvas:
 - Its lower hands its interior `inPixels(transform)`, which reflects y on the way in
   and on the way out, so each warped primitive lands in y-down pixels. The grid and
   polar axes it draws itself are computed in the plane and mapped by `planeToPixel`.
-- Its own box is a pixel box (direction `+1`), so the coord is the one node whose
-  interior runs opposite to its own box. It reads and places its children through a
-  view in the interior's order (`orientView(child, INTERIOR)`), hands them its
-  interior σ-maps expressed in its own pixels (`orientScales`), and stores the plane
-  origin (`contentOffset`) as a pixel offset from its box's top.
+- Its own box has the interior's direction too (`-1`: it is seated from its bottom,
+  like a chart), so it reads and places its children through the ordinary node
+  boundary (see [Axis direction](/internals/layout/passes#axis-direction)), and
+  stores the plane origin (`contentOffset`) in that upward order.
 
 ## Fitting the subtree to the coordinate budget
 

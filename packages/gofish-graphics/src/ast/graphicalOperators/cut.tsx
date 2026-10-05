@@ -97,11 +97,11 @@ async function buildSliceNode(
   const insetExtent = Math.max(0, extent - inset);
   const insetOffset = offset + inset / 2;
 
-  // Image and rect render with an internal scale(1, -1) that flips their
-  // y-axis so the source is right-side up in chart-y space. To bring source
-  // pixels [insetOffset, insetOffset + insetExtent] into slice-local
-  // [0, insetExtent] on y, translate by -(sourceDimAlong - insetOffset -
-  // insetExtent), not -insetOffset. The x axis has no such flip.
+  // The offset is in the slice's axis order. On y that order grows upward
+  // (see `axisDirection.ts`), so source pixels [insetOffset, insetOffset +
+  // insetExtent], counted from the source's top, are reached by translating
+  // by -(sourceDimAlong - insetOffset - insetExtent), counted from its
+  // bottom, not by -insetOffset. x runs with the pixels.
   const translateOffset =
     dirIdx === 1 ? -(sourceDimAlong - insetOffset - insetExtent) : -insetOffset;
 

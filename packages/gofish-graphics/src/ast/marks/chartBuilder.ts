@@ -1300,9 +1300,10 @@ export class LayerBuilder extends RenderableBuilder {
  * apps/docs/docs/js/api/core/render.md). Axis titles are inferred downstream
  * from each resolved space's `measure` (see `gofish`) — both continuous
  * (channel field) and ordinal (grouping field) spaces carry one — so no
- * field-name hint is threaded from the builder. y-up is likewise decided by
- * the root render from the resolved y space (a CONTINUOUS value axis flips, an
- * ORDINAL category axis reads top-down), not forced here (issue #143/#16).
+ * field-name hint is threaded from the builder. Which way y runs is likewise
+ * not forced here: each node reads its own direction off its resolved y space
+ * at layout (a continuous value axis grows upward, an ordinal category axis
+ * reads top-down; see `axisDirection.ts`).
  */
 async function resolveForRender(
   this: RenderableBuilder,

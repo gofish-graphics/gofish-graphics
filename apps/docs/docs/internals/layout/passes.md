@@ -418,9 +418,9 @@ It applies layout algorithms (stacking, positioning, etc.), calculates intrinsic
 
 Layout stores every node's geometry (its local box, its translate, its bbox ledger)
 in **y-down pixels**, the canvas's own frame. Nothing is mirrored later. What makes a
-continuous y grow upward is the node's **axis direction** (`axisDirection(node, dim)`
-in `src/ast/axisDirection.ts`), the one resolution site for which way a node's axis
-order runs on the screen:
+continuous y grow upward is the node's **axis direction** (`yDirection(node)` in
+`src/ast/axisDirection.ts`), the one resolution site for which way a node's axis
+order runs on the screen. Only y has one to resolve; x always runs with the pixels:
 
 - `+1`: the order runs with the pixels. Every x axis, and a discrete y (an ordinal
   space, or a spread along y, whose space is UNDEFINED when its children carry no
@@ -438,15 +438,22 @@ its box's start edge in its own axis order (the top in a frame that reads top-do
 the bottom in one that grows upward), so `y`, a parent's seating and every operator
 treat it as they treat a rect. The glyphs' own anchor (the point on the baseline that
 `textAnchor` and `rotate` refer to) sits inside that box; the text lowers it from
-the origin (`glyphDy`).
+the origin by `glyphDy`, the box's top in pixels less the glyphs' top.
 
 It is read off the node's own resolved underlying space (for a node that roots its
 own σ-scope, the space it keeps for itself, `selfScaledSpace`), so it is local: an
 ordinal spread inside a bar chart reads top-down inside, and a bar chart inside an
-ordinal spread grows upward inside its row. Everything inside a `coord` is `-1`,
-because a coordinate transform is math-handed; the `coord` itself is a pixel box
-(`+1`) and converts between the two (see
-[Flattening the Scenegraph](/internals/layout/coord-flattening)).
+ordinal spread grows upward inside its row. A `coord` and everything inside it is
+`-1`, because a coordinate transform is math-handed; the `coord` reflects y where its
+interior meets the canvas (see
+[Flattening the Scenegraph](/internals/layout/coord-flattening)). A `ref` takes its
+target's direction.
+
+Each node resolves its direction once, top-down, into `GoFishNode.yFrame` (the
+direction plus whether the node is in a coordinate space), from its resolved spaces
+and its parent's frame. The frame is cleared with the spaces
+(`clearUnderlyingSpace`), which every rewrite of the tree re-resolves; reading it
+before the node's spaces are resolved is an error.
 
 Operators never consult it directly. A node's `_layout` reasons in its own **axis
 order** (`order = direction · pixel`), and `GoFishNode.layout` converts at the node
@@ -460,15 +467,19 @@ unchanged:
 - the node is handed back to its parent as a view in the PARENT's axis order
   (`orientView`), which reflects every y read (box, anchors, translate, shape) and
   every y write (placements, extents) about the parent's local origin. Anchors swap
-  `min`↔`max`; `center` and `baseline` stay.
+  `min`↔`max` (`orientSide`); `center` and `baseline` stay. The view is built once
+  per child, and its reflected shape is rebuilt only when the child's own is.
 
 A `ref` stores a pixel copy of its target, so it is read through its parent's view
 like any child. An elaboration wrapper (axes, labels, titles, a legend) builds its
 constraints before its own space is resolved, so it reads its direction off
 `wrapperDirection(node)`: the direction of a layer that reports the wrapped node's
-spaces and takes its parent. Geometry a node keeps for its own `lower` (a connector's paths, an
-arrow, a polygon's vertices) is in its axis order too, so the node reflects it
-through its direction when it lowers. A node that runs a pixel-native algorithm
+spaces and takes its parent. A side named on the screen (the top, the bottom) is
+turned into the side in a frame's axis order by `orientSide("start" | "end",
+direction)`. Geometry a node keeps for its own `lower` (a connector's paths, an
+arrow, a polygon's vertices, a tween's run) is in its axis order too; `lower`
+receives one node-local map, `local` (`p ↦ translate + (x, direction·y)`), the one
+place that geometry is reflected. A node that runs a pixel-native algorithm
 (the treemap's d3 tiling) reads its y from its frame's start edge
 (`fromFrameStart`), where it places its children.
 
@@ -529,10 +540,9 @@ dimension _is_ given, `layout()` additionally measures how far the laid-out tree
 extends past the authoritative extent on each of the four sides — including content a constraint
 seated _beyond_ the canvas, e.g. a marginal histogram's bands above and to the
 right of a scatter — and the render pass reserves exactly that, replacing the
-former fixed `LEGEND_MARGIN` constant. The right side is split into two measured
-overhangs: a `rightOverhang` for a legend swatch column (gated on whether a legend
-was added) and a `rightContentOverhang` for any non-legend content displaced past
-the right edge — see Render Pass 2 below for why the split is necessary. See
+former fixed `LEGEND_MARGIN` constant. With the right overhang it reports
+whether the root carries a legend (`hasLegend`), which decides how the right side
+is reserved — see Render Pass 1 below for why. See
 [Legends](/internals/frontend/legends).
 
 > Literal pixel sizes are invisible to the underlying-space tree (a fixed-size
@@ -771,10 +781,10 @@ return render(
     svgPadding,
     defs,
     rightOverhang: data.rightOverhang,
-    rightContentOverhang: data.rightContentOverhang,
     topOverhang: data.topOverhang,
     leftOverhang: data.leftOverhang,
     bottomOverhang: data.bottomOverhang,
+    hasLegend: data.hasLegend,
   },
   data.child
 );
@@ -782,13 +792,14 @@ return render(
 
 `render()` no longer takes `axes`/`axisFields` or the scale/space context — all
 the chrome is in the laid-out tree by now, so render only needs the computed
-extent and the measured per-side overhangs to size the SVG. It computes the gutter
-reserves, builds the `toPixel` coordinate map (below), lowers the baked tree, and
-paints each item into an `<svg>`.
+extent and the measured per-side overhangs to size the SVG. It computes the SVG's
+size and the `toPixel` coordinate map (below) with `svgFrame`, lowers the baked tree,
+and paints each item into an `<svg>`. `toDisplayList` sizes its viewport with the
+same `svgFrame`.
 
 ### Render Pass 1: Chrome Reservation
 
-**Location**: `src/ast/gofish.tsx` (`render()`)
+**Location**: `src/ast/gofish.tsx` (`svgFrame()`)
 
 `render()` draws **no chart chrome of its own** — no axis lines, tick marks, tick
 labels, ordinal category labels, _or titles_, and no legend swatches. All of it
@@ -798,23 +809,24 @@ node tree like any other shape. The former bespoke render-time path (hand-writte
 has been deleted, so `render()` has zero chart-chrome special cases left.
 
 What `render()` _does_ do is size the SVG around the measured extent of that
-chrome, on all four sides. `layout()` hands it five gutter measurements:
+chrome, on all four sides. `layout()` hands it four gutter measurements:
 `leftOverhang`, `bottomOverhang`, and `topOverhang` (negative-space gutters and
 top overflow off the outermost wrapper: tick/label rows, the seated y-title and
-x-title, and any content a constraint seated above the canvas), plus the two
-right-side overhangs — `rightOverhang` (the legend swatch column) and
-`rightContentOverhang` (non-legend content displaced past the right edge). The
-render pass reserves exactly enough on each side:
+x-title, and any content a constraint seated above the canvas), and
+`rightOverhang` (a legend column, or content displaced past the right edge), plus
+`hasLegend`. `svgFrame` reserves exactly enough on each side:
 
 ```typescript
 const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
 const reserve = (o: number) =>
   o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
-const leftReserve = reserve(leftOverhang);
-const bottomReserve = reserve(bottomOverhang);
-const topReserve = reserve(topOverhang);
-// right side: legend column + non-legend displaced content
-// width = leftReserve + width + rightOverhang + reserve(rightContentOverhang)
+const left = reserve(leftOverhang);
+const top = reserve(topOverhang);
+const bottom = reserve(bottomOverhang);
+// the right side: a legend column keeps a full `pad` beyond it
+width = hasLegend
+  ? left + width + rightOverhang + reserve(0)
+  : left + width + reserve(rightOverhang);
 ```
 
 The `o > 0` guard keeps a chart with `padding: 0` and no chrome at zero reserve
@@ -834,9 +846,9 @@ with a legend column historically reserves its overhang plus `pad`, while displa
 two cannot be unified by magnitude — a single-row legend overhangs by roughly the
 same few pixels as a wide rightmost x-tick label, yet the legend must be _added_
 to the width while the tick spill must be _absorbed_ into `pad`. Only whether
-the root carries a legend can tell them apart, so a chart with a legend reports
-its right overhang as `rightOverhang`; everything else flows through `rightContentOverhang`
-and `reserve()`. This is the one place a chart-chrome flag still influences
+the root carries a legend can tell them apart, so `layout()` reports `hasLegend`
+with the one right overhang, and `svgFrame` adds it plus `pad` beside a legend and
+runs it through `reserve()` otherwise. This is the one place a chart-chrome flag still influences
 sizing — kept deliberately, because the distinction is semantic, not geometric.
 
 ### Render Pass 2: SVG Container Creation
@@ -845,8 +857,8 @@ sizing — kept deliberately, because the distinction is semantic, not geometric
 
 ```typescript
 <svg
-  width={leftReserve + width + rightOverhang + reserve(rightContentOverhang)}
-  height={topReserve + height + bottomReserve}
+  width={frame.width}
+  height={frame.height}
   xmlns="http://www.w3.org/2000/svg"
 >
 ```
@@ -865,7 +877,7 @@ because layout placed it that way (see [Axis direction](#axis-direction)). So th
 on the render session only adds the gutter offset:
 
 ```typescript
-const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+toPixel: ([gx, gy]) => [gx + left, gy + top], // in svgFrame
 ```
 
 The lower pass produces items already in **final absolute pixels**: no flip group, no

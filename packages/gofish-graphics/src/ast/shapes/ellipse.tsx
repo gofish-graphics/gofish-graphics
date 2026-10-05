@@ -141,7 +141,7 @@ export const Ellipse = ({
         });
 
         // Build an EllipseItem from a display-space center; radii are unchanged
-        // by `toPixel` (it is translate + y-flip only).
+        // by `toPixel` (it is a translate).
         const ellipseItem = (
           cx: number,
           cy: number,

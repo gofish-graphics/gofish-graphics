@@ -44,10 +44,11 @@ root   = Layer([ titles.name("__legendContent"), legend ])
 A node gets only the rings it has shapes for. Its chrome is:
 
 - the axes `resolveAxes` assigned it (the first two rings);
-- a title on each of those axes that the `axisTitle` option of
-  `ChromeOptions` names (see [Axis titles](#axis-titles));
-- the legend that the `legend` option gives it (see
-  [Legends](/internals/frontend/legends)).
+- what its chrome request (`GoFishNode._chromeRequest`) asks for: a title on
+  each of those axes that the request's `axes` options name (see
+  [Axis titles](#axis-titles)), and a legend ring (see
+  [Legends](/internals/frontend/legends)). The chart options stamp the request
+  on the chart root; `elaborateChrome` reads it, synchronously, and clears it.
 
 The node's identity (name, key, visibility) moves onto the outermost ring. That
 ring also records the boxes inside it as `GoFishNode.chrome`:
@@ -264,7 +265,8 @@ difference-axis delta labels are not tagged, since the angle does not apply to
 them). After a run, `collectLabelBoxes` walks the laid-out tree, and for each
 tagged label reads its unrotated text box and rotation from the `Text` node and
 its pivot: its origin, found by summing its own and every ancestor's
-`projectedTranslate`, plus the glyph offset the text keeps (`glyphDy`). That
+`projectedTranslate`, plus the glyph offset the text keeps (`glyphDy`, the
+box's top in pixels less the glyphs' top). That
 puts every label in the root's layout frame, which is screen pixels up to the
 gutter offset, so overlap measured there equals overlap on screen.
 
@@ -464,14 +466,14 @@ elaborated axis share a coordinate frame.
 ## Axis titles
 
 A title is a ring of the chrome of the node that owns its axis. `elaborateChrome`
-asks the `axisTitle` option of `ChromeOptions` for the title of each axis the
-node draws. It passes the measure of that axis, read off the node's own space
-before elaboration re-resolves it. That is why a grouped bar chart's x title
+titles each axis the node draws from the `axes` options in the node's chrome
+request (`chartAxisTitle`), with the measure of that axis, read off the node's own
+space before elaboration re-resolves it. That is why a grouped bar chart's x title
 names the outer grouping ("lake") and not the inner one ("species"): the inner
 axes inserted below the root would change the root's space after elaboration.
 
 The chart's `axes` options describe the chrome of the chart root, so `layout()`
-answers `axisTitle` only for the root. It titles each axis the root owns that
+stamps them only on the root. It titles each axis the root owns that
 the options turn on, with the option's `title` or else the measure. Axes owned
 deeper in the tree, e.g. the per-panel axes of the Gapminder panels, get no
 title. The mechanism does not depend on this choice. A nested chart that

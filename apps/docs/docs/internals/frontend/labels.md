@@ -118,7 +118,8 @@ placed):
    content at its own origin. The content is referenced by the label
    constraints below, and a constraint-referenced child skips the layer's
    phase-1 baseline placement; this re-states that placement explicitly, the
-   same pin every chrome ring (`wrapRing` in `axes/elaborate.tsx`) uses for the same reason.
+   same pin every chrome ring uses for the same reason: the label wrap is built
+   with the same `wrapRing` (in `elaborationUtils.ts`).
 2. Per target × spec, the constraints `buildLabelConstraints` derives from the
    spec's `LabelPosition` (below), relating the spec's `Text` to a
    `ref(target)` stand-in.

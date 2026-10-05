@@ -10,8 +10,7 @@
  * user-supplied `defs: JSX.Element[]`. Both backends consume the SAME display
  * list; a cross-check test keeps them in lockstep.
  *
- * Items are already in final absolute y-down pixels (the lower pass folded the
- * flip into `toPixel`), so there is no outer `<g scale(1,-1)>` and no per-shape
+ * Items are already in final absolute y-down pixels, so there is no per-shape
  * transform — each item paints verbatim.
  */
 

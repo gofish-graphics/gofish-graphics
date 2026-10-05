@@ -53,12 +53,12 @@ session (`RenderSession.toPixel` in `_node.ts`) before the baked entries lower. 
 only adds the gutter offset:
 
 ```ts
-const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+toPixel: ([gx, gy]) => [gx + left, gy + top], // svgFrame in gofish.tsx
 ```
 
 So a continuous y axis growing upward is not something paint does. Layout places it
-that way. Every node's y axis has a **direction**, `axisDirection(node, 1)` in
-`ast/axisDirection.ts`: `+1` when its order runs with the pixels (an ordinal y, so the
+that way. Every node's y axis has a **direction**, `yDirection(node)` in
+`ast/axisDirection.ts` (resolved once per node into `GoFishNode.yFrame`): `+1` when its order runs with the pixels (an ordinal y, so the
 first item is at the top) and `-1` when it runs against them (a continuous y, which
 grows upward from its origin). A node with no y axis takes its parent's direction,
 and the canvas is `+1`. x is always `+1`. The direction is
@@ -269,7 +269,7 @@ pixel box: a negative min is top overhang, a max past the canvas is bottom
 overhang), builds `toPixel`, and paints the lowered list into an `<svg>`:
 
 ```ts
-const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+toPixel: ([gx, gy]) => [gx + left, gy + top], // svgFrame in gofish.tsx
 const paintBaked = () => lowerToDisplayList(child, toPixel).map(paintSVG);
 return (
   <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">
