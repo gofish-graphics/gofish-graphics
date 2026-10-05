@@ -20,6 +20,7 @@ import {
   hasOrigin,
 } from "../underlyingSpace";
 import { Extent, impliedExtent } from "../extent";
+import { axisDirection } from "../axisDirection";
 import * as Monotonic from "../../util/monotonic";
 import * as Interval from "../../util/interval";
 
@@ -122,6 +123,53 @@ export function distributeChildrenInPlacementOrder(
   children: readonly ConstraintRef[] = constraint.children
 ): readonly ConstraintRef[] {
   return constraint.order === "reverse" ? [...children].reverse() : children;
+}
+
+/** The minimal node shape {@link keysDownTheScreen} reads (duck-typed: a
+ *  `GoFishNode`, without importing it). */
+type DistributingNode = {
+  type?: string;
+  parent?: DistributingNode;
+  constraints: readonly { type: string }[];
+  children: readonly unknown[];
+};
+
+/**
+ * The keys of the parts a node distributes along y, in the order they read
+ * down the screen (top to bottom), or undefined when the node distributes
+ * nothing along the screen's y. This is the operator's own fact, from its
+ * placement order and its axis direction: a chain along a y that reads
+ * top-down lays its parts out in placement order down the screen, and one
+ * along a y that grows upward lays them out from the bottom, so they read
+ * down the screen in reverse. A stack's parts follow its chain whatever
+ * their signs (a negative part reaches back from where it is laid).
+ *
+ * Inside a coordinate space the y is a coordinate of the space (a polar
+ * radius), not the screen's, so a chain there has no order down the screen.
+ * A part without a key leaves the order undefined. A legend lists its
+ * entries in this order when they are a chain's parts.
+ */
+export function keysDownTheScreen(
+  node: DistributingNode
+): string[] | undefined {
+  const chain = node.constraints.find(
+    (c): c is DistributeConstraint =>
+      c.type === "distribute" && (c as DistributeConstraint).dir === "y"
+  );
+  if (chain === undefined) return undefined;
+  for (let n: DistributingNode | undefined = node; n; n = n.parent)
+    if (n.type === "coord") return undefined;
+  const byName = new Map<string, unknown>();
+  for (const child of node.children) {
+    const name = (child as { _name?: unknown })._name;
+    if (typeof name === "string") byName.set(name, child);
+  }
+  const keys = distributeChildrenInPlacementOrder(chain).map(
+    (ref) => (byName.get(ref.name) as { key?: string } | undefined)?.key
+  );
+  if (keys.some((k) => k === undefined)) return undefined;
+  const down = keys as string[];
+  return axisDirection(node as never, 1) === -1 ? [...down].reverse() : down;
 }
 
 export function distributePlacementAnchors({

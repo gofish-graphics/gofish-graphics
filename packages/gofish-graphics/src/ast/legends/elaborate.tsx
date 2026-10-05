@@ -12,8 +12,8 @@ import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
 import { ticks as d3Ticks } from "d3-array";
 import { datum } from "../data";
 import type { CategoricalScale, ContinuousColorScale } from "../gofish";
-import { axisDirection, wrapperDirection } from "../axisDirection";
-import type { DistributeConstraint } from "../constraints/distribute";
+import { wrapperDirection } from "../axisDirection";
+import { keysDownTheScreen } from "../constraints/distribute";
 
 /**
  * Legend elaboration: turn the resolved color scale into ordinary GoFish shapes
@@ -72,56 +72,41 @@ export async function legendColumn(
 }
 
 /**
- * The legend's one special case: when the plot STACKS its color series along
- * a y axis that grows upward, the first series sits at the bottom of each
- * stack, so the legend lists the series in the stack's visual order, top to
- * bottom (the last series first). Otherwise the legend keeps the color
- * scale's own order.
- *
- * Returns the stack's series keys top to bottom, or undefined when no stack
- * in `content` orders the legend's series: the first glued `distribute` along
- * an upward-growing y whose children are all keyed by legend entries.
+ * The order the plot lays its color series down the screen, when it lays
+ * them out along y: the parts of the first chain in `content` (breadth
+ * first) whose parts are all legend entries, top to bottom, as that chain
+ * reports them ({@link keysDownTheScreen}). Undefined when no chain lays the
+ * legend's entries out down the screen; the legend then keeps the color
+ * scale's order. A chain of one part orders nothing.
  */
-function stackedSeriesOrder(
+function seriesDownTheScreen(
   content: GoFishNode,
   legendKeys: Set<string>
 ): string[] | undefined {
   const queue: GoFishNode[] = [content];
   while (queue.length > 0) {
     const n = queue.shift()!;
-    // A coordinate space's y is not the screen's (polar's is the radius), so a
-    // stack inside one does not order the legend.
-    if (n.type === "coord") continue;
-    const stack = n.constraints.find(
-      (c): c is DistributeConstraint =>
-        c.type === "distribute" && c.glue && c.dir === "y"
-    );
-    if (stack !== undefined && axisDirection(n, 1) === -1) {
-      const keys = n.children.map((c) =>
-        c instanceof GoFishNode ? c.key : undefined
-      );
-      if (
-        keys.length > 1 &&
-        keys.every((k) => k !== undefined && legendKeys.has(String(k)))
-      ) {
-        // Placement order runs up from the baseline; the legend reads down.
-        const upward = stack.order === "reverse" ? [...keys].reverse() : keys;
-        return upward.map(String).reverse();
-      }
-    }
+    const keys = keysDownTheScreen(n);
+    if (
+      keys !== undefined &&
+      keys.length > 1 &&
+      keys.every((k) => legendKeys.has(String(k)))
+    )
+      return keys.map(String);
     for (const c of n.children) if (c instanceof GoFishNode) queue.push(c);
   }
   return undefined;
 }
 
-/** The categorical legend's entries in the order the column lists them (see
- *  {@link stackedSeriesOrder}). */
+/** The categorical legend's entries in the order the column lists them, top
+ *  to bottom: the order the plot lays them down the screen (see
+ *  {@link seriesDownTheScreen}), else the color scale's order. */
 function legendEntries(
   colorMap: Map<any, string>,
   content: GoFishNode
 ): Map<any, string> {
   const byKey = new Map([...colorMap.keys()].map((k) => [String(k), k]));
-  const order = stackedSeriesOrder(content, new Set(byKey.keys()));
+  const order = seriesDownTheScreen(content, new Set(byKey.keys()));
   if (order === undefined) return colorMap;
   const keys = [
     ...order.map((k) => byKey.get(k)),
@@ -265,8 +250,8 @@ export async function elaborateLegend(
   node: GoFishNode,
   scale: CategoricalScale | ContinuousColorScale,
   /** The plot the legend describes: a categorical legend lists its entries
-   *  in the plot's stacking order when the plot stacks its series along an
-   *  upward-growing y (see `stackedSeriesOrder`). */
+   *  in the order the plot lays them down the screen, when it does (see
+   *  `seriesDownTheScreen`). */
   content: GoFishNode
 ): Promise<GoFishNode> {
   const legend =

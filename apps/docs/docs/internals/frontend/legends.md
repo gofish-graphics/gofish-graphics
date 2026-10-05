@@ -68,13 +68,20 @@ root = Layer([ content.name("__legendContent"), legendColumn(colorMap) ])
 [Axis direction](/internals/layout/passes#axis-direction)): the entries are listed
 top to bottom in the order they are given.
 
-That order is the color scale's own, with one special case
-(`stackedSeriesOrder`): when the plot STACKS its color series along a y that grows
-upward, the first series sits at the bottom of each stack, so the legend lists the
-series in the stack's visual order, top to bottom (the last series first). The
-legend finds that stack in the content it describes: the first glued `distribute`
-along an upward-growing y whose children are all keyed by legend entries. The
-legend follows the plot; the plot's stacking rule never reads the legend.
+The order is the one the plot lays its series out in down the screen, when it
+lays them out along y, and the color scale's own otherwise. The legend does not
+work that out from the shape of the plot. Each operator that chains its parts
+along y (a stack or a spread, a `distribute` on y) reports the keys of its parts
+in the order they read down the screen (`keysDownTheScreen` in
+`constraints/distribute.ts`): its placement order, reversed when its y grows
+upward, because such a chain lays its first part at the bottom. A stack reports
+its chain whatever the signs of its parts. Inside a coordinate space the chain's
+y is a coordinate of that space (a polar radius), not the screen's, so it reports
+no order. The legend reads these reports off the content it describes
+(`seriesDownTheScreen`, breadth first) and takes the first chain whose parts are
+all legend entries. So a stacked bar chart lists its last series first, the one at
+the top of each bar. The legend follows the plot; the plot's stacking rule never
+reads the legend.
 
 A continuous (gradient) colorbar is a continuous value axis, so it grows upward:
 the domain max is at the top. Its bands are listed from the top, each showing the
