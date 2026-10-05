@@ -37,6 +37,7 @@ import {
   unionChildSpaces,
 } from "../graphicalOperators/alignment";
 import { axisScale, type AxisMap } from "../domain";
+import { type AxisDirection } from "../axisDirection";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry, scopeFrame, seatInScope } from "../solver/scopes";
 import { axisTitle, TITLE_COLOR, TITLE_FONT_SIZE } from "../axes/elaborate";
@@ -45,6 +46,15 @@ import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
 import type { AxesOptions } from "../gofish";
 
+/**
+ * A coordinate space. Its `transform` is MATH-HANDED: it maps a point of the
+ * coordinate space, whose y runs upward, to a point of the plane, whose y
+ * also runs upward (polar's θ is measured counter-clockwise from 3 o'clock,
+ * geo's north is up). The `coord` node is where that meets the canvas: it
+ * gives its interior the coordinate space's upward y as its axis order (see
+ * `axisDirection.ts`), and reflects y on the way in and out (`inPixels`) so
+ * the warped geometry lands in y-down pixels.
+ */
 export type CoordinateTransform = {
   type: string;
   transform: (point: [number, number]) => [number, number];
@@ -103,6 +113,24 @@ export type CoordinateTransform = {
 
 /** The two axes, for the loops that walk both. */
 const AXES = [0, 1] as const;
+
+/** The y direction of a coordinate space, its own box and its interior:
+ *  math-handed, so upward (see `axisDirection.ts`). */
+const INTERIOR: AxisDirection = -1;
+
+/**
+ * A math-handed transform as the coord's interior lowers through it: the
+ * interior stores its geometry in y-down pixels (y = −coordinate y), and the
+ * plane point comes back in y-down pixels too. The one place a coordinate
+ * space's handedness meets the canvas's.
+ */
+export const inPixels = (t: CoordinateTransform): CoordinateTransform => ({
+  ...t,
+  transform: ([x, y]) => {
+    const [px, py] = t.transform([x, -y]);
+    return [px, -py];
+  },
+});
 
 export const coord = createNodeOperator(
   (
@@ -315,7 +343,8 @@ export const coord = createNodeOperator(
           // Each child sits in the coord's frame by the one seating rule
           // (`seatInScope`): a pinned child shares the frame and its map
           // places it; a free child's baseline sits at the frame's pixel of
-          // data 0; a child with no 0 sits at 0.
+          // data 0; a child with no 0 sits at 0. The coord and its interior
+          // share one axis order, the coordinate space's upward y.
           const childPlaceables = children.map((child) => {
             const space = child.resolveUnderlyingSpace();
             const x = seatInScope(frameX, space[0]);
@@ -460,7 +489,9 @@ export const coord = createNodeOperator(
           };
 
           // coord does NOT self-place. `translateX/Y` is a CONTENT OFFSET — where
-          // to draw the coord origin within the box — not placement: the polar
+          // to draw the plane's origin within the box, in the coord's upward
+          // axis order; `contentOffset` keeps it in pixels, which `lower`
+          // draws — not placement: the polar
           // content is drawn centered on the origin (spanning negative screen
           // coords), so it must be shifted to sit inside `[0, size]`. Carrying it
           // as `transform.translate` (as before) collided with the parent placing
@@ -473,15 +504,20 @@ export const coord = createNodeOperator(
             transform: { translate: [undefined, undefined] },
             renderData: {
               coordinateSpaceBbox: coordSpaceBbox,
-              contentOffset: [translateX, translateY] as [number, number],
+              contentOffset: [translateX, INTERIOR * translateY] as [
+                number,
+                number,
+              ],
             },
           };
         },
-        // IR lowering — mirror of render. Everything lives under the coord's
-        // `translate(transform) translate(contentOffset)` group, so a single
-        // `contentToPixel` folds that offset + the root flip. Content children
-        // warp through `coordTransform` in their own `lower` (rect/ellipse/petal
-        // emit paths); the grid + polar axes port the same overlay primitives.
+        // IR lowering. Everything lives under the coord's translate plus its
+        // `contentOffset` (the plane origin inside the box, in the coord's
+        // upward axis order), so a single `contentToPixel` maps a y-down plane
+        // point to the canvas. Content children warp through `inPixels(...)`
+        // in their own `lower` (rect/ellipse/petal emit paths); the grid +
+        // polar axes are computed in the math-handed plane and map through
+        // `planeToPixel`.
         lower: ({ transform, renderData }, _children, node) => {
           const session = node.getRenderSession();
           const outer = session.toPixel!;
@@ -491,15 +527,18 @@ export const coord = createNodeOperator(
             | undefined) ?? [0, 0];
           const contentToPixel: ToPixel = ([cx, cy]) =>
             outer([coordTx + offsetX + cx, coordTy + offsetY + cy]);
+          /** A math-handed plane point (y up) to the canvas. */
+          const planeToPixel: ToPixel = ([cx, cy]) => contentToPixel([cx, -cy]);
 
           // The transform layout resolved: the donut-hole radial shift (so
           // content, grid and axis all sit past the hole) or a `fit`-ted space's
           // budget-to-pixels map. Angular budget = the transform's CentralAngle
           // (domain[0].size) so a sub-2π sweep tiles ticks correctly.
           const effectiveTransform = transformRef.current;
+          const pixelTransform = inPixels(effectiveTransform);
           const angularBudget = coordTransform.domain[0].size ?? 2 * Math.PI;
 
-          // Overlay primitive helpers (all in coord-local y-up coords).
+          // Overlay primitive helpers (all in the math-handed plane, y up).
           const lineItem = (
             x1: number,
             y1: number,
@@ -509,12 +548,11 @@ export const coord = createNodeOperator(
             sw: number
           ): DisplayList.PathItem => ({
             kind: "path",
-            d: `M${contentToPixel([x1, y1]).join(",")} L${contentToPixel([x2, y2]).join(",")}`,
+            d: `M${planeToPixel([x1, y1]).join(",")} L${planeToPixel([x2, y2]).join(",")}`,
             role: "overlay",
             style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
           });
-          // Axis labels: legacy emits `transform="scale(1,-1)" x y=-y`, so the
-          // anchor point is (x, y) in y-up — upright under contentToPixel.
+          // Axis labels: the anchor point (x, y) is in the plane (y up).
           const textItem = (
             x: number,
             y: number,
@@ -524,7 +562,7 @@ export const coord = createNodeOperator(
             fontSize: number,
             fill: string
           ): DisplayList.TextItem => {
-            const [px, py] = contentToPixel([x, y]);
+            const [px, py] = planeToPixel([x, y]);
             return {
               kind: "text",
               x: px,
@@ -540,11 +578,8 @@ export const coord = createNodeOperator(
 
           const items: DisplayList.DisplayItem[] = [];
 
-          // Content: warp each flattened child through the coord transform.
-          // `contentToPixel` only composes a translate onto `outer`, so it
-          // preserves the incoming y-parity — the active flip scope
-          // (`session.flip`) is unchanged (issue #629; coord self-normalization
-          // is a Stage-1 concern).
+          // Content: warp each flattened child through the coord transform,
+          // in pixels (`inPixels`).
           // A FRAMED space (one declaring its own window, e.g. `geo`'s lon/lat
           // box) draws only what falls inside the frame: a flattened item whose
           // coordinate-space box lies wholly outside the budget is skipped, the
@@ -562,8 +597,12 @@ export const coord = createNodeOperator(
             for (const axis of AXES) {
               const iv = dims[axis];
               if (iv?.min === undefined || iv?.size === undefined) return false;
-              const lo = (d.transform.translate[axis] ?? 0) + iv.min;
-              const hi = lo + iv.size;
+              // The interior stores pixels; the frame is in the coordinate
+              // space, whose y runs the other way.
+              const pxLo = (d.transform.translate[axis] ?? 0) + iv.min;
+              const pxHi = pxLo + iv.size;
+              const [lo, hi] =
+                axis === 1 && INTERIOR === -1 ? [-pxHi, -pxLo] : [pxLo, pxHi];
               if (
                 !IntervalLib.overlaps(
                   { min: lo, max: hi },
@@ -583,7 +622,7 @@ export const coord = createNodeOperator(
               for (const d of flattenLayout(child)) {
                 if (outsideFrame(d)) continue;
                 items.push(
-                  ...d.node.INTERNAL_lower(effectiveTransform, d.transform)
+                  ...d.node.INTERNAL_lower(pixelTransform, d.transform)
                 );
               }
             }
@@ -616,7 +655,7 @@ export const coord = createNodeOperator(
                   path([a, b], { subdivision: 100 }),
                   effectiveTransform
                 ),
-                contentToPixel
+                planeToPixel
               );
             for (
               let i = domain[0].min!;
@@ -633,7 +672,7 @@ export const coord = createNodeOperator(
                 i,
                 domain[1].max!,
               ]);
-              const [px, py] = contentToPixel([gx, gy]);
+              const [px, py] = planeToPixel([gx, gy]);
               items.push({
                 kind: "text",
                 x: px,
@@ -659,7 +698,7 @@ export const coord = createNodeOperator(
                 domain[0].max! + domain[0].size! / 20,
                 i,
               ]);
-              const [px, py] = contentToPixel([gx, gy]);
+              const [px, py] = planeToPixel([gx, gy]);
               items.push({
                 kind: "text",
                 x: px,
@@ -690,7 +729,7 @@ export const coord = createNodeOperator(
 
             if (axesX && !isUNDEFINED(xSpace)) {
               // Outer ring.
-              const [ringCx, ringCy] = contentToPixel([0, 0]);
+              const [ringCx, ringCy] = planeToPixel([0, 0]);
               items.push({
                 kind: "ellipse",
                 cx: ringCx,
@@ -817,8 +856,8 @@ export const coord = createNodeOperator(
                 spaceMeasure(ySpace) ?? effectiveTransform.aliases?.y ?? "r"
               );
               if (title !== undefined) {
-                const [ix, iy] = contentToPixel([x0 - H_GAP, y0]);
-                const [ox, oy] = contentToPixel([x1 - H_GAP, y1]);
+                const [ix, iy] = planeToPixel([x0 - H_GAP, y0]);
+                const [ox, oy] = planeToPixel([x1 - H_GAP, y1]);
                 const len = Math.hypot(ox - ix, oy - iy) || 1;
                 const [ux, uy] = [(ox - ix) / len, (oy - iy) / len];
                 // Reading direction along the ray, kept upright: a ray that

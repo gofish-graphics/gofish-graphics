@@ -181,6 +181,7 @@ function reduceToAxisProblem(
   const pins: PlacementPinClaim[] = [];
   const participantFacts: AxisProblem["participantFacts"] = [];
   const participants = new Set<NodeId>();
+  const chainAnchors = new Map<NodeId, number>();
 
   const resolveOffset = (node: NodeId, anchor: RelationAnchor) =>
     nodeAnchorOffset(node, anchor, axis, strongSizes, targets);
@@ -209,6 +210,17 @@ function reduceToAxisProblem(
       if (fromOffset === undefined || toOffset === undefined) continue;
       participants.add(fact.from.node);
       participants.add(fact.to.node);
+      // A chain of baselines (a fixed pitch between origins) starts at its
+      // first member's origin; any other chain starts at its first member's
+      // start edge.
+      if (
+        fact.chain === "spread" &&
+        fact.from.anchor === "baseline" &&
+        fact.to.anchor === "baseline"
+      ) {
+        chainAnchors.set(fact.from.node, fromOffset);
+        chainAnchors.set(fact.to.node, toOffset);
+      }
       relations.push(
         relationFact(
           anchorExpr(fact.from.node, axis, "start"),
@@ -225,7 +237,7 @@ function reduceToAxisProblem(
     participantFacts.push(participantFact(fact.node, axis, fact.owner));
   }
 
-  return { relations, pins, participantFacts, participants };
+  return { relations, pins, participantFacts, participants, chainAnchors };
 }
 
 /** Solve one axis's anchor program into `(min, size)` per node, plus any cell or

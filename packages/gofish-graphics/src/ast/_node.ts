@@ -71,7 +71,13 @@ import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
 import type { ScaleContext } from "./gofish";
 import type { TokenContext } from "./tokenContext";
-import type { FlipScope } from "./_displayObject";
+import {
+  axisDirection,
+  orientDims,
+  orientScales,
+  orientTransform,
+  orientView,
+} from "./axisDirection";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
@@ -109,19 +115,9 @@ export type RenderSession = {
   tokenContext: TokenContext;
   scaleContext: ScaleContext;
   /** Set by the lower emit driver (`lowerToDisplayList`) for the duration of a
-   *  lowering walk: the y-up→y-down pixel mapping every `lower` body uses. */
+   *  lowering walk: the map from layout pixels to canvas pixels (the gutter
+   *  offset) every `lower` body uses. */
   toPixel?: ToPixel;
-  /** The per-scope `toPixel` factory (issue #629): `flip → ToPixel`, built once by
-   *  the render terminal from the viewport. A BAKE BOUNDARY reads it to re-lower
-   *  its child subtree through the scope walk (`bake`) and install each descendant
-   *  scope's own map — so a continuous-y subtree inside an UNDEFINED-y boundary
-   *  (`enclose`/`arrow`/`connect`) still flips, instead of inheriting the
-   *  boundary's single (y-down) map. Set by `lowerToDisplayList`. */
-  toPixelFor?: (flip?: FlipScope) => ToPixel;
-  /** The flip scope of the draw entry currently being lowered (issue #629) — the
-   *  boundary's own scope, seeded into its child re-bake so descendants inherit it
-   *  unless they open their own. Set by `lowerToDisplayList` per baked entry. */
-  flip?: FlipScope;
   /** The σ-scope registry: the one place σ / posScale is derived,
    *  shared by every scope root in this render. Created on first use
    *  (`getScopeRegistry`). */
@@ -176,17 +172,6 @@ export type Placeable = {
    *  `rect({})`), so the size cell is free for the constraint to own. Optional
    *  for the same reason as the other constraint write hooks. */
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
-  /** Stamped by a spread `distribute` on `dir: "y"`: the anchor the chain
-   *  fixed on this target (for an edge chain, which fixes the whole box,
-   *  `"middle"`, whose mirror keeps the box in place). The chain places the
-   *  target itself — the target's allocated y band is just a slice of the
-   *  spread's height and bears no relation to where it sits — so if this
-   *  node later opens its own y-up flip scope, the scope mirrors about THIS
-   *  anchor (a point reflection; see `scopeBox` in coordinateTransforms/bake.ts)
-   *  rather than the allocated band. That keeps the PAINTED anchor coincident
-   *  with the solver's chained position, so `anchor: "baseline"` rows land on
-   *  their solved baselines at exact pitch. */
-  pitchAnchorY?: "start" | "middle" | "end" | "baseline";
 };
 
 /** Place a child at `at` (default `(0, 0)`; layer passes its free-child
@@ -219,6 +204,13 @@ export function placeUnplacedChild(
 // a local scale for its descendants (the `shared` scoping annotation, below) it
 // copies into a fresh array and passes that down — never writing back to the
 // parent's, so a solved σ can't leak to the node's siblings (see layer.tsx).
+//
+// A layout runs in the node's AXIS ORDER (`axisDirection.ts`): the scale it
+// receives, the children it reads and places, and the box and translate it
+// returns all run along the node's own direction. `GoFishNode.layout` stores
+// the result in pixels. Geometry a node keeps for its `lower` (in
+// `renderData` or a closure) must be pixels, so a node with direction −1 that
+// keeps any reflects it itself.
 export type Layout = (
   shared: Size<boolean>,
   size: Size,
@@ -227,9 +219,9 @@ export type Layout = (
   node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
-/** Map a GoFish y-up display point to a final y-down absolute SVG pixel. The one
- *  transform a `lower` body needs: it folds in both the per-shape `scale(1,-1)`
- *  and the root flip. Set once per emit on the render session. */
+/** Map a layout pixel (y-down, layout origin) to a final absolute canvas
+ *  pixel: the gutter offset, or a boundary's own frame shift. Set once per emit
+ *  on the render session. */
 export type ToPixel = (p: [number, number]) => [number, number];
 
 /**
@@ -237,7 +229,7 @@ export type ToPixel = (p: [number, number]) => [number, number];
  * its `lower`, and the display list is the union of every node's fragment,
  * painted by a single backend (no per-shape SVG). `children` are the
  * already-lowered child items (empty for a boundary, which re-walks its own
- * subtree); `toPixel` carries the y-flip + viewport offset.
+ * subtree); `toPixel` carries the viewport offset.
  */
 export type Lower = (
   {
@@ -498,54 +490,6 @@ export class GoFishNode {
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
-  /** The pixel size this node was ALLOCATED by its parent (the `size` handed to
-   *  `layout()`) — the extent of its coordinate frame, which for a continuous
-   *  axis is the posScale's pixel range (canvas height for the root, cell height
-   *  for a facet). The y-up flip scope (#629) mirrors about this, NOT the content
-   *  bbox (`intrinsicDims.size`, which shrinks to the tallest bar). An UNSIZED
-   *  (NaN) axis leaves it undefined. */
-  public _allocatedSize?: Size;
-  /** This node and its subtree are CHROME that seats in the AMBIENT y-down frame,
-   *  NOT in the plot's y-up flip scope (issue #629). Set by the chrome-elaboration
-   *  passes (axis titles, the legend swatch column, the colorbar) on the shapes
-   *  they synthesize: those describe the plot from the outside and read top→bottom
-   *  regardless of whether the plot's value axis grows upward. The bake walk resets
-   *  the active flip scope to ambient when it enters such a subtree, so a titled /
-   *  legended y-up chart flips only its DATA marks (and their in-plot labels),
-   *  while the legend column and rotated axis titles stay y-down. The plot content
-   *  itself is NOT flagged, so it still flips. Only `options.yUp` (a global y-up
-   *  ambient) overrides — see the ambient seed in `render`. */
-  public _ambientYDown?: boolean;
-  /** This node UNIONS a continuous y up but does not ESTABLISH it — a chrome
-   *  wrapper (the axis-title / legend layer) that seats the plot content plus its
-   *  chrome siblings (issue #629). It is scope-TRANSPARENT for the y-up flip: the
-   *  bake walk does NOT open a scope here (its bbox includes the chrome, so it is
-   *  the wrong mirror band), but descends to the plot content it wraps — whose
-   *  frame is the canvas `finalH` — which opens the scope. Set by the chrome
-   *  elaboration passes. Distinct from `_ambientYDown` (which resets to y-down);
-   *  a scope-transparent node's CONTENT child still flips. */
-  public _scopeTransparent?: boolean;
-  /** The authoritative canvas y-flip frame for the ROOT plot content (issue
-   *  #629): `{ baseY: 0, height: finalH }`, stamped by `layout()` on `contentNode`
-   *  once `finalH = contentNode.dims.size` is known. This is the exact frame the
-   *  old global flip mirrored about (`toDisplayList`'s `data.height`) — the canvas
-   *  origin, NOT the node's placed bbox min, which a shrink-to-fit pin can offset
-   *  from 0. The bake walk uses it when the root content opens the flip scope; a
-   *  scope opening deeper (a facet cell) has no stamp and mirrors about its own
-   *  allocated band. `{baseY, height}` mirrors `FlipScope` in `_displayObject`. */
-  public _rootFlipScope?: { baseY: number; height: number };
-  /** See {@link Placeable.pitchAnchorY} — the fixed-pitch distribute anchor this
-   *  node's y was chained at, consumed by the bake's flip-scope band decision. */
-  public pitchAnchorY?: "start" | "middle" | "end" | "baseline";
-  /** The plot's flip frame a chrome subtree's BOX is mirrored about (issue #629).
-   *  Stamped by `layout()` on each OUTERMOST `_ambientYDown` chrome node (axis
-   *  title, legend column, colorbar) — the same value as the plot content's
-   *  `_rootFlipScope` — so the bake reads it directly (`node._chromeFrame`)
-   *  instead of searching up through the scope-transparent wrappers on every
-   *  visit. Only set when the plot mirrors (`contentFlipsY`); a chrome subtree
-   *  with no frame passes through unmirrored. `{baseY, height}` mirrors
-   *  `FlipScope`. */
-  public _chromeFrame?: { baseY: number; height: number };
   /** Persistent per-axis bbox ledger: the box-key equations that determine this
    *  node's box. `layout()` seeds the self-layout size (+ a self-placed absolute
    *  min), `_pinAnchor` records the absolute anchor a pin lands at, and a rank-2
@@ -1383,18 +1327,29 @@ export class GoFishNode {
     );
   }
 
+  /**
+   * Lay this node out and return it as its parent sees it.
+   *
+   * The node's own `_layout` reasons in its AXIS ORDER (see `axisDirection.ts`):
+   * the box and translate it returns, and the scale it receives, run along its
+   * own direction. Here that result is stored in pixels (`orientDims`,
+   * `orientTransform`), and the node is handed back to its parent as a view in
+   * the PARENT's axis order (`orientView`). The y scale is reflected on the
+   * way in when the two directions differ (`orientScales`).
+   */
   public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
-    this._allocatedSize = size; // frame extent for the y-up flip scope (#629)
+    const direction = axisDirection(this, 1);
+    const parentDirection = axisDirection(this.parent, 1);
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
       size,
-      scales,
+      orientScales(scales, direction, parentDirection),
       this.children,
       this
     );
 
-    this.intrinsicDims = elaborateDims(intrinsicDims);
-    this.transform = elaborateTransform(transform);
+    this.intrinsicDims = orientDims(elaborateDims(intrinsicDims), direction);
+    this.transform = orientTransform(elaborateTransform(transform), direction);
     this.renderData = renderData;
     this._geometry = undefined;
 
@@ -1418,7 +1373,7 @@ export class GoFishNode {
       // `place()` short-circuits on the solved ledger, not on the translate.
       this._clearTranslateIfSolved(dir);
     }
-    return this;
+    return orientView(this, parentDirection);
   }
 
   /**
@@ -1749,8 +1704,7 @@ export class GoFishNode {
    * Lend this node's own drawing to another node to paint: the returned
    * function lowers the node exactly as it was built to draw itself, placed
    * at `transform` (an absolute transform, like `INTERNAL_lower`'s override)
-   * and mapped by `toPixel`. Call it while lowering, like any `_lower`: it
-   * reads the session's active flip scope. It lends the node's own lowering
+   * and mapped by `toPixel`. Call it while lowering, like any `_lower`. It lends the node's own lowering
    * even when the node has been silenced (`INTERNAL_emitNothing`), so a node
    * can be silenced and lend in either order, any number of times. A
    * `time.transition()` moves a keyframe's text this way: it draws the copy

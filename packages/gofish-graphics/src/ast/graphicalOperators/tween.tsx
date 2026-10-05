@@ -65,6 +65,7 @@ import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable, type ToPixel } from "../_node";
 import { GoFishRef } from "../_ref";
+import { axisDirection } from "../axisDirection";
 import { resolveColorChannel } from "../../color";
 import {
   fadeItem,
@@ -529,10 +530,12 @@ export const tween = createNodeOperator(
 
           // The same local-pixel map `connect` builds: the node's absolute
           // translate folded in, so the interpolated point lands where the
-          // keyframes' own boxes were measured.
+          // keyframes' own boxes were measured. The run was measured in this
+          // node's axis order, so its y reads through the node's direction.
           const [tx, ty] = displayTranslate(transform);
+          const yDirection = axisDirection(node, 1);
           const toLocalPixel = ([px, py]: [number, number]): [number, number] =>
-            toPixel([px + tx, py + ty]);
+            toPixel([px + tx, yDirection * py + ty]);
 
           const datum = node.datum;
           const role = roleFor(datum);
@@ -564,7 +567,7 @@ export const tween = createNodeOperator(
             if (drawn === undefined) {
               const [ox, oy] = track.origins[k];
               drawn = leaf.INTERNAL_lendDrawing()(
-                { translate: [tx + ox, ty + oy] },
+                { translate: [tx + ox, ty + yDirection * oy] },
                 toPixel
               );
               drawings.set(leaf, drawn);

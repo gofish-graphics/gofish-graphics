@@ -39,6 +39,10 @@ export type AxisProblem = {
   pins: PlacementPinClaim[];
   participantFacts: PlacementParticipant[];
   participants: Set<NodeId>;
+  /** For a member of a chain of baselines, the offset of its baseline from
+   *  its `min`: such a chain starts at its first member's origin, not its
+   *  edge (see the sequence origin in `solveAxisProblem`). */
+  chainAnchors?: Map<NodeId, number>;
 };
 
 type RelationEdge = {
@@ -142,8 +146,10 @@ function solveRelationComponents(
  * Solve one axis's {@link AxisProblem} into an absolute `min` per node. Pins fix
  * each relation component's offset; a component with no pin falls back to the
  * free origin (its determined free baseline at the layer's origin pixel), the
- * distribute sequence-origin (the first source of its chain relations), or a
- * normalized origin (its minimum coordinate at 0). This is the general half of
+ * distribute sequence-origin (the first source of its chain relations, seated
+ * at 0 by the point the chain starts from: its start edge, or for a chain of
+ * baselines its origin), or a normalized origin (its minimum coordinate at
+ * 0). This is the general half of
  * the placement solver.
  */
 export function solveAxisProblem(
@@ -235,7 +241,9 @@ export function solveAxisProblem(
     const origin = distributeOriginFor(component);
     if (origin !== undefined) {
       offsets.set(component, {
-        value: -(relative.get(origin) ?? 0),
+        value: -(
+          (relative.get(origin) ?? 0) + (problem.chainAnchors?.get(origin) ?? 0)
+        ),
         owner: "sequence-origin",
       });
       continue;

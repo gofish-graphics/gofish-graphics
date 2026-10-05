@@ -10,7 +10,10 @@ import { layer } from "../graphicalOperators/layer";
 import { Constraint } from "../constraints";
 import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
 import { ticks as d3Ticks } from "d3-array";
+import { datum } from "../data";
 import type { CategoricalScale, ContinuousColorScale } from "../gofish";
+import { axisDirection, wrapperDirection } from "../axisDirection";
+import type { DistributeConstraint } from "../constraints/distribute";
 
 /**
  * Legend elaboration: turn the resolved color scale into ordinary GoFish shapes
@@ -51,27 +54,80 @@ function legendRow(key: any, color: string): GoFishNode {
 }
 
 /**
- * The swatch column. Entries read top→bottom. Under the y-up chart flip a
- * `Spread({dir:"y"})` lays children bottom→top, so the first color-map entry
- * must render last (`reverse`) to land at the top; in y-down free space the
- * natural order already reads top→bottom, so no reverse. See issue #143/#16.
+ * The swatch column: one row per entry of `colorMap`, in that order, top to
+ * bottom (a `Spread({dir:"y"})` reads top-down).
  */
 export async function legendColumn(
-  colorMap: Map<any, string>,
-  yUp = true
+  colorMap: Map<any, string>
 ): Promise<GoFishNode> {
   const rows = [...colorMap.entries()].map(([key, color]) =>
     legendRow(key, color)
   );
-  // `Spread` returns a PromiseWithRender — await the real node so the chrome
-  // flag below lands on the tree node, not the promise wrapper.
+  // `Spread` returns a PromiseWithRender — await the real node.
   const col = (await (Spread as any)(
-    { dir: "y", spacing: ROW_GAP, alignment: "start", reverse: yUp },
+    { dir: "y", spacing: ROW_GAP, alignment: "start" },
     rows
   )) as GoFishNode;
-  col.name(LEGEND_NAME);
-  col._ambientYDown = true; // chrome: interior ambient, box placed by the plot frame (#629)
-  return col;
+  return col.name(LEGEND_NAME);
+}
+
+/**
+ * The legend's one special case: when the plot STACKS its color series along
+ * a y axis that grows upward, the first series sits at the bottom of each
+ * stack, so the legend lists the series in the stack's visual order, top to
+ * bottom (the last series first). Otherwise the legend keeps the color
+ * scale's own order.
+ *
+ * Returns the stack's series keys top to bottom, or undefined when no stack
+ * in `content` orders the legend's series: the first glued `distribute` along
+ * an upward-growing y whose children are all keyed by legend entries.
+ */
+function stackedSeriesOrder(
+  content: GoFishNode,
+  legendKeys: Set<string>
+): string[] | undefined {
+  const queue: GoFishNode[] = [content];
+  while (queue.length > 0) {
+    const n = queue.shift()!;
+    // A coordinate space's y is not the screen's (polar's is the radius), so a
+    // stack inside one does not order the legend.
+    if (n.type === "coord") continue;
+    const stack = n.constraints.find(
+      (c): c is DistributeConstraint =>
+        c.type === "distribute" && c.glue && c.dir === "y"
+    );
+    if (stack !== undefined && axisDirection(n, 1) === -1) {
+      const keys = n.children.map((c) =>
+        c instanceof GoFishNode ? c.key : undefined
+      );
+      if (
+        keys.length > 1 &&
+        keys.every((k) => k !== undefined && legendKeys.has(String(k)))
+      ) {
+        // Placement order runs up from the baseline; the legend reads down.
+        const upward = stack.order === "reverse" ? [...keys].reverse() : keys;
+        return upward.map(String).reverse();
+      }
+    }
+    for (const c of n.children) if (c instanceof GoFishNode) queue.push(c);
+  }
+  return undefined;
+}
+
+/** The categorical legend's entries in the order the column lists them (see
+ *  {@link stackedSeriesOrder}). */
+function legendEntries(
+  colorMap: Map<any, string>,
+  content: GoFishNode
+): Map<any, string> {
+  const byKey = new Map([...colorMap.keys()].map((k) => [String(k), k]));
+  const order = stackedSeriesOrder(content, new Set(byKey.keys()));
+  if (order === undefined) return colorMap;
+  const keys = [
+    ...order.map((k) => byKey.get(k)),
+    ...[...colorMap.keys()].filter((k) => !order.includes(String(k))),
+  ];
+  return new Map(keys.map((k) => [k, colorMap.get(k)!]));
 }
 
 // Colorbar constants.
@@ -86,50 +142,38 @@ const BAR_LABEL_GAP = 4; // gap between a tick mark and its label
 /**
  * The colorbar: a vertical gradient bar sampled from `scaleFn` over `domain`,
  * with tick labels pinned at the domain endpoints plus d3 "nice" ticks between
- * them. Built as a `layer` of fixed-pixel shapes — `BAND_COUNT` thin band
- * `Rect`s stacked bottom→top to form the bar, plus a tick mark + label per tick
- * — each placed by a literal-pixel `Constraint.position` in the bar's own y-up
- * frame (value `v` → `t·BAR_HEIGHT` from the bottom, so the domain max sits at
- * the top). Each band is pinned by its bottom edge and overhangs the next by
- * `BAND_OVERLAP` px (the next band, drawn on top, hides the seam) so the bar
- * reads as a smooth gradient rather than discrete bands. The layer's bbox is
- * the union of these, so the colorbar is measured by normal layout exactly like
- * the swatch column.
+ * them. The bar is a continuous value axis: a `layer` `BAR_HEIGHT` px tall
+ * whose shapes are pinned at DATA values (`datum(v)`), so its y is continuous
+ * and grows upward (see `axisDirection.ts`), and the domain max is at the top.
+ * It holds `BAND_COUNT` thin band `Rect`s, each pinned by its bottom edge (the
+ * `start` of the upward y) at its slice's low value and showing the value at
+ * its center, plus a tick mark + label per tick. Each band overhangs the next
+ * by `BAND_OVERLAP` px (the next band, drawn on top, hides the seam) so the
+ * bar reads as a smooth gradient rather than discrete bands. The layer's bbox
+ * is the union of these, so the colorbar is measured by normal layout exactly
+ * like the swatch column.
  */
 export async function legendColorbar(
   scaleFn: (v: number) => string,
-  domain: [number, number],
-  yUp = true
+  domain: [number, number]
 ): Promise<GoFishNode> {
   const [min, max] = domain;
-  const bandH = BAR_HEIGHT / BAND_COUNT;
-  // The bar is laid out in fixed y-up logical coordinates (band 0 at the base,
-  // domain max at the top). The PHYSICAL layout never changes — what flips for a
-  // y-down render is which value each slot shows and where the ticks land — so
-  // the band-overlap seam logic below stays intact (a pure coordinate mirror
-  // would invert the overlap and reopen seams). In y-up the slot at height `y`
-  // shows value `min + y/BAR_HEIGHT·range`; in y-down it shows the mirror, so the
-  // domain max still reads at the top of the (now unflipped) bar. See #143/#16.
-  const valueToPx = (v: number) =>
-    (max === min ? 0 : (v - min) / (max - min)) * BAR_HEIGHT;
-  // Pixel height (from the band-0 base) at which value `v`'s color/tick belongs.
-  const valueToBarY = (v: number) =>
-    yUp ? valueToPx(v) : BAR_HEIGHT - valueToPx(v);
+  // A one-value domain still needs a span to lay the bar out over.
+  const span = max === min ? 1 : max - min;
+  const bandSpan = span / BAND_COUNT;
 
   const bandName = (i: number) => `__cbBand${i}`;
   const tickName = (i: number) => `__cbTick${i}`;
   const labelName = (i: number) => `__cbLabel${i}`;
 
-  const bands = Array.from({ length: BAND_COUNT }, (_, i) => {
-    // Slot `i` sits at height `i·bandH`; the value shown there mirrors when y-down.
-    const frac = (yUp ? i + 0.5 : BAND_COUNT - i - 0.5) / BAND_COUNT;
-    const value = min + frac * (max - min);
-    return Rect({
+  const bandH = BAR_HEIGHT / BAND_COUNT;
+  const bands = Array.from({ length: BAND_COUNT }, (_, i) =>
+    Rect({
       w: BAR_WIDTH,
       h: bandH + BAND_OVERLAP,
-      fill: scaleFn(value),
-    }).name(bandName(i));
-  });
+      fill: scaleFn(min + (i + 0.5) * bandSpan),
+    }).name(bandName(i))
+  );
 
   // Always show the domain endpoints; fill in d3 "nice" ticks strictly between.
   const tickValues =
@@ -153,7 +197,7 @@ export async function legendColorbar(
     }).name(labelName(i))
   );
 
-  const root = (await (layer as any)([
+  const root = (await (layer as any)({ h: BAR_HEIGHT }, [
     ...bands,
     ...tickMarks,
     ...tickLabels,
@@ -161,12 +205,12 @@ export async function legendColorbar(
 
   await root.relate((g: Record<string, any>) => {
     const cs: any[] = [];
-    // Bands: centered in the bar column (x), pinned by their BOTTOM edge at
-    // `i * bandH` (y) and stacked bottom→top to fill BAR_HEIGHT. Pinning the
-    // bottom keeps the bar's base at y=0 while each band overhangs upward by
-    // BAND_OVERLAP; the next band (drawn on top) covers that overhang, so no
-    // sub-pixel seam shows between bands. (x uses anchor "middle", y uses
-    // "start" — separate constraints since one shared anchor can't do both.)
+    // Bands: centered in the bar column (x), pinned by their bottom edge at
+    // their slice's low value (y) and stacked bottom→top to fill the bar.
+    // Each band overhangs upward by BAND_OVERLAP; the next band (drawn on
+    // top) covers that overhang, so no sub-pixel seam shows between bands.
+    // (x uses anchor "middle", y uses "start" — separate constraints since
+    // one shared anchor can't do both.)
     bands.forEach((_, i) => {
       cs.push(
         Constraint.position({ x: BAR_WIDTH / 2, anchor: "middle" }, [
@@ -174,22 +218,25 @@ export async function legendColorbar(
         ])
       );
       cs.push(
-        Constraint.position({ y: i * bandH, anchor: "start" }, [g[bandName(i)]])
+        Constraint.position({ y: datum(min + i * bandSpan), anchor: "start" }, [
+          g[bandName(i)],
+        ])
       );
     });
-    // Ticks + labels pinned at their value's pixel. x and y are pinned by
-    // separate position constraints so the label can sit start-aligned in x
-    // while staying middle-aligned in y (one shared anchor can't do both).
+    // Ticks + labels pinned at their value. x and y are pinned by separate
+    // position constraints so the label can sit start-aligned in x while
+    // staying middle-aligned in y (one shared anchor can't do both).
     tickValues.forEach((v, i) => {
-      const cy = valueToBarY(v);
       cs.push(
         Constraint.position(
-          { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: cy, anchor: "middle" },
+          { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: datum(v), anchor: "middle" },
           [g[tickName(i)]]
         )
       );
       cs.push(
-        Constraint.position({ y: cy, anchor: "middle" }, [g[labelName(i)]])
+        Constraint.position({ y: datum(v), anchor: "middle" }, [
+          g[labelName(i)],
+        ])
       );
       cs.push(
         Constraint.position(
@@ -201,7 +248,6 @@ export async function legendColorbar(
     return cs;
   });
 
-  root._ambientYDown = true; // chrome: reads y-down, never in the plot flip scope (#629)
   return root.name(LEGEND_NAME);
 }
 
@@ -218,21 +264,18 @@ export async function legendColorbar(
 export async function elaborateLegend(
   node: GoFishNode,
   scale: CategoricalScale | ContinuousColorScale,
-  /** Orientation of the AMBIENT frame the legend's INTERIOR renders in (row
-   *  order, colorbar value direction) — y-down unless `options.yUp` forces a
-   *  global y-up ambient. The legend is `_ambientYDown` chrome (#629): its
-   *  interior never flips with the plot. */
-  yUp = true,
-  /** Orientation of the abstract frame the legend's BOX seats in — true when the
-   *  plot content will mirror (continuous root y, or a forced global y-up). The
-   *  align below is authored in that shared frame; the bake then box-mirrors the
-   *  legend about the plot's flip scope so it lands top-aligned on screen. */
-  boxYUp = yUp
+  /** The plot the legend describes: a categorical legend lists its entries
+   *  in the plot's stacking order when the plot stacks its series along an
+   *  upward-growing y (see `stackedSeriesOrder`). */
+  content: GoFishNode
 ): Promise<GoFishNode> {
   const legend =
     "scaleFn" in scale
-      ? await legendColorbar(scale.scaleFn, scale.domain, yUp)
-      : await legendColumn(scale.color, yUp);
+      ? await legendColorbar(scale.scaleFn, scale.domain)
+      : await legendColumn(legendEntries(scale.color, content));
+  // The legend tops out with the content: "top" is the end of a y that grows
+  // upward and the start of one that reads top-down.
+  const top = wrapperDirection(node, 1) === -1 ? "end" : "start";
   return wrapPreservingIdentity(node, async (content) => {
     content.name(CONTENT_NAME);
 
@@ -249,21 +292,9 @@ export async function elaborateLegend(
         g[CONTENT_NAME],
         g[LEGEND_NAME],
       ]),
-      // Top-align the column with the content top. "Top" is the far edge in the
-      // abstract frame of a mirroring plot (end) but the near edge of a y-down
-      // one (start), so the anchor follows the BOX frame (`boxYUp`) — otherwise
-      // a y-down chart (heatmap) seats the legend at the bottom. #143/#16/#629.
-      Constraint.align({ y: boxYUp ? "end" : "start" }, [
-        g[CONTENT_NAME],
-        g[LEGEND_NAME],
-      ]),
+      // Top-align the column with the content top.
+      Constraint.align({ y: top }, [g[CONTENT_NAME], g[LEGEND_NAME]]),
     ]);
-
-    // The legend wrapper only UNIONS the plot's continuous y up; it is not the
-    // σ-scope. Mark it scope-transparent so the y-up flip (#629) opens at the plot
-    // CONTENT (frame = canvas `finalH`), not at this wrapper (whose bbox spans the
-    // legend column). The column itself is `_ambientYDown` (stays y-down). #629.
-    root._scopeTransparent = true;
     return root;
   });
 }

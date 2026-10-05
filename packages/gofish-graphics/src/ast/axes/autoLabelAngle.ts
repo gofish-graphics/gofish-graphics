@@ -58,7 +58,7 @@ type RelBox = { minX: number; minY: number; maxX: number; maxY: number };
 /**
  * One axis label's final geometry, in the root node's frame: the label's
  * unrotated box `rel` around its origin `pivot`, turned by `rotate` degrees
- * (counterclockwise in the layout frame, as `Text` applies it) about `pivot`.
+ * (clockwise on screen, in y-down pixels, as `Text` applies it) about `pivot`.
  */
 export type LabelBox = {
   dim: 0 | 1;
@@ -71,7 +71,8 @@ export type LabelBox = {
   rel: RelBox;
 };
 
-/** Rotate `p` by `deg` degrees counterclockwise about the origin. */
+/** Rotate `p` by `deg` degrees about the origin, clockwise on screen (y-down
+ *  pixels). */
 function rotatePoint([x, y]: [number, number], deg: number): [number, number] {
   const rad = (deg * Math.PI) / 180;
   const c = Math.cos(rad);
@@ -101,10 +102,9 @@ function rotatedExtent(rel: RelBox, deg: number): RelBox {
 /**
  * Read every tagged axis label's final geometry off a laid-out tree. The
  * label's origin is its placed translate plus every ancestor's translate, so
- * all labels land in one common frame (the root's). This is the layout frame,
- * before any y-up mirror is applied at paint. A mirror reflects positions and
- * angles together, so overlap measured here equals overlap on screen, as long
- * as the labels of one row sit under the same mirror (an axis's labels do).
+ * all labels land in one common frame (the root's): layout pixels, which are
+ * the screen up to the gutter offset, so overlap measured here equals overlap
+ * on screen.
  */
 export function collectLabelBoxes(root: GoFishNode): LabelBox[] {
   const out: LabelBox[] = [];

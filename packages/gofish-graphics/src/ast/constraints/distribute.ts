@@ -163,24 +163,6 @@ export function lowerDistributePlacement(
   const ordered = distributeChildrenInPlacementOrder(constraint, children);
   if (ordered.length === 0) return;
   const anchors = distributePlacementAnchors(constraint);
-  // A spread chain on y places its targets itself: their allocated y bands are
-  // just slices of the spread's height, unrelated to where the chain put
-  // them. Stamp the anchor the chain fixed on each target so a target that
-  // later opens its own y-up flip scope mirrors about that anchor (see
-  // `Placeable.pitchAnchorY` and `scopeBox` in coordinateTransforms/bake.ts),
-  // keeping the painted targets exactly where this chain solved them. A
-  // fixed-pitch chain fixes its anchor (an overlay, at exact pitch); an edge
-  // chain fixes the whole box, which a mirror about its middle keeps. (A
-  // stack's parts never open their own scope: the stack is one continuous
-  // space and flips as a whole.)
-  if (constraint.dir === "y" && !constraint.glue) {
-    for (const child of ordered) {
-      const target = targets.get(child.name);
-      if (target)
-        target.pitchAnchorY =
-          constraint.anchor === "edge" ? "middle" : constraint.anchor;
-    }
-  }
   for (let i = 1; i < ordered.length; i++) {
     // A chain edge whose endpoints both arrived pre-positioned is a consistency
     // check, not an owning relation: confluence governs the unknown positions.
@@ -402,12 +384,13 @@ const STACK: ChainRule = {
 
 /** A spread chain (a non-glued distribute): `"edge"` lays each part's box
  *  `spacing` after the previous one's end; a fixed-pitch anchor lays each
- *  part's anchor `spacing` from the previous one's. A pitched chain steps
- *  down the axis, as its rows read: content above the anchor (`start`,
- *  `baseline`) rises over the rows chained after it, and content below it
- *  (`end`) hangs under the rows chained before it. A baseline-anchored part
- *  keeps its signed sides about its baseline; any other part is its box,
- *  seated by its anchor. */
+ *  part's anchor `spacing` from the previous one's. A pitched chain's claim
+ *  steps against its parts' own growth, as its rows read: content above the
+ *  anchor (`start`, `baseline`) rises over the rows chained after it, and
+ *  content below it (`end`) hangs under the rows chained before it. That is a
+ *  ridgeline: a spread that reads top-down whose rows grow upward (see
+ *  `axisDirection.ts`). A baseline-anchored part keeps its signed sides about
+ *  its baseline; any other part is its box, seated by its anchor. */
 const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
   seat: (A, part) => {
     const w = box(A, part);

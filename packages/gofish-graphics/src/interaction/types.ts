@@ -23,9 +23,9 @@ import type { ToPixel } from "../ast/_node";
  */
 export interface InteractionFrame {
   items: DisplayList.DisplayItem[];
-  /** GoFish-space → screen-px map for this frame (gutters + y-flip). */
+  /** Layout-pixel → screen-px map for this frame (the gutter offset). */
   toPixel?: ToPixel;
-  /** Root position scales: data → gofish space, per axis. */
+  /** Root position scales: data → layout pixels, per axis. */
   posScales?: [
     ((pos: number) => number) | undefined,
     ((pos: number) => number) | undefined,

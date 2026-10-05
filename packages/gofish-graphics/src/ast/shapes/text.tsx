@@ -15,11 +15,11 @@ import { glyphAxis } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import type { DisplayList } from "gofish-ir";
 import {
-  declaredFlipsY,
   lowerStyle,
   rectItemFromBox,
   roleFor,
 } from "../displayList/lowerHelpers";
+import { axisDirection } from "../axisDirection";
 type TextDimensions = {
   width: number;
   height: number;
@@ -89,14 +89,14 @@ type TextLayout = {
 type RelBBox = { minX: number; minY: number; maxX: number; maxY: number };
 
 /**
- * Rotate an anchor-relative bbox by `deg` (degrees, CCW in the chart's y-up
- * world frame) about the anchor and return the axis-aligned min/max of the
- * rotated corners. Standard rotation matrix: x' = x·cosθ − y·sinθ,
- * y' = x·sinθ + y·cosθ.
+ * Rotate an anchor-relative pixel bbox (y-down) by `deg` degrees, clockwise on
+ * screen (SVG's `rotate`), about the anchor and return the axis-aligned
+ * min/max of the rotated corners. Standard rotation matrix in y-down pixels:
+ * x' = x·cosθ − y·sinθ, y' = x·sinθ + y·cosθ.
  *
- * Sanity for rotate:90 — x∈[0,w], y∈[descent,ascent] (the unrotated relative
- * box, anchor at the start baseline) maps to x∈[−ascent,−descent], y∈[0,w]:
- * a narrow strip left of the anchor extending up — exactly the footprint a
+ * Sanity for rotate:−90 — x∈[0,w], y∈[−ascent,−descent] (the unrotated box,
+ * anchor at the start baseline) maps to x∈[−ascent,−descent], y∈[−w,0]: a
+ * narrow strip left of the anchor extending up — exactly the footprint a
  * conventional y-axis title occupies in the left gutter.
  */
 const rotateRelBBox = (b: RelBBox, deg: number): RelBBox => {
@@ -135,11 +135,13 @@ const resolveTextLayout = (
     fontStyle,
     fontWeight
   );
+  // Pixel (y-down) box about the baseline: the glyphs rise `ascent` above it
+  // (negative y) and hang `-descent` below it.
   const bbox = {
     minX: 0,
-    minY: dims.descent,
+    minY: -dims.ascent,
     maxX: dims.width,
-    maxY: dims.ascent,
+    maxY: -dims.descent,
   };
 
   const anchorX =
@@ -153,9 +155,9 @@ const resolveTextLayout = (
   if (dominantBaseline === "central") {
     anchorY = (bbox.minY + bbox.maxY) / 2;
   } else if (dominantBaseline === "hanging") {
-    anchorY = bbox.maxY;
+    anchorY = bbox.minY;
   } else if (dominantBaseline === "mathematical") {
-    anchorY = dims.ascent * 0.5;
+    anchorY = -dims.ascent * 0.5;
   }
 
   return { dims, bbox, anchor: { x: anchorX, y: anchorY } };
@@ -188,8 +190,8 @@ export const Text = ({
   fontStyle?: string;
   fontWeight?: number | string;
   debugBoundingBox?: boolean;
-  /** Rotation in degrees, applied in the chart's y-up world frame about the
-   *  text anchor. `rotate: 90` yields a conventional y-axis title — it reads
+  /** Rotation in degrees, clockwise on screen, about the text anchor (SVG's
+   *  `rotate`). `rotate: -90` yields a conventional y-axis title — it reads
    *  bottom-to-top with glyph tops facing left. */
   rotate?: number;
   /** Which end of the (pre-rotation) text sits at the node's own local
@@ -234,7 +236,7 @@ export const Text = ({
 
         return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (shared, size, scales, children, node) => {
         const finalText = isValue(textContent)
           ? getValue(textContent)
           : textContent;
@@ -248,12 +250,12 @@ export const Text = ({
           fontWeight
         );
 
-        // Anchor-relative bbox. When the text is rotated, its layout footprint
-        // is the rotated box (e.g. rotate:90 turns a wide label into a tall
-        // strip left of the anchor — a y-title gutter), so we measure the
-        // axis-aligned extent of the rotated corners. rotate:0 is the identity
-        // here, but we skip the matrix so unrotated text is bit-for-bit
-        // unchanged.
+        // Anchor-relative pixel bbox. When the text is rotated, its layout
+        // footprint is the rotated box (e.g. rotate:-90 turns a wide label
+        // into a tall strip left of the anchor — a y-title gutter), so we
+        // measure the axis-aligned extent of the rotated corners. rotate:0 is
+        // the identity here, but we skip the matrix so unrotated text is
+        // bit-for-bit unchanged.
         const relRaw: RelBBox = {
           minX: layout.bbox.minX - layout.anchor.x,
           maxX: layout.bbox.maxX - layout.anchor.x,
@@ -263,6 +265,9 @@ export const Text = ({
         const { minX, maxX, minY, maxY } = rotate
           ? rotateRelBBox(relRaw, rotate)
           : relRaw;
+        // The box is pixels; layout returns it in the text's own axis order,
+        // which runs against the pixels when its y is a continuous position.
+        const up = axisDirection(node, 1) === -1;
 
         const positionX =
           computeAesthetic(
@@ -287,7 +292,7 @@ export const Text = ({
               embedded: dims[0].embedded,
             },
             {
-              min: minY,
+              min: up ? -maxY : minY,
               size: maxY - minY,
               embedded: dims[1].embedded,
             },
@@ -298,12 +303,8 @@ export const Text = ({
           renderData: { layout },
         };
       },
-      // IR lowering — mirror of `render`. The anchor maps through `toPixel`.
-      // Rotation sign is flip-AGNOSTIC: in a `yUp` chart scope `toPixel` mirrors
-      // y, which negates a screen-space rotate (`-rotate`); in y-down free space
-      // there is no mirror, so the rotate passes through (`+rotate`). We read the
-      // flip out of `toPixel` via `toPixelFlipsY` (issue #143/#16). Unrotated →
-      // upright text either way.
+      // IR lowering. The anchor (the baseline point) maps through `toPixel`,
+      // and the rotation is SVG's, clockwise on screen.
       lower: (
         { transform, renderData, toPixel, intrinsicDims },
         _children,
@@ -314,21 +315,8 @@ export const Text = ({
           : textContent;
         const text = finalText == null ? "" : String(finalText);
 
-        const flips = declaredFlipsY(node, toPixel);
         const [anchorX, anchorY] = displayTranslate(transform);
-        const [px, py0] = toPixel([anchorX, anchorY]);
-        // Text's vertical box is asymmetric about the baseline (ascent ≠ descent
-        // for `auto`). Under the y-up flip that asymmetry resolves correctly; in
-        // y-down free space the SVG baseline must shift by (minY + maxY) so the
-        // glyphs fill the un-mirrored layout box (zero for a symmetric `central`
-        // baseline, and zero under the flip → charts stay byte-identical). The
-        // rotated case carries its footprint in the rotate transform. #143/#16.
-        const baselineShift =
-          flips || rotate
-            ? 0
-            : 2 * (intrinsicDims?.[1]?.min ?? 0) +
-              (intrinsicDims?.[1]?.size ?? 0);
-        const py = py0 + baselineShift;
+        const [px, py] = toPixel([anchorX, anchorY]);
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
@@ -399,7 +387,7 @@ export const Text = ({
             filter,
           }),
         };
-        if (rotate) textItem.rotate = flips ? -rotate : rotate;
+        if (rotate) textItem.rotate = rotate;
         items.push(textItem);
         return items;
       },

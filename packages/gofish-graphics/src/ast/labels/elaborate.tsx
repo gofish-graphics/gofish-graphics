@@ -13,7 +13,7 @@ import type { AlignAnchor } from "../constraints/shared";
 import { wrapPreservingIdentity } from "../elaborationUtils";
 import { getValue, type MaybeValue } from "../data";
 import { resolveColorChannel } from "../../color";
-import { isCONTINUOUS } from "../underlyingSpace";
+import { wrapperDirection, type AxisDirection } from "../axisDirection";
 import {
   type LabelPosition,
   type LabelSpec,
@@ -134,34 +134,31 @@ function resolveLabelTargets(node: GoFishNode): void {
 }
 
 /**
- * Which bbox anchor of the TARGET corresponds to a given visual edge, in this
- * subtree's own AUTHORED (pre-bake) coordinate frame.
+ * Which bbox anchor of the TARGET corresponds to a given visual edge, in the
+ * axis order of the frame the label constraints run in (`yDirection`, that
+ * frame's y direction, see `axisDirection.ts`).
  *
- * `left`/`right` are direction-invariant — x is never mirrored — so they map
- * literally (`left` → bbox min/`"start"`, `right` → bbox max/`"end"`).
+ * `left`/`right` map literally (`left` → bbox min/`"start"`, `right` → bbox
+ * max/`"end"`): x always runs with the pixels.
  *
- * `top`/`bottom` depend on `frameFlips` (does THIS node declare a continuous
- * y, and so get y-mirrored at bake — see `elaborateAxes`'s `frameFlips`,
- * `elaborationsFor` ~:722, and `bake.ts`'s `declaredYUp`): when it does, the
- * subtree's authored-ascending direction reads as visually UP once mirrored,
- * so `top` is the bbox MAX (`"end"`); when it doesn't (no mirror — an
- * ordinal/undefined-y subtree, e.g. a bar sized only along x), the authored
- * frame already equals final pixel space directly, where ascending y is
- * visually DOWN, so `top` is the bbox MIN (`"start"`) instead.
+ * `top`/`bottom` follow the y direction: in a frame whose y grows upward (a
+ * continuous y, direction −1) `top` is the bbox MAX (`"end"`); in a frame that
+ * reads top-down (+1) `top` is the bbox MIN (`"start"`).
  */
 function edgeAnchor(
   edge: "top" | "bottom" | "left" | "right",
-  frameFlips: boolean
+  yDirection: AxisDirection
 ): AlignAnchor {
+  const up = yDirection === -1;
   switch (edge) {
     case "right":
       return "end";
     case "left":
       return "start";
     case "top":
-      return frameFlips ? "end" : "start";
+      return up ? "end" : "start";
     case "bottom":
-      return frameFlips ? "start" : "end";
+      return up ? "start" : "end";
   }
 }
 
@@ -173,19 +170,18 @@ function edgeAnchor(
  * — the mapping is literal (`start` → left edge, `end` → right edge).
  *
  * For a `left`/`right` edge the cross axis is y, so — like {@link edgeAnchor}
- * — the mapping depends on `frameFlips`: per `LabelPosition`'s documented
- * semantics, `start` means "top" and `end` means "bottom"; which bbox anchor
- * ("start"/"end") that visual side is depends on whether this subtree
- * y-mirrors, exactly as `edgeAnchor` derives for the main axis.
+ * — the mapping depends on the y direction: per `LabelPosition`'s documented
+ * semantics, `start` means "top" and `end` means "bottom", and which bbox
+ * anchor ("start"/"end") that visual side is depends on which way y runs.
  */
 function crossAlignAnchor(
   edge: "top" | "bottom" | "left" | "right",
   align: "start" | "center" | "end",
-  frameFlips: boolean
+  yDirection: AxisDirection
 ): AlignAnchor {
   if (align === "center") return "middle";
   const yCross = edge === "left" || edge === "right";
-  const invert = yCross && frameFlips;
+  const invert = yCross && yDirection === -1;
   if (!invert) return align === "start" ? "start" : "end";
   return align === "start" ? "end" : "start";
 }
@@ -201,14 +197,14 @@ const inwardSpacing = (anchor: AlignAnchor, offset: number): number =>
  * `ref()` stand-in, from the label's parsed `LabelPosition`. Mirrors the pixel
  * semantics of the old `calculateLabelOffset`/`getLabelTextAnchor` as closely
  * as the constraint vocabulary allows (a few px of anchor-vs-bbox drift is
- * expected and acceptable). `frameFlips` is this wrap's own y-mirror
- * predicate (see `edgeAnchor`'s doc comment).
+ * expected and acceptable). `yDirection` is the y direction of the frame the
+ * constraints run in (see `edgeAnchor`'s doc comment).
  */
 function buildLabelConstraints(
   spec: LabelSpec,
   refRef: any,
   textRef: any,
-  frameFlips: boolean
+  yDirection: AxisDirection
 ): any[] {
   const positionStr = spec.position ?? "outset";
   if (positionStr === "center") {
@@ -220,7 +216,7 @@ function buildLabelConstraints(
   const offset = spec.offset ?? DEFAULT_OFFSET;
   const dir: "x" | "y" = edge === "left" || edge === "right" ? "x" : "y";
   const crossDim: "x" | "y" = dir === "x" ? "y" : "x";
-  const mainAnchor = edgeAnchor(edge, frameFlips);
+  const mainAnchor = edgeAnchor(edge, yDirection);
   const cs: any[] = [];
 
   if (side === "outset") {
@@ -232,7 +228,7 @@ function buildLabelConstraints(
     // Cross axis: a plain bbox-edge align (no gap) — the label's edge sits
     // flush with the target's edge, matching the old "full half-extent, no
     // baseOffset" pixel math for outset alignment.
-    const anchor = crossAlignAnchor(edge, align, frameFlips);
+    const anchor = crossAlignAnchor(edge, align, yDirection);
     cs.push(Constraint.align({ [crossDim]: anchor } as any, [textRef, refRef]));
   } else {
     // inset: fixed-pitch distribute (PR #762) relates the SAME anchor on both
@@ -253,7 +249,7 @@ function buildLabelConstraints(
         Constraint.align({ [crossDim]: "middle" } as any, [textRef, refRef])
       );
     } else {
-      const crossAnchor = crossAlignAnchor(edge, align, frameFlips);
+      const crossAnchor = crossAlignAnchor(edge, align, yDirection);
       cs.push(
         Constraint.distribute(
           {
@@ -271,26 +267,6 @@ function buildLabelConstraints(
 
 let labelUid = 0;
 
-/** The `frameFlips` predicate, evaluated at the WRAP node — the node whose
- *  layer the label `Text`s actually live in. A label's `rotate` is authored
- *  as a literal screen-clockwise degrees value (Vega-Lite semantics),
- *  independent of whether that frame mirrors; `Text` re-negates its `rotate`
- *  prop when ITS OWN frame flips (`text.tsx`'s `flips ? -rotate : rotate`),
- *  so pre-negating with the SAME predicate cancels the render-time negation
- *  and lands back on the literal authored angle regardless of orientation.
- *  The same bit also feeds `edgeAnchor`/`crossAlignAnchor` (which visual side
- *  an authored "top" is). Mirrors `elaborateAxes`'s `frameFlips`
- *  (`elaborationsFor`, ~:722) and `bake.ts`'s `declaredYUp`. */
-const frameFlipsAt = (
-  node: GoFishNode,
-  yUp: boolean,
-  underCoord: boolean
-): boolean =>
-  yUp ||
-  underCoord ||
-  (node._underlyingSpace !== undefined &&
-    isCONTINUOUS(node._underlyingSpace[1]));
-
 /**
  * Wrap `node` in ONE Layer tier carrying, per (target × label spec), a
  * `ref(target)` stand-in and a label `Text`, related by the constraints
@@ -301,9 +277,11 @@ const frameFlipsAt = (
  */
 async function wrapWithLabelTexts(
   node: GoFishNode,
-  targets: GoFishNode[],
-  frameFlips: boolean
+  targets: GoFishNode[]
 ): Promise<GoFishNode> {
+  // The label constraints run in the wrapper's axis order, which is the
+  // wrapped node's: the wrapper's spaces are the node's.
+  const yDirection = wrapperDirection(node, 1);
   return wrapPreservingIdentity(node, async (content) => {
     content.name(CONTENT_NAME);
 
@@ -327,12 +305,7 @@ async function wrapWithLabelTexts(
         refs.push((ref(target) as any).name(refName) as GoFishNode);
 
         const position = spec.position ?? "outset";
-        const rotate =
-          spec.rotate != null
-            ? frameFlips
-              ? -spec.rotate
-              : spec.rotate
-            : undefined;
+        const rotate = spec.rotate ?? undefined;
         const label = Text({
           text,
           fontSize: spec.fontSize ?? 11,
@@ -370,7 +343,7 @@ async function wrapWithLabelTexts(
       ];
       for (const { refName, textName, spec } of pending) {
         cs.push(
-          ...buildLabelConstraints(spec, g[refName], g[textName], frameFlips)
+          ...buildLabelConstraints(spec, g[refName], g[textName], yDirection)
         );
       }
       return cs;
@@ -398,17 +371,13 @@ async function wrapWithLabelTexts(
  * that case with a self-wrap.
  */
 async function elaborateLabelsWalk(
-  node: GoFishNode,
-  yUp: boolean,
-  underCoord: boolean
+  node: GoFishNode
 ): Promise<{ node: GoFishNode; changed: boolean }> {
   let changed = false;
-  const childUnderCoord =
-    underCoord || (node as { type?: string }).type === "coord";
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child instanceof GoFishNode) {
-      const res = await elaborateLabelsWalk(child, yUp, childUnderCoord);
+      const res = await elaborateLabelsWalk(child);
       if (res.changed) changed = true;
       if (res.node !== child) {
         node.children[i] = res.node;
@@ -426,8 +395,7 @@ async function elaborateLabelsWalk(
   );
   if (targets.length === 0) return { node, changed };
 
-  const frameFlips = frameFlipsAt(node, yUp, underCoord);
-  const root = await wrapWithLabelTexts(node, targets, frameFlips);
+  const root = await wrapWithLabelTexts(node, targets);
 
   // If this node ALSO carries its own labels (pending for ITS parent), hoist
   // them onto the wrapper — the parent's collection loop sees the wrapper as
@@ -449,18 +417,14 @@ async function elaborateLabelsWalk(
  * final self-wrap.
  */
 export async function elaborateLabels(
-  node: GoFishNode,
-  opts: { yUp?: boolean; underCoord?: boolean } = {}
+  node: GoFishNode
 ): Promise<{ node: GoFishNode; changed: boolean }> {
-  const yUp = opts.yUp ?? false;
-  const underCoord = opts.underCoord ?? false;
   resolveLabelTargets(node);
-  const res = await elaborateLabelsWalk(node, yUp, underCoord);
+  const res = await elaborateLabelsWalk(node);
   let out = res.node;
   let changed = res.changed;
   if (out._labels && out._labels.length > 0) {
-    const frameFlips = frameFlipsAt(out, yUp, underCoord);
-    out = await wrapWithLabelTexts(out, [out], frameFlips);
+    out = await wrapWithLabelTexts(out, [out]);
     changed = true;
   }
   return { node: out, changed };

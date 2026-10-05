@@ -35,20 +35,13 @@ export type SpreadOptions = {
 /**
  * Spread helper: wraps `gofish-graphics`' `spread` operator as a `Combiner`.
  *
- * When used as a `parentChild` combiner with `dir: "y"`, the helper swaps the
- * two children so the parent ends up at high y (top of the screen) — GoFish
- * is y-up, so the first child of `spreadY` would otherwise land at the bottom.
- * For `dir: "x"` the natural order (parent first → low x → left) is kept.
- * When used as a `sibling` combiner (N children, not 2), no swap is applied.
+ * A spread reads in its axis order, parent first: as a `parentChild` combiner
+ * the parent lands on the left (`dir: "x"`) or at the top (`dir: "y"`, which
+ * reads top-down), its children after it.
  */
 export const spread = (opts: SpreadOptions): Combiner => {
-  const combiner: Combiner = (children: any[]) => {
-    const ordered =
-      children.length === 2 && opts.dir === "y"
-        ? [children[1], children[0]]
-        : children;
-    return gfSpread(opts as any, ordered);
-  };
+  const combiner: Combiner = (children: any[]) =>
+    gfSpread(opts as any, children);
   combiner.growthDir = opts.dir;
   return combiner;
 };

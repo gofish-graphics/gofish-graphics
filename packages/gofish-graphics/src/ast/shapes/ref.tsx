@@ -43,7 +43,6 @@ const PLACEABLE_OPTIONAL_KEYS: readonly (keyof Placeable)[] = [
   "pinAnchor",
   "setSizeOnly",
   "spaceOn",
-  "pitchAnchorY",
 ];
 const RESERVED_KEYS: ReadonlySet<string> = new Set<string>([
   // Instance fields of GoFishRef (public + private)

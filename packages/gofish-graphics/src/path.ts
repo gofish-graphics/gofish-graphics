@@ -73,6 +73,18 @@ export const reverseSegment = (seg: PathSegment): PathSegment =>
 export const reversePath = (path: Path): Path =>
   path.map(reverseSegment).reverse();
 
+/** A path with every point's y scaled by `sign` (±1): the same path read in
+ *  the opposite y direction when `sign` is −1 (see `ast/axisDirection.ts`). */
+export const scalePathY = (path: Path, sign: 1 | -1): Path => {
+  if (sign === 1) return path;
+  const f = ([x, y]: Point): Point => [x, -y];
+  return path.map((seg) =>
+    seg.type === "line"
+      ? segment(f(seg.points[0]), f(seg.points[1]))
+      : curve(f(seg.start), f(seg.control1), f(seg.control2), f(seg.end))
+  );
+};
+
 export const segmentToSVG = (segment: PathSegment): string => {
   if (segment.type === "line") {
     const [[x1, y1], [x2, y2]] = segment.points;

@@ -306,12 +306,9 @@ export const Image = ({
           },
         };
       },
-      // IR lowering — structural mirror of `render`. Flip-AGNOSTIC: the box
-      // spans x `[x, x+width]`, y `[y, y+height]`; map both diagonal corners
-      // through `toPixel` and take the component-wise min for the SVG top-left.
-      // Correct under y-down free space and the `yUp` chart scope alike — where
-      // `toPixel` un-mirrors, the top-left is `(x, y+height)`; in y-down it is
-      // `(x, y)` (issue #143/#16).
+      // IR lowering: the box spans x `[x, x+width]`, y `[y, y+height]`; map both
+      // diagonal corners through `toPixel` and take the component-wise min for
+      // the SVG top-left.
       lower: (
         { intrinsicDims, transform, toPixel },
         _children,

@@ -1,4 +1,5 @@
 import { GoFishAST } from "../_ast";
+import { axisDirection } from "../axisDirection";
 import { GoFishNode, type ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
@@ -57,7 +58,7 @@ export const arrow = createNodeOperator(
           _childSpaces: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [UNDEFINED, UNDEFINED],
-        layout: (shared, size, scales, layoutChildren) => {
+        layout: (shared, size, scales, layoutChildren, node) => {
           if (layoutChildren.length < 2) {
             return {
               intrinsicDims: [
@@ -102,6 +103,9 @@ export const arrow = createNodeOperator(
             bbox(toDims[0].min!, toDims[0].max!, toDims[1].min!, toDims[1].max!)
           );
 
+          // The arrow is computed in the arrow's axis order; `lower` draws
+          // pixels, so reflect its y (and its angles) through the direction.
+          const d = axisDirection(node, 1);
           return {
             intrinsicDims: [
               {
@@ -116,20 +120,19 @@ export const arrow = createNodeOperator(
             transform: { translate: [0, 0] },
             renderData: {
               sx: arrowTuple[0],
-              sy: arrowTuple[1],
+              sy: d * arrowTuple[1],
               cx: arrowTuple[2],
-              cy: arrowTuple[3],
+              cy: d * arrowTuple[3],
               ex: arrowTuple[4],
-              ey: arrowTuple[5],
-              ae: arrowTuple[6],
-              as: arrowTuple[7],
+              ey: d * arrowTuple[5],
+              ae: d * arrowTuple[6],
+              as: d * arrowTuple[7],
               ec: arrowTuple[8],
             },
           };
         },
-        // IR lowering — mirror of render. The arrow's parts live under the
-        // node's translate (no local flip), so each point is offset by that
-        // translate and pushed through `toPixel`. The arrowhead's
+        // IR lowering. The arrow's parts live under the node's translate, so
+        // each point is offset by that translate and pushed through `toPixel`. The arrowhead's
         // `translate(ex,ey) rotate(θ)` is baked into the emitted points.
         lower: (
           { transform, renderData, coordinateTransform },
@@ -142,11 +145,6 @@ export const arrow = createNodeOperator(
           const [tx, ty] = displayTranslate(transform);
           const session = node.getRenderSession();
           const outer = session.toPixel!;
-          // LIMITATION (#657, a #629 follow-up): the arrow body + head map
-          // through this single `toPixel`, so an arrow spanning two DIFFERENT
-          // orientation scopes (a y-up bar to a y-down heatmap cell) mirrors one
-          // endpoint incorrectly. Per-endpoint scopes need a mid-curve
-          // reconciliation; deferred. Single-scope arrows are correct.
           const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
           const px = (x: number, y: number) => composed([x, y]).join(",");
 

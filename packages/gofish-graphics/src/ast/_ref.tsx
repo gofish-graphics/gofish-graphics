@@ -27,6 +27,7 @@ import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
 import { childNameKey } from "./constraints/shared";
+import { axisDirection, orientView } from "./axisDirection";
 
 export class GoFishRef {
   public type: string = "ref";
@@ -305,7 +306,8 @@ export class GoFishRef {
 
     this.intrinsicDims = this.selectedNode.intrinsicDims;
 
-    return this;
+    // The copy above is in pixels; the parent reads it in its own axis order.
+    return orientView(this as Placeable, axisDirection(this.parent, 1));
   }
 
   public get dims(): Dimensions {

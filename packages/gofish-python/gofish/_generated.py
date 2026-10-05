@@ -298,7 +298,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         font_style: Raw CSS font-style (e.g. "italic").
         font_weight: CSS font-weight (e.g. 300, 700, "bold").
         debug_bounding_box: Draw the text's bounding box, for layout debugging. Default false.
-        rotate: Rotation in degrees, applied in the chart's y-up world frame about the text anchor. Default 0.
+        rotate: Rotation in degrees, clockwise on screen, about the text anchor. Default 0.
         text_anchor: Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character. Default "start".
     """
     _kw: Dict[str, Any] = {}
@@ -966,7 +966,7 @@ def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = 
         font_size: Font size in pixels.
         color: Label color. Omitted, it is chosen to contrast with the mark.
         offset: Offset from the shape's edge in pixels.
-        rotate: Rotation in degrees.
+        rotate: Rotation in degrees, clockwise on screen.
         font_family: Font family of the label's text node. Omitted, the elaborator's own font family.
         font_weight: Font weight, e.g. "bold" or a numeric weight.
         font_style: Font style, e.g. "italic".

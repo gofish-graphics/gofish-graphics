@@ -4,9 +4,11 @@ import {
   evenStep,
   reversePath,
   samePoint,
+  scalePathY,
   transformPath,
 } from "../../path";
 import { GoFishAST } from "../_ast";
+import { axisDirection } from "../axisDirection";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
@@ -921,14 +923,9 @@ export const connect = createNodeOperator(
 
           // The legacy `<g transform="translate(tx,ty)">` offset, folded into a
           // local pixel map so each path point lands at its absolute pixel.
-          //
-          // LIMITATION (#657, a #629 follow-up): the connector is ONE bake entry
-          // with ONE flip, so every path point — both endpoints — maps through
-          // this single `toPixel`. A connector spanning two DIFFERENT orientation
-          // scopes (e.g. a y-up bar to a y-down heatmap cell) therefore mirrors
-          // one endpoint incorrectly. A clean fix needs per-endpoint scopes plus
-          // a mid-path reconciliation; deferred. Single-scope connectors (the
-          // common case) are correct.
+          // The paths were built in the connector's axis order; reading their
+          // y through its direction gives pixels.
+          const yDirection = axisDirection(node, 1);
           const [tx, ty] = displayTranslate(transform);
           const offsetToPixel: ToPixel = ([px, py]) =>
             toPixel([px + tx, py + ty]);
@@ -945,13 +942,15 @@ export const connect = createNodeOperator(
           });
 
           /** A path's pixel-space path data. */
-          const pathData = (path: Path): string =>
-            pathToPixelSVG(
+          const pathData = (orderPath: Path): string => {
+            const path = scalePathY(orderPath, yDirection);
+            return pathToPixelSVG(
               coordinateTransform
                 ? transformPath(path, coordinateTransform, { resample: true })
                 : path,
               offsetToPixel
             );
+          };
           const toItem = (d: string): DisplayList.DisplayItem => ({
             kind: "path",
             d,

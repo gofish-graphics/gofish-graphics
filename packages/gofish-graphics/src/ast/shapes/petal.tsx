@@ -98,11 +98,13 @@ export const Petal = ({
           },
         };
       },
-      // IR lowering — mirror of render. Petal is polar-only; `toPixel` is the
-      // coord content map set by coord.lower. The both-aesthetic branch is a
+      // IR lowering. Petal is polar-only; `toPixel` is the coord content map
+      // set by coord.lower and `coordinateTransform` is the polar transform in
+      // pixels (`inPixels`: it takes the interior's pixel y, the negated
+      // radius, and returns y-down points). The both-aesthetic branch is a
       // point rect; otherwise the petal path is built from polar-transformed
-      // points and rotated by its angular center (the legacy `rotate(deg)`),
-      // baked into each point before `toPixel`.
+      // points and rotated by its angular center, baked into each point before
+      // `toPixel`.
       lower: (
         { intrinsicDims, transform, coordinateTransform, toPixel },
         _children,
@@ -152,24 +154,27 @@ export const Petal = ({
         // Petal shape — same points as render, rotated by the angular center
         // (radians) and mapped to pixels.
         const halfRadius = (displayDims[1].size ?? 0) / 2;
+        // The interior's pixel y of radius `halfRadius` is `-halfRadius`.
         const s = space.transform([
           -displayDims[0].size / 2 + Math.PI / 2,
-          halfRadius,
+          -halfRadius,
         ]);
         const e = space.transform([
           displayDims[0].size / 2 + Math.PI / 2,
-          halfRadius,
+          -halfRadius,
         ]);
         const r = displayDims[1].size ?? 0;
         const m: [number, number] = [halfRadius + r / 2, 0];
         const c1: [number, number] = [halfRadius + r / 4, s[1]];
         const c2: [number, number] = [halfRadius + r / 4, e[1]];
 
-        const center = displayDims[0].center ?? 0; // radians
+        // Turn by the angular center (radians, counter-clockwise on screen,
+        // as polar measures angles), in y-down pixels.
+        const center = displayDims[0].center ?? 0;
         const cos = Math.cos(center);
         const sin = Math.sin(center);
         const petalToPixel = ([x, y]: [number, number]): [number, number] =>
-          toPixel([x * cos - y * sin, x * sin + y * cos]);
+          toPixel([x * cos + y * sin, -x * sin + y * cos]);
         const p = (pt: [number, number]) => petalToPixel(pt).join(",");
 
         const d =

@@ -291,7 +291,7 @@ export const LABEL_OPTIONS: FieldGroup = group({
     doc: "Label color. Omitted, it is chosen to contrast with the mark.",
   },
   offset: { type: t.number, doc: "Offset from the shape's edge in pixels." },
-  rotate: { type: t.number, doc: "Rotation in degrees." },
+  rotate: { type: t.number, doc: "Rotation in degrees, clockwise on screen." },
   fontFamily: {
     type: t.string,
     doc: "Font family of the label's text node. Omitted, the elaborator's own font family.",
@@ -948,7 +948,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       rotate: {
         type: t.number,
         default: 0,
-        doc: "Rotation in degrees, applied in the chart's y-up world frame about the text anchor.",
+        doc: "Rotation in degrees, clockwise on screen, about the text anchor.",
       },
       textAnchor: {
         type: t.enum("start", "middle", "end"),
