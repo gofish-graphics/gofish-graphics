@@ -22,6 +22,6 @@ def default(data=None, w=500, h=300):
         data = load_data()
     return (
         chart(data)
-        .flow(spread(by="age", dir="y", reverse=True))
+        .flow(spread(by="age", dir="y"))
         .mark(rect(w="people"))
     )
