@@ -64,17 +64,21 @@ root = Layer([ content.name("__legendContent"), legendColumn(colorMap) ])
 
 `legendColumn` is a `Spread({ dir: "y" })` of one row per color-map entry. Each
 `legendRow` is a `Spread({ dir: "x" })` of a 10×10 `Rect` swatch and a 10px gray
-`Text` label. The column entries always read top→bottom, but how the spread gets
-there depends on the render orientation (issue #143/#16). It takes
-`reverse: yUp`: under the y-UP chart flip a `Spread({ dir: "y" })` lays children
-bottom→top (the first child gets the smallest y), so the first color-map entry
-must render _last_ to land at the top; in y-DOWN free space the natural order
-already reads top→bottom, so no reverse. A continuous (gradient) colorbar is
-likewise orientation-aware — it is built in fixed y-up logical coordinates (band
-0 at the base, domain max at the top), and for a y-down render it flips which
-value each band/tick shows (and the tick pixel via `valueToBarY`) so a sequential
-scale still reads max-at-top either way, without disturbing the band-overlap
-seam logic.
+`Text` label. The column's y is ordinal, so the spread reads top-down (see
+[Axis direction](/internals/layout/passes#axis-direction)): the entries are listed
+top to bottom in the order they are given.
+
+That order is the color scale's own, with one special case
+(`stackedSeriesOrder`): when the plot STACKS its color series along a y that grows
+upward, the first series sits at the bottom of each stack, so the legend lists the
+series in the stack's visual order, top to bottom (the last series first). The
+legend finds that stack in the content it describes: the first glued `distribute`
+along an upward-growing y whose children are all keyed by legend entries. The
+legend follows the plot; the plot's stacking rule never reads the legend.
+
+A continuous (gradient) colorbar is a continuous value axis, so it grows upward:
+the domain max is at the top. Its bands are listed from the top, each showing the
+value at its center, and each tick sits `valueToPx(v)` above the bar's base.
 
 ### The three constraints
 
@@ -91,11 +95,10 @@ the first one places the anchor the other two read:
    overhang.
 2. `distribute({ dir: "x", spacing: 20 }, [content, column])` — seats the column
    just right of the content's **full** bounding box, including its axis labels.
-3. `align({ y: yUp ? "end" : "start" }, [content, column])` — top-aligns the
-   column with the content top. "Top" is the far edge in y-up (`end`) but the
-   near edge in y-down free space (`start`), so the anchor follows the render
-   orientation; otherwise a y-down chart (e.g. a heatmap) seats its legend at the
-   bottom (issue #143/#16).
+3. `align({ y: top }, [content, column])` — top-aligns the column with the content
+   top. The constraint runs in the wrapper's axis order, so "top" is the `end` of a
+   y that grows upward and the `start` of one that reads top-down (a heatmap), read
+   off `axisDirection`.
 
 The wrapper inherits the wrapped node's `key` and `_name` (moved off the content
 via the identity dance), so faceting, refs, and `selectAll` keep resolving to the
@@ -178,8 +181,8 @@ chosen to match the previous bespoke styling.
 `legendColorbar` builds the bar as a `layer` of fixed-pixel shapes —
 `BAND_COUNT` thin band `Rect`s (each filled `scaleFn(value)`) plus a tick mark +
 label per d3 tick — each placed by a literal-pixel `Constraint.position` in the
-bar's own y-up frame (value `v` → `t·BAR_HEIGHT` from the bottom, so the domain
-max sits at the top). The layer's bbox is the union of those shapes, so the
+colorbar's y-down layer (value `v` sits `t·BAR_HEIGHT` above the bar's base, so the
+domain max is at the top). The layer's bbox is the union of those shapes, so the
 colorbar is measured by normal layout exactly like the swatch column.
 
 ## Limitations

@@ -47,15 +47,16 @@ layer([
   chart(selectAll("bars"))
     .flow(group({ by: "lake" }))
     .mark((d) =>
+      // A spread on y reads top-down: the total above its bar.
       spread({ dir: "y", alignment: "middle", spacing: 10 }, [
-        d[0],
         text({ text: String(sumBy(d[0].datum, "count")) }),
+        d[0],
       ])
     ),
 ]);
 
-// Rotated y-axis title (reads bottom-to-top)
-.mark(text({ text: "count", rotate: 90, fontSize: 13 }))
+// Rotated y-axis title (reads bottom-to-top): rotate is clockwise on screen
+.mark(text({ text: "count", rotate: -90, fontSize: 13 }))
 
 // Italic label
 .mark(text({ text: "note", fontStyle: "italic" }))

@@ -7,6 +7,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/gofish.tsx
   - packages/gofish-graphics/src/ast/_node.ts
+  - packages/gofish-graphics/src/ast/axisDirection.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
@@ -427,6 +428,70 @@ This is where the actual positioning and sizing happens. Each node's `layout` fu
 
 It applies layout algorithms (stacking, positioning, etc.), calculates intrinsic dimensions for each node, and handles nested layouts and complex arrangements.
 
+#### Axis direction
+
+Layout stores every node's geometry (its local box, its translate, its bbox ledger)
+in **y-down pixels**, the canvas's own frame. Nothing is mirrored later. What makes a
+continuous y grow upward is the node's **axis direction** (`axisDirection(node, dim)`
+in `src/ast/axisDirection.ts`), the one resolution site for which way a node's axis
+order runs on the screen:
+
+- `+1`: the order runs with the pixels. Every x axis, and a discrete y (an ordinal
+  space, or a spread along y, whose space is UNDEFINED when its children carry no
+  keys): the first item is at the top.
+- `-1`: the order runs against the pixels. A continuous y (a value axis, a magnitude,
+  a datum-positioned mark) grows upward from its origin, so `start`, the baseline and
+  the first part of a stack sit at the bottom.
+- A node with **no y axis** (an UNDEFINED y: a fixed-size shape, a text label, a layer
+  of those) has no direction of its own and takes its parent's: it reads in the frame
+  it sits in. On the canvas that is top-down; inside a bar chart a fixed-size shape's
+  box sits above its origin like the bars around it, and a text label's glyphs rise
+  above its baseline.
+
+It is read off the node's own resolved underlying space (for a node that roots its
+own σ-scope, the space it keeps for itself, `selfScaledSpace`), so it is local: an
+ordinal spread inside a bar chart reads top-down inside, and a bar chart inside an
+ordinal spread grows upward inside its row. Everything inside a `coord` is `-1`,
+because a coordinate transform is math-handed; the `coord` itself is a pixel box
+(`+1`) and converts between the two (see
+[Flattening the Scenegraph](/internals/layout/coord-flattening)).
+
+Operators never consult it directly. A node's `_layout` reasons in its own **axis
+order** (`order = direction · pixel`), and `GoFishNode.layout` converts at the node
+boundary, so spread, stack, align, distribute, the σ maps and baseline seating all run
+unchanged:
+
+- the box and translate a `_layout` returns are stored in pixels (`orientDims`,
+  `orientTransform`);
+- the y map a node receives is reflected when it and its parent run opposite ways
+  (`orientScales`; σ, a magnitude, never changes);
+- the node is handed back to its parent as a view in the PARENT's axis order
+  (`orientView`), which reflects every y read (box, anchors, translate, shape) and
+  every y write (placements, extents) about the parent's local origin. Anchors swap
+  `min`↔`max`; `center` and `baseline` stay.
+
+A `ref` stores a pixel copy of its target, so it is read through its parent's view
+like any child. An elaboration wrapper (axes, labels, titles, a legend) builds its
+constraints before its own space is resolved, so it reads its direction off
+`wrapperDirection(node)`: the direction of a layer that reports the wrapped node's
+spaces and takes its parent. Geometry a node keeps for its own `lower` (a connector's paths, an
+arrow, a polygon's vertices) is in its axis order too, so the node reflects it
+through its direction when it lowers. A node that runs a pixel-native algorithm
+(the treemap's d3 tiling) reads its y from its frame's start edge
+(`fromFrameStart`), where it places its children.
+
+Seating a child at its baseline is the one place a boundary between two directions
+needs more than the reflection: a child whose y runs the other way from its
+layer's is seated from ITS frame's start edge, the band the layer allocated it (or
+its own box when unsized). So a bar chart (growing upward) in a cell of a layer
+that reads top-down sits with its baseline at the bottom of its cell, exactly as
+the root sits in the canvas (`placeRoot`, `fromFrameStart`).
+
+A chain of baselines (a spread with `anchor: "baseline"`) starts at its first
+member's origin rather than its start edge (its sequence origin in
+`solveAxisProblem`), so two such chains over the same rows solve to the same lines
+whatever their rows hold: a ridgeline's upward-growing silhouettes and its rules.
+
 **Inferring an omitted `w`/`h`.** The chart-level `w` and `h` are optional. An
 omitted dimension is resolved per axis from the root's size claim on it:
 
@@ -614,27 +679,29 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 **Location**: `src/ast/gofish.tsx`
 
 ```typescript
-const placeRoot = (axis, value, shrinkToFit) =>
-  shrinkToFit
-    ? child.pinAnchor(axis, value, "min")
-    : child.place(axis, value, "baseline");
-placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
-placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
+// The root's axis order starts at the canvas frame's start edge: the top, or the
+// bottom for a continuous y (`direction` −1).
+const atFrameStart = (p) => (direction === 1 ? p : frame - p);
+shrinkToFit
+  ? child.pinAnchor(axis, atFrameStart(offset), direction === 1 ? "min" : "max")
+  : child.place(axis, atFrameStart(offset + seatPx), "baseline");
 ```
 
 **Implementation**: `src/ast/_node.ts`
 
 Pins the whole chart into the container by landing one anchor of the root's bbox
-at a target coordinate. _Which_ anchor depends on whether the axis is sized:
+at a target coordinate. The canvas is a frame `[0, final]` on each axis, and the
+root's axis order starts at the frame's start edge (the bottom for a continuous y).
+_Which_ anchor depends on whether the axis is sized:
 
-- **Given dimension** → pin the **baseline** (local `0`) to `0`. The canvas box is
-  the baseline-anchored `[0, given]`, and any content seated outside it (axis labels
-  below `0`, ticks above `given`) is reserved as the per-side overhangs in the render
-  pass.
-- **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the **`min`
-  edge** to `0`. The canvas box _is_ the content's full `[min, max]` extent, so the
-  content fills `[0, size]` exactly and the overhang formulas (`-min`, `max - finalH`)
-  compute `0` for that axis with no special-casing.
+- **Given dimension** → pin the **baseline** (local `0`) at the scope's seat from the
+  start edge. The canvas box is `[0, given]`, and any content seated outside it (axis
+  labels past the start edge, ticks past the end) is reserved as the per-side
+  overhangs in the render pass.
+- **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the
+  content's **start edge** to the frame's start. The canvas box _is_ the content's
+  full extent, so the content fills `[0, size]` exactly and the overhang formulas
+  (`-min`, `max - finalH`) compute `0` for that axis with no special-casing.
 
   Leaving `min` off origin in this case is the
   [#574](https://github.com/gofish-graphics/gofish-graphics/issues/574) double-count:
@@ -790,42 +857,25 @@ sizing — kept deliberately, because the distinction is semantic, not geometric
 
 The SVG container is sized to the content (`width`/`height`, read off the
 pre-chrome content node in layout) plus the measured reserves on each side. There is
-**no inner flip `<g>`** — the y-flip is folded into `toPixel` (next pass), so the
-display-list items paint directly under the `<svg>`.
+**no inner flip `<g>`**: layout is already in y-down pixels, so the display-list items
+paint directly under the `<svg>`.
 
 ### Render Pass 3: The Coordinate Fold (`toPixel`)
 
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
-SVG is **y-down** (top-left origin); a continuous-y chart wants **y-up** (bars grow
-upward). The old renderer reconciled the two with two stacked SVG transforms — a
-per-shape `scale(1,-1)` and a root flip `<g transform="scale(1,-1) translate(…)">`.
-Both are folded into an affine map on the render session, but the map is now decided
-**per scope** rather than globally (issue #629): the bake walk tags each baked draw
-entry with the placed y-band it draws in (its `FlipScope`), and the lower driver builds
-that entry's `toPixel` from it:
+SVG is **y-down** (top-left origin), and so is layout: a continuous y grows upward
+because layout placed it that way (see [Axis direction](#axis-direction)). So the map
+on the render session only adds the gutter offset:
 
 ```typescript
-const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-const toPixelFor = (flip?: FlipScope): ToPixel =>
-  flip === undefined
-    ? baseDown // ambient y-down
-    : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]); // y-up
+const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
 ```
 
-A continuous-y subtree mirrors _y_ about its own band; an ordinal-y neighbor (a heatmap
-beside a bar chart) keeps the ambient y-down map. The **root plot content** mirrors about
-the canvas frame `[0, finalH]` stamped on `contentNode._rootFlipScope` here in
-`layout()` (where `finalH` is known) — the exact frame the old global flip used, so a
-single cohesive chart is pixel-identical; a mixed free-space dashboard flips only its
-continuous subtrees, each about its own band. Chrome (axis titles, legend, colorbar) is
-stamped `_ambientYDown`: the bake box-mirrors its BOX about the plot's frame (so it
-seats beside the flipped plot exactly as before) while its INTERIOR renders y-down —
-legend rows read top→bottom with no `reverse`. Because the flip and the gutter offset live in
-`toPixel`, the lower pass produces items already in **final absolute pixels** — no outer
-flip group, no per-shape transform. `toPixel` is affine, so straight paths stay straight
-(a warped path just maps each control point through it). See
-[Rendering](/internals/core/rendering) for the full per-scope mechanism.
+The lower pass produces items already in **final absolute pixels**: no flip group, no
+per-shape transform. `toPixel` is a translate, so straight paths stay straight (a
+warped path just maps each control point through it). See
+[Rendering](/internals/core/rendering).
 
 ### Render Pass 4: Lowering the Baked Tree
 
@@ -1022,14 +1072,14 @@ This creates:
 
 1. **Lower**: each bar's `lower()` emits a single `rect` display-list item — a
    linear-space, one-dimension-data-driven bar lowers to an axis-aligned rectangle in
-   absolute pixels (its y-up box mapped through `toPixel`):
+   absolute pixels (its pixel box mapped through `toPixel`):
 
    ```typescript
    // X is aesthetic (positioned by spread), Y is data-driven
    const gxMin = displayDims[0].min ?? 0;
    const width = displayDims[0].size ?? 0; // Inferred by spread
    const height = displayDims[1].size ?? 0; // From data
-   // rectItemFromBox maps the y-up box through toPixel → { kind: "rect", x, y, w, h }
+   // rectItemFromBox maps the box through toPixel → { kind: "rect", x, y, w, h }
    return [
      rectItemFromBox(gxMin, gxMin + width, 0, height, toPixel, { style }),
    ];

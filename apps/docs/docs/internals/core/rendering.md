@@ -40,139 +40,70 @@ paints — is the whole architecture of this pass.
 > wrapped everything in a `<g transform="scale(1,-1) …">` to flip the y-axis), and
 > there was no IR. That path has been **deleted**. `render`/`INTERNAL_render`/
 > `_render`/`_renderLabel` are gone; the extension point each shape implements is now
-> `lower`, and the y-flip lives in a single coordinate map (`toPixel`, below) rather
-> than in nested SVG `<g>` transforms. The case for the IR is
+> `lower`, and there is no y-flip at all: layout is already in y-down pixels (see
+> `toPixel`, below). The case for the IR is
 > [A Core IR and a Display List](/internals/design/core-ir).
 
 ## The coordinate fold: `toPixel`
 
-Layout produces a tree of boxes; the lower pass maps each box's coordinates to final
-SVG pixels through an affine map, `toPixel`, installed on the render session
-(`RenderSession.toPixel` in `_node.ts`) just before each baked draw entry lowers.
-y-orientation is a **per-scope** property (issue #629), so the map differs by scope
-rather than being one global root decision.
+Layout produces a tree of boxes in **final y-down pixels**: SVG-native, top-left
+origin. There is no mirror anywhere between layout and paint. The lower pass maps
+each box's coordinates to canvas pixels through `toPixel`, installed on the render
+session (`RenderSession.toPixel` in `_node.ts`) before the baked entries lower. It
+only adds the gutter offset:
 
-- **Free space is y-DOWN** (SVG-native, top-left origin). A vertical list written
-  `[A, B]` reads top→bottom, an explicit `y:` grows downward — what you'd expect from
-  SVG, Bluefish, or Typst. This is the **ambient** base map:
+```ts
+const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+```
 
-  ```ts
-  const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-  ```
+So a continuous y axis growing upward is not something paint does. Layout places it
+that way. Every node's y axis has a **direction**, `axisDirection(node, 1)` in
+`ast/axisDirection.ts`: `+1` when its order runs with the pixels (an ordinal y, so the
+first item is at the top) and `-1` when it runs against them (a continuous y, which
+grows upward from its origin). A node with no y axis takes its parent's direction,
+and the canvas is `+1`. x is always `+1`. The direction is
+read off the node's own resolved underlying space and is local: an ordinal spread
+inside a bar chart reads top-down inside. Operators reason in their node's axis order
+and the one reflection `pixel = direction · order` is applied where geometry crosses
+a node boundary (see [Layout & Render Passes](/internals/layout/passes#axis-direction)).
+A `coord` declares its own handedness: its transform is math-handed, so its interior
+has direction `-1`, and the coord (a pixel box, `+1`) reflects y where the interior
+meets the canvas (see
+[Flattening the Scenegraph](/internals/layout/coord-flattening)).
 
-- **A continuous-_y_ scope is y-UP** (larger _y_ is higher, the convention bars and
-  y-axes want). It mirrors _y_ about its OWN placed band `[baseY, baseY+height]`:
-
-  ```ts
-  const toPixel: ToPixel = ([gx, gy]) =>
-    baseDown([gx, 2 * baseY + height - gy]);
-  ```
-
-Which band a draw entry mirrors about is decided by the **bake walk** (`bake.ts`), not
-one root switch. Each entry is tagged with the `FlipScope` it draws in
-(`DisplayObject.flip`); the lower driver builds that entry's `toPixel` from it. A node
-opens a scope when its own resolved y space `isCONTINUOUS` (`declaredYUp`) — a value
-axis, a datum-positioned mark, a swarm's distribution; an **ORDINAL / UNDEFINED** node
-declares nothing and inherits the ambient. The mirror therefore lands at each **topmost
-continuous-y node**, so a vertical bar chart flips (continuous value axis) while a
-horizontal bar chart does not (ordinal category axis), and a box-and-whisker built from
-primitives flips with no opt-in. `options.yUp` still forces a **global** y-up ambient.
-
-**Root placement of a free root (#773).** When the root's space on an axis is a
-baseline magnitude, `layout()` solves σ so the root's size claim
-`ascent + descent` (the claim's total `width`, from `resolveExtent()`) fills
-the given canvas, and places the root's baseline at the scope's `originPx`,
-`descent·σ` above the canvas's low edge (the rule a layer's self-scaled free
-stash uses too), so a signed area or bar chart under `scatter` keeps its
-negative side on the canvas. A pinned root solves σ the same way and hands its
-content the map `px(d) = σ·d + originPx`, through which the content places
-itself, so it sits at 0. This applies only
-to a given dimension: a shrink-to-fit root pins its content's `min` edge, which
-already includes the descent, so adding it there would count it twice (#574).
-See
+**Root placement.** The canvas is a frame `[0, final]` on each axis, and the root's
+axis order starts at the frame's start edge: the top for a y that reads top-down, the
+bottom for a continuous y. A given dimension seats the root's baseline in that frame
+(a free root's baseline at the scope's `originPx`, `descent·σ` from the start edge,
+#773; a pinned root at 0, its map carrying `originPx`); a shrink-to-fit dimension
+pins the root's start edge to the frame's start, which already includes any descent,
+so adding it would count it twice (#574). See
 [Underlying Space](/internals/core/underlying-space).
 
-The rule is decided by the **underlying-space tree** — the σ-scope that establishes a
-continuous y position scale — never by wrapper geometry. Three things fall out of that:
-
-- **Root vs. nested band.** The **root plot content** mirrors about the authoritative
-  canvas frame `[0, finalH]`, carried on `contentNode._rootFlipScope` (stamped by
-  `layout()` once `finalH = contentNode.dims.size` is known — the exact frame the old
-  global flip used). Whether the root content flips as a whole is the bake's own
-  rule applied to it (`opensFlipScope`): its y is continuous, or it is a `coord`.
-  The chart-level chrome follows exactly that decision; there is no separate
-  "some coord somewhere below" trigger. The canvas origin `0` is _not_ recoverable from the node's placed
-  bbox (a shrink-to-fit pin can offset it), so it is stamped rather than re-derived. A
-  scope that opens **below** the canvas frame — a facet cell, a mixed-dashboard subtree
-  — carries no stamp and mirrors about its own allocated band (`scopeBox`).
-- **A mixed free-space composition needs no special case.** A bar chart beside a
-  heatmap composes under a `spread` whose y unions to ORDINAL/UNDEFINED (the ordinal
-  category axis wins the union), so nothing opens a scope at the top; the walk descends
-  and each continuous subtree opens its own scope while the ordinal neighbor keeps the
-  ambient y-down map. This is exactly the all-or-nothing bug the old single global flip
-  could not close — and it closes with no "blocking" logic, because the union already
-  reports the neighbor as ordinal.
-- **Chrome is the coord rule applied to annotation: the plot's frame places its BOX,
-  but never re-interprets its INTERIOR.** A titled/legended chart's outer wrapper
-  _unions_ the plot's continuous y, so it too `declaredYUp` — but the axis-title /
-  legend / colorbar shapes are chrome that reads top→bottom regardless of which way the
-  value axis grows. The chrome-elaboration passes stamp those subtrees `_ambientYDown`;
-  their seating constraints stay authored in the shared abstract frame (same side as
-  the axis labels, exactly as before #629), and the bake **box-mirrors** each chrome
-  subtree about the plot's flip scope — so the title lands on the same _visual_ edge as
-  the flipped tick labels — while everything _inside_ the chrome renders ambient:
-  glyphs upright, legend rows top→bottom with no `reverse`, colorbar max at the top.
-  Only the plot's data marks (and their in-plot point labels — UNDEFINED-y but _inside_
-  the scope) actually flip. The title/legend _wrapper_ layers are marked
-  `_scopeTransparent`: they do not open the scope themselves (their bbox includes the
-  chrome, the wrong mirror band); they descend to the plot content they wrap, which
-  opens it about the canvas frame. The chrome's placement frame is stamped directly on
-  each outermost `_ambientYDown` chrome subtree by `layout()` (as `_chromeFrame`, the
-  plot content's flip scope), so the bake reads it off the node rather than searching up
-  through the wrappers on every visit. A plot that doesn't mirror has no frame, and its
-  chrome passes through untouched (a heatmap keeps its top-side axis title).
-
-- **`coord`** (polar/clock) opens a scope about its own box when none is active
-  (a standalone pie reads y-up) and INHERITS the parent scope when nested (a flower's
-  petals or a pie glyph keep their placement in the parent frame) — its own transform
-  fixes the interior angular sense either way, so a polar interior is identical in free
-  space and inside a y-up scatter. A parent's orientation places the coord's _box_; it
-  never re-interprets its interior.
-
-Nesting is idempotent by construction — **the first scope on a root-to-leaf path wins,
-and every descendant inherits it**. A node opens a scope only in the ambient y-down
-frame (`incomingFlip === undefined`); once a scope is active, a nested continuous node
-(or a nested `coord`) simply inherits the active band instead of opening a second one.
-Ordinal/undefined nodes declare nothing either way. So a continuous scope inside a
-continuous scope sees the flip already active and inherits it — no double flip, no
-cancellation. (This is an inherit rule, **not** an XOR: an XOR would re-mirror or cancel
-on nesting, which the code never does — see `opensScope` in `bake.ts`, gated on
-`incomingFlip === undefined`.)
+**Chrome is ordinary content.** Axis titles, the legend column and the colorbar are
+elaborated at the root as ordinary y-down shapes. Their seating constraints run in
+the wrapper's axis order like any other constraint, and the sides are chosen with the
+same `axisDirection` (a title follows its axis line; the legend tops out with the
+content: the `end` of a y that grows upward, the `start` of one that reads top-down).
+Nothing inside them is mirrored, so legend rows read top to bottom with no `reverse`
+and the y title is simply rotated `-90°`.
 
 > **Caveat (count-as-magnitude).** A unit visualization that encodes a quantity as a
 > _count of ordinal units_ (a unit column chart: `spread`-ing one dot per row) has no
-> continuous y, so the rule leaves it y-down. Such stories are authored for y-down
-> directly — bottom-aligning their stacks (`alignment: "end"`) so the units grow
-> upward — rather than forced y-up. The principled end-state is to model a unit-count
-> stack as a baseline magnitude (continuous), at which point the rule flips it for free.
+> continuous y, so its spread reads top-down. Such stories are authored for that
+> directly (a `reverse` spread, bottom-aligned stacks). The planned fix models a unit
+> count as a `stack` with an `inset`, at which point the direction rule grows it upward
+> for free.
 
-> **Historical note.** Before #143, the world was y-up _everywhere_ (one global
-> `scale(1,-1)` at the root, plus a per-shape `scale(1,-1)` to un-mirror content). The
-> y-down default (#143) relocated that flip behind a single root `effYUp` switch;
-> #629 then localized it into the per-scope `FlipScope` mechanism above, so a mixed
-> composition flips only its continuous scopes. Shape lowering is **flip-agnostic** —
-> `rectItemFromBox`/image map both box corners through `toPixel` and take the
-> component-wise min/abs; text & label rotation read the declared flip off the session
-> (`declaredFlipsY`, cross-checked against the `toPixelFlipsY` probe under
-> `GOFISH_FLIP_CHECK`) — so the same shape code is correct under either map.
+> **Historical note.** Before #143 the world was y-up everywhere (a global
+> `scale(1,-1)`). #143 made free space y-down behind a root switch, and #629 made the
+> mirror per subtree: each draw entry carried a `FlipScope` band it was mirrored
+> about at paint, with chrome compensations around it. #681 replaced all of that with
+> the axis direction above, resolved at layout.
 
-Because `toPixel` already carries the orientation and the viewport offset, the display
-list is in **final absolute pixels** — the SVG backend emits each item verbatim, with
-**no outer flip `<g>` and no per-shape transform**.
-
-`toPixel` is affine (a translate, optionally a y-flip), so a straight path stays straight: a
-shape with a curved path just maps each of its control points through `toPixel` and
-re-serializes (`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling.
+`toPixel` is a translate, so a straight path stays straight: a shape with a curved
+path maps each of its control points through `toPixel` and re-serializes
+(`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling.
 
 ## The lower pass
 
@@ -332,32 +263,13 @@ mask-and-blend-mode graphs and assigning their deterministic def ids.
 ## How the live `render()` wires it together
 
 The orchestrator `render()` in `gofish.tsx` is now small. It computes the gutter
-reserves, builds the y-DOWN base map plus a per-scope mirror factory (`toPixelFor`),
-and paints the lowered list into an `<svg>`. The y gutter sides are attributed by
-PAINTED side: when the root flips as a whole (`rootFlipsWhole` — a continuous-y
-chart, or the global `yUp`), the canvas mirror sends layout-max past `finalH` to
-the visual top and negative layout min to the visual bottom; on an unflipped root
-the attribution swaps (negative min is painted-TOP content — a ridgeline's
-amplitude allowance above its first baseline, a heatmap's category label row —
-and max past `finalH` is painted-bottom, e.g. elaborated labels below
-fixed-pitch rows). This one rule replaced both the historical always-flipped
-mapping and the `_pitchPaintedTopSpill` ridgeline special case — see
-[Underlying Space](/internals/core/underlying-space). Orientation is decided **per draw entry**
-by the bake walk (each entry carries its `FlipScope`), so `render()` does not pick a
-single global map; it only threads the base map and the `ambientFlip` that
-`options.yUp` (`LayoutData.yUp`) forces. The canvas frame the root scope mirrors about
-is not passed here — it is stamped on `contentNode._rootFlipScope` back in `layout()`,
-where the final canvas height is known:
+reserves from the measured overhangs (`layout()` reads them straight off the root's
+pixel box: a negative min is top overhang, a max past the canvas is bottom
+overhang), builds `toPixel`, and paints the lowered list into an `<svg>`:
 
 ```ts
-const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-const toPixelFor = (flip?: FlipScope): ToPixel =>
-  flip === undefined
-    ? baseDown
-    : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]);
-const ambientFlip = yUp ? { baseY: 0, height } : undefined;
-const paintBaked = () =>
-  lowerToDisplayList(child, toPixelFor, ambientFlip).map(paintSVG);
+const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+const paintBaked = () => lowerToDisplayList(child, toPixel).map(paintSVG);
 return (
   <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">
     <Show when={defs}><defs>{defs}</defs></Show>
@@ -366,18 +278,11 @@ return (
 );
 ```
 
-The lower driver (`lowerToDisplayList`) installs each baked entry's scope
-(`session.flip = d.flip` and `session.toPixel = toPixelFor(d.flip)`, via the shared
-`installFlip` helper) just before lowering it — so a continuous-y subtree mirrors
-within its own band while an ordinal-y neighbor stays y-down, all sharing one flat
-display list. The declared orientation is derived from `session.flip !== undefined`
-(`declaredFlipsY`), not a separate stored bit.
-
 The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→paint
 pipeline against a throwaway container and serialize the result.
 
 The real `paintBaked` brackets each half with the perf instrumentation
-(`src/ast/perf.ts`): it times `lowerToDisplayList(child, toPixelFor, ambientFlip)`
+(`src/ast/perf.ts`): it times `lowerToDisplayList(child, toPixel)`
 under the `lower` label, records the emitted `items.length` as the `displayItems`
 count, then times `items.map((item) => paintSVG(item, interactive))` under `paint`.
 Like the layout-pass hooks, this is zero-cost when instrumentation is off and
@@ -406,7 +311,8 @@ signal during resolve), three things change; when it is absent — the common ca
   laid out again — see [Reactivity](/internals/frontend/reactivity). What the
   item carries statically is what serialization and hit-testing see.
 - **Frame publication.** Before painting, `render()` publishes the lowered
-  `items`, the root `posScales`, and `toPixel` to the runtime as an
+  `items`, the root `posScales` (data → layout pixels, read off the placed root
+  in its axis direction), and `toPixel` to the runtime as an
   `InteractionFrame`, so hit-testing and data↔px conversions see the current
   frame. `gofish()` stashes the chart's state on the container
   (`__gofishState`: the current Solid root's dispose and the runtime). There

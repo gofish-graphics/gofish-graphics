@@ -81,17 +81,16 @@ axis line.
 
 ### Which side the axis seats on
 
-Each axis seats in a gutter on one cross-edge. The **default** target is the
-CONVENTIONAL edge — a continuous/difference **x-axis renders at the visual
-bottom**, a continuous y-axis at the left — regardless of whether the frame
-y-flips (issue #143/#16/#629). `axisSide` (in `elaborationsFor`) turns that target
-into the abstract `start`/`end` edge to author against: when the cross frame
-mirrors (a CONTINUOUS cross y, a global `yUp`, or a `coord` ancestor — tracked by
-the `underCoord` flag threaded down `elaborateAxes`), the near `"start"` edge lands
-at the bottom, so keep it; otherwise (a horizontal bar's ordinal category y, a
-faceted stack's ordinal facet y) the far `"end"` edge is the bottom. This is what
-puts a horizontal bar's and a faceted small-multiple's value axis at the bottom
-with no option — the pre-#629 behavior left them stranded at the top.
+Each axis seats in a gutter on one cross-edge, chosen in the owner's **axis order**
+(`"start"` or `"end"`, see [Axis direction](/internals/layout/passes#axis-direction)).
+The default is `defaultAxisSide` (`axes/elaborate.tsx`), read off the owner's
+`axisDirection` on the cross axis:
+
+- a continuous/difference **x-axis renders at the visual bottom**: the `start` of a
+  y that grows upward (a scatter, a vertical bar chart), the `end` of a y that reads
+  top-down (a horizontal bar's category y, a faceted stack's facet y);
+- every other axis takes `start` in its frame: a y-axis on the left, and a category
+  x-axis at the start of its y (the bottom of a bar chart, the top of a heatmap).
 
 The public `axes: { x: { side: "start" | "end" } }` option is the **override**:
 when specified it is honored **literally** (frame-relative: `"start"`=near,
@@ -101,17 +100,16 @@ elaboration can tell an explicit `"start"` apart from the default. The per-dim
 side is threaded `elaborateAxes → elaborationsFor → elaborate{Continuous,
 Difference,Ordinal}Axis`, and each seating decision reads the resolved edge:
 `gutterConstraints` flips the `innerAlign` edge and the `distribute`/standoff
-order, `tickMark` swaps the label/tick order so the tick still faces the content,
-the ordinal label row flips its `distribute([label, content])` pair, and the axis
-**titles** follow their axis to the same edge (see below).
+order, the ordinal label row flips its `distribute([label, content])` pair, and the
+axis **titles** follow their axis to the same edge (see below). The tick-and-label
+pair (`tickMark`) is a plain spread, which reads in pixel order, so it orders its
+two parts by the axis's SCREEN side (the side in axis order, turned into the screen
+side by the owner's cross direction) to keep the tick facing the content.
 
-Ordinal axes keep the plain `"start"` default (they flip with the content like a
-category row, not to a fixed edge). Chart-level **axis titles** are chrome
-(`elaborateAxisTitles`), so they reach the bottom by a different mechanism than the
-content-embedded line — a box-mirror about the canvas when the frame flips, or a
-direct far-edge seating (with the mirror suppressed) when it does not. `gofish.tsx`
-computes the title's `sides` and the mirror-suppression (`xTitleSeatsFar`) to match
-wherever `axisSide` put the line, so the two always land together.
+Chart-level **axis titles** (`elaborateAxisTitles`) are ordinary shapes seated by
+constraints in the title wrapper's axis order. `gofish.tsx` gives each title the same
+side as its axis (the explicit `side`, else `defaultAxisSide`), so the two always land
+together.
 
 ### Label rotation (`labelAngle`)
 
@@ -121,20 +119,14 @@ authored **screen-clockwise** to match Vega-Lite's `labelAngle`. It is threaded 
 same way `side` is —
 `elaborateAxes → elaborationsFor → elaborate{Continuous,Ordinal}Axis → tickMark` /
 `elaborateOrdinalAxis` — landing on the `Text` mark's `rotate` prop, which is
-applied in the node's own **y-up world frame** and gets negated at render time
-when that frame flips (`text.tsx`'s `flips ? -rotate : rotate`). Since
-`elaborationsFor` doesn't know the bake-time flip decision, it pre-negates using
-the same predicate `axisSide` already uses for its cross-flip check
-(`yUp || underCoord || isCONTINUOUS(space[1])` — this is dim-independent: it's
-really "does this node's own y mirror", not specific to the axis being labeled),
-canceling the render-time negation so the label lands at the literal screen angle
-regardless of the frame's orientation. A number or array is a manual, always-on
+SVG's rotation, clockwise on screen, so it passes through unchanged. A number or
+array is a manual, always-on
 angle; `"auto"` picks one of 0°, 45°, and 90° per label row (see
 [Automatic label angle](#automatic-label-angle-labelangle-auto) below).
 
 **The hanging-point rule.** `resolveLabelRotation` (`axes/elaborate.tsx`) turns
-the authored angle `a` into a `LabelRotation` descriptor — `rotate` (the
-frame-resolved value passed to `Text`), `trackAlign`, and `textAnchor` — that
+the authored angle `a` into a `LabelRotation` descriptor — `rotate` (the value
+passed to `Text`), `trackAlign`, and `textAnchor` — that
 governs how the label attaches to its tick/key along the TRACK axis (the axis's
 own direction): the label is anchored at whichever of its points ends up nearest
 the axis line, not at its rotated bbox's middle.
@@ -249,10 +241,8 @@ difference-axis delta labels are not tagged, since the angle does not apply to
 them). After a run, `collectLabelBoxes` walks the laid-out tree, and for each
 tagged label reads its unrotated text box and rotation from the `Text` node and
 its origin by summing its own and every ancestor's `projectedTranslate`. That
-puts every label in the root's layout frame, before the paint-time y-up mirror.
-A mirror reflects positions and angles together, so overlap measured there
-equals overlap on screen, provided the labels of one row share a mirror (an
-axis's labels do).
+puts every label in the root's layout frame, which is screen pixels up to the
+gutter offset, so overlap measured there equals overlap on screen.
 
 **The score.** Labels are grouped into rows, one per (axis, kind, tier), and
 `scoreLabelRows` scores each row on its own. Within a row all labels share one

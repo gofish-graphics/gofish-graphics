@@ -166,33 +166,23 @@ mainAnchor, spacing: inwardSpacing(mainAnchor, offset) })` relates the
 `edgeAnchor`/`crossAlignAnchor` translate the position string's visual
 vocabulary (`top`/`bottom`/`left`/`right`, and `start`/`end` for the cross
 alignment) into the `AlignAnchor` values (`"start"`/`"end"`/`"middle"`) the
-constraint system actually understands, in **this subtree's own authored
-frame** — see frame flips below for why that translation isn't literal on
-every axis.
+constraint system actually understands, in **the wrap's own axis order** — see
+below for why that translation isn't literal on every axis.
 
-## `frameFlips` and the rotation convention
+## Axis direction and the rotation convention
 
-x is never mirrored, so `left`/`right` map to bbox `start`/`end` literally.
-y can be — a node whose own space is a position-like CONTINUOUS y gets
-y-mirrored at bake (`elaborateAxes`'s `frameFlips`, `bake.ts`'s `declaredYUp`)
-so that ascending data values read upward on screen. `edgeAnchor` and
-`crossAlignAnchor` both take a `frameFlips` boolean (computed once per wrap by
-`frameFlipsAt`, using the exact same predicate `elaborateAxes` uses: an
-explicit chart-level `yUp`, an ancestor `coord` node, or this node's own
-underlying space being CONTINUOUS on y) so that an authored `"top"` always
-lands at the visual top, and an authored `align: "start"` on a left/right edge
-always means the visual top, regardless of which way this particular subtree's
-y axis happens to be mirrored.
+x always runs with the pixels, so `left`/`right` map to bbox `start`/`end`
+literally. y runs either way: the label constraints run in the wrapper's axis
+order, whose y direction (`axisDirection` of the wrapped node, see
+[Axis direction](/internals/layout/passes#axis-direction)) is `-1` for a continuous
+y, which grows upward, and `+1` for one that reads top-down. `edgeAnchor` and
+`crossAlignAnchor` take that direction, so an authored `"top"` always lands at the
+visual top, and an authored `align: "start"` on a left/right edge always means the
+visual top.
 
-The same `frameFlips` bit governs `rotate`. A label's `rotate` option is
-authored as **literal screen-clockwise degrees** (Vega-Lite's convention),
-independent of the subtree's own orientation. `Text` re-negates its own
-`rotate` prop when its frame flips (`text.tsx`'s `flips ? -rotate : rotate`),
-so `wrapWithLabelTexts` pre-negates with the identical `frameFlips` predicate
-before handing the angle to `Text`, canceling that render-time negation and
-landing back on the literal authored angle either way — the same
-pre-negation trick `elaborateAxes` uses for `labelAngle` (see
-[Axes](/internals/frontend/axes)).
+A label's `rotate` option is authored as **literal screen-clockwise degrees**
+(Vega-Lite's convention), and `Text`'s `rotate` is SVG's rotation, so it passes
+through unchanged.
 
 ## Auto-color
 
