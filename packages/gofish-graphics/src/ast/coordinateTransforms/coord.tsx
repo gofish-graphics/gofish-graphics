@@ -37,7 +37,7 @@ import {
   unionChildSpaces,
 } from "../graphicalOperators/alignment";
 import { axisScale, type AxisMap } from "../domain";
-import { type AxisDirection } from "../axisDirection";
+import { reflectInterval } from "../axisDirection";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry, scopeFrame, seatInScope } from "../solver/scopes";
 import { axisTitle, TITLE_COLOR, TITLE_FONT_SIZE } from "../axes/elaborate";
@@ -113,10 +113,6 @@ export type CoordinateTransform = {
 
 /** The two axes, for the loops that walk both. */
 const AXES = [0, 1] as const;
-
-/** The y direction of a coordinate space, its own box and its interior:
- *  math-handed, so upward (see `axisDirection.ts`). */
-const INTERIOR: AxisDirection = -1;
 
 /**
  * A math-handed transform as the coord's interior lowers through it: the
@@ -504,10 +500,7 @@ export const coord = createNodeOperator(
             transform: { translate: [undefined, undefined] },
             renderData: {
               coordinateSpaceBbox: coordSpaceBbox,
-              contentOffset: [translateX, INTERIOR * translateY] as [
-                number,
-                number,
-              ],
+              contentOffset: [translateX, -translateY] as [number, number],
             },
           };
         },
@@ -598,14 +591,13 @@ export const coord = createNodeOperator(
               const iv = dims[axis];
               if (iv?.min === undefined || iv?.size === undefined) return false;
               // The interior stores pixels; the frame is in the coordinate
-              // space, whose y runs the other way.
+              // space, whose y runs upward (see `axisDirection.ts`).
               const pxLo = (d.transform.translate[axis] ?? 0) + iv.min;
-              const pxHi = pxLo + iv.size;
-              const [lo, hi] =
-                axis === 1 && INTERIOR === -1 ? [-pxHi, -pxLo] : [pxLo, pxHi];
+              const px = { min: pxLo, max: pxLo + iv.size };
+              const { min, max } = axis === 1 ? reflectInterval(px) : px;
               if (
                 !IntervalLib.overlaps(
-                  { min: lo, max: hi },
+                  { min: min!, max: max! },
                   { min: 0, max: frame[axis] }
                 )
               )

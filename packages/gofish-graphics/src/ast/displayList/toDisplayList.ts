@@ -25,17 +25,11 @@
  */
 
 import type { DisplayList } from "gofish-ir";
-import type { ToPixel } from "../_node";
-import { runLayout, type GoFishRenderOptions } from "../gofish";
+import { runLayout, svgFrame, type GoFishRenderOptions } from "../gofish";
 import { GoFishNode } from "../_node";
 import { lowerToDisplayList } from "./lower";
 
 const PADDING = 40;
-const EDGE_GAP = 8;
-
-/** Replicates the gutter reserve in `gofish.tsx` `render()`. */
-const reserve = (overhang: number, pad: number): number =>
-  overhang > 0 ? Math.ceil(Math.max(pad, overhang + EDGE_GAP)) : pad;
 
 /**
  * Run layout + bake at `{w, h}` and emit the display list. Async because the
@@ -48,25 +42,12 @@ export async function toDisplayList(
   const pad = options.padding ?? PADDING;
   const data = await runLayout(options, child);
 
-  const leftReserve = reserve(data.leftOverhang, pad);
-  const topReserve = reserve(data.topOverhang, pad);
-  const bottomReserve = reserve(data.bottomOverhang, pad);
-
-  const viewport = {
-    w:
-      leftReserve +
-      data.width +
-      data.rightOverhang +
-      reserve(data.rightContentOverhang, pad),
-    h: topReserve + data.height + bottomReserve,
-  };
-
-  const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+  const frame = svgFrame(data, data.width, data.height, pad);
 
   return {
     irVersion: 0,
     ir: "gofish-display-list",
-    viewport,
-    items: lowerToDisplayList(data.child, toPixel),
+    viewport: { w: frame.width, h: frame.height },
+    items: lowerToDisplayList(data.child, frame.toPixel),
   };
 }

@@ -177,10 +177,7 @@ const isTransparent = (node: GoFishAST): boolean =>
  * resolving each layer's own order and only then descending preserves the
  * legacy interleaving. Transforms still compose all the way to the leaves.
  */
-export const bake = (
-  root: GoFishAST,
-  startTransform: [number, number] = [0, 0]
-): DisplayObject[] => {
+export const bake = (root: GoFishAST): DisplayObject[] => {
   const items: DisplayObject[] = [];
 
   const walk = (
@@ -213,7 +210,7 @@ export const bake = (
     }
   };
 
-  walk(root, startTransform, [1, 1]);
+  walk(root, [0, 0], [1, 1]);
   return items;
 };
 

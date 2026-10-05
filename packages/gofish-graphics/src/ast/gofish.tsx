@@ -263,10 +263,10 @@ export async function layout(
   width: number;
   height: number;
   rightOverhang: number;
-  rightContentOverhang: number;
   topOverhang: number;
   leftOverhang: number;
   bottomOverhang: number;
+  hasLegend: boolean;
   legendFields: ReadonlySet<string>;
 }> {
   child = await child;
@@ -628,22 +628,9 @@ export async function layout(
   // extent minus the content box; `render()` then sizes the SVG around them.
   // `max!` / `min!` discipline (never a silent `?? 0`): the wrapper always emits
   // a placed extent here — a silent 0 would clip the overhang and mask a layout
-  // bug, so assert it's present.
-  //
-  // The RIGHT side is reserved one of two ways, and the two overlap in
-  // magnitude, so whether the root carries a legend — not the size — is what
-  // tells them apart:
-  //  - Beside a legend column, the overhang reserves itself plus a full `pad`
-  //    (see the width formula in `render`). A single-row legend can overhang
-  //    as little as ~6px — the same as a wide rightmost x-tick label — so
-  //    this cannot be recovered from magnitude alone.
-  //  - Otherwise, it flows through `reserve()` like the other three gutters:
-  //    a small x-tick spill is absorbed into `pad` and a large band (content
-  //    displaced past the canvas by a constraint, e.g. a marginal
-  //    histogram's right band) reserves its full extent.
-  const right = Math.max(0, child.dims[0].max! - finalW);
-  const rightOverhang = hasLegend ? right : 0;
-  const rightContentOverhang = hasLegend ? 0 : right;
+  // bug, so assert it's present. Whether the root carries a legend goes with
+  // them: it decides how the right side is reserved (see `svgFrame`).
+  const rightOverhang = Math.max(0, child.dims[0].max! - finalW);
   const topOverhang = Math.max(0, -child.dims[1].min!);
   const bottomOverhang = Math.max(0, child.dims[1].max! - finalH);
   const leftOverhang = Math.max(0, -child.dims[0].min!);
@@ -661,10 +648,10 @@ export async function layout(
     width: finalW,
     height: finalH,
     rightOverhang,
-    rightContentOverhang,
     topOverhang,
     leftOverhang,
     bottomOverhang,
+    hasLegend,
     // The fields a rendered legend shows: the color scale's fields when the
     // legend was drawn, none when it was suppressed or had nothing to show.
     legendFields: hasLegend
@@ -716,10 +703,12 @@ type LayoutData = {
   width: number;
   height: number;
   rightOverhang: number;
-  rightContentOverhang: number;
   topOverhang: number;
   leftOverhang: number;
   bottomOverhang: number;
+  /** Whether the root carries a legend (its right overhang is the legend's;
+   *  see {@link svgFrame}). */
+  hasLegend: boolean;
   /** The data fields the rendered legend shows (empty without a legend). */
   legendFields: ReadonlySet<string>;
 };
@@ -848,10 +837,10 @@ function renderLayout(
       svgPadding,
       defs,
       rightOverhang: data.rightOverhang,
-      rightContentOverhang: data.rightContentOverhang,
       topOverhang: data.topOverhang,
       leftOverhang: data.leftOverhang,
       bottomOverhang: data.bottomOverhang,
+      hasLegend: data.hasLegend,
       interaction,
       // Root data → layout-pixel maps for the interaction layer's data↔px
       // conversions (frameConversions).
@@ -1159,6 +1148,69 @@ export async function gofishSave(
 
 const PADDING = 40;
 
+/** Breathing room between gutter content and the SVG edge. */
+const EDGE_GAP = 8;
+
+/**
+ * The SVG around a laid-out chart: its size, with a gutter on each side of
+ * the `width` × `height` canvas, and the layout-pixel → screen map the
+ * gutters make. Shared by the live `render()` and `toDisplayList`.
+ *
+ * Chrome (axis tick/label rows, titles, the legend column) is elaborated into
+ * ordinary shapes that live in the node tree, so the SVG is only sized around
+ * their measured extent. Content seated beyond the canvas by a constraint
+ * (e.g. marginal histogram bands above/right of a scatter) is measured the
+ * same way, via the per-side overhangs.
+ *
+ * Each gutter reserves enough to clear its measured overhang plus a little
+ * breathing room from the SVG edge. The `o > 0` guard keeps a chart with
+ * `padding: 0` and no chrome at zero reserve (don't invent `EDGE_GAP` px on an
+ * empty gutter); and because gutters ≤ `pad - EDGE_GAP` are absorbed by the
+ * existing `pad`, an untitled chart stays byte-identical to the pre-chrome
+ * output. Ceil: the reserve becomes the root translate, and a fractional
+ * translate (measured overhangs are routinely fractional — text widths)
+ * shifts every shape off the pixel grid: adjacent area/bar segments grow
+ * hairline antialiasing seams and text rasterizes fuzzy.
+ *
+ * The RIGHT side is reserved one of two ways, and the two overlap in
+ * magnitude, so whether the root carries a legend — not the size — tells
+ * them apart. Beside a legend column the overhang reserves itself plus a full
+ * `pad` (a single-row legend can overhang as little as ~6px, the same as a
+ * wide rightmost x-tick label). Otherwise it is reserved like the other three
+ * gutters: a small x-tick spill is absorbed into `pad` and a large band
+ * reserves its full extent. The right gutter bears no translate, so it
+ * needn't be pixel-snapped.
+ *
+ * Layout geometry is already SVG-native y-DOWN (see `axisDirection.ts`), so
+ * the map only offsets by the gutter reserves.
+ */
+export function svgFrame(
+  overhangs: {
+    leftOverhang: number;
+    topOverhang: number;
+    rightOverhang: number;
+    bottomOverhang: number;
+    hasLegend: boolean;
+  },
+  width: number,
+  height: number,
+  pad: number
+): { width: number; height: number; toPixel: ToPixel } {
+  const reserve = (o: number) =>
+    o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
+  const left = reserve(overhangs.leftOverhang);
+  const top = reserve(overhangs.topOverhang);
+  const bottom = reserve(overhangs.bottomOverhang);
+  const right = overhangs.rightOverhang;
+  return {
+    width: overhangs.hasLegend
+      ? left + width + right + reserve(0)
+      : left + width + reserve(right),
+    height: top + height + bottom,
+    toPixel: ([gx, gy]) => [gx + left, gy + top],
+  };
+}
+
 export const render = (
   {
     width,
@@ -1166,10 +1218,10 @@ export const render = (
     transform,
     defs,
     rightOverhang = 0,
-    rightContentOverhang = 0,
     topOverhang = 0,
     leftOverhang = 0,
     bottomOverhang = 0,
+    hasLegend = false,
     svgPadding,
     interaction,
     posScales,
@@ -1180,10 +1232,10 @@ export const render = (
     transform?: string;
     defs?: JSX.Element[];
     rightOverhang?: number;
-    rightContentOverhang?: number;
     topOverhang?: number;
     leftOverhang?: number;
     bottomOverhang?: number;
+    hasLegend?: boolean;
     svgPadding?: number;
     interaction?: InteractionRuntime;
     posScales?: PixelPosScales;
@@ -1193,44 +1245,13 @@ export const render = (
 ): JSX.Element => {
   const pad = svgPadding ?? PADDING;
 
-  // Chrome (axis tick/label rows, titles, the legend column) is elaborated into
-  // ordinary shapes that live in the node tree; `render()` only sizes the SVG
-  // around their measured extent. Content seated beyond the canvas by a
-  // constraint (e.g. marginal histogram bands above/right of a scatter) is
-  // measured the same way, via the per-side overhangs.
-  //
-  // Reserve enough on each gutter side to clear the measured overhang plus a
-  // little breathing room from the SVG edge. The `o > 0` guard keeps a chart
-  // with `padding: 0` and no chrome at zero reserve (don't invent EDGE_GAP px on
-  // an empty gutter); and because gutters ≤ `pad - EDGE_GAP` are absorbed by the
-  // existing `pad`, an untitled chart stays byte-identical to the pre-chrome
-  // output.
-  const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
-  // Ceil: the reserve becomes the root <g> translate, and a fractional
-  // translate (measured overhangs are routinely fractional — text widths)
-  // shifts every shape off the pixel grid: adjacent area/bar segments grow
-  // hairline antialiasing seams and text rasterizes fuzzy.
-  const reserve = (o: number) =>
-    o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
-  const leftReserve = reserve(leftOverhang);
-  const bottomReserve = reserve(bottomOverhang);
-  const topReserve = reserve(topOverhang);
-
-  // Right gutter: `rightOverhang` is the overhang of a chart that carries a
-  // legend (0 otherwise); it keeps a full `pad` margin beyond it via
-  // `reserve(rightContentOverhang)`, whose floor is `pad`. `rightContentOverhang`
-  // is the overhang of a chart without one; routing it through the same
-  // `reserve()` as the other gutters absorbs a small x-tick spill into `pad`
-  // and reserves a large band's full extent plus `EDGE_GAP`. The right gutter
-  // bears no root
-  // <g> translate, so it needn't be pixel-snapped — a fractional width is
-  // harmless (legend overhangs are fractional text widths).
-  // Two-pass render: lower the baked scenegraph into the display-list IR, then
-  // paint each item. Items are final absolute pixels. Layout geometry is
-  // already SVG-native y-DOWN (see `axisDirection.ts`), so the map only offsets
-  // by the gutter reserves. It is also the layout-pixel → screen map the
-  // interaction layer publishes for hit-test / dataPos reads.
-  const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+  const frame = svgFrame(
+    { leftOverhang, topOverhang, rightOverhang, bottomOverhang, hasLegend },
+    width,
+    height,
+    pad
+  );
+  const toPixel = frame.toPixel;
   const interactive = interaction !== undefined;
   const paintBaked = () => {
     const __tLower = perfNow();
@@ -1254,10 +1275,8 @@ export const render = (
   return (
     <svg
       ref={(el: SVGSVGElement) => interaction?.attachSVG(el)}
-      width={
-        leftReserve + width + rightOverhang + reserve(rightContentOverhang)
-      }
-      height={topReserve + height + bottomReserve}
+      width={frame.width}
+      height={frame.height}
       xmlns="http://www.w3.org/2000/svg"
     >
       <Show when={defs}>

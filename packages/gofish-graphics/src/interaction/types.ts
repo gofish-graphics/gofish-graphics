@@ -14,6 +14,7 @@
  */
 import type { DisplayList } from "gofish-ir";
 import type { ToPixel } from "../ast/_node";
+import type { PixelPosScales } from "../ast/gofish";
 
 /**
  * One published layout frame: the lowered items and the recorded root-level
@@ -26,10 +27,7 @@ export interface InteractionFrame {
   /** Layout-pixel → screen-px map for this frame (the gutter offset). */
   toPixel?: ToPixel;
   /** Root position scales: data → layout pixels, per axis. */
-  posScales?: [
-    ((pos: number) => number) | undefined,
-    ((pos: number) => number) | undefined,
-  ];
+  posScales?: PixelPosScales;
   /** Continuous data domains per axis, when the axis has one. */
   domains?: {
     x?: [number, number];
