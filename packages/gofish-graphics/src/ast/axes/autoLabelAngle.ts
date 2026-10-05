@@ -117,7 +117,12 @@ export function collectLabelBoxes(root: GoFishNode): LabelBox[] {
           }
         | undefined;
       if (layout) {
-        const pivot: [number, number] = [0, 0];
+        // The pivot is the glyph anchor, which sits `glyphDy` below the
+        // text's origin (its box's start edge).
+        const pivot: [number, number] = [
+          0,
+          (n.renderData?.glyphDy as number | undefined) ?? 0,
+        ];
         for (const dir of [0, 1] as const) {
           let a: GoFishNode | undefined = n;
           while (a) {

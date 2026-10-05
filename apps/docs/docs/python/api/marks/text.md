@@ -36,6 +36,19 @@ Keyword-only (matches every existing call site, which already passes
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
+## Placement
+
+A text is a box, and it is placed exactly as a rect of the same size would be.
+`y` is the box's start edge: its top where y reads top-down (a free diagram, an
+ordinal spread) and its bottom where y grows upward (a chart with a value axis).
+`cy` is the box's center. Spreads, stacks, layers and `align`/`distribute`
+constraints place it by its box, as they place a rect. In x, `x` is the
+`text_anchor` point: the left edge for the default `"start"` (as for a rect), the
+center for `"middle"`, the right edge for `"end"`.
+
+`rotate` turns the glyphs about the point on their baseline at `text_anchor`; the
+box is then the rotated glyphs' footprint.
+
 ## Encoding
 
 The `text` option takes a **constant**, a **field name** (a string column in

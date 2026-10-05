@@ -194,14 +194,15 @@ export const Text = ({
    *  `rotate`). `rotate: -90` yields a conventional y-axis title — it reads
    *  bottom-to-top with glyph tops facing left. */
   rotate?: number;
-  /** Which end of the (pre-rotation) text sits at the node's own local
-   *  origin — the point `rotate` pivots about, and the point an `align`/
-   *  `position` constraint's `"baseline"` anchor pins (see `_node.ts`'s
-   *  `_pinAnchor`). Defaults to `"start"` (the first character), matching
-   *  ordinary left-to-right text flow; `"end"` pivots at the last character
-   *  instead — used for an obliquely-rotated label that should hang from its
-   *  end rather than its start (see `axes/elaborate.tsx`'s hanging-point
-   *  rule for rotated axis labels). */
+  /** Which end of the (pre-rotation) text is its x origin — the x of the
+   *  point `rotate` pivots about, and the x an `align`/`position`
+   *  constraint's `"baseline"` anchor pins (see `_node.ts`'s `_pinAnchor`).
+   *  (In y the origin is the box's start edge, as for a rect.) Defaults to
+   *  `"start"` (the first character), matching ordinary left-to-right text
+   *  flow; `"end"` pivots at the last character instead — used for an
+   *  obliquely-rotated label that should hang from its end rather than its
+   *  start (see `axes/elaborate.tsx`'s hanging-point rule for rotated axis
+   *  labels). */
   textAnchor?: "start" | "middle" | "end";
 } & FancyDims<MaybeValue<number>>) => {
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
@@ -265,9 +266,19 @@ export const Text = ({
         const { minX, maxX, minY, maxY } = rotate
           ? rotateRelBBox(relRaw, rotate)
           : relRaw;
-        // The box is pixels; layout returns it in the text's own axis order,
-        // which runs against the pixels when its y is a continuous position.
+        // A text is a box, placed exactly like a rect of the same size: its
+        // origin (local 0, the point parents seat it by and the `baseline`
+        // anchor) is the box's START edge in its own axis order — the top in
+        // a frame that reads top-down, the bottom in one whose y grows upward
+        // — and `y`/`cy` place that box as they place a rect's. The glyphs'
+        // anchor (the baseline point `textAnchor` and `rotate` refer to) sits
+        // inside the box, `glyphDy` screen pixels down from the origin (up,
+        // when negative). In x the origin
+        // is the `textAnchor` point, which for the default `"start"` is again
+        // the box's start edge.
+        const height = maxY - minY;
         const up = axisDirection(node, 1) === -1;
+        const glyphDy = up ? -maxY : -minY;
 
         const positionX =
           computeAesthetic(
@@ -276,13 +287,19 @@ export const Text = ({
             undefined
           ) ??
           computeAesthetic(dims[0].min, posFn(scales?.[0]?.map)!, undefined);
+        const centerY = computeAesthetic(
+          dims[1].center,
+          posFn(scales?.[1]?.map)!,
+          undefined
+        );
         const positionY =
-          computeAesthetic(
-            dims[1].center,
-            posFn(scales?.[1]?.map)!,
-            undefined
-          ) ??
-          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map)!, undefined);
+          centerY !== undefined
+            ? centerY - height / 2
+            : computeAesthetic(
+                dims[1].min,
+                posFn(scales?.[1]?.map)!,
+                undefined
+              );
 
         return {
           intrinsicDims: [
@@ -292,19 +309,20 @@ export const Text = ({
               embedded: dims[0].embedded,
             },
             {
-              min: up ? -maxY : minY,
-              size: maxY - minY,
+              min: 0,
+              size: height,
               embedded: dims[1].embedded,
             },
           ],
           transform: {
             translate: [positionX, positionY],
           },
-          renderData: { layout },
+          renderData: { layout, glyphDy },
         };
       },
-      // IR lowering. The anchor (the baseline point) maps through `toPixel`,
-      // and the rotation is SVG's, clockwise on screen.
+      // IR lowering. The glyph anchor is the origin mapped through `toPixel`
+      // and moved `glyphDy` down the screen; the rotation is SVG's,
+      // clockwise on screen.
       lower: (
         { transform, renderData, toPixel, intrinsicDims },
         _children,
@@ -316,7 +334,12 @@ export const Text = ({
         const text = finalText == null ? "" : String(finalText);
 
         const [anchorX, anchorY] = displayTranslate(transform);
-        const [px, py] = toPixel([anchorX, anchorY]);
+        // `glyphDy` is in screen pixels (a text is drawn upright at its
+        // point even inside a coordinate space), so it applies after the
+        // origin maps through `toPixel`.
+        const glyphDy = (renderData as { glyphDy?: number })?.glyphDy ?? 0;
+        const [px, originPy] = toPixel([anchorX, anchorY]);
+        const py = originPy + glyphDy;
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
@@ -349,8 +372,8 @@ export const Text = ({
               rectItemFromBox(
                 anchorX + relRot.minX,
                 anchorX + relRot.maxX,
-                anchorY + relRot.minY,
-                anchorY + relRot.maxY,
+                anchorY + glyphDy + relRot.minY,
+                anchorY + glyphDy + relRot.maxY,
                 toPixel,
                 {
                   role: "overlay",

@@ -135,12 +135,13 @@ export const labelRowSettingsFromAngles =
  * is the point placed at the band/tick center, not the rotated bbox's
  * middle. `trackAlign` picks the `Constraint.align`/`Spread` anchor mode
  * along the TRACK axis (the axis's own direction — horizontal for an
- * x-axis); `textAnchor` picks which end of the (pre-rotation) label sits at
- * its own local origin, i.e. the point `"baseline"` alignment pins (see
- * `_node.ts`'s `_pinAnchor`: a `"baseline"` anchor places a node's local
- * coordinate 0, not a bbox edge). `Text`'s rotation is applied about that
- * same local origin (`text.tsx`), so pinning it IS pinning the rotation
- * pivot.
+ * x-axis); `textAnchor` picks which end of the (pre-rotation) label is its
+ * x origin, i.e. the x that `"baseline"` alignment pins (see `_node.ts`'s
+ * `_pinAnchor`: a `"baseline"` anchor places a node's local coordinate 0,
+ * not a bbox edge). `Text`'s rotation is applied about a point with that
+ * same x (`text.tsx`), so on an x track pinning it IS pinning the rotation
+ * pivot. (A text's y origin is its box's start edge, like a rect's, so on a
+ * y track the pin lands the rotated box's start edge instead.)
  *
  * Rule (screen-clockwise angle `a`; a bottom x-axis is the easiest intuition,
  * but the derivation only depends on the label's own local frame, not which
@@ -158,8 +159,8 @@ export const labelRowSettingsFromAngles =
  *    `textAnchor: "end"` — the pivot is the LAST character's origin, so the
  *    label hangs from its end (matplotlib's `ha="right"` look).
  *
- * Caveat, deliberately accepted: the label's local origin sits on its
- * baseline (`dominantBaseline: "auto"`, y=0 at the baseline), not the
+ * Caveat, deliberately accepted: the label's pivot sits on its
+ * baseline (`dominantBaseline: "auto"`), not the
  * ascender-TOP corner a literal "nearest point on the rotated bbox" geometric
  * derivation would use. The two differ by `ascent·sin(a)` — a couple of
  * pixels at these font sizes/angles — which the constraint system can't

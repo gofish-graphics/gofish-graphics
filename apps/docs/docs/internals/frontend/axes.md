@@ -141,15 +141,17 @@ the axis line, not at its rotated bbox's middle.
   — the label hangs from its LAST character (matplotlib's `ha="right"` look).
 
 `"baseline"` is `AlignAnchor`'s existing "pin the target's own local origin"
-mode (`_node.ts`'s `_pinAnchor`), and `Text`'s rotation is applied about that
-same local origin (`text.tsx`), so pinning `"baseline"` pins the rotation pivot
-directly — no bbox-edge arithmetic needed. `textAnchor` (a new `Text` prop)
-picks which end of the pre-rotation label sits at that origin: `"start"` (the
-default) puts the first character there, `"end"` puts the last character there,
-so the SAME `"baseline"` anchor reaches either hanging corner depending on the
-angle's sign. Accepted approximation: the origin sits on the label's baseline
-(`dominantBaseline: "auto"`), not the ascender-top corner an idealized "nearest
-point on the rotated bbox" derivation would use — the two differ by
+mode (`_node.ts`'s `_pinAnchor`). A text's x origin is its `textAnchor` point,
+and `Text`'s rotation is applied about a point with that x (`text.tsx`), so on an
+x track pinning `"baseline"` pins the rotation pivot directly — no bbox-edge
+arithmetic needed. (A text's y origin is its box's start edge, as for a rect, so
+on a y track the pin lands the rotated box's start edge.) `textAnchor` (a `Text`
+prop) picks which end of the pre-rotation label is that x: `"start"` (the
+default) the first character, `"end"` the last, so the SAME `"baseline"` anchor
+reaches either hanging corner depending on the angle's sign. Accepted
+approximation: the pivot sits on the label's baseline (`dominantBaseline:
+"auto"`), not the ascender-top corner an idealized "nearest point on the rotated
+bbox" derivation would use — the two differ by
 `ascent·sin(a)`, a couple of pixels at these sizes, invisible in practice.
 
 For an ordinal axis, `elaborateOrdinalAxis` expresses this directly:
@@ -240,7 +242,8 @@ label `Text` with `axisLabel = { dim, kind, tier }` (`kind` is `"ordinal"` or
 difference-axis delta labels are not tagged, since the angle does not apply to
 them). After a run, `collectLabelBoxes` walks the laid-out tree, and for each
 tagged label reads its unrotated text box and rotation from the `Text` node and
-its origin by summing its own and every ancestor's `projectedTranslate`. That
+its pivot: its origin, found by summing its own and every ancestor's
+`projectedTranslate`, plus the glyph offset the text keeps (`glyphDy`). That
 puts every label in the root's layout frame, which is screen pixels up to the
 gutter offset, so overlap measured there equals overlap on screen.
 

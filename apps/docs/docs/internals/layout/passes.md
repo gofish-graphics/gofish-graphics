@@ -445,8 +445,14 @@ order runs on the screen:
 - A node with **no y axis** (an UNDEFINED y: a fixed-size shape, a text label, a layer
   of those) has no direction of its own and takes its parent's: it reads in the frame
   it sits in. On the canvas that is top-down; inside a bar chart a fixed-size shape's
-  box sits above its origin like the bars around it, and a text label's glyphs rise
-  above its baseline.
+  box sits above its origin like the bars around it.
+
+A text is a box, placed exactly as a rect of the same size would be: its origin is
+its box's start edge in its own axis order (the top in a frame that reads top-down,
+the bottom in one that grows upward), so `y`, a parent's seating and every operator
+treat it as they treat a rect. The glyphs' own anchor (the point on the baseline that
+`textAnchor` and `rotate` refer to) sits inside that box; the text lowers it from
+the origin (`glyphDy`).
 
 It is read off the node's own resolved underlying space (for a node that roots its
 own σ-scope, the space it keeps for itself, `selfScaledSpace`), so it is local: an
@@ -481,11 +487,16 @@ through its direction when it lowers. A node that runs a pixel-native algorithm
 (`fromFrameStart`), where it places its children.
 
 Seating a child at its baseline is the one place a boundary between two directions
-needs more than the reflection: a child whose y runs the other way from its
-layer's is seated from ITS frame's start edge, the band the layer allocated it (or
-its own box when unsized). So a bar chart (growing upward) in a cell of a layer
-that reads top-down sits with its baseline at the bottom of its cell, exactly as
-the root sits in the canvas (`placeRoot`, `fromFrameStart`).
+needs more than the reflection: a child whose y grows upward inside a layer that
+reads top-down is seated at the bottom of the band the layer allocated it (or of
+its own box when unsized), its own start end, exactly as the root sits in the
+canvas (`placeRoot`, `fromFrameStart`). So a bar chart in a cell of a layer that
+reads top-down sits with its baseline at the bottom of its cell. Every other child
+is seated by its origin at the seat. That is not one rule "each child at its own
+start end of its band": a child that reads top-down inside a layer whose y grows
+upward is still seated at the seat, the band's bottom, not at the band's top. Such
+children are placed by what they hold (a value label's `spread` around a `ref` to
+its bar); seating them at the band's top lifts them off their bars.
 
 A chain of baselines (a spread with `anchor: "baseline"`) starts at its first
 member's origin rather than its start edge (its sequence origin in
