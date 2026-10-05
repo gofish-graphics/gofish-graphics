@@ -636,9 +636,11 @@ const kinematicsBlock = (rows: any[], clock: any) => {
           // panel's chrome, and an empty `rect` is what gives it that width:
           // a `frame`'s own `w` sizes the box it lays out in, but a lone text
           // mark does not fill it, so the cell would collapse to the word.
+          // The word sits at the middle of the row's height, beside its
+          // sparklines.
           frame({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX }, [
             rect({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX, fill: "none" }),
-            text({ text: q, fontSize: 11, fill: "#888" }),
+            text({ text: q, fontSize: 11, fill: "#888", cy: SPARK_H_PX / 2 }),
           ]),
           // The step column is a chart of its own, with its own scale: its
           // velocity and acceleration are combs of impulse weights, which

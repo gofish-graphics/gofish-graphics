@@ -1,7 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seattleWeather } from "../../src/data/seatle-weather";
-import { chart, spread, scatter, field, rect, text, layer, Constraint } from "../../src/lib";
+import {
+  chart,
+  spread,
+  scatter,
+  field,
+  rect,
+  text,
+  layer,
+  Constraint,
+} from "../../src/lib";
 import { ribbon } from "../../src/lib";
 
 const meta: Meta = {
@@ -145,7 +154,8 @@ export const Default: StoryObj<Args> = {
       //    the ridge peaks reach above the first baseline. Each label's END
       //    is constraint-aligned to a same-row invisible anchor rect fixed at
       //    `labelMarginX` (6px left of the plot edge) — see `labelMarginX`'s
-      //    comment; a text's y is its glyph baseline, so y = k·pitch puts it on the rule.
+      //    comment — and its bottom edge to the anchor, which sits on the
+      //    rule at y = k·pitch, so the label stands on its rule.
       .layer(
         chart(monthNames.map((month) => ({ month })))
           .flow(
@@ -170,12 +180,14 @@ export const Default: StoryObj<Args> = {
               text: month,
               fontSize: 11,
               fill: "#666",
-              y: rowPitch * k,
             }).name(`label${k}`),
           ])
         ).relate((g) =>
           monthNames.map((_, k) =>
-            Constraint.align({ x: "end" }, [g[`label${k}`], g[`anchor${k}`]])
+            Constraint.align({ x: "end", y: "end" }, [
+              g[`label${k}`],
+              g[`anchor${k}`],
+            ])
           )
         )
       )
