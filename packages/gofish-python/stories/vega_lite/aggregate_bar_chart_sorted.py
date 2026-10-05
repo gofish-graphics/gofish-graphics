@@ -35,7 +35,7 @@ def default(data=None, w=500, h=300):
         chart(data)
         .flow(
             derive(_aggregate_and_sort),
-            spread(by="age", dir="y", reverse=True),
+            spread(by="age", dir="y"),
         )
         .mark(rect(w="people"))
     )
