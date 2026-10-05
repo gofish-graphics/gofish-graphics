@@ -51,10 +51,11 @@ export const Default: StoryObj<Args> = {
         chart()
           .flow(group({ by: "lake" }))
           .mark(((d: any[]) => {
+            // A spread on y reads top-down: the label above its bar.
             return spread({ dir: "y", alignment: "middle", spacing: 10 },
               [
-                d[0],
                 text({ text: String(sumBy(d[0].datum, "count")) }),
+                d[0],
               ]
             );
           }) as any)
@@ -88,8 +89,8 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
             const species = pluck(d[0], "species") as string[];
             return spread({ dir: "y", alignment: "middle", spacing: 10 },
               [
-                d[0],
                 text({ text: `${species.length} spp` }),
+                d[0],
               ]
             );
           }) as any)

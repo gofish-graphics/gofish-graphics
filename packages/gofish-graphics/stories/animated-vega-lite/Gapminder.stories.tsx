@@ -628,10 +628,6 @@ const sparkRow = (samples: Sample[], clock: any, w: number) =>
 const kinematicsBlock = (rows: any[], clock: any) => {
   const samples = kinematics(rows);
   return [
-    // A panel draws its x-axis BELOW its box, in space the layout does not
-    // know about, so the row's 16px of breathing room is already spent by the
-    // time the sparklines arrive. This empty rect buys the axis its room back.
-    rect({ w: 1, h: 36, fill: "none" }),
     spreadY(
       { spacing: 8, alignment: "middle" },
       QUANTITIES.map((q) =>

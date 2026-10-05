@@ -145,7 +145,7 @@ export const Default: StoryObj<Args> = {
       //    the ridge peaks reach above the first baseline. Each label's END
       //    is constraint-aligned to a same-row invisible anchor rect fixed at
       //    `labelMarginX` (6px left of the plot edge) — see `labelMarginX`'s
-      //    comment; y = k·pitch − 9 puts the glyph baseline on the rule.
+      //    comment; a text's y is its glyph baseline, so y = k·pitch puts it on the rule.
       .layer(
         chart(monthNames.map((month) => ({ month })))
           .flow(
@@ -170,7 +170,7 @@ export const Default: StoryObj<Args> = {
               text: month,
               fontSize: 11,
               fill: "#666",
-              y: rowPitch * k - 9,
+              y: rowPitch * k,
             }).name(`label${k}`),
           ])
         ).relate((g) =>
