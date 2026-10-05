@@ -102,9 +102,8 @@ export const arrow = createNodeOperator(
             bbox(toDims[0].min!, toDims[0].max!, toDims[1].min!, toDims[1].max!)
           );
 
-          // The arrow is computed in the arrow's axis order; `lower` draws
-          // pixels, so reflect its y (and its angles) through the direction.
-          const d = node.yFrame.direction;
+          // The arrow is computed and kept in the arrow's axis order; `lower`
+          // places it through its `local` map.
           return {
             intrinsicDims: [
               {
@@ -119,13 +118,13 @@ export const arrow = createNodeOperator(
             transform: { translate: [0, 0] },
             renderData: {
               sx: arrowTuple[0],
-              sy: d * arrowTuple[1],
+              sy: arrowTuple[1],
               cx: arrowTuple[2],
-              cy: d * arrowTuple[3],
+              cy: arrowTuple[3],
               ex: arrowTuple[4],
-              ey: d * arrowTuple[5],
-              ae: d * arrowTuple[6],
-              as: d * arrowTuple[7],
+              ey: arrowTuple[5],
+              ae: arrowTuple[6],
+              as: arrowTuple[7],
               ec: arrowTuple[8],
             },
           };
@@ -134,7 +133,7 @@ export const arrow = createNodeOperator(
         // each point is offset by that translate and pushed through `toPixel`. The arrowhead's
         // `translate(ex,ey) rotate(θ)` is baked into the emitted points.
         lower: (
-          { transform, renderData, coordinateTransform },
+          { transform, renderData, coordinateTransform, local },
           _children,
           node
         ): DisplayList.DisplayItem[] => {
@@ -144,14 +143,17 @@ export const arrow = createNodeOperator(
           const [tx, ty] = displayTranslate(transform);
           const session = node.getRenderSession();
           const outer = session.toPixel!;
+          // Children are placed in pixels under the arrow's translate; the
+          // arrow's own points are in its axis order, placed by `local`.
           const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
-          const px = (x: number, y: number) => composed([x, y]).join(",");
+          const own: ToPixel = (p) => outer(local(p));
+          const px = (x: number, y: number) => own([x, y]).join(",");
 
           const stroke = props.stroke;
           const items: DisplayList.DisplayItem[] = [];
 
           if (props.start) {
-            const [cx, cy] = composed([data.sx, data.sy]);
+            const [cx, cy] = own([data.sx, data.sy]);
             items.push({
               kind: "ellipse",
               cx,

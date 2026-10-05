@@ -13,6 +13,7 @@ import {
   Anchor,
   Dimensions,
   Direction,
+  displayTranslate,
   elaborateDims,
   elaborateDirection,
   elaborateSize,
@@ -213,8 +214,8 @@ export function placeUnplacedChild(
 // receives, the children it reads and places, and the box and translate it
 // returns all run along the node's own direction. `GoFishNode.layout` stores
 // the result in pixels. Geometry a node keeps for its `lower` (in
-// `renderData` or a closure) must be pixels, so a node with direction −1 that
-// keeps any reflects it itself.
+// `renderData` or a closure) stays in that axis order too: `lower` maps it to
+// pixels through its `local` map, the one place it is reflected.
 export type Layout = (
   shared: Size<boolean>,
   size: Size,
@@ -233,7 +234,9 @@ export type ToPixel = (p: [number, number]) => [number, number];
  * its `lower`, and the display list is the union of every node's fragment,
  * painted by a single backend (no per-shape SVG). `children` are the
  * already-lowered child items (empty for a boundary, which re-walks its own
- * subtree); `toPixel` carries the viewport offset.
+ * subtree); `toPixel` carries the viewport offset. `local` maps a point the
+ * node kept in its own local frame and axis order (see {@link Layout}) to a
+ * layout pixel: the node's translate plus `(x, direction · y)`.
  */
 export type Lower = (
   {
@@ -242,12 +245,14 @@ export type Lower = (
     renderData,
     coordinateTransform,
     toPixel,
+    local,
   }: {
     intrinsicDims?: Dimensions;
     transform?: Transform;
     renderData?: any;
     coordinateTransform?: CoordinateTransform;
     toPixel: ToPixel;
+    local: ToPixel;
   },
   children: DisplayList.DisplayItem[],
   node: GoFishNode
@@ -1903,6 +1908,8 @@ export class GoFishNode {
     coordinateTransform: CoordinateTransform | undefined,
     withVisibility: boolean
   ): DisplayList.DisplayItem[] {
+    const [tx, ty] = displayTranslate(transform);
+    const direction = this.yFrame.direction;
     const items = lower(
       {
         intrinsicDims: this.intrinsicDims,
@@ -1910,6 +1917,7 @@ export class GoFishNode {
         renderData: this.renderData,
         coordinateTransform,
         toPixel,
+        local: ([x, y]) => [x + tx, direction * y + ty],
       },
       [],
       this

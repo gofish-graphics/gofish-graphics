@@ -2,7 +2,7 @@ import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
 import { boxOfDims } from "../geometry";
 import { GoFishAST } from "../_ast";
-import { displayTranslate, Size } from "../dims";
+import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { nameableMark, type NameableMark } from "../marks/createOperator";
@@ -147,22 +147,17 @@ export const Polygon = ({
           transform: { translate: [tx, ty] },
         };
       },
-      // IR lowering: a local point (x, y) in axis order is the pixel point
-      // (x + tx, d·y + ty). Under a nonlinear coordinate space the edges are
+      // IR lowering: a local point in axis order maps to its pixel through
+      // the node's `local` map. Under a nonlinear coordinate space the edges are
       // adaptively resampled so a straight edge in data space draws as the
       // curve the projection makes of it — a country outline, not its
       // vertices joined.
       lower: (
-        { transform, coordinateTransform, toPixel },
+        { coordinateTransform, toPixel, local },
         _children,
         node
       ): DisplayList.DisplayItem[] => {
-        const [tx, ty] = displayTranslate(transform);
-        const d = node.yFrame.direction;
-        const displayPoints: Ring = localRef.current.map(([x, y]) => [
-          x + tx,
-          d * y + ty,
-        ]);
+        const displayPoints: Ring = localRef.current.map((p) => local(p));
         const nonlinear =
           coordinateTransform !== undefined &&
           coordinateTransform.type !== "linear";

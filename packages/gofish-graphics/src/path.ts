@@ -73,17 +73,20 @@ export const reverseSegment = (seg: PathSegment): PathSegment =>
 export const reversePath = (path: Path): Path =>
   path.map(reverseSegment).reverse();
 
-/** A path with every point's y scaled by `sign` (±1): the same path read in
- *  the opposite y direction when `sign` is −1 (see `ast/axisDirection.ts`). */
-export const scalePathY = (path: Path, sign: 1 | -1): Path => {
-  if (sign === 1) return path;
-  const f = ([x, y]: Point): Point => [x, -y];
-  return path.map((seg) =>
-    seg.type === "line"
-      ? segment(f(seg.points[0]), f(seg.points[1]))
-      : curve(f(seg.start), f(seg.control1), f(seg.control2), f(seg.end))
+/** A path with every point (and control point) mapped through `f`. */
+export const mapPathPoints = (path: Path, f: (p: Point) => Point): Path =>
+  path.map(
+    (seg): PathSegment =>
+      seg.type === "line"
+        ? { type: "line", points: [f(seg.points[0]), f(seg.points[1])] }
+        : {
+            type: "bezier",
+            start: f(seg.start),
+            control1: f(seg.control1),
+            control2: f(seg.control2),
+            end: f(seg.end),
+          }
   );
-};
 
 export const segmentToSVG = (segment: PathSegment): string => {
   if (segment.type === "line") {
@@ -116,25 +119,7 @@ export const transformPath = (
   }
 
   // Default behavior: direct transformation without resampling
-  return path.map((segment): PathSegment => {
-    if (segment.type === "line") {
-      return {
-        type: "line",
-        points: [
-          space.transform(segment.points[0]),
-          space.transform(segment.points[1]),
-        ] as [Point, Point],
-      };
-    } else {
-      return {
-        type: "bezier",
-        start: space.transform(segment.start),
-        control1: space.transform(segment.control1),
-        control2: space.transform(segment.control2),
-        end: space.transform(segment.end),
-      };
-    }
-  });
+  return mapPathPoints(path, (p) => space.transform(p));
 };
 
 const subdivideSegment = (

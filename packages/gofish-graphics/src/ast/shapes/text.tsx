@@ -2,11 +2,12 @@ import { resolveColorChannel } from "../../color";
 import { computeAesthetic } from "../../util";
 import { posFn } from "../domain";
 import { GoFishNode } from "../_node";
+import { orientDims } from "../axisDirection";
 import { getValue, isValue, MaybeValue } from "../data";
 import {
-  Dimensions,
   displayTranslate,
   elaborateDims,
+  type Interval,
   deferAxisDims,
   FancyDims,
   Transform,
@@ -276,8 +277,6 @@ export const Text = ({
         // is the `textAnchor` point, which for the default `"start"` is again
         // the box's start edge.
         const height = maxY - minY;
-        const up = node.yFrame.direction === -1;
-        const glyphDy = up ? -maxY : -minY;
 
         const positionX =
           computeAesthetic(
@@ -300,19 +299,23 @@ export const Text = ({
                 undefined
               );
 
+        const box: [Interval, Interval] = [
+          {
+            min: minX,
+            size: maxX - minX,
+            embedded: dims[0].embedded,
+          },
+          {
+            min: 0,
+            size: height,
+            embedded: dims[1].embedded,
+          },
+        ];
+        // The glyph anchor in screen pixels below the origin: the box's top
+        // in pixels, less the glyphs' top.
+        const glyphDy = orientDims(box, node.yFrame.direction)[1].min! - minY;
         return {
-          intrinsicDims: [
-            {
-              min: minX,
-              size: maxX - minX,
-              embedded: dims[0].embedded,
-            },
-            {
-              min: 0,
-              size: height,
-              embedded: dims[1].embedded,
-            },
-          ],
+          intrinsicDims: box,
           transform: {
             translate: [positionX, positionY],
           },
