@@ -13,7 +13,13 @@
  */
 
 // Source-module imports — see the note in registry.ts.
-import { chart, selectAll, PREVIOUS_LAYER_MARKS } from "../ast/marks/chart";
+import {
+  chart,
+  layer,
+  selectAll,
+  PREVIOUS_LAYER_MARKS,
+} from "../ast/marks/chart";
+import type { AxesOptions, View } from "../ast/gofish";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { wavy } from "../ast/coordinateTransforms/wavy";
@@ -357,6 +363,25 @@ export function mapMarkChildren(
 }
 
 /**
+ * Rebuild the clauses of a `.relate()` callback, in order: a constraint
+ * (it carries `refs`, operand names) through {@link constraintFromIR}, a mark
+ * that draws like any other mark. Shared by the `layer` combinator mark and
+ * the `LayerIR` root (see {@link renderIR}).
+ */
+function relateClauses(
+  clauses: RelateClauseIR[],
+  bridge: DeriveBridge | undefined,
+  resolveToken: TokenResolver,
+  inputRefs?: any[]
+): unknown[] {
+  return clauses.map((c) =>
+    Frontend.isConstraintIR(c)
+      ? constraintFromIR(c)
+      : mapMark(c as MarkSpec, bridge, resolveToken, inputRefs)
+  );
+}
+
+/**
  * Serialize a mark-fn's input array for the RPC bridge. Each `GoFishRef` (the
  * shape `.flow(group(...)).mark((refs) => ...)` hands the callback — see
  * `createRelationalMark`'s `by`-split bag form and `createOperator.ts`'s
@@ -431,9 +456,24 @@ export function mapMark(
         "mark-fn spec encountered but no DeriveBridge was supplied"
       );
     }
+    // A render may resolve the same mark more than once (measurement, then
+    // placement), and each call is a round trip into Python. The callback is
+    // a function of its input, so its answer is remembered per input. Only
+    // the answer is: the mark is rebuilt per call, so an `__inputRef` in it
+    // resolves against THIS call's refs even when two calls send equal rows.
+    const answers = new Map<string, Promise<any[]>>();
+    const ask = (rows: any[]): Promise<any[]> => {
+      const key = JSON.stringify(rows);
+      let answer = answers.get(key);
+      if (answer === undefined) {
+        answer = bridge.applyLambda(lambdaId, rows);
+        answers.set(key, answer);
+      }
+      return answer;
+    };
     return (async (data: any, _key: any, _layerContext: any) => {
       const { rows, inputRefs: newInputRefs } = serializeMarkFnInput(data);
-      const result = await bridge.applyLambda(lambdaId, rows);
+      const result = await ask(rows);
       // Returns a ChartBuilder or a raw Mark, both of which behave as a Mark
       // in the deserialization pipeline; cast through `unknown` to express
       // that the deserializer is honoring the existing widget contract.
@@ -554,11 +594,7 @@ export function mapMark(
     if (spec.relate && typeof (mark as any).relate === "function") {
       const clauses = spec.relate as RelateClauseIR[];
       mark = (mark as any).relate(() =>
-        clauses.map((c) =>
-          Frontend.isConstraintIR(c)
-            ? constraintFromIR(c)
-            : mapMark(c as MarkSpec, bridge, resolveToken, inputRefs)
-        )
+        relateClauses(clauses, bridge, resolveToken, inputRefs)
       );
     }
     if (spec.__scope) {
@@ -708,7 +744,144 @@ export function buildChart(
     .flow(...operators)
     .mark(mark);
   if ((chartSpec as any).zOrder !== undefined) {
+    // A relational mark (line/ribbon) over row data fuses into an anchor tier
+    // plus a connector tier, and `.mark()` then returns a LayerBuilder, which
+    // has no `.zOrder()`. JS has no spelling for that combination either.
+    if (typeof builder.zOrder !== "function") {
+      throw new Error(
+        "zOrder on a chart whose relational mark fuses into a layer is not supported"
+      );
+    }
     builder = builder.zOrder((chartSpec as any).zOrder);
   }
   return builder;
+}
+
+/**
+ * Render options a host supplies beside the IR document: the arguments of
+ * the Python `.render(...)` call. A field left undefined lets the document
+ * decide (a chart's own `axes` option, the default padding).
+ */
+export interface RenderIROptions {
+  w?: number;
+  h?: number;
+  axes?: AxesOptions;
+  debug?: boolean;
+}
+
+/** Where the parts of a render that are not in the IR document come from. */
+export interface IRHost {
+  /** Runs the Python callbacks the IR names (derive operators, lambda
+   *  accessors, mark functions). */
+  bridge?: DeriveBridge;
+  /** Rows shipped beside the IR instead of inline in it (the widget's Arrow
+   *  sidecar), one array per chart tier; a lone chart is tier 0. A chart
+   *  whose `data` is inline, a selection, or the previous tier ignores its
+   *  entry. */
+  tierRows?: Record<string, any>[][];
+}
+
+/** Drop undefined fields, so a render option the host left unset is absent
+ *  rather than present-and-undefined. */
+function definedFields<T extends Record<string, unknown>>(o: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(o).filter(([, v]) => v !== undefined)
+  ) as Partial<T>;
+}
+
+/**
+ * Render a whole frontend-IR root (a chart, a layer, or a bare mark) into
+ * `container`. This is the one entry point both hosts use: the Python widget
+ * (Arrow sidecar, anywidget RPC) and the parity harness (inline rows, HTTP).
+ * Building throws synchronously on a bad spec; the returned promise settles
+ * with the {@link View} once the chart has rendered.
+ */
+export function renderIR(
+  encodedRoot: Frontend.FrontendIR,
+  container: HTMLElement,
+  renderOptions: RenderIROptions,
+  host: IRHost = {}
+): Promise<View> {
+  const root = readIR(encodedRoot);
+  const { bridge, tierRows = [] } = host;
+  const resolveToken = makeTokenResolver();
+  const options = definedFields({ ...renderOptions });
+  if (root.type === "raw-mark") {
+    const mark = mapMark(root.mark, bridge, resolveToken) as any;
+    return mark.render(container, options);
+  }
+  if (root.type === "layer") {
+    return renderLayer(
+      root,
+      container,
+      options,
+      bridge,
+      tierRows,
+      resolveToken
+    );
+  }
+  return buildChart(root, tierRows[0] ?? [], bridge, resolveToken).render(
+    container,
+    options as any
+  );
+}
+
+function renderLayer(
+  spec: LayerSpec,
+  container: HTMLElement,
+  renderOptions: Partial<RenderIROptions>,
+  bridge: DeriveBridge | undefined,
+  tierRows: Record<string, any>[][],
+  resolveToken: TokenResolver
+): Promise<View> {
+  // A tier is a chart (ChartBuilder) or a component-level annotation
+  // (raw-mark → a Mark).
+  const tiers: any[] = spec.charts.map((tier, i) =>
+    tier.type === "raw-mark"
+      ? mapMark(tier.mark, bridge, resolveToken)
+      : buildChart(tier, tierRows[i] ?? [], bridge, resolveToken)
+  );
+  // `padding` is a render option in JS (`layer([...]).render(container,
+  // { padding })`); inside the Layer's own options it would be inert. Python
+  // spells it on the layer (`layer([...], padding=80)`), so it moves to the
+  // render options here.
+  const { padding, ...rest } = (spec.options ?? {}) as Record<string, any>;
+  const layerOptions = resolveOptions(rest);
+  const options = definedFields({ ...renderOptions, padding }) as any;
+  const makeLayer = (children: any[]): any =>
+    Object.keys(layerOptions).length > 0
+      ? (layer as any)(layerOptions, children)
+      : (layer as any)(children);
+
+  if (spec.relate && spec.relate.length > 0) {
+    // `layer([chart.name("a"), ...]).relate(...)`: as in the JS spelling,
+    // resolve each tier to a node, name it, and relate the named nodes.
+    const clauses = spec.relate;
+    return (async () => {
+      const nodes: any[] = [];
+      for (let i = 0; i < tiers.length; i++) {
+        const node = await tiers[i].resolve();
+        const name = resolveNameField(
+          (spec.charts[i] as any).name,
+          resolveToken
+        );
+        if (name != null) node.name(name);
+        nodes.push(node);
+      }
+      return makeLayer(nodes)
+        .relate(() => relateClauses(clauses, bridge, resolveToken))
+        .render(container, options);
+    })();
+  }
+  if (spec.builder) {
+    // Fluent `chart(...).layer(...)` chain: reconstruct through the real
+    // LayerBuilder so JS owns the builder's render logic (inferred axis
+    // titles, the root tier's `axes`, etc.). The first tier is always a
+    // chart; later tiers may be mark tiers (`.layer(text({...}))`).
+    return tiers
+      .slice(1)
+      .reduce((acc, tier) => acc.layer(tier), tiers[0])
+      .render(container, options);
+  }
+  return makeLayer(tiers).render(container, options);
 }

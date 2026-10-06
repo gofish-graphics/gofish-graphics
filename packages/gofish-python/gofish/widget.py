@@ -27,7 +27,9 @@ class GoFishChartWidget(anywidget.AnyWidget):
     arrow_data = traitlets.Unicode().tag(sync=True)  # base64 Arrow IPC bytes
     width = traitlets.Int(800).tag(sync=True)
     height = traitlets.Int(600).tag(sync=True)
-    axes = traitlets.Bool(False).tag(sync=True)
+    # None = the render call did not pass `axes`, so the chart's own `axes`
+    # option (or a layer chain's root tier's) decides.
+    axes = traitlets.Bool(None, allow_none=True).tag(sync=True)
     debug = traitlets.Bool(False).tag(sync=True)
     container_id = traitlets.Unicode().tag(sync=True)
 
@@ -55,7 +57,7 @@ class GoFishChartWidget(anywidget.AnyWidget):
         derive_functions: Optional[Dict[str, Callable]] = None,
         width: int = 800,
         height: int = 600,
-        axes: bool = False,
+        axes: Optional[bool] = None,
         debug: bool = False,
         **kwargs,
     ):

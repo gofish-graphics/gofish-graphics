@@ -16,6 +16,7 @@ export {
 export {
   buildChart,
   readIR,
+  renderIR,
   constraintFromIR,
   isTokenSentinel,
   makeTokenResolver,
@@ -34,6 +35,8 @@ export {
   type MarkSpec,
   type OperatorSpec,
   type RawMarkSpec,
+  type RenderIROptions,
+  type IRHost,
   type TokenResolver,
   type TokenSentinel,
 } from "./fromJSON";

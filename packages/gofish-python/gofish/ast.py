@@ -1332,6 +1332,14 @@ class ChartBuilder:
         }
         if self._z_order is not None:
             result["zOrder"] = self._z_order
+        # `.name(...)` lets a `layer([...]).relate(...)` callback refer to
+        # this chart; JS names the resolved tier with it.
+        if self._name is not None:
+            result["name"] = (
+                self._name.to_dict()
+                if isinstance(self._name, Token)
+                else self._name
+            )
         return result
 
     def render(
@@ -3321,7 +3329,7 @@ class LayerBuilder:
         self,
         w: int = 800,
         h: int = 600,
-        axes: bool = False,
+        axes: Optional[bool] = None,
         debug: bool = False,
     ):
         """
@@ -3330,7 +3338,8 @@ class LayerBuilder:
         Args:
             w: Chart width in pixels
             h: Chart height in pixels
-            axes: Whether to show axes
+            axes: Whether to show axes. Leave unset to use the root tier's own
+                ``axes`` chart option.
             debug: Whether to enable debug mode
 
         Returns:
@@ -3379,7 +3388,7 @@ class LayerBuilder:
         path,
         w: int = 800,
         h: int = 600,
-        axes: bool = False,
+        axes: Optional[bool] = None,
         debug: bool = False,
     ):
         """Save the layer's render to ``path`` (see ``ChartBuilder.save``)."""

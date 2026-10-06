@@ -172,7 +172,6 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 DeriveOperator,
                 LayerBuilder,
                 Mark,
-                Token,
                 _RefProxy,
                 _collect_mark_lambdas,
                 _MarkFn,
@@ -276,21 +275,14 @@ class DeriveHandler(BaseHTTPRequestHandler):
 
                     _registry[mark_fn.lambda_id] = _mark_fn_wrapped
 
-                # A chart layered with `.name(...)` carries its name so a
-                # `Layer([...]).relate(...)` callback can reference it.
-                child_name = getattr(child, "_name", None)
-                if isinstance(child_name, Token):
-                    child_name = child_name.to_dict()
-
+                # The chart's own IR, with its rows inlined (the widget ships
+                # them in an Arrow sidecar instead).
                 return (
                     {
+                        **child_ir,
                         "type": "chart",
-                        "operators": child_ir["operators"],
-                        "mark": child_ir["mark"],
-                        "options": child_ir.get("options", {}),
+                        "options": child_ir.get("options") or {},
                         "data": child_data,
-                        "zOrder": child_ir.get("zOrder"),
-                        "name": child_name,
                     },
                     child_derive_ids,
                 )

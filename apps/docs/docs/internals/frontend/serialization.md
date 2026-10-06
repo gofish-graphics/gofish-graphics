@@ -42,7 +42,7 @@ expansion and elaboration. Three consumers:
 | Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                         |
 | JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                |
 | JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                         |
-| JS-side deserializer (`Serialize.buildChart`, `mapMark`, …)                                             | `packages/gofish-graphics/src/serialize/fromJSON.ts`                       |
+| JS-side deserializer (`Serialize.renderIR`, `buildChart`, `mapMark`, …)                                 | `packages/gofish-graphics/src/serialize/fromJSON.ts`                       |
 | Operator/mark factory registry                                                                          | `packages/gofish-graphics/src/serialize/registry.ts`                       |
 | Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`) |
 | Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                     |
@@ -193,18 +193,16 @@ earlier tier) survives. A `.name(...)` call on the Python `_InputRef` (#556)
 rides along as a `name` field on the sentinel and is applied to the resolved
 ref before it's returned, since `GoFishRef.name()` mutates in place — this is
 how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
-`.relate(...)` against a ref it only received through the bridge. The test
-harness (`tests/harness/main.ts`) carries an equivalent
-`serializeMarkFnInput`/`__inputRef` implementation, since it renders from raw
-IR over plain HTTP rather than through the shared `fromJSON.ts`/widget path.
-It does share the deserializer's factory registries
-(`Serialize.COMBINATOR_FACTORIES` and `Serialize.MARK_MAP` in `registry.ts`),
-so the two cannot disagree on which factory a wire type maps to.
+`.relate(...)` against a ref it only received through the bridge. A render
+may resolve the same mark more than once, so the mark-fn remembers the
+bridge's answer per input rows (each call is a round trip into Python), but
+it rebuilds the mark per call, so an `__inputRef` always resolves against
+that call's own refs.
 
 The plain leaf-form `ref` node carries names the same way: `RefMarkIR`
 declares an optional `name`, emitted by Python's `_RefProxy.to_dict()` when
-the ref was renamed and re-applied by the deserializer (both `fromJSON.ts`
-and the harness's `mapMark`) via the same mutate-in-place `GoFishRef.name()`.
+the ref was renamed and re-applied by the deserializer's `mapMark` via the
+same mutate-in-place `GoFishRef.name()`.
 This is what lets a named ref stand-in, such as `ref(token).name("a")`,
 serve as a constraint operand from Python exactly as from JS: without the wire
 `name`, the reconstructed ref would not answer to `"a"` and the constraint
@@ -230,7 +228,6 @@ centralAngle, startAngle, direction, center }`. `fromJSON.ts` reconstructs it by
 calling `polar(coordSpec)` / `clock(coordSpec)` and passing the whole spec
 through (the factory ignores the `type` key), so a parameterized polar/clock —
 donut hole, partial fan, start angle — round-trips without per-option plumbing.
-The parity render harness (`tests/harness/main.ts`) rebuilds it the same way.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:
@@ -263,10 +260,10 @@ boundary, with no per-field rule:
   `to_ir()` (`gofish/_nonfinite.py`). The test derive server encodes the
   infinities in what it sends the same way.
 - A reader decodes in one place, `Serialize.readIR` (`fromJSON.ts`), which
-  parses JSON text if it is given text and decodes the tags. The parity
-  harness calls it once per spec and once per derive response, the widget once
-  per spec trait (and hands the result down), and `buildChart` reads its own
-  arguments through it. The other reconstruction functions (`mapMark`,
+  parses JSON text if it is given text and decodes the tags. `renderIR` reads
+  the root it is given through it, the parity harness's HTTP bridge reads each
+  derive response through it, and `buildChart` reads its own arguments
+  through it. The other reconstruction functions (`mapMark`,
   `mapOperator`, ...) take what `readIR` returns.
 - The validator accepts the tagged `Infinity` and `-Infinity` wherever it
   expects a number, through one check (`isIRNumber`), and the JSON Schema has
@@ -291,7 +288,7 @@ evaluated on the authoring side. A clause is a `ConstraintIR`
 `{ type: "ref", selection: "name" }` refs to the layer's names. The two are
 told apart by `refs`: a constraint always carries it and a mark never does
 (`isConstraintIR`, which the validator uses too). Both readers (`fromJSON.ts`
-and the parity harness) rebuild a constraint with the same `constraintFromIR`
+and the parity harness, which both go through `fromJSON.ts`) rebuild a constraint with the same `constraintFromIR`
 and hand the list back through `.relate(() => clauses)`, so the
 layer schedules the clauses exactly as it would for a JS author. The field was
 called `constraints`, and held constraints only, before the `.constrain()` →
@@ -621,7 +618,7 @@ alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
 widget/RPC layer — see
 [Design space: generating the Python wrapper](/internals/design/python-wrapper-codegen)
 for the full hand-written-residue accounting and what's still deferred
-(closing the deserializer-registry/parity-harness generification, the
+(generifying the deserializer registry, the
 `.layer()`/relate-ref-walk follow-ups).
 
 Generating this layer fixed real drift along the way: the hand-written
@@ -704,6 +701,33 @@ directly — no bridge sentinel needed.
 Olli and other pure-JS consumers don't see these — they're a
 `FrontendIRWithBridge` extension declared in the Python widget code
 (see [The Jupyter Bridge & RPC](/internals/python/bridge)).
+
+### One renderer, two hosts
+
+Two hosts render Python IR: the notebook widget
+(`packages/gofish-python/widget-src/index.ts`) and the Python parity harness
+(`tests/harness/main.ts`). Both call the same function,
+`Serialize.renderIR(root, container, renderOptions, { bridge, tierRows })`
+in `fromJSON.ts`, which dispatches on the root (chart, layer, bare mark) and
+renders it. What differs between the hosts is only transport:
+
+- **Callbacks.** The widget's `DeriveBridge` sends rows as Arrow over
+  anywidget traitlets; the harness's sends them as JSON in an HTTP POST to
+  `tests/scripts/derive-server.py` (`/derive/<id>`).
+- **Rows.** The widget ships each chart tier's rows in an Arrow sidecar and
+  passes them as `tierRows`; the derive server inlines them in the IR as
+  `{type: "inline", rows}`.
+- **Render options.** The widget reads `w`, `h`, `axes` and `debug` from its
+  traits, which the Python `.render(...)` call sets. The harness reads them from
+  the story's options dict. `axes` stays unset unless the caller passed it, so a
+  chart's own `axes` option, or a layer chain's root tier's, decides.
+
+The layer cases live in `renderIR` too: a `LayerIR` with `relate` resolves
+each tier, names it with the tier's `name`, and relates the named nodes (the
+JS `layer([...]).relate(...)` spelling); `builder: true` rebuilds the real
+`LayerBuilder`; and a layer's `padding` option becomes a render option, since
+in JS `padding` is a render option of `layer([...]).render(...)` and is inert
+as a Layer option.
 
 ## Prior art
 

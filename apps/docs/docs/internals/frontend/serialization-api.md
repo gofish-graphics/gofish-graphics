@@ -86,6 +86,21 @@ const builder = Serialize.buildChart(
 await builder.render(container, { w: 500, h: 300, axes: true });
 ```
 
+To render a whole root (a chart, a layer, or a bare mark) in one call, the
+way the Python widget and the parity harness do:
+
+```ts
+await Serialize.renderIR(
+  root,
+  container,
+  { w: 500, h: 300 },
+  { bridge, tierRows }
+);
+```
+
+`tierRows` holds rows shipped beside the IR, one array per chart tier; a
+chart whose IR carries inline rows does not need it.
+
 For finer-grained reconstruction:
 
 | Function                                              | Returns              |
@@ -97,8 +112,9 @@ For finer-grained reconstruction:
 The `bridge` argument is a `Serialize.DeriveBridge` — required only if
 the IR contains `derive` operators or `{__gofish_lambda}` sentinels
 (both Python-bridge concerns). A pure-JS-emitted IR doesn't need one;
-pass `undefined`. The widget's bridge implementation lives in
-`packages/gofish-python/widget-src/index.ts` if you need a reference.
+pass `undefined`. The widget's bridge implementation (Arrow over anywidget)
+lives in `packages/gofish-python/widget-src/index.ts`, and the parity harness's (JSON
+over HTTP) in `tests/harness/main.ts`, if you need a reference.
 
 `makeTokenResolver()` returns a fresh per-render resolver that mints
 stable JS `Token` instances for the `{__gofish_token, __tag}` sentinels
