@@ -7,6 +7,7 @@
     "test": "tsx scripts/capture-js-dom.ts && tsx scripts/capture-python-dom.ts && tsx scripts/compare.ts",
     "test:js": "tsx scripts/capture-js-dom.ts && tsx scripts/compare.ts --js-only",
     "update": "tsx scripts/capture-js-dom.ts && tsx scripts/update-baselines.ts",
+    "typecheck": "tsc --noEmit",
     "capture-js": "tsx scripts/capture-js-dom.ts",
     "capture-one": "tsx scripts/capture-one.ts",
     "capture-docs-images": "tsx scripts/capture-docs-images.ts",
@@ -40,7 +41,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "@types/diff": "^7.0.2",
     "@types/diff-match-patch": "^1.0.36",
+    "@types/node": "^24.10.1",
     "@types/pixelmatch": "^5.2.6",
     "@types/pngjs": "^6.0.5",
     "diff": "^7.0.0",

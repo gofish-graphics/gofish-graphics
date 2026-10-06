@@ -963,11 +963,12 @@ let pkgVersionsCache: Record<string, string> | undefined;
 function pkgVersions(): Record<string, string> {
   if (pkgVersionsCache) return pkgVersionsCache;
   const pkg = JSON.parse(readFileSync(GOFISH_PKG_JSON, "utf-8"));
-  pkgVersionsCache = {
+  const versions: Record<string, string> = {
     ...(pkg.devDependencies ?? {}),
     ...(pkg.dependencies ?? {}),
   };
-  return pkgVersionsCache;
+  pkgVersionsCache = versions;
+  return versions;
 }
 
 /** All `from "<spec>"` and bare side-effect import specifiers in a snippet. */

@@ -197,6 +197,9 @@ how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
 harness (`tests/harness/main.ts`) carries an equivalent
 `serializeMarkFnInput`/`__inputRef` implementation, since it renders from raw
 IR over plain HTTP rather than through the shared `fromJSON.ts`/widget path.
+It does share the deserializer's factory registries
+(`Serialize.COMBINATOR_FACTORIES` and `Serialize.MARK_MAP` in `registry.ts`),
+so the two cannot disagree on which factory a wire type maps to.
 
 The plain leaf-form `ref` node carries names the same way: `RefMarkIR`
 declares an optional `name`, emitted by Python's `_RefProxy.to_dict()` when

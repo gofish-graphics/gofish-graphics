@@ -123,7 +123,7 @@ export const COMBINATOR_FACTORIES: Record<
     (enclose as any)(opts, marks) as unknown as Mark<any>,
   // Absolute-offset placement primitive — sets its single child's min-corner
   // (x, y) in parent coordinates. Combinator-only, like `enclose`; opts ride
-  // in `options`. Mirrors tests/harness/main.ts's COMBINATOR_FACTORIES.
+  // in `options`.
   position: (opts, marks) =>
     (position as any)(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,

@@ -34,3 +34,9 @@ jobs:
 
       - name: Typecheck gofish-graphics
         run: pnpm --filter gofish-graphics typecheck
+
+      # The test harness, bench specs, and capture scripts import the library
+      # source directly. Vite and tsx strip types, so without this step a
+      # renamed lib export only shows up at page-eval time in Playwright (#554).
+      - name: Typecheck tests workspace
+        run: pnpm --filter @gofish/tests typecheck

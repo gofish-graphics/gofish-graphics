@@ -23,16 +23,6 @@ import {
   derive,
   resolve,
   join,
-  rect,
-  circle,
-  line,
-  ribbon,
-  blank,
-  ellipse,
-  petal,
-  text,
-  image,
-  polygon,
   palette,
   gradient,
   clock,
@@ -40,23 +30,6 @@ import {
   wavy,
   layer,
   ref,
-  arrow,
-  enclose,
-  position,
-  // Region-compositing combinators. PR #404's Stage-2 rename (#196/#202)
-  // renamed the public Porter-Duff exports to Figma-inspired names:
-  //   inside → intersect, xor → exclude, out → subtract, atop → paint.
-  // `over` stays internal-for-IR (re-exported from lib.ts only for this
-  // harness — use `layer` in user code). The COMBINATOR_FACTORIES map below
-  // is still keyed by the OLD wire-type strings ("inside"/"xor"/...), which
-  // the IR serializer never renamed — see the matching comments in
-  // packages/gofish-graphics/src/serialize/registry.ts and chart.ts.
-  over,
-  intersect,
-  exclude,
-  subtract,
-  paint,
-  mask,
   // `cut` (pure slice primitive → array of slice-node promises) and `cutMark`
   // (expand-mark form). A `cut` IR node used as a chart `.mark(...)` →
   // `cutMark`; used as a combinator child → expanded into slices via `cut`.
@@ -77,49 +50,10 @@ import {
 } from "gofish-graphics";
 import { Frontend } from "gofish-ir";
 
-// Combinator-form factory map. Each entry takes (opts, marks) and returns
-// a Mark. JS storybook uses these directly via the dual-mode operator
-// overloads; the harness mirrors that shape.
-const COMBINATOR_FACTORIES: Record<
-  string,
-  (opts: Record<string, any>, marks: Mark<any>[]) => Mark<any>
-> = {
-  spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
-  // stack/scatter/group/table are dual-mode operators (createOperator) whose
-  // `(opts, marks)` overload yields a combinator-form Mark — Python emits the
-  // matching `__combinator: true` IR (e.g. the `stackX`/`stackY` ports).
-  stack: (opts, marks) => stack(opts, marks) as unknown as Mark<any>,
-  scatter: (opts, marks) => scatter(opts, marks) as unknown as Mark<any>,
-  group: (opts, marks) => group(opts, marks) as unknown as Mark<any>,
-  table: (opts, marks) => table(opts, marks) as unknown as Mark<any>,
-  layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
-  // Graphical wrapping operator (padding/rx/ry border), combinator-only like
-  // layer; opts ride in `options`. Mirrors registry.ts's COMBINATOR_FACTORIES.
-  enclose: (opts, marks) => enclose(opts, marks) as unknown as Mark<any>,
-  // Absolute-offset placement primitive — sets its single child's min-corner
-  // (x, y) in parent coordinates. Combinator-only, like `enclose`; opts ride
-  // in `options`. Mirrors registry.ts's COMBINATOR_FACTORIES.
-  position: (opts, marks) => position(opts, marks) as unknown as Mark<any>,
-  arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
-  // line/ribbon low-level combinator form (replaces the removed connect).
-  line: (opts, marks) => line(opts, marks) as unknown as Mark<any>,
-  ribbon: (opts, marks) => ribbon(opts, marks) as unknown as Mark<any>,
-  treemap: (opts, marks) => treemap(opts, marks) as unknown as Mark<any>,
-  pack: (opts, marks) => pack(opts, marks) as unknown as Mark<any>,
-  // Keys are the IR wire types (UNCHANGED — the serializer never renamed
-  // them); values are the renamed (#196/#202) combinator factories. Mirrors
-  // packages/gofish-graphics/src/serialize/registry.ts's COMBINATOR_FACTORIES.
-  // Porter-Duff combinators have a stricter `[Mark, Mark]` tuple signature
-  // than a runtime deserializer can satisfy; cast the function at the dispatch
-  // boundary, mirroring registry.ts's COMBINATOR_FACTORIES.
-  over: (opts, marks) => (over as any)(opts, marks) as unknown as Mark<any>,
-  inside: (opts, marks) =>
-    (intersect as any)(opts, marks) as unknown as Mark<any>,
-  xor: (opts, marks) => (exclude as any)(opts, marks) as unknown as Mark<any>,
-  out: (opts, marks) => (subtract as any)(opts, marks) as unknown as Mark<any>,
-  atop: (opts, marks) => (paint as any)(opts, marks) as unknown as Mark<any>,
-  mask: (opts, marks) => (mask as any)(opts, marks) as unknown as Mark<any>,
-};
+// The combinator and leaf-mark factory maps are the library's own
+// (`Serialize.COMBINATOR_FACTORIES` / `Serialize.MARK_MAP` in
+// packages/gofish-graphics/src/serialize/registry.ts), so the harness can't
+// drift from the deserializer the Python widget uses.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -424,19 +358,6 @@ function mapOperator(
   }
 }
 
-const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
-  rect: (opts) => rect(opts),
-  circle: (opts) => circle(opts),
-  line: (opts) => line(opts),
-  ribbon: (opts) => ribbon(opts),
-  blank: (opts) => blank(opts),
-  ellipse: (opts) => ellipse(opts),
-  petal: (opts) => petal(opts),
-  text: (opts) => text(opts),
-  image: (opts) => image(opts),
-  polygon: (opts) => polygon(opts as any) as unknown as Mark<any>,
-};
-
 /** Resolve a `.name` field that's either a string or a token sentinel. */
 function resolveNameField(
   rawName: any,
@@ -695,7 +616,7 @@ function mapMark(
     const opts = resolveOptions(
       unwrapMarkOpts(spec.options ?? {}, deriveServerUrl)
     );
-    const factory = COMBINATOR_FACTORIES[spec.type];
+    const factory = Serialize.COMBINATOR_FACTORIES[spec.type];
     if (!factory) {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
@@ -732,7 +653,7 @@ function mapMark(
   }
 
   const { type, name: layerName, label, ...opts } = spec;
-  const factory = MARK_MAP[type];
+  const factory = Serialize.MARK_MAP[type];
   if (!factory) throw new Error(`Unknown mark type: ${type}`);
 
   // The Python Mark.label() chain emits an array of structured
@@ -841,7 +762,7 @@ function buildChartFromSpec(
   chartSpec: ChartHarnessSpec,
   deriveServerUrl: string | undefined,
   resolveToken: TokenResolver
-): ChartBuilder<any, any> {
+): ReturnType<ChartBuilder<any, any>["mark"]> {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of chartSpec.operators || []) {
     const op = mapOperator(opSpec, deriveServerUrl);
@@ -870,13 +791,24 @@ function buildChartFromSpec(
     }
   }
 
-  let builder = chart(chartData, chartOpts)
-    .flow(...operators)
-    .mark(mark);
-  if (chartSpec.zOrder !== undefined && chartSpec.zOrder !== null) {
-    builder = builder.zOrder(chartSpec.zOrder);
+  // `.flow(op)` appends to the pipeline, so one call per operator is the same
+  // as one `.flow(...operators)` call (whose public overloads are fixed-arity).
+  const flowed = operators.reduce<ChartBuilder<any, any>>(
+    (builder, op) => builder.flow(op),
+    chart(chartData, chartOpts)
+  );
+  const built = flowed.mark(mark);
+  const zOrder = chartSpec.zOrder;
+  if (zOrder === undefined || zOrder === null) return built;
+  // A relational mark (line/ribbon) over row data fuses into an anchor tier
+  // plus a connector tier, and `.mark()` then returns a LayerBuilder, which
+  // has no `.zOrder()`. JS has no spelling for that combination either.
+  if (!("zOrder" in built)) {
+    throw new Error(
+      "zOrder on a chart whose relational mark fuses into a layer is not supported"
+    );
   }
-  return builder;
+  return built.zOrder(zOrder);
 }
 
 function renderChart(encodedSpec: HarnessSpec) {
