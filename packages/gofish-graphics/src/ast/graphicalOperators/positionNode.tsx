@@ -102,20 +102,18 @@ export const positionNode = (
             ? undefined
             : (computeAesthetic(options.y, posFn(scales[1]?.map)!, 0) ?? 0);
 
+        // The local box is the child's box as placed in this node's own
+        // frame; the offset is applied exactly once, as the translate. `dims`
+        // composes the two (`min = local min + translate`), so adding the
+        // offset to the local min too would count it twice (#755).
         return {
           intrinsicDims: [
             {
-              min:
-                childPlaceable.dims[0].min === undefined
-                  ? undefined
-                  : childPlaceable.dims[0].min + (offsetX ?? 0),
+              min: childPlaceable.dims[0].min,
               size: childPlaceable.dims[0].size,
             },
             {
-              min:
-                childPlaceable.dims[1].min === undefined
-                  ? undefined
-                  : childPlaceable.dims[1].min + (offsetY ?? 0),
+              min: childPlaceable.dims[1].min,
               size: childPlaceable.dims[1].size,
             },
           ],
