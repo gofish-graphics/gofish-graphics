@@ -304,7 +304,11 @@ jobs:
             --branch="${{ github.head_ref || github.ref_name }}" \
             --commit-dirty=true 2>&1) || { echo "$output"; exit 1; }
           echo "$output"
-          url=$(echo "$output" | grep -oE 'https://[a-zA-Z0-9._-]+\.pages\.dev[a-zA-Z0-9._/-]*' | tail -1)
+          # Link this deployment's own URL, not the branch alias wrangler prints
+          # last: the alias serves whichever run of the branch deployed most
+          # recently, so a status on one commit could open (and accept against)
+          # another commit's run.
+          url=$(echo "$output" | grep -F 'Take a peek over at' | grep -oE 'https://[a-zA-Z0-9._-]+\.pages\.dev[a-zA-Z0-9._/-]*' | head -1)
           echo "deployment-url=$url" >> "$GITHUB_OUTPUT"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -535,7 +539,11 @@ jobs:
             --branch="${{ github.head_ref || github.ref_name }}" \
             --commit-dirty=true 2>&1) || { echo "$output"; exit 1; }
           echo "$output"
-          url=$(echo "$output" | grep -oE 'https://[a-zA-Z0-9._-]+\.pages\.dev[a-zA-Z0-9._/-]*' | tail -1)
+          # Link this deployment's own URL, not the branch alias wrangler prints
+          # last: the alias serves whichever run of the branch deployed most
+          # recently, so a status on one commit could open (and accept against)
+          # another commit's run.
+          url=$(echo "$output" | grep -F 'Take a peek over at' | grep -oE 'https://[a-zA-Z0-9._-]+\.pages\.dev[a-zA-Z0-9._/-]*' | head -1)
           echo "deployment-url=$url" >> "$GITHUB_OUTPUT"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
