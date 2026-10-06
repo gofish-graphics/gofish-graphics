@@ -44,6 +44,7 @@ def story_default():
                 "rain": "#1f77b4",
                 "snow": "#9467bd",
             }),
+            axes=True,
         )
         .flow(
             derive(_add_month),
@@ -51,5 +52,5 @@ def story_default():
             stack(by=field("weather").sort(WEATHER_ORDER), dir="y"),
         )
         .mark(rect(h=field("date").count(), fill="weather")),
-        {"w": 600, "h": 300, "axes": True},
+        {"w": 600, "h": 300},
     )

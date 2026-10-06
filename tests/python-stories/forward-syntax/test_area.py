@@ -12,10 +12,10 @@ def story_basic():
     w = 500
     lakes = 6
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=True)
         .flow(spread(by="lake", dir="x", spacing=w / (lakes - 1)))
         .mark(ribbon(h="count", opacity=0.8)),
-        {"w": w, "h": 300, "axes": True},
+        {"w": w, "h": 300},
     )
 
 

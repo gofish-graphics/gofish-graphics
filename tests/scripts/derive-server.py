@@ -254,6 +254,11 @@ class DeriveHandler(BaseHTTPRequestHandler):
                             tiers.append(tier)
                         else:
                             tiers.append(chart_ir(tier, child))
+                    # A `.relate(...)` clause that draws is a mark, and may
+                    # carry accessors too (a constraint carries none).
+                    for clause in b._relate or []:
+                        if isinstance(clause, Mark):
+                            register_mark(clause)
                     return {**ir, "charts": tiers}
                 if isinstance(b, ChartBuilder):
                     return chart_ir(b.to_ir(), b)

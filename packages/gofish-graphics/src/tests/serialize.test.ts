@@ -1025,6 +1025,53 @@ async function main() {
     );
   }
 
+  // A relational mark over rows fuses into a layer, so `.mark(line(...))`
+  // returns a LayerBuilder, which has no `.name()` or `.zOrder()` in JS. A
+  // named or ordered fused chart in the IR (Python can emit one) must fail
+  // with the one clear error, for both modifiers, not a TypeError.
+  {
+    const rows = [
+      { x: 1, y: 2 },
+      { x: 2, y: 3 },
+    ];
+    const fusedJS = chart(rows)
+      .flow(scatter({ x: "x", y: "y" }))
+      .mark(line({}));
+    check(
+      "JS: a fused relational chart has no .name() or .zOrder()",
+      typeof fusedJS.name !== "function" &&
+        typeof fusedJS.zOrder !== "function"
+    );
+    const ir = {
+      type: "chart",
+      data: { type: "inline", rows },
+      operators: [{ type: "scatter", x: "x", y: "y" }],
+      mark: { type: "line" },
+      options: {},
+    };
+    for (const [label, extra] of [
+      ["name", { name: "trend" }],
+      ["zOrder", { zOrder: 1 }],
+    ] as const) {
+      let message = "";
+      try {
+        Serialize.buildChart(
+          { ...ir, ...extra },
+          [],
+          undefined,
+          Serialize.makeTokenResolver()
+        );
+      } catch (e) {
+        message = e instanceof Error ? e.message : String(e);
+      }
+      check(
+        `fused line chart with ${label} throws the fused-layer error`,
+        message.includes("fuses into a layer"),
+        message || "did not throw"
+      );
+    }
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);

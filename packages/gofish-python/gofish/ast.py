@@ -196,10 +196,10 @@ def _channel(v: Any) -> Any:
 def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
     """Walk a Mark tree, yielding `(lambda_id, rows_fn)` pairs for every
     `_PendingAccessor` in mark kwargs (and recursively in combinator
-    `_children`). `rows_fn` adapts the user's `(row) -> value` callable to
-    the rows-in / rows-out shape the existing `/derive/<id>` endpoint
-    expects, so mark accessors and `derive()` operators share one registry
-    and one endpoint.
+    `_children` and in the marks of `.relate(...)` clauses). `rows_fn`
+    adapts the user's `(row) -> value` callable to the rows-in / rows-out
+    shape the existing `/derive/<id>` endpoint expects, so mark accessors
+    and `derive()` operators share one registry and one endpoint.
     """
     pairs: List[tuple] = []
     for val in mark.kwargs.values():
@@ -211,6 +211,10 @@ def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
     if mark._children is not None:
         for child in mark._children:
             pairs.extend(_collect_mark_lambdas(child))
+    # A `.relate(...)` clause that draws is a mark too (a constraint is not).
+    for clause in getattr(mark, "_relate", None) or []:
+        if isinstance(clause, Mark):
+            pairs.extend(_collect_mark_lambdas(clause))
     return pairs
 
 
@@ -509,7 +513,8 @@ class Mark:
         self,
         w: int = 800,
         h: int = 600,
-        axes: bool = False,
+        axes: Optional[Any] = None,
+        legend: Optional[bool] = None,
         padding: Optional[float] = None,
         debug: bool = False,
     ):
@@ -517,8 +522,9 @@ class Mark:
         Render this Mark directly (no Chart wrapper) — mirrors the JS storybook
         pattern `spread({...}, [marks]).render(container, {w, h})`.
 
-        ``padding`` is the JS render option of the same name: extra pixels
-        between the drawing and the SVG edge. Leave it unset for the default.
+        The options are the JS ``.render(container, options)`` options
+        (``w``, ``h``, ``axes``, ``legend``, ``padding``, ``debug``); one left
+        unset (``None``) takes its default.
 
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
@@ -534,6 +540,7 @@ class Mark:
             width=w,
             height=h,
             axes=axes,
+            legend=legend,
             padding=padding,
             debug=debug,
         )
@@ -544,12 +551,15 @@ class Mark:
         path,
         w: int = 800,
         h: int = 600,
-        axes: bool = False,
+        axes: Optional[Any] = None,
+        legend: Optional[bool] = None,
         padding: Optional[float] = None,
         debug: bool = False,
     ):
         """Save this mark's render to ``path`` (see ``ChartBuilder.save``)."""
-        widget = self.render(w=w, h=h, axes=axes, padding=padding, debug=debug)
+        widget = self.render(
+            w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+        )
         widget.save(path)
         return widget
 
@@ -1353,24 +1363,34 @@ class ChartBuilder:
         self,
         w: int = 800,
         h: int = 600,
+        axes: Optional[Any] = None,
+        legend: Optional[bool] = None,
+        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """
         Render the chart as an anywidget for Jupyter notebooks.
 
+        The options are the JS ``.render(container, options)`` options.
+
         Args:
             w: Chart width in pixels
             h: Chart height in pixels
+            axes: Draw axes (the JS render option ``axes``). Leave unset to
+                use the chart's own ``axes`` option.
+            legend: Draw the color legend (the JS render option ``legend``).
+                Leave unset for the default; a ``chart()`` ``legend`` option
+                wins over this one.
+            padding: Extra pixels between the drawing and the SVG edge (the JS
+                render option ``padding``). Leave unset for the default.
             debug: Whether to enable debug mode
 
         Returns:
             GoFishChartWidget instance that will display in Jupyter
 
         Note:
-            Axes are a *chart* option, not a render option — pass `axes=...`
-            (and `padding=...`) to ``chart(data, axes=True)``, mirroring the
-            JS ``Chart(data, { axes: true })``. See ``chart`` for the full
-            ``axes`` shape.
+            ``axes`` and ``padding`` can be given to ``chart(data, ...)`` or
+            here, as in JS. See ``chart`` for the full ``axes`` shape.
 
         Example:
             >>> data = [{"x": 1, "y": 2}]
@@ -1400,20 +1420,30 @@ class ChartBuilder:
             for op in _collect_derive_operators(self.operators)
         }
 
-        # Create and return widget. Axes flow through the chart options
-        # (spec["options"]["axes"]), not a render-time trait.
         widget = GoFishChartWidget(
             spec=spec,
             arrow_data=arrow_data,
             derive_functions=derive_functions,
             width=w,
             height=h,
+            axes=axes,
+            legend=legend,
+            padding=padding,
             debug=debug,
         )
 
         return widget
 
-    def save(self, path, w: int = 800, h: int = 600, debug: bool = False):
+    def save(
+        self,
+        path,
+        w: int = 800,
+        h: int = 600,
+        axes: Optional[Any] = None,
+        legend: Optional[bool] = None,
+        padding: Optional[float] = None,
+        debug: bool = False,
+    ):
         """Save the rendered chart to ``path`` (format inferred from the
         extension — ``.svg`` today; PNG/HTML tracked in #578).
 
@@ -1425,7 +1455,9 @@ class ChartBuilder:
         Example:
             >>> chart(data).mark(rect(h="y")).save("chart.svg")
         """
-        widget = self.render(w=w, h=h, debug=debug)
+        widget = self.render(
+            w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+        )
         widget.save(path)
         return widget
 
@@ -3217,7 +3249,8 @@ def chart(
         chart(data, color=palette("tableau10"))
         chart(data, color=gradient("blues"), coord=clock())
 
-    Axes are a chart option (not a render option). ``axes`` accepts:
+    Axes are a chart option (``.render(axes=...)`` can also set them, as in
+    JS). ``axes`` accepts:
 
         axes=True                      # show both axes, titles inferred
         axes=False                     # no axes
@@ -3337,20 +3370,26 @@ class LayerBuilder:
         self,
         w: int = 800,
         h: int = 600,
-        axes: Optional[bool] = None,
+        axes: Optional[Any] = None,
+        legend: Optional[bool] = None,
         padding: Optional[float] = None,
         debug: bool = False,
     ):
         """
         Render the layer as an anywidget for Jupyter notebooks.
 
+        The options are the JS ``.render(container, options)`` options.
+
         Args:
             w: Chart width in pixels
             h: Chart height in pixels
-            axes: Whether to show axes. Leave unset to use the root tier's own
-                ``axes`` chart option.
+            axes: Draw axes (the JS render option ``axes``). Leave unset to
+                use the root tier's own ``axes`` option.
+            legend: Draw the color legend (the JS render option ``legend``).
+                Leave unset for the default; a ``chart()`` ``legend`` option
+                wins over this one.
             padding: Extra pixels between the drawing and the SVG edge (the JS
-                render option of the same name). Leave unset for the default.
+                render option ``padding``). Leave unset for the default.
             debug: Whether to enable debug mode
 
         Returns:
@@ -3390,6 +3429,7 @@ class LayerBuilder:
             width=w,
             height=h,
             axes=axes,
+            legend=legend,
             padding=padding,
             debug=debug,
         )
@@ -3400,12 +3440,15 @@ class LayerBuilder:
         path,
         w: int = 800,
         h: int = 600,
-        axes: Optional[bool] = None,
+        axes: Optional[Any] = None,
+        legend: Optional[bool] = None,
         padding: Optional[float] = None,
         debug: bool = False,
     ):
         """Save the layer's render to ``path`` (see ``ChartBuilder.save``)."""
-        widget = self.render(w=w, h=h, axes=axes, padding=padding, debug=debug)
+        widget = self.render(
+            w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+        )
         widget.save(path)
         return widget
 

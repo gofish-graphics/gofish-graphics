@@ -21,10 +21,10 @@ CASH_FLOWS = [
 
 def story_default():
     return (
-        chart(NEGATIVE_BAR_DATA)
+        chart(NEGATIVE_BAR_DATA, axes=True)
         .flow(spread(by="category", dir="x"))
         .mark(rect(h="value")),
-        {"w": 400, "h": 400, "axes": True},
+        {"w": 400, "h": 400},
     )
 
 
@@ -38,10 +38,10 @@ def story_unrounded_min():
         {"category": "F", "value": -5},
     ]
     return (
-        chart(data)
+        chart(data, axes=True)
         .flow(spread(by="category", dir="x"))
         .mark(rect(h="value")),
-        {"w": 400, "h": 300, "axes": True},
+        {"w": 400, "h": 300},
     )
 
 
@@ -53,10 +53,10 @@ def story_all_negative():
         {"category": "D", "value": -8},
     ]
     return (
-        chart(data)
+        chart(data, axes=True)
         .flow(spread(by="category", dir="x"))
         .mark(rect(h="value")),
-        {"w": 400, "h": 300, "axes": True},
+        {"w": 400, "h": 300},
     )
 
 
@@ -70,42 +70,42 @@ def story_signed_group():
         {"quarter": "Q3", "flow": "Outflow", "amount": -52},
     ]
     return (
-        chart(data)
+        chart(data, axes=True)
         .flow(spread(by="quarter", dir="y"), group(by="flow"))
         .mark(rect(w="amount", fill="flow")),
-        {"w": 400, "h": 200, "axes": True},
+        {"w": 400, "h": 200},
     )
 
 
 def story_mixed_sign_stack():
     return (
-        chart(CASH_FLOWS)
+        chart(CASH_FLOWS, axes=True)
         .flow(spread(by="quarter", dir="x"), stack(by="flow", dir="y"))
         .mark(rect(h="amount", fill="flow")),
-        {"w": 400, "h": 400, "axes": True},
+        {"w": 400, "h": 400},
     )
 
 
 def story_all_negative_stack():
     outflows = [d for d in CASH_FLOWS if d["direction"] == "Outflow"]
     return (
-        chart(outflows)
+        chart(outflows, axes=True)
         .flow(spread(by="quarter", dir="x"), stack(by="flow", dir="y"))
         .mark(rect(h="amount", fill="flow")),
-        {"w": 400, "h": 300, "axes": True},
+        {"w": 400, "h": 300},
     )
 
 
 def story_diverging_stack():
     return (
-        chart(CASH_FLOWS)
+        chart(CASH_FLOWS, axes=True)
         .flow(
             spread(by="quarter", dir="x"),
             group(by="direction"),
             stack(by="flow", dir="y"),
         )
         .mark(rect(h="amount", fill="flow")),
-        {"w": 400, "h": 400, "axes": True},
+        {"w": 400, "h": 400},
     )
 
 
@@ -118,8 +118,8 @@ def story_waterfall_column():
         {"step": "New business", "change": 10},
     ]
     return (
-        chart(data)
+        chart(data, axes=True)
         .flow(stack(by="step", dir="y"))
         .mark(rect(w=40, h="change", fill="step")),
-        {"w": 200, "h": 400, "axes": True},
+        {"w": 200, "h": 400},
     )

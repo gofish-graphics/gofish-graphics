@@ -17,6 +17,7 @@ import {
   chart,
   layer,
   selectAll,
+  LayerBuilder,
   PREVIOUS_LAYER_MARKS,
 } from "../ast/marks/chart";
 import type { AxesOptions, View } from "../ast/gofish";
@@ -460,32 +461,20 @@ export function mapMark(
       // that the deserializer is honoring the existing widget contract.
       // mark-fn returns a one-element list; result[0] is the chart/mark-spec
       // dict, as plain JSON (the bridge undoes any transport wrapping).
-      const resultSpec = result[0];
-      // A bare Mark returned by the Python mark-fn (e.g. `spread([...])`)
-      // serializes as `{type: "raw-mark", mark: ...}` — mirrors the
-      // top-level raw-mark IR (`Mark.to_ir()`), reused here since a mark-fn
-      // result is structurally the same "just a mark tree" shape.
-      if (
-        resultSpec &&
-        typeof resultSpec === "object" &&
-        (resultSpec as any).type === "raw-mark"
-      ) {
-        // Returned un-invoked: `resolveMarkResult` (the caller, one level up)
-        // already knows how to call a function-shaped Mark with
-        // `(undefined, undefined, layerContext)` — mirrors the ChartBuilder
-        // branch below, which is likewise returned rather than resolved here.
-        return mapMark(
-          (resultSpec as any).mark as MarkSpec,
-          bridge,
-          resolveToken,
-          newInputRefs
-        );
+      // The reply is the IR root of what the callback returned: a bare Mark
+      // (`{type: "raw-mark"}`, e.g. a `spread([...])` that embeds one of its
+      // input refs), a chart, or a layer (`chart(...).layer(...)`). Like a JS
+      // mark function's result, each is returned unresolved: the caller,
+      // `resolveMarkResult`, resolves a Mark, a ChartBuilder or a
+      // LayerBuilder. Rows travel inline in the reply.
+      const root = result[0] as Frontend.FrontendIR;
+      if (root.type === "raw-mark") {
+        return mapMark(root.mark, bridge, resolveToken, newInputRefs);
       }
-      const cs = resultSpec as ChartSpec;
-      const data2 = Array.isArray((cs as any).data)
-        ? ((cs as any).data as Record<string, any>[])
-        : [];
-      return buildChart(cs, data2, bridge, resolveToken);
+      if (root.type === "layer") {
+        return buildLayer(root, bridge, [], resolveToken);
+      }
+      return chartFromIR(root, [], bridge, resolveToken);
     }) as unknown as Mark<any>;
   }
 
@@ -569,13 +558,12 @@ export function mapMark(
     }
     let mark = factory(opts, childMarks);
     if (spec.relate && typeof (mark as any).relate === "function") {
-      const clauses = relateClauses(
-        spec.relate as RelateClauseIR[],
-        bridge,
-        resolveToken,
-        inputRefs
+      // Rebuilt per call: a `ref(...)` clause is a live GoFishRef that
+      // `.name()` mutates in place, so calls must not share one.
+      const clauses = spec.relate as RelateClauseIR[];
+      mark = (mark as any).relate(() =>
+        relateClauses(clauses, bridge, resolveToken, inputRefs)
       );
-      mark = (mark as any).relate(() => clauses);
     }
     if (spec.__scope) {
       mark = wrapWithScope(mark);
@@ -651,17 +639,12 @@ export function mapMark(
 }
 
 /**
- * Build a full chart from its IR. Data is supplied separately (the IR's
- * `data` field may be a `select` reference; row data comes from the
- * caller — either an inline `rows` from the IR or external Arrow data
- * from the Python bridge).
- */
-/**
  * Read an IR document (or any part of one, such as a derive response) as it
  * arrives: parse it if it is JSON text, and turn its tagged non-finite
  * numbers (`{ "$numberDouble": "Infinity" }`, written by `toJSON` and Python's
- * `to_ir()`) back into numbers. The one place a reader decodes; everything
- * that rebuilds a chart takes what this returns.
+ * `to_ir()`) back into numbers. Each entry point decodes once: `renderIR` its
+ * root, `buildChart` its arguments, and a JSON bridge its replies. The
+ * builders below take what this returns.
  */
 export function readIR<T = any>(json: T | string): T {
   return Frontend.decodeNonFinite(
@@ -669,14 +652,33 @@ export function readIR<T = any>(json: T | string): T {
   );
 }
 
+/**
+ * Build a full chart from its IR, as it arrives (it is decoded here). Data is
+ * supplied separately (the IR's `data` field may be a `select` reference; row
+ * data comes from the caller — either an inline `rows` from the IR or
+ * external Arrow data from the Python bridge).
+ */
 export function buildChart(
   encodedSpec: ChartSpec,
   encodedData: Record<string, any>[],
   bridge: DeriveBridge | undefined,
   resolveToken: TokenResolver
 ): ChartBuilder<any> {
-  const chartSpec = readIR(encodedSpec);
-  const data = readIR(encodedData);
+  return chartFromIR(
+    readIR(encodedSpec),
+    readIR(encodedData),
+    bridge,
+    resolveToken
+  );
+}
+
+/** {@link buildChart} over an already-decoded spec and rows. */
+function chartFromIR(
+  chartSpec: ChartSpec,
+  data: Record<string, any>[],
+  bridge: DeriveBridge | undefined,
+  resolveToken: TokenResolver
+): ChartBuilder<any> {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of (chartSpec.operators ?? []) as OperatorSpec[]) {
     const op = mapOperator(opSpec, bridge);
@@ -725,21 +727,30 @@ export function buildChart(
   let builder = (chart as any)(chartData, resolvedOptions)
     .flow(...operators)
     .mark(mark);
-  if ((chartSpec as any).zOrder !== undefined) {
-    // A relational mark (line/ribbon) over row data fuses into an anchor tier
-    // plus a connector tier, and `.mark()` then returns a LayerBuilder, which
-    // has no `.zOrder()`.
-    if (typeof builder.zOrder !== "function") {
-      throw new Error(
-        "zOrder on a chart whose relational mark fuses into a layer is a " +
-          "known gap (issue #1047): the fused LayerBuilder has no .zOrder()"
-      );
-    }
-    builder = builder.zOrder((chartSpec as any).zOrder);
-  }
-  // `chart(...).name(n)`: a sibling `layer([...]).relate(...)` (or a
-  // cross-chart `selectAll(n)`) refers to this chart by that name.
+  // The chart-level modifiers `.zOrder(n)` and `.name(n)` (the name lets a
+  // sibling `layer([...]).relate(...)` or a cross-chart `selectAll(n)` refer
+  // to this chart).
+  const zOrder = (chartSpec as any).zOrder as number | undefined;
   const name = resolveNameField((chartSpec as any).name, resolveToken);
+  if (zOrder === undefined && name == null) return builder;
+  // A relational mark (line/ribbon) over row data fuses into an anchor tier
+  // plus a connector tier, so `.mark()` returns a LayerBuilder, which has
+  // neither modifier. JS cannot spell `chart(rows).mark(line()).name(...)`
+  // either, so this is a gap in the language, reported the same way for both.
+  if (builder instanceof LayerBuilder) {
+    const used = [
+      zOrder !== undefined && ".zOrder()",
+      name != null && ".name()",
+    ]
+      .filter(Boolean)
+      .join(" and ");
+    throw new Error(
+      `${used} on a chart whose relational mark (line/ribbon) fuses into a ` +
+        `layer: the fused chart is a LayerBuilder, which has no ${used}, in ` +
+        `JS as in Python.`
+    );
+  }
+  if (zOrder !== undefined) builder = builder.zOrder(zOrder);
   if (name != null) builder = builder.name(name);
   return builder;
 }
@@ -754,6 +765,7 @@ export interface RenderIROptions {
   w?: number;
   h?: number;
   axes?: AxesOptions;
+  legend?: boolean;
   padding?: number;
   debug?: boolean;
 }
@@ -805,7 +817,7 @@ export function renderIR(
       options
     );
   }
-  return buildChart(root, tierRows[0] ?? [], bridge, resolveToken).render(
+  return chartFromIR(root, tierRows[0] ?? [], bridge, resolveToken).render(
     container,
     options
   );
@@ -824,7 +836,7 @@ function buildLayer(
   const tiers: any[] = spec.charts.map((tier, i) =>
     tier.type === "raw-mark"
       ? mapMark(tier.mark, bridge, resolveToken)
-      : buildChart(tier, tierRows[i] ?? [], bridge, resolveToken)
+      : chartFromIR(tier, tierRows[i] ?? [], bridge, resolveToken)
   );
   if (spec.builder) {
     // Fluent `chart(...).layer(...)` chain: reconstruct through the real
@@ -838,6 +850,7 @@ function buildLayer(
     tiers
   );
   if (spec.relate === undefined || spec.relate.length === 0) return combined;
-  const clauses = relateClauses(spec.relate, bridge, resolveToken);
-  return combined.relate(() => clauses);
+  // Rebuilt per call, as in `mapMark`'s combinator branch.
+  const clauses = spec.relate;
+  return combined.relate(() => relateClauses(clauses, bridge, resolveToken));
 }

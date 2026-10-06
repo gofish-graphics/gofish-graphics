@@ -35,20 +35,20 @@ def story_data_driven_height_default():
     heights = value) so it falls back to the 400px default; the x axis is
     ORDINAL so bars keep their default width and the chart shrinks horizontally."""
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=True)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count")),
-        {"axes": True},
+        {},
     )
 
 
 def story_position_scatter_default():
     """POSITION space (scatter) with omitted w/h → 400x400 default."""
     return (
-        chart(CATCH_LOCATIONS_ARRAY)
+        chart(CATCH_LOCATIONS_ARRAY, axes=True)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(circle(r=5)),
-        {"axes": True},
+        {},
     )
 
 

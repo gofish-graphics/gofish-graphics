@@ -14,7 +14,11 @@ from python_stories.vega_data_urls import read_json
 def story_default():
     movies = read_json("movies.json").to_dict("records")
     return (
-        chart(movies)
+        chart(
+            movies,
+            # TODO(#1017): remove label_angle once "auto" is the default.
+            axes={"x": {"label_angle": "auto"}, "y": {"title": "Total Gross"}},
+        )
         .flow(spread(by="Major Genre", dir="x"))
         .mark(
             spread(
@@ -27,10 +31,5 @@ def story_default():
                 spacing=0,
             )
         ),
-        {
-            "w": 600,
-            "h": 300,
-            # TODO(#1017): remove once labelAngle "auto" is the default.
-            "axes": {"x": {"labelAngle": "auto"}, "y": {"title": "Total Gross"}},
-        },
+        {"w": 600, "h": 300},
     )

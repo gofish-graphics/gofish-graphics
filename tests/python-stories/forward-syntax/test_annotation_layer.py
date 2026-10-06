@@ -19,5 +19,5 @@ def story_default():
         .layer(rect(y=datum(60), h=3, w=400, fill="#333"))
         # Caption: a bare text tier.
         .layer(text(x=20, y=24, text="threshold: 60", fill="#333")),
-        {"w": 400, "h": 300, "axes": True},
+        {"w": 400, "h": 300},
     )

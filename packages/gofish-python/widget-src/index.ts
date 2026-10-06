@@ -31,7 +31,8 @@ interface WidgetModel {
   get(key: "arrow_data"): string;
   get(key: "width"): number;
   get(key: "height"): number;
-  get(key: "axes"): boolean | null;
+  get(key: "axes"): Serialize.RenderIROptions["axes"] | null;
+  get(key: "legend"): boolean | null;
   get(key: "padding"): number | null;
   get(key: "debug"): boolean;
   get(key: "container_id"): string;
@@ -313,9 +314,10 @@ function renderChart(
   const renderOptions: Serialize.RenderIROptions = {
     w: model.get("width"),
     h: model.get("height"),
-    // `axes` is null unless the Python render call passed it, so a chart's
-    // own `axes` option (or a layer chain's root tier's) decides.
+    // Each is null unless the Python render call passed it, so the chart's
+    // own option (or the default) decides.
     axes: model.get("axes") ?? undefined,
+    legend: model.get("legend") ?? undefined,
     padding: model.get("padding") ?? undefined,
     debug,
   };

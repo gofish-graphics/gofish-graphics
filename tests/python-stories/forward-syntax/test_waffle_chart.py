@@ -6,7 +6,7 @@ from python_stories.data import SEAFOOD
 
 def story_default():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes={"x": {"side": "end"}})
         .flow(
             # Bottom-align the lake columns (y-down: "end" = bottom) so the
             # waffles sit on a baseline and fill upward.
@@ -19,5 +19,5 @@ def story_default():
         )
         .mark(rect(w=8, h=8, fill="species")),
         # x-axis at the bottom (y-end), under the upward-filling columns.
-        {"axes": {"x": {"side": "end"}}},
+        {},
     )
