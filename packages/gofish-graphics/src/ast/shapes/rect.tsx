@@ -67,7 +67,7 @@ export const Rect = ({
   strokeWidth?: number;
   rx?: number;
   ry?: number;
-  filter?: string;
+  filter?: MaybeValue<string>;
   opacity?: number;
   /** w/h ratio to enforce. w = h * aspectRatio. When both dims are data-driven,
    *  the constraining axis (smaller of the two scaled sizes) is used. */
@@ -76,6 +76,7 @@ export const Rect = ({
   // `embedded` is authored by the resolveEmbedding pass (after underlying-space
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
   const dims = elaborateDims(fancyDims);
+  const resolvedFilter = isValue(filter) ? getValue(filter) : filter;
   const node = new GoFishNode(
     {
       key,
@@ -294,7 +295,7 @@ export const Rect = ({
           stroke: resolvedStroke,
           strokeWidth: strokeWidth ?? 0,
           opacity,
-          filter,
+          filter: resolvedFilter,
         });
         const rectExtra = {
           rx,
@@ -377,7 +378,7 @@ export const Rect = ({
                 stroke: resolvedStroke,
                 strokeWidth: thickness + 0.5,
                 opacity,
-                filter,
+                filter: resolvedFilter,
               }),
             },
           ];
@@ -413,7 +414,7 @@ export const Rect = ({
               stroke: resolvedStroke,
               strokeWidth: strokeWidth ?? 0,
               opacity,
-              filter,
+              filter: resolvedFilter,
             }),
           },
         ];
@@ -442,7 +443,14 @@ const RECT_CHANNELS = {
   stroke: "color",
 } as const;
 
-const baseRect = createMark(Rect, RECT_CHANNELS, "rect");
+// `filter` is a raw per-datum channel on rect only: each segment can point at
+// its own SVG filter. `blank` shares RECT_CHANNELS but never paints, so it
+// does not take a filter.
+const baseRect = createMark(
+  Rect,
+  { ...RECT_CHANNELS, filter: "raw" } as const,
+  "rect"
+);
 
 export const rect: typeof baseRect = ((opts: any) =>
   attachCut(baseRect(opts))) as typeof baseRect;

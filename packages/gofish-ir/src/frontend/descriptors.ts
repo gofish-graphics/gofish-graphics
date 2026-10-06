@@ -436,7 +436,9 @@ export const paint: FieldGroup = group({
   stroke: ch.color("Stroke color. Defaults to `fill`."),
   strokeWidth: { type: t.number, default: 0, doc: "Stroke width in pixels." },
   opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
-  filter: { type: t.string, doc: "Raw SVG filter attribute." },
+  filter: ch.str(
+    "SVG filter attribute, or a field name or accessor for a per-item filter."
+  ),
 });
 
 /** The shared groups above, with the heading a docs consumer shows them under.
