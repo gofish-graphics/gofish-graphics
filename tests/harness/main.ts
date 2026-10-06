@@ -17,15 +17,15 @@ import { Serialize } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
 
 /**
- * What `capture-python-dom.ts` sends: an IR root whose `options` also carry
- * the story's options dict (derive-server.py merges the two), plus the derive
- * server's address. A single chart arrives without its `type`.
+ * What `capture-python-dom.ts` sends: a story's IR as the derive server
+ * returns it (the builder's own `to_ir()`, rows inlined), the story's render
+ * options, and the derive server's address.
  */
-type HarnessSpec = (
-  | Frontend.LayerIR
-  | Frontend.RawMarkIR
-  | (Omit<Frontend.ChartIR, "type"> & { type?: "chart" })
-) & { deriveServerUrl?: string };
+interface HarnessSpec {
+  ir: Frontend.FrontendIR;
+  render: Serialize.RenderIROptions;
+  deriveServerUrl?: string;
+}
 
 declare global {
   interface Window {
@@ -58,35 +58,6 @@ function httpBridge(
   };
 }
 
-/**
- * Split the story's options back out of the IR. A story returns
- * `(builder, options)`, where `options` stands for the arguments of that
- * builder's Python `.render(...)`: `w`, `h` and `debug`, plus `axes` for a
- * layer or a bare mark. A chart's `.render()` takes no `axes` (it is a chart
- * option), so for a chart it stays in the IR.
- */
-function splitRenderOptions(spec: HarnessSpec): {
-  root: Frontend.FrontendIR;
-  render: Serialize.RenderIROptions;
-} {
-  const { deriveServerUrl: _url, ...ir } = spec;
-  const { w, h, axes, debug, ...rest } = (ir.options ?? {}) as Record<
-    string,
-    any
-  >;
-  if (ir.type === "layer" || ir.type === "raw-mark") {
-    return { root: { ...ir, options: rest }, render: { w, h, axes, debug } };
-  }
-  return {
-    root: {
-      ...ir,
-      type: "chart",
-      options: axes === undefined ? rest : { ...rest, axes },
-    },
-    render: { w, h, debug },
-  };
-}
-
 function renderChart(spec: HarnessSpec) {
   const container = document.getElementById("gofish-harness-root");
   if (!container) {
@@ -96,8 +67,7 @@ function renderChart(spec: HarnessSpec) {
   }
   (async () => {
     try {
-      const { root, render } = splitRenderOptions(spec);
-      await Serialize.renderIR(root, container, render, {
+      await Serialize.renderIR(spec.ir, container, spec.render, {
         bridge: httpBridge(spec.deriveServerUrl),
       });
       // Allow a tick for SolidJS to flush renders.

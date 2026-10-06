@@ -510,11 +510,15 @@ class Mark:
         w: int = 800,
         h: int = 600,
         axes: bool = False,
+        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """
         Render this Mark directly (no Chart wrapper) — mirrors the JS storybook
         pattern `spread({...}, [marks]).render(container, {w, h})`.
+
+        ``padding`` is the JS render option of the same name: extra pixels
+        between the drawing and the SVG edge. Leave it unset for the default.
 
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
@@ -530,6 +534,7 @@ class Mark:
             width=w,
             height=h,
             axes=axes,
+            padding=padding,
             debug=debug,
         )
         return widget
@@ -540,10 +545,11 @@ class Mark:
         w: int = 800,
         h: int = 600,
         axes: bool = False,
+        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """Save this mark's render to ``path`` (see ``ChartBuilder.save``)."""
-        widget = self.render(w=w, h=h, axes=axes, debug=debug)
+        widget = self.render(w=w, h=h, axes=axes, padding=padding, debug=debug)
         widget.save(path)
         return widget
 
@@ -1325,6 +1331,7 @@ class ChartBuilder:
         # so the canonical schema's `zOrder: number` (no null) matches
         # what we emit, and consumers don't see spurious `null`s.
         result: dict = {
+            "type": "chart",
             "data": data_ir,
             "operators": [op.to_dict() for op in self.operators],
             "mark": mark_ir,
@@ -1505,10 +1512,6 @@ def layer(
 
     - **Chart tiers** — ``layer([chart(...), chart(...)])`` stacks each chart and
       emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``).
-      Options are keyword arguments: ``layer([chart1, chart2], coord=clock())``,
-      the same chart-level options ``chart()`` takes (the generated
-      ``_chart_opts``), so nested keys are snake_case
-      (``axes={"x": {"label_angle": 45}}``).
     - **Marks** — ``layer([rect(...).name("a"), ...])`` wraps child marks in a
       layer node (returns a ``RelatableMark`` that renders directly), with
       ``.relate(...)`` for clauses that relate the marks::
@@ -1518,13 +1521,18 @@ def layer(
               rect(w=120, h=60).name("b"),
           ]).relate(lambda a, b: [Constraint.align([a, b], x="end")])
 
+    Either way the options are the JS ``layer(options, children)`` options
+    (box dims, ``coord``, ``axes``, ``transform``, ``box``, ``key``), as keyword
+    arguments: ``layer([chart1, chart2], coord=clock())``. Render options such
+    as ``padding`` go to ``.render(...)``, as in JS.
+
     Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
     charts and marks.
     """
-    # Chart tiers → LayerBuilder; marks → combinator mark. Chart-tier options
-    # take the chart-level option set, spelled and checked as in `chart()`.
+    # Chart tiers → LayerBuilder; marks → combinator mark. Both take JS
+    # `layer`'s option set.
     if children and all(isinstance(c, ChartBuilder) for c in children):
-        return LayerBuilder(list(children), _chart_opts(**options) or None)
+        return LayerBuilder(list(children), _layer_opts(**options) or None)
     return RelatableMark(
         "layer", _children=list(children), **_layer_opts(**options)
     )
@@ -3330,6 +3338,7 @@ class LayerBuilder:
         w: int = 800,
         h: int = 600,
         axes: Optional[bool] = None,
+        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """
@@ -3340,6 +3349,8 @@ class LayerBuilder:
             h: Chart height in pixels
             axes: Whether to show axes. Leave unset to use the root tier's own
                 ``axes`` chart option.
+            padding: Extra pixels between the drawing and the SVG edge (the JS
+                render option of the same name). Leave unset for the default.
             debug: Whether to enable debug mode
 
         Returns:
@@ -3379,6 +3390,7 @@ class LayerBuilder:
             width=w,
             height=h,
             axes=axes,
+            padding=padding,
             debug=debug,
         )
         return widget
@@ -3389,10 +3401,11 @@ class LayerBuilder:
         w: int = 800,
         h: int = 600,
         axes: Optional[bool] = None,
+        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """Save the layer's render to ``path`` (see ``ChartBuilder.save``)."""
-        widget = self.render(w=w, h=h, axes=axes, debug=debug)
+        widget = self.render(w=w, h=h, axes=axes, padding=padding, debug=debug)
         widget.save(path)
         return widget
 

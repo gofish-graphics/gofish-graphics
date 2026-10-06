@@ -193,11 +193,8 @@ earlier tier) survives. A `.name(...)` call on the Python `_InputRef` (#556)
 rides along as a `name` field on the sentinel and is applied to the resolved
 ref before it's returned, since `GoFishRef.name()` mutates in place — this is
 how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
-`.relate(...)` against a ref it only received through the bridge. A render
-may resolve the same mark more than once, so the mark-fn remembers the
-bridge's answer per input rows (each call is a round trip into Python), but
-it rebuilds the mark per call, so an `__inputRef` always resolves against
-that call's own refs.
+`.relate(...)` against a ref it only received through the bridge. Each call asks Python again and builds
+its own mark, so an `__inputRef` always resolves against that call's own refs.
 
 The plain leaf-form `ref` node carries names the same way: `RefMarkIR`
 declares an optional `name`, emitted by Python's `_RefProxy.to_dict()` when
@@ -716,18 +713,23 @@ renders it. What differs between the hosts is only transport:
   `tests/scripts/derive-server.py` (`/derive/<id>`).
 - **Rows.** The widget ships each chart tier's rows in an Arrow sidecar and
   passes them as `tierRows`; the derive server inlines them in the IR as
-  `{type: "inline", rows}`.
-- **Render options.** The widget reads `w`, `h`, `axes` and `debug` from its
-  traits, which the Python `.render(...)` call sets. The harness reads them from
-  the story's options dict. `axes` stays unset unless the caller passed it, so a
-  chart's own `axes` option, or a layer chain's root tier's, decides.
+  `{type: "inline", rows}`. Otherwise the derive server returns the builder's
+  own `to_ir()` untouched. Data in the IR wins over `tierRows`.
+- **Render options.** These are the JS `.render(container, options)` options:
+  `w`, `h`, `axes`, `padding`, `debug`. The widget reads them from its traits,
+  which the Python `.render(...)` call sets; the harness reads the story's
+  render-options dict. `axes` and `padding` stay unset unless the caller
+  passed them, so a chart's own `axes` option (or a layer chain's root
+  tier's) decides, and the default padding applies.
 
-The layer cases live in `renderIR` too: a `LayerIR` with `relate` resolves
-each tier, names it with the tier's `name`, and relates the named nodes (the
-JS `layer([...]).relate(...)` spelling); `builder: true` rebuilds the real
-`LayerBuilder`; and a layer's `padding` option becomes a render option, since
-in JS `padding` is a render option of `layer([...]).render(...)` and is inert
-as a Layer option.
+The layer cases live in `renderIR` too: `builder: true` rebuilds the real
+`LayerBuilder`; otherwise the tiers go to the JS `layer(options, tiers)`
+combinator with the layer's options as they are, and its `relate` clauses are
+rebuilt once and handed to `.relate(...)`. A tier named with
+`chart(...).name(n)` carries `name` on its `ChartIR`, which `buildChart`
+applies with `ChartBuilder.name`, so the clauses can refer to it. Python's
+`layer([...], **options)` takes exactly JS `layer`'s options; `padding` is a
+render option in both languages.
 
 ## Prior art
 

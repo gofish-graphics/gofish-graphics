@@ -30,6 +30,8 @@ class GoFishChartWidget(anywidget.AnyWidget):
     # None = the render call did not pass `axes`, so the chart's own `axes`
     # option (or a layer chain's root tier's) decides.
     axes = traitlets.Bool(None, allow_none=True).tag(sync=True)
+    # The JS render option `padding`; None = unset (the default padding).
+    padding = traitlets.Float(None, allow_none=True).tag(sync=True)
     debug = traitlets.Bool(False).tag(sync=True)
     container_id = traitlets.Unicode().tag(sync=True)
 
@@ -58,6 +60,7 @@ class GoFishChartWidget(anywidget.AnyWidget):
         width: int = 800,
         height: int = 600,
         axes: Optional[bool] = None,
+        padding: Optional[float] = None,
         debug: bool = False,
         **kwargs,
     ):
@@ -100,6 +103,7 @@ class GoFishChartWidget(anywidget.AnyWidget):
             width=width,
             height=height,
             axes=axes,
+            padding=padding,
             debug=debug,
             container_id=container_id,
             derive_functions=derive_functions or {},

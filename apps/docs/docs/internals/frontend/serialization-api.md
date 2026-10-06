@@ -107,7 +107,6 @@ For finer-grained reconstruction:
 | ----------------------------------------------------- | -------------------- |
 | `Serialize.buildChart(chartSpec, data, bridge?, tok)` | `ChartBuilder<any>`  |
 | `Serialize.mapOperator(opSpec, bridge?)`              | `Operator<any, any>` |
-| `Serialize.mapMark(markSpec, bridge?, tokenResolver)` | `Mark<any>`          |
 
 The `bridge` argument is a `Serialize.DeriveBridge` — required only if
 the IR contains `derive` operators or `{__gofish_lambda}` sentinels
@@ -161,7 +160,7 @@ The current gaps:
   round-trip fine through the widget.
 - **`Token` names** from `.name(createName("foo"))` aren't carried into
   the IR by `toJSON` yet (string names are). Tokens need a stable
-  per-document id scheme; deferred. `mapMark` does resolve the
+  per-document id scheme; deferred. The deserializer does resolve the
   Python-side `{__gofish_token}` sentinels via the token resolver.
 - **`arrow` / `connect` / `treemap` combinator-form marks** are built
   via a different factory (`createNodeOperator`) and aren't tagged in

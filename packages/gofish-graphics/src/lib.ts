@@ -222,11 +222,6 @@ export {
   exclude,
   subtract,
   mask,
-  // `PREVIOUS_LAYER_MARKS` is NOT public API — users spell "inherit the
-  // previous tier's marks" as an empty `chart()` scope. Re-exported only so
-  // the IR test harness can map the `{type: "previous-tier"}` DataIR variant
-  // to this same sentinel without deep-importing internals.
-  PREVIOUS_LAYER_MARKS,
 } from "./ast/marks/chart";
 export type { RelatableMark } from "./ast/marks/chart";
 export { compose } from "./ast/marks/compose";
@@ -270,7 +265,7 @@ export type { MarkChild } from "./ast/types";
 import "./ast/marks/builderMixins";
 
 // Frontend-IR deserializer — re-exported as a namespace so the symbol set
-// stays scoped (`Serialize.mapMark`, etc.).
+// stays scoped (`Serialize.renderIR`, etc.).
 export * as Serialize from "./serialize";
 export { palette, gradient, assignGradientColor } from "./ast/colorSchemes";
 export { barChart } from "./charts/bar";

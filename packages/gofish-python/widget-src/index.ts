@@ -32,6 +32,7 @@ interface WidgetModel {
   get(key: "width"): number;
   get(key: "height"): number;
   get(key: "axes"): boolean | null;
+  get(key: "padding"): number | null;
   get(key: "debug"): boolean;
   get(key: "container_id"): string;
   get(
@@ -315,6 +316,7 @@ function renderChart(
     // `axes` is null unless the Python render call passed it, so a chart's
     // own `axes` option (or a layer chain's root tier's) decides.
     axes: model.get("axes") ?? undefined,
+    padding: model.get("padding") ?? undefined,
     debug,
   };
   log("Rendering with options:", renderOptions);

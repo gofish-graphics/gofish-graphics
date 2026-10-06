@@ -452,24 +452,9 @@ export function mapMark(
         "mark-fn spec encountered but no DeriveBridge was supplied"
       );
     }
-    // A render may resolve the same mark more than once (measurement, then
-    // placement), and each call is a round trip into Python. The callback is
-    // a function of its input, so its answer is remembered per input. Only
-    // the answer is: the mark is rebuilt per call, so an `__inputRef` in it
-    // resolves against THIS call's refs even when two calls send equal rows.
-    const answers = new Map<string, Promise<any[]>>();
-    const ask = (rows: any[]): Promise<any[]> => {
-      const key = JSON.stringify(rows);
-      let answer = answers.get(key);
-      if (answer === undefined) {
-        answer = bridge.applyLambda(lambdaId, rows);
-        answers.set(key, answer);
-      }
-      return answer;
-    };
     return (async (data: any, _key: any, _layerContext: any) => {
       const { rows, inputRefs: newInputRefs } = serializeMarkFnInput(data);
-      const result = await ask(rows);
+      const result = await bridge.applyLambda(lambdaId, rows);
       // Returns a ChartBuilder or a raw Mark, both of which behave as a Mark
       // in the deserialization pipeline; cast through `unknown` to express
       // that the deserializer is honoring the existing widget contract.
@@ -584,10 +569,13 @@ export function mapMark(
     }
     let mark = factory(opts, childMarks);
     if (spec.relate && typeof (mark as any).relate === "function") {
-      const clauses = spec.relate as RelateClauseIR[];
-      mark = (mark as any).relate(() =>
-        relateClauses(clauses, bridge, resolveToken, inputRefs)
+      const clauses = relateClauses(
+        spec.relate as RelateClauseIR[],
+        bridge,
+        resolveToken,
+        inputRefs
       );
+      mark = (mark as any).relate(() => clauses);
     }
     if (spec.__scope) {
       mark = wrapWithScope(mark);
@@ -712,6 +700,8 @@ export function buildChart(
   //   - null / undefined                 — data was shipped via the bridge's
   //                                        arrow_data sidecar; use the
   //                                        `data` argument the caller passed
+  // Data in the IR (inline rows, a selection, the previous tier) wins over
+  // rows the host shipped beside it.
   let chartData: any = data;
   const dataField = (chartSpec as any).data;
   if (dataField && typeof dataField === "object") {
@@ -738,26 +728,33 @@ export function buildChart(
   if ((chartSpec as any).zOrder !== undefined) {
     // A relational mark (line/ribbon) over row data fuses into an anchor tier
     // plus a connector tier, and `.mark()` then returns a LayerBuilder, which
-    // has no `.zOrder()`. JS has no spelling for that combination either.
+    // has no `.zOrder()`.
     if (typeof builder.zOrder !== "function") {
       throw new Error(
-        "zOrder on a chart whose relational mark fuses into a layer is not supported"
+        "zOrder on a chart whose relational mark fuses into a layer is a " +
+          "known gap (issue #1047): the fused LayerBuilder has no .zOrder()"
       );
     }
     builder = builder.zOrder((chartSpec as any).zOrder);
   }
+  // `chart(...).name(n)`: a sibling `layer([...]).relate(...)` (or a
+  // cross-chart `selectAll(n)`) refers to this chart by that name.
+  const name = resolveNameField((chartSpec as any).name, resolveToken);
+  if (name != null) builder = builder.name(name);
   return builder;
 }
 
 /**
  * Render options a host supplies beside the IR document: the arguments of
  * the Python `.render(...)` call. A field left undefined lets the document
- * decide (a chart's own `axes` option, the default padding).
+ * decide (a chart's own `axes` option, the default padding). These are the
+ * JS `.render(container, options)` options.
  */
 export interface RenderIROptions {
   w?: number;
   h?: number;
   axes?: AxesOptions;
+  padding?: number;
   debug?: boolean;
 }
 
@@ -797,35 +794,31 @@ export function renderIR(
   const root = readIR(encodedRoot);
   const { bridge, tierRows = [] } = host;
   const resolveToken = makeTokenResolver();
-  const options = definedFields({ ...renderOptions });
+  const options: any = definedFields({ ...renderOptions });
   if (root.type === "raw-mark") {
     const mark = mapMark(root.mark, bridge, resolveToken) as any;
     return mark.render(container, options);
   }
   if (root.type === "layer") {
-    return renderLayer(
-      root,
+    return buildLayer(root, bridge, tierRows, resolveToken).render(
       container,
-      options,
-      bridge,
-      tierRows,
-      resolveToken
+      options
     );
   }
   return buildChart(root, tierRows[0] ?? [], bridge, resolveToken).render(
     container,
-    options as any
+    options
   );
 }
 
-function renderLayer(
+/** Build a `LayerIR` root: the `chart(...).layer(...)` builder chain, or the
+ *  `layer(options, tiers)` combinator with its `.relate(...)` clauses. */
+function buildLayer(
   spec: LayerSpec,
-  container: HTMLElement,
-  renderOptions: Partial<RenderIROptions>,
   bridge: DeriveBridge | undefined,
   tierRows: Record<string, any>[][],
   resolveToken: TokenResolver
-): Promise<View> {
+): any {
   // A tier is a chart (ChartBuilder) or a component-level annotation
   // (raw-mark → a Mark).
   const tiers: any[] = spec.charts.map((tier, i) =>
@@ -833,47 +826,18 @@ function renderLayer(
       ? mapMark(tier.mark, bridge, resolveToken)
       : buildChart(tier, tierRows[i] ?? [], bridge, resolveToken)
   );
-  // `padding` is a render option in JS (`layer([...]).render(container,
-  // { padding })`); inside the Layer's own options it would be inert. Python
-  // spells it on the layer (`layer([...], padding=80)`), so it moves to the
-  // render options here.
-  const { padding, ...rest } = (spec.options ?? {}) as Record<string, any>;
-  const layerOptions = resolveOptions(rest);
-  const options = definedFields({ ...renderOptions, padding }) as any;
-  const makeLayer = (children: any[]): any =>
-    Object.keys(layerOptions).length > 0
-      ? (layer as any)(layerOptions, children)
-      : (layer as any)(children);
-
-  if (spec.relate && spec.relate.length > 0) {
-    // `layer([chart.name("a"), ...]).relate(...)`: as in the JS spelling,
-    // resolve each tier to a node, name it, and relate the named nodes.
-    const clauses = spec.relate;
-    return (async () => {
-      const nodes: any[] = [];
-      for (let i = 0; i < tiers.length; i++) {
-        const node = await tiers[i].resolve();
-        const name = resolveNameField(
-          (spec.charts[i] as any).name,
-          resolveToken
-        );
-        if (name != null) node.name(name);
-        nodes.push(node);
-      }
-      return makeLayer(nodes)
-        .relate(() => relateClauses(clauses, bridge, resolveToken))
-        .render(container, options);
-    })();
-  }
   if (spec.builder) {
     // Fluent `chart(...).layer(...)` chain: reconstruct through the real
     // LayerBuilder so JS owns the builder's render logic (inferred axis
     // titles, the root tier's `axes`, etc.). The first tier is always a
     // chart; later tiers may be mark tiers (`.layer(text({...}))`).
-    return tiers
-      .slice(1)
-      .reduce((acc, tier) => acc.layer(tier), tiers[0])
-      .render(container, options);
+    return tiers.slice(1).reduce((acc, tier) => acc.layer(tier), tiers[0]);
   }
-  return makeLayer(tiers).render(container, options);
+  const combined = (layer as any)(
+    resolveOptions((spec.options ?? {}) as Record<string, any>),
+    tiers
+  );
+  if (spec.relate === undefined || spec.relate.length === 0) return combined;
+  const clauses = relateClauses(spec.relate, bridge, resolveToken);
+  return combined.relate(() => clauses);
 }
