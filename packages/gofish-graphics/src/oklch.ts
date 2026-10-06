@@ -1,5 +1,5 @@
 // OKLCH Color Manipulation Functions
-import chroma from "chroma-js";
+import { to8Bit, toRgb } from "./colorModes";
 
 export interface OKLCHColor {
   l: number; // Lightness (0-100)
@@ -22,6 +22,15 @@ export const parseOKLCH = (oklchString: string): OKLCHColor => {
 // Convert OKLCH components back to string
 export const oklchToString = ({ l, c, h }: OKLCHColor): string => {
   return `oklch(${l}% ${c} ${h})`;
+};
+
+// Convert OKLCH components to a CSS `rgb(r g b / alpha)` string, clipped to the
+// sRGB gamut and rounded to 8 bits per channel. The alpha part is left out
+// when the color is opaque.
+const oklchToRgbString = ({ l, c, h }: OKLCHColor, alpha: number): string => {
+  const { r, g, b } = toRgb({ mode: "oklch", l: l / 100, c, h });
+  const channels = `${to8Bit(r)} ${to8Bit(g)} ${to8Bit(b)}`;
+  return alpha < 1 ? `rgb(${channels} / ${alpha})` : `rgb(${channels})`;
 };
 
 // Modify chroma of an OKLCH color
@@ -65,10 +74,10 @@ export const createColorVariant = <
 
       // Apply opacity blending in RGB space if opacity is provided
       if (opacity !== undefined && opacity >= 0 && opacity <= 1) {
-        // Convert OKLCH to RGB using chroma-js for blending
-        const chromaColor = chroma(resultColor);
-        const blendedColor = chromaColor.alpha(opacity);
-        resultColor = blendedColor.css();
+        resultColor = oklchToRgbString(
+          { l: newLuminance, c: newChroma, h },
+          opacity
+        );
       }
 
       variant[colorName][shade] = resultColor;

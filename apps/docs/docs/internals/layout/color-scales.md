@@ -8,6 +8,7 @@ covers:
   - packages/gofish-graphics/src/ast/colorSchemes.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/color.ts
+  - packages/gofish-graphics/src/colorModes.ts
 ---
 
 # GoFish Color Scales
@@ -20,7 +21,7 @@ chart(data, { color: palette("tableau10") });
 chart(data, { color: palette(["#e41a1c", "#377eb8", "#4daf4a"]) });
 chart(data, { color: palette({ Salmon: "#e15759" }) }); // unmapped → "#ccc"
 
-// Gradient — continuous, interpolates via chroma-js in lab space
+// Gradient — continuous, interpolates in CIE Lab (D65) via culori
 chart(data, { color: gradient("blues") });
 chart(data, { color: gradient(["#f7fbff", "#6b0808"]) });
 ```
@@ -63,9 +64,9 @@ gradient(stops); // constructor
 
 ### Gradient
 
-- `string` → named scheme stops, interpolate in lab space via chroma-js
-- `string[]` → use as stops, interpolate in lab space via chroma-js
-- A gradient becomes a single **continuous color scale** — `createGradientScale(config, [min, max])` returns a reusable `(value) => string` (chroma scale built once, `t = (value - min) / (max - min)` clamped to `[0, 1]`). This one `scaleFn` is the source of truth for the encoding: both the mark fills (`resolveColorChannel`) and the [colorbar legend](/internals/frontend/legends) read it, so a value and its swatch on the bar always agree. `min`/`max` span the full subtree domain.
+- `string` → named scheme stops, interpolate in CIE Lab (D65 white point, CSS Color 4 conversions) via culori
+- `string[]` → use as stops, interpolate in CIE Lab (D65 white point, CSS Color 4 conversions) via culori
+- A gradient becomes a single **continuous color scale** — `createGradientScale(config, [min, max])` returns a reusable `(value) => string` (stops parsed once, `t = (value - min) / (max - min)` clamped to `[0, 1]`, each lookup computed afresh so a value's color never depends on earlier lookups; a `NaN` value gives `#cccccc`). This one `scaleFn` is the source of truth for the encoding: both the mark fills (`resolveColorChannel`) and the [colorbar legend](/internals/frontend/legends) read it, so a value and its swatch on the bar always agree. `min`/`max` span the full subtree domain.
 
 ### Named scheme registry (`colorSchemes.ts`)
 
@@ -116,6 +117,7 @@ already recorded the subtree's color encodings in the render session.
 | `src/ast/colorSchemes.ts` | Types, constructors, `assignPaletteColor`, `assignGradientColor`, `createGradientScale`, scheme registry |
 | `src/ast/_node.ts`        | `collectColorValues`, `resolveColorScale` two-pass dispatch (categorical map vs continuous scaleFn)      |
 | `src/color.ts`            | `resolveColorChannel` — shared categorical/continuous lookup + color ops for mark fills                  |
+| `src/colorModes.ts`       | Registers the culori color modes (`culori/fn`) and exports the parse/convert/hex helpers                 |
 | `src/ast/shapes/rect.tsx` | Resolves fill/stroke via `resolveColorChannel`                                                           |
 | `src/ast/marks/chart.ts`  | `ChartOptions.color?: ColorConfig`; passes `colorConfig` to render                                       |
 | `src/lib.ts`              | Exports `palette`, `gradient`, `assignGradientColor`, `ColorConfig`, `PaletteScale`, `GradientScale`     |

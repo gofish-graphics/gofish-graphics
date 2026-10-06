@@ -166,7 +166,7 @@ Key coordinate systems available:
   - SolidJS for reactive rendering and JSX
   - D3-array for domain calculations and scales
   - Lodash for utility functions (groupBy, sumBy, orderBy, meanBy)
-  - Chroma-js and Culori for color manipulation
+  - Culori for color manipulation
   - Perfect-arrows for arrow rendering
   - Bubblesets-js for enclosure rendering
 
