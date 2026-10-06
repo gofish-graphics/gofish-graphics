@@ -1,0 +1,158 @@
+// Sankey Tree
+// A branching flow diagram where the width of each tapering band encodes the magnitude of a quantity as it splits across successive tiers.
+
+import {
+  color6,
+  gray,
+  layer,
+  map,
+  neutral,
+  rect,
+  ribbon,
+  spreadX,
+  spreadY,
+  stackY,
+} from "gofish-graphics";
+import { groupBy } from "lodash";
+import _ from "lodash";
+import { titanic } from "./dataset";
+const classColor = {
+  First: color6[0],
+  Second: color6[1],
+  Third: color6[2],
+  Crew: color6[3],
+};
+const container = document.getElementById("app");
+const layerSpacing = 64;
+const internalSpacing = 2;
+layer([
+  spreadX({ spacing: layerSpacing, alignment: "middle" }, [
+    stackY(
+      // y-down: reverse every vertical ordering so the tiers read the same
+      // way they did under the old y-up convention. See issue #143/#16.
+      { spacing: 0, alignment: "middle", reverse: true },
+      map(groupBy(titanic, "class"), (items, cls) =>
+        rect({
+          w: 40,
+          h: _(items).sumBy("count") / 10,
+          fill: neutral,
+        }).name(`${cls}-src`),
+      ),
+    ),
+    spreadY(
+      { spacing: internalSpacing, alignment: "middle", reverse: true },
+      map(groupBy(titanic, "class"), (items, cls) =>
+        spreadX({ spacing: layerSpacing, alignment: "middle" }, [
+          stackY(
+            { spacing: 0, alignment: "middle", reverse: true },
+            map(groupBy(items, "sex"), (items, sex) =>
+              rect({
+                w: 40,
+                h: _(items).sumBy("count") / 10,
+                fill: classColor[cls],
+              }).name(`${cls}-${sex}-src`),
+            ),
+          ).name(`${cls}-tgt`),
+          spreadY(
+            {
+              h: _(items).sumBy("count") / 10,
+              spacing: internalSpacing * 2,
+              alignment: "middle",
+              reverse: true,
+            },
+            map(groupBy(items, "sex"), (items, sex) =>
+              spreadX({ spacing: layerSpacing, alignment: "middle" }, [
+                stackY(
+                  {
+                    spacing: 0,
+                    alignment: "middle",
+                    reverse: true,
+                  },
+                  map(groupBy(items, "survived"), (survivedItems, survived) =>
+                    rect({
+                      w: 40,
+                      h: _(survivedItems).sumBy("count") / 10,
+                      fill: sex === "Female" ? color6[4] : color6[5],
+                    }).name(`${cls}-${sex}-${survived}-src`),
+                  ),
+                ).name(`${cls}-${sex}-tgt`),
+                spreadY(
+                  {
+                    w: 40,
+                    spacing: internalSpacing * 4,
+                    alignment: "middle",
+                    reverse: true,
+                  },
+                  map(groupBy(items, "survived"), (survivedItems, survived) => {
+                    return rect({
+                      h: _(survivedItems).sumBy("count") / 10,
+                      fill:
+                        sex === "Female"
+                          ? survived === "No"
+                            ? gray
+                            : color6[4]
+                          : survived === "No"
+                            ? gray
+                            : color6[5],
+                    }).name(`${cls}-${sex}-${survived}-tgt`);
+                  }),
+                ),
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    ),
+  ]),
+])
+  .relate((names) =>
+    map(groupBy(titanic, "class"), (items, cls) => [
+      ribbon(
+        {
+          dir: "x",
+          fill: classColor[cls],
+          curve: "bezier",
+          opacity: 0.7,
+          mixBlendMode: "multiply",
+        },
+        [names[`${cls}-src`], names[`${cls}-tgt`]],
+      ),
+      map(groupBy(items, "sex"), (sexItems, sex) => [
+        ribbon(
+          {
+            dir: "x",
+            fill: sex === "Female" ? color6[4] : color6[5],
+            curve: "bezier",
+            opacity: 0.7,
+            mixBlendMode: "multiply",
+          },
+          [names[`${cls}-${sex}-src`], names[`${cls}-${sex}-tgt`]],
+        ),
+        map(groupBy(sexItems, "survived"), (survivedItems, survived) =>
+          ribbon(
+            {
+              dir: "x",
+              fill:
+                sex === "Female"
+                  ? survived === "No"
+                    ? gray
+                    : color6[4]
+                  : survived === "No"
+                    ? gray
+                    : color6[5],
+              curve: "bezier",
+              opacity: 0.7,
+              mixBlendMode: "multiply",
+            },
+            [
+              names[`${cls}-${sex}-${survived}-src`],
+              names[`${cls}-${sex}-${survived}-tgt`],
+            ],
+          ),
+        ),
+      ]),
+    ]),
+  )
+  .render(container, {
+    axes: true,
+  });

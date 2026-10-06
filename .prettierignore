@@ -12,3 +12,4 @@ pnpm-lock.yaml
 __snapshots__/
 tests/tmp/
 prototypes/gallery/renders.js
+tests/llm-bench/context/

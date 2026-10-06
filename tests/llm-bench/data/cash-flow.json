@@ -1,0 +1,9 @@
+[
+  { "label": "Begin", "amount": 4000 },
+  { "label": "Jan", "amount": 1707 },
+  { "label": "Feb", "amount": -1425 },
+  { "label": "Mar", "amount": -1030 },
+  { "label": "Apr", "amount": 1812 },
+  { "label": "May", "amount": -1067 },
+  { "label": "Jun", "amount": -1481 }
+]

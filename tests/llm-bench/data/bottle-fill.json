@@ -1,0 +1,6 @@
+[
+  { "wine": "Merlot", "fill_pct": 30 },
+  { "wine": "Chardonnay", "fill_pct": 55 },
+  { "wine": "Riesling", "fill_pct": 80 },
+  { "wine": "Prosecco", "fill_pct": 92 }
+]

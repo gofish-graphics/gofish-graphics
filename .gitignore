@@ -25,6 +25,7 @@ _static/
 # Share project skills with the team; keep everything else under .claude/ local.
 !.claude/skills/
 tests/tmp/
+tests/llm-bench/.env
 __snapshots__/
 
 # gallery prototype: generated screenshots

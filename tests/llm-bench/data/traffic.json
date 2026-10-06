@@ -1,0 +1,7 @@
+[
+  { "channel": "Search", "visits": 5200 },
+  { "channel": "Direct", "visits": 2600 },
+  { "channel": "Social", "visits": 1900 },
+  { "channel": "Referral", "visits": 1500 },
+  { "channel": "Email", "visits": 800 }
+]

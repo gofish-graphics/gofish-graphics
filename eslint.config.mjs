@@ -16,6 +16,8 @@ export default tseslint.config(
       "**/coverage/**",
       "packages/gofish-graphics/src/tests/**",
       "packages/gofish-graphics/stories/**",
+      // Generated from gallery stories; hashed as benchmark context.
+      "tests/llm-bench/context/**",
       "pnpm-lock.yaml",
     ],
   },

@@ -1,0 +1,1193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Benchmark Output Gallery</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --surface-1: #fcfcfb;
+        --surface-2: #f3f2ee;
+        --surface-3: #ffffff;
+        --chart-bg: #ffffff;
+        --text-primary: #0b0b0b;
+        --text-secondary: #52514e;
+        --text-muted: #7a7974;
+        --grid: #e6e5e0;
+        --axis: #b9b8b1;
+        --accent: #2a78d6;
+        --pass: #1a7f37;
+        --pass-bg: #dff3e4;
+        --partial: #8a5a00;
+        --partial-bg: #fbeccb;
+        --fail: #c62a2f;
+        --fail-bg: #fbe1e1;
+        --code-bg: #f6f5f1;
+        --tok-kw: #8b2fb3;
+        --tok-str: #1a7f37;
+        --tok-num: #b35900;
+        --tok-com: #8f8e86;
+        --tok-fn: #2a5fb0;
+        --arm-gofish: #1baf7a;
+        --arm-recharts: #eb6834;
+        --arm-d3: #2a78d6;
+        --arm-matplotlib: #eda100;
+        --arm-ggplot2: #e87ba4;
+        --arm-altair: #4a3aa7;
+        --arm-plot: #7a7974;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          color-scheme: dark;
+          --surface-1: #1a1a19;
+          --surface-2: #232322;
+          --surface-3: #2a2a28;
+          --chart-bg: #ffffff;
+          --text-primary: #ffffff;
+          --text-secondary: #c3c2b7;
+          --text-muted: #8f8e86;
+          --grid: #2e2e2c;
+          --axis: #55544f;
+          --accent: #5a9ff0;
+          --pass: #5cc97a;
+          --pass-bg: #173a22;
+          --partial: #e6b450;
+          --partial-bg: #3d2f10;
+          --fail: #f07a7a;
+          --fail-bg: #451c1c;
+          --code-bg: #20201f;
+          --tok-kw: #d19af0;
+          --tok-str: #8fd18f;
+          --tok-num: #f0b070;
+          --tok-com: #7d7c75;
+          --tok-fn: #8ab8f5;
+          --arm-gofish: #199e70;
+          --arm-recharts: #d95926;
+          --arm-d3: #3987e5;
+          --arm-matplotlib: #c98500;
+          --arm-ggplot2: #d55181;
+          --arm-altair: #9085e9;
+          --arm-plot: #a3a29b;
+        }
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --surface-1: #1a1a19;
+        --surface-2: #232322;
+        --surface-3: #2a2a28;
+        --chart-bg: #ffffff;
+        --text-primary: #ffffff;
+        --text-secondary: #c3c2b7;
+        --text-muted: #8f8e86;
+        --grid: #2e2e2c;
+        --axis: #55544f;
+        --accent: #5a9ff0;
+        --pass: #5cc97a;
+        --pass-bg: #173a22;
+        --partial: #e6b450;
+        --partial-bg: #3d2f10;
+        --fail: #f07a7a;
+        --fail-bg: #451c1c;
+        --code-bg: #20201f;
+        --tok-kw: #d19af0;
+        --tok-str: #8fd18f;
+        --tok-num: #f0b070;
+        --tok-com: #7d7c75;
+        --tok-fn: #8ab8f5;
+        --arm-gofish: #199e70;
+        --arm-recharts: #d95926;
+        --arm-d3: #3987e5;
+        --arm-matplotlib: #c98500;
+        --arm-ggplot2: #d55181;
+        --arm-altair: #9085e9;
+        --arm-plot: #a3a29b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        background: var(--surface-1);
+        color: var(--text-primary);
+        font:
+          14px/1.45 system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      .page {
+        padding: 20px 16px 48px;
+        max-width: 1480px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+        font-weight: 650;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 0 0 6px;
+        font-weight: 650;
+        overflow-wrap: anywhere;
+      }
+      h3 {
+        font-size: 15px;
+        margin: 20px 0 8px;
+        font-weight: 600;
+      }
+      .sub {
+        color: var(--text-secondary);
+        margin: 0 0 14px;
+        max-width: 90ch;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 20px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .controls > div {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .label {
+        color: var(--text-muted);
+        font-size: 12px;
+        margin-right: 4px;
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--axis);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .seg button,
+      .btn {
+        font: inherit;
+        font-size: 13px;
+        padding: 4px 10px;
+        border: 0;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+      }
+      .seg button + button {
+        border-left: 1px solid var(--axis);
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--text-primary);
+        color: var(--surface-1);
+      }
+      .btn {
+        border: 1px solid var(--axis);
+        border-radius: 8px;
+      }
+      select {
+        font: inherit;
+        font-size: 13px;
+        padding: 3px 6px;
+        border-radius: 6px;
+        border: 1px solid var(--axis);
+        background: var(--surface-3);
+        color: var(--text-primary);
+      }
+      .count {
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+      a {
+        color: var(--accent);
+      }
+
+      /* Overview grid */
+      .gridwrap {
+        overflow-x: auto;
+        border: 1px solid var(--grid);
+        border-radius: 10px;
+        background: var(--surface-3);
+      }
+      table.grid {
+        border-collapse: separate;
+        border-spacing: 0;
+        table-layout: fixed;
+        width: max(100%, 1180px);
+      }
+      .grid th,
+      .grid td {
+        border-bottom: 1px solid var(--grid);
+        padding: 8px;
+        vertical-align: top;
+        text-align: left;
+      }
+      .grid thead th {
+        position: sticky;
+        top: 0;
+        background: var(--surface-3);
+        z-index: 2;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .grid th.taskcol {
+        width: 150px;
+        position: sticky;
+        left: 0;
+        background: var(--surface-3);
+        z-index: 1;
+        border-right: 1px solid var(--grid);
+      }
+      .grid thead th.taskcol {
+        z-index: 3;
+      }
+      .grid tr.fam td {
+        background: var(--surface-2);
+        font-weight: 600;
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 6px 8px;
+      }
+      .grid tr.fam td span {
+        position: sticky;
+        left: 8px;
+      }
+      .taskname {
+        font-weight: 600;
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+      .taskname a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .taskname a:hover {
+        text-decoration: underline;
+      }
+      .muted {
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+      .armdot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 6px;
+        vertical-align: -1px;
+      }
+      .cell {
+        cursor: pointer;
+        display: block;
+        color: inherit;
+        text-decoration: none;
+        border-radius: 6px;
+      }
+      .cell:hover .shot,
+      .cell:focus-visible .shot {
+        outline: 2px solid var(--accent);
+      }
+      .shot {
+        background: var(--chart-bg);
+        border: 1px solid var(--grid);
+        border-radius: 6px;
+        display: block;
+        width: 100%;
+      }
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 5px;
+      }
+      .noimg {
+        aspect-ratio: 3 / 2;
+        display: grid;
+        place-items: center;
+        color: #7a7974;
+        font-size: 12px;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        margin-top: 5px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+      .badge {
+        font-size: 11px;
+        font-weight: 650;
+        padding: 1px 6px;
+        border-radius: 999px;
+        letter-spacing: 0.02em;
+      }
+      .b-pass {
+        color: var(--pass);
+        background: var(--pass-bg);
+      }
+      .b-partial {
+        color: var(--partial);
+        background: var(--partial-bg);
+      }
+      .b-fail {
+        color: var(--fail);
+        background: var(--fail-bg);
+      }
+      .why {
+        font-size: 11.5px;
+        color: var(--fail);
+        margin-top: 3px;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+      }
+      .why.partial {
+        color: var(--partial);
+      }
+      .empty {
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+
+      /* Detail */
+      #detail[hidden],
+      #overview[hidden] {
+        display: none;
+      }
+      .back {
+        margin-bottom: 12px;
+      }
+      .instr {
+        white-space: pre-wrap;
+        background: var(--surface-2);
+        border-radius: 8px;
+        padding: 10px 12px;
+        max-width: 100ch;
+        margin: 8px 0;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 12px;
+      }
+      .card {
+        background: var(--surface-3);
+        border: 1px solid var(--grid);
+        border-radius: 10px;
+        padding: 8px;
+        min-width: 0;
+      }
+      .card.sel {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent);
+      }
+      .cardhead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-bottom: 6px;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .pick {
+        display: inline-flex;
+        gap: 4px;
+      }
+      .pick button {
+        font: inherit;
+        font-size: 11px;
+        font-weight: 650;
+        width: 24px;
+        padding: 2px 0;
+        border-radius: 6px;
+        border: 1px solid var(--axis);
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+      }
+      .pick button[aria-pressed="true"] {
+        background: var(--text-primary);
+        color: var(--surface-1);
+        border-color: var(--text-primary);
+      }
+      .refpair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .cap {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin: 4px 0 2px;
+      }
+      .cmpbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 20px;
+        align-items: center;
+        margin: 8px 0 12px;
+      }
+      .cmp {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .col {
+        min-width: 0;
+      }
+      .colhead {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 10px;
+        font-weight: 600;
+        font-size: 15px;
+        padding-bottom: 6px;
+        border-bottom: 3px solid var(--armc, var(--axis));
+        margin-bottom: 8px;
+      }
+      .turn {
+        margin-bottom: 12px;
+      }
+      .turnhead {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+      }
+      .feedback {
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      .feedback .cap {
+        color: var(--fail);
+        font-weight: 600;
+      }
+      pre {
+        margin: 0;
+      }
+      .errbox {
+        background: var(--fail-bg);
+        color: var(--text-primary);
+        border-radius: 6px;
+        padding: 6px 8px;
+        font:
+          11.5px/1.4 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        max-height: 180px;
+        overflow: auto;
+      }
+      .code {
+        background: var(--code-bg);
+        border: 1px solid var(--grid);
+        border-radius: 8px;
+        overflow: auto;
+        max-height: 720px;
+        font:
+          12px/1.5 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        counter-reset: ln;
+        padding: 6px 0;
+        tab-size: 4;
+      }
+      .code .l {
+        display: block;
+        padding: 0 10px 0 0;
+        white-space: pre;
+      }
+      .code .l::before {
+        counter-increment: ln;
+        content: counter(ln);
+        display: inline-block;
+        width: 3.2em;
+        padding-right: 10px;
+        text-align: right;
+        color: var(--text-muted);
+        user-select: none;
+      }
+      .t-kw {
+        color: var(--tok-kw);
+      }
+      .t-str {
+        color: var(--tok-str);
+      }
+      .t-num {
+        color: var(--tok-num);
+      }
+      .t-com {
+        color: var(--tok-com);
+        font-style: italic;
+      }
+      .t-fn {
+        color: var(--tok-fn);
+      }
+      .stats {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin: 8px 0 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      details > summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin: 6px 0;
+      }
+      .note {
+        color: var(--text-muted);
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      @media (max-width: 760px) {
+        .cmp {
+          grid-template-columns: 1fr;
+        }
+        .grid th.taskcol {
+          width: 110px;
+        }
+        table.grid {
+          width: 1000px;
+        }
+        .cards {
+          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        }
+        .top {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="top">
+        <div>
+          <h1>Benchmark Output Gallery</h1>
+          <p class="sub" id="sub"></p>
+        </div>
+        <button class="btn" id="theme" type="button" title="Color theme">
+          Theme: auto
+        </button>
+      </div>
+
+      <section id="overview">
+        <div class="controls">
+          <div id="runBox" hidden>
+            <span class="label" id="runLabel">Run</span
+            ><span class="seg" id="runSeg"></span>
+          </div>
+          <div>
+            <span class="label">Family</span
+            ><select id="family"></select>
+          </div>
+          <div>
+            <span class="label">Show tasks where</span
+            ><select id="fArm"></select
+            ><select id="fOutcome">
+              <option value="">any outcome</option>
+              <option value="pass">passed</option>
+              <option value="notpass">did not pass</option>
+              <option value="fail">failed</option>
+              <option value="partial">was partial</option>
+              <option value="multi">took more than 1 turn</option>
+            </select>
+          </div>
+          <div>
+            <span class="label">Sort</span
+            ><span class="seg" id="sortSeg">
+              <button data-v="family" aria-pressed="true">By family</button>
+              <button data-v="tokens" aria-pressed="false">
+                GoFish syntax tokens
+              </button>
+            </span>
+          </div>
+          <span class="count" id="count"></span>
+        </div>
+        <div class="gridwrap"><table class="grid" id="grid"></table></div>
+        <p class="note">
+          Each cell is the final turn's picture. Badges: outcome and turns used;
+          then syntax tokens (tok) and arithmetic operations (ops) of the final
+          program. Click a cell or task name for the task's detail.
+        </p>
+      </section>
+
+      <section id="detail" hidden></section>
+    </div>
+
+    <script src="data.js"></script>
+    <script>
+      (() => {
+        const G = window.GALLERY;
+        const $ = (s, el = document) => el.querySelector(s);
+        const esc = (s) =>
+          String(s ?? "").replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c]
+          );
+        const ARM_NAME = {
+          gofish: "GoFish",
+          recharts: "Recharts",
+          d3: "D3",
+          matplotlib: "Matplotlib",
+          ggplot2: "ggplot2",
+          altair: "Altair",
+          plot: "Observable Plot",
+        };
+        const armName = (a) => ARM_NAME[a] ?? a;
+        const store = {
+          get(k) {
+            try {
+              return localStorage.getItem(k);
+            } catch {
+              return null;
+            }
+          },
+          set(k, v) {
+            try {
+              localStorage.setItem(k, v);
+            } catch {}
+          },
+        };
+
+        // ---- theme ------------------------------------------------------------
+        const themes = ["auto", "light", "dark"];
+        let theme = store.get("gallery-theme") || "auto";
+        function applyTheme() {
+          if (theme === "auto")
+            document.documentElement.removeAttribute("data-theme");
+          else document.documentElement.setAttribute("data-theme", theme);
+          $("#theme").textContent = `Theme: ${theme}`;
+        }
+        $("#theme").onclick = () => {
+          theme = themes[(themes.indexOf(theme) + 1) % 3];
+          store.set("gallery-theme", theme);
+          applyTheme();
+        };
+        applyTheme();
+
+        // ---- data indexes ------------------------------------------------------
+        const jobsBy = new Map(); // task|arm|run -> jobs (by sample)
+        for (const j of G.jobs) {
+          const k = `${j.task}|${j.arm}|${j.run}`;
+          if (!jobsBy.has(k)) jobsBy.set(k, []);
+          jobsBy.get(k).push(j);
+        }
+        for (const list of jobsBy.values())
+          list.sort((a, b) => a.sample - b.sample);
+        const runsOfArm = Object.fromEntries(
+          G.arms.map((a) => [
+            a,
+            G.runs
+              .map((r, i) => (r.arms.includes(a) ? i : -1))
+              .filter((i) => i >= 0),
+          ])
+        );
+        const switchable = G.runs
+          .map((r, i) => i)
+          .filter((i) =>
+            G.arms.some(
+              (a) => runsOfArm[a].length > 1 && runsOfArm[a].includes(i)
+            )
+          );
+
+        const state = {
+          run: switchable[0] ?? 0,
+          family: "",
+          fArm: "gofish",
+          fOutcome: "",
+          sort: "family",
+        };
+        /** The run shown for an arm: the chosen one when it covers the arm. */
+        const runFor = (arm) =>
+          runsOfArm[arm].includes(state.run) ? state.run : runsOfArm[arm][0];
+        const jobsOf = (task, arm) =>
+          jobsBy.get(`${task}|${arm}|${runFor(arm)}`) ?? [];
+        const jobOf = (task, arm) => jobsOf(task, arm)[0];
+
+        // ---- header -----------------------------------------------------------
+        {
+          const r0 = G.runs.find((r) => r.model) ?? G.runs[0];
+          const bits = G.runs.map(
+            (r) =>
+              `<b>${esc(r.label)}</b> (${esc(r.dirs.join(", "))}${r.extensions ? `; extensions ${esc(r.extensions)}` : ""})`
+          );
+          $("#sub").innerHTML =
+            `${G.tasks.length} tasks, ${G.arms.length} libraries. Model ${esc(r0.model ?? "?")}, GoFish context ${esc(r0.context ?? "?")}. Runs: ${bits.join("; ")}.${G.referencesRun ? ` References: ${esc(G.referencesRun)}.` : ""}`;
+        }
+
+        // ---- controls ---------------------------------------------------------
+        if (switchable.length > 1) {
+          $("#runBox").hidden = false;
+          const multi = G.arms
+            .filter((a) => runsOfArm[a].length > 1)
+            .map(armName);
+          $("#runLabel").textContent = `${multi.join(", ")}:`;
+          $("#runSeg").innerHTML = switchable
+            .map(
+              (i) => `<button data-v="${i}">${esc(G.runs[i].label)}</button>`
+            )
+            .join("");
+        }
+        const families = [...new Set(G.tasks.map((t) => t.family))];
+        $("#family").innerHTML =
+          `<option value="">all</option>` +
+          families.map((f) => `<option>${esc(f)}</option>`).join("");
+        $("#fArm").innerHTML = G.arms
+          .map((a) => `<option value="${a}">${esc(armName(a))}</option>`)
+          .join("");
+        function syncControls() {
+          for (const b of $("#runSeg").children)
+            b.setAttribute("aria-pressed", String(+b.dataset.v === state.run));
+          for (const b of $("#sortSeg").children)
+            b.setAttribute("aria-pressed", String(b.dataset.v === state.sort));
+          $("#family").value = state.family;
+          $("#fArm").value = state.fArm;
+          $("#fOutcome").value = state.fOutcome;
+        }
+        $("#runSeg").onclick = (e) => {
+          const b = e.target.closest("button");
+          if (!b) return;
+          state.run = +b.dataset.v;
+          setHash();
+        };
+        $("#sortSeg").onclick = (e) => {
+          const b = e.target.closest("button");
+          if (!b) return;
+          state.sort = b.dataset.v;
+          renderGrid();
+          syncControls();
+        };
+        $("#family").onchange = (e) => {
+          state.family = e.target.value;
+          renderGrid();
+        };
+        $("#fArm").onchange = (e) => {
+          state.fArm = e.target.value;
+          renderGrid();
+        };
+        $("#fOutcome").onchange = (e) => {
+          state.fOutcome = e.target.value;
+          renderGrid();
+        };
+
+        const OUT_LABEL = { pass: "pass", partial: "partial", fail: "fail" };
+        const badge = (o) =>
+          `<span class="badge b-${o}">${OUT_LABEL[o] ?? o}</span>`;
+        const turnsLabel = (j) =>
+          j.turns.length > 1 ? `${j.turns.length} turns` : "1 turn";
+        const statLine = (s) =>
+          s ? `${s.syntax} tok · ${s.arithOps ?? "?"} ops` : "no program";
+
+        function matches(t) {
+          if (state.family && t.family !== state.family) return false;
+          if (!state.fOutcome) return true;
+          const j = jobOf(t.id, state.fArm);
+          if (!j) return false;
+          if (state.fOutcome === "notpass") return j.outcome !== "pass";
+          if (state.fOutcome === "multi") return j.turns.length > 1;
+          return j.outcome === state.fOutcome;
+        }
+        const gofishTokens = (t) =>
+          jobOf(t.id, "gofish")?.stats?.syntax ?? Infinity;
+
+        function cellHtml(t, arm) {
+          const js = jobsOf(t.id, arm);
+          if (!js.length) return `<span class="empty">not run</span>`;
+          return js
+            .map((j) => {
+              const img = j.thumb && G.thumbs[j.thumb];
+              const why = j.why
+                ? `<div class="why ${j.outcome}" title="${esc(j.why)}">${esc(j.why)}</div>`
+                : "";
+              return `<a class="cell" href="#${esc(hashFor(t.id, arm))}" title="${esc(armName(arm))}: ${esc(t.id)}">
+      <span class="shot">${img ? `<img loading="lazy" alt="${esc(armName(arm))} output for ${esc(t.id)}" src="${img}">` : `<span class="noimg">no picture</span>`}</span>
+      <span class="meta">${badge(j.outcome)}<span>${turnsLabel(j)}</span>${js.length > 1 ? `<span>s${j.sample}</span>` : ""}<span>${statLine(j.stats)}</span></span>${why}</a>`;
+            })
+            .join("");
+        }
+
+        function renderGrid() {
+          const tasks = G.tasks.filter(matches);
+          if (state.sort === "tokens")
+            tasks.sort((a, b) => gofishTokens(a) - gofishTokens(b));
+          $("#count").textContent =
+            `${tasks.length} of ${G.tasks.length} tasks`;
+          const head = `<thead><tr><th class="taskcol">Task</th>${G.arms
+            .map((a) => {
+              const r = G.runs[runFor(a)];
+              const tag =
+                runsOfArm[a].length > 1
+                  ? ` <span class="muted">(${esc(r.label)})</span>`
+                  : "";
+              return `<th><span class="armdot" style="background:var(--arm-${a})"></span>${esc(armName(a))}${tag}</th>`;
+            })
+            .join("")}</tr></thead>`;
+          const rows = [];
+          let fam = null;
+          for (const t of tasks) {
+            if (state.sort === "family" && t.family !== fam) {
+              fam = t.family;
+              rows.push(
+                `<tr class="fam"><td colspan="${G.arms.length + 1}"><span>${esc(fam)}</span></td></tr>`
+              );
+            }
+            const gt = gofishTokens(t);
+            rows.push(`<tr><th class="taskcol"><div class="taskname"><a href="#${esc(hashFor(t.id))}">${esc(t.id)}</a></div>
+      <div class="muted">${esc(t.family)}${state.sort === "tokens" && gt !== Infinity ? ` · GoFish ${gt} tok` : ""}</div></th>
+      ${G.arms.map((a) => `<td>${cellHtml(t, a)}</td>`).join("")}</tr>`);
+          }
+          $("#grid").innerHTML =
+            head +
+            `<tbody>${rows.join("") || `<tr><td colspan="${G.arms.length + 1}" class="empty">No task matches.</td></tr>`}</tbody>`;
+        }
+
+        // ---- syntax highlighting ----------------------------------------------
+        const KW = {
+          js: "import export from as default const let var function return if else for while do of in new class extends this null undefined true false typeof instanceof async await try catch finally throw switch case break continue yield delete void",
+          python:
+            "import from as def return if elif else for while in not and or is None True False lambda class with try except finally raise pass break continue yield global nonlocal assert del",
+          r: "function return if else for while repeat in next break TRUE FALSE NULL NA NA_integer_ NA_real_ NA_character_ Inf NaN library require",
+        };
+        const kwSets = Object.fromEntries(
+          Object.entries(KW).map(([k, v]) => [k, new Set(v.split(" "))])
+        );
+        const LEX = {
+          js: /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\[\s\S]|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|([A-Za-z_$][\w$]*)/g,
+          python:
+            /(#[^\n]*)|([rbfRBF]{0,2}(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'))|(\b\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|([A-Za-z_]\w*)/g,
+          r: /(#[^\n]*)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`[^`]*`)|(\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?L?\b)|([A-Za-z_.][\w.]*)/g,
+        };
+        function highlight(code, lang) {
+          const re = LEX[lang === "jsx" ? "js" : lang] ?? LEX.js;
+          const kws = kwSets[lang === "jsx" ? "js" : lang] ?? kwSets.js;
+          const lines = [""];
+          const put = (text, cls) => {
+            const parts = text.split("\n");
+            parts.forEach((p, i) => {
+              if (i > 0) lines.push("");
+              if (p)
+                lines[lines.length - 1] += cls
+                  ? `<span class="${cls}">${esc(p)}</span>`
+                  : esc(p);
+            });
+          };
+          let last = 0;
+          re.lastIndex = 0;
+          for (let m; (m = re.exec(code)); ) {
+            put(code.slice(last, m.index));
+            let cls = "";
+            if (m[1]) cls = "t-com";
+            else if (m[2]) cls = "t-str";
+            else if (m[3]) cls = "t-num";
+            else if (kws.has(m[4])) cls = "t-kw";
+            else if (/^\s*\(/.test(code.slice(re.lastIndex, re.lastIndex + 3)))
+              cls = "t-fn";
+            put(m[0], cls);
+            last = re.lastIndex;
+          }
+          put(code.slice(last));
+          if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+          return lines;
+        }
+        const codeBlock = (code, lang) =>
+          `<pre class="code"><code>${highlight(code, lang)
+            .map((l) => `<span class="l">${l || " "}</span>`)
+            .join("")}</code></pre>`;
+
+        // ---- task packs (full pictures and programs) ---------------------------
+        const packs = {};
+        const waiting = {};
+        window.galleryPack = (id, pack) => {
+          packs[id] = pack;
+          (waiting[id] || []).forEach((f) => f());
+          delete waiting[id];
+        };
+        function loadPack(t) {
+          if (packs[t.id]) return Promise.resolve(packs[t.id]);
+          return new Promise((res, rej) => {
+            if (!waiting[t.id]) {
+              waiting[t.id] = [];
+              const s = document.createElement("script");
+              s.src = t.pack;
+              s.onerror = () => rej(new Error(`could not load ${t.pack}`));
+              document.head.appendChild(s);
+            }
+            waiting[t.id].push(() => res(packs[t.id]));
+          });
+        }
+
+        // ---- routing ------------------------------------------------------------
+        function hashFor(task, a, b) {
+          const p = new URLSearchParams();
+          if (task) p.set("task", task);
+          if (a) p.set("a", a);
+          if (b) p.set("b", b);
+          if (switchable.length > 1) p.set("run", G.runs[state.run].label);
+          if (task && detailState.ref) p.set("ref", "1");
+          return p.toString().replace(/%2F/g, "/");
+        }
+        const detailState = { task: null, a: null, b: null, ref: false };
+        function setHash() {
+          const h = hashFor(
+            detailState.task,
+            detailState.task && detailState.a,
+            detailState.task && detailState.b
+          );
+          if (location.hash.slice(1) !== h) location.hash = h;
+          else route();
+        }
+        let overviewScroll = 0;
+        function route() {
+          const p = new URLSearchParams(location.hash.slice(1));
+          const run = p.get("run");
+          if (run != null) {
+            const i = G.runs.findIndex((r) => r.label === run);
+            if (i >= 0) state.run = i;
+          }
+          detailState.ref = p.get("ref") === "1";
+          const task = G.tasks.find((t) => t.id === p.get("task"));
+          syncControls();
+          if (!task) {
+            detailState.task = null;
+            $("#detail").hidden = true;
+            $("#overview").hidden = false;
+            renderGrid();
+            window.scrollTo(0, overviewScroll);
+            return;
+          }
+          if ($("#detail").hidden) overviewScroll = window.scrollY;
+          detailState.task = task.id;
+          detailState.a = G.arms.includes(p.get("a")) ? p.get("a") : null;
+          detailState.b = G.arms.includes(p.get("b")) ? p.get("b") : null;
+          renderDetail(task);
+        }
+        window.addEventListener("hashchange", route);
+
+        // ---- detail ---------------------------------------------------------------
+        function defaultPair(task) {
+          const a =
+            detailState.a ?? (G.arms.includes("gofish") ? "gofish" : G.arms[0]);
+          if (detailState.b && detailState.b !== a) return [a, detailState.b];
+          const others = G.arms.filter((x) => x !== a && jobOf(task.id, x));
+          others.sort(
+            (x, y) =>
+              (jobOf(task.id, x).stats?.syntax ?? Infinity) -
+              (jobOf(task.id, y).stats?.syntax ?? Infinity)
+          );
+          return [a, others[0] ?? G.arms.find((x) => x !== a)];
+        }
+
+        const imgTag = (src, alt) =>
+          src
+            ? `<span class="shot"><img alt="${esc(alt)}" src="${src}"></span>`
+            : `<span class="shot"><span class="noimg">no picture</span></span>`;
+        const statsText = (s) =>
+          s
+            ? `${s.syntax} syntax tokens · ${s.loc} lines of code · ${s.arithOps ?? "?"} arithmetic ops · ${s.magicNumbers ?? "?"} magic numbers`
+            : "no program";
+        const lineCount = (code) => code.replace(/\n$/, "").split("\n").length;
+
+        function renderDetail(task) {
+          const [a, b] = defaultPair(task);
+          detailState.a = a;
+          detailState.b = b;
+          const pack = packs[task.id];
+          const el = $("#detail");
+          $("#overview").hidden = true;
+          el.hidden = false;
+          const runPick =
+            switchable.length > 1
+              ? `<div><span class="label">${esc($("#runLabel").textContent)}</span><span class="seg" id="dRun">${switchable.map((i) => `<button data-v="${i}" aria-pressed="${i === state.run}">${esc(G.runs[i].label)}</button>`).join("")}</span></div>`
+              : "";
+          const hasRefs = G.arms.some((x) => G.references[`${task.id}|${x}`]);
+          const refToggle = hasRefs
+            ? `<label><input type="checkbox" id="refT" ${detailState.ref ? "checked" : ""}> Show references</label>`
+            : "";
+          const armOpts = (sel) =>
+            G.arms
+              .map(
+                (x) =>
+                  `<option value="${x}" ${x === sel ? "selected" : ""}>${esc(armName(x))}</option>`
+              )
+              .join("");
+          const img = (key) => (key && pack ? pack.img[key] : null);
+
+          const cards = G.arms
+            .map((arm) => {
+              const j = jobOf(task.id, arm);
+              const ref = G.references[`${task.id}|${arm}`];
+              const final = j?.turns[j.turns.length - 1];
+              const src = img(final?.img) ?? (j?.thumb && G.thumbs[j.thumb]);
+              const picture =
+                detailState.ref && ref
+                  ? `<div class="refpair"><div><div class="cap">model</div>${imgTag(src, `${armName(arm)} output`)}</div><div><div class="cap">reference</div>${imgTag(img(ref.img), `${armName(arm)} reference`)}</div></div>`
+                  : imgTag(src, `${armName(arm)} output`);
+              return `<div class="card ${arm === a || arm === b ? "sel" : ""}">
+      <div class="cardhead"><span><span class="armdot" style="background:var(--arm-${arm})"></span>${esc(armName(arm))}</span>
+      <span class="pick"><button data-arm="${arm}" data-side="a" aria-pressed="${arm === a}" title="Compare on the left">A</button><button data-arm="${arm}" data-side="b" aria-pressed="${arm === b}" title="Compare on the right">B</button></span></div>
+      ${j ? picture : `<span class="empty">not run</span>`}
+      ${j ? `<div class="meta">${badge(j.outcome)}<span>${turnsLabel(j)}</span><span>${statLine(j.stats)}</span></div>${j.why ? `<div class="why ${j.outcome}" title="${esc(j.why)}">${esc(j.why)}</div>` : ""}` : ""}
+    </div>`;
+            })
+            .join("");
+
+          el.innerHTML = `
+    <div class="back"><a href="#${esc(hashFor())}">← All tasks</a></div>
+    <h2>${esc(task.id)}</h2>
+    <div class="muted">${esc(task.family)} · group ${esc(task.group)}${task.size ? ` · ${task.size.w}×${task.size.h}` : ""}</div>
+    <div class="instr">${esc(task.instruction)}</div>
+    <div class="controls" style="margin-top:10px">${runPick}${refToggle}</div>
+    ${pack ? "" : `<p class="muted" id="loading">Loading pictures and code…</p>`}
+    <h3>All libraries</h3>
+    <div class="cards" id="cards">${cards}</div>
+    <h3>Side by side</h3>
+    <div class="cmpbar"><label><span class="label">A</span><select id="selA">${armOpts(a)}</select></label>
+      <label><span class="label">B</span><select id="selB">${armOpts(b)}</select></label></div>
+    <div class="cmp">${[a, b].map((arm) => columnHtml(task, arm, pack)).join("")}</div>`;
+
+          el.querySelector("#cards").onclick = (e) => {
+            const btn = e.target.closest(".pick button");
+            if (!btn) return;
+            const arm = btn.dataset.arm;
+            if (btn.dataset.side === "a") {
+              detailState.a = arm;
+              if (detailState.b === arm) detailState.b = b === arm ? a : b;
+            } else {
+              detailState.b = arm;
+              if (detailState.a === arm) detailState.a = a === arm ? b : a;
+            }
+            setHash();
+          };
+          $("#selA", el).onchange = (e) => {
+            detailState.a = e.target.value;
+            setHash();
+          };
+          $("#selB", el).onchange = (e) => {
+            detailState.b = e.target.value;
+            setHash();
+          };
+          const dRun = $("#dRun", el);
+          if (dRun)
+            dRun.onclick = (e) => {
+              const btn = e.target.closest("button");
+              if (!btn) return;
+              state.run = +btn.dataset.v;
+              setHash();
+            };
+          const refT = $("#refT", el);
+          if (refT)
+            refT.onchange = (e) => {
+              detailState.ref = e.target.checked;
+              setHash();
+            };
+          if (!pack) {
+            const scrollY = window.scrollY;
+            loadPack(task)
+              .then(() => {
+                if (detailState.task === task.id) {
+                  renderDetail(task);
+                  window.scrollTo(0, scrollY);
+                }
+              })
+              .catch((err) => {
+                const l = $("#loading");
+                if (l) l.textContent = err.message;
+              });
+          }
+        }
+
+        function columnHtml(task, arm, pack) {
+          const js = jobsOf(task.id, arm);
+          const lang = G.lang[arm];
+          const img = (key) => (key && pack ? pack.img[key] : null);
+          const head = `<div class="colhead" style="--armc:var(--arm-${arm})"><span><span class="armdot" style="background:var(--arm-${arm})"></span>${esc(armName(arm))}</span>`;
+          if (!js.length)
+            return `<div class="col">${head}</div><span class="empty">not run</span></div>`;
+          const body = js
+            .map((j) => {
+              const turns = j.turns
+                .map((t, i) => {
+                  const name = `${t.step ? `step ${t.step}, ` : ""}turn ${t.turn}`;
+                  const src =
+                    img(t.img) ??
+                    (i === j.turns.length - 1 && j.thumb
+                      ? G.thumbs[j.thumb]
+                      : null);
+                  const fb =
+                    t.error && i < j.turns.length - 1
+                      ? `<div class="feedback"><div class="cap">Sent back to the model (${esc(t.errorKind ?? "error")}):</div><div class="errbox">${esc(t.error)}</div></div>`
+                      : t.error
+                        ? `<div class="feedback"><div class="cap">Error (${esc(t.errorKind ?? "error")}):</div><div class="errbox">${esc(t.error)}</div></div>`
+                        : t.why
+                          ? `<div class="why ${t.outcome}">${esc(t.why)}</div>`
+                          : "";
+                  return `<div class="turn">${j.turns.length > 1 ? `<div class="turnhead">${badge(t.outcome)}<span>${esc(name)}</span></div>` : ""}${imgTag(src, `${armName(arm)} ${name}`)}${fb}</div>`;
+                })
+                .join("");
+              const final = [...j.turns].reverse().find((t) => t.code);
+              const code = final && pack ? pack.code[final.code] : null;
+              const earlier = j.turns
+                .filter((t) => t.code && t !== final)
+                .map((t) => {
+                  const c = pack?.code[t.code];
+                  return c
+                    ? `<details><summary>Code of ${t.step ? `step ${t.step}, ` : ""}turn ${t.turn} (${lineCount(c)} lines)</summary>${codeBlock(c, lang)}</details>`
+                    : "";
+                })
+                .join("");
+              return `${js.length > 1 ? `<div class="muted">sample ${j.sample}</div>` : ""}
+      <div class="meta" style="margin-bottom:8px">${badge(j.outcome)}<span>${turnsLabel(j)}</span></div>
+      ${turns}
+      <div class="stats">${code ? `${lineCount(code)} lines · ` : ""}${statsText(j.stats)}</div>
+      ${code ? codeBlock(code, lang) : pack ? `<span class="empty">no program</span>` : `<span class="empty">loading…</span>`}
+      ${earlier}${j.note ? `<p class="note">Rescore note: ${esc(j.note)}</p>` : ""}`;
+            })
+            .join("");
+          const ref = G.references[`${task.id}|${arm}`];
+          const refCode = ref?.code && pack ? pack.code[ref.code] : null;
+          const refHtml =
+            detailState.ref && ref
+              ? `<h3>Reference</h3>${imgTag(img(ref.img), `${armName(arm)} reference`)}
+       <div class="stats">${refCode ? `${lineCount(refCode)} lines · ` : ""}${statsText(ref.stats)}</div>${refCode ? codeBlock(refCode, lang) : ""}`
+              : "";
+          return `<div class="col">${head}</div>${body}${refHtml}</div>`;
+        }
+
+        route();
+      })();
+    </script>
+  </body>
+</html>

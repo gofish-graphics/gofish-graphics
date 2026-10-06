@@ -1,0 +1,22 @@
+[
+  { "nationality": "UAE", "gender": "Women", "percent": 33.1 },
+  { "nationality": "UAE", "gender": "Men", "percent": 66.9 },
+  { "nationality": "Saudi Arabian", "gender": "Women", "percent": 42.9 },
+  { "nationality": "Saudi Arabian", "gender": "Men", "percent": 57.1 },
+  { "nationality": "Malaysian", "gender": "Women", "percent": 46.1 },
+  { "nationality": "Malaysian", "gender": "Men", "percent": 53.9 },
+  { "nationality": "Indian", "gender": "Women", "percent": 49.0 },
+  { "nationality": "Indian", "gender": "Men", "percent": 51.0 },
+  { "nationality": "Filipino", "gender": "Women", "percent": 49.0 },
+  { "nationality": "Filipino", "gender": "Men", "percent": 51.0 },
+  { "nationality": "Danish", "gender": "Women", "percent": 50.0 },
+  { "nationality": "Danish", "gender": "Men", "percent": 50.0 },
+  { "nationality": "American", "gender": "Women", "percent": 50.6 },
+  { "nationality": "American", "gender": "Men", "percent": 49.4 },
+  { "nationality": "German", "gender": "Women", "percent": 51.4 },
+  { "nationality": "German", "gender": "Men", "percent": 48.6 },
+  { "nationality": "Swedish", "gender": "Women", "percent": 51.6 },
+  { "nationality": "Swedish", "gender": "Men", "percent": 48.4 },
+  { "nationality": "French", "gender": "Women", "percent": 52.2 },
+  { "nationality": "French", "gender": "Men", "percent": 47.8 }
+]
