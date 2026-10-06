@@ -1,1 +1,0 @@
-# Vega-Lite parity stories
