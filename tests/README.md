@@ -189,7 +189,7 @@ def story_default():
     )
 ```
 
-Stories with `derive()` use a Python HTTP server (`scripts/derive-server.py`) that executes the Python functions during rendering, mirroring the AnyWidget RPC architecture.
+Stories with `derive()` (and lambda accessors and mark functions) use a Python HTTP server (`scripts/derive-server.py`) that executes the Python functions during rendering. The harness page (`harness/main.ts`) renders the IR through the same deserializer the notebook widget uses (`Serialize.renderIR`); only its `DeriveBridge` differs, sending rows over HTTP instead of AnyWidget RPC.
 
 ### Sync enforcement
 
@@ -215,7 +215,7 @@ tests/
     check-python-sync.sh       # Git-based JS↔Python sync checker
   harness/
     stories-runner.html/ts     # Batch story runner (import.meta.glob)
-    index.html / main.ts       # IR rendering harness for Python stories
+    index.html / main.ts       # Python story page: HTTP DeriveBridge + Serialize.renderIR
     vite.config.ts             # Shared Vite config (SolidJS + gofish alias)
   python-stories/
     data.py                    # Shared datasets (mirrors src/data/)

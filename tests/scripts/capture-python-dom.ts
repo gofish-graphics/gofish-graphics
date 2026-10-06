@@ -23,6 +23,7 @@ import {
   existsSync,
 } from "fs";
 import { join, dirname, relative } from "path";
+import type { Frontend } from "gofish-ir";
 import { normalizeDom } from "./normalize-dom.js";
 import { mapJsToPython } from "./path-mapping.js";
 
@@ -135,38 +136,17 @@ function loadExemptPythonFiles(): Set<string> {
 // Extract IR from Python story (by calling Python)
 // ---------------------------------------------------------------------------
 
-type ChartIR = {
-  operators: any[];
-  mark: any;
-  options: any;
-  data: any;
-  zOrder?: number | null;
-  connect?: any;
-  // Set when a chart is layered via `Layer([chart.name(...), ...])` so a
-  // `.relate(...)` callback can reference it by name.
-  name?: string | any | null;
+/** What the derive server's `/load` answers: the builder's own `to_ir()`
+ *  (rows inlined), the story's render options, and the lambda ids the IR
+ *  names. */
+type LoadedStory = {
+  ir: Frontend.FrontendIR;
+  render: Record<string, unknown>;
+  deriveIds: string[];
 };
 
 type IRResult =
-  | ({
-      kind: "chart";
-      deriveIds: string[];
-    } & ChartIR)
-  | {
-      kind: "layer";
-      charts: ChartIR[];
-      options: any;
-      deriveIds: string[];
-      relate?: any[];
-      builder?: boolean;
-    }
-  | {
-      kind: "raw-mark";
-      mark: any;
-      options: any;
-      deriveIds: string[];
-    }
-  | { kind: "layer-unsupported"; reason: string }
+  | ({ kind: "ok" } & LoadedStory)
   | { kind: "error"; reason: string };
 
 /**
@@ -205,32 +185,8 @@ async function loadStory(story: PythonStory): Promise<IRResult> {
     }
     return { kind: "error", reason: `${resp.status} ${body}` };
   }
-  const json = (await resp.json()) as any;
-  if (json && json._kind === "layer") {
-    return {
-      kind: "layer",
-      charts: json.charts,
-      options: json.options ?? {},
-      deriveIds: json.deriveIds ?? [],
-      relate: json.relate,
-      builder: json.builder,
-    };
-  }
-  if (json && json._kind === "raw-mark") {
-    return {
-      kind: "raw-mark",
-      mark: json.mark,
-      options: json.options ?? {},
-      deriveIds: json.deriveIds ?? [],
-    };
-  }
-  if (json && json._kind === "layer-unsupported") {
-    return {
-      kind: "layer-unsupported",
-      reason: "LayerBuilder stories not yet supported by capture harness",
-    };
-  }
-  return { kind: "chart", ...json };
+  const json = (await resp.json()) as LoadedStory;
+  return { kind: "ok", ...json };
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +269,7 @@ async function captureStory(
   page: Page,
   harnessUrl: string,
   story: PythonStory,
-  ir: IRResult & { kind: "chart" | "layer" | "raw-mark" }
+  ir: IRResult & { kind: "ok" }
 ): Promise<{ dom: string; screenshot: Buffer }> {
   await page.goto(harnessUrl, { waitUntil: "networkidle" });
 
@@ -322,36 +278,9 @@ async function captureStory(
       ? `http://localhost:${DERIVE_SERVER_PORT}`
       : undefined;
 
-  // Inject spec and trigger render. The harness dispatches on `spec.type`:
-  // `"layer"` for a multi-chart layer, `"raw-mark"` for a bare Mark
-  // rendered without a Chart wrapper, undefined for the single-chart path.
-  let spec: any;
-  if (ir.kind === "layer") {
-    spec = {
-      type: "layer",
-      charts: ir.charts,
-      options: ir.options,
-      relate: ir.relate,
-      builder: ir.builder,
-      deriveServerUrl,
-    };
-  } else if (ir.kind === "raw-mark") {
-    spec = {
-      type: "raw-mark",
-      mark: ir.mark,
-      options: ir.options,
-      deriveServerUrl,
-    };
-  } else {
-    spec = {
-      data: ir.data,
-      operators: ir.operators,
-      mark: ir.mark,
-      options: ir.options,
-      connect: ir.connect ?? null,
-      deriveServerUrl,
-    };
-  }
+  // Inject the spec and trigger the render. The harness renders `ir` with
+  // `render` as its render options and reaches Python over `deriveServerUrl`.
+  const spec = { ir: ir.ir, render: ir.render, deriveServerUrl };
 
   await page.evaluate((s) => {
     window.__GOFISH_RENDER_COMPLETE__ = false;
@@ -540,24 +469,6 @@ async function main() {
       }
 
       const ir = await loadStory(story);
-      if (ir.kind === "layer-unsupported") {
-        // Known limitation, not a real failure: surface visibly but
-        // don't tank the build over Layer stories the harness can't
-        // currently render.
-        console.log(`SKIP (${ir.reason})`);
-        skipped++;
-        skips.push({
-          story: `${story.module}::${story.function}`,
-          reason: ir.reason,
-        });
-        skippedRecords.push({
-          id: story.path,
-          story: `${story.module}::${story.function}`,
-          reason: ir.reason,
-        });
-        flushCaptureResults();
-        continue;
-      }
       if (ir.kind === "error") {
         console.log(`FAILED (IR extraction): ${ir.reason}`);
         failed++;

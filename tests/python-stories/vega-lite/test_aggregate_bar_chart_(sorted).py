@@ -8,8 +8,8 @@ def story_default():
     population = vega_data.population()
     year2000 = population[population["year"] == 2000].to_dict("records")
     return (
-        chart(year2000)
+        chart(year2000, axes=True)
         .flow(spread(by=field("age").sort("people", "desc"), dir="y"))
         .mark(rect(w="people")),
-        {"w": 500, "h": 300, "axes": True},
+        {"w": 500, "h": 300},
     )

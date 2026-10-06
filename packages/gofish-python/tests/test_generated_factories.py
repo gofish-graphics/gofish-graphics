@@ -350,9 +350,10 @@ def test_data_keyed_dicts_are_untouched():
     assert ir["operators"][0]["right"] == [{"myCategory": "fooBar", "otherCol": 2}]
 
 
-def test_layer_of_charts_options_spell_like_chart():
-    # The chart-tier `layer([...], **options)` takes chart()'s option set, so
-    # nested keys are snake_case in Python and camelCase on the wire.
+def test_layer_of_charts_takes_js_layer_options():
+    # The chart-tier `layer([...], **options)` takes JS `layer`'s option set,
+    # like the mark form, so nested keys are snake_case in Python and camelCase
+    # on the wire, and a render option such as `padding` is rejected.
     c1 = chart([{"v": 1}]).mark(rect(h="v"))
     c2 = chart([{"v": 2}]).mark(rect(h="v"))
     ir = layer([c1, c2], axes={"x": {"label_angle": 45}}).to_ir()
@@ -361,6 +362,8 @@ def test_layer_of_charts_options_spell_like_chart():
         layer([c1, c2], axes={"x": {"labelAngle": 45}})
     with pytest.raises(TypeError):
         layer([c1, c2], labelAngle=45)
+    with pytest.raises(TypeError):
+        layer([c1, c2], padding=80)
 
 
 # --- Combinator box dims ------------------------------------------------------

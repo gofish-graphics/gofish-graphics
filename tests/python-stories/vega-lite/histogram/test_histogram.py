@@ -8,11 +8,11 @@ def story_default():
     df = read_json("movies.json")
     movies = df.to_dict("records")
     return (
-        chart(movies)
+        chart(movies, axes=True)
         .flow(
             derive(bin("IMDB Rating")),
             scatter(x_min="start", x_max="end"),
         )
         .mark(rect(h="count")),
-        {"w": 500, "h": 300, "axes": True},
+        {"w": 500, "h": 300},
     )

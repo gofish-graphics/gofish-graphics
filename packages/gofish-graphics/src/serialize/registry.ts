@@ -79,13 +79,16 @@ export { cutSlices, cutMark, offsetOp };
  *  - The `{ __gofish_lambda: id }` channel-value sentinel — converted to an
  *    async per-row accessor.
  *
- * The transport (Arrow over anywidget traitlets, etc.) is the bridge's
- * responsibility; the deserializer only sees rows of objects.
+ * The transport (Arrow over anywidget traitlets, JSON over HTTP, etc.) is the
+ * bridge's responsibility. `applyLambda` returns the callback's results as
+ * plain JSON values; any transport-specific wrapping is the bridge's job to
+ * undo.
  */
 export interface DeriveBridge {
   /**
    * Apply the lambda registered under `lambdaId` to a batch of rows.
-   * Returns the row(s) the lambda produced.
+   * Returns what the lambda produced (rows, or one value per row) as plain
+   * JSON values.
    */
   applyLambda(lambdaId: string, rows: any[]): Promise<any[]>;
 }
@@ -123,7 +126,7 @@ export const COMBINATOR_FACTORIES: Record<
     (enclose as any)(opts, marks) as unknown as Mark<any>,
   // Absolute-offset placement primitive — sets its single child's min-corner
   // (x, y) in parent coordinates. Combinator-only, like `enclose`; opts ride
-  // in `options`. Mirrors tests/harness/main.ts's COMBINATOR_FACTORIES.
+  // in `options`.
   position: (opts, marks) =>
     (position as any)(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,

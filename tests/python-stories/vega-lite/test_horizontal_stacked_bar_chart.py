@@ -12,11 +12,11 @@ from vega_datasets import data as vega_data
 def story_default():
     barley = vega_data.barley()
     return (
-        chart(barley, color=palette("tableau10"))
+        chart(barley, color=palette("tableau10"), axes=True)
         .flow(
             spread(by="variety", dir="y"),
             stack(by="site", dir="x"),
         )
         .mark(rect(w="yield", fill="site")),
-        {"w": 500, "h": 400, "axes": True},
+        {"w": 500, "h": 400},
     )

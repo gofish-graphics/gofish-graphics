@@ -16,13 +16,12 @@ export {
 export {
   buildChart,
   readIR,
+  renderIR,
   constraintFromIR,
   isTokenSentinel,
   makeTokenResolver,
-  mapMark,
   mapOperator,
   resolveNameField,
-  resolveOptions,
   resolveRefSelection,
   unwrapMarkOpts,
   unwrapValues,
@@ -34,6 +33,8 @@ export {
   type MarkSpec,
   type OperatorSpec,
   type RawMarkSpec,
+  type RenderIROptions,
+  type IRHost,
   type TokenResolver,
   type TokenSentinel,
 } from "./fromJSON";

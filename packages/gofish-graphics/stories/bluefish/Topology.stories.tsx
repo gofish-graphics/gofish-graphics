@@ -1,12 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import {
-  layer,
-  ellipse,
-  text,
-  position,
-  polygon,
-} from "../../src/lib";
+import { layer, ellipse, text, position, polygon, spread } from "../../src/lib";
 
 // Ported from Bluefish's example-gallery topology.tsx (issue #440): three
 // labeled points (a, b, c) with nested ellipse "neighbourhood" outlines
@@ -297,10 +291,9 @@ const ThreePointTopology = (
   // normally absorb; see friction log.)
   const points = POINT_NAMES.map((p, i) => {
     const x = (i - 1) * SPACING;
-    return position(
-      { x: x - POINT_SIZE / 2, y: -POINT_SIZE / 2 },
-      [ellipse({ w: POINT_SIZE, h: POINT_SIZE, fill: "black" }).name(p)]
-    );
+    return position({ x: x - POINT_SIZE / 2, y: -POINT_SIZE / 2 }, [
+      ellipse({ w: POINT_SIZE, h: POINT_SIZE, fill: "black" }).name(p),
+    ]);
   });
 
   const labels = showLabels
@@ -357,19 +350,16 @@ const ThreePointTopology = (
     }
 
     const box = neighbourhoodBox(n, NEIGHBOURHOOD_PAD[n.length]);
-    return position(
-      { x: box.centerX - box.w / 2, y: -box.h / 2 },
-      [
-        ellipse({
-          w: box.w,
-          h: box.h,
-          fill: overdraw ? "none" : rawColor,
-          stroke: "black",
-          strokeWidth: 3,
-          opacity: overdraw ? 1 : TOPOLOGY_OPACITY,
-        }),
-      ]
-    );
+    return position({ x: box.centerX - box.w / 2, y: -box.h / 2 }, [
+      ellipse({
+        w: box.w,
+        h: box.h,
+        fill: overdraw ? "none" : rawColor,
+        stroke: "black",
+        strokeWidth: 3,
+        opacity: overdraw ? 1 : TOPOLOGY_OPACITY,
+      }),
+    ]);
   });
 
   // Paint order (last = on top in GoFish's layer z-order): outer outline at
@@ -380,24 +370,14 @@ const ThreePointTopology = (
   return layer([outer, ...neighbourhoods, ...points, ...labels]);
 };
 
-// Grid pitches: panel = outer ellipse (176 x 116) + a 40px gutter. The grid
-// is placed EXPLICITLY (position() at fixed pitches) rather than with
-// nested `spread`s: spread spaces panels by their layout extents, and the
-// panels' extents vary spuriously (a label or the a/c polygon inflates a
-// panel's proposed size asymmetrically — see friction log item 7), which
-// produced visibly uneven gutters. The panels' ellipses are all the same
-// size, so a fixed-pitch grid is both correct and deterministic.
-const COL_PITCH = 176 + 40;
-const ROW_PITCH = 116 + 40;
-
 // `cols` is column-major: cols[c][r] is the panel at column c, row r —
 // matching the original Bluefish source's StackH-of-StackV structure.
+const GUTTER = 40;
 const panelGrid = (cols: ReturnType<typeof ThreePointTopology>[][]) =>
-  layer(
-    cols.flatMap((colPanels, c) =>
-      colPanels.map((panel, r) =>
-        position({ x: c * COL_PITCH, y: r * ROW_PITCH }, [panel])
-      )
+  spread(
+    { dir: "x", spacing: GUTTER, alignment: "middle" },
+    cols.map((colPanels) =>
+      spread({ dir: "y", spacing: GUTTER, alignment: "middle" }, colPanels)
     )
   );
 
@@ -413,43 +393,27 @@ export const Topology: StoryObj<Args> = {
   render: () => {
     const container = initializeContainer();
 
-    // The root `Layer`'s own x/y/w/h options (the technique Pulley uses to
-    // shift a bounding box) turned out to have NO effect at the root: the
-    // final canvas normalizes the root's content bbox back to (0, 0)
-    // regardless of the root node's own translate, so root-level margin has
-    // to come from the render() call's own {w, h} (below) — a wider/taller
-    // canvas than the tightly-fit content, which leaves the extra room as a
-    // margin on the bottom/right since content stays anchored at its
-    // auto-fit top-left. See friction log.
-    layer(
-      {},
+    // The canvas margin comes from the render() call's own {w, h}, larger
+    // than the content. See friction log item 5.
+    panelGrid([
       [
-        panelGrid([
-          [
-            ThreePointTopology([], { showLabels: true }),
-            ThreePointTopology([["b"]]),
-            ThreePointTopology([["a", "b"]]),
-          ],
-          [
-            ThreePointTopology([["a", "b"], ["a"]], { showLabels: true }),
-            ThreePointTopology([["a", "b"], ["c"]]),
-            ThreePointTopology([["a", "b"], ["a"], ["b"]]),
-          ],
-          [
-            ThreePointTopology([["a", "b"], ["b", "c"], ["b"]], {
-              showLabels: true,
-            }),
-            ThreePointTopology([["a", "b"], ["b", "c"], ["b"], ["c"]]),
-            ThreePointTopology([
-              ["a", "b"],
-              ["b", "c"],
-              ["b"],
-              ["a", "c"],
-            ]),
-          ],
-        ]),
-      ]
-    ).render(container, { w: 700, h: 460 });
+        ThreePointTopology([], { showLabels: true }),
+        ThreePointTopology([["b"]]),
+        ThreePointTopology([["a", "b"]]),
+      ],
+      [
+        ThreePointTopology([["a", "b"], ["a"]], { showLabels: true }),
+        ThreePointTopology([["a", "b"], ["c"]]),
+        ThreePointTopology([["a", "b"], ["a"], ["b"]]),
+      ],
+      [
+        ThreePointTopology([["a", "b"], ["b", "c"], ["b"]], {
+          showLabels: true,
+        }),
+        ThreePointTopology([["a", "b"], ["b", "c"], ["b"], ["c"]]),
+        ThreePointTopology([["a", "b"], ["b", "c"], ["b"], ["a", "c"]]),
+      ],
+    ]).render(container, { w: 700, h: 460 });
 
     return container;
   },
@@ -467,41 +431,35 @@ export const TopologyOverdraw: StoryObj<Args> = {
   render: () => {
     const container = initializeContainer();
 
-    layer(
-      {},
+    panelGrid([
       [
-        panelGrid([
-          [
-            ThreePointTopology([], { showLabels: true, overdraw: true }),
-            ThreePointTopology([["b"]], { overdraw: true }),
-            ThreePointTopology([["a", "b"]], { overdraw: true }),
-          ],
-          [
-            ThreePointTopology([["a", "b"], ["a"]], {
-              showLabels: true,
-              overdraw: true,
-            }),
-            ThreePointTopology([["a", "b"], ["c"]], { overdraw: true }),
-            ThreePointTopology([["a", "b"], ["a"], ["b"]], {
-              overdraw: true,
-            }),
-          ],
-          [
-            ThreePointTopology([["a", "b"], ["b", "c"], ["b"]], {
-              showLabels: true,
-              overdraw: true,
-            }),
-            ThreePointTopology([["a", "b"], ["b", "c"], ["b"], ["c"]], {
-              overdraw: true,
-            }),
-            ThreePointTopology(
-              [["a", "b"], ["a", "c"], ["b", "c"], ["b"]],
-              { overdraw: true }
-            ),
-          ],
-        ]),
-      ]
-    ).render(container, { w: 700, h: 460 });
+        ThreePointTopology([], { showLabels: true, overdraw: true }),
+        ThreePointTopology([["b"]], { overdraw: true }),
+        ThreePointTopology([["a", "b"]], { overdraw: true }),
+      ],
+      [
+        ThreePointTopology([["a", "b"], ["a"]], {
+          showLabels: true,
+          overdraw: true,
+        }),
+        ThreePointTopology([["a", "b"], ["c"]], { overdraw: true }),
+        ThreePointTopology([["a", "b"], ["a"], ["b"]], {
+          overdraw: true,
+        }),
+      ],
+      [
+        ThreePointTopology([["a", "b"], ["b", "c"], ["b"]], {
+          showLabels: true,
+          overdraw: true,
+        }),
+        ThreePointTopology([["a", "b"], ["b", "c"], ["b"], ["c"]], {
+          overdraw: true,
+        }),
+        ThreePointTopology([["a", "b"], ["a", "c"], ["b", "c"], ["b"]], {
+          overdraw: true,
+        }),
+      ],
+    ]).render(container, { w: 700, h: 460 });
 
     return container;
   },
@@ -578,24 +536,9 @@ export const TopologyOverdraw: StoryObj<Args> = {
 // 6. `stack()` silently ignores `spacing` (its type comment says so — "the
 //    same as `spread` but never a gap") which is easy to reach for by
 //    analogy with `spread` and get flush-touching panels with no error.
-//    Switching to `spread({ anchor: "edge" })` fixed it (the grid has since
-//    moved off spread entirely — see item 7), but a runtime warning (or
-//    accepting the option as a no-op-with-warning) would have caught this
-//    immediately instead of via a visual diff.
+//    Switching to `spread({ anchor: "edge" })` fixed it, but a runtime
+//    warning (or accepting the option as a no-op-with-warning) would have
+//    caught this immediately instead of via a visual diff.
 //
-// 7. Spread spaces panels by phantom-inflated extents, so the grid is
-//    placed explicitly. With identical outer ellipses in every panel,
-//    `spread` should produce a uniform 3x3 grid — but panels containing a
-//    label or the a/c polygon report a layout extent asymmetrically larger
-//    than their visible content (measured: a labeled panel's box bottom sat
-//    at outer-max + label-max, a polygon panel's at outer-max +
-//    polygon-max — a SUM, not a union), producing visibly uneven gutters in
-//    both `anchor: "edge"` (uneven gaps) and `anchor: "middle"` (shifted
-//    middles, since the phantom shifts the bbox middle). Adding invisible
-//    y-mirrored counterweight children did NOT re-center the boxes, which
-//    rules out a simple bbox-union story and points at the size-proposal
-//    pass double-counting positive `position` offsets / free minima (the
-//    #39 bbox-sync family). The story-local fix: place the nine panels at
-//    fixed pitches with `position()` (`panelGrid`), which no layout pass
-//    can perturb. The same inflation is why the rendered canvas is larger
-//    than the ink (item 5's margins).
+// 7. Spread gutters between panels were uneven because of the position()
+//    double count; fixed in #755, so the panels now use nested spreads.

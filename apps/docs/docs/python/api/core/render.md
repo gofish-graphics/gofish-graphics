@@ -17,23 +17,30 @@ chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
 ## Signature
 
 ```python
-ChartBuilder.render(w=800, h=600, debug=False)
+ChartBuilder.render(w=800, h=600, axes=None, legend=None, padding=None, debug=False)
 ```
+
+`layer(...)` and `.layer(...)` chains (`LayerBuilder`) and bare marks take the
+same options. They are the JS `.render(container, options)` options, in snake
+case.
 
 ## Parameters
 
-| Parameter | Type   | Default | Description                       |
-| --------- | ------ | ------- | --------------------------------- |
-| `w`       | `int`  | `800`   | Chart width in pixels             |
-| `h`       | `int`  | `600`   | Chart height in pixels            |
-| `debug`   | `bool` | `False` | Whether to enable debug rendering |
+| Parameter | Type                   | Default | Description                                                                                                                          |
+| --------- | ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `w`       | `int`                  | `800`   | Width in pixels                                                                                                                      |
+| `h`       | `int`                  | `600`   | Height in pixels                                                                                                                     |
+| `axes`    | `bool \| dict \| None` | `None`  | Auto-generate axes, labels, and legends; same shape as `chart(axes=...)`. Unset, the chart's own `axes` option decides.              |
+| `legend`  | `bool \| None`         | `None`  | Whether to draw the color-scale legend. Unset, the default (`True`) applies. A `chart()` option of the same name wins over this one. |
+| `padding` | `float \| None`        | `None`  | Extra pixels between the drawing and the SVG edge. Unset, the chart's own `padding` option (or the default) applies.                 |
+| `debug`   | `bool`                 | `False` | Whether to enable debug rendering                                                                                                    |
 
 Returns a `GoFishChartWidget`.
 
-::: tip Axes are a chart option
-`axes` (and `padding`) are passed to [`chart`](/python/api/core/chart), not
-`render` — mirroring the JS `chart(data, { axes: true })`. See
-[chart](/python/api/core/chart) for the full `axes` shape.
+::: tip Axes on the chart or on render
+`axes` (and `padding`) can be passed to [`chart`](/python/api/core/chart) or to
+`render`, as in JS (`chart(data, { axes: true })` or
+`.render(container, { axes: true })`). See [chart](/python/api/core/chart) for the full `axes` shape.
 :::
 
 ## Automatic display
@@ -46,7 +53,7 @@ chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
 ```
 
 This is equivalent to calling `.render()` with its defaults. Call `.render()`
-explicitly when you want to set the size (turn axes on via `chart(..., axes=True)`):
+explicitly when you want to set the size or other render options:
 
 ```python
 chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(

@@ -83,14 +83,21 @@ export const gridFamily: CountFamily = (n) => {
         i: k % side,
         v: val(k),
       }));
-      return chart(data)
-        .flow(spread({ by: "g", dir: "x", spacing: 4 }))
-        .mark((d: any) =>
-          chart(d)
-            .flow(spread({ by: "i", dir: "y", spacing: 1 }))
-            .mark(rect({ w: 4, h: 4 }))
-        )
-        .render(container, { w, h });
+      return (
+        chart(data)
+          .flow(spread({ by: "g", dir: "x", spacing: 4 }))
+          // @ts-expect-error Library type gap: ChartBuilder.mark() is typed as
+          // returning `ChartBuilder | LayerBuilder` for every mark, though only a
+          // fused relational mark (line/ribbon) yields a LayerBuilder; the inner
+          // `.mark(rect(...))` is always a ChartBuilder. TODO(#1047): narrow
+          // mark()'s return type by mark kind.
+          .mark((d: any) =>
+            chart(d)
+              .flow(spread({ by: "i", dir: "y", spacing: 1 }))
+              .mark(rect({ w: 4, h: 4 }))
+          )
+          .render(container, { w, h })
+      );
     },
   };
 };

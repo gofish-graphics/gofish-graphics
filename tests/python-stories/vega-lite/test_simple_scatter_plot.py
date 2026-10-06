@@ -7,7 +7,7 @@ from vega_datasets import data as vega_data
 def story_default():
     cars = vega_data.cars().dropna(subset=["Horsepower", "Miles_per_Gallon"])
     return (
-        chart(cars)
+        chart(cars, axes=True)
         .flow(
             log("cars before scatter"),
             scatter(by="Name", x="Horsepower", y="Miles_per_Gallon", debug=True),
@@ -20,5 +20,5 @@ def story_default():
                 stroke_width=1,
             )
         ),
-        {"w": 300, "h": 300, "axes": True},
+        {"w": 300, "h": 300},
     )

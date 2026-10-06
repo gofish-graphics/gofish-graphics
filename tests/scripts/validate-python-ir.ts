@@ -143,36 +143,12 @@ async function loadStoryIR(story: PythonStory): Promise<any> {
   return await resp.json();
 }
 
-/**
- * Wrap the /load response into a FrontendIRDocument. The server's response
- * shape differs slightly from a clean Frontend.* root: chart payloads have a
- * `deriveIds` field at the top level (bridge bookkeeping); layer/raw-mark
- * payloads use `_kind` discriminators. Normalize here.
- */
-function wrap(serverIR: any): Frontend.FrontendIRDocument {
-  let root: Frontend.FrontendIR;
-  if (serverIR && serverIR._kind === "layer") {
-    root = {
-      type: "layer",
-      charts: serverIR.charts,
-      ...(serverIR.options ? { options: serverIR.options } : {}),
-      // Part of the canonical schema (LayerIR.relate) — pass through so
-      // related-layer stories actually exercise the validator.
-      ...(serverIR.relate ? { relate: serverIR.relate } : {}),
-    } as Frontend.LayerIR;
-  } else if (serverIR && serverIR._kind === "raw-mark") {
-    root = {
-      type: "raw-mark",
-      mark: serverIR.mark,
-      ...(serverIR.options ? { options: serverIR.options } : {}),
-    } as Frontend.RawMarkIR;
-  } else {
-    // Plain chart payload — strip out the bridge-only `deriveIds` field
-    // before wrapping, since it's not part of the canonical schema.
-    const { deriveIds: _deriveIds, ...chartIR } = serverIR;
-    root = { type: "chart", ...chartIR } as Frontend.ChartIR;
-  }
-  return { irVersion: 0, ir: "gofish-frontend", root };
+/** Wrap the IR in the /load response (the builder's own `to_ir()`, rows
+ *  inlined) into a FrontendIRDocument. */
+function wrap(serverIR: {
+  ir: Frontend.FrontendIR;
+}): Frontend.FrontendIRDocument {
+  return { irVersion: 0, ir: "gofish-frontend", root: serverIR.ir };
 }
 
 // ---------------------------------------------------------------------------

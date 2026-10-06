@@ -20,10 +20,10 @@ from python_stories.data import (
 
 def story_basic():
     return (
-        chart(CATCH_LOCATIONS_ARRAY)
+        chart(CATCH_LOCATIONS_ARRAY, axes=True)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(circle(r=5)),
-        {"w": 400, "h": 400, "axes": True},
+        {"w": 400, "h": 400},
     )
 
 
@@ -33,14 +33,14 @@ def story_with_pie_glyphs():
     # draws them as a polar pie — no `lambda data: chart(data, ...)` callback.
     # Mirrors JS storybook's `.mark(chart({coord: clock()}).flow(...))`.
     return (
-        chart(CATCH_LOCATIONS_ARRAY)
+        chart(CATCH_LOCATIONS_ARRAY, axes=True)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(
             chart(coord=clock())
             .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
             .mark(rect(w="count", fill="species"))
         ),
-        {"w": 400, "h": 400, "axes": True},
+        {"w": 400, "h": 400},
     )
 
 
@@ -50,22 +50,22 @@ def story_with_pie_glyphs_denormalized():
     # glyph's rows — the nested chart inherits them directly, no join. Mirrors
     # JS `Scatter.stories.tsx::WithPieGlyphsDenormalized`.
     return (
-        chart(CATCH_DATA_WITH_LOCATIONS)
+        chart(CATCH_DATA_WITH_LOCATIONS, axes=True)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(
             chart(coord=clock())
             .flow(stack(by="species", dir="x", h=20))
             .mark(rect(w="count", fill="species"))
         ),
-        {"w": 400, "h": 400, "axes": True},
+        {"w": 400, "h": 400},
     )
 
 
 def story_connected():
     return (
-        chart(DRIVING_SHIFTS)
+        chart(DRIVING_SHIFTS, axes=True)
         .flow(scatter(by="year", x="miles", y="gas"))
         .mark(circle(r=4, fill="white", stroke="black", stroke_width=2))
         .layer(line(stroke="black", stroke_width=2)),
-        {"w": 400, "h": 400, "axes": True},
+        {"w": 400, "h": 400},
     )

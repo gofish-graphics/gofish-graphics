@@ -23,6 +23,8 @@
   },
   "devDependencies": {
     "@shikijs/vitepress-twoslash": "^4.1.0",
+    "@types/markdown-it": "^14.1.2",
+    "@types/markdown-it-container": "^4.0.1",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue-jsx": "^5.0.0",
     "gray-matter": "^4.0.3",

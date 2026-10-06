@@ -58,7 +58,7 @@ THIS SOFTWARE.
  */
 
 import MarkdownIt from "markdown-it";
-import container from "markdown-it-container";
+import container, { type ContainerOpts } from "markdown-it-container";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -160,7 +160,7 @@ function loadInternalCode(id: string): string | null {
   }
 }
 
-export default function gofish(md) {
+export default function gofish(md: MarkdownIt) {
   md.use(container, "gofish", {
     render(tokens, idx) {
       if (tokens[idx].nesting !== 1) {
@@ -250,7 +250,7 @@ export default function gofish(md) {
       const suffix = d.hidden ? "" : `\n${renderHref}`;
       return `<div class="gofish-container">\n${component}${suffix}\n`;
     },
-  });
+  } satisfies ContainerOpts);
 }
 
 /**
