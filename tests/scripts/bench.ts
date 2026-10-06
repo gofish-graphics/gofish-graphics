@@ -660,13 +660,9 @@ async function benchExamplesPy(
           }
           const loadDelta = performance.now() - tLoad;
 
-          // Only the single-chart path is benchmarked here; layer/raw-mark/unsupported
+          // Only the single-chart path is benchmarked here; layer/raw-mark
           // are skipped (they don't represent the common per-example case).
-          if (
-            ir?._kind === "layer" ||
-            ir?._kind === "raw-mark" ||
-            ir?._kind === "layer-unsupported"
-          ) {
+          if (ir?.ir?.type === "layer" || ir?.ir?.type === "raw-mark") {
             return { ok: false };
           }
 
@@ -674,14 +670,7 @@ async function benchExamplesPy(
             ir.deriveIds?.length > 0
               ? `http://localhost:${DERIVE_SERVER_PORT}`
               : undefined;
-          const spec = {
-            data: ir.data,
-            operators: ir.operators,
-            mark: ir.mark,
-            options: ir.options,
-            connect: ir.connect ?? null,
-            deriveServerUrl,
-          };
+          const spec = { ir: ir.ir, render: ir.render, deriveServerUrl };
 
           const r = await withinBudget(
             page.evaluate(async (s) => {

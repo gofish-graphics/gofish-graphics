@@ -68,7 +68,7 @@ def story_default():
         movie_counts.append({**d, "size": size, "id": i})
 
     return (
-        chart(movie_counts)
+        chart(movie_counts, axes=True)
         .flow(scatter(by="id", x="x", y="y"))
         .mark(
             rect(
@@ -81,5 +81,5 @@ def story_default():
                 ry=2,
             )
         ),
-        {"w": 600, "h": 300, "axes": True},
+        {"w": 600, "h": 300},
     )

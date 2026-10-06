@@ -27,7 +27,7 @@ def story_basic():
         )
         .mark(rect(h="count", fill="species"))
         .layer(ribbon(opacity=0.8)),
-        {"w": 400, "h": 400, "axes": True},
+        {"w": 400, "h": 400},
     )
 
 

@@ -16,13 +16,7 @@
  */
 
 import * as Arrow from "apache-arrow";
-import {
-  layer,
-  Serialize,
-  serializeSVG,
-  type ChartBuilder,
-  type View,
-} from "gofish-graphics";
+import { Serialize, serializeSVG, type View } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
 
@@ -37,7 +31,9 @@ interface WidgetModel {
   get(key: "arrow_data"): string;
   get(key: "width"): number;
   get(key: "height"): number;
-  get(key: "axes"): boolean;
+  get(key: "axes"): Serialize.RenderIROptions["axes"] | null;
+  get(key: "legend"): boolean | null;
+  get(key: "padding"): number | null;
   get(key: "debug"): boolean;
   get(key: "container_id"): string;
   get(
@@ -56,13 +52,6 @@ interface WidgetModel {
  */
 interface RawDeriveBridge {
   request(lambdaId: string, arrowB64: string): Promise<string>;
-}
-
-interface RenderOptions {
-  w: number;
-  h: number;
-  axes: boolean;
-  debug: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,147 +271,61 @@ function renderError(
   container.replaceChildren(panel);
 }
 
-function renderLayer(
-  spec: LayerSpec,
-  model: WidgetModel,
-  container: HTMLElement,
-  bridge: Serialize.DeriveBridge
-): Promise<View> {
-  const debug = model.get("debug");
-  const log = debug
-    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
-    : () => {};
-
-  log("Rendering layer...");
-
-  const arrowDataRaw = model.get("arrow_data");
-
-  let arrowDict: Record<string, string> = {};
-  try {
-    arrowDict = JSON.parse(arrowDataRaw);
-  } catch (e) {
-    throw new Error(`Failed to parse layer arrow_data JSON: ${e}`);
-  }
-
-  const resolveToken = Serialize.makeTokenResolver();
-  // A tier is a chart (ChartBuilder) or a component-level annotation
-  // (raw-mark → a Mark). Build each accordingly; the builder chain stacks
-  // them via `.layer()`, which accepts either.
-  const childTiers = spec.charts.map((childSpec: any, i: number) => {
-    if (childSpec && childSpec.type === "raw-mark") {
-      log(`Building raw-mark tier ${i}`);
-      return Serialize.mapMark(childSpec.mark, bridge, resolveToken) as any;
+/**
+ * Decode the Arrow sidecar into the rows of each chart tier. A single chart
+ * ships one base64 Arrow stream; a layer ships a JSON object mapping tier
+ * index to that same encoding (see `GoFishChartWidget` in widget.py).
+ */
+function decodeTierRows(
+  spec: ChartSpec | LayerSpec | RawMarkSpec,
+  arrowData: string
+): Record<string, any>[][] {
+  if (spec.type === "layer") {
+    let arrowDict: Record<string, string> = {};
+    try {
+      arrowDict = JSON.parse(arrowData);
+    } catch (e) {
+      throw new Error(`Failed to parse layer arrow_data JSON: ${e}`);
     }
-    const b64 = arrowDict[String(i)] || "";
-    const data = decodeArrowB64(b64);
-    log(`Building chart ${i}: ${data.length} rows`);
-    return Serialize.buildChart(
-      childSpec as ChartSpec,
-      data,
-      bridge,
-      resolveToken
-    );
-  });
-
-  const resolvedLayerOptions = Serialize.resolveOptions(
-    (spec.options ?? {}) as Record<string, any>
-  );
-  const renderOptions: RenderOptions = {
-    w: model.get("width"),
-    h: model.get("height"),
-    axes: model.get("axes"),
-    debug,
-  };
-
-  if ((spec as any).builder) {
-    // Fluent `chart(...).layer(...)` chain: reconstruct through the real
-    // LayerBuilder so JS owns the builder's render logic (inferred axis
-    // titles, etc.) instead of the wrapper re-deriving it. The child charts
-    // are already wired (the producer mark is named, the consumer reads
-    // selectAll), so chaining `.layer()` just stacks them. The first tier is
-    // always a chart; later tiers may be mark tiers (`.layer(text({...}))`).
-    const layerBuilder = childTiers
-      .slice(1)
-      .reduce((acc: any, c) => acc.layer(c), childTiers[0] as any);
-    return layerBuilder.render(container, renderOptions);
-  }
-  if (Object.keys(resolvedLayerOptions).length > 0) {
-    return (layer as any)(resolvedLayerOptions, childTiers).render(
-      container,
-      renderOptions
+    return spec.charts.map((_, i) =>
+      decodeArrowB64(arrowDict[String(i)] || "")
     );
   }
-  return (layer as any)(childTiers).render(container, renderOptions);
+  if (spec.type === "raw-mark") return [];
+  return [decodeArrowB64(arrowData)];
 }
 
-function renderRawMark(
-  spec: RawMarkSpec,
-  model: WidgetModel,
-  container: HTMLElement,
-  bridge: Serialize.DeriveBridge
-): Promise<View> {
-  const debug = model.get("debug");
-  const log = debug
-    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
-    : () => {};
-
-  log("Building raw mark...");
-  const resolveToken = Serialize.makeTokenResolver();
-  const mark = Serialize.mapMark(spec.mark, bridge, resolveToken) as any;
-  const renderOptions: RenderOptions = {
-    w: model.get("width"),
-    h: model.get("height"),
-    axes: model.get("axes"),
-    debug,
-  };
-  log("Rendering raw mark with options:", renderOptions);
-  return mark.render(container, renderOptions);
-}
-
-/** Render the widget's spec into `container`. Building the chart throws
- *  synchronously on a bad spec; the returned promise settles with the chart's
- *  {@link View} once it has resolved. */
+/** Render the widget's spec into `container` through the library's one IR
+ *  renderer (`Serialize.renderIR`, which the parity harness uses too).
+ *  Building the chart throws synchronously on a bad spec; the returned
+ *  promise settles with the chart's {@link View} once it has resolved. */
 function renderChart(
   model: WidgetModel,
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
 ): Promise<View> {
-  // The spec trait as Python's `to_ir()` wrote it: read it once (its tagged
-  // non-finite numbers become numbers) and hand it down.
-  const spec = Serialize.readIR(model.get("spec"));
-  if ((spec as any).type === "layer") {
-    return renderLayer(spec as LayerSpec, model, container, bridge);
-  }
-  if ((spec as any).type === "raw-mark") {
-    return renderRawMark(spec as RawMarkSpec, model, container, bridge);
-  }
-
-  const chartSpec = spec as ChartSpec;
+  const spec = model.get("spec");
   const debug = model.get("debug");
   const log = debug
     ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
     : () => {};
-
-  let data: Record<string, any>[] = [];
-  const arrowDataB64 = model.get("arrow_data");
-  if (arrowDataB64) {
-    log("Decoding Arrow data...");
-    data = decodeArrowB64(arrowDataB64);
-    log(`Converted to ${data.length} data objects`);
-  }
-
-  log("Building chart...");
-  const resolveToken = Serialize.makeTokenResolver();
-  const node = Serialize.buildChart(chartSpec, data, bridge, resolveToken);
-
-  const renderOptions: RenderOptions = {
+  log("Decoding Arrow data...");
+  const tierRows = decodeTierRows(spec, model.get("arrow_data"));
+  const renderOptions: Serialize.RenderIROptions = {
     w: model.get("width"),
     h: model.get("height"),
-    axes: model.get("axes"),
+    // Each is null unless the Python render call passed it, so the chart's
+    // own option (or the default) decides.
+    axes: model.get("axes") ?? undefined,
+    legend: model.get("legend") ?? undefined,
+    padding: model.get("padding") ?? undefined,
     debug,
   };
   log("Rendering with options:", renderOptions);
-  return node.render(container, renderOptions);
+  return Serialize.renderIR(spec, container, renderOptions, {
+    bridge,
+    tierRows,
+  });
 }
 
 // ---------------------------------------------------------------------------

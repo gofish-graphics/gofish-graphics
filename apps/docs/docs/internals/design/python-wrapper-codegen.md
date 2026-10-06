@@ -426,9 +426,11 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   a loud unknown/duplicate-ref guard JS-side. That guard now exists
   (`resolveScopedName`, #819), and the walk is gone: Python passes one ref
   per callback parameter without a default and JS resolves and checks the names at layout.
-- **Generifying the deserializer registry and the parity-harness
-  switch** off the descriptor table (option 5 in § Option A above) —
-  both remain hand-maintained; see the CLAUDE.md checklist's step 2 note.
+- **Generifying the deserializer registry** off the descriptor table
+  (option 5 in § Option A above). It remains hand-maintained; see step 2 of
+  the `add-cross-language-construct` skill. The parity harness no longer has
+  its own switch: it renders through the same deserializer as the widget
+  (`Serialize.renderIR`).
 - **Closing the `spread`/`stack`/`scatter` operator-vs-combinator `w`/`h`
   schema drift** — the low-level combinator forms accept explicit `w`/`h`
   passthrough that the fluent operators' IR doesn't expose; `descriptors.ts`

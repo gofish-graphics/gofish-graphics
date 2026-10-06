@@ -27,10 +27,10 @@ from python_stories.vega_data_urls import read_json
 
 def story_default():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=True)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count").label(field("count").sum())),
-        {"w": 400, "h": 300, "axes": True},
+        {"w": 400, "h": 300},
     )
 
 
@@ -38,7 +38,7 @@ def story_default():
 
 def story_center():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=True)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="y"),
@@ -48,7 +48,7 @@ def story_center():
                 "count", position="center", font_size=10
             )
         ),
-        {"w": 400, "h": 300, "axes": True},
+        {"w": 400, "h": 300},
     )
 
 
@@ -56,10 +56,10 @@ def story_center():
 
 def story_above():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=True)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count").label(field("count").sum(), position="outset")),
-        {"w": 400, "h": 300, "axes": True},
+        {"w": 400, "h": 300},
     )
 
 
@@ -67,7 +67,7 @@ def story_above():
 
 def story_below():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=False)
         .flow(
             spread(by="lake", dir="y", spacing=30),
             stack(by="species", dir="x"),
@@ -77,7 +77,7 @@ def story_below():
                 "count", position="outset-bottom", font_size=9
             )
         ),
-        {"w": 400, "h": 300, "axes": False},
+        {"w": 400, "h": 300},
     )
 
 
@@ -85,7 +85,7 @@ def story_below():
 
 def story_left():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=False)
         .flow(
             spread(by="lake", dir="y"),
             spread(by="species", dir="x", spacing=25),
@@ -98,7 +98,7 @@ def story_left():
                 offset=13,
             )
         ),
-        {"w": 400, "h": 300, "axes": False},
+        {"w": 400, "h": 300},
     )
 
 
@@ -106,14 +106,14 @@ def story_left():
 
 def story_right():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=True)
         .flow(spread(by="lake", dir="y"))
         .mark(
             rect(w="count").label(
                 field("count").sum(), position="outset-right", offset=15
             )
         ),
-        {"w": 400, "h": 300, "axes": True},
+        {"w": 400, "h": 300},
     )
 
 
@@ -121,7 +121,7 @@ def story_right():
 
 def story_above_start():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=True)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="x"),
@@ -131,7 +131,7 @@ def story_above_start():
                 "count", position="outset-top-start", font_size=9
             )
         ),
-        {"w": 500, "h": 300, "axes": True},
+        {"w": 500, "h": 300},
     )
 
 
@@ -139,7 +139,7 @@ def story_above_start():
 
 def story_above_end():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=True)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="x"),
@@ -149,7 +149,7 @@ def story_above_end():
                 "count", position="outset-top-end", font_size=9
             )
         ),
-        {"w": 500, "h": 300, "axes": True},
+        {"w": 500, "h": 300},
     )
 
 
@@ -167,14 +167,14 @@ _HEAT_DATA = [
 
 def story_heatmap_with_labels():
     return (
-        chart(_HEAT_DATA, color=gradient(["#e0f3ff", "#08519c"]))
+        chart(_HEAT_DATA, color=gradient(["#e0f3ff", "#08519c"]), axes=True)
         .flow(table(by={"x": "hour", "y": "day"}, spacing=4))
         .mark(
             rect(fill="value").label(
                 "value", position="center", font_size=11
             )
         ),
-        {"w": 420, "h": 280, "axes": True},
+        {"w": 420, "h": 280},
     )
 
 
@@ -185,14 +185,14 @@ def story_label_on_stack_operator():
         "packages/gofish-graphics/src/data/titanicPassengers.json"
     )
     return (
-        chart(titanic_passengers)
+        chart(titanic_passengers, axes=False)
         .flow(
             stack(by="pclass", dir="y").label(
                 "pclass", position="center", font_size=14, color="white"
             )
         )
         .mark(rect(w=120, h=field("survived").count())),
-        {"w": 260, "h": 300, "axes": False},
+        {"w": 260, "h": 300},
     )
 
 
@@ -203,7 +203,7 @@ def story_label_on_stack_aggregate():
         "packages/gofish-graphics/src/data/titanicPassengers.json"
     )
     return (
-        chart(titanic_passengers)
+        chart(titanic_passengers, axes=False)
         .flow(
             stack(by="pclass", dir="y").label(
                 field("survived").count(),
@@ -213,7 +213,7 @@ def story_label_on_stack_aggregate():
             )
         )
         .mark(rect(w=120, h=field("survived").count())),
-        {"w": 260, "h": 300, "axes": False},
+        {"w": 260, "h": 300},
     )
 
 
@@ -224,7 +224,7 @@ def story_label_on_stack_aggregate():
 
 def story_two_labels_per_bar():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, axes=True)
         .flow(spread(by="lake", dir="x", spacing=40))
         .mark(
             rect(h=field("count").sum())
@@ -236,7 +236,7 @@ def story_two_labels_per_bar():
             )
             .label("lake", position="outset-top", font_size=9)
         ),
-        {"w": 400, "h": 300, "axes": True},
+        {"w": 400, "h": 300},
     )
 
 
@@ -257,6 +257,7 @@ def story_normalized_stacked_bar_with_labels():
         chart(
             year2000,
             color=palette({"Female": "#675193", "Male": "#ca8861"}),
+            axes={"x": {"side": "end", "title": "proportion"}, "y": True},
         )
         .flow(
             derive(_decode_sex),
@@ -274,9 +275,5 @@ def story_normalized_stacked_bar_with_labels():
             rect(fill="sex").label("people", position="center", color="white")
         ),
         # Keep the continuous proportion x-axis at the bottom (y-end).
-        {
-            "w": 350,
-            "h": 400,
-            "axes": {"x": {"side": "end", "title": "proportion"}, "y": True},
-        },
+        {"w": 350, "h": 400},
     )

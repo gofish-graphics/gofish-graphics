@@ -49,13 +49,14 @@ Returns a `ChartBuilder` with [`.flow()`](/python/api/core/flow),
 
 ::: tip
 Chart **size** is set on [`.render()`](/python/api/core/render), not `chart()` —
-`render(w=500, h=300)`. Everything else (`axes`, `coord`, `color`, `padding`)
-is a `chart()` option.
+`render(w=500, h=300)`. `coord` and `color` are `chart()` options; `axes` and
+`padding` can be set on either, as in JS.
 :::
 
 ## Axes
 
-`axes` is a `chart()` option (mirroring the JS `chart(data, { axes: true })`).
+`axes` is a `chart()` option (mirroring the JS `chart(data, { axes: true })`),
+and also a [`render`](/python/api/core/render) option.
 It accepts a bool, a per-dimension dict, or per-dimension title control:
 
 ```python

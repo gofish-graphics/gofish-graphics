@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional
 import anywidget
 import traitlets
 
+from ._generated import _to_wire
 from .arrow_utils import arrow_to_records, data_to_arrow_bytes
 
 
@@ -27,7 +28,12 @@ class GoFishChartWidget(anywidget.AnyWidget):
     arrow_data = traitlets.Unicode().tag(sync=True)  # base64 Arrow IPC bytes
     width = traitlets.Int(800).tag(sync=True)
     height = traitlets.Int(600).tag(sync=True)
-    axes = traitlets.Bool(False).tag(sync=True)
+    # The JS `.render(container, options)` options. None = the render call did
+    # not pass it, so the chart's own option (or the default) decides. `axes`
+    # is a boolean or per-axis options (wire spelling), so it is untyped here.
+    axes = traitlets.Any(None, allow_none=True).tag(sync=True)
+    legend = traitlets.Bool(None, allow_none=True).tag(sync=True)
+    padding = traitlets.Float(None, allow_none=True).tag(sync=True)
     debug = traitlets.Bool(False).tag(sync=True)
     container_id = traitlets.Unicode().tag(sync=True)
 
@@ -55,7 +61,9 @@ class GoFishChartWidget(anywidget.AnyWidget):
         derive_functions: Optional[Dict[str, Callable]] = None,
         width: int = 800,
         height: int = 600,
-        axes: bool = False,
+        axes: Optional[Any] = None,
+        legend: Optional[bool] = None,
+        padding: Optional[float] = None,
         debug: bool = False,
         **kwargs,
     ):
@@ -97,7 +105,11 @@ class GoFishChartWidget(anywidget.AnyWidget):
             arrow_data=arrow_data_trait,
             width=width,
             height=height,
-            axes=axes,
+            # Per-axis options are snake_case in Python and camelCase on the
+            # wire, renamed (and checked) as `chart(axes=...)` does.
+            axes=_to_wire(("ref", "AxesOptions"), axes, "axes"),
+            legend=legend,
+            padding=padding,
             debug=debug,
             container_id=container_id,
             derive_functions=derive_functions or {},
