@@ -5,6 +5,13 @@ operator's `x=`/`y=`, or `.translate()`) is applied exactly once. Before the
 fix, `position()` added its offset to its local box AND to its translate, so
 the box it reported was displaced twice and the root reserved the extra offset
 as a phantom overhang.
+
+Expected to change: the y axis in `story_spread_option_y` and
+`story_operator_translate_y` stays put while the bars lift, which is wrong
+(#1053), and both `story_operator_translate_*` stories record `.translate()`'s
+current absolute placement, whose meaning is undecided (#1054). When either is
+resolved, these baselines move on purpose; what must still hold is that each
+offset is counted once.
 """
 
 from gofish import chart, layer, position, rect, spread

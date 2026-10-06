@@ -8,6 +8,13 @@ import { chart, layer, position, rect, spread } from "../../src/lib";
 // get no tag). Before the fix, `position()` added its offset to its local box
 // AND to its translate, so the box it reported was displaced twice and the
 // root reserved the extra offset as a phantom overhang.
+//
+// Expected to change: the y axis in `SpreadOptionY` and `OperatorTranslateY`
+// stays put while the bars lift, which is wrong (#1053), and both
+// `OperatorTranslate*` stories record `.translate()`'s current absolute
+// placement, whose meaning is undecided (#1054). When either is resolved,
+// these baselines move on purpose; what must still hold is that each offset
+// is counted once.
 const meta: Meta = {
   title: "Low Level Syntax/Offset Regressions",
 };
