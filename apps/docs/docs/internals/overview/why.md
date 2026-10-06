@@ -193,7 +193,7 @@ Plot.plot({
 
 <ObservablePlotEmbed
   caption='Output: 26 bars collapse on top of each other; no error is thrown.'
-  :build='(Plot, d3) => {
+  :build='(Plot) => {
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((letter, i) => ({letter, frequency: i + 1}));
     return Plot.plot({
       marks: [
