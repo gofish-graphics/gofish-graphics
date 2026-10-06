@@ -5,12 +5,13 @@ Pure analytic geometry, no constraints/refs: `layer([...])` overlays,
 half the shape's extent to center it, mirroring the JS), `ellipse`/`text` for
 points and neighbourhood outlines, and one `polygon` (sampled from
 hand-transcribed cubic Bezier segments and remapped through piecewise-linear
-warps) for the concave a/c neighbourhood.
+warps) for the concave a/c neighbourhood. Nested `spread`s lay the nine
+panels out as a 3x3 grid.
 """
 
 from typing import List, Tuple
 
-from gofish import ellipse, layer, polygon, position, text
+from gofish import ellipse, layer, polygon, position, spread, text
 
 POINT_NAMES = ["a", "b", "c"]
 
@@ -234,18 +235,20 @@ def three_point_topology(
     return layer([outer, *neighbourhoods, *points, *labels])
 
 
-# Grid pitches: panel = outer ellipse (176 x 116) + a 40px gutter.
-COL_PITCH = 176 + 40
-ROW_PITCH = 116 + 40
+GUTTER = 40
 
 
 def panel_grid(cols: List[List[object]]):
     """`cols` is column-major: cols[c][r] is the panel at column c, row r."""
-    panels = []
-    for c, col_panels in enumerate(cols):
-        for r, panel in enumerate(col_panels):
-            panels.append(position([panel], x=c * COL_PITCH, y=r * ROW_PITCH))
-    return layer(panels)
+    return spread(
+        [
+            spread(col_panels, dir="y", spacing=GUTTER, alignment="middle")
+            for col_panels in cols
+        ],
+        dir="x",
+        spacing=GUTTER,
+        alignment="middle",
+    )
 
 
 def story_topology():
