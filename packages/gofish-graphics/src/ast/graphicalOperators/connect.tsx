@@ -4,11 +4,12 @@ import {
   evenStep,
   reversePath,
   samePoint,
+  mapPathPoints,
   transformPath,
 } from "../../path";
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
-import { GoFishNode, type ToPixel } from "../_node";
+import { GoFishNode } from "../_node";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -16,13 +17,7 @@ import {
   pathToPixelSVG,
   roleFor,
 } from "../displayList/lowerHelpers";
-import {
-  Dimensions,
-  displayTranslate,
-  elaborateDirection,
-  FancyDirection,
-  Size,
-} from "../dims";
+import { Dimensions, elaborateDirection, FancyDirection, Size } from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
 import { isValue, MaybeValue } from "../data";
@@ -57,8 +52,9 @@ import {
 } from "../../timeWindow";
 
 // Per-axis bbox anchor. A literal number is the raw fraction in [0, 1]; the
-// keywords map to {start: 0, middle: 0.5, end: 1}. GoFish is y-up, so
-// `start`/`end` on the y axis are bottom/top respectively.
+// keywords map to {start: 0, middle: 0.5, end: 1}, in the connector's axis
+// order (see `axisDirection.ts`): on a y that grows upward `start` is the
+// bottom, on one that reads top-down it is the top.
 export type AnchorAlignment = "start" | "middle" | "end";
 export type AnchorAxis = number | AnchorAlignment;
 // One of:
@@ -903,7 +899,7 @@ export const connect = createNodeOperator(
         // (connector beneath the marks) is the connect node's zOrder(-1),
         // resolved globally by the bake — not this method's concern.
         lower: (
-          { transform, renderData, coordinateTransform, toPixel },
+          { renderData, coordinateTransform, toPixel, local },
           _children,
           node
         ): DisplayList.DisplayItem[] => {
@@ -919,20 +915,6 @@ export const connect = createNodeOperator(
             scaleContext?.unit
           );
 
-          // The legacy `<g transform="translate(tx,ty)">` offset, folded into a
-          // local pixel map so each path point lands at its absolute pixel.
-          //
-          // LIMITATION (#657, a #629 follow-up): the connector is ONE bake entry
-          // with ONE flip, so every path point — both endpoints — maps through
-          // this single `toPixel`. A connector spanning two DIFFERENT orientation
-          // scopes (e.g. a y-up bar to a y-down heatmap cell) therefore mirrors
-          // one endpoint incorrectly. A clean fix needs per-endpoint scopes plus
-          // a mid-path reconciliation; deferred. Single-scope connectors (the
-          // common case) are correct.
-          const [tx, ty] = displayTranslate(transform);
-          const offsetToPixel: ToPixel = ([px, py]) =>
-            toPixel([px + tx, py + ty]);
-
           const style = lowerStyle({
             fill: mode === "center" ? "none" : (resolvedFill ?? "none"),
             stroke: resolvedStroke ?? resolvedFill ?? "black",
@@ -944,14 +926,17 @@ export const connect = createNodeOperator(
             mixBlendMode: mixBlendMode ?? "normal",
           });
 
-          /** A path's pixel-space path data. */
-          const pathData = (path: Path): string =>
-            pathToPixelSVG(
+          /** A path's pixel-space path data. The paths were built in the
+           *  connector's local frame and axis order; `local` places them. */
+          const pathData = (orderPath: Path): string => {
+            const path = mapPathPoints(orderPath, local);
+            return pathToPixelSVG(
               coordinateTransform
                 ? transformPath(path, coordinateTransform, { resample: true })
                 : path,
-              offsetToPixel
+              toPixel
             );
+          };
           const toItem = (d: string): DisplayList.DisplayItem => ({
             kind: "path",
             d,

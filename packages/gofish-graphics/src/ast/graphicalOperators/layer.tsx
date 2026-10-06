@@ -31,6 +31,7 @@ import { bakeChildren } from "../coordinateTransforms/bake";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { NestedOperand, nestedGap } from "../constraints/nestedOperand";
+import { fromFrameStart, orientView, rawPlaceable } from "../axisDirection";
 import type { RigidAttachment } from "../constraints/placementSolver";
 import {
   applyConstraints,
@@ -53,7 +54,6 @@ import {
   type ConstraintPosScales,
   type FreeOrigin,
 } from "../constraints/shared";
-import { anchorOffset } from "../constraints/placementProgramLowerer";
 import {
   applyNestExtentPlan,
   applyNestLayoutProposal,
@@ -499,6 +499,9 @@ export const layer = createNodeOperatorSequential(
           return resolved;
         },
         layout: (shared, size, scales, children, node) => {
+          // This layer's y direction: its children and constraints are read
+          // in this axis order (see `axisDirection.ts`).
+          const direction = node.yFrame.direction;
           // Split the incoming single-carrier scale into its two half-channels
           // for the proposal planning below: σ (size slope) feeds sizing and the
           // child σ forwarding; the anchored map feeds `position` constraints and
@@ -661,16 +664,33 @@ export const layer = createNodeOperatorSequential(
             effectivePosScales[0]?.originPx,
             effectivePosScales[1]?.originPx,
           ];
+          //
+          // A seat is a position along this layer's axis order. A child whose
+          // y grows upward inside this layer that reads top-down is seated
+          // from the bottom of the band this layer allocated it
+          // (`childFrames`, else its own box): its axis starts there, as the
+          // root's starts at the bottom of the canvas (`placeRoot` in
+          // gofish.tsx). A child that reads top-down hangs from its origin,
+          // which is its top, in either kind of layer.
+          const childFrames: number[] = new Array(children.length);
           const baselineFor = (
-            cp: (typeof childPlaceables)[number]
-          ): [number, number] =>
-            [0, 1].map(
+            cp: (typeof childPlaceables)[number],
+            i: number
+          ): [number, number] => {
+            const [bx, by] = [0, 1].map(
               (axis) =>
                 seatInScope(
                   effectivePosScales[axis],
                   cp.spaceOn?.(axis as 0 | 1)
                 ).seatPx
-            ) as [number, number];
+            );
+            if (direction === -1 || children[i].yFrame.direction === 1)
+              return [bx, by];
+            const frame = Number.isFinite(childFrames[i])
+              ? childFrames[i]
+              : (cp.dims[1].size ?? 0);
+            return [bx, by + frame];
+          };
 
           const childPlaceables: ReturnType<
             (typeof children)[number]["layout"]
@@ -738,12 +758,13 @@ export const layer = createNodeOperatorSequential(
               basePosScales,
               effectivePosScales
             );
+            childFrames[i] = layoutSize[1];
             const childPlaceable = child.layout(layoutSize, [
               axisScale(childScaleFactors[0], childMaps[0]),
               axisScale(childScaleFactors[1], childMaps[1]),
             ]);
             if (!constrainedChildren.has(i)) {
-              const [bx, by] = baselineFor(childPlaceable);
+              const [bx, by] = baselineFor(childPlaceable, i);
               childPlaceable.place("x", bx, "baseline");
               childPlaceable.place("y", by, "baseline");
             }
@@ -790,16 +811,34 @@ export const layer = createNodeOperatorSequential(
                 containerKey.set(op.child, container);
                 nameToPlaceable.set(container, childPlaceables[op.child]);
               }
-              const gap = nestedGap(op.node, node.children[op.child]);
+              // The operand sits at a fixed pixel offset inside its container
+              // (`nestedGap`); the solve sees both in this layer's axis order.
+              const containerPx = rawPlaceable(childPlaceables[op.child]);
+              const gapPx = nestedGap(op.node, node.children[op.child]);
+              const operand = new NestedOperand(
+                name,
+                op.node,
+                containerPx,
+                gapPx
+              );
               nameToPlaceable.set(
                 name,
-                new NestedOperand(
-                  name,
-                  op.node,
-                  childPlaceables[op.child],
-                  gap
+                orientView(
+                  operand,
+                  direction
                 ) as unknown as (typeof childPlaceables)[number]
               );
+              // The same offset in this layer's axis order: from the
+              // container's start edge to the operand's, which is its top
+              // when y reads top-down and its bottom when y grows upward.
+              const gap: [number, number] = [
+                gapPx[0],
+                fromFrameStart(
+                  gapPx[1],
+                  containerPx.dims[1].size ?? 0,
+                  direction
+                ) - (direction === 1 ? 0 : (op.node.dims[1].size ?? 0)),
+              ];
               rigid.set(name, { container, gap });
             }
 
@@ -864,70 +903,35 @@ export const layer = createNodeOperatorSequential(
             // phase 1 already placed every child. A drawing clause that reads the
             // constrained positions is laid out after this (see
             // `relateOrder`), not by a re-layout pass here.
-            for (const cp of childPlaceables) {
-              if (cp) placeUnplacedChild(cp, "baseline", baselineFor(cp));
-            }
+            childPlaceables.forEach((cp, i) => {
+              if (cp) placeUnplacedChild(cp, "baseline", baselineFor(cp, i));
+            });
           }
 
           for (const i of relateOrder.afterSolve) layoutChild(i);
 
           // Calculate the bounding box of all children (NaN-safe; see
-          // foldFinite for why undefined extents are skipped).
-          //
-          // A FIXED-PITCH chained child (`Placeable.pitchAnchorY`) that will
-          // self-mirror at paint (continuous y — it opens its own y-up flip
-          // scope, mirroring about its chained anchor; see `scopeBox` in
-          // coordinateTransforms/bake.ts) truly occupies the MIRROR of its
-          // layout band about that anchor. Fold THAT band, so the layer's box
-          // gains the amplitude allowance on the side where content actually
-          // paints (above a baseline-chained ridge row) instead of phantom
-          // space on the other side (below the chain tail, where nothing ever
-          // paints — which pushed the x axis far below the last row). Exact
-          // no-op for `"middle"` (a band mirrored about its own center is
-          // itself). Assumes no enclosing y-up scope is active above the chain
-          // — the fixed-pitch-under-ordinal-spread case; inside a whole-plot
-          // flip the rows would inherit that scope instead of self-mirroring,
-          // and the plain layout band would be the honest one.
-          const paintedYBand = (
-            cp: (typeof childPlaceables)[number]
-          ): { min: number | undefined; max: number | undefined } => {
-            const d = cp.dims[1];
-            const band = { min: d.min, max: d.max };
-            const gn = cp instanceof GoFishNode ? cp : undefined;
-            const anchor = gn?.pitchAnchorY;
-            if (anchor === undefined || d.min === undefined) return band;
-            const sy = gn?._underlyingSpace?.[1];
-            const selfMirrors =
-              sy !== undefined &&
-              isCONTINUOUS(sy) &&
-              gn?._scopeTransparent !== true &&
-              gn?._ambientYDown !== true;
-            if (!selfMirrors) return band;
-            const off = anchorOffset(gn!, "y", anchor);
-            if (off === undefined || d.max === undefined) return band;
-            const a = d.min + off;
-            return { min: 2 * a - d.max, max: 2 * a - d.min };
-          };
-          // Compute each child's painted y-band ONCE (it's otherwise called
-          // twice per child below — once for the min fold, once for the max —
-          // and each call re-derives `anchorOffset`/`localAnchor` internally).
-          const paintedYBands = childPlaceables.map(paintedYBand);
-          const minX = foldFinite(
-            childPlaceables.map((cp) => cp.dims[0].min),
-            Math.min
-          );
-          const maxX = foldFinite(
-            childPlaceables.map((cp) => cp.dims[0].max),
-            Math.max
-          );
-          const minY = foldFinite(
-            paintedYBands.map((b) => b.min),
-            Math.min
-          );
-          const maxY = foldFinite(
-            paintedYBands.map((b) => b.max),
-            Math.max
-          );
+          // foldFinite for why undefined extents are skipped). Each child's
+          // box is read once.
+          const mins: [(number | undefined)[], (number | undefined)[]] = [
+            [],
+            [],
+          ];
+          const maxs: [(number | undefined)[], (number | undefined)[]] = [
+            [],
+            [],
+          ];
+          for (const cp of childPlaceables) {
+            const d = cp.dims;
+            for (const axis of [0, 1] as const) {
+              mins[axis].push(d[axis].min);
+              maxs[axis].push(d[axis].max);
+            }
+          }
+          const minX = foldFinite(mins[0], Math.min);
+          const maxX = foldFinite(maxs[0], Math.max);
+          const minY = foldFinite(mins[1], Math.min);
+          const maxY = foldFinite(maxs[1], Math.max);
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
 

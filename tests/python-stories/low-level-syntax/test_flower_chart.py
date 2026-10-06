@@ -41,9 +41,9 @@ def story_default():
             petal(w=datum(r["count"]), fill=datum(r["species"]).lighten(0.5))
             for r in ref.datum
         ]
+        # A spread on y reads top-down: the flower above its stem.
         return spread(
             [
-                ref,
                 layer(
                     [
                         stack(
@@ -57,6 +57,7 @@ def story_default():
                     ],
                     coord=polar(),
                 ),
+                ref,
             ],
             dir="y",
             alignment="middle",

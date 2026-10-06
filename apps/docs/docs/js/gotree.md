@@ -140,7 +140,7 @@ Two helpers cover the common cases:
 
 Returns a combiner that distributes the children along an axis. Used as
 `parentChild`, the helper places parent and children-group adjacent along `dir`
-(with the y-up swap, parent ends at high y / top of screen for `dir: "y"`). Used as
+(parent first: on the left for `dir: "x"`, at the top for `dir: "y"`, which reads top-down). Used as
 `sibling`, it spreads N children along `dir`.
 
 ```ts no-check
@@ -261,7 +261,7 @@ sibling: (kids) => stackY({ spacing: 8 }, [
 - `"bottomUp"` — children's sizes sum into the parent (dendrogram-style).
 
 In the current implementation, `mode` is a documentation hint only — the visual
-orientation is handled by the y-up swap inside `spread`, and data-driven sizing is
+orientation is handled by the axis order `spread` reads in, and data-driven sizing is
 performed in the user's `node` factory via the existing `value()` channel.
 
 ### `coord` — coordinate transform

@@ -51,16 +51,18 @@ polygon — typically a `layer` or a constraint. The polygon's bounding box is
 the axis-aligned extent of its points; the parent placement system translates
 the whole polygon to position it.
 
-GoFish is y-up internally, so a trapezoid whose wide edge sits at the bottom
+Literal points are in the polygon's own frame. Where that frame's y reads
+top-down (a polygon placed by a `layer` or a constraint, outside any data-driven
+y), y grows downward like SVG, so a trapezoid whose wide edge sits at the bottom
 and narrow edge at the top is written:
 
 ```python
 polygon(
     points=[
-        [0, 0],            # bottom-left (the wider edge)
-        [width, 0],        # bottom-right
-        [width - 10, h],   # top-right  (inset)
-        [10, h],           # top-left   (inset)
+        [10, 0],           # top-left   (inset)
+        [width - 10, 0],   # top-right  (inset)
+        [width, h],        # bottom-right (the wider edge)
+        [0, h],            # bottom-left
     ],
 )
 ```

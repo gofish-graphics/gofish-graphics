@@ -67,8 +67,8 @@ export const Default: StoryObj<Args> = {
       chart(selectAll("stems"))
         .flow(group({ by: "lake" }))
         .mark(((d: any[]) =>
+          // A spread on y reads top-down: the flower above its stem.
           spread({ dir: "y", alignment: "middle", spacing: -FLOWER_RADIUS }, [
-            d[0],
             layer({ coord: polar() }, [
               stackX(
                 {
@@ -85,6 +85,7 @@ export const Default: StoryObj<Args> = {
                 )
               ),
             ]),
+            d[0],
           ])) as any),
     ]).render(container, {
       w: args.w,

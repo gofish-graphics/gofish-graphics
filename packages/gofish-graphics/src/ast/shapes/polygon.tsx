@@ -2,7 +2,7 @@ import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
 import { boxOfDims } from "../geometry";
 import { GoFishAST } from "../_ast";
-import { displayTranslate, Size } from "../dims";
+import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { nameableMark, type NameableMark } from "../marks/createOperator";
@@ -61,8 +61,8 @@ export type PolygonProps = {
 /**
  * A closed polygon.
  *
- * With literal points it is a local-coordinate shape (GoFish-native y-up) whose
- * bounding box comes from the points and whose placement comes from the parent
+ * With literal points it is a local-coordinate shape (in the axis order of the
+ * polygon's own frame: pixels, y down) whose bounding box comes from the points and whose placement comes from the parent
  * constraint system. With data-bound points (a `value(ring)`) it is a
  * data-positioned mark: it declares a POSITION space per axis spanning the
  * ring's extent, maps its vertices through the axis scales, and self-places at
@@ -87,9 +87,11 @@ export const Polygon = ({
   }
   const { minX, maxX, minY, maxY } = ringExtent(ring);
 
-  // The vertices in LOCAL coordinates, as `layout` resolved them: the literal
-  // points, or — when data-bound — the scaled points minus the node's own
-  // translate. `lower` reads this so it emits exactly what layout measured.
+  // The vertices in LOCAL coordinates, in the polygon's own axis order, as
+  // `layout` resolved them: the literal points, or — when data-bound — the
+  // scaled points minus the node's own translate. `lower` and `geometry` read
+  // this, in pixels (y times the polygon's direction), so they emit exactly
+  // what layout measured.
   const localRef: { current: Ring } = { current: ring };
 
   return new GoFishNode(
@@ -145,22 +147,17 @@ export const Polygon = ({
           transform: { translate: [tx, ty] },
         };
       },
-      // IR lowering — the legacy `transform="scale(1,-1)"` with each point
-      // emitted as `(x+tx, -(y+ty))` folds into `toPixel`: a local point (x,y)
-      // is the y-up display point (x+tx, y+ty), which `toPixel` maps to y-down
-      // pixels. Under a nonlinear coordinate space the edges are adaptively
-      // resampled so a straight edge in data space draws as the curve the
-      // projection makes of it — a country outline, not its vertices joined.
+      // IR lowering: a local point in axis order maps to its pixel through
+      // the node's `local` map. Under a nonlinear coordinate space the edges are
+      // adaptively resampled so a straight edge in data space draws as the
+      // curve the projection makes of it — a country outline, not its
+      // vertices joined.
       lower: (
-        { transform, coordinateTransform, toPixel },
+        { coordinateTransform, toPixel, local },
         _children,
         node
       ): DisplayList.DisplayItem[] => {
-        const [tx, ty] = displayTranslate(transform);
-        const displayPoints: Ring = localRef.current.map(([x, y]) => [
-          x + tx,
-          y + ty,
-        ]);
+        const displayPoints: Ring = localRef.current.map((p) => local(p));
         const nonlinear =
           coordinateTransform !== undefined &&
           coordinateTransform.type !== "linear";
@@ -196,8 +193,9 @@ export const Polygon = ({
       geometry: ({ intrinsicDims }, _children, node) => ({
         box: boxOfDims(intrinsicDims, node.type),
         enclosingCircle: () => {
+          const d = node.yFrame.direction;
           const e = packEnclose(
-            localRef.current.map(([x, y]) => ({ x, y, r: 0 }))
+            localRef.current.map(([x, y]) => ({ x, y: d * y, r: 0 }))
           );
           return { cx: e.x, cy: e.y, r: e.r };
         },

@@ -519,7 +519,7 @@ export const tween = createNodeOperator(
           };
         },
         lower: (
-          { transform, renderData, toPixel },
+          { renderData, toPixel, local },
           _children,
           node
         ): DisplayList.DisplayItem[] => {
@@ -527,12 +527,11 @@ export const tween = createNodeOperator(
           const unitScale = node.getRenderSession().scaleContext?.unit;
           const declaredStroke = resolveColorChannel(stroke, unitScale);
 
-          // The same local-pixel map `connect` builds: the node's absolute
-          // translate folded in, so the interpolated point lands where the
+          // The run was measured in this node's local frame and axis order;
+          // `local` places it, so the interpolated point lands where the
           // keyframes' own boxes were measured.
-          const [tx, ty] = displayTranslate(transform);
-          const toLocalPixel = ([px, py]: [number, number]): [number, number] =>
-            toPixel([px + tx, py + ty]);
+          const toLocalPixel = (p: [number, number]): [number, number] =>
+            toPixel(local(p));
 
           const datum = node.datum;
           const role = roleFor(datum);
@@ -562,9 +561,8 @@ export const tween = createNodeOperator(
             const leaf = track.leaves[k];
             let drawn = drawings.get(leaf);
             if (drawn === undefined) {
-              const [ox, oy] = track.origins[k];
               drawn = leaf.INTERNAL_lendDrawing()(
-                { translate: [tx + ox, ty + oy] },
+                { translate: local(track.origins[k]) },
                 toPixel
               );
               drawings.set(leaf, drawn);

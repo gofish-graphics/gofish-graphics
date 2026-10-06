@@ -27,6 +27,12 @@ import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
 import { childNameKey } from "./constraints/shared";
+import {
+  CANVAS_FRAME,
+  orientView,
+  yDirection,
+  type YFrame,
+} from "./axisDirection";
 
 export class GoFishRef {
   public type: string = "ref";
@@ -96,6 +102,12 @@ export class GoFishRef {
    *  operator) read node-level metadata such as `__splitBy`. */
   public get targetNode(): GoFishNode | undefined {
     return this.directNode ?? this.selectedNode;
+  }
+
+  /** A ref holds its target's box, so it has its target's y frame (see
+   *  `axisDirection.ts`). */
+  public get yFrame(): YFrame {
+    return this.targetNode?.yFrame ?? CANVAS_FRAME;
   }
 
   /** Chainable: name this ref so a relate clause can reference it (mirrors
@@ -305,7 +317,8 @@ export class GoFishRef {
 
     this.intrinsicDims = this.selectedNode.intrinsicDims;
 
-    return this;
+    // The copy above is in pixels; the parent reads it in its own axis order.
+    return orientView(this as Placeable, yDirection(this.parent));
   }
 
   public get dims(): Dimensions {

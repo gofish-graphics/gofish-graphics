@@ -712,9 +712,11 @@ fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
 about its chain point by a seat, the next chain point is one step on, and the
 claim is the highest reach above the chain's start plus the lowest reach
 below it, over every part. Only the seat and the step differ. A pitched
-chain's anchors step down the axis one pitch at a time, as its rows read
-(the rows mirror about their anchors at paint, below), and each part sits
-about its anchor:
+chain's claim steps its anchors against its parts' growth one pitch at a
+time, as a ridgeline reads (rows chained down a y that reads top-down, each
+growing upward from its anchor, see
+[Axis direction](/internals/layout/passes#axis-direction)), and each part
+sits about its anchor:
 
 - `"middle"`: half its width above the anchor, half below.
 - `"baseline"`: its own signed sides, ascent above and descent below.
@@ -736,33 +738,15 @@ The type fold has no data part of the chain: a spread separates, so its type
 is ordinal (or undefined) whatever its pitch, and the chain lives only in the
 claim.
 
-A spread chain on y also has a PAINT-side handshake. The chain places its
-targets itself — their allocated slices are just slices of the spread's
-height — so if a chained target later opens its own y-up flip scope (a
-spread separates, so its targets can), mirroring about the allocated band
-would displace it from where the solver chained it. `lowerDistributePlacement`
-therefore stamps the anchor the chain fixed on each y-chained target
-(`Placeable.pitchAnchorY`: the pitch anchor of a fixed-pitch chain, and
-`"middle"` for an edge chain, which fixes the whole box), and the bake's scope-band
-decision (`scopeBox` in `coordinateTransforms/bake.ts`) mirrors such a scope
-about that anchor pointwise (`y ↦ 2·anchor − y`), keeping the painted anchors
-exactly at the solved pitch — see
-[Flattening the Scenegraph](/internals/layout/coord-flattening). The same
-stamp drives the layer's bbox fold (`paintedYBand` in layer.tsx): a
-pitch-chained self-mirroring row's box is folded as the MIRROR of its layout
-band about the chained anchor — the band it actually paints — so the layer's
-box gains the amplitude allowance above the chain head (matching the fold
-extent above) instead of phantom space below the tail where nothing paints,
-and the x axis lands directly below the last baseline. The resulting negative
-layer min reaches `render()` as a painted-TOP overhang: gofish.tsx attributes
-the y overhang sides by painted truth — an unflipped root's negative min is
-always the painted TOP and its max-past-`finalH` the painted bottom, with the
-flipped mapping when the root mirrors as a whole (an exact no-op for
-`"middle"`, whose mirror is the identity on its own band).
-This all assumes the chained rows self-mirror — continuous y with no enclosing
-y-up scope, the fixed-pitch-under-ordinal-spread case; inside a whole-plot
-flip the rows would inherit that scope and the plain layout band would be the
-honest one.
+A spread chain on y needs no paint-side handshake. The chain places each
+target's anchor in the spread's own axis order, and the target is read through
+that order like any child (see
+[Axis direction](/internals/layout/passes#axis-direction)): a ridgeline row,
+whose y is continuous, has its baseline placed at the chained anchor and grows
+upward from it, so the painted anchors sit exactly at the solved pitch and the
+layer's box is the rows' real pixel extent. (Before #681 the rows were laid out
+growing down and mirrored about their anchors at paint, which needed a
+`pitchAnchorY` stamp, a mirrored bbox fold and a swapped overhang attribution.)
 
 `resolveLayerBaseSpaces` is the default bottom-up type resolver before composed
 constraint overrides: union child spaces, and overlay datum-valued
@@ -1528,15 +1512,15 @@ raw. See the `stack` operator and the mosaic gallery examples.
 
 An earlier iteration (the `stack({ normalize: true })` layout flag) needed a
 bake-side escape hatch: because `resolveUnderlyingSpace` reports `UNDEFINED`
-upward for a self-scaled axis, `declaredYUp` (`coordinateTransforms/bake.ts`)
-couldn't see that the axis was _really_ CONTINUOUS, so a parallel
-`_selfScaledSpace` field on `GoFishNode` carried the true kind alongside the
-reported `UNDEFINED`, purely so the [y-up flip scope](/internals/layout/coord-flattening)
-could still open over a normalized spine. The per-entry `size`-claim mechanism
+upward for a self-scaled axis, the bake's y-flip rule (since replaced by
+[axis direction](/internals/layout/passes#axis-direction)) couldn't see that
+the axis was _really_ CONTINUOUS, so a parallel `_selfScaledSpace` field on
+`GoFishNode` carried the true kind alongside the reported `UNDEFINED`, purely so
+the flip could still open over a normalized spine. The per-entry `size`-claim mechanism
 doesn't need that: each entry gets its own wrapper wired through the ordinary
 data-valued-size path above, and stacking now follows **data order** directly
 at every level rather than needing a flip to correct it — so `_selfScaledSpace`
-and its `declaredYUp` fallback were deleted outright, not generalized.
+and its fallback were deleted outright, not generalized.
 
 A differently-shaped side channel came back later for a different consumer.
 `layer.tsx`'s self-scaling branch now also writes the real (anchored/
@@ -1873,7 +1857,7 @@ labels, ORDINAL → labels at laid-out keys.
 Selection is no longer tied to the root. A faceted chart tags an axis on each
 facet-owning node, and an outer operator can suppress an axis its child would
 otherwise produce. The flags are consumed by the **axis elaboration pass**
-(`elaborateAxes`, `src/ast/axes/elaborate.tsx`), which wraps each flagged node
+(`elaborateChrome`, `src/ast/axes/elaborate.tsx`), which wraps each flagged node
 in a `Layer` of ordinary tick/label shapes constrained to the inferred domain —
 so axes are not a privileged node type and the layout engine carries no
 axis-specific budget machinery. See [Axes](/internals/frontend/axes) for the

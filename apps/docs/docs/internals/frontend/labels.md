@@ -54,10 +54,10 @@ per-instance and per-group labeling; see `resolveLabelTargets` below.
 ## The elaboration pass
 
 `elaborateLabels` (`src/ast/labels/elaborate.tsx`) runs inside `gofish.tsx`'s
-`layout()`, immediately after axis elaboration and before the
-contentNode/title/legend passes — so a label's own bbox is folded into what
-those later passes measure, and a label may target a node the axis pass just
-wrapped. It has two phases:
+`layout()`, immediately after chrome elaboration, so a label may target a node
+the chrome pass just wrapped. A label inside a node's content is inside that
+node's chrome rings, so at layout time the rings seat their axes, titles, and
+legend past it. It has two phases:
 
 1. **`resolveLabelTargets`** — a single top-down walk that pushes each node's
    `_labels` array down to its children whenever the node has children but no
@@ -118,7 +118,8 @@ placed):
    content at its own origin. The content is referenced by the label
    constraints below, and a constraint-referenced child skips the layer's
    phase-1 baseline placement; this re-states that placement explicitly, the
-   same pin `elaborateAxes`/`elaborateLegend` use for the same reason.
+   same pin every chrome ring uses for the same reason: the label wrap is built
+   with the same `wrapRing` (in `elaborationUtils.ts`).
 2. Per target × spec, the constraints `buildLabelConstraints` derives from the
    spec's `LabelPosition` (below), relating the spec's `Text` to a
    `ref(target)` stand-in.
@@ -166,33 +167,23 @@ mainAnchor, spacing: inwardSpacing(mainAnchor, offset) })` relates the
 `edgeAnchor`/`crossAlignAnchor` translate the position string's visual
 vocabulary (`top`/`bottom`/`left`/`right`, and `start`/`end` for the cross
 alignment) into the `AlignAnchor` values (`"start"`/`"end"`/`"middle"`) the
-constraint system actually understands, in **this subtree's own authored
-frame** — see frame flips below for why that translation isn't literal on
-every axis.
+constraint system actually understands, in **the wrap's own axis order** — see
+below for why that translation isn't literal on every axis.
 
-## `frameFlips` and the rotation convention
+## Axis direction and the rotation convention
 
-x is never mirrored, so `left`/`right` map to bbox `start`/`end` literally.
-y can be — a node whose own space is a position-like CONTINUOUS y gets
-y-mirrored at bake (`elaborateAxes`'s `frameFlips`, `bake.ts`'s `declaredYUp`)
-so that ascending data values read upward on screen. `edgeAnchor` and
-`crossAlignAnchor` both take a `frameFlips` boolean (computed once per wrap by
-`frameFlipsAt`, using the exact same predicate `elaborateAxes` uses: an
-explicit chart-level `yUp`, an ancestor `coord` node, or this node's own
-underlying space being CONTINUOUS on y) so that an authored `"top"` always
-lands at the visual top, and an authored `align: "start"` on a left/right edge
-always means the visual top, regardless of which way this particular subtree's
-y axis happens to be mirrored.
+x always runs with the pixels, so `left`/`right` map to bbox `start`/`end`
+literally. y runs either way: the label constraints run in the wrapper's axis
+order, whose y direction (`axisDirection` of the wrapped node, see
+[Axis direction](/internals/layout/passes#axis-direction)) is `-1` for a continuous
+y, which grows upward, and `+1` for one that reads top-down. `edgeAnchor` and
+`crossAlignAnchor` take that direction, so an authored `"top"` always lands at the
+visual top, and an authored `align: "start"` on a left/right edge always means the
+visual top.
 
-The same `frameFlips` bit governs `rotate`. A label's `rotate` option is
-authored as **literal screen-clockwise degrees** (Vega-Lite's convention),
-independent of the subtree's own orientation. `Text` re-negates its own
-`rotate` prop when its frame flips (`text.tsx`'s `flips ? -rotate : rotate`),
-so `wrapWithLabelTexts` pre-negates with the identical `frameFlips` predicate
-before handing the angle to `Text`, canceling that render-time negation and
-landing back on the literal authored angle either way — the same
-pre-negation trick `elaborateAxes` uses for `labelAngle` (see
-[Axes](/internals/frontend/axes)).
+A label's `rotate` option is authored as **literal screen-clockwise degrees**
+(Vega-Lite's convention), and `Text`'s `rotate` is SVG's rotation, so it passes
+through unchanged.
 
 ## Auto-color
 

@@ -120,8 +120,9 @@ Each per-axis object also accepts `side: "start" | "end"`. By default a
 y-axis at the left), whichever edge that is once the frame's y-orientation is
 resolved — so a scatter, a horizontal bar, and a faceted small-multiple all place
 their value axis at the bottom without any option. An explicit `side` overrides
-that with the literal **frame-relative** seating: `"start"` is the near/origin edge
-(top in a y-down frame, bottom in y-up) and `"end"` is the far edge — e.g.
+that with the literal **frame-relative** seating: `"start"` is the start of the
+axis order (the top of a y that reads top-down, the bottom of a continuous y, which
+grows upward) and `"end"` is the far edge — e.g.
 `{ x: { side: "end" } }` forces the x-axis onto the opposite edge from the default.
 
 ### Rotating tick and category labels

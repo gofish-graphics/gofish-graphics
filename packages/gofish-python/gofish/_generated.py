@@ -106,7 +106,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         x2: Right edge position.
         w: Width.
         em_x: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
@@ -187,7 +187,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]]
         x2: Right edge position.
         w: Width.
         em_x: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
@@ -236,7 +236,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         x2: Right edge position.
         w: Width.
         em_x: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
@@ -281,7 +281,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         x2: Right edge position.
         w: Width.
         em_x: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
@@ -298,7 +298,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         font_style: Raw CSS font-style (e.g. "italic").
         font_weight: CSS font-weight (e.g. 300, 700, "bold").
         debug_bounding_box: Draw the text's bounding box, for layout debugging. Default false.
-        rotate: Rotation in degrees, applied in the chart's y-up world frame about the text anchor. Default 0.
+        rotate: Rotation in degrees, clockwise on screen, about the text anchor. Default 0.
         text_anchor: Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character. Default "start".
     """
     _kw: Dict[str, Any] = {}
@@ -343,7 +343,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         x2: Right edge position.
         w: Width.
         em_x: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
@@ -380,7 +380,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
     return Mark("image", **_kw)
 
 def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """A closed polygon defined by local-coordinate points (y-up), given literally or read from a field. No dims channels — the bbox is computed from `points`.
+    """A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
@@ -604,7 +604,7 @@ def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
-        y: Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Data-driven cross-axis extent (field/datum-sized children).
         h: Data-driven cross-axis extent (field/datum-sized children).
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
@@ -645,7 +645,7 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
         anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
-        y: Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Data-driven cross-axis extent (field/datum-sized children).
         h: Data-driven cross-axis extent (field/datum-sized children).
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
@@ -753,7 +753,7 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
 
     Args:
         x: Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
-        y: Top/bottom edge (y-up: bottom) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
         w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -809,7 +809,7 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
 
     Args:
         x: Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
-        y: Top/bottom edge (y-up: bottom) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
         w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -853,7 +853,7 @@ def _spread_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: O
         x2: Right edge position.
         w: Data-driven cross-axis extent (field/datum-sized children).
         em_x: Embed x in the parent's x space.
-        y: Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cy: Center y.
         y2: Other y edge position.
         h: Data-driven cross-axis extent (field/datum-sized children).
@@ -910,7 +910,7 @@ def _stack_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: Op
         x2: Right edge position.
         w: Data-driven cross-axis extent (field/datum-sized children).
         em_x: Embed x in the parent's x space.
-        y: Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cy: Center y.
         y2: Other y edge position.
         h: Data-driven cross-axis extent (field/datum-sized children).
@@ -966,7 +966,7 @@ def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = 
         font_size: Font size in pixels.
         color: Label color. Omitted, it is chosen to contrast with the mark.
         offset: Offset from the shape's edge in pixels.
-        rotate: Rotation in degrees.
+        rotate: Rotation in degrees, clockwise on screen.
         font_family: Font family of the label's text node. Omitted, the elaborator's own font family.
         font_weight: Font weight, e.g. "bold" or a numeric weight.
         font_style: Font style, e.g. "italic".
@@ -1083,7 +1083,7 @@ def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Unio
         x2: Right edge position.
         w: Width.
         em_x: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.

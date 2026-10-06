@@ -20,8 +20,9 @@ def default(w=400, h=400):
     # per-lake total label.
     def label_mark(d):
         total = sum(row["count"] for row in d[0].datum)
+        # A spread on y reads top-down: the label above its bar.
         return spread(
-            [d[0], text(text=str(total))],
+            [text(text=str(total)), d[0]],
             dir="y",
             alignment="middle",
             spacing=10,

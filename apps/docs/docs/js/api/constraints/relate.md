@@ -79,7 +79,7 @@ gf.layer([
 
 ## Drawing clauses
 
-A clause that is not a constraint is an operator or mark, and it becomes a child of the layer. An operand in its children stands for the named node, like [`ref("name")`](/js/api/marks/ref). A drawing clause can also hold fresh marks next to the operands, as in `spread({ dir: "y" }, [bar, text(...)])`.
+A clause that is not a constraint is an operator or mark, and it becomes a child of the layer. An operand in its children stands for the named node, like [`ref("name")`](/js/api/marks/ref). A drawing clause can also hold fresh marks next to the operands, as in `spread({ dir: "y" }, [text(...), bar])`.
 
 ```ts
 layer([

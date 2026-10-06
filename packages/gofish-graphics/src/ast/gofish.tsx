@@ -15,13 +15,12 @@ import {
   type RenderSession,
 } from "./_node";
 import type { GoFishAST } from "./_ast";
-import { axisScale, posFn, type AxisMap, type AxisScale } from "./domain";
-import { lowerToDisplayList, makeToPixelFor } from "./displayList/lower";
+import { axisScale, pxOf, type AxisMap, type AxisScale } from "./domain";
+import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
 import type { ToPixel } from "./_node";
-import type { FlipScope } from "./_displayObject";
 import type { Size } from "./dims";
 import {
   continuousInterval,
@@ -30,7 +29,12 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { niceScope, type Extent } from "./extent";
-import { opensFlipScope } from "./coordinateTransforms/bake";
+import {
+  fromFrameStart,
+  orientScales,
+  orientSide,
+  yDirection,
+} from "./axisDirection";
 import { shadowCheckScaleRoot } from "./solver/shadow";
 import {
   perfNow,
@@ -40,9 +44,7 @@ import {
   perfSetCount,
 } from "./perf";
 import {
-  axisTitle,
-  elaborateAxes,
-  elaborateAxisTitles,
+  elaborateChrome,
   labelRowSettingsFromAngles,
   type LabelRowSettings,
 } from "./axes/elaborate";
@@ -54,7 +56,7 @@ import {
   type EqualMeasureAxis,
   type ScopeSolution,
 } from "./solver/scopes";
-import { elaborateLegend, legendOverhang } from "./legends/elaborate";
+import { legendRing } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
 
 export type CategoricalScale = {
@@ -106,14 +108,21 @@ export const isCategoricalScale = (
 export const isContinuousColorScale = (
   s: Scale | undefined
 ): s is ContinuousColorScale => s !== undefined && "scaleFn" in s;
+/** Root data → layout-pixel maps, per axis (undefined where the root has no
+ *  continuous position scale). */
+export type PixelPosScales = [
+  ((value: number) => number) | undefined,
+  ((value: number) => number) | undefined,
+];
+
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 /** `side` (issue #143/#16): which frame edge the axis seats on — `"start"` (the
- *  near/origin side — top for a y-DOWN frame, bottom for y-UP) or `"end"` (the
- *  far side). Frame-relative, matching the start/end vocabulary of
- *  alignment/distribute. When OMITTED, a continuous/difference X-axis defaults to
- *  the visual BOTTOM regardless of the frame's flip (see `axisSide` in
- *  `elaborate.tsx`); an explicit `side` overrides that with the literal
- *  frame-relative seating. */
+ *  start of the frame's axis order: the top of a y that reads top-down, the
+ *  bottom of a continuous y, which grows upward) or `"end"` (the far side).
+ *  Frame-relative, matching the start/end vocabulary of alignment/distribute.
+ *  When OMITTED, a continuous/difference X-axis defaults to the visual BOTTOM
+ *  (see `defaultAxisSide` in `axes/elaborate.tsx`); an explicit `side`
+ *  overrides that with the literal frame-relative seating. */
 export type AxisOptions =
   | boolean
   | {
@@ -218,22 +227,6 @@ function manualLabelRowSettings(
 // `layout()` for the full behavior, including the shrink-to-fit case).
 const DEFAULT_CANVAS_SIZE = 400;
 
-// A chart-level axis is titled only when `axes` turns it on (`true`, or a
-// dim's entry that is not `false`); its title is then `axisTitle`'s.
-function resolveAxisTitles(
-  axes: AxesOptions | undefined,
-  measures?: { x?: string; y?: string }
-): { xTitle: string | undefined; yTitle: string | undefined } {
-  const title = (dim: "x" | "y"): string | undefined => {
-    if (axes === true) return measures?.[dim];
-    const opt = axes && typeof axes === "object" ? axes[dim] : undefined;
-    return opt === undefined || opt === false
-      ? undefined
-      : axisTitle(opt, measures?.[dim]);
-  };
-  return { xTitle: title("x"), yTitle: title("y") };
-}
-
 export async function layout(
   {
     w,
@@ -244,7 +237,6 @@ export async function layout(
     debug = false,
     axes = false,
     legend = true,
-    yUp = false,
     labelRowSettings,
   }: {
     w?: number;
@@ -255,7 +247,6 @@ export async function layout(
     debug?: boolean;
     axes?: AxesOptions;
     legend?: boolean;
-    yUp?: boolean;
     /** Internal: how each axis label row is drawn, as chosen by
      *  `labelAngle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
     labelRowSettings?: LabelRowSettings;
@@ -267,17 +258,15 @@ export async function layout(
 ): Promise<{
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
-  yUp: boolean;
-  rootFlipsWhole: boolean;
-  scales: Size<AxisScale | undefined>;
+  posScales: PixelPosScales;
   child: GoFishNode;
   width: number;
   height: number;
   rightOverhang: number;
-  rightContentOverhang: number;
   topOverhang: number;
   leftOverhang: number;
   bottomOverhang: number;
+  hasLegend: boolean;
   legendFields: ReadonlySet<string>;
 }> {
   child = await child;
@@ -303,46 +292,15 @@ export async function layout(
   child.resolveUnderlyingSpace();
   perfAdd("resolve", perfNow() - __tResolve);
 
-  // Chart-level axis TITLE measure, captured PRE-elaboration. The root space
-  // here carries the OUTERMOST grouping's measure (the outer operator's fold is
-  // authoritative over its subtree), e.g. a grouped bar's x = "lake". After
-  // axis elaboration inserts the inner (per-facet) ordinal axis nodes, the
-  // re-resolved root unions those up and a finer grouping's measure ("species")
-  // can win — but the chart-level title should name the outermost axis, so we
-  // read it before that. (Nicing changes domains, not measures, so pre/post
-  // agree except for this elaboration bubble-up.)
-  const titleMeasures = {
-    x: spaceMeasure(child._underlyingSpace?.[0]),
-    y: spaceMeasure(child._underlyingSpace?.[1]),
-  };
-
-  // The original root content object stays in the tree as the plot after any
-  // wrapping below (axis / legend / title elaboration each wrap, never replace,
-  // the content). Captured here so the title pass can center on it as the
-  // fallback anchor when a dim has no elaborated axis line. If axis elaboration
-  // changes nothing, `plotNode === child`.
-  const plotNode = child;
-
-  // Per-dim axis-line node for chart-level title centering (root-most owner
-  // wins). Defaults to no anchors when the `axes` block below doesn't run.
-  let titleAnchors: [GoFishNode | undefined, GoFishNode | undefined] = [
-    undefined,
-    undefined,
-  ];
-
   // Re-resolve after an elaboration pass rewrote `child`. The inserted nodes
   // need the session and name resolution (a `ref()` stand-in resolves its
   // target here, or layout throws "Selected node not found"), and because
   // `resolveUnderlyingSpace` memoizes while a rewrite moves keys onto fresh
-  // wrappers, every cached space is cleared and recomputed from scratch.
-  //
-  // `withColorScale` is for the AXIS pass only: the color scale must be final
-  // before the legend pass consumes it, and the later passes insert chrome with
-  // non-literal fills ("gray" titles, swatches) that would otherwise be folded
-  // into the palette as if they were data values.
-  const reresolve = async (n: GoFishNode, withColorScale = false) => {
+  // wrappers, every cached space is cleared and recomputed from scratch. The
+  // color scale is NOT re-resolved: it was final before chrome was elaborated
+  // (the legend shows it), and chrome adds no data colors.
+  const reresolve = async (n: GoFishNode) => {
     if (contexts?.session) n.setRenderSession(contexts.session);
-    if (withColorScale) n.resolveColorScale();
     n.resolveNames();
     // The inserted chrome is built from operators (Spread) whose constraints
     // install in this pass; nodes resolved before are consumed and untouched.
@@ -351,13 +309,13 @@ export async function layout(
     n.resolveUnderlyingSpace();
   };
 
-  // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
   const __tAxes = perfNow();
+  // Axis ownership: which node draws each axis (`resolveAxes`). Which dims
+  // the chart-level `axes` option enables: `true` → both. For an `{ x?, y? }`
+  // object, a dim is enabled unless it is explicitly `false` — an unspecified
+  // (undefined) dim still shows (specifying one axis doesn't disable the
+  // other); only `false` suppresses.
   if (axes) {
-    // Which dims the chart-level `axes` option enables. `true` → both. For an
-    // `{ x?, y? }` object, a dim is enabled unless it is explicitly `false` —
-    // an unspecified (undefined) dim still shows (specifying one axis doesn't
-    // disable the other); only `false` suppresses.
     const enabled = new Set<0 | 1>();
     if (axes === true) {
       enabled.add(0);
@@ -367,36 +325,50 @@ export async function layout(
       if (axes.y !== false) enabled.add(1);
     }
     child.resolveAxes(new Map(), enabled);
+  }
 
-    // Axis elaboration: turn inferred axes into ordinary shapes + constraints.
-    // Wraps axis-owning content in a Layer with tick/label shapes and clears the
-    // handled axis flags; the new subtree is then re-resolved below. A flag the
-    // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
-    // consumes `node.axis`.
-    const elaborated = await elaborateAxes(
-      child,
-      resolveAxisSides(axes),
-      yUp,
-      false,
-      labelRowSettings ?? manualLabelRowSettings(axes)
-    );
-    titleAnchors = elaborated.titleAnchors;
-    if (elaborated.changed) {
-      child = elaborated.node;
-      await reresolve(child, true);
-    }
+  // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
+  // chrome wraps itself in it, as ordinary shapes + constraints — its axes,
+  // their titles, its legend. The chart's options describe the chrome of the
+  // chart ROOT, stamped on it as its request: its axes are titled (with the
+  // measure of the axis, so the outermost grouping names it), and it carries
+  // the legend, because the color scale is resolved once, from the root, for
+  // the whole render. The legend is built here, from the root as it is laid
+  // out, before any chrome wraps the nodes inside it. `legend: false` drops
+  // the legend; the color scale still paints the marks.
+  const unitScale = contexts?.session.scaleContext.unit;
+  const hasLegend =
+    legend !== false &&
+    ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
+      isContinuousColorScale(unitScale));
+  child._chromeRequest = {
+    axes,
+    legend: hasLegend
+      ? await legendRing(
+          unitScale as CategoricalScale | ContinuousColorScale,
+          child
+        )
+      : undefined,
+  };
+  const elaborated = await elaborateChrome(child, {
+    sides: resolveAxisSides(axes),
+    labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
+  });
+  if (elaborated.changed) {
+    child = elaborated.node;
+    await reresolve(child);
   }
 
   // Label elaboration: turn every `.label(...)` spec into a real `Text` node +
-  // constraints (src/ast/labels/elaborate.tsx), the same technique the axis
-  // pass above uses. Runs after axis elaboration (a label may target a node
-  // an axis pass just wrapped) and before the contentNode/title/legend passes
-  // below, so a label's own bbox is folded into what those passes measure.
-  const labelRes = await elaborateLabels(child, { yUp });
+  // constraints (src/ast/labels/elaborate.tsx), the same technique the chrome
+  // pass above uses. Runs after chrome elaboration (a label may target a node
+  // the chrome pass just wrapped).
+  const labelRes = await elaborateLabels(child);
   if (labelRes.changed) {
     child = labelRes.node;
     await reresolve(child);
   }
+  perfAdd("axes", perfNow() - __tAxes);
 
   // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
   // applied AT the scope's solve (there is no pre-layout tree walk), and it is
@@ -426,162 +398,6 @@ export async function layout(
     rootExtent[1],
     rootAxisDemand[1]
   );
-
-  // y-orientation is a PER-SCOPE property resolved at bake time (issue #629): the
-  // bake walk opens a y-up mirror at each topmost continuous-y node and mirrors
-  // about its own placed band, so a continuous chart grows up while an ordinal-y
-  // neighbor (a heatmap beside a bar chart) stays y-down — no single global root
-  // decision. The scope opens at the plot CONTENT (the chrome wrappers are
-  // `_scopeTransparent`), so a chart's chrome (legend column, axis titles) is NOT
-  // a member of the scope: its INTERIOR renders in the ambient frame (glyphs,
-  // legend row order, colorbar direction), while its BOX is placed by the plot's
-  // frame — the bake box-mirrors `_ambientYDown` chrome about the plot's flip
-  // scope (a parent's orientation places a child's box, never re-interprets its
-  // interior). Three layout-time orientation bits fall out:
-  //  - `chromeYUp`: the AMBIENT orientation the chrome INTERIOR builders read
-  //    (legend swatch order, colorbar value direction, axis-title rotation) —
-  //    y-down unless the explicit global `options.yUp` flips the whole canvas.
-  //  - `rootFlipsWhole`: whether the ROOT content node itself opens ONE canvas-
-  //    wide flip scope that its whole subtree inherits (mirrors about `[0, finalH]`)
-  //    — the bake's own rule applied to the root content (`opensFlipScope`: a
-  //    continuous root y, as in a plain bar/line chart, or a root `coord`, as
-  //    in a pie) or the global override. It stays NARROW: a per-scope opener BELOW the root (a `coord`, a continuous
-  //    subtree inside an UNDEFINED-root free-space mix, or a facet cell) mirrors
-  //    about its OWN band, never this canvas frame, and an ORDINAL root does NOT
-  //    flip as a whole (a faceted scatter keeps its panels in natural order; its
-  //    shared continuous axis is instead defaulted to the bottom edge, see the
-  //    axis-side note below). It also decides whether the ROOT frame the chrome
-  //    annotates mirrors about the canvas, so a chart's chrome (y-title, legend
-  //    column, colorbar, and an ordinal-x title) box-mirrors to the same VISUAL
-  //    edge as the flipped content: the chrome follows exactly the root's own
-  //    flip. It does not fire on a continuous DESCENDANT under an
-  //    ordinal/undefined root (a faceted stack, a unit chart): that content
-  //    flips per-scope BELOW the root, the root chrome frame does not mirror,
-  //    and a chart-level title that mirrored there would split from its
-  //    (unflipped) axis. The chart-level CONTINUOUS x-axis is the one
-  //    exception, handled by seating it (and its title) on the far edge
-  //    directly — see the axis-side note. This gates the `_rootFlipScope` and
-  //    `_chromeFrame` stamps and the legend's abstract frame. #629/#143/#16.
-  const chromeYUp = yUp;
-  const rootFlipsWhole = yUp || opensFlipScope(child);
-  //  - `xTitleSeatsFar`: a CONTINUOUS x-axis whose frame does NOT flip at all
-  //    (`!rootFlipsWhole` — an ordinal cross y AND no `coord`: a horizontal bar, a
-  //    faceted stack). `elaborateAxes` seats such a line on the FAR edge directly
-  //    (no mirror), so its title is authored to match and its box-mirror is
-  //    suppressed below — the two stay together at the visual bottom instead of the
-  //    title lifting above. A `coord` chart (a pie) is EXCLUDED: its frame flips via
-  //    the coord scope, so its x-axis and title mirror like any flipped frame. Only
-  //    the DEFAULT (unspecified) side seats far — an explicit `side` is honored
-  //    literally, matching the axis line.
-  const xSideOpt = resolveAxisSides(axes)[0];
-  const xTitleSeatsFar =
-    xSideOpt === undefined &&
-    isCONTINUOUS(niceUnderlyingSpaceX) &&
-    !rootFlipsWhole;
-
-  // Reference to the content node whose extent defines the final canvas
-  // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
-  // and the legend pass wrap `child`, so `contentNode` keeps pointing at the
-  // PRE-title, pre-legend content. This matters two ways:
-  //  - The inferred canvas is measured off the content, never inflated by a long
-  //    title or a tall legend column.
-  //  - Title, legend, and constraint-displaced extents past the content are
-  //    reserved separately as measured per-side overhangs (`leftOverhang`,
-  //    `bottomOverhang`, `topOverhang`, the legend `rightOverhang`, and the
-  //    non-legend `rightContentOverhang` below).
-  const contentNode = child;
-
-  // Axis-title elaboration: seat up to two title Text nodes (x below, y rotated
-  // left) as ordinary shapes + constraints (src/ast/axes/elaborate.tsx), each
-  // centered on the axis line it describes via a `ref()` stand-in (falling back
-  // to the plot node). Runs BEFORE the legend block on purpose: the legend
-  // distributes off the titled content's bbox, and title centering must never
-  // see the legend column. Title Texts resolve UNDEFINED spaces on both dims, so
-  // the wrapper preserves the content's underlying spaces and the nice spaces
-  // captured above remain valid. The caller owns the "any title?" guard.
-  // The title names each axis off its space `measure` (continuous → unit,
-  // ordinal → grouping field), read from `titleMeasures` (the OUTERMOST grouping,
-  // captured pre-elaboration). An axis whose space carries no measure (e.g. a
-  // magnitude whose measures forgot on conflict) simply gets no title.
-  // A title names an axis the root has: a dim the root has no space on (the
-  // root is a coordinate space, whose axes and their titles it draws itself,
-  // or has nothing data-driven there) gets no chart-level title.
-  const titles = resolveAxisTitles(axes, titleMeasures);
-  const rootHasAxis = (dim: 0 | 1) =>
-    (dim === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY).kind !==
-    "undefined";
-  const xTitle = rootHasAxis(0) ? titles.xTitle : undefined;
-  const yTitle = rootHasAxis(1) ? titles.yTitle : undefined;
-  // The elaborated x-title node, when there is one — the chrome-frame stamp
-  // below needs its identity to exempt a far-seated title from the box-mirror.
-  let xTitleNode: GoFishNode | undefined;
-  if (xTitle !== undefined || yTitle !== undefined) {
-    // The x-axis title is authored at the SAME abstract side as its axis LINE, so
-    // the two stay together and land at the same visual edge (#143/#16/#629):
-    //  - `xTitleSeatsFar` (a DEFAULT continuous x over a non-flipping frame — a
-    //    horizontal bar, a faceted stack): `elaborateAxes` seated the line on the
-    //    far "end" edge directly, so the title matches and its box-mirror is
-    //    suppressed (see the chrome-frame stamp) — else it would lift above the
-    //    line. `titleSides[0] = "end"`.
-    //  - default continuous x on a FLIPPING frame (a scatter, a `coord` pie): the
-    //    line is authored "start" and mirrors to the bottom, so the title rides
-    //    along on "start". `titleSides[0] = "start"`.
-    //  - an EXPLICIT `side`, or an ordinal x: honored literally (`baseSides[0]`,
-    //    defaulting to "start"), mirroring with the content like any chrome.
-    // The y-title (left gutter) is untouched — the vertical flip never moves it.
-    const baseSides = resolveAxisSides(axes);
-    const titleSides: ["start" | "end", "start" | "end"] = [
-      xTitleSeatsFar ? "end" : (baseSides[0] ?? "start"),
-      baseSides[1] ?? "start",
-    ];
-    const titled = await elaborateAxisTitles(child, {
-      xTitle,
-      yTitle,
-      anchors: titleAnchors,
-      plotNode,
-      yUp: chromeYUp,
-      sides: titleSides,
-    });
-    child = titled.node;
-    xTitleNode = titled.xTitleNode;
-    await reresolve(child);
-  }
-
-  // Legend elaboration: turn the color scale into an ordinary subtree seated
-  // beside the (now possibly titled) content (src/ast/legends/elaborate.tsx) —
-  // a swatch column for a categorical scale, or a colorbar for a continuous
-  // (gradient) one. Runs after the last resolveColorScale (it consumes the
-  // resolved scale; legend fills are literal strings, never isValue, so the
-  // scale pass is NOT re-run). The wrapper preserves the content's underlying
-  // spaces (unionChildSpaces ignores the legend's UNDEFINED spaces), so the
-  // nice spaces captured above remain valid.
-  // `legend: false` (the chart option) suppresses this pass entirely: the
-  // color scale still paints the marks, only the chrome is dropped. Mirrors
-  // `axes: false`, and nothing downstream reserves space for a legend that
-  // was never added (`legendAdded` stays false).
-  let legendAdded = false;
-  const unitScale = contexts?.session.scaleContext.unit;
-  const hasLegend =
-    legend !== false &&
-    ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
-      isContinuousColorScale(unitScale));
-  if (hasLegend && unitScale) {
-    // The legend entries should read top→bottom. The swatch column is chrome
-    // (`_ambientYDown`, #629): its INTERIOR renders in the ambient frame, where a
-    // `Spread({dir:"y"})` already reads top→bottom — no `reverse` unless the
-    // whole canvas is forced y-up by `options.yUp` (`chromeYUp`). Its BOX aligns
-    // against the plot's abstract frame (`rootFlipsWhole`) and is box-mirrored by
-    // the bake when the plot flips, landing top-aligned on screen. #143/#16/#629.
-    child = await elaborateLegend(
-      child,
-      unitScale as CategoricalScale | ContinuousColorScale,
-      chromeYUp,
-      rootFlipsWhole
-    );
-    legendAdded = true;
-    await reresolve(child);
-  }
-  perfAdd("axes", perfNow() - __tAxes);
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
@@ -691,7 +507,7 @@ export async function layout(
   const rootSeats = ([0, 1] as const).map((axis) =>
     seatInScope(scopeFrame(rootScopes[axis]), rootSpaces[axis])
   );
-  const posScales: Size<AxisMap | undefined> = [
+  const rootMaps: Size<AxisMap | undefined> = [
     rootSeats[0].childMap,
     rootSeats[1].childMap,
   ];
@@ -718,149 +534,105 @@ export async function layout(
 
   // Merge the two half-channels into the single per-axis scale carrier handed
   // to layout: σ (size slope) from `rootScaleFactors`, the anchored map from
-  // `posScales`.
+  // `rootMaps`.
   const rootScales: Size<AxisScale | undefined> = [
-    axisScale(rootScaleFactors[0], posScales[0]),
-    axisScale(rootScaleFactors[1], posScales[1]),
+    axisScale(rootScaleFactors[0], rootMaps[0]),
+    axisScale(rootScaleFactors[1], rootMaps[1]),
   ];
 
+  // The root's frame on the canvas is its box with axes: the root content
+  // with its axis gutters and category label rows, without the titles and
+  // legend seated around them (see `GoFishNode.chrome`). Its extent sizes a
+  // shrink-to-fit canvas, so a long title or a tall legend column never
+  // inflates the canvas; whatever lies outside the canvas is reserved as a
+  // measured overhang below.
+  const plot = child.chrome?.withAxes ?? child;
+  // The root scales are solved in the root's own axis order; the canvas hands
+  // them down in pixels, so a root whose y grows upward receives them reflected
+  // (and `layout()` reads them back in its own order). The root's order is its
+  // frame's: the chrome rings seat what they wrap at their own origin and only
+  // add chrome around it.
+  const rootYDirection = yDirection(plot);
   const __tSolve = perfNow();
-  child.layout([layoutW, layoutH], rootScales);
+  child.layout([layoutW, layoutH], orientScales(rootScales, 1, rootYDirection));
   perfAdd("solve", perfNow() - __tSolve);
   // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
   // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
   scopes.dump();
-  // Root placement anchor. A GIVEN dimension keeps the baseline-anchored canvas
-  // box [0, given]; content seated outside it (axis labels below 0, ticks above
-  // `given`) is reserved as the per-side overhangs below. A SHRINK-TO-FIT
-  // dimension makes the canvas box the content's full [min, max] extent, so pin
-  // its `min` edge to 0 — content then fills [0, size] and every overhang
-  // formula computes 0 for that axis. Leaving `min` off origin is the #574
-  // double-count: the overhangs re-reserve it as a phantom band (a negative
-  // `min` bloats the canvas via `-min`; a positive one gaps the near side and
-  // overhangs the far side, e.g. the pulley diagram). The pin uses `pinAnchor`,
-  // not the write-once `place()`, so it lands even when the root self-placed (a
-  // diagram with its own root transform) — `place()` short-circuits a placed axis.
-  //
-  // A free (baseline-magnitude) root's local 0 is its baseline, so it is
-  // placed at the scope's `originPx` (#773: `descent·σ` above the canvas's
-  // low edge, plus any overhead below). A pinned root shares the canvas frame
-  // (its map carries `originPx`), and an origin-less root has none: both sit
-  // at 0 (`seatInScope`).
-  const placeRoot = (axis: 0 | 1) => {
-    const name = axis === 0 ? "x" : "y";
-    const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
-    // Shrink-to-fit pins the content's `min` edge, which already includes any
-    // descent: adding `descent·σ` there would count it twice (#574).
-    if ((axis === 0 ? w : h) === undefined)
-      child.pinAnchor(name, offset, "min");
-    else child.place(name, offset + rootSeats[axis].seatPx, "baseline");
-  };
-  placeRoot(0);
-  placeRoot(1);
-
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
-  // canvas default when the content didn't report one. Read off `contentNode`
-  // (== `child` when no title/legend wrapper), never an outer wrapper — so the
-  // canvas stays content-relative; title and legend extents are reserved
-  // separately as measured gutters below.
+  // canvas default when the content didn't report one. Read off the root's
+  // frame (`plot`), so title and legend extents are reserved separately as
+  // measured gutters below. Sizes do not depend on placement, so this is
+  // known before the root is placed.
   const finalDim = (i: 0 | 1, given: number | undefined): number => {
     if (given !== undefined) return given;
-    const s = contentNode.dims[i]?.size;
+    const s = plot.dims[i]?.size;
     return s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE;
   };
   const finalW = finalDim(0, w);
   const finalH = finalDim(1, h);
 
-  // The canvas y-flip frame (issue #629): the whole-plot band `[0, finalH]` the
-  // old global flip mirrored about (`data.height`). finalH is only known here,
-  // and the canvas origin (0) is NOT recoverable from a node's placed bbox (a
-  // shrink-to-fit pin can offset it), so it is stamped authoritatively rather
-  // than re-derived by the bake. Feeds both the root-content scope stamp below
-  // and the chrome frame.
-  const canvasFrame: FlipScope = { baseY: 0, height: finalH };
+  // Root placement. The canvas is a frame `[0, final]` on each axis, and the
+  // root's axis order starts at the frame's start edge: the left on x, the top
+  // for a y that reads top-down, and the BOTTOM for a continuous y, which grows
+  // upward from there (`atFrameStart`). A position `p` along the root's axis
+  // order is the pixel `p` from that edge, inward.
+  //
+  // A GIVEN dimension seats the root's baseline in that frame; content seated
+  // outside it (axis labels past the frame, ticks beyond it) is reserved as the
+  // per-side overhangs below. A free (baseline-magnitude) root's local 0 is its
+  // baseline, so it is placed at the scope's `originPx` (#773: `descent·σ` from
+  // the frame's start edge, plus any overhead); a pinned root shares the frame
+  // (its map carries `originPx`), and an origin-less root has none: both sit at
+  // 0 (`seatInScope`).
+  //
+  // A SHRINK-TO-FIT dimension makes the canvas box the content's full extent,
+  // so pin the box's start edge to the frame's start — content then fills the
+  // frame and every overhang formula computes 0 for that axis. Leaving it off
+  // origin is the #574 double-count: the overhangs re-reserve it as a phantom
+  // band (e.g. the pulley diagram). Shrink-to-fit pins the edge, which already
+  // includes any descent: adding `descent·σ` there would count it twice
+  // (#574). The pin uses `pinAnchor`, not the write-once `place()`, so it lands
+  // even when the root self-placed (a diagram with its own root transform).
+  const placeRoot = (axis: 0 | 1) => {
+    const name = axis === 0 ? "x" : "y";
+    const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
+    const direction = axis === 0 ? 1 : rootYDirection;
+    const frame = axis === 0 ? finalW : finalH;
+    const atFrameStart = (p: number) => fromFrameStart(p, frame, direction);
+    if ((axis === 0 ? w : h) === undefined)
+      child.pinAnchor(name, atFrameStart(offset), orientSide("min", direction));
+    else
+      child.place(
+        name,
+        atFrameStart(offset + rootSeats[axis].seatPx),
+        "baseline"
+      );
+  };
+  placeRoot(0);
+  placeRoot(1);
 
-  // Stamp the ROOT plot content with the canvas y-flip frame (issue #629), when
-  // the root plot flips as a WHOLE (`rootFlipsWhole`). The bake walk opens the
-  // y-up scope at `contentNode` (the plot, inside any scope-transparent
-  // title/legend chrome) and mirrors about THIS frame; the whole subtree inherits
-  // it (no double flip). The bake honors this stamp even for an ordinal root y (a
-  // faceted-by-y chart) — an explicit whole-plot decision overriding the per-node
-  // `declaredYUp` rule. A scope that opens BELOW the canvas frame (a `coord`, a
-  // continuous subtree inside an UNDEFINED-root free-space mix) is not
-  // `contentNode`, carries no stamp, and mirrors about its own placed band. Stamp
-  // UNCONDITIONALLY every layout (undefined when the root does not flip whole) so
-  // no stale frame from a prior layout of the same node tree survives an
-  // option/data change — a re-layout that turns `rootFlipsWhole` false must clear
-  // the previous `{baseY, height}`, or the bake would mirror about a dead frame
-  // (#629, stale-scope finding).
-  contentNode._rootFlipScope = rootFlipsWhole ? canvasFrame : undefined;
-
-  // Stamp the chrome placement frame (issue #629) directly on each OUTERMOST
-  // `_ambientYDown` chrome subtree (axis titles, legend column, colorbar), so the
-  // bake reads `node._chromeFrame` instead of searching up through the
-  // scope-transparent wrappers on every visit. The frame is the WHOLE-plot canvas
-  // band: the chart-level chrome spans the whole plot, so it mirrors about the
-  // canvas when the root content flips (`rootFlipsWhole`). The bake box-mirrors a chrome box about it (its interior
-  // still renders ambient). Only when the plot mirrors somewhere — otherwise
-  // chrome passes through unchanged, and a re-layout that turns `rootFlipsWhole`
-  // false stamps nothing (the chrome subtrees are freshly rebuilt by the
-  // elaboration passes each layout, so no stale frame survives). The walk stops
-  // at `contentNode` (never descends into the plot) and at the outermost ambient
-  // node of each chrome subtree (its descendants render ambient — a second mirror
-  // would double-flip). #629 chrome-frame finding.
-  if (rootFlipsWhole) {
-    const frame = canvasFrame;
-    const stampChrome = (n: GoFishNode): void => {
-      if (n === contentNode) return;
-      if (n._ambientYDown === true) {
-        // Suppress the box-mirror for a far-seated continuous x-axis title
-        // (`xTitleSeatsFar`): `elaborateAxes` already placed its line on the far
-        // edge directly and the title was authored to match (see `titleSides`), so
-        // mirroring it here would lift it back above the line. Every other chrome
-        // node (y-title, legend, colorbar) still mirrors.
-        if (xTitleSeatsFar && n === xTitleNode) return;
-        n._chromeFrame = frame;
-        return;
-      }
-      for (const c of n.children) if (c instanceof GoFishNode) stampChrome(c);
-    };
-    stampChrome(child);
-  }
+  // The root data → layout-pixel maps the interaction layer converts through:
+  // a position along the root's axis order, from the root's placed origin.
+  const posScales = [0, 1].map((axis) => {
+    const map = rootScales[axis]?.map;
+    if (map === undefined) return undefined;
+    const origin = child.projectedTranslate(axis as 0 | 1) ?? 0;
+    const direction = axis === 0 ? 1 : rootYDirection;
+    return (v: number) => origin + direction * pxOf(map, v);
+  }) as PixelPosScales;
 
   // Measured overhangs off the OUTERMOST wrapper (`child`), from its laid-out
   // extent. Anything seated beyond the content box is reserved by its placed
   // extent minus the content box; `render()` then sizes the SVG around them.
   // `max!` / `min!` discipline (never a silent `?? 0`): the wrapper always emits
   // a placed extent here — a silent 0 would clip the overhang and mask a layout
-  // bug, so assert it's present.
-  //
-  // The RIGHT side has two distinct kinds of overhang that must be reserved
-  // DIFFERENTLY, and they overlap in magnitude so the color-scale flag — not the
-  // size — is what tells them apart:
-  //  - A legend swatch column reserves `legendOverhang + pad` (see the width
-  //    formula in `render`). Gated on `legendAdded`: a single-row legend can
-  //    overhang as little as ~6px — the same as a wide rightmost x-tick label —
-  //    so we cannot recover this from magnitude alone.
-  //  - Otherwise, content displaced past the canvas by a constraint (e.g. a
-  //    marginal histogram's right band) flows through `reserve()` like the other
-  //    three gutters: a small x-tick spill is absorbed into `pad` (plain axis
-  //    charts stay byte-identical) and a large band reserves its full extent.
-  // TOP, LEFT, BOTTOM have only the second (chrome / displaced-content) kind.
-  const rightOverhang = legendAdded ? legendOverhang(child, finalW) : 0;
-  const rightContentOverhang = legendAdded
-    ? 0
-    : Math.max(0, child.dims[0].max! - finalW);
-  // The y overhang sides — attributed by PAINTED side. When the root flips as
-  // a whole (`rootFlipsWhole`: a continuous-y chart, or the global `yUp`),
-  // the canvas mirror sends authored max-past-finalH to the visual TOP and
-  // authored negative min to the visual BOTTOM; on an unflipped root the
-  // authored directions ARE the painted ones, so the attribution swaps.
-  const layoutMaxOverhang = Math.max(0, child.dims[1].max! - finalH);
-  const layoutMinOverhang = Math.max(0, -child.dims[1].min!);
-  const topOverhang = rootFlipsWhole ? layoutMaxOverhang : layoutMinOverhang;
-  const bottomOverhang = rootFlipsWhole ? layoutMinOverhang : layoutMaxOverhang;
+  // bug, so assert it's present. Whether the root carries a legend goes with
+  // them: it decides how the right side is reserved (see `svgFrame`).
+  const rightOverhang = Math.max(0, child.dims[0].max! - finalW);
+  const topOverhang = Math.max(0, -child.dims[1].min!);
+  const bottomOverhang = Math.max(0, child.dims[1].max! - finalH);
   const leftOverhang = Math.max(0, -child.dims[0].min!);
 
   if (debug) {
@@ -871,20 +643,18 @@ export async function layout(
   return {
     underlyingSpaceX: niceUnderlyingSpaceX,
     underlyingSpaceY: niceUnderlyingSpaceY,
-    yUp,
-    rootFlipsWhole,
-    scales: rootScales,
+    posScales,
     child,
     width: finalW,
     height: finalH,
     rightOverhang,
-    rightContentOverhang,
     topOverhang,
     leftOverhang,
     bottomOverhang,
+    hasLegend,
     // The fields a rendered legend shows: the color scale's fields when the
     // legend was drawn, none when it was suppressed or had nothing to show.
-    legendFields: legendAdded
+    legendFields: hasLegend
       ? new Set(
           (unitScale as { fields?: Set<string> } | undefined)?.fields ?? []
         )
@@ -910,15 +680,6 @@ export type GoFishRenderOptions = {
   colorConfig?: ColorConfig;
   padding?: number;
   /**
-   * y-UP render scope (issue #143/#16): when true the root `toPixel` mirrors y
-   * about the canvas height — the convention charts want (bars grow up, y-axis
-   * increases upward). Default (free space, raw `gofish()`) is y-DOWN: a
-   * top-left origin where a vertical list reads top→bottom. `chart()` threads
-   * this true; a true y-up coordinate transform (the follow-up) will later make
-   * this composable per-subtree instead of root-global.
-   */
-  yUp?: boolean;
-  /**
    * Interaction runtime (see src/interaction/). When present, the render pass
    * publishes each lowered frame to it, emits `data-gf-id` hit-test hooks, and
    * attaches its delegated event listeners to the produced <svg>. Absent (the
@@ -936,30 +697,18 @@ export type GoFishExportOptions = GoFishRenderOptions & {
 type LayoutData = {
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
-  /**
-   * The explicit global y-UP override (`options.yUp`). Per-scope orientation
-   * (continuous-y subtrees) is decided independently at bake via the flip scopes
-   * stamped in `layout()`; this only forces a whole-canvas y-up ambient. See
-   * #629/#143/#16.
-   */
-  yUp: boolean;
-  /**
-   * Whether the ROOT plot content flips as a whole about the canvas band
-   * (`yUp || isCONTINUOUS(root-y)`) — the decision behind the `_rootFlipScope`
-   * stamp. Unlike `yUp` (the global override only), this also captures the
-   * per-scope continuous-y auto-flip, so the interaction frame's root
-   * data→pixel map (`toPixel`) matches what the plot actually paints. #629.
-   */
-  rootFlipsWhole: boolean;
-  scales: Size<AxisScale | undefined>;
+  /** Root data → layout-pixel maps (see `PixelPosScales`). */
+  posScales: PixelPosScales;
   child: GoFishNode;
   width: number;
   height: number;
   rightOverhang: number;
-  rightContentOverhang: number;
   topOverhang: number;
   leftOverhang: number;
   bottomOverhang: number;
+  /** Whether the root carries a legend (its right overhang is the legend's;
+   *  see {@link svgFrame}). */
+  hasLegend: boolean;
   /** The data fields the rendered legend shows (empty without a legend). */
   legendFields: ReadonlySet<string>;
 };
@@ -1051,7 +800,6 @@ async function layoutOnce(
         debug,
         axes,
         legend,
-        yUp: options.yUp,
         labelRowSettings,
       },
       child,
@@ -1088,20 +836,15 @@ function renderLayout(
       height: data.height,
       svgPadding,
       defs,
-      // The resolved y-up decision (root y space), computed in `layout()`.
-      yUp: data.yUp,
-      // The root-content whole-plot flip (incl. continuous-y auto-flip), so the
-      // interaction frame's root data→pixel map matches the painted orientation.
-      rootFlipsWhole: data.rootFlipsWhole,
       rightOverhang: data.rightOverhang,
-      rightContentOverhang: data.rightContentOverhang,
       topOverhang: data.topOverhang,
       leftOverhang: data.leftOverhang,
       bottomOverhang: data.bottomOverhang,
+      hasLegend: data.hasLegend,
       interaction,
-      // Root data → gofish-space maps, read off the recorded root scales for
-      // the interaction layer's data↔px conversions (frameConversions).
-      posScales: [posFn(data.scales[0]?.map), posFn(data.scales[1]?.map)],
+      // Root data → layout-pixel maps for the interaction layer's data↔px
+      // conversions (frameConversions).
+      posScales: data.posScales,
       domains: {
         x: continuousDomain(data.underlyingSpaceX),
         y: continuousDomain(data.underlyingSpaceY),
@@ -1405,6 +1148,69 @@ export async function gofishSave(
 
 const PADDING = 40;
 
+/** Breathing room between gutter content and the SVG edge. */
+const EDGE_GAP = 8;
+
+/**
+ * The SVG around a laid-out chart: its size, with a gutter on each side of
+ * the `width` × `height` canvas, and the layout-pixel → screen map the
+ * gutters make. Shared by the live `render()` and `toDisplayList`.
+ *
+ * Chrome (axis tick/label rows, titles, the legend column) is elaborated into
+ * ordinary shapes that live in the node tree, so the SVG is only sized around
+ * their measured extent. Content seated beyond the canvas by a constraint
+ * (e.g. marginal histogram bands above/right of a scatter) is measured the
+ * same way, via the per-side overhangs.
+ *
+ * Each gutter reserves enough to clear its measured overhang plus a little
+ * breathing room from the SVG edge. The `o > 0` guard keeps a chart with
+ * `padding: 0` and no chrome at zero reserve (don't invent `EDGE_GAP` px on an
+ * empty gutter); and because gutters ≤ `pad - EDGE_GAP` are absorbed by the
+ * existing `pad`, an untitled chart stays byte-identical to the pre-chrome
+ * output. Ceil: the reserve becomes the root translate, and a fractional
+ * translate (measured overhangs are routinely fractional — text widths)
+ * shifts every shape off the pixel grid: adjacent area/bar segments grow
+ * hairline antialiasing seams and text rasterizes fuzzy.
+ *
+ * The RIGHT side is reserved one of two ways, and the two overlap in
+ * magnitude, so whether the root carries a legend — not the size — tells
+ * them apart. Beside a legend column the overhang reserves itself plus a full
+ * `pad` (a single-row legend can overhang as little as ~6px, the same as a
+ * wide rightmost x-tick label). Otherwise it is reserved like the other three
+ * gutters: a small x-tick spill is absorbed into `pad` and a large band
+ * reserves its full extent. The right gutter bears no translate, so it
+ * needn't be pixel-snapped.
+ *
+ * Layout geometry is already SVG-native y-DOWN (see `axisDirection.ts`), so
+ * the map only offsets by the gutter reserves.
+ */
+export function svgFrame(
+  overhangs: {
+    leftOverhang: number;
+    topOverhang: number;
+    rightOverhang: number;
+    bottomOverhang: number;
+    hasLegend: boolean;
+  },
+  width: number,
+  height: number,
+  pad: number
+): { width: number; height: number; toPixel: ToPixel } {
+  const reserve = (o: number) =>
+    o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
+  const left = reserve(overhangs.leftOverhang);
+  const top = reserve(overhangs.topOverhang);
+  const bottom = reserve(overhangs.bottomOverhang);
+  const right = overhangs.rightOverhang;
+  return {
+    width: overhangs.hasLegend
+      ? left + width + right + reserve(0)
+      : left + width + reserve(right),
+    height: top + height + bottom,
+    toPixel: ([gx, gy]) => [gx + left, gy + top],
+  };
+}
+
 export const render = (
   {
     width,
@@ -1412,13 +1218,11 @@ export const render = (
     transform,
     defs,
     rightOverhang = 0,
-    rightContentOverhang = 0,
     topOverhang = 0,
     leftOverhang = 0,
     bottomOverhang = 0,
+    hasLegend = false,
     svgPadding,
-    yUp = false,
-    rootFlipsWhole = yUp,
     interaction,
     posScales,
     domains,
@@ -1428,96 +1232,37 @@ export const render = (
     transform?: string;
     defs?: JSX.Element[];
     rightOverhang?: number;
-    rightContentOverhang?: number;
     topOverhang?: number;
     leftOverhang?: number;
     bottomOverhang?: number;
+    hasLegend?: boolean;
     svgPadding?: number;
-    yUp?: boolean;
-    rootFlipsWhole?: boolean;
     interaction?: InteractionRuntime;
-    posScales?: [
-      ((pos: number) => number) | undefined,
-      ((pos: number) => number) | undefined,
-    ];
+    posScales?: PixelPosScales;
     domains?: { x?: [number, number]; y?: [number, number] };
   },
   child: GoFishNode
 ): JSX.Element => {
   const pad = svgPadding ?? PADDING;
 
-  // Chrome (axis tick/label rows, titles, the legend column) is elaborated into
-  // ordinary shapes that live in the node tree; `render()` only sizes the SVG
-  // around their measured extent. Content seated beyond the canvas by a
-  // constraint (e.g. marginal histogram bands above/right of a scatter) is
-  // measured the same way, via the per-side overhangs.
-  //
-  // Reserve enough on each gutter side to clear the measured overhang plus a
-  // little breathing room from the SVG edge. The `o > 0` guard keeps a chart
-  // with `padding: 0` and no chrome at zero reserve (don't invent EDGE_GAP px on
-  // an empty gutter); and because gutters ≤ `pad - EDGE_GAP` are absorbed by the
-  // existing `pad`, an untitled chart stays byte-identical to the pre-chrome
-  // output.
-  const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
-  // Ceil: the reserve becomes the root <g> translate, and a fractional
-  // translate (measured overhangs are routinely fractional — text widths)
-  // shifts every shape off the pixel grid: adjacent area/bar segments grow
-  // hairline antialiasing seams and text rasterizes fuzzy.
-  const reserve = (o: number) =>
-    o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
-  const leftReserve = reserve(leftOverhang);
-  const bottomReserve = reserve(bottomOverhang);
-  const topReserve = reserve(topOverhang);
-
-  // Right gutter = legend reservation + non-legend reserve. `rightOverhang` is
-  // the legend column's overhang (0 when there's no legend); it keeps a full
-  // `pad` margin beyond the column — the legend's historical reservation — via
-  // `reserve(rightContentOverhang)`, whose floor is `pad` (so a legend chart
-  // reserves `legendOverhang + pad`, byte-identical). `rightContentOverhang` is
-  // any NON-legend content displaced past the right edge (a marginal band);
-  // routing it through the same `reserve()` as the other gutters absorbs a small
-  // x-tick spill into `pad` (plain axis charts stay byte-identical) and reserves
-  // a large band's full extent plus `EDGE_GAP`. The right gutter bears no root
-  // <g> translate, so it needn't be pixel-snapped — a fractional width is
-  // harmless (legend overhangs are fractional text widths).
-  // Two-pass render: lower the baked scenegraph into the display-list IR, then
-  // paint each item. Items are final absolute pixels. The ambient frame is
-  // SVG-native y-DOWN (top-left origin): the base map only offsets by the gutter
-  // reserves, so a vertical list reads top→bottom. Orientation is now a PER-SCOPE
-  // property (issue #629): the bake walk tags each draw entry with the placed
-  // y-band it renders in (`d.flip`), and `toPixelFor` mirrors that entry's y
-  // about its own band — so a continuous-y chart grows up while an ordinal-y
-  // neighbor stays y-down. `options.yUp` still forces a GLOBAL y-up ambient
-  // (mirror about the whole canvas height), threaded as `ambientFlip`.
-  const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-  const toPixelFor = makeToPixelFor(baseDown);
-  // The whole-canvas y-flip band. Shared by both maps below so that when the
-  // plot flips as a whole they pass the SAME `FlipScope` identity to
-  // `toPixelFor`, which memoizes per identity — one cached closure, not two.
-  const canvasFlip: FlipScope = { baseY: 0, height };
-  const ambientFlip: FlipScope | undefined = yUp ? canvasFlip : undefined;
-  // The frame-level GoFish-space → screen map interaction publishes for
-  // hit-test / dataPos reads. It must mirror the ROOT PLOT's orientation, which
-  // flips about the canvas band whenever the plot flips as a whole — i.e. the
-  // global `yUp` override OR the per-scope continuous-y auto-flip
-  // (`rootFlipsWhole`, mirroring the `_rootFlipScope` stamp). Using `ambientFlip`
-  // (yUp only) here would report y-down for a continuous-y chart that paints
-  // y-up, inverting drags. #629.
-  const rootFlip: FlipScope | undefined = rootFlipsWhole
-    ? canvasFlip
-    : undefined;
-  const rootToPixel = toPixelFor(rootFlip);
+  const frame = svgFrame(
+    { leftOverhang, topOverhang, rightOverhang, bottomOverhang, hasLegend },
+    width,
+    height,
+    pad
+  );
+  const toPixel = frame.toPixel;
   const interactive = interaction !== undefined;
   const paintBaked = () => {
     const __tLower = perfNow();
-    const items = lowerToDisplayList(child, toPixelFor, ambientFlip);
+    const items = lowerToDisplayList(child, toPixel);
     perfAdd("lower", perfNow() - __tLower);
     perfSetCount("displayItems", items.length);
     // Publish the frame (id-keyed hit-test map + data-space conversions) before
     // paint so the first hit-test / dataPos reads see the current frame.
     interaction?.publishFrame({
       items,
-      toPixel: rootToPixel,
+      toPixel,
       posScales,
       domains,
       size: { width, height },
@@ -1530,10 +1275,8 @@ export const render = (
   return (
     <svg
       ref={(el: SVGSVGElement) => interaction?.attachSVG(el)}
-      width={
-        leftReserve + width + rightOverhang + reserve(rightContentOverhang)
-      }
-      height={topReserve + height + bottomReserve}
+      width={frame.width}
+      height={frame.height}
       xmlns="http://www.w3.org/2000/svg"
     >
       <Show when={defs}>

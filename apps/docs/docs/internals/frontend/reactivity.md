@@ -237,7 +237,8 @@ split positioned so incremental layout can slot in later.
 Inputs that speak in data coordinates (`pointer().dataPos()`,
 `drag().currentData()`) need to invert the chart's positional mapping. They do
 **not** re-derive scales. `render()` (`gofish.tsx`) records the root position
-scales (data → gofish-space) and `toPixel` (gofish-space → screen px) onto the
+scales (data → layout pixels, read off the placed root in its axis direction)
+and `toPixel` (layout pixels → screen px) onto the
 published `InteractionFrame`. `frameScales.ts` composes those _recorded_ forward
 maps into `dataToPx` per axis, and — because every leg is affine — obtains
 `pxToData` by **sampling two points** (`invertAffine`), never by re-running scale

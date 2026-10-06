@@ -7,6 +7,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/gofish.tsx
   - packages/gofish-graphics/src/ast/_node.ts
+  - packages/gofish-graphics/src/ast/axisDirection.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
@@ -298,7 +299,7 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 }
 ```
 
-### Pass 7: Axis Elaboration
+### Pass 7: Chrome Elaboration
 
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
 
@@ -315,13 +316,15 @@ level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
 later gates per-scope domain nicing at the σ-scope solves (issue #659), since
 `resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
 driven at each scope's own solve (below). Then
-`elaborateAxes` **rewrites the tree**: each axis-owning node is wrapped in
-`Layer` tiers containing ordinary `rect`/`text`/`spread` axis shapes wired with
-`align`/`distribute`/`position` constraints. Axes are not a privileged node
-type and there is no axis-specific code later in the pipeline — after this
-pass they are just nodes. Because the rewrite inserts new nodes and moves
-keys onto wrappers, the affected resolution passes (color, names, labels,
-underlying space) rerun on the new tree. Domain nicing is not a tree pass at
+`elaborateChrome` **rewrites the tree**. Each node that owns chrome (axes,
+axis titles, a legend) is wrapped in rings of `Layer`s containing ordinary
+`rect`/`text`/`spread` shapes wired with `align`/`distribute`/`position`
+constraints. Chrome is not a privileged node type, and there is no
+chrome-specific code later in the pipeline. After this pass it is just nodes.
+Because the rewrite inserts new nodes and moves keys onto wrappers, the name,
+alias, and underlying space passes rerun on the new tree. The color scale does
+not: it was final before the pass, and chrome adds no data colors. Label
+elaboration follows and reruns the same passes. Domain nicing is not a tree pass at
 all: each σ-scope nices its own POSITION domain at its solve, if some node in
 its space-flow region renders that dim's axis.
 
@@ -329,44 +332,28 @@ See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
-**Axis-title elaboration** follows the axis block and runs _before_ the legend.
-The chart-level title _text_ for each dim is read off the **resolved space's
-`measure`** — a continuous axis names itself by its unit, an ordinal axis by its
-grouping field. There is no syntactic field-name fallback: a space with no
-measure simply has no title. The measure is captured **pre-elaboration** (before
-the axis block inserts the inner per-facet ordinal axis nodes, whose finer
-grouping would otherwise bubble up and win the root union), so the chart-level
-title names the OUTERMOST grouping (`lake`, not the inner `species`).
-`elaborateAxisTitles` then wraps
-the chart in one more
-`Layer` carrying up to two title `Text` nodes — the x-title horizontal below the
-plot, the y-title rotated to read bottom-to-top in the left gutter — each
-centered on the axis line it describes via a `ref()` stand-in (`elaborateAxes`
-hands back those axis-line nodes as `titleAnchors`; an ordinal or absent axis
-has no line, so the title falls back to centering on the plot node). Two extra
-references thread through here:
+The chart's options describe the chrome of the chart root. `layout()` passes
+`elaborateChrome` two answers that apply only to the root:
 
-- `plotNode` — the original root content, captured _before_ `elaborateAxes`, so
-  it survives every wrapping pass and stands in as the fallback title anchor.
-- `contentNode` — the node captured _just before_ the title wrap (and so before
-  the legend wrap too). It is what `finalW`/`finalH` read off below, so a long
-  title or a tall legend can never inflate the inferred canvas; their extents
-  past the content are reserved separately as measured gutters instead.
+- **Axis titles.** The root titles each axis it owns that the `axes` option
+  turns on. The title text is the option's `title`, or else the axis's
+  `measure` (a continuous axis names itself by its unit, an ordinal axis by its
+  grouping field). A space with no measure has no title. The measure is read
+  off the root's space before elaboration re-resolves it, so the title names
+  the OUTERMOST grouping (`lake`, not the inner `species`).
+- **The legend.** The color scale is resolved once, from the root, so the root
+  carries the legend whenever the scale has something to show and the `legend`
+  option is not `false`.
 
-The ordering is deliberate: titles must be seated before the legend, because the
-legend distributes off the titled content's bbox — and conversely the title's
-centering must never see the legend column (it would drag the title off-center).
-This is the same elaborate-into-ordinary-nodes treatment axes and legends get;
-the former bespoke render-time title path is gone. See
-[Axes](/internals/frontend/axes) for the title recipe and the
-sibling-facet anchor limitation.
-
-**Legend elaboration** follows the title block in the same `layout()`, gated on a
-non-empty color map (not on the `axes` option). `elaborateLegend` wraps the chart
-root in a `Layer` holding the content plus a swatch column of `rect`/`text` rows,
-seated to the right with `align`/`distribute` constraints — the same elaborate-
-into-ordinary-nodes treatment axes get. See
-[Legends](/internals/frontend/legends).
+Each title is a ring seated past the root's axes and centered on the axis line
+it describes. The legend is the ring outside that, so it is seated past the
+titles. The outermost ring records the boxes inside it as `GoFishNode.chrome`:
+`content` (the root without chrome) and `withAxes` (the root with its axis
+gutters and category label rows). `layout()` uses `withAxes` as the root's
+frame: its size is the inferred canvas when `w`/`h` are omitted, and its axis
+direction is the root's. So a long title or a tall legend never inflates the
+inferred canvas, and their extents past it are reserved as measured gutters.
+See [Axes](/internals/frontend/axes) and [Legends](/internals/frontend/legends).
 
 ### Pass 8: Position Scale Computation
 
@@ -427,6 +414,92 @@ This is where the actual positioning and sizing happens. Each node's `layout` fu
 
 It applies layout algorithms (stacking, positioning, etc.), calculates intrinsic dimensions for each node, and handles nested layouts and complex arrangements.
 
+#### Axis direction
+
+Layout stores every node's geometry (its local box, its translate, its bbox ledger)
+in **y-down pixels**, the canvas's own frame. Nothing is mirrored later. What makes a
+continuous y grow upward is the node's **axis direction** (`yDirection(node)` in
+`src/ast/axisDirection.ts`), the one resolution site for which way a node's axis
+order runs on the screen. Only y has one to resolve; x always runs with the pixels:
+
+- `+1`: the order runs with the pixels. Every x axis, and a discrete y (an ordinal
+  space, or a spread along y, whose space is UNDEFINED when its children carry no
+  keys): the first item is at the top.
+- `-1`: the order runs against the pixels. A continuous y (a value axis, a magnitude,
+  a datum-positioned mark) grows upward from its origin, so `start`, the baseline and
+  the first part of a stack sit at the bottom.
+- A node with **no y axis** (an UNDEFINED y: a fixed-size shape, a text label, a layer
+  of those) has no direction of its own and takes its parent's: it reads in the frame
+  it sits in. On the canvas that is top-down; inside a bar chart a fixed-size shape's
+  box sits above its origin like the bars around it.
+
+A text is a box, placed exactly as a rect of the same size would be: its origin is
+its box's start edge in its own axis order (the top in a frame that reads top-down,
+the bottom in one that grows upward), so `y`, a parent's seating and every operator
+treat it as they treat a rect. The glyphs' own anchor (the point on the baseline that
+`textAnchor` and `rotate` refer to) sits inside that box; the text lowers it from
+the origin by `glyphDy`, the box's top in pixels less the glyphs' top.
+
+It is read off the node's own resolved underlying space (for a node that roots its
+own σ-scope, the space it keeps for itself, `selfScaledSpace`), so it is local: an
+ordinal spread inside a bar chart reads top-down inside, and a bar chart inside an
+ordinal spread grows upward inside its row. A `coord` and everything inside it is
+`-1`, because a coordinate transform is math-handed; the `coord` reflects y where its
+interior meets the canvas (see
+[Flattening the Scenegraph](/internals/layout/coord-flattening)). A `ref` takes its
+target's direction.
+
+Each node resolves its direction once, top-down, into `GoFishNode.yFrame` (the
+direction plus whether the node is in a coordinate space), from its resolved spaces
+and its parent's frame. The frame is cleared with the spaces
+(`clearUnderlyingSpace`), which every rewrite of the tree re-resolves; reading it
+before the node's spaces are resolved is an error.
+
+Operators never consult it directly. A node's `_layout` reasons in its own **axis
+order** (`order = direction · pixel`), and `GoFishNode.layout` converts at the node
+boundary, so spread, stack, align, distribute, the σ maps and baseline seating all run
+unchanged:
+
+- the box and translate a `_layout` returns are stored in pixels (`orientDims`,
+  `orientTransform`);
+- the y map a node receives is reflected when it and its parent run opposite ways
+  (`orientScales`; σ, a magnitude, never changes);
+- the node is handed back to its parent as a view in the PARENT's axis order
+  (`orientView`), which reflects every y read (box, anchors, translate, shape) and
+  every y write (placements, extents) about the parent's local origin. Anchors swap
+  `min`↔`max` (`orientSide`); `center` and `baseline` stay. The view is built once
+  per child, and its reflected shape is rebuilt only when the child's own is.
+
+A `ref` stores a pixel copy of its target, so it is read through its parent's view
+like any child. An elaboration wrapper (axes, labels, titles, a legend) builds its
+constraints before its own space is resolved, so it reads its direction off
+`wrapperDirection(node)`: the direction of a layer that reports the wrapped node's
+spaces and takes its parent. A side named on the screen (the top, the bottom) is
+turned into the side in a frame's axis order by `orientSide("start" | "end",
+direction)`. Geometry a node keeps for its own `lower` (a connector's paths, an
+arrow, a polygon's vertices, a tween's run) is in its axis order too; `lower`
+receives one node-local map, `local` (`p ↦ translate + (x, direction·y)`), the one
+place that geometry is reflected. A node that runs a pixel-native algorithm
+(the treemap's d3 tiling) reads its y from its frame's start edge
+(`fromFrameStart`), where it places its children.
+
+Seating a child at its baseline is the one place a boundary between two directions
+needs more than the reflection: a child whose y grows upward inside a layer that
+reads top-down is seated at the bottom of the band the layer allocated it (or of
+its own box when unsized), its own start end, exactly as the root sits in the
+canvas (`placeRoot`, `fromFrameStart`). So a bar chart in a cell of a layer that
+reads top-down sits with its baseline at the bottom of its cell. Every other child
+is seated by its origin at the seat. That is not one rule "each child at its own
+start end of its band": a child that reads top-down inside a layer whose y grows
+upward is still seated at the seat, the band's bottom, not at the band's top. Such
+children are placed by what they hold (a value label's `spread` around a `ref` to
+its bar); seating them at the band's top lifts them off their bars.
+
+A chain of baselines (a spread with `anchor: "baseline"`) starts at its first
+member's origin rather than its start edge (its sequence origin in
+`solveAxisProblem`), so two such chains over the same rows solve to the same lines
+whatever their rows hold: a ridgeline's upward-growing silhouettes and its rules.
+
 **Inferring an omitted `w`/`h`.** The chart-level `w` and `h` are optional. An
 omitted dimension is resolved per axis from the root's size claim on it:
 
@@ -467,10 +540,9 @@ dimension _is_ given, `layout()` additionally measures how far the laid-out tree
 extends past the authoritative extent on each of the four sides — including content a constraint
 seated _beyond_ the canvas, e.g. a marginal histogram's bands above and to the
 right of a scatter — and the render pass reserves exactly that, replacing the
-former fixed `LEGEND_MARGIN` constant. The right side is split into two measured
-overhangs: a `rightOverhang` for a legend swatch column (gated on whether a legend
-was added) and a `rightContentOverhang` for any non-legend content displaced past
-the right edge — see Render Pass 2 below for why the split is necessary. See
+former fixed `LEGEND_MARGIN` constant. With the right overhang it reports
+whether the root carries a legend (`hasLegend`), which decides how the right side
+is reserved — see Render Pass 1 below for why. See
 [Legends](/internals/frontend/legends).
 
 > Literal pixel sizes are invisible to the underlying-space tree (a fixed-size
@@ -614,27 +686,29 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 **Location**: `src/ast/gofish.tsx`
 
 ```typescript
-const placeRoot = (axis, value, shrinkToFit) =>
-  shrinkToFit
-    ? child.pinAnchor(axis, value, "min")
-    : child.place(axis, value, "baseline");
-placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
-placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
+// The root's axis order starts at the canvas frame's start edge: the top, or the
+// bottom for a continuous y (`direction` −1).
+const atFrameStart = (p) => (direction === 1 ? p : frame - p);
+shrinkToFit
+  ? child.pinAnchor(axis, atFrameStart(offset), direction === 1 ? "min" : "max")
+  : child.place(axis, atFrameStart(offset + seatPx), "baseline");
 ```
 
 **Implementation**: `src/ast/_node.ts`
 
 Pins the whole chart into the container by landing one anchor of the root's bbox
-at a target coordinate. _Which_ anchor depends on whether the axis is sized:
+at a target coordinate. The canvas is a frame `[0, final]` on each axis, and the
+root's axis order starts at the frame's start edge (the bottom for a continuous y).
+_Which_ anchor depends on whether the axis is sized:
 
-- **Given dimension** → pin the **baseline** (local `0`) to `0`. The canvas box is
-  the baseline-anchored `[0, given]`, and any content seated outside it (axis labels
-  below `0`, ticks above `given`) is reserved as the per-side overhangs in the render
-  pass.
-- **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the **`min`
-  edge** to `0`. The canvas box _is_ the content's full `[min, max]` extent, so the
-  content fills `[0, size]` exactly and the overhang formulas (`-min`, `max - finalH`)
-  compute `0` for that axis with no special-casing.
+- **Given dimension** → pin the **baseline** (local `0`) at the scope's seat from the
+  start edge. The canvas box is `[0, given]`, and any content seated outside it (axis
+  labels past the start edge, ticks past the end) is reserved as the per-side
+  overhangs in the render pass.
+- **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the
+  content's **start edge** to the frame's start. The canvas box _is_ the content's
+  full extent, so the content fills `[0, size]` exactly and the overhang formulas
+  (`-min`, `max - finalH`) compute `0` for that axis with no special-casing.
 
   Leaving `min` off origin in this case is the
   [#574](https://github.com/gofish-graphics/gofish-graphics/issues/574) double-count:
@@ -707,10 +781,10 @@ return render(
     svgPadding,
     defs,
     rightOverhang: data.rightOverhang,
-    rightContentOverhang: data.rightContentOverhang,
     topOverhang: data.topOverhang,
     leftOverhang: data.leftOverhang,
     bottomOverhang: data.bottomOverhang,
+    hasLegend: data.hasLegend,
   },
   data.child
 );
@@ -718,40 +792,41 @@ return render(
 
 `render()` no longer takes `axes`/`axisFields` or the scale/space context — all
 the chrome is in the laid-out tree by now, so render only needs the computed
-extent and the measured per-side overhangs to size the SVG. It computes the gutter
-reserves, builds the `toPixel` coordinate map (below), lowers the baked tree, and
-paints each item into an `<svg>`.
+extent and the measured per-side overhangs to size the SVG. It computes the SVG's
+size and the `toPixel` coordinate map (below) with `svgFrame`, lowers the baked tree,
+and paints each item into an `<svg>`. `toDisplayList` sizes its viewport with the
+same `svgFrame`.
 
 ### Render Pass 1: Chrome Reservation
 
-**Location**: `src/ast/gofish.tsx` (`render()`)
+**Location**: `src/ast/gofish.tsx` (`svgFrame()`)
 
 `render()` draws **no chart chrome of its own** — no axis lines, tick marks, tick
 labels, ordinal category labels, _or titles_, and no legend swatches. All of it
-was elaborated into ordinary nodes during layout (see Pass 7: Axis Elaboration,
-the title block that follows it, and the legend block) and renders as part of the
+was elaborated into ordinary nodes during layout (see Pass 7: Chrome Elaboration) and renders as part of the
 node tree like any other shape. The former bespoke render-time path (hand-written
 `<text>` title elements behind fixed `Y_TITLE_MARGIN` / `X_TITLE_MARGIN` gutters)
 has been deleted, so `render()` has zero chart-chrome special cases left.
 
 What `render()` _does_ do is size the SVG around the measured extent of that
-chrome, on all four sides. `layout()` hands it five gutter measurements:
+chrome, on all four sides. `layout()` hands it four gutter measurements:
 `leftOverhang`, `bottomOverhang`, and `topOverhang` (negative-space gutters and
 top overflow off the outermost wrapper: tick/label rows, the seated y-title and
-x-title, and any content a constraint seated above the canvas), plus the two
-right-side overhangs — `rightOverhang` (the legend swatch column) and
-`rightContentOverhang` (non-legend content displaced past the right edge). The
-render pass reserves exactly enough on each side:
+x-title, and any content a constraint seated above the canvas), and
+`rightOverhang` (a legend column, or content displaced past the right edge), plus
+`hasLegend`. `svgFrame` reserves exactly enough on each side:
 
 ```typescript
 const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
 const reserve = (o: number) =>
   o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
-const leftReserve = reserve(leftOverhang);
-const bottomReserve = reserve(bottomOverhang);
-const topReserve = reserve(topOverhang);
-// right side: legend column + non-legend displaced content
-// width = leftReserve + width + rightOverhang + reserve(rightContentOverhang)
+const left = reserve(leftOverhang);
+const top = reserve(topOverhang);
+const bottom = reserve(bottomOverhang);
+// the right side: a legend column keeps a full `pad` beyond it
+width = hasLegend
+  ? left + width + rightOverhang + reserve(0)
+  : left + width + reserve(rightOverhang);
 ```
 
 The `o > 0` guard keeps a chart with `padding: 0` and no chrome at zero reserve
@@ -765,15 +840,15 @@ seated past the canvas — marginal histogram bands, wide diagram nodes**), wher
 
 **Why the right side is special.** Left, bottom, and top each have a single kind
 of overhang (chrome or displaced content) and run through `reserve()` uniformly.
-The right side carries _two_ kinds that must be reserved _differently_: a legend
-column historically reserves `legendOverhang + pad`, while displaced content
+The right side carries _two_ kinds that must be reserved _differently_: a chart
+with a legend column historically reserves its overhang plus `pad`, while displaced content
 (like a marginal band) should run through `reserve()` like the other gutters. The
 two cannot be unified by magnitude — a single-row legend overhangs by roughly the
 same few pixels as a wide rightmost x-tick label, yet the legend must be _added_
-to the width while the tick spill must be _absorbed_ into `pad`. Only the
-color-scale flag (`legendAdded`) can tell them apart, so the legend keeps its own
-gated `rightOverhang` term; everything else flows through `rightContentOverhang`
-and `reserve()`. This is the one place a chart-chrome flag still influences
+to the width while the tick spill must be _absorbed_ into `pad`. Only whether
+the root carries a legend can tell them apart, so `layout()` reports `hasLegend`
+with the one right overhang, and `svgFrame` adds it plus `pad` beside a legend and
+runs it through `reserve()` otherwise. This is the one place a chart-chrome flag still influences
 sizing — kept deliberately, because the distinction is semantic, not geometric.
 
 ### Render Pass 2: SVG Container Creation
@@ -782,50 +857,33 @@ sizing — kept deliberately, because the distinction is semantic, not geometric
 
 ```typescript
 <svg
-  width={leftReserve + width + rightOverhang + reserve(rightContentOverhang)}
-  height={topReserve + height + bottomReserve}
+  width={frame.width}
+  height={frame.height}
   xmlns="http://www.w3.org/2000/svg"
 >
 ```
 
 The SVG container is sized to the content (`width`/`height`, read off the
 pre-chrome content node in layout) plus the measured reserves on each side. There is
-**no inner flip `<g>`** — the y-flip is folded into `toPixel` (next pass), so the
-display-list items paint directly under the `<svg>`.
+**no inner flip `<g>`**: layout is already in y-down pixels, so the display-list items
+paint directly under the `<svg>`.
 
 ### Render Pass 3: The Coordinate Fold (`toPixel`)
 
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
-SVG is **y-down** (top-left origin); a continuous-y chart wants **y-up** (bars grow
-upward). The old renderer reconciled the two with two stacked SVG transforms — a
-per-shape `scale(1,-1)` and a root flip `<g transform="scale(1,-1) translate(…)">`.
-Both are folded into an affine map on the render session, but the map is now decided
-**per scope** rather than globally (issue #629): the bake walk tags each baked draw
-entry with the placed y-band it draws in (its `FlipScope`), and the lower driver builds
-that entry's `toPixel` from it:
+SVG is **y-down** (top-left origin), and so is layout: a continuous y grows upward
+because layout placed it that way (see [Axis direction](#axis-direction)). So the map
+on the render session only adds the gutter offset:
 
 ```typescript
-const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-const toPixelFor = (flip?: FlipScope): ToPixel =>
-  flip === undefined
-    ? baseDown // ambient y-down
-    : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]); // y-up
+toPixel: ([gx, gy]) => [gx + left, gy + top], // in svgFrame
 ```
 
-A continuous-y subtree mirrors _y_ about its own band; an ordinal-y neighbor (a heatmap
-beside a bar chart) keeps the ambient y-down map. The **root plot content** mirrors about
-the canvas frame `[0, finalH]` stamped on `contentNode._rootFlipScope` here in
-`layout()` (where `finalH` is known) — the exact frame the old global flip used, so a
-single cohesive chart is pixel-identical; a mixed free-space dashboard flips only its
-continuous subtrees, each about its own band. Chrome (axis titles, legend, colorbar) is
-stamped `_ambientYDown`: the bake box-mirrors its BOX about the plot's frame (so it
-seats beside the flipped plot exactly as before) while its INTERIOR renders y-down —
-legend rows read top→bottom with no `reverse`. Because the flip and the gutter offset live in
-`toPixel`, the lower pass produces items already in **final absolute pixels** — no outer
-flip group, no per-shape transform. `toPixel` is affine, so straight paths stay straight
-(a warped path just maps each control point through it). See
-[Rendering](/internals/core/rendering) for the full per-scope mechanism.
+The lower pass produces items already in **final absolute pixels**: no flip group, no
+per-shape transform. `toPixel` is a translate, so straight paths stay straight (a
+warped path just maps each control point through it). See
+[Rendering](/internals/core/rendering).
 
 ### Render Pass 4: Lowering the Baked Tree
 
@@ -969,7 +1027,7 @@ last artifact still drawn here; they too are now elaborated during layout
 The bespoke legend-rendering pass that used to live here (a `<For>` over
 `scaleContext.unit.color` hand-placing swatches behind a fixed `LEGEND_MARGIN`)
 was **deleted**. Color legends are now elaborated into ordinary GoFish nodes
-during layout (see Pass 7: Axis Elaboration, which the legend pass follows, and
+during layout (see Pass 7: Chrome Elaboration, and
 [Legends](/internals/frontend/legends)), so they render through the normal
 node-tree pass above with no special casing.
 
@@ -1009,7 +1067,7 @@ This creates:
 4. **Underlying Space Resolution**:
    - X-axis: `ORDINAL` (from `spread`)
    - Y-axis: `SIZE` (height is data-driven, no position)
-5. **Axis Elaboration** (if `axes` enabled): the chart is wrapped in layers
+5. **Chrome Elaboration** (axes when `axes` is enabled): the chart is wrapped in layers
    carrying the y tick marks/labels (constraint-pinned at their data values)
    and the per-category x labels (`ref`-bound to the bars)
 6. **Layout Calculation**:
@@ -1022,14 +1080,14 @@ This creates:
 
 1. **Lower**: each bar's `lower()` emits a single `rect` display-list item — a
    linear-space, one-dimension-data-driven bar lowers to an axis-aligned rectangle in
-   absolute pixels (its y-up box mapped through `toPixel`):
+   absolute pixels (its pixel box mapped through `toPixel`):
 
    ```typescript
    // X is aesthetic (positioned by spread), Y is data-driven
    const gxMin = displayDims[0].min ?? 0;
    const width = displayDims[0].size ?? 0; // Inferred by spread
    const height = displayDims[1].size ?? 0; // From data
-   // rectItemFromBox maps the y-up box through toPixel → { kind: "rect", x, y, w, h }
+   // rectItemFromBox maps the box through toPixel → { kind: "rect", x, y, w, h }
    return [
      rectItemFromBox(gxMin, gxMin + width, 0, height, toPixel, { style }),
    ];

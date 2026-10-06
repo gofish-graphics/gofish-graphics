@@ -113,9 +113,7 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             const minY = intrinsicDims?.[1]?.min ?? 0;
             const width = intrinsicDims?.[0]?.size ?? 0;
             const height = intrinsicDims?.[1]?.size ?? 0;
-            // Pixel bbox top-left, flip-AGNOSTIC (see `pixelBox`): under the
-            // y-up flip the top edge is `gyMax`, in y-down free space it is
-            // `gyMin` — the component-wise min picks the right one (issue #143/#16).
+            // Pixel bbox top-left and size (see `pixelBox`).
             const {
               x: bx,
               y: by,

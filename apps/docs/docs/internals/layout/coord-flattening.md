@@ -209,82 +209,34 @@ list](/internals/core/rendering) (the render IR): once each draw entry is a
 self-contained primitive rather than a `{ node, transform }` back-reference, the flat
 list _is_ the display list.
 
-## Tagging each entry with its flip scope (#629)
+## No orientation at bake time
 
-The bake also decides **y-orientation per subtree** (issue #629). `bake(root, ambientFlip)`
-carries a `FlipScope` — the placed y-band `{ baseY, height }` a draw entry mirrors about —
-down the walk, and stamps it on each emitted `DisplayObject` as `d.flip`. The lower driver
-builds that entry's `toPixel` from it (`toPixelFor(d.flip)`), so a continuous-y chart grows
-up while an ordinal-y neighbor stays y-down — see [Rendering](/internals/core/rendering) for
-the map itself.
+The bake carries only translates. Layout already stored every node's geometry in
+y-down pixels (a continuous y grows upward because its operators placed it that way,
+see [Layout & Render Passes](/internals/layout/passes#axis-direction)), so a draw
+entry is just `{ node, transform }` and every boundary lowers its children under one
+composed `toPixel`. This replaced the #629 flip scopes: a `FlipScope` band per entry,
+mirrored at paint, with special cases for chrome, fixed-pitch chains and relational
+marks whose operands sat under a different scope (#657). A `connect` or `tween`
+reads its operands' pixel geometry, so it needs no scope of its own.
 
-The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
+## A coord's handedness
 
-- If a scope is already active (`incomingFlip !== undefined`), **inherit** it. The first
-  scope on a root-to-leaf path wins; descendants never re-open (no double flip).
-- Otherwise a node **opens** a scope about its own placed band (`scopeBox`, or the
-  authoritative `contentNode._rootFlipScope` for the root plot) iff its own resolved y is
-  CONTINUOUS (`declaredYUp`) or it is a `coord`. An ORDINAL / UNDEFINED node declares
-  nothing. `declaredYUp` reads only the node's reported underlying space — it briefly
-  carried a fallback to a privately stashed space so normalize-spine mosaics could open
-  a flip scope, but normalized stacks now report real continuous `[0,1]` share spaces
-  (see [Underlying Space](/internals/core/underlying-space)), so the fallback is gone.
-- `_scopeTransparent` chrome wrappers never open (their bbox is the wrong band); an
-  `_ambientYDown` chrome subtree renders in the ambient frame and is **box-mirrored** about
-  the plot's frame — stamped directly on the chrome nodes by `layout()` as `_chromeFrame`
-  (no walk-time search).
-- **Chained exception.** A target a spread `distribute` chains on y carries
-  `pitchAnchorY` — the anchor the chain fixed, stamped by `lowerDistributePlacement`: the
-  pitch anchor (`"baseline" | "start" | "middle" | "end"`) of a fixed-pitch chain, and
-  `"middle"` for an edge chain, which fixes the whole box (the mirror about a box's middle
-  keeps the box, so signed bars spread down a category axis stay packed edge to edge). A
-  spread separates, so its targets can open their own scopes. A fixed-pitch chain is an **overlay**,
-  not a tiling: the target's allocated band is just the leftover slice (`(h − (n−1)·pitch)/n`)
-  and bears no relation to where its chained anchor sits, so mirroring about it would displace
-  every painted anchor by the slice height (and a connector reading the same rows from outside
-  the scope by a _different_ amount — the ridgeline-wobble bug). Such a scope instead mirrors
-  about the chained anchor itself, a degenerate height-0 band: `y ↦ 2·anchor − y`, the unique
-  mirror that **fixes the chained anchor pointwise**. Painted anchors therefore sit exactly
-  where the placement solver chained them, at exact pitch, and content rises above its
-  baseline (a ridgeline row's silhouette grows up from its own zero line). The layout side
-  accounts for that painted extent too: the space fold attributes the chain's amplitude
-  allowance to the painted side (`chainClaim` in constraints/distribute.ts), the enclosing
-  layer folds each such row's MIRRORED band into its bbox (`paintedYBand` in layer.tsx),
-  and `render()` attributes y overhangs by painted side (an unflipped root's negative min
-  is the painted TOP), so the resulting negative min is reserved as a painted-TOP gutter —
-  the first baseline sits an allowance below the box top, the last
-  baseline lands at the box bottom with the x axis directly beneath it, and no story-side
-  padding is needed. See [Underlying Space](/internals/core/underlying-space) for the
-  per-anchor allowance formulas.
+A coordinate transform is **math-handed**: it maps a point of its coordinate space,
+whose y runs upward, to a point of the plane, whose y also runs upward (polar's θ is
+measured counter-clockwise from 3 o'clock, geo's north is up). The `coord` node is
+where that meets the canvas:
 
-The walk visits every node on the way down, including each plain layer, so every node
-decides its scope with this one rule. Adding a `zAbove` / `zBelow` constraint only
-reorders a layer's children; it cannot change which scope a subtree lowers under.
-
-Two other places have to run the **same** rule so a subtree's orientation is stable no
-matter how it is wrapped:
-
-- **Bake boundaries.** A boundary whose own y space is UNDEFINED (`enclose` / `arrow` /
-  `connect`) would otherwise lower its whole subtree under a single (y-down) map. Instead its
-  child descent (`lowerChildrenOffset`) **re-runs `bake`** on each child — seeded with the
-  boundary's absolute translate (`startTransform`) and its own flip scope (`startFlip`) — and
-  lowers each leaf under that leaf's own scope's `toPixel`. So a continuous-y bar chart inside
-  an `enclose` still flips, while an ordinal neighbor beside it stays y-down. Single-orientation
-  content inherits the boundary's flip and lowers byte-identically to the old single-map descent.
-- **Relational nodes adopt their operands' scope.** A `connect` (the node behind
-  `line`/`ribbon`) or a `tween` (the node behind `time.transition()`) paints its
-  _operands'_ geometry, but it lives as a sibling tier outside
-  their subtrees — so when no scope is active at its own altitude it used to lower unflipped
-  even though its operands mirror inside their own scopes (per-row scopes under a fixed-pitch
-  distribute), drawing the band upside-down and displaced. `relationalOperandFlip` handles the
-  **single-scope case**: when every operand lowers under the same scope (reconstructed by
-  re-running the scope decision along each operand's ancestor path below its common ancestor
-  with the connector), the connector adopts it. Operands under _different_ scopes (or none)
-  keep the old behavior — that multi-scope reconciliation is still the known gap
-  ([#657](https://github.com/gofish-graphics/gofish-graphics/issues/657)).
-  A `tween` that moves a text leaf (a keyframe mark's label) lowers each
-  keyframe's text once, under the tween's own adopted scope, and then only
-  shifts it, so the label and its bar are drawn under the same map.
+- Its interior has y direction `-1` (`axisDirection`), whatever the data type, so an
+  interior layout runs in the coordinate space's own upward order and is stored, like
+  everything else, in y-down numbers (`y = −coordinate y`).
+- Its lower hands its interior `inPixels(transform)`, which reflects y on the way in
+  and on the way out, so each warped primitive lands in y-down pixels. The grid and
+  polar axes it draws itself are computed in the plane and mapped by `planeToPixel`.
+- Its own box has the interior's direction too (`-1`: it is seated from its bottom,
+  like a chart), so it reads and places its children through the ordinary node
+  boundary (see [Axis direction](/internals/layout/passes#axis-direction)), and
+  stores the plane origin (`contentOffset`) in that upward order.
 
 ## Fitting the subtree to the coordinate budget
 
@@ -305,8 +257,8 @@ sits on top of the data. The title is the `axes` option's `y` title,
 else the radial space's measure, else the space's own name for the axis (`r`)
 (#621). There is deliberately no angular title by default: the ring's tick
 labels say what goes around, and a circle has no single natural place for a
-title. The chart-level title pass reads only the root's own space, so it adds
-no second title for a coordinate space. Only
+title. A coordinate space owns no cartesian axes, so it gets no second,
+cartesian title. Only
 DATA-bound channels consume these — a plain number bypasses both (see
 `computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
 mark that says `w: datum(count)` (the θ extent) auto-fits. Because the coord is the

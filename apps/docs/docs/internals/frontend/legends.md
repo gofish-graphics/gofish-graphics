@@ -19,8 +19,8 @@ is _elaborated_ into ordinary GoFish shapes (`rect`, `text`) and operators
 
 ## Why elaborate
 
-The legend was the **second-to-last bespoke piece of chrome** (axis titles
-followed it; both are now elaborated). It used to render as a
+The legend was the **second-to-last bespoke piece of chrome**. Axis titles
+followed it, and both are now elaborated. It used to render as a
 `<For>` over `scaleContext.unit.color` in `gofish.tsx`'s `render()`, hand-placing
 swatches at `translate(width + pad*3, …)` behind a fixed 120px `LEGEND_MARGIN`
 reserved on the right of the SVG. Because it was a render-time fixture rather
@@ -33,130 +33,122 @@ functions a future public API can override.
 
 ## The elaboration pass
 
-`elaborateLegend` (`src/ast/legends/elaborate.tsx`) runs inside `gofish.tsx`'s
-`layout()`, _after_ the axis-elaboration block and after the nice-space capture,
-and is gated on a **resolved color scale** (not on the `axes` option — a legend
-appears whenever a color encoding resolved): a non-empty categorical color map,
-or a continuous color scale. The one thing that can veto it is the chart option
-`legend: false`, which suppresses the pass outright — the scale still colors the
-marks, and since `legendAdded` stays false nothing downstream reserves the
-column's width. That is the whole implementation of the option: a chart with 72
-categories can keep its colors and drop a swatch column that would be taller than
-the chart. It runs after the last `resolveColorScale`,
-consuming the already-resolved `scaleContext.unit` (the `color` map for a
-categorical scale, or the `scaleFn` + `domain` for a continuous one), and
-dispatches to `legendColumn` or `legendColorbar` accordingly.
-Crucially, `resolveColorScale` is **not** re-run on the rewritten tree: legend
-shape fills are literal color strings (each colorbar band is `scaleFn(value)`,
-baked at elaboration time), never `isValue` data references, so the
-color pass has nothing to do with them. After the rewrite the pass runs only a
-memoized `resolveUnderlyingSpace()` (which computes only the newly inserted
-nodes); `resolveNames()` is unnecessary, since the legend subtree carries only
-plain string `.name()`s and its constraint refs were already resolved eagerly
-inside `elaborateLegend`.
+A legend is the outermost ring of the chrome of the node that owns the color
+encoding (see [Axes](/internals/frontend/axes#the-elaboration-pass) for how
+`elaborateChrome` builds the rings). The color scale is resolved once for the
+whole render, by a walk from the chart root (`resolveColorScale`), so the root
+owns it. `layout()` builds `legendRing(scale, root)` when the scale has
+something to show (a non-empty categorical color map, or a continuous color
+scale) and stamps it on the root's chrome request, before chrome elaboration
+wraps any node of the tree; `elaborateChrome` seats it as the root's outermost
+ring. The
+`axes` option plays no part, so a legend appears whenever a color encoding
+resolved.
 
-The pass wraps the chart root in a single `Layer` holding the original content
-plus a swatch column:
+The chart option `legend: false` is the one veto. With it, the root gets no
+legend ring, and nothing reserves the column's width. The scale still colors
+the marks. A chart with 72 categories can keep its colors and drop a swatch
+column that would be taller than the chart.
+
+`legendRing` reads the resolved `scaleContext.unit` (the `color` map for a
+categorical scale, or the `scaleFn` and `domain` for a continuous one) and
+builds `legendColumn` or `legendColorbar` from it. The color scale is resolved
+before chrome is elaborated and is not resolved again afterward. Chrome adds no
+data colors: legend fills are literal color strings (each colorbar band is
+`scaleFn(value)`, baked at elaboration time), never `isValue` data references.
+
+The ring holds the box inside it (the root with its axes and titles) plus the
+legend:
 
 ```
-root = Layer([ content.name("__legendContent"), legendColumn(colorMap) ])
+root = Layer([ titled.name("__legendContent"), legend ])
 ```
 
 `legendColumn` is a `Spread({ dir: "y" })` of one row per color-map entry. Each
 `legendRow` is a `Spread({ dir: "x" })` of a 10×10 `Rect` swatch and a 10px gray
-`Text` label. The column entries always read top→bottom, but how the spread gets
-there depends on the render orientation (issue #143/#16). It takes
-`reverse: yUp`: under the y-UP chart flip a `Spread({ dir: "y" })` lays children
-bottom→top (the first child gets the smallest y), so the first color-map entry
-must render _last_ to land at the top; in y-DOWN free space the natural order
-already reads top→bottom, so no reverse. A continuous (gradient) colorbar is
-likewise orientation-aware — it is built in fixed y-up logical coordinates (band
-0 at the base, domain max at the top), and for a y-down render it flips which
-value each band/tick shows (and the tick pixel via `valueToBarY`) so a sequential
-scale still reads max-at-top either way, without disturbing the band-overlap
-seam logic.
+`Text` label. The column's y is ordinal, so the spread reads top-down (see
+[Axis direction](/internals/layout/passes#axis-direction)): the entries are listed
+top to bottom in the order they are given.
+
+The order is the one the plot lays its color series out in down the screen,
+when it lays them out along y, and the color scale's own otherwise. The legend
+does not work that out from the shape of the plot. Each operator that chains its parts
+along y (a stack or a spread, a `distribute` on y) reports the keys of its parts
+in the order they read down the screen (`keysDownTheScreen` in
+`constraints/distribute.ts`): its placement order, reversed when its y grows
+upward, because such a chain lays its first part at the bottom. A stack reports
+its chain whatever the signs of its parts. Inside a coordinate space the chain's
+y is a coordinate of that space (a polar radius), not the screen's, so it reports
+no order. The legend links to its series structurally, by field: the color scale
+records the fields it encodes, and an operator that splits its data by a field
+records that field on each of its parts (`__splitBy`). The legend takes the
+chain of the outermost operator (breadth first, `seriesDownTheScreen`) that
+splits by a field the color scale encodes and lays its parts out along y. So a
+stacked bar chart lists its last series first, the one at the top of each bar. The legend follows the plot; the plot's stacking rule never
+reads the legend.
+
+A continuous (gradient) colorbar is a continuous value axis, so it grows upward:
+the domain max is at the top. Its bands are listed from the top, each showing the
+value at its center, and each tick sits `valueToPx(v)` above the bar's base.
 
 ### The three constraints
 
-The wrapper is wired with three constraints, and **the order matters** because
-the first one places the anchor the other two read:
+The ring is wired with three constraints, and **the order matters** because
+the first one places the box the other two read:
 
-1. `position({ x: 0, y: 0, anchor: "baseline" })` on the content — a
-   literal-pixel pin at the origin meaning "stay exactly where you were laid
-   out". The content is referenced by the `distribute` below, and a
-   constraint-referenced child skips the layer's phase-1 baseline placement
-   (placement is first-write-wins), so the pin re-states that placement
-   explicitly. It pins the **baseline** (the local 0 point), not the
-   bounding-box corner, so the content never moves regardless of axis-label
-   overhang.
-2. `distribute({ dir: "x", spacing: 20 }, [content, column])` — seats the column
-   just right of the content's **full** bounding box, including its axis labels.
-3. `align({ y: yUp ? "end" : "start" }, [content, column])` — top-aligns the
-   column with the content top. "Top" is the far edge in y-up (`end`) but the
-   near edge in y-down free space (`start`), so the anchor follows the render
-   orientation; otherwise a y-down chart (e.g. a heatmap) seats its legend at the
-   bottom (issue #143/#16).
+1. `position({ x: 0, y: 0, anchor: "baseline" })` on the box inside, a
+   literal-pixel pin at the origin that means "stay exactly where you were laid
+   out". Every ring starts with this pin (`wrapRing`). The box is referenced by
+   the `distribute` below, and a constraint-referenced child skips the layer's
+   phase-1 baseline placement (placement is first-write-wins), so the pin
+   states that placement explicitly. It pins the baseline (the local 0 point),
+   not the bounding-box corner, so the box never moves however far its axis
+   labels reach.
+2. `distribute({ dir: "x", spacing: 20 }, [box, column])` seats the column just
+   right of the box, which includes the axis labels and titles.
+3. `align({ y: top }, [box, column])` top-aligns the column with the box. The
+   constraint runs in the ring's axis order, so "top" is the `end` of a y that
+   grows upward and the `start` of one that reads top-down (a heatmap):
+   `orientSide("start", wrapperDirection(root))`.
 
-The wrapper inherits the wrapped node's `key` and `_name` (moved off the content
-via the identity dance), so faceting, refs, and `selectAll` keep resolving to the
-wrapped node.
+The outermost ring inherits the root's `key` and `_name`, so faceting, refs, and
+`selectAll` keep resolving to it.
 
-### Why the wrapper preserves the content's spaces
+### Why the ring preserves the content's spaces
 
-Inserting a `Layer` around the content could in principle disturb the chart's
-inferred underlying space — and the nice spaces captured just above this pass
-must stay valid. They do, because of `unionChildSpaces`' rule that an
-**UNDEFINED** sibling contributes "no opinion" and is ignored in the all-SIZE
+Inserting a `Layer` around the content could in principle change the chart's
+inferred underlying space. It does not, because of `unionChildSpaces`' rule that
+an **UNDEFINED** sibling contributes "no opinion" and is ignored in the all-SIZE
 gate (the same way ORDINAL siblings are filtered). The swatch column resolves to
 UNDEFINED on both axes (fixed-pixel shapes, no data-driven extent), so the
-wrapper's space is just the content's space. See
+ring's space is the content's space. See
 [Underlying Space](/internals/core/underlying-space).
 
 ## Sizing: measured overhang, not a margin
 
 The fixed 120px `LEGEND_MARGIN` is gone. The canvas size and the legend
-reservation are read off **two different nodes**, which is what keeps the
-content centered and the legend reserved separately:
+reservation are read off two different boxes:
 
-- `finalW`/`finalH` (the canvas) read off the **content node** — the original
-  pre-wrap node, captured as `contentNode` _before_ both the title wrap and the
-  `elaborateLegend` wrap. So the canvas is exactly the content's extent, never
-  inflated by a title or a legend.
-- `rightOverhang` reads off the **wrapper** (`child`), whose bounding box
-  includes the seated swatch column, and subtracts the content width:
+- `finalW`/`finalH` (the canvas, when `w`/`h` are omitted) are read off the
+  root's box with axes, `chrome.withAxes`. A title or a legend never inflates
+  the inferred canvas.
+- The right overhang is read off the outermost ring (`child`), whose box
+  includes the legend column: `child.dims[0].max - finalW`.
 
-```ts
-const finalW = finalDim(0, w); // off contentNode
-const rightOverhang = legendAdded ? legendOverhang(child, finalW) : 0;
-```
-
-`legendOverhang` (in `legends/elaborate.tsx`, next to the constraint that
-creates the overhang) returns `wrapper.dims[0].max - finalW`, which is exactly
-the `LEGEND_CONTENT_GAP` plus the swatch-column width, so the render pass
-reserves precisely the legend on the right of the SVG. The measurement is gated
-on an explicit `legendAdded` boolean rather than `child !== contentNode`:
-because the axis-title pass _also_ wraps `child`, the identity check would
-wrongly fire on a titles-only chart and measure a title gutter as a legend
-overhang. With the boolean, legend-free charts keep byte-identical SVG widths.
-
-Reading `finalW`/`finalH` off the content (not any wrapper) matters most when
-`w`/`h` are **omitted**: the inferred graphic size is the content's computed
-extent (#494's `finalDim` readback), and the title and legend are then reserved
-on top of it via the measured gutters — rather than a long title or a tall
-legend inflating the inferred size.
+The render pass reserves the right overhang of a chart with a legend as the
+overhang plus a full `pad`, and that of a chart without one through `reserve()`
+like the other gutters. The two overlap in size (a single-row legend can
+overhang as little as a wide x tick label), so `layout()` tells them apart by
+whether the root carries a legend, not by size. The title gutters (left for the
+rotated y title, bottom for the x title) are reserved as `leftOverhang` and
+`bottomOverhang`, measured off the outermost ring. See
+[Layout & Render Passes](/internals/layout/passes).
 
 ## Interplay with axis titles
 
-Axis titles are elaborated just before the legend (see
-[Axes](/internals/frontend/axes)), so the two wraps **nest**: the title wrap goes
-on first, then `elaborateLegend` wraps that titled subtree. This ordering is what
-lets the legend seat itself off the content's _full, titled_ bbox while the title
-centering never sees the legend column. `contentNode` stays pointed at the
-pre-title, pre-legend content throughout, so neither wrapper feeds back into the
-inferred canvas. The title gutters (left for the rotated y-title, bottom for the
-x-title) are reserved separately from `rightOverhang` as `leftOverhang` /
-`bottomOverhang`, measured off the outermost wrapper. See
-[Layout & Render Passes](/internals/layout/passes).
+The title ring is inside the legend ring (see
+[Axes](/internals/frontend/axes)). So the legend is seated off the box with the
+titles, and the title centering never sees the legend column.
 
 This relies on the content node reporting a complete, correctly-positioned
 bounding box. Most nodes do, but the polar `coord` node historically emitted an
@@ -178,8 +170,8 @@ chosen to match the previous bespoke styling.
 `legendColorbar` builds the bar as a `layer` of fixed-pixel shapes —
 `BAND_COUNT` thin band `Rect`s (each filled `scaleFn(value)`) plus a tick mark +
 label per d3 tick — each placed by a literal-pixel `Constraint.position` in the
-bar's own y-up frame (value `v` → `t·BAR_HEIGHT` from the bottom, so the domain
-max sits at the top). The layer's bbox is the union of those shapes, so the
+colorbar's y-down layer (value `v` sits `t·BAR_HEIGHT` above the bar's base, so the
+domain max is at the top). The layer's bbox is the union of those shapes, so the
 colorbar is measured by normal layout exactly like the swatch column.
 
 ## Limitations

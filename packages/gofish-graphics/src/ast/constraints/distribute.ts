@@ -20,6 +20,11 @@ import {
   hasOrigin,
 } from "../underlyingSpace";
 import { Extent, impliedExtent } from "../extent";
+import {
+  inCoordinateSpace,
+  yDirection,
+  type FramedNode,
+} from "../axisDirection";
 import * as Monotonic from "../../util/monotonic";
 import * as Interval from "../../util/interval";
 
@@ -124,6 +129,49 @@ export function distributeChildrenInPlacementOrder(
   return constraint.order === "reverse" ? [...children].reverse() : children;
 }
 
+/** The minimal node shape {@link keysDownTheScreen} reads (duck-typed: a
+ *  `GoFishNode`, without importing it). */
+type DistributingNode = FramedNode & {
+  constraints: readonly { type: string }[];
+  children: readonly unknown[];
+};
+
+/**
+ * The keys of the parts a node distributes along y, in the order they read
+ * down the screen (top to bottom), or undefined when the node distributes
+ * nothing along the screen's y. This is the operator's own fact, from its
+ * placement order and its axis direction: a chain along a y that reads
+ * top-down lays its parts out in placement order down the screen, and one
+ * along a y that grows upward lays them out from the bottom, so they read
+ * down the screen in reverse. A stack's parts follow its chain whatever
+ * their signs (a negative part reaches back from where it is laid).
+ *
+ * Inside a coordinate space the y is a coordinate of the space (a polar
+ * radius), not the screen's, so a chain there has no order down the screen.
+ * A part without a key leaves the order undefined. A legend lists its
+ * entries in this order when they are a chain's parts.
+ */
+export function keysDownTheScreen(
+  node: DistributingNode
+): string[] | undefined {
+  const chain = node.constraints.find(
+    (c): c is DistributeConstraint =>
+      c.type === "distribute" && (c as DistributeConstraint).dir === "y"
+  );
+  if (chain === undefined || inCoordinateSpace(node)) return undefined;
+  const byName = new Map<string, unknown>();
+  for (const child of node.children) {
+    const name = (child as { _name?: unknown })._name;
+    if (typeof name === "string") byName.set(name, child);
+  }
+  const keys = distributeChildrenInPlacementOrder(chain).map(
+    (ref) => (byName.get(ref.name) as { key?: string } | undefined)?.key
+  );
+  if (keys.some((k) => k === undefined)) return undefined;
+  const down = keys as string[];
+  return yDirection(node) === -1 ? [...down].reverse() : down;
+}
+
 export function distributePlacementAnchors({
   anchor,
   glue,
@@ -163,24 +211,6 @@ export function lowerDistributePlacement(
   const ordered = distributeChildrenInPlacementOrder(constraint, children);
   if (ordered.length === 0) return;
   const anchors = distributePlacementAnchors(constraint);
-  // A spread chain on y places its targets itself: their allocated y bands are
-  // just slices of the spread's height, unrelated to where the chain put
-  // them. Stamp the anchor the chain fixed on each target so a target that
-  // later opens its own y-up flip scope mirrors about that anchor (see
-  // `Placeable.pitchAnchorY` and `scopeBox` in coordinateTransforms/bake.ts),
-  // keeping the painted targets exactly where this chain solved them. A
-  // fixed-pitch chain fixes its anchor (an overlay, at exact pitch); an edge
-  // chain fixes the whole box, which a mirror about its middle keeps. (A
-  // stack's parts never open their own scope: the stack is one continuous
-  // space and flips as a whole.)
-  if (constraint.dir === "y" && !constraint.glue) {
-    for (const child of ordered) {
-      const target = targets.get(child.name);
-      if (target)
-        target.pitchAnchorY =
-          constraint.anchor === "edge" ? "middle" : constraint.anchor;
-    }
-  }
   for (let i = 1; i < ordered.length; i++) {
     // A chain edge whose endpoints both arrived pre-positioned is a consistency
     // check, not an owning relation: confluence governs the unknown positions.
@@ -402,12 +432,13 @@ const STACK: ChainRule = {
 
 /** A spread chain (a non-glued distribute): `"edge"` lays each part's box
  *  `spacing` after the previous one's end; a fixed-pitch anchor lays each
- *  part's anchor `spacing` from the previous one's. A pitched chain steps
- *  down the axis, as its rows read: content above the anchor (`start`,
- *  `baseline`) rises over the rows chained after it, and content below it
- *  (`end`) hangs under the rows chained before it. A baseline-anchored part
- *  keeps its signed sides about its baseline; any other part is its box,
- *  seated by its anchor. */
+ *  part's anchor `spacing` from the previous one's. A pitched chain's claim
+ *  steps against its parts' own growth, as its rows read: content above the
+ *  anchor (`start`, `baseline`) rises over the rows chained after it, and
+ *  content below it (`end`) hangs under the rows chained before it. That is a
+ *  ridgeline: a spread that reads top-down whose rows grow upward (see
+ *  `axisDirection.ts`). A baseline-anchored part keeps its signed sides about
+ *  its baseline; any other part is its box, seated by its anchor. */
 const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
   seat: (A, part) => {
     const w = box(A, part);

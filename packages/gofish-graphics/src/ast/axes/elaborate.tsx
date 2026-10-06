@@ -6,11 +6,16 @@ import { GoFishNode } from "../_node";
 import { Rect } from "../shapes/rect";
 import { Text } from "../shapes/text";
 import { Spread } from "../graphicalOperators/spread";
-import { layer } from "../graphicalOperators/layer";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
 import type { AlignAnchor } from "../constraints/shared";
-import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
+import {
+  breadthFirst,
+  fmtNum,
+  wrapPreservingIdentity,
+  wrapRing,
+  type ChromeRing,
+} from "../elaborationUtils";
 import { datum } from "../data";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
@@ -23,8 +28,31 @@ import {
   axisOver,
   niceContinuous,
   originIs,
+  spaceMeasure,
 } from "../underlyingSpace";
-import type { AxisOptions } from "../gofish";
+import type { AxesOptions, AxisOptions } from "../gofish";
+import {
+  orientSide,
+  wrapperDirection,
+  type AxisDirection,
+} from "../axisDirection";
+
+/**
+ * The edge an axis on `dim` seats on when its `side` is not given, in the
+ * owner's axis order (`"start"` or `"end"`). A continuous x axis sits at the
+ * bottom of the screen (`crossDirection` is its owner's y direction). Every
+ * other axis takes `"start"` in
+ * its frame: a y axis sits on the left, and a category x axis sits at the
+ * start of its y (the bottom of a bar chart, the top of a heatmap).
+ */
+export function defaultAxisSide(
+  dim: 0 | 1,
+  space: UnderlyingSpace | undefined,
+  crossDirection: AxisDirection
+): "start" | "end" {
+  if (dim === 1 || space === undefined || !isCONTINUOUS(space)) return "start";
+  return orientSide("end", crossDirection);
+}
 
 /**
  * Axis elaboration: turn an inferred axis into ordinary GoFish shapes +
@@ -57,20 +85,24 @@ const TICK_COUNT = 10;
 const LABEL_FONT_SIZE = 10;
 const AXIS_COLOR = "gray";
 
+/** Per-dim [x, y] axis edge, in the owner's axis order; undefined = none
+ *  given (an option) or no axis on that dim (an owner's result). */
+type AxisSides = ["start" | "end" | undefined, "start" | "end" | undefined];
+
 export type AxisElaboration = {
   /** Shapes to add as siblings of the content inside the wrapping layer. */
   nodes: GoFishNode[];
   /** Builds this axis's constraints from the layer's name→ref map. */
   constraints: (g: Record<string, any>) => any[];
-  /** The node a chart-level axis title should center on — the axis line.
-   *  Position-like axes (continuous/difference) set it; ordinal axes leave it
-   *  unset (they're just a label row, with no spanning line to center on, so
-   *  the title pass falls back to the plot bbox). */
+  /** The node the axis's title centers on — the axis line. Position-like
+   *  axes (continuous/difference) set it; ordinal axes leave it unset (they're
+   *  just a label row, with no spanning line to center on, so the title
+   *  centers on the owner's content box). */
   anchor?: GoFishNode;
   /** Where the content's baseline sits along this axis, in the axis's own
    *  data frame: a delta axis has no data 0, so its frame is its own, and it
    *  centers the content in its niced width. Unset: the content sits as its
-   *  type says (see the inner tier in `elaborateAxes`). */
+   *  type says (see the axis gutters in `elaborateChrome`). */
   contentAt?: { dim: 0 | 1; at: number };
 };
 
@@ -117,12 +149,13 @@ export const labelRowSettingsFromAngles =
  * is the point placed at the band/tick center, not the rotated bbox's
  * middle. `trackAlign` picks the `Constraint.align`/`Spread` anchor mode
  * along the TRACK axis (the axis's own direction — horizontal for an
- * x-axis); `textAnchor` picks which end of the (pre-rotation) label sits at
- * its own local origin, i.e. the point `"baseline"` alignment pins (see
- * `_node.ts`'s `_pinAnchor`: a `"baseline"` anchor places a node's local
- * coordinate 0, not a bbox edge). `Text`'s rotation is applied about that
- * same local origin (`text.tsx`), so pinning it IS pinning the rotation
- * pivot.
+ * x-axis); `textAnchor` picks which end of the (pre-rotation) label is its
+ * x origin, i.e. the x that `"baseline"` alignment pins (see `_node.ts`'s
+ * `_pinAnchor`: a `"baseline"` anchor places a node's local coordinate 0,
+ * not a bbox edge). `Text`'s rotation is applied about a point with that
+ * same x (`text.tsx`), so on an x track pinning it IS pinning the rotation
+ * pivot. (A text's y origin is its box's start edge, like a rect's, so on a
+ * y track the pin lands the rotated box's start edge instead.)
  *
  * Rule (screen-clockwise angle `a`; a bottom x-axis is the easiest intuition,
  * but the derivation only depends on the label's own local frame, not which
@@ -140,8 +173,8 @@ export const labelRowSettingsFromAngles =
  *    `textAnchor: "end"` — the pivot is the LAST character's origin, so the
  *    label hangs from its end (matplotlib's `ha="right"` look).
  *
- * Caveat, deliberately accepted: the label's local origin sits on its
- * baseline (`dominantBaseline: "auto"`, y=0 at the baseline), not the
+ * Caveat, deliberately accepted: the label's pivot sits on its
+ * baseline (`dominantBaseline: "auto"`), not the
  * ascender-TOP corner a literal "nearest point on the rotated bbox" geometric
  * derivation would use. The two differ by `ascent·sin(a)` — a couple of
  * pixels at these font sizes/angles — which the constraint system can't
@@ -151,18 +184,17 @@ export const labelRowSettingsFromAngles =
  * extra machinery.
  */
 type LabelRotation = {
-  /** The (frame-resolved) degrees to pass to `Text`'s `rotate`. */
+  /** The degrees to pass to `Text`'s `rotate` (screen-clockwise). */
   rotate: number;
   trackAlign: "middle" | "baseline";
   textAnchor: "start" | "end";
 };
 
 function resolveLabelRotation(
-  a: number | undefined,
-  frameFlips: boolean
+  a: number | undefined
 ): LabelRotation | undefined {
   if (!a) return undefined;
-  const rotate = frameFlips ? -a : a;
+  const rotate = a;
   if (Math.abs(a) === 90) {
     return { rotate, trackAlign: "middle", textAnchor: "start" };
   }
@@ -185,11 +217,14 @@ const tickRect = (dim: 0 | 1): GoFishNode =>
       : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
   );
 
-/** A short label+tick mark pair, stacked along the cross axis. The tick is the
- *  INNER element (facing the content) and the label the outer one, so the order
- *  follows `side`: with the axis on the near/start side the inner edge is the
- *  cross-`end`, so `[label, tick]`; on the far/end side the inner edge is the
- *  cross-`start`, so `[tick, label]`.
+/** A short label+tick mark pair, spread along the cross axis. The tick is the
+ *  INNER element (facing the content) and the label the outer one. A spread
+ *  reads in pixel order (top-down, left-to-right; see `axisDirection.ts`), so
+ *  the order follows where the axis sits on SCREEN: an axis at the cross
+ *  axis's pixel start (top or left) has the content after it, so
+ *  `[label, tick]`; an axis at the pixel end has it before, so `[tick, label]`.
+ *  `side` is in the owner's axis order, and `crossDirection` (the owner's
+ *  direction on the cross axis) turns it into the screen side.
  *
  *  Used only for the "middle" hanging-point case (unrotated / ±90°, see
  *  `LabelRotation`'s doc comment) — `elaborateContinuousAxis` bypasses this
@@ -210,9 +245,11 @@ function tickMark(
   dim: 0 | 1,
   label: string,
   name: string,
-  side: "start" | "end" = "start",
+  side: "start" | "end",
+  crossDirection: AxisDirection,
   labelAngle?: number
 ): GoFishNode {
+  const atPixelStart = side === orientSide("start", crossDirection);
   const text = Text({
     text: label,
     fontSize: LABEL_FONT_SIZE,
@@ -228,7 +265,7 @@ function tickMark(
       spacing: LABEL_TICK_GAP,
       alignment: "middle",
     },
-    side === "end" ? [tick, text] : [text, tick]
+    atPixelStart ? [text, tick] : [tick, text]
   ).name(name) as GoFishNode;
 }
 
@@ -432,7 +469,7 @@ function positionAxis(opts: {
     return cs;
   };
 
-  // `line` is the title anchor: a chart-level title for this dim centers on the
+  // `line` is the title anchor: the axis's title centers on the
   // axis line's span (which may be narrower than the plot — a difference axis
   // spans the data width, a facet-owned axis spans its facet).
   return {
@@ -462,8 +499,9 @@ function elaborateContinuousAxis(
   dim: 0 | 1,
   nice: [number, number],
   prefix: string,
-  crossFloor?: number,
-  side: "start" | "end" = "start",
+  crossFloor: number | undefined,
+  side: "start" | "end",
+  crossDirection: AxisDirection,
   labelRotation?: LabelRotation,
   mirrored = false
 ): AxisElaboration {
@@ -480,7 +518,14 @@ function elaborateContinuousAxis(
     tickNode: oblique
       ? (_v, _i, name) => tickRect(dim).name(name)
       : (v, _i, name) =>
-          tickMark(dim, tickText(v), name, side, labelRotation?.rotate),
+          tickMark(
+            dim,
+            tickText(v),
+            name,
+            side,
+            crossDirection,
+            labelRotation?.rotate
+          ),
     tickLabel: oblique
       ? (v, _i, name) => {
           const label = Text({
@@ -637,18 +682,13 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
   // the real (later-sibling) band — collapsing every label past the first onto
   // one slot. Level-order makes "shallower wins" hold globally, not just within
   // a subtree, so the bands always claim their keys before any datum node.
-  const queue: GoFishNode[] = [node];
-  while (queue.length > 0) {
-    const n = queue.shift()!;
+  for (const n of breadthFirst(node)) {
     if (n._ordinalKeyMap) {
       for (const k of Object.keys(n._ordinalKeyMap)) {
         if (!(k in out)) out[k] = n._ordinalKeyMap[k];
       }
     }
     if (n.key !== undefined && !(n.key in out)) out[n.key] = n;
-    n.children.forEach((c) => {
-      if (c instanceof GoFishNode) queue.push(c);
-    });
   }
   return out;
 }
@@ -665,16 +705,14 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  *
  * `tierCounts` is the per-dim count of ordinal axis tiers already elaborated
  * BELOW this node in the subtree (0 = none yet, i.e. this node — if it owns an
- * ordinal axis — is the innermost tier); see `elaborateAxes` for how it's
+ * ordinal axis — is the innermost tier); see `elaborateChrome` for how it's
  * bubbled up. The returned `tierCounts` adds one per dim this node claimed an
  * ordinal axis on, so an ancestor owning the same dim's outer tier reads the
  * right index for a per-tier `labelAngle` array.
  */
 function elaborationsFor(
   node: GoFishNode,
-  sides: ["start" | "end" | undefined, "start" | "end" | undefined],
-  yUp: boolean,
-  underCoord: boolean,
+  sides: AxisSides,
   labelSettings: LabelRowSettings = () => undefined,
   tierCounts: [number, number] = [0, 0]
 ): {
@@ -684,9 +722,11 @@ function elaborationsFor(
    *  node owns; undefined where the node owns no position-like axis on that dim. */
   anchors: [GoFishNode | undefined, GoFishNode | undefined];
   /** Per-dim [x, y]: did this node own (and elaborate) an axis on that dim at
-   *  all — including an ordinal one, which contributes no `anchors` entry. An
-   *  owner CLAIMS the dim for title-anchoring purposes (see `elaborateAxes`). */
+   *  all — including an ordinal one, which contributes no `anchors` entry. */
   owned: [boolean, boolean];
+  /** Per-dim [x, y]: the edge each owned axis seats on, in the node's axis
+   *  order; undefined on a dim the node owns no axis on. */
+  sides: AxisSides;
   /** Per-dim ordinal-tier count, incremented for each dim this node claimed
    *  an ordinal axis on (see the doc comment above). */
   tierCounts: [number, number];
@@ -698,6 +738,7 @@ function elaborationsFor(
       refBased: [],
       anchors: [undefined, undefined],
       owned: [false, false],
+      sides: [undefined, undefined],
       tierCounts,
     };
   // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
@@ -737,33 +778,13 @@ function elaborationsFor(
     undefined,
   ];
   const owned: [boolean, boolean] = [false, false];
-  // A continuous/difference X-axis with NO explicit `side` renders at the visual
-  // BOTTOM by default (#143/#16/#629). It sits at its cross (y) axis's low edge;
-  // which abstract edge that is depends on whether this owner's frame y-flips —
-  // CONTINUOUS cross y (a scatter's value axis), a global `yUp`, or a `coord`
-  // ancestor (a polar plot) all mirror the frame, so the near "start" edge lands
-  // at the bottom; otherwise (a horizontal bar's ordinal category y, a faceted
-  // stack's ordinal facet y) the far "end" edge is the bottom. An EXPLICIT `side`
-  // is honored literally (frame-relative: `start`=near, `end`=far) — it is the
-  // override, so a caller can still force the far edge. The Y-axis (dim 1) keeps
-  // its `start` (left) default; the vertical flip never moves it horizontally.
-  const axisSide = (dim: 0 | 1): "start" | "end" => {
-    const userSide = sides[dim];
-    if (dim !== 0) return userSide ?? "start";
-    if (userSide !== undefined) return userSide;
-    const crossFlips = yUp || underCoord || isCONTINUOUS(space[cross(dim)]);
-    return crossFlips ? "start" : "end";
-  };
-  // `labelAngle` is authored screen-clockwise (Vega-Lite semantics), but the
-  // `Text` `rotate` prop is applied in this node's own y-up WORLD frame and
-  // gets negated at render time when that frame flips (see `text.tsx`'s
-  // `flips ? -rotate : rotate`). This node's frame flips iff a y-up mirror
-  // scope is active over it — the exact same predicate `axisSide` uses for
-  // its own cross-flip check (`yUp || underCoord || isCONTINUOUS(space[1])`,
-  // dim-independent since it's really "does THIS node's y mirror") — so we
-  // pre-negate here to cancel that render-time negation and land back on the
-  // literal screen angle regardless of the frame's orientation.
-  const frameFlips = yUp || underCoord || isCONTINUOUS(space[1]);
+  // Which edge each axis seats on, in the axis order of the wrapper it is
+  // seated in: the explicit `side`, else the default (`defaultAxisSide`).
+  // The direction of the axis across `dim`, in that wrapper: only y has one.
+  const crossDirection = (dim: 0 | 1): AxisDirection =>
+    dim === 0 ? wrapperDirection(node) : 1;
+  const axisSide = (dim: 0 | 1): "start" | "end" =>
+    sides[dim] ?? defaultAxisSide(dim, spaceFor(dim), crossDirection(dim));
   // `tier` is 0 for a continuous/difference axis (always single-tier) or the
   // bubbled-up ordinal tier index (0 = innermost) for an ordinal one. Returns
   // the full hanging-point descriptor (see `LabelRotation`), not just the
@@ -779,7 +800,7 @@ function elaborationsFor(
         `axis elaboration: a ${row.kind} label row cannot be hidden`
       );
     }
-    return resolveLabelRotation(setting, frameFlips);
+    return resolveLabelRotation(setting);
   };
   const outTierCounts: [number, number] = [...tierCounts];
   for (const dim of [0, 1] as (0 | 1)[]) {
@@ -795,6 +816,7 @@ function elaborationsFor(
         prefix,
         crossFloor,
         axisSide(dim),
+        crossDirection(dim),
         resolvedLabelRotation({ dim, kind: "continuous", tier: 0 }),
         s.mirrored === true
       );
@@ -812,8 +834,6 @@ function elaborationsFor(
       anchors[dim] = e.anchor;
     } else if (isORDINAL(s)) {
       keyMap ??= collectKeyMap(node);
-      // Ordinal axes keep the `start` default (they follow the content's own flip
-      // like a category row); only continuous axes default to the bottom.
       const tier = outTierCounts[dim];
       const row: LabelRow = { dim, kind: "ordinal", tier };
       // A hidden row draws nothing and takes no space, but the node still
@@ -825,7 +845,7 @@ function elaborationsFor(
             s,
             keyMap,
             prefix,
-            sides[dim] ?? "start",
+            axisSide(dim),
             resolvedLabelRotation(row),
             tier
           )
@@ -839,33 +859,55 @@ function elaborationsFor(
     if (dim === 0) node.axis.x = undefined;
     else node.axis.y = undefined;
   }
-  return { constrained, refBased, anchors, owned, tierCounts: outTierCounts };
+  return {
+    constrained,
+    refBased,
+    anchors,
+    owned,
+    sides: [
+      owned[0] ? axisSide(0) : undefined,
+      owned[1] ? axisSide(1) : undefined,
+    ],
+    tierCounts: outTierCounts,
+  };
 }
 
+// ── Chrome elaboration ───────────────────────────────────────────────────────
+//
+// Chrome is everything drawn ABOUT a node rather than from its data: its axes
+// (gutters of ticks, rows of category labels), their titles, and a legend.
+// Each node that owns some elaborates it around itself, as rings of ordinary
+// shapes + constraints. Every ring is a `layer` holding the rings inside it
+// plus that ring's shapes, so each ring seats its shapes past everything
+// inside it:
+//
+//   content                  the node itself, without chrome
+//   ↳ axis gutters           continuous/difference axes
+//   ↳ category label rows    ordinal axes, tracked by `ref`
+//   ↳ axis titles            centered on the axis they name
+//   ↳ legend                 beside all of the above
+//
+// The node's identity (name, key, visibility) moves onto the outermost ring,
+// which records the boxes inside it as `chrome` (see `GoFishNode.chrome`).
+
+/** How the chrome a chart asks for is drawn, beyond the axes `resolveAxes`
+ *  assigned and the requests stamped on nodes (`GoFishNode._chromeRequest`). */
+export type ChromeOptions = {
+  /** Per-dim axis `side`; undefined = the axis's default edge. */
+  sides?: AxisSides;
+  /** How each axis label row is drawn. */
+  labelSettings?: LabelRowSettings;
+};
+
 /**
- * Recursively elaborate axes. Children are processed first (bottom-up) so an
+ * Recursively elaborate chrome. Children are processed first (bottom-up) so an
  * inner facet's axis is wrapped before its parent reads keys; the wrapper
  * inherits the wrapped node's `key`/`_name` so faceting and external refs keep
  * resolving to it.
  *
- * Alongside the elaborated tree it bubbles up `titleAnchors` — the per-dim
- * [x, y] axis-line node a chart-level title should center on. Anchors flow up
- * from the children (a child's anchor fills a still-empty dim slot), then any
- * dim this node OWNS an axis on is CLAIMED outright: the slot is overwritten
- * with this node's own anchor — the axis line for a position-like axis, or
- * `undefined` for an ordinal one (no spanning line; the title pass falls back
- * to the plot node, i.e. the span of the whole ordinal group). Because the
- * walk is bottom-up (children first, then self), the ROOT-most owner of a dim
- * wins — which is what a chart-level title should describe. The clearing
- * matters for faceted charts: the root owns the ordinal facet axis while each
- * facet owns a continuous axis on the SAME dim, and without the claim the
- * first facet's line would bubble past the root and drag the title onto one
- * subchart.
- *
- * Known limitation: multiple same-dim axis owners across SIBLING facets are
- * ambiguous here — they overwrite the same slot, so whichever sibling is
- * visited last wins. We don't try to disambiguate (a per-facet title is out of
- * scope); the chart-level title just tracks one of them.
+ * What a node owns: the axes `resolveAxes` assigned it, and what its
+ * `_chromeRequest` asks for: a title on each of those axes that the `axes`
+ * options name, and a legend ring.
  *
  * It also bubbles up `tierCounts` — the per-dim count of ordinal axis tiers
  * elaborated so far in this subtree — purely as an output (nothing is passed
@@ -877,49 +919,23 @@ function elaborationsFor(
  * the right entry of a per-tier `labelAngle` array. Sibling subtrees don't
  * interfere: each call only sees counts folded from ITS OWN children.
  */
-export async function elaborateAxes(
+export async function elaborateChrome(
   node: GoFishNode,
-  sides: ["start" | "end" | undefined, "start" | "end" | undefined] = [
-    undefined,
-    undefined,
-  ],
-  yUp = false,
-  underCoord = false,
-  labelSettings: LabelRowSettings = () => undefined
+  options: ChromeOptions = {}
 ): Promise<{
   node: GoFishNode;
   changed: boolean;
-  titleAnchors: [GoFishNode | undefined, GoFishNode | undefined];
   tierCounts: [number, number];
 }> {
   let changed = false;
-  const titleAnchors: [GoFishNode | undefined, GoFishNode | undefined] = [
-    undefined,
-    undefined,
-  ];
   const tierCounts: [number, number] = [0, 0];
-  // A `coord` (polar/clock) fixes its own frame orientation, so any axis inside
-  // it flips with the coord rather than seating on the far edge directly. Track
-  // whether we are under one so `axisSide` keeps the near/"start" seating there.
-  const childUnderCoord =
-    underCoord || (node as { type?: string }).type === "coord";
   // Bottom-up: replace each child with its elaborated form.
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child instanceof GoFishNode) {
-      const res = await elaborateAxes(
-        child,
-        sides,
-        yUp,
-        childUnderCoord,
-        labelSettings
-      );
+      const res = await elaborateChrome(child, options);
       if (res.changed) changed = true;
-      // A child's anchor fills a dim slot we haven't claimed yet.
       for (const dim of [0, 1] as (0 | 1)[]) {
-        if (titleAnchors[dim] === undefined && res.titleAnchors[dim]) {
-          titleAnchors[dim] = res.titleAnchors[dim];
-        }
         tierCounts[dim] = Math.max(tierCounts[dim], res.tierCounts[dim]);
       }
       if (res.node !== child) {
@@ -934,119 +950,139 @@ export async function elaborateAxes(
     refBased,
     anchors,
     owned,
+    sides,
     tierCounts: nextTierCounts,
   } = elaborationsFor(
     node,
-    sides,
-    yUp,
-    childUnderCoord,
-    labelSettings,
+    options.sides ?? [undefined, undefined],
+    options.labelSettings,
     tierCounts
   );
-  // Any dim this node owns an axis on is claimed — its own anchor replaces
-  // whatever bubbled up from children, INCLUDING replacing it with undefined
-  // when the owned axis is ordinal (so the title pass falls back to the plot
-  // instead of centering on a nested facet's line).
-  for (const dim of [0, 1] as (0 | 1)[]) {
-    if (owned[dim]) titleAnchors[dim] = anchors[dim];
+  // A title names an axis this node draws. The measure is read off the
+  // node's own space, which elaboration has not re-resolved yet.
+  const request = node._chromeRequest;
+  node._chromeRequest = undefined;
+  const titles = ([0, 1] as const).map((dim) =>
+    owned[dim] && request !== undefined
+      ? chartAxisTitle(
+          request.axes,
+          dim,
+          spaceMeasure(node._underlyingSpace?.[dim])
+        )
+      : undefined
+  ) as [string | undefined, string | undefined];
+  const legend = request?.legend;
+
+  if (
+    constrained.length === 0 &&
+    refBased.length === 0 &&
+    titles[0] === undefined &&
+    titles[1] === undefined &&
+    legend === undefined
+  ) {
+    return { node, changed, tierCounts: nextTierCounts };
   }
 
-  if (constrained.length === 0 && refBased.length === 0) {
-    return { node, changed, titleAnchors, tierCounts: nextTierCounts };
-  }
-
-  // Move identity off the content onto whatever ends up outermost (so the
-  // parent — faceting/refs/select — still resolves to this node), build the
-  // axis tiers, then restore the identity onto the outermost wrapper.
+  let withAxes: GoFishNode = node;
   const root = await wrapPreservingIdentity(node, async (content) => {
-    // Inner tier: content + constraint-based (continuous/difference) axes. The
-    // content is pinned at its own ORIGIN (a literal-pixel position pin at the
-    // origin: x:0/y:0, translate 0) so each axis grows into negative gutter
-    // space; this keeps the content on the posScale grid both axes' ticks use.
-    // The anchor must be `baseline`, not `start`: nested content (facets
-    // carrying their own ordinal labels) has a bbox extending past its origin,
-    // and pinning bbox-min would slide the marks off the tick grid by that
-    // overhang.
-    let inner: GoFishNode = content;
+    let ring: GoFishNode = content;
+
+    // Axis gutters: continuous/difference axes seat a gutter via constraints
+    // that would SHIFT the content, so the content is seated first and each
+    // axis grows into negative gutter space; this keeps the content on the
+    // posScale grid both axes' ticks use. Where the content sits on each
+    // axis: a delta axis says where in its own frame. Otherwise this is the
+    // one seating rule (`seatInScope`): a free content (a bar chart's bars)
+    // is a magnitude whose baseline the axis's frame places, so it is left
+    // unpinned and the layer seats it at data 0 of the frame's map, so value
+    // 0 sits at the 0 tick; a pinned content shares the frame, so its
+    // baseline is the frame's 0 (a literal pixel pin). The anchor is
+    // `baseline`, not `start`: nested content (facets carrying their own
+    // ordinal labels) has a bbox extending past its origin, and pinning
+    // bbox-min would slide the marks off the tick grid by that overhang.
     if (constrained.length > 0) {
-      content.name(CONTENT_NAME);
-      const axisNodes = constrained.flatMap((e) => e.nodes);
-      inner = (await (layer as any)([content, ...axisNodes])) as GoFishNode;
-      // Where the content sits on each axis. A delta axis says where in its
-      // own frame. Otherwise this is the one seating rule (`seatInScope`):
-      // a free content (a bar chart's bars) is a magnitude whose baseline the
-      // axis's frame places, so it is left unpinned and the layer seats it at
-      // data 0 of the frame's map, so value 0 sits at the 0 tick; a pinned
-      // content shares the frame, so its baseline is the frame's 0 (a literal
-      // pixel pin).
       const contentSpace = content._underlyingSpace;
       const contentAt = (dim: 0 | 1) => {
         const at = constrained.find((e) => e.contentAt?.dim === dim)?.contentAt;
         if (at !== undefined) return datum(at.at);
         return originIs(contentSpace?.[dim], "free") ? undefined : 0;
       };
-      const seat = { x: contentAt(0), y: contentAt(1) };
-      await inner.relate((g) => [
-        ...(seat.x === undefined && seat.y === undefined
-          ? []
-          : [
-              Constraint.position({ ...seat, anchor: "baseline" }, [
-                g[CONTENT_NAME],
-              ]),
-            ]),
-        ...constrained.flatMap((e) => e.constraints(g)),
-      ]);
+      ring = await wrapRing(
+        ring,
+        CONTENT_NAME,
+        {
+          nodes: constrained.flatMap((e) => e.nodes),
+          constraints: (g) => constrained.flatMap((e) => e.constraints(g)),
+        },
+        { x: contentAt(0), y: contentAt(1) }
+      );
     }
 
-    // Outer tier: ref-based (ordinal) labels. The labels `distribute` against
-    // `inner`, whose bbox includes any nested inner-facet labels — so an outer
-    // label row stacks below the inner row. For that anchor to be "placed",
-    // `inner` is pinned at its origin (a literal-pixel position pin, x:0/y:0):
-    // its 0 point stays the layer's 0 point, and the labels seat past its bbox
-    // edge in negative gutter space.
-    let outerRoot = inner;
+    // Category label rows: ordinal labels track their keys via `ref(...)`, so
+    // they must be laid out AFTER the gutters have shifted the content (the
+    // ref would otherwise capture the pre-shift position) — hence a ring of
+    // their own. They `distribute` against the ring inside, whose bbox
+    // includes any nested inner-facet labels, so an outer label row stacks
+    // below the inner row.
     if (refBased.length > 0) {
-      inner.name(INNER_REF_NAME);
-      const labelNodes = refBased.flatMap((e) => e.nodes);
-      outerRoot = (await (layer as any)([inner, ...labelNodes])) as GoFishNode;
-      await outerRoot.relate((g) => [
-        Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
-          g[INNER_REF_NAME],
-        ]),
-        ...refBased.flatMap((e) => e.constraints(g)),
-      ]);
+      ring = await wrapRing(ring, INNER_REF_NAME, {
+        nodes: refBased.flatMap((e) => e.nodes),
+        constraints: (g) => refBased.flatMap((e) => e.constraints(g)),
+      });
+    }
+    withAxes = ring;
+
+    // Axis titles, seated past the axes so they clear the tick and label rows.
+    if (titles[0] !== undefined || titles[1] !== undefined) {
+      ring = await wrapRing(
+        ring,
+        TITLE_CONTENT_NAME,
+        axisTitles(
+          titles,
+          [anchors[0] ?? content, anchors[1] ?? content],
+          sides
+        )
+      );
     }
 
-    return outerRoot;
+    // The legend, beside everything inside it, titles included.
+    if (legend !== undefined) {
+      ring = await wrapRing(ring, LEGEND_CONTENT_NAME, legend);
+    }
+    return ring;
   });
+  root.chrome = { content: node, withAxes };
 
-  return {
-    node: root,
-    changed: true,
-    titleAnchors,
-    tierCounts: nextTierCounts,
-  };
+  return { node: root, changed: true, tierCounts: nextTierCounts };
 }
 
 // ── Axis titles ──────────────────────────────────────────────────────────────
 //
-// The CHART-level title pass. Unlike the per-owner axis pass above (which wraps
-// every node that owns an axis, anywhere in the tree), titles are a single pass
-// at the root: at most one title per dim, resolved by the orchestrator from the
-// `axes` options + the root space's `measure` (the outermost grouping). A title
-// is placed RELATIVE TO the
-// elaborated axis shape it describes — the axis line for that dim, which may
-// span less than the whole plot (a difference axis spans the data width; a
-// facet-owned axis spans its facet). `elaborateAxes` hands us those axis-line
-// nodes as `anchors`; we center the title on the one for its dim.
-//
-// This must run BEFORE the legend wrap: the legend seats itself off the titled
-// content's bbox, so the title must already be in place — and conversely the
-// title's centering must never see the legend column (it'd drag the title
-// off-center). Same ordering argument the legend pass makes about itself.
+// A title names an axis its owner draws. It is placed RELATIVE TO the axis
+// shape it describes — the axis line for that dim, which may span less than
+// the whole plot (a difference axis spans the data width) — and falls back to
+// the owner's content box for an axis with no spanning line (a row of
+// category labels).
 
 export const TITLE_FONT_SIZE = 11;
 export const TITLE_COLOR = "gray";
+
+/** The title of the axis on `dim` from the chart's `axes` options: it is
+ *  titled only when `axes` turns it on (`true`, or a dim's entry that is not
+ *  `false`); its title is then {@link axisTitle}'s, with the axis's measure
+ *  as the inferred name. */
+function chartAxisTitle(
+  axes: AxesOptions | undefined,
+  dim: 0 | 1,
+  measure: string | undefined
+): string | undefined {
+  if (axes === true) return measure;
+  const opt =
+    axes && typeof axes === "object" ? axes[dim === 0 ? "x" : "y"] : undefined;
+  return opt === undefined || opt === false
+    ? undefined
+    : axisTitle(opt, measure);
+}
 
 /** The title of a drawn axis from its `axes` option: the option's `title`,
  *  none when it is `false`, and otherwise `inferred` (the axis's measure, or
@@ -1059,8 +1095,9 @@ export function axisTitle(
   const title = typeof opt === "object" && opt !== null ? opt.title : undefined;
   return title === false ? undefined : (title ?? inferred);
 }
-const TITLE_CONTENT_GAP = 8; // gap between a title and the full content bbox
+const TITLE_CONTENT_GAP = 8; // gap between a title and the box it is seated past
 const TITLE_CONTENT_NAME = "__titleContent";
+const LEGEND_CONTENT_NAME = "__legendContent";
 const X_TITLE_ANCHOR_NAME = "__xTitleAnchor";
 const Y_TITLE_ANCHOR_NAME = "__yTitleAnchor";
 const X_TITLE_NAME = "__xAxisTitle";
@@ -1069,170 +1106,88 @@ const Y_TITLE_NAME = "__yAxisTitle";
 /** The x-axis title: horizontal text below the plot. The customization seam
  *  (like `legendColumn` / `tickMark`) — a future public API can override it. */
 export function xAxisTitle(text: string): GoFishNode {
-  const t = Text({ text, fontSize: TITLE_FONT_SIZE, fill: TITLE_COLOR }).name(
+  return Text({ text, fontSize: TITLE_FONT_SIZE, fill: TITLE_COLOR }).name(
     X_TITLE_NAME
   );
-  t._ambientYDown = true; // chrome: reads y-down, never in the plot flip scope (#629)
-  return t;
 }
 
-/** The y-axis title, reading bottom-to-top (facing inward) in the left gutter.
- *  Text lowering applies `flips ? -rotate : rotate`, so the SAME screen rotation
- *  (-90°) needs the stored `rotate` to follow the frame: `90` under the y-up flip,
- *  `-90` in y-down (no flip). Otherwise a y-down chart (heatmap) reads its title
- *  top-to-bottom, facing outward. See issue #143/#16. Customization seam, like
+/** The y-axis title, reading bottom-to-top (facing inward) in the left gutter:
+ *  rotated a quarter turn counter-clockwise on screen. Customization seam, like
  *  `xAxisTitle`. */
-export function yAxisTitle(text: string, yUp = true): GoFishNode {
-  const t = Text({
+export function yAxisTitle(text: string): GoFishNode {
+  return Text({
     text,
     fontSize: TITLE_FONT_SIZE,
     fill: TITLE_COLOR,
-    rotate: yUp ? 90 : -90,
+    rotate: -90,
   }).name(Y_TITLE_NAME);
-  t._ambientYDown = true; // chrome: reads y-down, never in the plot flip scope (#629)
-  return t;
 }
 
 /**
- * Wrap `node` in a Layer carrying up to two axis titles, each centered on the
- * axis shape it describes and seated outside the full content bbox.
+ * The title ring: up to two axis titles, each centered on the node it
+ * describes (`anchors[dim]`: the axis line, or the owner's content box) and
+ * seated past the box inside the ring on the same edge as its axis
+ * (`sides[dim]`, in the owner's axis order: a title BEFORE the box seats on
+ * the start edge, AFTER it on the end edge).
  *
- * Per titled dim the anchor is `anchors[dim] ?? plotNode`: the axis line node
- * elaboration produced for that dim if one exists (continuous / difference),
- * else the plot node itself. The fallback covers ordinal axes — they're just a
- * label row with no spanning line, and their UNDEFINED underlying space
- * elaborates no line node — so the plot's own bbox stands in as the thing to
- * center the title on. We reference the anchor with a `ref(node)` stand-in (the
- * direct-node `ref` form `elaborateOrdinalAxis` already uses): the title layer
- * is outermost, so by the time `align` reads the ref the axis line / plot is
- * already placed, and the ref resolves to that placement — so `align` moves
- * only the title.
- *
- * Both title Texts resolve UNDEFINED underlying spaces on both dims (they carry
- * no data-bound position), so `wrapPreservingIdentity` preserves the wrapped
- * content's underlying spaces unchanged — the same argument the legend pass
- * makes for its swatch column.
- *
- * The caller owns the "is there any title at all?" guard; this always wraps and
- * returns the new root, along with the x-title node itself — the orchestrator
- * needs that identity to decide whether the title's box takes part in the
- * chrome y-mirror (see `xTitleSeatsFar` in `gofish.tsx`).
+ * The anchor is referenced with a `ref(node)` stand-in: the anchor sits in a
+ * ring inside this one, so by the time `align` reads the ref it is already
+ * placed, and `align` moves only the title. Both title Texts resolve
+ * UNDEFINED underlying spaces, so the ring preserves the owner's spaces.
  */
-export async function elaborateAxisTitles(
-  node: GoFishNode,
-  opts: {
-    xTitle?: string;
-    yTitle?: string;
-    anchors: [GoFishNode | undefined, GoFishNode | undefined];
-    plotNode: GoFishNode;
-    yUp?: boolean;
-    /** Per-dim axis side, so each title follows its axis to the same edge. */
-    sides?: ["start" | "end", "start" | "end"];
+function axisTitles(
+  titles: [string | undefined, string | undefined],
+  anchors: [GoFishNode, GoFishNode],
+  sides: AxisSides
+): ChromeRing {
+  const [xTitle, yTitle] = titles;
+  const refs: GoFishNode[] = [];
+  const texts: GoFishNode[] = [];
+  if (xTitle !== undefined) {
+    refs.push((ref(anchors[0]) as any).name(X_TITLE_ANCHOR_NAME) as GoFishNode);
+    texts.push(xAxisTitle(xTitle));
   }
-): Promise<{ node: GoFishNode; xTitleNode?: GoFishNode }> {
-  const {
-    xTitle,
-    yTitle,
-    anchors,
-    plotNode,
-    yUp = true,
-    sides = ["start", "start"],
-  } = opts;
-
-  let xTitleNode: GoFishNode | undefined;
-  const wrapped = await wrapPreservingIdentity(node, async (content) => {
-    content.name(TITLE_CONTENT_NAME);
-
-    const refs: GoFishNode[] = [];
-    const titles: GoFishNode[] = [];
-    if (xTitle !== undefined) {
-      const anchorNode = anchors[0] ?? plotNode;
-      refs.push(
-        (ref(anchorNode) as any).name(X_TITLE_ANCHOR_NAME) as GoFishNode
-      );
-      xTitleNode = xAxisTitle(xTitle);
-      titles.push(xTitleNode);
-    }
-    if (yTitle !== undefined) {
-      const anchorNode = anchors[1] ?? plotNode;
-      refs.push(
-        (ref(anchorNode) as any).name(Y_TITLE_ANCHOR_NAME) as GoFishNode
-      );
-      titles.push(yAxisTitle(yTitle, yUp));
-    }
-
-    const root = (await (layer as any)([
-      content,
-      ...refs,
-      ...titles,
-    ])) as GoFishNode;
-
-    // Constraint order matters; placement is first-write-wins.
-    await root.relate((g) => {
-      const cs: any[] = [
-        // Pin the content at its origin (a literal-pixel position pin, x:0/y:0);
-        // it never moves. Everything else seats off the (already-placed) ref
-        // stand-ins and this content bbox.
-        Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
-          g[TITLE_CONTENT_NAME],
-        ]),
-      ];
+  if (yTitle !== undefined) {
+    refs.push((ref(anchors[1]) as any).name(Y_TITLE_ANCHOR_NAME) as GoFishNode);
+    texts.push(yAxisTitle(yTitle));
+  }
+  return {
+    nodes: [...refs, ...texts],
+    constraints: (g, inner) => {
+      const cs: any[] = [];
       if (xTitle !== undefined) {
-        // Center the x-title on the axis line's horizontal span (the ref is
-        // already placed, so only the title moves) …
         cs.push(
           Constraint.align({ x: "middle" }, [
             g[X_TITLE_ANCHOR_NAME],
             g[X_TITLE_NAME],
           ])
         );
-        // … and seat it past the FULL content bbox on the same edge as the
-        // axis: title BEFORE the content seats it on the start edge, AFTER on
-        // the end edge (so it clears the tick/label rows and tracks `side`).
-        // This is authored in the shared ABSTRACT frame — the same side as the
-        // axis labels. When the plot mirrors (y-up), the bake box-mirrors the
-        // title (an `_ambientYDown` chrome sibling) about the plot's flip
-        // scope, so it lands on the same VISUAL edge as the flipped labels;
-        // its interior (glyphs, rotation) stays ambient. See bake.ts. #629
         cs.push(
           Constraint.distribute(
             { dir: "y", spacing: TITLE_CONTENT_GAP },
             sides[0] === "end"
-              ? [g[TITLE_CONTENT_NAME], g[X_TITLE_NAME]]
-              : [g[X_TITLE_NAME], g[TITLE_CONTENT_NAME]]
+              ? [g[inner], g[X_TITLE_NAME]]
+              : [g[X_TITLE_NAME], g[inner]]
           )
         );
       }
       if (yTitle !== undefined) {
-        // Mirror for the y-title: center on the axis line's vertical span …
         cs.push(
           Constraint.align({ y: "middle" }, [
             g[Y_TITLE_ANCHOR_NAME],
             g[Y_TITLE_NAME],
           ])
         );
-        // … and seat it past the content bbox on the axis's side (left for
-        // "start", right for "end").
         cs.push(
           Constraint.distribute(
             { dir: "x", spacing: TITLE_CONTENT_GAP },
             sides[1] === "end"
-              ? [g[TITLE_CONTENT_NAME], g[Y_TITLE_NAME]]
-              : [g[Y_TITLE_NAME], g[TITLE_CONTENT_NAME]]
+              ? [g[inner], g[Y_TITLE_NAME]]
+              : [g[Y_TITLE_NAME], g[inner]]
           )
         );
       }
       return cs;
-    });
-
-    // The title wrapper only UNIONS the plot's continuous y up (to keep the space
-    // valid for nicing); it is not itself the σ-scope. Mark it scope-transparent
-    // so the y-up flip (#629) opens at the plot CONTENT it wraps — whose frame is
-    // the canvas `finalH` — not at this wrapper (whose bbox includes the title,
-    // which would over-size the mirror band). The titles themselves are
-    // `_ambientYDown`, so they stay y-down regardless.
-    root._scopeTransparent = true;
-    return root;
-  });
-  return { node: wrapped, xTitleNode };
+    },
+  };
 }

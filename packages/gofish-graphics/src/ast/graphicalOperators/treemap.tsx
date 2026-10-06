@@ -11,6 +11,7 @@ import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 
 import { GoFishNode, Placeable } from "../_node";
 import { GoFishAST } from "../_ast";
+import { fromFrameStart } from "../axisDirection";
 import { createNodeOperator } from "../withGoFish";
 import {
   FancyDims,
@@ -162,6 +163,7 @@ const Treemap = createNodeOperator(
           return [axisSpace(0), axisSpace(1)];
         },
         layout: (_shared, size, scales, childAsts, node) => {
+          const yDirection = node.yFrame.direction;
           const xPos = computeAesthetic(
             dims[0].min,
             posFn(scales?.[0]?.map)!,
@@ -289,11 +291,17 @@ const Treemap = createNodeOperator(
             const h = Math.max(0, y1 - y0);
 
             const placeable = childAsts[i].layout([w, h], scales);
-            placeable.place(0, x0 + w / 2, "center");
-            // d3 lays out y-down and GoFish is y-up, so mirror y: d3's first
+            // d3 lays out in y-down pixels over the frame `[0, h]`: its first
             // tile (the largest, under the default sort) lands at the top
-            // left, in reading order.
-            placeable.place(1, resolvedSize[1] - (y0 + h / 2), "center");
+            // left, in reading order. The treemap places in its own axis
+            // order, which starts at the frame's bottom when its y is a
+            // magnitude, so it reads d3's y from the frame's start edge.
+            placeable.place(0, x0 + w / 2, "center");
+            placeable.place(
+              1,
+              fromFrameStart(y0 + h / 2, resolvedSize[1], yDirection),
+              "center"
+            );
             placed[i] = placeable;
           }
 

@@ -17,10 +17,7 @@ import { lowerChildrenOffset } from "../displayList/lowerHelpers";
  * translate the parent assigns, inside `render`. Never collapse the
  * `undefined`s to `0`; doing so would steal placement from the parent.
  *
- * Subtlety for image/rect children: those shapes render with an internal
- * `scale(1, -1)` y-flip, so a positive `y` offset moves content the opposite
- * way you might expect on the y axis. Callers compensate at the callsite (see
- * `cut`), not here.
+ * The shift is in pixels: a positive `y` moves the content down the screen.
  *
  * Exactly one child is required.
  */

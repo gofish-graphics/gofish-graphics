@@ -30,6 +30,19 @@ text({ text, fill = "black", stroke?, strokeWidth = 0, fontSize = 12,
 ::: gofish-ref text
 :::
 
+## Placement
+
+A text is a box, and it is placed exactly as a rect of the same size would be.
+`y` is the box's start edge: its top where y reads top-down (a free diagram, an
+ordinal spread) and its bottom where y grows upward (a chart with a value axis).
+`cy` is the box's center. Spreads, stacks, layers and `align`/`distribute`
+constraints place it by its box, as they place a rect. In x, `x` is the
+`textAnchor` point: the left edge for the default `"start"` (as for a rect), the
+center for `"middle"`, the right edge for `"end"`.
+
+`rotate` turns the glyphs about the point on their baseline at `textAnchor`; the
+box is then the rotated glyphs' footprint.
+
 ## Examples
 
 ```ts
@@ -47,15 +60,16 @@ layer([
   chart(selectAll("bars"))
     .flow(group({ by: "lake" }))
     .mark((d) =>
+      // A spread on y reads top-down: the total above its bar.
       spread({ dir: "y", alignment: "middle", spacing: 10 }, [
-        d[0],
         text({ text: String(sumBy(d[0].datum, "count")) }),
+        d[0],
       ])
     ),
 ]);
 
-// Rotated y-axis title (reads bottom-to-top)
-.mark(text({ text: "count", rotate: 90, fontSize: 13 }))
+// Rotated y-axis title (reads bottom-to-top): rotate is clockwise on screen
+.mark(text({ text: "count", rotate: -90, fontSize: 13 }))
 
 // Italic label
 .mark(text({ text: "note", fontStyle: "italic" }))
