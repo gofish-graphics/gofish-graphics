@@ -2,7 +2,7 @@
 // @wiki Color Scale Resolution — /internals/layout/color-scales
 // </gofish-wiki>
 
-import chroma from "chroma-js";
+import { formatHex, parse, toLab65, type Color } from "../colorModes";
 
 export type PaletteScale = {
   _tag: "palette";
@@ -70,21 +70,67 @@ export function assignPaletteColor(
   return (values as Record<string, string>)[key] ?? "#ccc";
 }
 
+/** The color a gradient returns for a missing (`NaN`) position. */
+const MISSING_COLOR = "#cccccc";
+
+function parseStop(stop: string): Color {
+  const color = parse(stop);
+  if (color === undefined) throw new Error(`Invalid gradient color: ${stop}`);
+  return color;
+}
+
+/**
+ * Build the interpolator for a list of evenly spaced color stops. Between two
+ * stops the color is mixed linearly in CIE Lab (D65 white point, CSS Color 4
+ * conversions); at or beyond a stop it is that stop's color. `t` is clamped to
+ * `[0, 1]`, and a `NaN` position gives `MISSING_COLOR`. The result is a
+ * `#rrggbb` hex string, clipped to the sRGB gamut and rounded to 8 bits.
+ */
+function labGradient(stops: string[]): (t: number) => string {
+  const colors = (stops.length === 1 ? [stops[0], stops[0]] : stops).map(
+    parseStop
+  );
+  const labs = colors.map((c) => toLab65(c));
+  const n = colors.length - 1;
+  return (t: number) => {
+    if (Number.isNaN(t)) return MISSING_COLOR;
+    const tt = Math.max(0, Math.min(1, t));
+    for (let i = 0; i < n; i++) {
+      const p0 = i / n;
+      const p1 = (i + 1) / n;
+      if (tt <= p0) return formatHex(colors[i]);
+      if (tt < p1) {
+        const f = (tt - p0) / (p1 - p0);
+        const a = labs[i];
+        const b = labs[i + 1];
+        return formatHex({
+          mode: "lab65",
+          l: a.l + f * (b.l - a.l),
+          a: a.a + f * (b.a - a.a),
+          b: a.b + f * (b.b - a.b),
+        });
+      }
+    }
+    return formatHex(colors[n]);
+  };
+}
+
 /** Assign a gradient color by interpolating at position t in [0, 1]. */
 export function assignGradientColor(config: GradientScale, t: number): string {
   const stops = config.stops;
   if (typeof stops === "string") {
     const scheme = schemes[stops];
-    if (scheme) return chroma.scale(scheme.colors).mode("lab")(t).hex();
+    if (scheme) return labGradient(scheme.colors)(t);
     return stops;
   }
-  return chroma.scale(stops).mode("lab")(t).hex();
+  return labGradient(stops)(t);
 }
 
 /**
  * Build a continuous color scale `(value: number) => string` for a gradient
- * config over `[min, max]`. The chroma scale is constructed once and reused for
- * every lookup; values are normalized into the domain and clamped to `[0, 1]`.
+ * config over `[min, max]`. The stops are parsed once; each lookup normalizes
+ * the value into the domain, clamps it to `[0, 1]`, and interpolates afresh,
+ * so the color for a value never depends on earlier lookups.
  * This is the source of truth for a gradient color encoding — shared by the
  * mark fills (`resolveColorChannel`) and the colorbar legend, so a value and
  * its swatch on the bar always agree.
@@ -98,9 +144,7 @@ export function createGradientScale(
     typeof config.stops === "string"
       ? (schemes[config.stops]?.colors ?? [config.stops])
       : config.stops;
-  const chromaScale = chroma.scale(stops).mode("lab");
-  return (value: number) => {
-    const t = max === min ? 0 : (value - min) / (max - min);
-    return chromaScale(Math.max(0, Math.min(1, t))).hex();
-  };
+  const interpolate = labGradient(stops);
+  return (value: number) =>
+    interpolate(max === min ? 0 : (value - min) / (max - min));
 }

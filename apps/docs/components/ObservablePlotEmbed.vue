@@ -2,12 +2,9 @@
 import { onMounted, ref } from "vue";
 
 const props = defineProps<{
-  // A function (Plot, d3) => HTMLElement | SVGElement that returns the figure.
+  // A function (Plot) => HTMLElement | SVGElement that returns the figure.
   // Passed as a function so the page doesn't have to import Plot itself.
-  build: (
-    Plot: typeof import("@observablehq/plot"),
-    d3: typeof import("d3")
-  ) => Node;
+  build: (Plot: typeof import("@observablehq/plot")) => Node;
   caption?: string;
 }>();
 
@@ -16,11 +13,8 @@ const container = ref<HTMLElement | null>(null);
 onMounted(async () => {
   if (!container.value) return;
   try {
-    const [Plot, d3] = await Promise.all([
-      import("@observablehq/plot"),
-      import("d3"),
-    ]);
-    const figure = props.build(Plot, d3);
+    const Plot = await import("@observablehq/plot");
+    const figure = props.build(Plot);
     container.value.append(figure);
   } catch (err) {
     container.value.textContent = `(plot error: ${

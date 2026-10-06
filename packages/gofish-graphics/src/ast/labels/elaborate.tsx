@@ -2,8 +2,7 @@
 // @wiki Labels — /internals/frontend/labels
 // </gofish-wiki>
 
-import chroma from "chroma-js";
-import { luv } from "culori";
+import { autoLabelColorForFill } from "./autoLabelColor";
 import { GoFishNode } from "../_node";
 import { Text } from "../shapes/text";
 import { ref } from "../shapes/ref";
@@ -74,35 +73,14 @@ function resolveNodeFill(node: GoFishNode): string | null {
 }
 
 /**
- * Compute an auto label color.
- * - Inside the shape: contrast against the fill.
- * - Outside the shape: darken the fill for a readable tint on white background.
+ * Compute an auto label color from the node's resolved fill (see
+ * `autoLabelColorForFill`): contrast against the fill inside the shape, a
+ * darkened tint of it outside.
  */
 function autoLabelColor(node: GoFishNode, position: LabelPosition): string {
-  const fill = resolveNodeFill(node);
   const isInside =
     position === "center" || (position as string).startsWith("inset");
-
-  if (isInside) {
-    if (!fill) return "black";
-
-    const luvColor = luv(fill);
-    const lightness = luvColor?.l ?? 0;
-    const [, , hue] = chroma(fill).lch();
-    if (lightness < 60) {
-      return "white";
-    } else {
-      return chroma.lch(8, 18, hue).hex();
-    }
-  }
-
-  if (!fill) return "#333333";
-  try {
-    const [, chr, hue] = chroma(fill).lch();
-    return chroma.lch(30, chr, hue).hex();
-  } catch {
-    return "#333333";
-  }
+  return autoLabelColorForFill(resolveNodeFill(node), isInside);
 }
 
 /**

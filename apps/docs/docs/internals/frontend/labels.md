@@ -6,6 +6,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/labels/elaborate.tsx
   - packages/gofish-graphics/src/ast/labels/labelPlacement.ts
+  - packages/gofish-graphics/src/ast/labels/autoLabelColor.ts
 ---
 
 # Labels
@@ -191,13 +192,18 @@ When a spec omits `color`, `autoLabelColor` picks one by resolving the target
 node's own fill via `resolveColorChannel` — the identical resolution the
 shape's own fill channel uses, so the label contrasts against the color
 actually drawn (a categorical swatch, a continuous gradient's `scaleFn(value)`,
-or a literal string), not some approximation of it. Inside the shape (`center`
-or any `inset-*` position), the fill's LUV lightness picks white text on a dark
-fill or a near-black tint of the fill's own hue on a light one; outside the
-shape, the label is a darkened tint of the fill's hue at a fixed lightness (a
-readable color on the white page background, distinct from but related to the
-shape it labels). A target with no resolvable fill at all falls back to a
-plain `"black"` (inside) or `"#333333"` (outside).
+or a literal string), not some approximation of it. The color math itself lives
+in `autoLabelColorForFill` (`autoLabelColor.ts`), and it runs on the color a
+renderer paints: the fill clipped to the sRGB gamut and rounded to 8 bits per
+channel. Inside the shape (`center` or any `inset-*` position), the fill's LUV
+lightness picks white text on a dark fill or a near-black tint of the fill's own
+hue (CIE LCh, D65) on a light one; a gray fill has no hue, so it gets a
+near-black neutral instead. Outside the shape, the label is a darkened tint of
+the fill's hue and chroma at a fixed lightness (a readable color on the white
+page background, distinct from but related to the shape it labels). A target
+with no resolvable fill, or a fill that is not a parseable color (`none`,
+`currentColor`, `url(#…)`), falls back to a plain `"black"` (inside) or
+`"#333333"` (outside).
 
 ## Multi-label and typography options
 

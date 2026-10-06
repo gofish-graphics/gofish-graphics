@@ -25,7 +25,7 @@ chart(data, { color: palette({ Salmon: "#e15759", Bass: "#4e79a7" }) });
 
 ## Gradient
 
-Use `gradient()` for continuous data. Colors are interpolated in LAB color space via chroma-js.
+Use `gradient()` for continuous data. Colors are interpolated in LAB color space via culori.
 
 ### Two-color gradient
 
