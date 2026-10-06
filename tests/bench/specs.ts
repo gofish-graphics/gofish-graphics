@@ -89,8 +89,8 @@ export const gridFamily: CountFamily = (n) => {
           // @ts-expect-error Library type gap: ChartBuilder.mark() is typed as
           // returning `ChartBuilder | LayerBuilder` for every mark, though only a
           // fused relational mark (line/ribbon) yields a LayerBuilder; the inner
-          // `.mark(rect(...))` is always a ChartBuilder. TODO: file a follow-up
-          // to #554 and narrow mark()'s return type by mark kind.
+          // `.mark(rect(...))` is always a ChartBuilder. TODO(#1047): narrow
+          // mark()'s return type by mark kind.
           .mark((d: any) =>
             chart(d)
               .flow(spread({ by: "i", dir: "y", spacing: 1 }))
