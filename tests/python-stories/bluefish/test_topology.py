@@ -253,41 +253,37 @@ def panel_grid(cols: List[List[object]]):
 
 def story_topology():
     return (
-        layer(
+        panel_grid(
             [
-                panel_grid(
-                    [
+                [
+                    three_point_topology([], show_labels=True),
+                    three_point_topology([["b"]]),
+                    three_point_topology([["a", "b"]]),
+                ],
+                [
+                    three_point_topology(
+                        [["a", "b"], ["a"]], show_labels=True
+                    ),
+                    three_point_topology([["a", "b"], ["c"]]),
+                    three_point_topology([["a", "b"], ["a"], ["b"]]),
+                ],
+                [
+                    three_point_topology(
+                        [["a", "b"], ["b", "c"], ["b"]],
+                        show_labels=True,
+                    ),
+                    three_point_topology(
+                        [["a", "b"], ["b", "c"], ["b"], ["c"]]
+                    ),
+                    three_point_topology(
                         [
-                            three_point_topology([], show_labels=True),
-                            three_point_topology([["b"]]),
-                            three_point_topology([["a", "b"]]),
-                        ],
-                        [
-                            three_point_topology(
-                                [["a", "b"], ["a"]], show_labels=True
-                            ),
-                            three_point_topology([["a", "b"], ["c"]]),
-                            three_point_topology([["a", "b"], ["a"], ["b"]]),
-                        ],
-                        [
-                            three_point_topology(
-                                [["a", "b"], ["b", "c"], ["b"]],
-                                show_labels=True,
-                            ),
-                            three_point_topology(
-                                [["a", "b"], ["b", "c"], ["b"], ["c"]]
-                            ),
-                            three_point_topology(
-                                [
-                                    ["a", "b"],
-                                    ["b", "c"],
-                                    ["b"],
-                                    ["a", "c"],
-                                ]
-                            ),
-                        ],
-                    ]
-                ),
+                            ["a", "b"],
+                            ["b", "c"],
+                            ["b"],
+                            ["a", "c"],
+                        ]
+                    ),
+                ],
             ]
         ),
         {"w": 700, "h": 460},
@@ -296,52 +292,48 @@ def story_topology():
 
 def story_topology_overdraw():
     return (
-        layer(
+        panel_grid(
             [
-                panel_grid(
-                    [
+                [
+                    three_point_topology(
+                        [], show_labels=True, overdraw=True
+                    ),
+                    three_point_topology([["b"]], overdraw=True),
+                    three_point_topology([["a", "b"]], overdraw=True),
+                ],
+                [
+                    three_point_topology(
+                        [["a", "b"], ["a"]],
+                        show_labels=True,
+                        overdraw=True,
+                    ),
+                    three_point_topology(
+                        [["a", "b"], ["c"]], overdraw=True
+                    ),
+                    three_point_topology(
+                        [["a", "b"], ["a"], ["b"]], overdraw=True
+                    ),
+                ],
+                [
+                    three_point_topology(
+                        [["a", "b"], ["b", "c"], ["b"]],
+                        show_labels=True,
+                        overdraw=True,
+                    ),
+                    three_point_topology(
+                        [["a", "b"], ["b", "c"], ["b"], ["c"]],
+                        overdraw=True,
+                    ),
+                    three_point_topology(
                         [
-                            three_point_topology(
-                                [], show_labels=True, overdraw=True
-                            ),
-                            three_point_topology([["b"]], overdraw=True),
-                            three_point_topology([["a", "b"]], overdraw=True),
+                            ["a", "b"],
+                            ["a", "c"],
+                            ["b", "c"],
+                            ["b"],
                         ],
-                        [
-                            three_point_topology(
-                                [["a", "b"], ["a"]],
-                                show_labels=True,
-                                overdraw=True,
-                            ),
-                            three_point_topology(
-                                [["a", "b"], ["c"]], overdraw=True
-                            ),
-                            three_point_topology(
-                                [["a", "b"], ["a"], ["b"]], overdraw=True
-                            ),
-                        ],
-                        [
-                            three_point_topology(
-                                [["a", "b"], ["b", "c"], ["b"]],
-                                show_labels=True,
-                                overdraw=True,
-                            ),
-                            three_point_topology(
-                                [["a", "b"], ["b", "c"], ["b"], ["c"]],
-                                overdraw=True,
-                            ),
-                            three_point_topology(
-                                [
-                                    ["a", "b"],
-                                    ["a", "c"],
-                                    ["b", "c"],
-                                    ["b"],
-                                ],
-                                overdraw=True,
-                            ),
-                        ],
-                    ]
-                ),
+                        overdraw=True,
+                    ),
+                ],
             ]
         ),
         {"w": 700, "h": 460},

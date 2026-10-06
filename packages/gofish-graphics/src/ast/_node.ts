@@ -216,6 +216,11 @@ export function placeUnplacedChild(
 // the result in pixels. Geometry a node keeps for its `lower` (in
 // `renderData` or a closure) stays in that axis order too: `lower` maps it to
 // pixels through its `local` map, the one place it is reflected.
+//
+// `intrinsicDims` is the node's box in its own frame, with no translate
+// applied; `transform.translate` is its offset in the parent's frame. `dims`
+// composes the two exactly once (`combineDims`), so a layout must never fold
+// its translate into `intrinsicDims.min` too (#755).
 export type Layout = (
   shared: Size<boolean>,
   size: Size,

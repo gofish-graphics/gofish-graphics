@@ -553,7 +553,7 @@ is reserved — see Render Pass 1 below for why. See
 
 **Example: Rect Layout Function**
 
-**Location**: `src/ast/shapes/rect.tsx:177-250`
+**Location**: `src/ast/shapes/rect.tsx:138-269`
 
 For a bar chart rectangle, the layout function:
 
@@ -590,15 +590,23 @@ For a bar chart rectangle, the layout function:
 3. **Returns intrinsic dimensions and transform**:
    ```typescript
    return {
-     intrinsicDims: [
-       { min: w >= 0 ? 0 : w, size: w, center: w / 2, max: w >= 0 ? w : 0 },
-       { min: h >= 0 ? 0 : h, size: h, center: h / 2, max: h >= 0 ? h : 0 },
-     ],
+     intrinsicDims: {
+       0: {
+         min: Math.min(0, w),
+         size: Math.abs(w),
+         embedded: dims[0].embedded,
+       },
+       1: {
+         min: Math.min(0, h),
+         size: Math.abs(h),
+         embedded: dims[1].embedded,
+       },
+     },
      transform: { translate: [x, y] },
    };
    ```
 
-The `intrinsicDims` represent the element's size in its local coordinate system (with min typically at 0), while `transform.translate` positions it in the parent's coordinate system.
+The `intrinsicDims` represent the element's box in its local coordinate system (with min typically at 0, or at the negative endpoint of a negative bar), while `transform.translate` positions it in the parent's coordinate system. The node's `dims` compose the two exactly once (`combineDims`: `min = local min + translate`), so a layout must never fold its translate into `intrinsicDims.min` as well; doing so counts the offset twice (#755).
 
 #### Shape geometry after layout
 

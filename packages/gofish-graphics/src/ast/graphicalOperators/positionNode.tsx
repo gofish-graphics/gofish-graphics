@@ -1,6 +1,6 @@
 import { computeAesthetic } from "../../util";
 import { posFn } from "../domain";
-import { GoFishNode } from "../_node";
+import { GoFishNode, placeUnplacedChild } from "../_node";
 import { Size } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import {
@@ -86,12 +86,7 @@ export const positionNode = (
         const child = children[0];
         const childPlaceable = child.layout(size, scales);
 
-        if (childPlaceable.dims[0].min === undefined) {
-          childPlaceable.place("x", 0, "baseline");
-        }
-        if (childPlaceable.dims[1].min === undefined) {
-          childPlaceable.place("y", 0, "baseline");
-        }
+        placeUnplacedChild(childPlaceable);
 
         const offsetX =
           options.x === undefined
@@ -102,21 +97,15 @@ export const positionNode = (
             ? undefined
             : (computeAesthetic(options.y, posFn(scales[1]?.map)!, 0) ?? 0);
 
-        // The local box is the child's box as placed in this node's own
-        // frame; the offset is applied exactly once, as the translate. `dims`
-        // composes the two (`min = local min + translate`), so adding the
-        // offset to the local min too would count it twice (#755).
+        // The local box is the child's placed box; the offset is applied once,
+        // as the translate. Adding it to the local min too would count it
+        // twice (#755).
+        const [boxX, boxY] = childPlaceable.dims.map(({ min, size }) => ({
+          min,
+          size,
+        }));
         return {
-          intrinsicDims: [
-            {
-              min: childPlaceable.dims[0].min,
-              size: childPlaceable.dims[0].size,
-            },
-            {
-              min: childPlaceable.dims[1].min,
-              size: childPlaceable.dims[1].size,
-            },
-          ],
+          intrinsicDims: [boxX, boxY],
           transform: {
             translate: [offsetX, offsetY],
           },
