@@ -106,8 +106,9 @@ def story_default():
         #    the ridge peaks reach above the first baseline. Each label's END
         #    is constraint-aligned to a same-row invisible anchor rect fixed
         #    at `LABEL_MARGIN_X` (6px left of the plot edge) — see
-        #    `LABEL_MARGIN_X`'s comment; y = k*pitch - 9 puts the glyph
-        #    baseline on the rule.
+        #    `LABEL_MARGIN_X`'s comment — and its bottom edge to the anchor,
+        #    which sits on the rule at y = k*pitch, so the label stands on
+        #    its rule.
         .layer(
             chart([{"month": month} for month in MONTH_NAMES])
             .flow(
@@ -135,14 +136,13 @@ def story_default():
                             text=month,
                             font_size=11,
                             fill="#666",
-                            y=ROW_PITCH * k - 9,
                         ).name(f"label{k}"),
                     )
                 ]
             ).relate(
                 lambda **refs: [
                     Constraint.align(
-                        [refs[f"label{k}"], refs[f"anchor{k}"]], x="end"
+                        [refs[f"label{k}"], refs[f"anchor{k}"]], x="end", y="end"
                     )
                     for k in range(len(MONTH_NAMES))
                 ]

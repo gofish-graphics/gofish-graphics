@@ -416,7 +416,9 @@ export const boxDims: FieldGroup = group({
   x2: ch.num("Right edge position."),
   w: ch.num("Width."),
   emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
-  y: ch.num("Top/bottom edge position (y-up: bottom)."),
+  y: ch.num(
+    "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
+  ),
   cy: ch.num("Center y."),
   y2: ch.num("Other y edge position."),
   h: ch.num("Height."),
@@ -462,7 +464,7 @@ const spreadBoxFields: FieldGroup = group({
     "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
   ),
   y: ch.num(
-    "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+    "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
   ),
   w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
   h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
@@ -732,7 +734,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
       ),
       y: ch.num(
-        "Top/bottom edge (y-up: bottom) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+        "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
       ),
       w: ch.num(
         "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
@@ -979,7 +981,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   polygon: leafMark("polygon", {
-    doc: "A closed polygon defined by local-coordinate points (y-up), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
+    doc: "A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
     fields: {
       points: {
         type: t.union(t.array(t.tuple(t.number, t.number)), t.string),
