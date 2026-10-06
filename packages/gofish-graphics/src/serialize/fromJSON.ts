@@ -110,17 +110,13 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
 /**
  * Build the async arrow for a `{ __gofish_lambda: id }` sentinel. The arrow
  * is what JS-side `inferRaw` (and equivalents) calls per row. The body
- * issues a one-row RPC through the bridge; if the lambda returned a
- * single-key object, the value is unwrapped so callers see the scalar
- * directly (a quirk of the Python rows-fn protocol).
+ * issues a one-row RPC through the bridge and returns the lambda's result for
+ * that row as the bridge hands it back: plain JSON values, with any
+ * transport-specific wrapping already undone by the bridge.
  */
 function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
   return async (d: any) => {
     const [result] = await bridge.applyLambda(lambdaId, [d]);
-    if (result && typeof result === "object") {
-      const keys = Object.keys(result);
-      if (keys.length === 1) return result[keys[0]];
-    }
     return result;
   };
 }
@@ -477,13 +473,9 @@ export function mapMark(
       // Returns a ChartBuilder or a raw Mark, both of which behave as a Mark
       // in the deserialization pipeline; cast through `unknown` to express
       // that the deserializer is honoring the existing widget contract.
-      // mark-fn returns a one-element list; row[0] is the chart/mark-spec dict.
-      // Round-trip transport may wrap it under the first column.
-      const first = result[0];
-      const resultSpec =
-        first && typeof first === "object" && Object.keys(first).length === 1
-          ? first[Object.keys(first)[0]]
-          : first;
+      // mark-fn returns a one-element list; result[0] is the chart/mark-spec
+      // dict, as plain JSON (the bridge undoes any transport wrapping).
+      const resultSpec = result[0];
       // A bare Mark returned by the Python mark-fn (e.g. `spread([...])`)
       // serializes as `{type: "raw-mark", mark: ...}` — mirrors the
       // top-level raw-mark IR (`Mark.to_ir()`), reused here since a mark-fn
