@@ -669,7 +669,7 @@ for the API.
               },
               "rotate": {
                 "$ref": "#/$defs/Number",
-                "description": "Rotation in degrees."
+                "description": "Rotation in degrees, clockwise on screen."
               },
               "fontFamily": {
                 "type": "string",
@@ -1017,7 +1017,7 @@ for the API.
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+          "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -1109,7 +1109,7 @@ for the API.
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Top/bottom edge (y-up: bottom) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+          "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -1416,7 +1416,7 @@ for the API.
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Top/bottom edge (y-up: bottom) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+          "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -1634,7 +1634,7 @@ for the API.
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Top/bottom edge position (y-up: bottom)."
+          "description": "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
         },
         "cy": {
           "$ref": "#/$defs/ChannelValue",
@@ -1807,7 +1807,7 @@ for the API.
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Top/bottom edge position (y-up: bottom)."
+          "description": "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
         },
         "cy": {
           "$ref": "#/$defs/ChannelValue",
@@ -1908,7 +1908,7 @@ for the API.
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Top/bottom edge position (y-up: bottom)."
+          "description": "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
         },
         "cy": {
           "$ref": "#/$defs/ChannelValue",
@@ -2000,7 +2000,7 @@ for the API.
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Top/bottom edge position (y-up: bottom)."
+          "description": "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
         },
         "cy": {
           "$ref": "#/$defs/ChannelValue",
@@ -2083,7 +2083,7 @@ for the API.
         },
         "rotate": {
           "$ref": "#/$defs/Number",
-          "description": "Rotation in degrees, applied in the chart's y-up world frame about the text anchor.",
+          "description": "Rotation in degrees, clockwise on screen, about the text anchor.",
           "default": 0
         },
         "textAnchor": {
@@ -2145,7 +2145,7 @@ for the API.
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Top/bottom edge position (y-up: bottom)."
+          "description": "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
         },
         "cy": {
           "$ref": "#/$defs/ChannelValue",
@@ -2215,7 +2215,7 @@ for the API.
       }
     },
     "PolygonMark": {
-      "description": "A closed polygon defined by local-coordinate points (y-up), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
+      "description": "A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
