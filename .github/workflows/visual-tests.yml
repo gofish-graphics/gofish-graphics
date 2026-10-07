@@ -33,6 +33,7 @@ jobs:
               - "packages/gofish-python/**"
               - "tests/**"
               - ".github/workflows/visual-tests.yml"
+              - ".github/actions/**"
 
   # Capturing every story is the expensive part of the visual tests.
   # It runs once per commit, split into shards that capture disjoint sets of

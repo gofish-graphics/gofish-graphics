@@ -82,7 +82,9 @@ there is no pass/fail signal for a layout change.
 `capture-diff` fills that gap. It answers **"did my change move anything I didn't
 intend?"** by capturing the normalized DOM of every story twice — once from the
 current worktree (HEAD) and once from a throwaway git worktree checked out at a
-base ref — and diffing the two per story:
+base ref — and diffing the two per story. Both captures use the current
+worktree's capture tooling (`tests/harness/` and `tests/scripts/`), so only the
+library and the stories come from the base ref:
 
 ```bash
 pnpm capture-diff main          # whole suite vs main

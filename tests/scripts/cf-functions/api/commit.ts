@@ -8,7 +8,8 @@
  * sends that as one `visual-baselines-accept` repository_dispatch and returns
  * right away. The `accept-visual-baselines.yml` workflow does the rest with
  * tests/scripts/accept-baselines.ts: it copies the files from the run's
- * `js-dom-capture` artifact onto `snapshots/<branch>` in one commit, keeps
+ * `js-dom-capture-<i>` artifacts (one per capture shard) onto
+ * `snapshots/<branch>` in one commit, keeps
  * the `Visual Diff Review` status up to date, and re-runs the run's failed
  * jobs once the run has finished. That script also checks the story paths.
  *

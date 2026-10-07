@@ -21,6 +21,7 @@ on:
       - "packages/gofish-python/**"
       - "tests/**"
       - ".github/workflows/perf-bench.yml"
+      - ".github/actions/**"
   pull_request:
     # Narrow: only the engine, its bench harness/specs, and the bench/ruler
     # scripts — not every parity-story edit under tests/**.
@@ -31,6 +32,7 @@ on:
       - "tests/scripts/bench*.ts"
       - "tests/scripts/ruler.ts"
       - ".github/workflows/perf-bench.yml"
+      - ".github/actions/**"
   workflow_dispatch:
 
 jobs:
@@ -51,32 +53,9 @@ jobs:
 
       # Same MS-core-fonts pinning as the visual-tests job: keeps text
       # measurement (and therefore layout timing) stable across runs rather
-      # than drifting on fontconfig fallbacks. See
-      # .github/actions/setup-ms-fonts for why the .ttf files are cached
-      # directly.
-      - name: Restore mscorefonts .ttf cache
-        id: msfonts-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/msttcorefonts
-          key: msttcorefonts-v1
-
-      - name: Install MS TrueType core fonts
-        run: |
-          set -euo pipefail
-          DEST=/usr/share/fonts/truetype/msttcorefonts
-          CACHE="$HOME/.cache/msttcorefonts"
-          if [ -d "$CACHE" ] && ls "$CACHE"/*.ttf >/dev/null 2>&1; then
-            sudo mkdir -p "$DEST"
-            sudo cp "$CACHE"/*.ttf "$DEST"/
-          else
-            echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
-            sudo apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer
-            mkdir -p "$CACHE"
-            cp "$DEST"/*.ttf "$CACHE"/
-          fi
-          sudo fc-cache -f
+      # than drifting on fontconfig fallbacks.
+      - name: Set up MS core fonts
+        uses: ./.github/actions/setup-ms-fonts
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6

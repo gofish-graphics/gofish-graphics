@@ -36,13 +36,15 @@ function listFiles(dir: string, prefix = ""): string[] {
 
 /**
  * Delete baseline dom/screenshot files for stories that no longer exist in
- * the current capture. JS_DIR always holds the *full* story corpus (one
- * capture-js-dom.ts run with cleanOutDir: true, or in CI the merge of every
- * shard's, which runs only when all of them succeeded), so anything in the
- * baseline set but missing from JS_DIR is a genuinely removed (or renamed)
- * story, not a partial capture. Without this, deleted stories' baselines accumulate on
- * snapshots/<branch> forever, and compare.ts would re-report the same
- * removal on every future PR.
+ * the current capture: anything in the baseline set but missing from JS_DIR
+ * is treated as a removed (or renamed) story. That holds only when JS_DIR is
+ * a capture of the whole corpus: one unfiltered, unsharded capture-js-dom.ts
+ * run (cleanOutDir: true), or in CI the merge of every shard's. A story that
+ * failed to render writes no `.html` — capture-js-dom.ts still exits 0 — so
+ * its baseline is pruned here as if the story had been removed. Without
+ * this pruning, deleted stories' baselines accumulate on snapshots/<branch>
+ * forever, and compare.ts would re-report the same removal on every future
+ * PR.
  */
 function pruneRemovedBaselines(currentHtmlFiles: Set<string>): string[] {
   // An empty capture means something went wrong upstream, not that every

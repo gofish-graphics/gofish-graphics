@@ -305,9 +305,7 @@ async function captureStory(
 
   // Wait for render completion. Most charts resolve quickly; heavy unit-dot
   // treemaps can paint thousands of marks while the render promise is still
-  // settling, so fall back to waiting for visible SVG output, plus a settle
-  // for the render that is still going. A completed render needs no settle:
-  // the harness signals completion a frame after the render resolves.
+  // settling, so fall back to waiting for visible SVG output.
   try {
     await page.waitForFunction(
       () => window.__GOFISH_RENDER_COMPLETE__ === true,
@@ -324,12 +322,17 @@ async function captureStory(
       },
       { timeout: 40_000 }
     );
-    await page.waitForTimeout(300);
   }
 
   // Check for errors
   const error = await page.evaluate(() => window.__GOFISH_RENDER_ERROR__);
   if (error) throw new Error(`Render error: ${error}`);
+
+  // Settle, on every path: lets a render the fallback above caught mid-way
+  // finish, and lets uncaught errors thrown after the render signaled
+  // completion reach the pageerror listener before the caller checks
+  // `pageErrors`.
+  await page.waitForTimeout(300);
 
   // Extract DOM
   const dom = await page.evaluate(() => {

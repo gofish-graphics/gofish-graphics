@@ -41,9 +41,9 @@
  * log and the result arrays are still in story order (see `captureStories`).
  *
  * What varies between callers is ONLY which `harnessDir` the Vite server is
- * rooted in (so capture-diff can point a second server at a base-ref worktree),
- * which stories are selected, where output goes, and whether PNG screenshots
- * are written. DOM normalization always runs in
+ * rooted in (so capture-diff can point a second server at a base-ref worktree,
+ * see `withBaseRefHarness`), which stories are selected, where output goes, and
+ * whether PNG screenshots are written. DOM normalization always runs in
  * THIS process via the current `normalize-dom.ts`, so two captures driven from
  * the same invocation are normalized identically — which is what makes the
  * geometry diff platform-stable.
@@ -69,12 +69,13 @@ import {
   type BrowserContextOptions,
   type Page,
 } from "playwright";
-import { spawn, type ChildProcess } from "child_process";
+import { execSync, spawn, type ChildProcess } from "child_process";
 import { availableParallelism } from "os";
-import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs";
+import { writeFileSync, mkdirSync, rmSync, existsSync, cpSync } from "fs";
 import { join, dirname } from "path";
 import { normalizeDom } from "./normalize-dom.js";
 import { storyToPath } from "./path-mapping.js";
+import { git, removeWorktree } from "./snapshot-branch.js";
 
 export interface StoryInfo {
   id: string;
@@ -277,6 +278,59 @@ export async function withHarness<T>(
   } finally {
     await browser?.close();
     viteProc.kill();
+  }
+}
+
+/** This tree's harness: the Vite root for capturing the current worktree. */
+export const HARNESS_DIR = join(import.meta.dirname, "../harness");
+
+/**
+ * Run `fn` with a harness that renders the stories and library of commit
+ * `sha`: a throwaway git worktree at `sha`, torn down when `fn` settles.
+ *
+ * The worktree's own `tests/harness` is replaced by THIS tree's harness
+ * before anything runs. The harness is capture tooling, like this driver and
+ * `normalize-dom.ts`: it speaks the driver's protocol (`__listStories__`,
+ * `__loadStory__`, `__renderStory__`) and decides when a render is done. So
+ * both sides of a capture-diff or capture-pixels run use the same tooling,
+ * and only what the harness imports by relative path (`packages/`: the
+ * library and its stories) comes from `sha`. A harness from `sha` would speak
+ * that commit's protocol, which this driver need not understand, and a change
+ * to the tooling would show up as a diff in every story.
+ */
+export async function withBaseRefHarness<T>(
+  sha: string,
+  fn: (harnessDir: string) => Promise<T>
+): Promise<T> {
+  const wtPath = join("/tmp", `gofish-base-ref-${process.pid}`);
+  removeWorktree(wtPath);
+  try {
+    git(`git worktree add --detach "${wtPath}" ${sha}`);
+    const harnessDir = join(wtPath, "tests/harness");
+    rmSync(harnessDir, { recursive: true, force: true });
+    cpSync(HARNESS_DIR, harnessDir, { recursive: true });
+
+    // The worktree has no node_modules — install so its harness can run Vite.
+    // --ignore-scripts skips husky/postinstall (not needed for a headless
+    // render) and keeps the install fast; the pnpm store is shared so it's
+    // mostly links.
+    console.log(
+      `Installing dependencies in the temp worktree (this can take a minute)...`
+    );
+    execSync("pnpm install --ignore-scripts", {
+      cwd: wtPath,
+      stdio: "inherit",
+    });
+    // --ignore-scripts also skips gofish-ir's `prepare` build, which the
+    // harness needs to resolve the package. Build it explicitly.
+    execSync("pnpm --filter gofish-ir build", {
+      cwd: wtPath,
+      stdio: "inherit",
+    });
+
+    return await fn(harnessDir);
+  } finally {
+    removeWorktree(wtPath);
   }
 }
 
