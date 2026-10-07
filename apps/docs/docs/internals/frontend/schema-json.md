@@ -2639,11 +2639,46 @@ for the API.
                 }
               ],
               "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; \"auto\" picks 0, 45, or 90 degrees per label row so labels do not collide."
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Calendar"
+              },
+              "description": "The label rows of a time axis, inner row first, e.g. [Calendar.month, Calendar.year]. Each row is one calendar partition: its ticks are its cells' starts, and each cell is labeled just past its start. Default: the finest level whose labels fit, then its parent level. In JS a row may also be { unit, format } with format a function of the cell."
             }
           }
         }
       ],
-      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle."
+      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and the rows of a time axis."
+    },
+    "Calendar": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "enum": [
+            "second",
+            "minute",
+            "hour",
+            "day",
+            "week",
+            "month",
+            "quarter",
+            "year"
+          ],
+          "description": "The calendar level of each cell."
+        },
+        "step": {
+          "$ref": "#/$defs/Number",
+          "description": "How many units one cell spans; steps align to the level above.",
+          "default": 1
+        },
+        "start": {
+          "enum": ["monday", "sunday"],
+          "description": "The first day of a week (weeks only)."
+        }
+      },
+      "description": "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3)."
     },
     "AxesOptions": {
       "oneOf": [

@@ -17,7 +17,9 @@ await build({
   bundle: true,
   platform: "browser",
   format: "esm",
-  target: "es2019",
+  // ES2020 for BigInt literals: temporal-polyfill (loaded only where the
+  // browser has no native Temporal) uses them.
+  target: "es2020",
   sourcemap: "inline",
   logLevel: "info",
   resolveExtensions: [".ts", ".tsx", ".js", ".jsx"],

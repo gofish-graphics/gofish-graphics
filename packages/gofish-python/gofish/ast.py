@@ -1298,6 +1298,25 @@ class ChartBuilder:
         """
         return encode_non_finite(self._ir())
 
+    def _options_with_time_schema(self) -> Any:
+        """The chart options, with ``HasCalendar`` added to the schema for
+        each datetime column of the data (pandas, polars or pyarrow) that the
+        schema does not declare. Datetimes cross the bridge as epoch
+        milliseconds; the schema marks them as time."""
+        if self.data is None or isinstance(self.data, _RefProxy):
+            return self.options
+        if self._uses_previous_marks():
+            return self.options
+        inferred = _time_schema(self.data)
+        if not inferred:
+            return self.options
+        options = dict(self.options or {})
+        schema = dict(options.get("schema") or {})
+        for column, column_type in inferred.items():
+            schema.setdefault(column, column_type)
+        options["schema"] = schema
+        return options
+
     def _ir(self) -> dict:
         """``to_ir()`` before its non-finite numbers are encoded (see
         ``Mark._ir``)."""
@@ -1345,7 +1364,7 @@ class ChartBuilder:
             "data": data_ir,
             "operators": [op.to_dict() for op in self.operators],
             "mark": mark_ir,
-            "options": self.options,
+            "options": self._options_with_time_schema(),
         }
         if self._z_order is not None:
             result["zOrder"] = self._z_order
@@ -2362,6 +2381,122 @@ class Schema:
         and a value outside the levels is an error.
         """
         return ColumnSchema({"HasOrder": {"levels": list(levels)}})
+
+    @staticmethod
+    def time(zone: str = "UTC") -> ColumnSchema:
+        """A column whose values are instants (``HasCalendar``), read on the
+        calendar of ``zone``, an IANA time zone (``"UTC"`` by default).
+
+        A value may be an ISO 8601 string (``"2024-03-05"`` is the start of
+        that day in ``zone``; a string without an offset is a wall-clock time
+        in ``zone``), a datetime, or epoch milliseconds. A pandas or polars
+        datetime column is a time without a schema entry. An axis over the
+        column labels its ticks with calendar cells (see ``Calendar``).
+        """
+        if not isinstance(zone, str):
+            raise TypeError(
+                f"Schema.time: zone must be an IANA time zone name, got {zone!r}"
+            )
+        return ColumnSchema({"HasCalendar": {"zone": zone}})
+
+
+# Calendar partitions
+
+_CALENDAR_UNITS = (
+    "second",
+    "minute",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "quarter",
+    "year",
+)
+
+
+class CalendarPartition(dict):
+    """A partition of the time line into calendar cells: a level (``unit``)
+    at a step. The dict is the wire form JS reads (``{"unit": "month",
+    "step": 3}``). Mirrors JS ``CalendarPartition``; build one from
+    ``Calendar``. Used in ``axes={"x": {"rows": [...]}}``.
+    """
+
+    def __init__(self, unit: str, step: int = 1, start: Optional[str] = None):
+        if unit not in _CALENDAR_UNITS:
+            raise ValueError(
+                f"Calendar: unknown unit {unit!r}; expected one of "
+                + ", ".join(_CALENDAR_UNITS)
+            )
+        if isinstance(step, bool) or not isinstance(step, int) or step < 1:
+            raise ValueError(
+                f"Calendar.{unit}.every({step!r}): the step must be a whole "
+                f"number of {unit}s, 1 or more."
+            )
+        wire: dict = {"unit": unit, "step": step}
+        if start is not None:
+            wire["start"] = start
+        super().__init__(wire)
+
+    def every(self, n: int) -> "CalendarPartition":
+        """The same level, ``n`` units per cell (``Calendar.month.every(3)``).
+        Steps align to the level above: months in steps of 3 start in
+        January, April, July and October."""
+        return CalendarPartition(self["unit"], n, self.get("start"))
+
+
+class _WeekPartition(CalendarPartition):
+    """``Calendar.week``: Monday-start weeks, also callable as
+    ``Calendar.week(start="sunday")``."""
+
+    def __call__(self, start: str = "monday") -> CalendarPartition:
+        if start not in ("monday", "sunday"):
+            raise ValueError(
+                f'Calendar.week: start must be "monday" or "sunday", not {start!r}.'
+            )
+        return CalendarPartition("week", 1, start)
+
+
+class Calendar:
+    """The calendar partitions, used in ``axes={"x": {"rows": [...]}}``.
+
+    Mirrors JS ``Calendar``::
+
+        chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})
+        Calendar.hour.every(6)
+        Calendar.week(start="sunday")
+
+    A custom ``format`` for a row's labels is JS-only for now.
+    """
+
+    second = CalendarPartition("second")
+    minute = CalendarPartition("minute")
+    hour = CalendarPartition("hour")
+    day = CalendarPartition("day")
+    week = _WeekPartition("week", 1, "monday")
+    month = CalendarPartition("month")
+    quarter = CalendarPartition("quarter")
+    year = CalendarPartition("year")
+
+
+def _time_schema(data: Any) -> dict:
+    """The column types of ``data``'s datetime columns: ``HasCalendar`` in
+    the column's own time zone, or UTC for a naive or date column. Inference
+    is local, from the column's dtype: strings and numbers are never time."""
+    import pyarrow as pa
+
+    from .arrow_utils import to_arrow_table
+
+    try:
+        table = to_arrow_table(data)
+    except Exception:
+        return {}
+    out = {}
+    for field in table.schema:
+        if pa.types.is_timestamp(field.type):
+            out[field.name] = {"HasCalendar": {"zone": field.type.tz or "UTC"}}
+        elif pa.types.is_date(field.type):
+            out[field.name] = {"HasCalendar": {"zone": "UTC"}}
+    return out
 
 
 # Color configuration

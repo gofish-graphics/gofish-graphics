@@ -311,7 +311,7 @@ export const LABEL_OPTIONS: FieldGroup = group({
  *  object of named options. Mirrors the JS `AxisOptions` in
  *  `gofish-graphics/src/ast/gofish.tsx`. */
 const axisOptions: FieldSpec = {
-  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle.",
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and the rows of a time axis.",
   type: t.union(
     t.boolean,
     t.object({
@@ -327,8 +327,42 @@ const axisOptions: FieldSpec = {
         type: t.union(t.number, t.array(t.number), t.enum("auto")),
         doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; "auto" picks 0, 45, or 90 degrees per label row so labels do not collide.',
       },
+      rows: {
+        type: t.array(t.ref("Calendar")),
+        doc: "The label rows of a time axis, inner row first, e.g. [Calendar.month, Calendar.year]. Each row is one calendar partition: its ticks are its cells' starts, and each cell is labeled just past its start. Default: the finest level whose labels fit, then its parent level. In JS a row may also be { unit, format } with format a function of the cell.",
+      },
     })
   ),
+};
+
+/** A Calendar value's wire form: a partition of the time line into calendar
+ *  cells (`CalendarPartition` in gofish-graphics/src/ast/calendar.ts). */
+const calendarPartition: FieldSpec = {
+  doc: "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3).",
+  type: t.object({
+    unit: {
+      type: t.enum(
+        "second",
+        "minute",
+        "hour",
+        "day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ),
+      doc: "The calendar level of each cell.",
+    },
+    step: {
+      type: t.number,
+      default: 1,
+      doc: "How many units one cell spans; steps align to the level above.",
+    },
+    start: {
+      type: t.enum("monday", "sunday"),
+      doc: "The first day of a week (weeks only).",
+    },
+  }),
 };
 
 /** Named option types: the nested option objects a field points at with
@@ -343,6 +377,7 @@ const axisOptions: FieldSpec = {
  *  (LabelIR, TranslateIR, FieldAccessor, AxisDimsValue, ...). */
 export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   AxisOptions: axisOptions,
+  Calendar: calendarPartition,
   AxesOptions: {
     doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
     type: t.union(
@@ -386,7 +421,7 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   schema: {
     type: t.record(t.any),
-    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels).",
+    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().",
   },
 });
 
