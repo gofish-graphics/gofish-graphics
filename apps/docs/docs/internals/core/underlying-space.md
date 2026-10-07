@@ -344,6 +344,23 @@ the two sides:
 
 With every descent 0, all of this reduces to a single width.
 
+**A stack is a signed partition of its own sum.** Read each part as an
+oriented interval from its tail to its head, counting +1 where it runs forward
+and −1 where it runs back. The parts then add up to the one interval from the
+stack's 0 to the sum of the parts: the boundaries telescope, and where a
+negative part goes back over earlier parts, the overlap cancels. So a stack is
+a partition whose whole is computed from its parts, bottom-up and in data
+units. Two things set it apart from a partition of a given whole. First, the
+stack's type is the span its parts cover (`[−35, 30]` above), not the net
+interval (`[0, −35]`), because the axis must hold all of the ink. Second,
+negative parts rule out a given whole, since a net sum of 0 cannot be scaled to
+fill anything. So the space-filling layout of a mosaic is a stack whose sizes
+are shares (see
+[Space-filling spines](#space-filling-spines-normalize-self-scales-a-stacking-axis)),
+and it is defined only for nonnegative amounts. Binning a continuous axis
+(#1058) is a different kind of partition: its cells come from a fixed map of
+the scale, not from the parts, so they do not depend on order.
+
 `ORDINAL` carries a `measure` too (the grouping field, e.g. `"lake"`) — the
 discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
 (`spread`'s `by`) when the ordinal space is built (`distributeSpaceFold` →
