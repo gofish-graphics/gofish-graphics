@@ -520,7 +520,9 @@ to `createOperator`; Encodable doesn't address layout multiplicity.
     acyclic).
 - The companion mark factory: [The Mark Factory](/internals/frontend/mark-factory).
 - The `serialize` config field tags the produced operator with
-  `__serialize` metadata the frontend-IR emitter reads — see
+  `__serialize` metadata the frontend-IR emitter reads. The tag holds the
+  options as the caller passed them, and the emitter keeps only the keys the
+  operator's descriptor declares — see
   [Frontend IR (Serialization)](/internals/frontend/serialization).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

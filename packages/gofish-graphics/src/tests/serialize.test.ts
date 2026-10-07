@@ -1072,6 +1072,113 @@ async function main() {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // The deserializer's factory table agrees with the descriptor table: every
+  // descriptor has a factory, and every factory has a descriptor (#691).
+  // -------------------------------------------------------------------------
+  {
+    // Wire types the descriptor table declares that `mapMark` rebuilds
+    // structurally rather than through a factory.
+    const STRUCTURAL = new Set(["mark-fn"]);
+    const tables = Serialize.DESCRIPTOR_TABLES as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const missing: string[] = [];
+    for (const [kind, table] of Object.entries(tables)) {
+      for (const type of Object.keys(table)) {
+        if (STRUCTURAL.has(type)) continue;
+        if (typeof Serialize.factoryFor(kind, type) !== "function") {
+          missing.push(`${kind} ${type}`);
+        }
+      }
+    }
+    check(
+      "every descriptor has a deserializer factory",
+      missing.length === 0,
+      missing.join(", ")
+    );
+    const declared = new Set(
+      Object.values(tables).flatMap((table) => Object.keys(table))
+    );
+    const orphans = Object.keys(Serialize.FACTORIES).filter(
+      (type) => !declared.has(type)
+    );
+    check(
+      "every deserializer factory has a descriptor",
+      orphans.length === 0,
+      orphans.join(", ")
+    );
+    const orphanBuilders = Object.keys(Serialize.OPERATOR_BUILDERS).filter(
+      (type) => !(type in tables.operator)
+    );
+    check(
+      "every hand-written operator builder has an operator descriptor",
+      orphanBuilders.length === 0,
+      orphanBuilders.join(", ")
+    );
+    check(
+      "factoryFor is kind-checked (no operator `layer`)",
+      Serialize.factoryFor("operator", "layer") === undefined
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // toJSON keeps only the keys a construct's descriptor declares (#691).
+  // -------------------------------------------------------------------------
+  {
+    const rows = [{ k: "a", v: 1 }];
+    const doc = await chart(rows)
+      .flow(spread({ by: "k", dir: "x", bogus: 1, label: false } as any))
+      .mark(
+        circle({
+          r: 3,
+          w: "v",
+          fillOpacity: 0.5,
+          debug: false,
+          opacity: (d: any) => d.v,
+        } as any)
+      )
+      .toJSON();
+    const op = (doc.root as any).operators[0];
+    const mark = (doc.root as any).mark;
+    check("unknown operator key is dropped", !("bogus" in op));
+    check(
+      "operator base field `label` is kept",
+      op.label === false && op.by === "k"
+    );
+    check(
+      "unknown leaf-mark keys are dropped",
+      !("w" in mark) && !("fillOpacity" in mark)
+    );
+    check("leaf-mark base field `debug` is kept", mark.debug === false);
+    check("a callback channel is dropped", !("opacity" in mark));
+    check("declared leaf-mark keys are kept", mark.r === 3);
+
+    const combDoc = await chart(rows)
+      .mark(spread({ dir: "x", spacing: 4, bogus: 1 } as any, [rect({ w: 4, h: 4 })]))
+      .toJSON();
+    const comb = (combDoc.root as any).mark;
+    check(
+      "unknown combinator option is dropped",
+      comb.options.spacing === 4 && !("bogus" in comb.options)
+    );
+
+    const undeclared: any = async () => undefined;
+    undeclared.__serialize = { type: "not-a-construct", opts: {} };
+    let message = "";
+    try {
+      await chart(rows).mark(undeclared).toJSON();
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+    check(
+      "a mark type with no descriptor has no IR form",
+      message.includes("no leaf-mark descriptor"),
+      message || "did not throw"
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);

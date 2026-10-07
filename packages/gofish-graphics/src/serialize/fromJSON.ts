@@ -29,11 +29,10 @@ import { Constraint, RelateOperand } from "../ast/constraints";
 import { palette, gradient } from "../ast/colorSchemes";
 import { ref } from "../ast/shapes/ref";
 import { GoFishRef } from "../ast/_ref";
+import { sealComponent } from "../ast/withGoFish";
 import { Frontend } from "gofish-ir";
 import {
-  COMBINATOR_FACTORIES,
-  MARK_MAP,
-  OPERATOR_MAP,
+  factoryFor,
   cutSlices,
   cutMark,
   offsetOp,
@@ -175,25 +174,11 @@ export function unwrapValues(value: any): any {
  * scoped mark still behaves as a `NameableMark` for the raw-mark render path.
  */
 export function wrapWithScope(inner: any): any {
-  const wrapped: any = async (data: any, key: any, layerContext: any) => {
-    const node: any = await Promise.resolve(inner(data, key, layerContext));
-    // Match JS `createMark`'s post-resolve sequence: stamp datum, then
-    // declare a scope boundary. Layout reads `node.datum` during some
-    // bbox / inferRaw passes. The `node.name(key)` step createMark does is
-    // skipped: `mapMark` already chains `.name(spec.name)` when set, and
-    // `.name("")` on a nested combinator child disrupts layer-context
-    // registration when the parent expects un-named children.
-    if (node) {
-      node.datum = data;
-      if (typeof node.scope === "function") {
-        node.scope();
-      }
-      // The composite is an opaque unit: ref-name resolution and z-order
-      // flattening both stop at `_isComponent`.
-      node._isComponent = true;
-    }
-    return node;
-  };
+  // The same closing step a JS `createMark` component gets. (`createMark` no
+  // longer names its node after the data key, since #923, so neither side
+  // names here: `mapMark` chains `.name(spec.name)` when the IR has one.)
+  const wrapped: any = async (data: any, key: any, layerContext: any) =>
+    sealComponent(await inner(data, key, layerContext), data);
   const define = (key: string, value: any) =>
     Object.defineProperty(wrapped, key, {
       value,
@@ -291,7 +276,7 @@ export function mapOperator(
   bridge?: DeriveBridge
 ): Operator<any, any> | null {
   const { type, translate, label, ...opts } = op as Record<string, any>;
-  const factory = OPERATOR_MAP[type as string];
+  const factory = factoryFor("operator", type as string);
   if (!factory) return null;
   let operator = factory(opts, bridge);
   if (
@@ -552,7 +537,7 @@ export function mapMark(
     // Resolve color/coord configs (e.g. a `layer({coord: polar()})` carries
     // its coord transform in the combinator options, not chart options).
     const opts = resolveOptions(unwrapMarkOpts(spec.options ?? {}, bridge));
-    const factory = COMBINATOR_FACTORIES[spec.type];
+    const factory = factoryFor("combinator-mark", spec.type);
     if (!factory) {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
@@ -600,7 +585,7 @@ export function mapMark(
     opts = rest;
   }
 
-  const factory = MARK_MAP[type as string];
+  const factory = factoryFor("leaf-mark", type as string);
   if (!factory) {
     throw new Error(`Unknown mark type: ${String(type)}`);
   }
