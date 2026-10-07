@@ -9,7 +9,7 @@
  * The deserializer turns a {@link Frontend.FrontendIRDocument} into a live
  * GoFish `ChartBuilder` / `Mark` graph. Each construct the descriptor table
  * declares is rebuilt by one factory, looked up by its wire `type`
- * ({@link factoryFor}); the `derive` operator and any `{__gofish_lambda}`
+ * ({@link rebuild}); the `derive` operator and any `{__gofish_lambda}`
  * sentinels invoke a caller-supplied bridge (typically the Python anywidget
  * bridge).
  */
@@ -65,11 +65,9 @@ import { pack } from "../ast/graphicalOperators/pack";
 import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
 import { offset as offsetOp } from "../ast/graphicalOperators/offset";
 import { setMeasureProvenance, type MeasureProvenance } from "../ast/data";
-import type { Frontend } from "gofish-ir";
-import { DESCRIPTOR_TABLES, type FactoryKind } from "./descriptorTables";
+import { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
-export { DESCRIPTOR_TABLES, type FactoryKind };
 export { cutSlices, cutMark, offsetOp };
 
 /**
@@ -99,7 +97,7 @@ export interface DeriveBridge {
 /**
  * The public factory that rebuilds each wire type, keyed by the descriptor
  * table's `type` (gofish-ir's `OPERATORS`, `LEAF_MARKS`, `COMBINATOR_MARKS`).
- * The descriptor's kind decides the call (see {@link factoryFor}): an
+ * The descriptor's kind decides the call (see {@link rebuild}): an
  * operator or a leaf mark is `factory(opts)`, a combinator mark is
  * `factory(opts, children)`. So a dual-form construct (`spread`, `line`, …)
  * has one entry for both of its forms.
@@ -214,33 +212,28 @@ export const OPERATOR_BUILDERS: Record<
 };
 
 /**
- * The factory that rebuilds a wire `type` of the given kind, or `undefined`
- * when the descriptor table declares no construct of that kind and type (an
- * operator `{type: "layer"}` has none, though the combinator `layer` does).
+ * Rebuild the construct of the given kind and wire `type` from its options,
+ * or return `undefined` when the descriptor table declares no construct of
+ * that kind and type (an operator `{type: "layer"}` has none, though the
+ * combinator `layer` does).
+ *
+ * The kind decides the call. An operator or a leaf mark is `factory(opts)`,
+ * and a combinator mark is `factory(opts, children)`: a dual-form factory
+ * reads a second argument as the combinator form's children, so an operator
+ * must not get one. Only an {@link OPERATOR_BUILDERS} entry sees the bridge.
  */
-export function factoryFor(
-  kind: "operator",
-  type: string
-): ((opts: Record<string, any>, bridge?: DeriveBridge) => any) | undefined;
-export function factoryFor(
-  kind: "leaf-mark" | "combinator-mark",
-  type: string
-): ((...args: any[]) => any) | undefined;
-export function factoryFor(
-  kind: FactoryKind,
-  type: string
-): ((...args: any[]) => any) | undefined {
-  if (!Object.prototype.hasOwnProperty.call(DESCRIPTOR_TABLES[kind], type)) {
-    return undefined;
-  }
-  if (kind !== "operator") return FACTORIES[type];
-  if (Object.prototype.hasOwnProperty.call(OPERATOR_BUILDERS, type)) {
-    return OPERATOR_BUILDERS[type];
+export function rebuild(
+  kind: Frontend.NodeKind,
+  type: string,
+  opts: Record<string, any>,
+  { children, bridge }: { children?: unknown[]; bridge?: DeriveBridge } = {}
+): any {
+  if (!Object.hasOwn(Frontend.DESCRIPTOR_TABLES[kind], type)) return undefined;
+  if (kind === "operator" && Object.hasOwn(OPERATOR_BUILDERS, type)) {
+    return OPERATOR_BUILDERS[type](opts, bridge);
   }
   const factory = FACTORIES[type];
-  // An operator is called with its options alone: a dual-form factory reads
-  // a second argument as the combinator form's children.
-  return factory && ((opts: Record<string, any>) => factory(opts));
+  return kind === "combinator-mark" ? factory(opts, children) : factory(opts);
 }
 
 // Re-export Frontend namespace for convenience.

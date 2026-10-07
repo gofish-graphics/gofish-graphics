@@ -657,19 +657,16 @@ export type OperatorConfig<Datum, Options> = {
     positions?: (opts: Options) => { x: boolean; y: boolean };
   };
   /**
-   * Optional IR-serialization config. When set, the factory tags the
-   * produced operator with an `__serialize: { type, opts }` marker the
-   * frontend-IR emitter (gofish-graphics/serialize/toJSON) reads. Each
-   * standard-library operator should declare its IR discriminator here;
-   * user-built operators may omit it (the emitter falls back to opaque
-   * `{ type: "derive" }` for any operator that lacks a tag). The tag holds
-   * the options as the caller passed them; the emitter keeps only the keys
-   * the operator's descriptor declares.
+   * The operator's IR discriminator (lowercase, as on the wire), e.g.
+   * "spread". When set, the factory tags the produced operator with an
+   * `__serialize: { type, opts }` marker the frontend-IR emitter
+   * (gofish-graphics/serialize/toJSON) reads. Each standard-library operator
+   * declares it; user-built operators may omit it (the emitter falls back to
+   * opaque `{ type: "derive" }` for any operator that lacks a tag). The tag
+   * holds the options as the caller passed them; the emitter keeps only the
+   * keys the operator's descriptor declares.
    */
-  serialize?: {
-    /** IR discriminator (lowercase to match the wire format), e.g. "spread". */
-    type: string;
-  };
+  serialize?: string;
 };
 
 /** Stamp a combinator-form mark with its IR-serialization tag. `__combinator`
@@ -1063,7 +1060,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       };
       const combinator = nameableMark(base);
       if (cfg.serialize) {
-        tagCombinator(combinator, cfg.serialize.type, opts, marks);
+        tagCombinator(combinator, cfg.serialize, opts, marks);
       }
       return combinator;
     }
@@ -1233,7 +1230,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     // Tag the operator with IR-serialization metadata so the frontend-IR
     // emitter can reconstruct it as `{ type, ...opts }` on the wire.
     if (cfg.serialize) {
-      (operator as any).__serialize = { type: cfg.serialize.type, opts };
+      (operator as any).__serialize = { type: cfg.serialize, opts };
     }
     const withTranslate = attachTranslateOption(operator, (translateOpts) =>
       translateOperator(operator, translateOpts)

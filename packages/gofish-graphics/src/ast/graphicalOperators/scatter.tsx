@@ -343,5 +343,5 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
   // travel-axis rule, which runs at build time, does not see it.
   // TODO(#838 follow-up): resolve the travel axis by name too.
   arrangement: { kind: "value", positions: scatterPositions },
-  serialize: { type: "scatter" },
+  serialize: "scatter",
 });

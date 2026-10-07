@@ -376,18 +376,6 @@ export type NameableMark<T> = Mark<T> & {
 };
 
 /**
- * Mark-factory IR serialization config — the optional third argument to
- * `createMark`: the mark's IR discriminator (lowercase, as on the wire), e.g.
- * "rect".
- *
- * The factory tags each produced mark with `__serialize: { type, opts }`, the
- * options exactly as the caller passed them, so the frontend-IR emitter
- * (gofish-graphics/serialize/toJSON) can reconstruct the mark on the wire.
- * The emitter keeps only the keys the mark's descriptor declares.
- */
-export type MarkSerializeConfig = string;
-
-/**
  * Creates a high-level mark from a low-level shape function plus optional
  * channel annotations. Channel annotations describe how each prop encodes data:
  * - "size":  accepts `number | keyof T`, uses inferSize
@@ -410,6 +398,12 @@ export type MarkSerializeConfig = string;
  * The returned mark supports `.name("layerName" | token)` so that when used
  * in a chart, each produced node is registered for `ref("layerName")` /
  * `selectAll("layerName")`.
+ *
+ * `serialize` is the mark's IR discriminator (lowercase, as on the wire), e.g.
+ * "rect". The factory tags each produced mark with `__serialize: { type, opts }`,
+ * the options exactly as the caller passed them, so the frontend-IR emitter
+ * (gofish-graphics/serialize/toJSON) can reconstruct the mark on the wire. The
+ * emitter keeps only the keys the mark's descriptor declares.
  */
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild
@@ -417,7 +411,7 @@ export function createMark<P extends Record<string, any>>(
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild,
   channels: undefined,
-  serialize: MarkSerializeConfig
+  serialize: string
 ): (props: P) => NameableMark<P>;
 export function createMark<
   ShapeProps extends Record<string, any>,
@@ -432,7 +426,7 @@ export function createMark<
     | PromiseLike<GoFishNode>
     | PromiseLike<GoFishNode[]>,
   channels: C,
-  serialize?: MarkSerializeConfig,
+  serialize?: string,
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
@@ -440,7 +434,7 @@ export function createMark<
 export function createMark(
   shapeFn: any,
   channels: Record<string, any> = {},
-  serialize?: MarkSerializeConfig,
+  serialize?: string,
   cfg?: { kind?: MarkKind }
 ): any {
   const kind: MarkKind = cfg?.kind ?? "per-item";
@@ -467,7 +461,7 @@ export function sealComponent(node: GoFishNode, datum: unknown): GoFishNode {
 function buildCreatedMark(
   shapeFn: any,
   channels: Record<string, any>,
-  serialize: MarkSerializeConfig | undefined,
+  serialize: string | undefined,
   kind: MarkKind,
   markOpts: Record<string, any>
 ): any {

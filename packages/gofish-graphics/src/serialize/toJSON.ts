@@ -21,7 +21,6 @@
 
 import { Frontend } from "gofish-ir";
 import type { ChartBuilder, Mark, Operator } from "./registry";
-import { DESCRIPTOR_TABLES, type FactoryKind } from "./descriptorTables";
 import { GoFishRef } from "../ast/_ref";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
@@ -52,47 +51,34 @@ interface SerializeTag {
 }
 
 /**
- * The fields every construct of a kind carries beside its own, as the
- * validator reads them: an operator's `label`/`translate`/`debug`, a leaf
- * mark's `name`/`label`/`relate`/`zOrder`/`translate`/`debug`. A combinator's
- * base fields sit beside its `options`, not in them; only `debug` rides in
- * the options (as the Python combinator cores send it).
- */
-const BASE_FIELDS: Record<FactoryKind, Frontend.FieldGroup> = {
-  operator: Frontend.OPERATOR_BASE_FIELDS,
-  "leaf-mark": Frontend.MARK_BASE_FIELDS,
-  "combinator-mark": { debug: Frontend.MARK_BASE_FIELDS.debug },
-};
-
-/**
- * A construct's options as the wire carries them: only the keys its
- * descriptor declares, plus its kind's base fields. Factories tag their
- * options as the caller passed them; this is the one place that decides what
- * of them reaches the IR, so an unknown key never leaks onto the wire.
+ * A construct's options as the wire carries them: only the keys gofish-ir's
+ * `acceptedFields` lists for its kind and type (its descriptor's fields plus
+ * the base fields that sit beside them). Factories tag their options as the
+ * caller passed them; this is the one place that decides what of them
+ * reaches the IR, so an unknown key never leaks onto the wire.
  *
  * A function value is dropped too, whatever the key: a callback or `live(...)`
  * channel is a JS closure with no JSON form (the same reason a JS `derive(fn)`
  * emits an opaque `{type: "derive"}`). A type the descriptor table does not
  * declare has no wire form at all, so it throws.
  */
-function wireOpts(kind: FactoryKind, type: string, opts: AnyObject): AnyObject {
-  const descriptor = DESCRIPTOR_TABLES[kind][type];
-  if (descriptor === undefined) {
+function wireOpts(
+  kind: Frontend.NodeKind,
+  type: string,
+  opts: AnyObject
+): AnyObject {
+  const accepted = Frontend.acceptedFields(kind, type);
+  if (accepted === undefined) {
     throw new Error(
       `toJSON: "${type}" has no ${kind} descriptor in gofish-ir's descriptor ` +
         "table, so it has no IR form."
     );
   }
-  const keys = new Set<string>();
-  for (const [name, spec] of Object.entries({
-    ...BASE_FIELDS[kind],
-    ...Frontend.resolveFields(descriptor),
-  })) {
-    keys.add(spec.wire ?? name);
-  }
   const out: AnyObject = {};
   for (const [key, value] of Object.entries(opts)) {
-    if (keys.has(key) && typeof value !== "function") out[key] = value;
+    if (Object.hasOwn(accepted, key) && typeof value !== "function") {
+      out[key] = value;
+    }
   }
   return out;
 }

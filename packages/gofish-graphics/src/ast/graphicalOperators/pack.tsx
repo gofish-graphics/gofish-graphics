@@ -136,7 +136,7 @@ const packOperator = createOperator<any, PackOptions>(
   {
     split: ({ by }, d) =>
       by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
-    serialize: { type: "pack" },
+    serialize: "pack",
   }
 );
 

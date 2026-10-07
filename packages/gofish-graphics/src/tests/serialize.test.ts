@@ -925,9 +925,9 @@ async function main() {
     );
   }
 
-  // Combinator-form stack: previously emitted by toJSON but COMBINATOR_FACTORIES
-  // had no entry to deserialize it, so fromJSON threw "Unknown combinator
-  // mark type". The fix is two lines in registry.ts; this test pins it.
+  // Combinator-form stack: once emitted by toJSON with no deserializer
+  // factory, so fromJSON threw "Unknown combinator mark type". This test pins
+  // the round trip.
   {
     const c = chart([{ a: 1 }]).mark(
       stack({ dir: "y" }, [rect({ h: 10 }), rect({ h: 20 })])
@@ -1080,15 +1080,20 @@ async function main() {
     // Wire types the descriptor table declares that `mapMark` rebuilds
     // structurally rather than through a factory.
     const STRUCTURAL = new Set(["mark-fn"]);
-    const tables = Serialize.DESCRIPTOR_TABLES as Record<
-      string,
-      Record<string, unknown>
-    >;
+    const kinds: Frontend.NodeKind[] = [
+      "operator",
+      "leaf-mark",
+      "combinator-mark",
+    ];
+    const tables = kinds.map((kind) => Frontend.DESCRIPTOR_TABLES[kind]);
     const missing: string[] = [];
-    for (const [kind, table] of Object.entries(tables)) {
-      for (const type of Object.keys(table)) {
+    for (const kind of kinds) {
+      for (const type of Object.keys(Frontend.DESCRIPTOR_TABLES[kind])) {
         if (STRUCTURAL.has(type)) continue;
-        if (typeof Serialize.factoryFor(kind, type) !== "function") {
+        const built =
+          kind === "operator" &&
+          Object.hasOwn(Serialize.OPERATOR_BUILDERS, type);
+        if (!built && typeof Serialize.FACTORIES[type] !== "function") {
           missing.push(`${kind} ${type}`);
         }
       }
@@ -1098,9 +1103,7 @@ async function main() {
       missing.length === 0,
       missing.join(", ")
     );
-    const declared = new Set(
-      Object.values(tables).flatMap((table) => Object.keys(table))
-    );
+    const declared = new Set(tables.flatMap((table) => Object.keys(table)));
     const orphans = Object.keys(Serialize.FACTORIES).filter(
       (type) => !declared.has(type)
     );
@@ -1110,7 +1113,7 @@ async function main() {
       orphans.join(", ")
     );
     const orphanBuilders = Object.keys(Serialize.OPERATOR_BUILDERS).filter(
-      (type) => !(type in tables.operator)
+      (type) => !Object.hasOwn(Frontend.OPERATORS, type)
     );
     check(
       "every hand-written operator builder has an operator descriptor",
@@ -1118,8 +1121,8 @@ async function main() {
       orphanBuilders.join(", ")
     );
     check(
-      "factoryFor is kind-checked (no operator `layer`)",
-      Serialize.factoryFor("operator", "layer") === undefined
+      "rebuild is kind-checked (no operator `layer`)",
+      Serialize.rebuild("operator", "layer", {}) === undefined
     );
   }
 

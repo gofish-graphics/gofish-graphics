@@ -7,12 +7,10 @@
  */
 
 export {
-  DESCRIPTOR_TABLES,
   FACTORIES,
   OPERATOR_BUILDERS,
-  factoryFor,
+  rebuild,
   type DeriveBridge,
-  type FactoryKind,
 } from "./registry";
 
 export {

@@ -32,7 +32,7 @@ import { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";
 import { Frontend } from "gofish-ir";
 import {
-  factoryFor,
+  rebuild,
   cutSlices,
   cutMark,
   offsetOp,
@@ -276,9 +276,8 @@ export function mapOperator(
   bridge?: DeriveBridge
 ): Operator<any, any> | null {
   const { type, translate, label, ...opts } = op as Record<string, any>;
-  const factory = factoryFor("operator", type as string);
-  if (!factory) return null;
-  let operator = factory(opts, bridge);
+  let operator = rebuild("operator", type as string, opts, { bridge });
+  if (operator === undefined) return null;
   if (
     operator &&
     label !== undefined &&
@@ -537,11 +536,12 @@ export function mapMark(
     // Resolve color/coord configs (e.g. a `layer({coord: polar()})` carries
     // its coord transform in the combinator options, not chart options).
     const opts = resolveOptions(unwrapMarkOpts(spec.options ?? {}, bridge));
-    const factory = factoryFor("combinator-mark", spec.type);
-    if (!factory) {
+    let mark = rebuild("combinator-mark", spec.type, opts, {
+      children: childMarks,
+    });
+    if (mark === undefined) {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
-    let mark = factory(opts, childMarks);
     if (spec.relate && typeof (mark as any).relate === "function") {
       // Rebuilt per call: a `ref(...)` clause is a live GoFishRef that
       // `.name()` mutates in place, so calls must not share one.
@@ -585,11 +585,10 @@ export function mapMark(
     opts = rest;
   }
 
-  const factory = factoryFor("leaf-mark", type as string);
-  if (!factory) {
+  let mark = rebuild("leaf-mark", type as string, unwrapMarkOpts(opts, bridge));
+  if (mark === undefined) {
     throw new Error(`Unknown mark type: ${String(type)}`);
   }
-  let mark = factory(unwrapMarkOpts(opts, bridge));
   if (labelSpecs && typeof (mark as any).label === "function") {
     for (const labelObj of labelSpecs) {
       const { accessor, ...labelOpts } = labelObj;

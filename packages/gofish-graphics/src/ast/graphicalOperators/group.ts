@@ -19,6 +19,6 @@ export const group = createOperator<any, GroupOptions>(
     // Positions nothing, but its `by` is still eligible to split a relational
     // mark (see `classifyOperator`).
     arrangement: { kind: "none" },
-    serialize: { type: "group" },
+    serialize: "group",
   }
 );

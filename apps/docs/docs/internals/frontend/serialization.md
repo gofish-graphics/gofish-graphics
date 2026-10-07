@@ -13,7 +13,6 @@ covers:
   - packages/gofish-graphics/src/serialize/toJSON.ts
   - packages/gofish-graphics/src/serialize/fromJSON.ts
   - packages/gofish-graphics/src/serialize/registry.ts
-  - packages/gofish-graphics/src/serialize/descriptorTables.ts
   - packages/gofish-python/scripts/generate.ts
 ---
 
@@ -453,13 +452,25 @@ unknown`) even though they aren't really open on the JS side (a mark's
   only warns about.
 - **The JS emitter** (`toJSON`) filters what reaches the wire through it.
   A factory tags its options as the caller passed them; `wireOpts` keeps
-  only the keys the construct's descriptor declares, plus its kind's base
-  fields (`debug` on all of them; `label`/`translate` on an operator), and
-  drops any function value, since a callback has no JSON form. So a key the
-  descriptor does not know never reaches the IR, and a construct with no
-  descriptor (such as `time.transition`) has no IR form: `toJSON` throws.
-- **The JS deserializer** (`registry.ts`) looks up the factory that
-  rebuilds a wire type by its descriptor — see § Modularity below.
+  only the keys `acceptedFields(kind, type)` lists, and drops any function
+  value, since a callback has no JSON form. So a key the descriptor does not
+  know never reaches the IR, and a construct with no descriptor (such as
+  `time.transition`) has no IR form: `toJSON` throws.
+
+  `acceptedFields` (in `descriptors.ts`) is the one statement of which keys an
+  options object takes on the wire: the descriptor's fields plus the base fields
+  that sit in the same object. An operator's and a leaf mark's options are spread
+  onto the node, so all of `OPERATOR_BASE_FIELDS` or `MARK_BASE_FIELDS` sit
+  beside them. A combinator mark nests its options under `options`, where only
+  `COMBINATOR_OPTIONS_BASE_FIELDS` (`debug`) ride; its other base fields sit on
+  the node. The emitter keeps these keys, and the validator checks an operator
+  or leaf-mark node against them. On a leaf mark, the base fields that Mark
+  methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked as
+  errors by their own walkers, so the warning-level check of the mark's
+  channels skips them.
+
+- **The JS deserializer** (`registry.ts`) rebuilds a wire type through
+  the factory its descriptor names — see § Modularity below.
 - **`gofish-python/scripts/generate.ts`** emits the mechanical part of the
   Python wrapper from the same table — see
   [§ Generating the Python factory layer](#generating-the-python-factory-layer)
@@ -647,7 +658,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread, {
   split: ({ by }, d) => /* ... */,
   channels: { w: "size", h: "size" },
   axisFields: ({ by, dir }) => /* ... */,
-  serialize: { type: "spread" },        // <-- new
+  serialize: "spread",                 // <-- new
 });
 
 // shapes/rect.tsx
@@ -664,13 +675,14 @@ the descriptor-table consumers above), so a factory never lists its own
 fields.
 
 The way back is one table. `FACTORIES` in `registry.ts` maps each wire
-type to the public factory that rebuilds it, and `factoryFor(kind, type)`
-looks a construct up by its descriptor: it finds a factory only when the
-descriptor table declares that type for that kind, and the kind decides the
-call. An operator or a leaf mark is `factory(opts)`; a combinator mark is
-`factory(opts, children)`. A dual-form construct such as `spread` or `line`
-therefore has one entry for both forms, and the compositing wire types map to
-their renamed factories (`inside` to `intersect`, and so on).
+type to the public factory that rebuilds it, and
+`rebuild(kind, type, opts, { children, bridge })` calls it: it returns
+`undefined` unless the descriptor table declares that type for that kind, and
+the kind decides the call. An operator or a leaf mark is `factory(opts)`; a
+combinator mark is `factory(opts, children)`. A dual-form construct such as
+`spread` or `line` therefore has one entry for both forms, and the compositing
+wire types map to their renamed factories (`inside` to `intersect`, and so on).
+Only an `OPERATOR_BUILDERS` entry sees the bridge.
 
 Four operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
 their IR is not their factory's options object: `derive` (it calls a Python

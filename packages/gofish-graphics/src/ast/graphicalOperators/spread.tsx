@@ -302,7 +302,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
     kind: "arrangement",
     positions: ({ dir }) => ({ x: dir === "x", y: dir === "y" }),
   },
-  serialize: { type: "spread" },
+  serialize: "spread",
 });
 
 /** Stack glues children together, summing sizes into a POSITION at the spread
