@@ -390,7 +390,7 @@ difference axis), never off the size claim:
   dropped (`labelsWithRoom`); that needs pixels before layout, so it takes
   the axis's length to be the chart's canvas size on that dim
   (`ChromeOptions.axisLengths`), exact for an axis the root owns and an
-  overestimate for a facet's. It decides only which labels are dropped,
+  overestimate for a facet's (TODO #1073). It decides only which labels are dropped,
   never the ticks or the domain. Rows stack outward from the
   line by a fixed offset each, the row's text height (its widest label on a
   y axis) plus a gap, so the axis emits all its rows in one elaboration

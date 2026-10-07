@@ -579,10 +579,10 @@ function elaborateContinuousAxis(
  * (`axes.x.rows`), else the inner row the domain picks
  * (`axisTickPartition`) and its parent level.
  *
- * A label is dropped when it comes within 5px of the next one in its row
+ * A label is dropped when it comes within 5px of the last label kept in its row
  * (`labelsWithRoom`). Telling that needs the axis's pixel length before
  * layout: `axisLength`.
- * TODO(#1065): `axisLength` is the chart's canvas size on this dim, which is
+ * TODO(#1073): `axisLength` is the chart's canvas size on this dim, which is
  * the axis's length for an axis the chart root owns, but an overestimate for
  * an axis owned by a facet. It decides only which labels are dropped, never
  * the ticks or the domain.
