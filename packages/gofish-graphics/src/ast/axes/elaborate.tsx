@@ -573,7 +573,7 @@ function elaborateContinuousAxis(
  * The domain is the data's own (a time domain is not niced). `rows` are the
  * rows the chart asks for (`axes.x.rows`), else the default rows, which need
  * the axis's pixel length to tell which labels fit: `axisLength`.
- * TODO(#1057): `axisLength` is the chart's canvas size on this dim, which is
+ * TODO(#1065): `axisLength` is the chart's canvas size on this dim, which is
  * the axis's length for an axis the chart root owns, but an overestimate for
  * an axis owned by a facet. The right fix chooses the rows once the scope's
  * scale is solved.
