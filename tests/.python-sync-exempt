@@ -222,3 +222,13 @@ packages/gofish-graphics/stories/animation/BuildInPrototype.stories.tsx
 # exports are also driven by `time.sequence` on a `timer()` clock, a live JS
 # signal the derive RPC cannot carry (same reason as the Gapminder panels).
 packages/gofish-graphics/stories/forwardsyntax/CurveLadder.stories.tsx
+
+# Time (#1057): QuarterlyBars labels its one axis row with a JS format
+# function ((cell) => string), which cannot cross the bridge; Python rows take
+# Calendar values only. The other Time stories are ported.
+packages/gofish-graphics/stories/forwardsyntax/Time.stories.tsx::QuarterlyBars
+
+# Time benchmark ports: CircleTimeline sizes each circle in a JS function mark
+# (a literal pixel radius per row), which cannot cross the bridge. StackedArea
+# and SurplusDeficitLine are ported.
+packages/gofish-graphics/stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx::CircleTimeline
