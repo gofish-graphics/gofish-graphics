@@ -102,10 +102,10 @@ is a point along an order.
   schema entry, in the column's own time zone (UTC for a naive or date
   column). Strings and numbers are never taken as times.
 - An instant has no zero.
-- An axis over the column is a time axis. Its domain is the data's own,
-  not rounded, and its ticks and labels are calendar cells in rows: by
-  default the finest level whose labels fit, and below it that level's
-  parent. See [`Calendar`](/python/api/core/calendar) for the rows.
+- An axis over the column is a time axis. Its ticks and labels are
+  calendar cells in rows: by default the level that gives about 10 ticks,
+  and below it that level's parent. Its domain is rounded outward to the
+  cells of its first row. See [`Calendar`](/python/api/core/calendar) for the rows.
 - An unknown `zone` is an error. Two time columns on one axis must have the
   same zone.
 

@@ -1297,10 +1297,18 @@ its own end), and a delta axis's width from 0, so a delta axis steps evenly
 (ticks 20, 40, …, 160 rather than 20, 40, …, 140 and a last step of 7). A
 **coord scope never
 nices** (its domains map into a fixed coordinate range; rounding them would
-break the mapping). Neither does a **time** space (`calendar` set, see the
-column types below): a round number of milliseconds means nothing on a
-calendar, and its axis's ticks are calendar cells, so the domain stays the
-data's own.
+break the mapping).
+
+A scope nices to **the ticks of the axis that demands it** (`AxisTicks`): a
+tick count (10) on a numeric axis, rounded with `d3.nice`; on a **time**
+space (`calendar` set, see the column types below) the calendar partition of
+the axis's inner row, rounded outward to its cells (`niceToCells` in
+`calendar.ts`), so both ends of the axis are ticks. A round number of
+milliseconds means nothing on a calendar, so a time space branches on its
+kind inside the one `niceContinuous`. The partition is the axis's explicit
+`rows[0]`, else the one the domain picks for about the tick count
+(`tickPartition`, like d3's time ticks). Both read the domain and the axis
+options only, never pixels.
 
 And it is **demand-driven**: a scope nices its domain **iff at least one node
 in the scope renders an axis on that dim**. Nicing is a presentation
@@ -1308,9 +1316,11 @@ adjustment whose demand comes from axis views — with no axis there is no tick
 grid to round for, so axis-less content stays at the honest raw scale; with an
 axis, content and ticks share the one niced domain, which is the contract.
 Mechanically, `resolveAxes` leaves a persistent `axisDemand` stamp on every
-axis-owning node (the `axis` work flags are consumed and cleared by
-elaboration; the stamps survive to layout), and each solve site asks
-`GoFishNode.scopeRendersAxis(dim)`: a walk over the scope's **space-flow
+axis-owning node: the axis's `AxisTicks`, which the chart's `axes` option
+sets per dim (undefined for no axis). The `axis` work flags are consumed and
+cleared by elaboration; the stamps survive to layout. Each solve site asks
+`GoFishNode.scopeAxisTicks(dim)`, which returns the ticks of an axis in the
+scope, or undefined for none: a walk over the scope's **space-flow
 region** — up from the scope root while neither a self-scaled stash nor a coord
 boundary cuts the flow, then across that region's subtree, stopping at deeper
 stashes and coords. The region is exactly the neighborhood whose axes all view
@@ -1754,7 +1764,7 @@ reads only the classes, never the builder words. Three classes exist:
   it (`mergeCalendars`: the overlay fold, a layer's datum-position domain in
   `compose.ts`, a rect's two ends, the `position` operator's offset), and
   two parts on different zones are an error, like two measures. A time space
-  is not niced, and its axis is a time axis
+  is niced to the cells of its axis's inner row, and its axis is a time axis
   ([Axes](/internals/frontend/axes#the-three-kinds)). Calendar cells
   (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
   on Temporal, native or the polyfill it loads when the runtime has none.

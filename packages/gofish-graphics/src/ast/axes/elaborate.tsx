@@ -29,6 +29,9 @@ import {
   niceContinuous,
   originIs,
   spaceMeasure,
+  axisTickPartition,
+  DEFAULT_AXIS_TICKS,
+  type AxisTicks,
 } from "../underlyingSpace";
 import type { AxesOptions, AxisOptions } from "../gofish";
 import {
@@ -42,7 +45,6 @@ import {
   rowLabels,
   rowTicks,
   timeRowsFromOption,
-  TIME_LABEL_PAD,
   type TimeRow,
   type TimeRowOption,
 } from "./timeRows";
@@ -91,7 +93,7 @@ const ORDINAL_LABEL_GAP = 8; // gap between content edge and the ordinal label r
 const CONTENT_NAME = "__axisContent"; // inner-tier name for the wrapped content
 const INNER_REF_NAME = "__axisInner"; // outer-tier name for the wrapped content
 const AXIS_CONTENT_GAP = 6; // gap between axis line and content
-const TICK_COUNT = 10;
+const TICK_COUNT = DEFAULT_AXIS_TICKS.count;
 const LABEL_FONT_SIZE = 10;
 const LABEL_FONT_FAMILY = "system-ui, sans-serif"; // Text's default
 const AXIS_COLOR = "gray";
@@ -562,38 +564,49 @@ function elaborateContinuousAxis(
  * One time axis: a continuous axis whose ticks and labels come from calendar
  * partitions (see axes/timeRows.ts). Ticks and labels are placed by the
  * axis's continuous scale, like any position axis. Each row is one
- * partition: its cells' starts are its ticks, and each cell's label sits
- * just past its start (`TIME_LABEL_PAD`), or past the axis start for a
- * partial first cell. Row 0 (the inner row) sits past the ticks, as a
- * continuous axis's labels do, and each further row sits past the one
- * before it. The inner row's ticks are short; an outer row's are longer, so
- * its boundaries stand out (where two rows share a tick, it is drawn once,
- * long).
+ * partition: its cells' starts are its ticks, and each label is centered on
+ * its cell's start tick, as a numeric axis's labels are. Row 0 (the inner
+ * row) sits past the ticks, as a continuous axis's labels do, and each
+ * further row sits past the one before it. The inner row's ticks are short;
+ * an outer row's are longer, so its boundaries stand out (where two rows
+ * share a tick, it is drawn once, long).
  *
- * The domain is the data's own (a time domain is not niced). `rows` are the
- * rows the chart asks for (`axes.x.rows`), else the default rows, which need
- * the axis's pixel length to tell which labels fit: `axisLength`.
+ * `nice` is the axis's domain, niced outward to the cells of the inner row
+ * (`niceContinuous` with the axis's `ticks`, the same nicing its scope's
+ * solve applies), so both ends are inner ticks. An outer row's first cell
+ * may start before the domain: its label is centered on the first tick,
+ * under the inner row's first label. `rows` are the rows the chart asks for
+ * (`axes.x.rows`), else the inner row the domain picks
+ * (`axisTickPartition`) and its parent level.
+ *
+ * A label is dropped when it comes within 5px of the next one in its row
+ * (`labelsWithRoom`). Telling that needs the axis's pixel length before
+ * layout: `axisLength`.
  * TODO(#1065): `axisLength` is the chart's canvas size on this dim, which is
  * the axis's length for an axis the chart root owns, but an overestimate for
- * an axis owned by a facet. The right fix chooses the rows once the scope's
- * scale is solved.
+ * an axis owned by a facet. It decides only which labels are dropped, never
+ * the ticks or the domain.
  */
 function elaborateTimeAxis(
   dim: 0 | 1,
   space: CONTINUOUS_TYPE,
+  nice: [number, number],
+  ticks: AxisTicks,
   prefix: string,
   crossFloor: number | undefined,
   side: "start" | "end",
   rowsOption: TimeRow[] | undefined,
   axisLength: number
 ): AxisElaboration {
-  const { min: lo, max: hi } = space.dataInterval;
+  const [lo, hi] = nice;
   const zone = space.calendar!.zone;
   const font = (t: string) =>
     estimateTextDimensions(t, LABEL_FONT_SIZE, LABEL_FONT_FAMILY);
   const textWidth = (t: string) => font(t).width;
+  // A label's length along the axis: its width on x, its height on y.
+  const extent = dim === 0 ? textWidth : (t: string) => font(t).height;
   const pxPerMs = hi > lo ? axisLength / (hi - lo) : 0;
-  const rows = rowsOption ?? defaultTimeRows(lo, hi, zone, pxPerMs, textWidth);
+  const rows = rowsOption ?? defaultTimeRows(axisTickPartition(space, ticks));
 
   // Ticks: every row's cell starts, each drawn once, long if an outer row
   // has it.
@@ -607,7 +620,7 @@ function elaborateTimeAxis(
   const tickValues = [...tickLen.keys()].sort((a, b) => a - b);
 
   const labels = rows.map((row) =>
-    labelsWithRoom(rowLabels(row, lo, hi, zone), pxPerMs, textWidth)
+    labelsWithRoom(rowLabels(row, lo, hi, zone), pxPerMs, extent)
   );
   // How far each row sits past the line: the ticks and gap, then every row
   // before it. A row's depth across the axis is its labels' height (x) or
@@ -658,13 +671,10 @@ function elaborateTimeAxis(
       labels.forEach((row, k) =>
         row.forEach((l, j) => {
           const label = g[labelName(k, j)];
-          // Just past the cell's first point along the axis, by the scale.
+          // Centered on its tick along the axis, by the scale.
           cs.push(
             Constraint.position(
-              {
-                [track]: datum(l.at).offset(TIME_LABEL_PAD),
-                anchor: "start",
-              } as any,
+              { [track]: datum(l.at), anchor: "middle" } as any,
               [label]
             )
           );
@@ -897,11 +907,15 @@ function elaborationsFor(
   // so a nicing change can't skew the corner. A DIFFERENCE dim's floor is 0.
   const nices: ([number, number] | undefined)[] = [undefined, undefined];
   const floors: (number | undefined)[] = [undefined, undefined];
+  // What each owned axis ticks at, as `resolveAxes` stamped it: the same
+  // ticks its scope's solve nices the domain to.
+  const ticksFor = (dim: 0 | 1): AxisTicks =>
+    node.axisDemand[dim] ?? DEFAULT_AXIS_TICKS;
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     if (axisOver(s) === "absolute") {
-      const niced = niceContinuous(s) as CONTINUOUS_TYPE;
+      const niced = niceContinuous(s, ticksFor(dim)) as CONTINUOUS_TYPE;
       nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
       floors[dim] = nices[dim]![0];
     } else if (axisOver(s) === "delta") {
@@ -959,6 +973,8 @@ function elaborationsFor(
       const e = elaborateTimeAxis(
         dim,
         s,
+        nices[dim]!,
+        ticksFor(dim),
         prefix,
         crossFloor,
         axisSide(dim),
@@ -1057,8 +1073,8 @@ export type ChromeOptions = {
   labelSettings?: LabelRowSettings;
   /** Per-dim `rows` of a time axis (`AxisOptions.rows`), as authored. */
   timeRows?: [TimeRowOption[] | undefined, TimeRowOption[] | undefined];
-  /** Per-dim length (px) a time axis assumes when it picks its default rows:
-   *  the chart's canvas size on that dim (see `elaborateTimeAxis`). */
+  /** Per-dim length (px) a time axis assumes when it drops labels that have
+   *  no room: the chart's canvas size on that dim (see `elaborateTimeAxis`). */
   axisLengths?: [number, number];
 };
 

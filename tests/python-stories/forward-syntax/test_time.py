@@ -143,3 +143,12 @@ def story_week_over_month_rows():
         .mark(line(stroke="steelblue", stroke_width=2)),
         {"w": 560, "h": 200},
     )
+
+
+def story_vertical_daily_dots():
+    return (
+        chart(PRICES, schema={"date": Schema.time()}, axes=True)
+        .flow(scatter(by="date", x="price", y="date"))
+        .mark(circle(r=1.5, fill="steelblue")),
+        {"w": 300, "h": 480},
+    )

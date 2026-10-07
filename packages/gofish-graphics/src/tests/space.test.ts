@@ -14,6 +14,7 @@ import {
   type UnderlyingSpace,
   CONTINUOUS,
   originIs,
+  DEFAULT_AXIS_TICKS,
 } from "../ast/underlyingSpace";
 import { Extent, impliedExtent, niceScope } from "../ast/extent";
 import { ScopeRegistry, seatInScope } from "../ast/solver/scopes";
@@ -399,7 +400,8 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   // Nicing widens only the data part.
   const [niced, nicedClaim] = niceScope(
     CONTINUOUS(interval(-3, 44), "pinned"),
-    Extent(M.linear(47, 100))
+    Extent(M.linear(47, 100)),
+    DEFAULT_AXIS_TICKS
   );
   ok(
     "nicing widens the claim by σ·(nicedWidth − dataWidth)",
@@ -687,7 +689,8 @@ console.log("# space: nicing is gated on an axis over the interval");
 {
   const [delta, deltaClaim] = niceScope(
     CONTINUOUS(interval(0, 137), "none"),
-    Extent(M.linear(137, 0))
+    Extent(M.linear(137, 0)),
+    DEFAULT_AXIS_TICKS
   );
   ok(
     "a delta axis nices its width, its claim widening by half on each side",
@@ -700,7 +703,8 @@ console.log("# space: nicing is gated on an axis over the interval");
   // of its claim widens by its own niced end.
   const [free, freeClaim] = niceScope(
     CONTINUOUS(interval(-28, 137), "free"),
-    Extent(M.linear(137, 0), M.linear(28, 0))
+    Extent(M.linear(137, 0), M.linear(28, 0)),
+    DEFAULT_AXIS_TICKS
   );
   ok(
     "a free magnitude nices about its 0, each side by its own end",

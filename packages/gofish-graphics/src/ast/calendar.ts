@@ -382,3 +382,76 @@ export function calendarPartition(
     v.unit === "week" ? (v.start ?? "monday") : undefined
   );
 }
+
+// ── Ticks ─────────────────────────────────────────────────────────────────
+
+/** The level-and-steps a time axis picks its inner row from, finest first.
+ *  Weeks and quarters are never picked (a week row can be asked for; a
+ *  quarter row is months in steps of 3 with other labels). */
+const AUTO_STEPS: [CalendarUnit, number[]][] = [
+  ["second", [1, 5, 15, 30]],
+  ["minute", [1, 5, 15, 30]],
+  ["hour", [1, 3, 6, 12]],
+  ["day", [1, 2]],
+  ["month", [1, 2, 3]],
+  ["year", [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]],
+];
+
+/** About how long one cell of `unit` × `step` lasts. */
+function nominalMs(unit: CalendarUnit, step: number): number {
+  const ms: Record<CalendarUnit, number> = {
+    second: 1e3,
+    minute: 6e4,
+    hour: 36e5,
+    day: 864e5,
+    week: 6048e5,
+    month: 2628e6,
+    quarter: 7884e6,
+    year: 31557e6,
+  };
+  return ms[unit] * step;
+}
+
+/**
+ * The partition a time axis over `[lo, hi]` ticks at when its rows are not
+ * given: about `count` ticks, as a numeric axis aims for `count` ticks. Like
+ * d3's time ticks, it takes the entry of {@link AUTO_STEPS} whose nominal
+ * cell length is nearest (by ratio) to `(hi − lo) / count`. It reads only
+ * the domain, never pixels.
+ */
+export function tickPartition(
+  lo: number,
+  hi: number,
+  count: number
+): CalendarPartition {
+  const target = (hi - lo) / count;
+  let best: CalendarPartition | undefined;
+  let bestRatio = Infinity;
+  for (const [unit, steps] of AUTO_STEPS) {
+    for (const step of steps) {
+      const d = nominalMs(unit, step);
+      const ratio = target > 0 ? Math.max(d / target, target / d) : d;
+      if (ratio < bestRatio) {
+        bestRatio = ratio;
+        best = new CalendarPartition(unit, step);
+      }
+    }
+  }
+  return best!;
+}
+
+/** `[lo, hi]` rounded outward to cell starts of `partition` in `zone`: the
+ *  start of the cell that holds `lo`, and the first cell start at or after
+ *  `hi`. The time analog of d3's `nice`. */
+export function niceToCells(
+  lo: number,
+  hi: number,
+  partition: CalendarPartition,
+  zone: string
+): [number, number] {
+  const last = partition.floor(hi, zone);
+  return [
+    partition.floor(lo, zone),
+    last === hi ? hi : partition.next(last, zone),
+  ];
+}

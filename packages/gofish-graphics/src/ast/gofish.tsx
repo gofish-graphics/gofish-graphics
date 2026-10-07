@@ -26,6 +26,8 @@ import {
   continuousInterval,
   isCONTINUOUS,
   spaceMeasure,
+  DEFAULT_AXIS_TICKS,
+  type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { niceScope, type Extent } from "./extent";
@@ -49,7 +51,7 @@ import {
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
-import type { TimeRowOption } from "./axes/timeRows";
+import { timeRowsFromOption, type TimeRowOption } from "./axes/timeRows";
 import { loadTemporal } from "./calendar";
 import {
   getScopeRegistry,
@@ -163,9 +165,10 @@ export type AxisOptions =
        *  Calendar.day]`, or `{ unit, format }` with `format` a function of
        *  the cell, `(cell) => string`, for custom labels. Each row is one
        *  partition of the time line: its ticks are its cells' starts, and
-       *  each cell is labeled just past its start (a partial first cell, at
-       *  the axis start). Rows need not nest. Omitted, the axis has two
-       *  rows: the finest level whose labels fit and its parent level. */
+       *  each label is centered on its cell's start tick. The axis's domain
+       *  is niced outward to the cells of the inner row. Rows need not nest.
+       *  Omitted, the axis has two rows: the level-and-step the domain picks
+       *  for about 10 ticks, and its parent level. */
       rows?: TimeRowOption[];
     };
 
@@ -329,15 +332,27 @@ export async function layout(
   // the chart-level `axes` option enables: `true` → both. For an `{ x?, y? }`
   // object, a dim is enabled unless it is explicitly `false` — an unspecified
   // (undefined) dim still shows (specifying one axis doesn't disable the
-  // other); only `false` suppresses.
+  // other); only `false` suppresses. Each enabled dim carries what its axis
+  // ticks at: about 10 ticks, or the cells of a time axis's inner row
+  // (`rows[0]`), which its scope's domain is niced to.
   if (axes) {
-    const enabled = new Set<0 | 1>();
-    if (axes === true) {
-      enabled.add(0);
-      enabled.add(1);
-    } else if (typeof axes === "object") {
-      if (axes.x !== false) enabled.add(0);
-      if (axes.y !== false) enabled.add(1);
+    const rows = perDimAxisOption(axes, "rows");
+    const ticksOf = (dim: 0 | 1): AxisTicks => {
+      const r = rows[dim];
+      return r === undefined
+        ? DEFAULT_AXIS_TICKS
+        : {
+            ...DEFAULT_AXIS_TICKS,
+            partition: timeRowsFromOption(r, dim === 0 ? "x" : "y")[0]
+              .partition,
+          };
+    };
+    const enabled = new Map<0 | 1, AxisTicks>();
+    for (const dim of [0, 1] as const) {
+      const on =
+        axes === true ||
+        (typeof axes === "object" && (dim === 0 ? axes.x : axes.y) !== false);
+      if (on) enabled.set(dim, ticksOf(dim));
     }
     child.resolveAxes(new Map(), enabled);
   }
@@ -390,7 +405,7 @@ export async function layout(
   // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
   // applied AT the scope's solve (there is no pre-layout tree walk), and it is
   // DEMAND-DRIVEN — the root scope nices a POSITION domain iff some node in it
-  // renders that dim's axis (`scopeRendersAxis` reads the persistent stamps
+  // renders that dim's axis (`scopeAxisTicks` reads the persistent stamps
   // `resolveAxes` left; with axes off no stamp exists, so axis-less content
   // stays at the honest raw scale). When an axis IS drawn, every root consumer
   // below — the posScale, the baseline-magnitude size solve, the equal-measure
@@ -398,10 +413,7 @@ export async function layout(
   // the tick elaboration niced, so content and ticks agree by construction.
   // Each nested scope root (self-scaled region, shared-scale scope) applies the
   // same rule at its own solve; a coord scope never nices.
-  const rootAxisDemand: [boolean, boolean] = [
-    child.scopeRendersAxis(0),
-    child.scopeRendersAxis(1),
-  ];
+  const rootAxisDemand = [child.scopeAxisTicks(0), child.scopeAxisTicks(1)];
   // The root's types and their size claims, niced together (a niced pinned
   // domain implies its claim).
   const rootExtent = child.resolveExtent();

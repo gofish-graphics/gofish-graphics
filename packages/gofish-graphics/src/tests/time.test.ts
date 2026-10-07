@@ -18,6 +18,7 @@ import {
   CalendarPartition,
   calendarPartition,
   loadTemporal,
+  tickPartition,
 } from "../ast/calendar";
 import {
   applySchema,
@@ -31,6 +32,12 @@ import {
   rowLabels,
   timeRowsFromOption,
 } from "../ast/axes/timeRows";
+import {
+  CONTINUOUS,
+  niceContinuous,
+  withCalendar,
+} from "../ast/underlyingSpace";
+import { interval } from "../util/interval";
 
 const { chart, scatter, line, circle, Schema } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
@@ -304,73 +311,115 @@ async function main() {
     );
   }
 
-  console.log("\n# default rows");
+  console.log("\n# default rows and nicing");
   {
-    const rowsOf = (lo: number, hi: number, px: number) =>
-      defaultTimeRows(lo, hi, "UTC", px / (hi - lo), textWidth).map((r) =>
+    const rowsOf = (lo: number, hi: number) =>
+      defaultTimeRows(tickPartition(lo, hi, 10)).map((r) =>
         r.partition.toString()
       );
     check(
       "daily over 14 months: month, year",
-      same(rowsOf(Date.UTC(2023, 10, 1), Date.UTC(2024, 11, 31), 560), [
+      same(rowsOf(Date.UTC(2023, 10, 1), Date.UTC(2024, 11, 31)), [
         "Calendar.month",
         "Calendar.year",
       ])
     );
     check(
       "hourly over 3.5 days: hours in steps of 6, day",
-      same(rowsOf(Date.UTC(2024, 1, 28), Date.UTC(2024, 2, 2, 12), 560), [
+      same(rowsOf(Date.UTC(2024, 1, 28), Date.UTC(2024, 2, 2, 12)), [
         "Calendar.hour.every(6)",
         "Calendar.day",
       ])
     );
     check(
       "events over 6 years: one year row",
-      same(rowsOf(Date.UTC(2018, 2, 12), Date.UTC(2024, 5, 24), 560), [
+      same(rowsOf(Date.UTC(2018, 2, 12), Date.UTC(2024, 5, 24)), [
         "Calendar.year",
       ])
+    );
+    const timeSpace = (lo: number, hi: number, zone = "UTC") =>
+      withCalendar(CONTINUOUS(interval(lo, hi), "pinned"), { zone });
+    const nicedIso = (sp: any, ticks?: any) => {
+      const iv = (niceContinuous(sp, ticks) as any).dataInterval;
+      return [iso(iv.min), iso(iv.max)];
+    };
+    check(
+      "a time domain nices outward to its inner row's cells",
+      same(nicedIso(timeSpace(Date.UTC(2018, 2, 12), Date.UTC(2024, 5, 24))), [
+        "2018-01-01T00:00:00.000Z",
+        "2025-01-01T00:00:00.000Z",
+      ])
+    );
+    check(
+      "an end already on a cell start stays",
+      same(nicedIso(timeSpace(Date.UTC(2023, 10, 1), Date.UTC(2025, 0, 1))), [
+        "2023-11-01T00:00:00.000Z",
+        "2025-01-01T00:00:00.000Z",
+      ])
+    );
+    check(
+      "an explicit inner row sets the nicing",
+      same(
+        nicedIso(timeSpace(Date.UTC(2024, 0, 24), Date.UTC(2024, 2, 31)), {
+          count: 10,
+          partition: Calendar.week,
+        }),
+        ["2024-01-22T00:00:00.000Z", "2024-04-01T00:00:00.000Z"]
+      )
+    );
+    check(
+      "a time domain nices in its zone",
+      same(
+        nicedIso(
+          timeSpace(
+            Date.UTC(2024, 2, 9, 7),
+            Date.UTC(2024, 2, 11, 20),
+            "America/New_York"
+          )
+        ),
+        ["2024-03-09T05:00:00.000Z", "2024-03-11T22:00:00.000Z"]
+      )
+    );
+    check(
+      "a numeric domain still nices to round numbers",
+      same(
+        (niceContinuous(CONTINUOUS(interval(3, 97), "pinned")) as any)
+          .dataInterval,
+        { min: 0, max: 100 }
+      )
     );
     const labels = rowLabels(
       { partition: Calendar.year },
       Date.UTC(2023, 10, 1),
-      Date.UTC(2024, 11, 31),
+      Date.UTC(2025, 0, 1),
       "UTC"
     );
     check(
-      "a partial first cell is labeled at the axis start",
+      "an outer cell that starts before the domain is labeled at its first " +
+        "tick, and the last tick is labeled",
       same(
         labels.map((l) => [l.text, iso(l.at).slice(0, 10)]),
         [
           ["2023", "2023-11-01"],
           ["2024", "2024-01-01"],
+          ["2025", "2025-01-01"],
         ]
       )
     );
+    const lo = Date.UTC(2024, 0, 1);
+    const hi = Date.UTC(2024, 0, 8);
     const crowded = labelsWithRoom(
-      rowLabels(
-        { partition: Calendar.month },
-        Date.UTC(2024, 0, 30),
-        Date.UTC(2024, 4, 1),
-        "UTC"
-      ),
-      400 / (Date.UTC(2024, 4, 1) - Date.UTC(2024, 0, 30)),
+      rowLabels({ partition: Calendar.day }, lo, hi, "UTC"),
+      100 / (hi - lo),
       textWidth
     );
     check(
-      "a label with no room before the next is dropped",
+      "a label within 5px of the last kept one is dropped",
       same(
         crowded.map((l) => l.text),
-        ["Feb", "Mar", "Apr"]
-      )
-    );
-    check(
-      "a cell that starts at the domain's end has no label",
-      rowLabels(
-        { partition: Calendar.day },
-        Date.UTC(2024, 0, 1),
-        Date.UTC(2024, 0, 3),
-        "UTC"
-      ).length === 2
+        ["Jan 1", "Jan 4", "Jan 7"]
+      ),
+      crowded.map((l) => l.text).join(" ")
     );
   }
 
@@ -439,9 +488,14 @@ async function main() {
       at("2023").y > at("Nov").y,
       `${at("2023").y} vs ${at("Nov").y}`
     );
+    // A label's center along x (`textWidth` is the non-DOM fallback's).
+    const mid = (w: string) => at(w).x + textWidth(w) / 2;
     check(
-      '"2024" sits at Jan 1, with "Jan"',
-      Math.abs(at("2024").x - at("Jan").x) < 0.5 && at("2023").x === at("Nov").x
+      'labels are centered on their ticks: "2024" under "Jan", and "2023" ' +
+        'under "Nov" at the first tick',
+      Math.abs(mid("2024") - mid("Jan")) < 0.5 &&
+        Math.abs(mid("2023") - mid("Nov")) < 0.5,
+      JSON.stringify([mid("2024"), mid("Jan"), mid("2023"), mid("Nov")])
     );
     check(
       "no tick label is a number of milliseconds",
@@ -471,7 +525,7 @@ async function main() {
       "a one-row axis uses its format function",
       same(
         textsOf(rowsDl).map((t) => t.text),
-        ["Q4 '23", "Q1 '24", "Q2 '24", "Q3 '24", "Q4 '24"]
+        ["Q4 '23", "Q1 '24", "Q2 '24", "Q3 '24", "Q4 '24", "Q1 '25"]
       ),
       textsOf(rowsDl)
         .map((t) => t.text)

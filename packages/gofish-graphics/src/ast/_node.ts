@@ -65,6 +65,8 @@ import {
   axisOver,
   placeBaseline,
   MeasureClash,
+  DEFAULT_AXIS_TICKS,
+  type AxisTicks,
 } from "./underlyingSpace";
 import { impliedExtents, type Extent } from "./extent";
 import { toJSON } from "../util/interval";
@@ -128,9 +130,9 @@ export type RenderSession = {
    *  (`getScopeRegistry`). */
   scopes?: ScopeRegistry;
   /** Each space-flow region's axis demand, per dim, keyed by the region's
-   *  root (`scopeRendersAxis`): every scope in a region shares the answer, so
+   *  root (`scopeAxisTicks`): every scope in a region shares the answer, so
    *  the region is scanned once per render. Created on first use. */
-  axisDemand?: WeakMap<GoFishNode, [boolean?, boolean?]>;
+  axisDemand?: WeakMap<GoFishNode, (AxisTicks | undefined)[]>;
 };
 
 export type Placeable = {
@@ -554,15 +556,20 @@ export class GoFishNode {
   // false    = explicitly suppressed via axes: override (blocks children)
   // undefined = not involved
   public axis: { x?: boolean; y?: boolean } = {};
-  /** Persistent per-dim record that THIS node renders an axis (issue #659).
-   *  Unlike `axis` — a work flag consumed and CLEARED by axis elaboration —
-   *  this stamp survives to layout time, so a σ-scope solve can ask "does any
-   *  node in my scope render an axis on this dim?" (`scopeRendersAxis`). That
-   *  demand bit is what gates nicing: nicing is a presentation adjustment
-   *  whose demand comes from axis views, so a scope nices its POSITION domain
-   *  iff some node in the scope draws that dim's axis. Stamped by
-   *  `resolveAxes` wherever it sets an owning (`true`) flag. */
-  public axisDemand: [boolean, boolean] = [false, false];
+  /** Persistent per-dim record that THIS node renders an axis, and what that
+   *  axis ticks at (issues #659, #1057); undefined = no axis. Unlike `axis` —
+   *  a work flag consumed and CLEARED by axis elaboration — this stamp
+   *  survives to layout time, so a σ-scope solve can ask "does any node in my
+   *  scope render an axis on this dim, and with what ticks?"
+   *  (`scopeAxisTicks`). That demand is what drives nicing: nicing is a
+   *  presentation adjustment whose demand comes from axis views, so a scope
+   *  nices its POSITION domain iff some node in the scope draws that dim's
+   *  axis, and nices it to that axis's ticks. Stamped by `resolveAxes`
+   *  wherever it sets an owning (`true`) flag. */
+  public axisDemand: [AxisTicks | undefined, AxisTicks | undefined] = [
+    undefined,
+    undefined,
+  ];
   /** Per-dim: the real (anchored/difference) space that was stashed and
    *  replaced with UNDEFINED for a self-scaled dim (explicit pixel size
    *  absorbing a baseline space) — set by `layer`'s space resolution. A
@@ -572,7 +579,7 @@ export class GoFishNode {
    *  cross-sibling scale match from an incidental one: this field keeps that
    *  real space reachable for the comparison, without touching
    *  `_underlyingSpace`/layout at all. Presence (`!== undefined`) IS "this node
-   *  roots its own σ-scope on the dim" — read by `scopeRendersAxis` to stop the
+   *  roots its own σ-scope on the dim" — read by `scopeAxisTicks` to stop the
    *  demand walk — so there is no separate boolean to keep in sync. */
   public selfScaledSpace: [
     UnderlyingSpace | undefined,
@@ -1136,10 +1143,18 @@ export class GoFishNode {
    * grouped/faceted chart renders one ordinal axis per grouping level (per
    * facet). Continuous axes stay single-owner (root-most wins): a descendant
    * continuous axis on an already-claimed dim defers to the chart-level scale.
+   *
+   * `enabled` maps each dim the chart's `axes` option turns on to what its
+   * axis ticks at ({@link AxisTicks}); a node that draws an axis stamps those
+   * ticks as its `axisDemand`. An operator's explicit override can draw an
+   * axis on a dim `enabled` leaves out, with the default ticks.
    */
   public resolveAxes(
     claimed: Map<0 | 1, string> = new Map(),
-    enabled: Set<0 | 1> = new Set([0, 1])
+    enabled: Map<0 | 1, AxisTicks> = new Map([
+      [0, DEFAULT_AXIS_TICKS],
+      [1, DEFAULT_AXIS_TICKS],
+    ])
   ): void {
     // A `layer` is treated like any other node: it claims the axis for its own
     // (unioned) space ONCE, so overlaid children share a single axis. Per-child
@@ -1205,6 +1220,8 @@ export class GoFishNode {
       next.set(dim, sig);
     };
     const space = this._underlyingSpace;
+    const ticksOf = (dim: 0 | 1): AxisTicks =>
+      enabled.get(dim) ?? DEFAULT_AXIS_TICKS;
     for (const dim of [0, 1] as (0 | 1)[]) {
       const override =
         dim === 0 ? this._axisOverride?.x : this._axisOverride?.y;
@@ -1244,7 +1261,7 @@ export class GoFishNode {
         const show = override !== false && !dupOrdinal && !dupContinuous;
         if (dim === 0) this.axis.x = show;
         else this.axis.y = show;
-        if (show) this.axisDemand[dim] = true;
+        if (show) this.axisDemand[dim] = ticksOf(dim);
         // When this node's own space collapsed to UNDEFINED on `dim` (self-
         // scaling swallowed it, or it unioned self-scaled children that did)
         // but it's about to render an axis anyway (an explicit override),
@@ -1279,7 +1296,7 @@ export class GoFishNode {
         if (shared !== undefined) {
           if (dim === 0) this.axis.x = true;
           else this.axis.y = true;
-          this.axisDemand[dim] = true;
+          this.axisDemand[dim] = ticksOf(dim);
           (this.hoistedAxisSpace ??= [undefined, undefined])[dim] =
             shared.space;
           claim(dim, shared.sig);
@@ -1315,7 +1332,7 @@ export class GoFishNode {
         if (sig !== undefined) {
           if (dim === 0) this.axis.x = true;
           else this.axis.y = true;
-          this.axisDemand[dim] = true;
+          this.axisDemand[dim] = ticksOf(dim);
           claim(dim, sig);
         }
       }
@@ -1327,8 +1344,9 @@ export class GoFishNode {
 
   /**
    * Demand-driven nicing (issue #659): does any axis rendered in this scope's
-   * SPACE-FLOW REGION view this scope's `dim` domain? A scope nices its
-   * anchored POSITION domain iff this returns true — nicing is a presentation
+   * SPACE-FLOW REGION view this scope's `dim` domain, and if so, what does it
+   * tick at? A scope nices its anchored POSITION domain iff this returns
+   * ticks, and nices it to them (#1057) — nicing is a presentation
    * adjustment whose demand comes from axis views; axis-less content stays at
    * the honest raw scale, and when an axis IS drawn, content and ticks share
    * the one niced domain.
@@ -1351,7 +1369,7 @@ export class GoFishNode {
    * belongs to the region, so it is kept on the render session by region
    * root, and many scopes in one region scan it once.
    */
-  public scopeRendersAxis(dim: 0 | 1): boolean {
+  public scopeAxisTicks(dim: 0 | 1): AxisTicks | undefined {
     let region: GoFishNode = this;
     while (
       region.selfScaledSpace[dim] === undefined &&
@@ -1365,16 +1383,24 @@ export class GoFishNode {
     const demands = (session.axisDemand ??= new WeakMap());
     let demand = demands.get(region);
     if (demand === undefined) demands.set(region, (demand = []));
-    return (demand[dim] ??= region.walkAxisDemand(dim, true));
+    if (!(dim in demand)) demand[dim] = region.walkAxisDemand(dim, true);
+    return demand[dim];
   }
 
-  private walkAxisDemand(dim: 0 | 1, isScopeRoot: boolean): boolean {
-    if (this.type === "coord") return false;
-    if (!isScopeRoot && this.selfScaledSpace[dim] !== undefined) return false;
-    if (this.axisDemand[dim]) return true;
-    return this.children.some(
-      (c) => c instanceof GoFishNode && c.walkAxisDemand(dim, false)
-    );
+  private walkAxisDemand(
+    dim: 0 | 1,
+    isScopeRoot: boolean
+  ): AxisTicks | undefined {
+    if (this.type === "coord") return undefined;
+    if (!isScopeRoot && this.selfScaledSpace[dim] !== undefined)
+      return undefined;
+    if (this.axisDemand[dim] !== undefined) return this.axisDemand[dim];
+    for (const c of this.children) {
+      if (!(c instanceof GoFishNode)) continue;
+      const t = c.walkAxisDemand(dim, false);
+      if (t !== undefined) return t;
+    }
+    return undefined;
   }
 
   /**

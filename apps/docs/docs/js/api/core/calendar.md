@@ -75,24 +75,29 @@ polars' `dt` fields.
 
 - A time axis is continuous: every tick and label sits where the axis's
   scale puts its instant.
+- The axis's domain is rounded outward to the cells of the inner row, as a
+  numeric axis rounds its domain to its tick step, so both ends of the axis
+  are ticks.
 - Each row is one partition. Its ticks are the starts of its cells inside
-  the domain. Each cell's label sits just right of its start, or of the axis
-  start for a partial first cell. A cell that starts at the end of the domain
-  has a tick and no label.
-- A label that would run into the next one is left out. In practice only a
-  narrow partial first cell loses its label.
+  the domain. Each label is centered on its cell's start tick. An outer
+  row's first cell can start before the domain: its label is centered on
+  the first tick, under the inner row's first label. The labels at the ends
+  may reach past the axis, as a numeric axis's do.
+- A label that comes within 5 pixels of the label before it in its row is
+  left out.
 - Rows need not nest: `[Calendar.week, Calendar.month]` is valid.
 - The first row sits next to the axis line, and each further row sits past
   the one before it. The ticks of the outer rows are longer.
-- Without `rows`, the axis has two rows. The inner row is the finest level
-  and step whose labels fit between its ticks, tried in this order: seconds
-  and minutes (1, 5, 15, 30), hours (1, 3, 6, 12), days (1, 2), months (1, 2,
-  3), and years (1, 2, 5, 10, 20, 50, ...). The outer row is the inner
-  level's parent: minutes for seconds, hours for minutes, days for hours,
-  months for days and weeks, years for months and quarters. Year has no
-  parent, so a year row is the only row.
-- To tell what fits, the axis takes its length to be the chart's `w` (or `h`
-  for a y axis).
+- Without `rows`, the axis has two rows. The inner row gives about 10
+  ticks over the data, as a numeric axis does: it is the level and step
+  whose cells are nearest in length to a tenth of the data's span, out of
+  seconds and minutes (1, 5, 15, 30), hours (1, 3, 6, 12), days (1, 2),
+  months (1, 2, 3), and years (1, 2, 5, 10, 20, 50, ...). The
+  outer row is the inner level's parent: minutes for seconds, hours for
+  minutes, days for hours, months for days and weeks, years for months and
+  quarters. Year has no parent, so a year row is the only row.
+- To tell which labels have room, the axis takes its length to be the
+  chart's `w` (or `h` for a y axis).
 - Default labels come from `Intl.DateTimeFormat` in the runtime's locale:
   `12 AM` for an hour, `Feb 29` for a day or week, `Jan` for a month, `2024`
   for a year.

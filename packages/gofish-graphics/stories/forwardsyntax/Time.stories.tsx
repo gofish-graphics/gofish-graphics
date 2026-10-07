@@ -235,3 +235,17 @@ export const QuarterlyBars: StoryObj<Args> = {
     return container;
   },
 };
+
+// The daily prices as dots with time running up the y axis: the month and
+// year rows stand side by side, left of the axis.
+export const VerticalDailyDots: StoryObj<Args> = {
+  args: { w: 300, h: 480 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(prices, { schema: { date: Schema.time() }, axes: true })
+      .flow(scatter({ by: "date", x: "price", y: "date" }))
+      .mark(circle({ r: 1.5, fill: "steelblue" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};

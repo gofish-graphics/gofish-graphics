@@ -317,8 +317,9 @@ under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
 level). So a grouped or faceted chart renders one ordinal axis per grouping
 level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
 `lake` axis and a per-lake `species` axis. Wherever it sets an owning flag,
-`resolveAxes` also leaves a persistent `axisDemand` stamp — the demand bit that
-later gates per-scope domain nicing at the σ-scope solves (issue #659), since
+`resolveAxes` also leaves a persistent `axisDemand` stamp — the axis's ticks
+(`AxisTicks`: a count, or a time axis's inner partition), which later gate and
+shape per-scope domain nicing at the σ-scope solves (issue #659), since
 `resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
 driven at each scope's own solve (below). Then
 `elaborateChrome` **rewrites the tree**. Each node that owns chrome (axes,

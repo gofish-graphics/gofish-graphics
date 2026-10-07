@@ -27,8 +27,9 @@ engine has no axis-specific code at all.
 `layout()`, _after_ `resolveUnderlyingSpace` (so domains are known) and
 `resolveAxes` (which flags which node owns an axis on each dimension — and leaves
 persistent `axisDemand` stamps that later gate demand-driven domain nicing at the
-σ-scope solves, issue #659). Tick values come from `d3.nice` applied node-locally
-to the owning node's POSITION domain — the same function the owning scope's
+σ-scope solves, issue #659, and carry the ticks the domain is niced to). Tick
+values come from `niceContinuous` applied node-locally, with the node's stamped
+ticks, to the owning node's POSITION domain — the same function the owning scope's
 solve applies to the same union domain, so ticks and content agree by
 construction. It walks the node tree **bottom-up**.
 Each node that owns chrome is replaced by rings of `Layer`s around the original
@@ -377,23 +378,31 @@ difference axis), never off the size claim:
   `Constraint.position`, so nothing sits in an ordinal slot. Its ticks and
   labels come from calendar partitions (`CalendarPartition` in
   `calendar.ts`) instead of `d3.ticks`, one row per partition
-  (`axes/timeRows.ts`). A row's ticks are its cells' starts inside the
-  domain, and each cell's label is pinned `TIME_LABEL_PAD` past its start
-  (anchor `start`), or past the axis start for a partial first cell. A
-  label that would run into the next one is dropped, and a cell starting at
-  the domain's end gets a tick but no label. Rows stack outward from the
+  (`axes/timeRows.ts`). Its domain is niced like a numeric axis's, by
+  the same `niceContinuous`, but outward to the cells of the inner row
+  instead of to round numbers, so both ends of the axis are inner ticks. A
+  row's ticks are its cells' starts inside the domain, and each label is
+  centered on its cell's start tick, as a numeric axis centers its labels.
+  An outer row's first cell may start before the domain: its label is
+  centered on the axis's first tick, under the inner row's first label
+  ("2023" under "Nov"). A cell starting at the domain's end is labeled at
+  the last tick. A label within 5px of the last label kept in its row is
+  dropped (`labelsWithRoom`); that needs pixels before layout, so it takes
+  the axis's length to be the chart's canvas size on that dim
+  (`ChromeOptions.axisLengths`), exact for an axis the root owns and an
+  overestimate for a facet's. It decides only which labels are dropped,
+  never the ticks or the domain. Rows stack outward from the
   line by a fixed offset each, the row's text height (its widest label on a
   y axis) plus a gap, so the axis emits all its rows in one elaboration
   rather than going through the ordinal tiers. Rows are independent
   partitions, so they need not nest. A tick both rows share is drawn once,
   with the outer row's longer length. `axes.x.rows` sets the rows; without
-  it, `defaultTimeRows` picks the finest level and step whose every cell is
-  wide enough for its label (steps per level in `AUTO_STEPS`), then that
-  level's parent. Fitting needs pixels before layout, so it takes the
-  axis's length to be the chart's canvas size on that dim
-  (`ChromeOptions.axisLengths`). That is exact for an axis the root owns and
-  an overestimate for a facet's (TODO(#1057): choose rows once the scope is
-  solved). The domain is not niced (see
+  them the inner row is the level and step whose cells are nearest in
+  length to a tenth of the domain (`tickPartition` in `calendar.ts`, like
+  d3's time ticks, and like a numeric axis's ~10 ticks), and the outer row
+  is that level's parent. Both choices read the domain only, never pixels.
+  The axis's ticks reach its scope's nicing through the axis demand
+  (`AxisTicks`, see
   [Underlying Space](/internals/core/underlying-space#nicing-is-a-scope-operation-applied-on-demand)).
 - **DIFFERENCE (continuous, `origin: "none"`)** — bare tick marks at the
   tick values over `[0, w]`, where `w` is the space's width niced from 0

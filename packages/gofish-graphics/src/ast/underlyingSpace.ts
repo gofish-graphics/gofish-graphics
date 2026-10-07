@@ -15,6 +15,7 @@ import {
 } from "./data";
 import { nice as d3Nice } from "d3-array";
 import type { HasCalendar } from "./schema";
+import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
 
 // This module is the TYPE half of an axis: what the axis means, with no σ in
 // it. The SIZE CLAIM half (how much room the content needs, as functions of
@@ -86,8 +87,9 @@ export type CONTINUOUS_TYPE = {
   /** Set when the data along this axis are instants (`HasCalendar`, from a
    *  `Schema.time()` column): epoch milliseconds read on the calendar of
    *  `zone`. An axis over it is a time axis: its ticks are calendar cells
-   *  (axes/timeAxis.ts), and its domain is not niced to round numbers. A
-   *  union keeps it from any part that has it ({@link mergeCalendars}). */
+   *  (axes/timeRows.ts), and its domain is niced outward to the cells of its
+   *  inner row ({@link niceContinuous}). A union keeps it from any part that
+   *  has it ({@link mergeCalendars}). */
   calendar?: HasCalendar;
 };
 
@@ -202,25 +204,48 @@ export const placeBaseline = <T extends UnderlyingSpace | undefined>(
 export const dataWidth = (space: CONTINUOUS_TYPE): number =>
   intervalWidth(space.dataInterval);
 
+/** What an axis ticks at, which is what a scope that draws the axis nices
+ *  its domain to (#659, #1057): about `count` ticks, or, on a time axis, the
+ *  cells of `partition`, the axis's inner row (`axes.x.rows[0]`). A time
+ *  axis with no `partition` picks one from its domain and `count`
+ *  ({@link axisTickPartition}). `resolveAxes` stamps it on every node that
+ *  draws an axis (`GoFishNode.axisDemand`). */
+export type AxisTicks = { count: number; partition?: CalendarPartition };
+
+/** An axis's ticks when it asks for nothing else: about 10. */
+export const DEFAULT_AXIS_TICKS: AxisTicks = { count: 10 };
+
+/** The partition a time axis over `space` ticks at: its explicit inner row,
+ *  else the one its domain picks ({@link tickPartition}). */
+export const axisTickPartition = (
+  space: CONTINUOUS_TYPE,
+  ticks: AxisTicks
+): CalendarPartition =>
+  ticks.partition ??
+  tickPartition(space.dataInterval.min, space.dataInterval.max, ticks.count);
+
 /** Nice the interval a space renders an axis over (issue #659): a pinned
- *  domain's `[min, max]`, or a delta axis's width from 0, rounded to d3-nice
- *  bounds (count 10, matching the axis tick nicing), so a scope solved with
+ *  domain's `[min, max]`, or a delta axis's width from 0, rounded outward to
+ *  the axis's ticks (`ticks`): d3-nice bounds for `ticks.count` on a numeric
+ *  axis, or the cells of the axis's inner row on a time axis (a calendar
+ *  space, {@link axisTickPartition}), so a scope solved with
  *  the niced space sizes content, maps positions, and (via the same interval)
  *  ticks the axis all off ONE rounded interval. The niced claim widens by the
  *  same data (`niceScope` in `./extent.ts`). The gate is {@link axisOver}:
  *  "an axis renders over this interval", not "the origin is pinned".
  *
- *  Nicing reads only the data interval and the fixed tick count, never σ or
- *  pixels, so it is a pure type operation.
+ *  Nicing reads only the data interval and the axis's ticks (a count, or a
+ *  calendar partition), never σ or pixels, so it is a pure type operation.
  *
  *  This is THE nicing operation. It is applied per σ-scope AT the scope's solve
  *  (the render root, a self-scaled region, a shared-scale scope, a datum-position
  *  scale), never as a pre-layout tree walk, so a domain that only reaches a
  *  scope through a stash cannot escape it (the original #659 bug), and a subtree
  *  that is not a scope root never nices its own subset (it inherits the scope's
- *  σ). It is DEMAND-DRIVEN: each solve site gates the call on
- *  `GoFishNode.scopeRendersAxis`, so a scope nices its interval iff some
- *  node in its space-flow region renders an axis on the dim. A free magnitude
+ *  σ). It is DEMAND-DRIVEN: each solve site reads
+ *  `GoFishNode.scopeAxisTicks`, so a scope nices its interval iff some
+ *  node in its space-flow region renders an axis on the dim, and nices it to
+ *  that axis's ticks. A free magnitude
  *  renders the absolute axis of the scope that places its baseline
  *  ({@link placeBaseline}), so it nices as that axis does, about its own 0
  *  (which its interval contains), and stays free. An ordinal or undefined
@@ -228,22 +253,29 @@ export const dataWidth = (space: CONTINUOUS_TYPE): number =>
  *  scope must NOT nice (its domain maps into a fixed coordinate range), so the
  *  coord boundary never calls this. */
 export const niceContinuous = <T extends UnderlyingSpace | undefined>(
-  space: T
+  space: T,
+  ticks: AxisTicks = DEFAULT_AXIS_TICKS
 ): T => {
   const axis = axisOver(placeBaseline(space));
   if (axis === undefined) return space;
-  // A time axis keeps its data domain: round numbers of milliseconds mean
-  // nothing on a calendar, and its ticks are calendar cells, not steps.
-  if ((space as CONTINUOUS_TYPE).calendar !== undefined) return space;
-  const iv = (space as CONTINUOUS_TYPE).dataInterval;
-  // An absolute axis nices its domain's ends; a delta axis has only a width,
-  // which it nices from 0 so its steps are even (ticks 20, 40, …, 160 rather
-  // than 20, 40, …, 140, 147). The low edge of an origin-less interval means
-  // nothing, so it stays.
+  const s = space as CONTINUOUS_TYPE;
+  const iv = s.dataInterval;
+  // An absolute axis nices its domain's ends: to round numbers, or, over
+  // instants, to cell starts of its inner row. A delta axis has only a
+  // width, which it nices from 0 so its steps are even (ticks 20, 40, …, 160
+  // rather than 20, 40, …, 140, 147). The low edge of an origin-less
+  // interval means nothing, so it stays.
   const [lo, hi] =
     axis === "absolute"
-      ? d3Nice(iv.min, iv.max, 10)
-      : [iv.min, iv.min + d3Nice(0, iv.max - iv.min, 10)[1]];
+      ? s.calendar !== undefined && iv.max > iv.min
+        ? niceToCells(
+            iv.min,
+            iv.max,
+            axisTickPartition(s, ticks),
+            s.calendar.zone
+          )
+        : d3Nice(iv.min, iv.max, ticks.count)
+      : [iv.min, iv.min + d3Nice(0, iv.max - iv.min, ticks.count)[1]];
   return {
     ...(space as CONTINUOUS_TYPE),
     dataInterval: interval(lo, hi),
