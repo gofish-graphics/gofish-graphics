@@ -49,6 +49,8 @@ import {
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
+import type { TimeRowOption } from "./axes/timeRows";
+import { loadTemporal } from "./calendar";
 import {
   getScopeRegistry,
   scopeFrame,
@@ -155,6 +157,16 @@ export type AxisOptions =
        *  axis has a single tier: it uses the number, or `array[0]` for the
        *  array form. */
       labelAngle?: number | number[] | "auto";
+      /** The label rows of a time axis (an axis over a `Schema.time()`
+       *  column), inner row first: each a Calendar value, e.g.
+       *  `[Calendar.month, Calendar.year]` or `[Calendar.hour.every(6),
+       *  Calendar.day]`, or `{ unit, format }` with `format` a function of
+       *  the cell, `(cell) => string`, for custom labels. Each row is one
+       *  partition of the time line: its ticks are its cells' starts, and
+       *  each cell is labeled just past its start (a partial first cell, at
+       *  the axis start). Rows need not nest. Omitted, the axis has two
+       *  rows: the finest level whose labels fit and its parent level. */
+      rows?: TimeRowOption[];
     };
 
 /** Read one `AxisOptions` field per dim, AS AUTHORED — `undefined` wherever the
@@ -282,6 +294,9 @@ export async function layout(
     debugInputSceneGraph(child);
   }
 
+  // Calendar math (time axes) runs on Temporal, loaded once, natively or by
+  // polyfill (calendar.ts).
+  await loadTemporal();
   const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
@@ -353,6 +368,8 @@ export async function layout(
   const elaborated = await elaborateChrome(child, {
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
+    timeRows: perDimAxisOption(axes, "rows"),
+    axisLengths: [w ?? DEFAULT_CANVAS_SIZE, h ?? DEFAULT_CANVAS_SIZE],
   });
   if (elaborated.changed) {
     child = elaborated.node;

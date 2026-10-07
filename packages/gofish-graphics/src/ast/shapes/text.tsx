@@ -40,7 +40,7 @@ const getMeasureContext = (): CanvasRenderingContext2D | null => {
   return _measureCtx ?? null;
 };
 
-const estimateTextDimensions = (
+export const estimateTextDimensions = (
   text: string,
   fontSize: number,
   fontFamily: string,

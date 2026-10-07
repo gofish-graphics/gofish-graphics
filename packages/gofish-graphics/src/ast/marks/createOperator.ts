@@ -53,7 +53,7 @@ import type {
   ChannelType as MarkChannelType,
 } from "../channels";
 import { discretePosition, copyMeasureProvenance } from "../data";
-import { copyColumnTypes } from "../schema";
+import { columnType, copyColumnTypes } from "../schema";
 import { fieldNameOf } from "../datumProjection";
 import type { MaybeValue, Value } from "../data";
 import {
@@ -945,6 +945,11 @@ function applyChannel(
     type === "size" || type === "pos"
       ? resolveMeasure(wholeData, val)
       : undefined;
+  // The column's type (schema.ts) rides `wholeData` too, as the measure does.
+  const fieldType =
+    type === "size" || type === "pos"
+      ? columnType(wholeData, fieldNameOf(val))
+      : undefined;
   if (perEntry && entries !== undefined) {
     if (type === "pos" && discrete && isNonNumericEntryField(val, wholeData)) {
       return [...entries.keys()].map((_, i) =>
@@ -963,7 +968,7 @@ function applyChannel(
     if (type === "size" && hasNormalizeOp(val)) {
       const { pre } = splitAtNormalize(val);
       const rawEntryValues = [...entries.values()].map((items) =>
-        CHANNEL_INFER[type](pre, items, measure)
+        CHANNEL_INFER[type](pre, items, measure, fieldType)
       );
       return applyEntryNormalize(rawEntryValues, fieldNameOf(opts.by));
     }
@@ -971,10 +976,10 @@ function applyChannel(
     // `wholeData` (the binned array still carries the symbol — each per-entry
     // slice does not).
     return [...entries.values()].map((items) =>
-      CHANNEL_INFER[type](val, items, measure)
+      CHANNEL_INFER[type](val, items, measure, fieldType)
     );
   }
-  return CHANNEL_INFER[type](val, wholeData, measure);
+  return CHANNEL_INFER[type](val, wholeData, measure, fieldType);
 }
 
 /**

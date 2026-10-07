@@ -6,6 +6,9 @@ import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import {
   anchorAt,
   isCONTINUOUS,
+  mergeCalendars,
+  positionCalendar,
+  withCalendar,
   UNDEFINED,
   UnderlyingSpace,
 } from "../underlyingSpace";
@@ -32,7 +35,11 @@ const offsetSpace = (
   // Shift the data interval by `value` and pin it: a pinned space moves by
   // `value`, a free or difference space hangs its origin at `value`. The claim
   // moves with it (see `offsetExtent` below).
-  return anchorAt(space, value, space.measure ?? getMeasure(offset));
+  // A time offset puts the content on its calendar.
+  return withCalendar(
+    anchorAt(space, value, space.measure ?? getMeasure(offset)),
+    mergeCalendars([space.calendar, positionCalendar(offset)])
+  );
 };
 
 /** The claim of {@link offsetSpace}'s result: a claim is measured from data

@@ -105,9 +105,21 @@ export type {
   ColumnType,
   HasOrder,
   HasMidpoint,
+  HasCalendar,
   Level,
   SchemaEntry,
 } from "./ast/schema";
+// Calendar partitions (#1057): the cells a time axis's rows are made of
+// (`axes: { x: { rows: [Calendar.month, Calendar.year] } }`). Capitalized
+// like `Schema`: a namespace of values.
+export { Calendar, CalendarPartition } from "./ast/calendar";
+export type {
+  CalendarCell,
+  CalendarUnit,
+  CalendarJSON,
+  WeekStart,
+} from "./ast/calendar";
+export type { TimeRowOption, CellFormat } from "./ast/axes/timeRows";
 
 // Constraints
 export { Constraint } from "./ast/constraints";

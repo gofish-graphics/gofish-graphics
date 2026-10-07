@@ -7,12 +7,14 @@ import { CoordinateTransform } from "./coordinateTransforms/coord";
 import {
   getMeasure,
   getValue,
+  getValueFieldType,
   isAesthetic,
   isValue,
   type MaybeValue,
   type Measure,
 } from "./data";
 import { nice as d3Nice } from "d3-array";
+import type { HasCalendar } from "./schema";
 
 // This module is the TYPE half of an axis: what the axis means, with no σ in
 // it. The SIZE CLAIM half (how much room the content needs, as functions of
@@ -81,6 +83,12 @@ export type CONTINUOUS_TYPE = {
    *  part has it ({@link allMirrored}).
    *  TODO(#995): layer axis merging, a coord's declared window, and anchorAt drop it. */
   mirrored?: true;
+  /** Set when the data along this axis are instants (`HasCalendar`, from a
+   *  `Schema.time()` column): epoch milliseconds read on the calendar of
+   *  `zone`. An axis over it is a time axis: its ticks are calendar cells
+   *  (axes/timeAxis.ts), and its domain is not niced to round numbers. A
+   *  union keeps it from any part that has it ({@link mergeCalendars}). */
+  calendar?: HasCalendar;
 };
 
 export type ORDINAL_TYPE = {
@@ -224,6 +232,9 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
 ): T => {
   const axis = axisOver(placeBaseline(space));
   if (axis === undefined) return space;
+  // A time axis keeps its data domain: round numbers of milliseconds mean
+  // nothing on a calendar, and its ticks are calendar cells, not steps.
+  if ((space as CONTINUOUS_TYPE).calendar !== undefined) return space;
   const iv = (space as CONTINUOUS_TYPE).dataInterval;
   // An absolute axis nices its domain's ends; a delta axis has only a width,
   // which it nices from 0 so its steps are even (ticks 20, 40, …, 160 rather
@@ -261,11 +272,14 @@ export const anchorAt = (
   at: number,
   measure?: Measure
 ): CONTINUOUS_TYPE =>
-  CONTINUOUS(
-    interval(space.dataInterval.min + at, space.dataInterval.max + at),
-    "pinned",
-    measure ?? space.measure,
-    space.coordinateTransform
+  withCalendar(
+    CONTINUOUS(
+      interval(space.dataInterval.min + at, space.dataInterval.max + at),
+      "pinned",
+      measure ?? space.measure,
+      space.coordinateTransform
+    ),
+    space.calendar
   );
 
 export const ORDINAL = (
@@ -285,10 +299,51 @@ export const UNDEFINED: UnderlyingSpace = { kind: "undefined" };
 export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
   space.kind === "undefined";
 
-/** The space of a datum point: a pinned zero-width interval at `pos`. */
+/** The space of a datum point: a pinned zero-width interval at `pos`, on a
+ *  calendar when the datum is a time ({@link positionCalendar}). */
 const pointAt = (pos: MaybeValue<number | undefined>): CONTINUOUS_TYPE => {
   const at = getValue(pos) ?? 0;
-  return CONTINUOUS(interval(at, at), "pinned", getMeasure(pos));
+  return withCalendar(
+    CONTINUOUS(interval(at, at), "pinned", getMeasure(pos)),
+    positionCalendar(pos)
+  );
+};
+
+/** The calendar of a datum position read from a time column (`HasCalendar`
+ *  in the chart's schema), if it is one. */
+export const positionCalendar = (
+  pos: MaybeValue<unknown>
+): HasCalendar | undefined => getValueFieldType(pos)?.HasCalendar;
+
+/** `space` on `calendar` (see {@link CONTINUOUS_TYPE.calendar}), or `space`
+ *  unchanged when there is none. */
+export const withCalendar = <T extends CONTINUOUS_TYPE>(
+  space: T,
+  calendar: HasCalendar | undefined
+): T => (calendar === undefined ? space : { ...space, calendar });
+
+/**
+ * The calendar of a union of spaces on one axis: the one their time parts
+ * share, or undefined when no part is a time. A part with no calendar makes no
+ * claim (a literal position among times), like an untagged measure. Two parts
+ * on different zones are an error: one axis reads one calendar.
+ */
+export const mergeCalendars = (
+  calendars: (HasCalendar | undefined)[]
+): HasCalendar | undefined => {
+  let out: HasCalendar | undefined;
+  for (const c of calendars) {
+    if (c === undefined) continue;
+    if (out !== undefined && out.zone !== c.zone) {
+      throw new Error(
+        `Two time columns on one axis are read in different time zones, ` +
+          `"${out.zone}" and "${c.zone}". One axis reads one calendar: give ` +
+          `both columns the same zone in Schema.time({ zone }).`
+      );
+    }
+    out ??= c;
+  }
+  return out;
 };
 
 /** One axis of a mark sized about a point (an ellipse, a petal): a datum

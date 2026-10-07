@@ -4,7 +4,7 @@
 
 import { GoFishNode } from "../_node";
 import { Rect } from "../shapes/rect";
-import { Text } from "../shapes/text";
+import { Text, estimateTextDimensions } from "../shapes/text";
 import { Spread } from "../graphicalOperators/spread";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
@@ -36,6 +36,16 @@ import {
   wrapperDirection,
   type AxisDirection,
 } from "../axisDirection";
+import {
+  defaultTimeRows,
+  labelsWithRoom,
+  rowLabels,
+  rowTicks,
+  timeRowsFromOption,
+  TIME_LABEL_PAD,
+  type TimeRow,
+  type TimeRowOption,
+} from "./timeRows";
 
 /**
  * The edge an axis on `dim` seats on when its `side` is not given, in the
@@ -83,7 +93,10 @@ const INNER_REF_NAME = "__axisInner"; // outer-tier name for the wrapped content
 const AXIS_CONTENT_GAP = 6; // gap between axis line and content
 const TICK_COUNT = 10;
 const LABEL_FONT_SIZE = 10;
+const LABEL_FONT_FAMILY = "system-ui, sans-serif"; // Text's default
 const AXIS_COLOR = "gray";
+const TIME_OUTER_TICK_LEN = 8; // a time axis's ticks for its outer rows
+const TIME_ROW_GAP = 2; // gap between two label rows of a time axis
 
 /** Per-dim [x, y] axis edge, in the owner's axis order; undefined = none
  *  given (an option) or no axis on that dim (an owner's result). */
@@ -545,6 +558,130 @@ function elaborateContinuousAxis(
   });
 }
 
+/**
+ * One time axis: a continuous axis whose ticks and labels come from calendar
+ * partitions (see axes/timeRows.ts). Ticks and labels are placed by the
+ * axis's continuous scale, like any position axis. Each row is one
+ * partition: its cells' starts are its ticks, and each cell's label sits
+ * just past its start (`TIME_LABEL_PAD`), or past the axis start for a
+ * partial first cell. Row 0 (the inner row) sits past the ticks, as a
+ * continuous axis's labels do, and each further row sits past the one
+ * before it. The inner row's ticks are short; an outer row's are longer, so
+ * its boundaries stand out (where two rows share a tick, it is drawn once,
+ * long).
+ *
+ * The domain is the data's own (a time domain is not niced). `rows` are the
+ * rows the chart asks for (`axes.x.rows`), else the default rows, which need
+ * the axis's pixel length to tell which labels fit: `axisLength`.
+ * TODO(#1057): `axisLength` is the chart's canvas size on this dim, which is
+ * the axis's length for an axis the chart root owns, but an overestimate for
+ * an axis owned by a facet. The right fix chooses the rows once the scope's
+ * scale is solved.
+ */
+function elaborateTimeAxis(
+  dim: 0 | 1,
+  space: CONTINUOUS_TYPE,
+  prefix: string,
+  crossFloor: number | undefined,
+  side: "start" | "end",
+  rowsOption: TimeRow[] | undefined,
+  axisLength: number
+): AxisElaboration {
+  const { min: lo, max: hi } = space.dataInterval;
+  const zone = space.calendar!.zone;
+  const font = (t: string) =>
+    estimateTextDimensions(t, LABEL_FONT_SIZE, LABEL_FONT_FAMILY);
+  const textWidth = (t: string) => font(t).width;
+  const pxPerMs = hi > lo ? axisLength / (hi - lo) : 0;
+  const rows = rowsOption ?? defaultTimeRows(lo, hi, zone, pxPerMs, textWidth);
+
+  // Ticks: every row's cell starts, each drawn once, long if an outer row
+  // has it.
+  const tickLen = new Map<number, number>();
+  rows.forEach((row, i) => {
+    for (const t of rowTicks(row, lo, hi, zone)) {
+      const len = i === 0 ? TICK_LEN : TIME_OUTER_TICK_LEN;
+      tickLen.set(t, Math.max(tickLen.get(t) ?? 0, len));
+    }
+  });
+  const tickValues = [...tickLen.keys()].sort((a, b) => a - b);
+
+  const labels = rows.map((row) =>
+    labelsWithRoom(rowLabels(row, lo, hi, zone), pxPerMs, textWidth)
+  );
+  // How far each row sits past the line: the ticks and gap, then every row
+  // before it. A row's depth across the axis is its labels' height (x) or
+  // its widest label (y).
+  const rowDepth = (k: number) =>
+    dim === 0
+      ? font("0").height
+      : Math.max(0, ...labels[k].map((l) => textWidth(l.text)));
+  const rowOffset: number[] = [];
+  let offset = TICK_LEN + LABEL_TICK_GAP;
+  rows.forEach((_, k) => {
+    rowOffset.push(offset);
+    offset += rowDepth(k) + TIME_ROW_GAP;
+  });
+
+  const base = positionAxis({
+    dim,
+    prefix,
+    lineMin: lo,
+    lineMax: hi,
+    tickValues,
+    tickNode: (v, _i, name) =>
+      Rect(
+        dim === 1
+          ? { w: tickLen.get(v)!, h: 1, fill: AXIS_COLOR }
+          : { w: 1, h: tickLen.get(v)!, fill: AXIS_COLOR }
+      ).name(name),
+    crossFloor,
+    side,
+  });
+  const lineName = `${prefix}line`;
+  const labelName = (k: number, j: number) => `${prefix}r${k}l${j}`;
+  const labelNodes = labels.flatMap((row, k) =>
+    row.map((l, j) =>
+      Text({
+        text: l.text,
+        fontSize: LABEL_FONT_SIZE,
+        fill: AXIS_COLOR,
+      }).name(labelName(k, j))
+    )
+  );
+  const track = dirName(dim);
+  return {
+    ...base,
+    nodes: [...base.nodes, ...labelNodes],
+    constraints: (g) => {
+      const cs = base.constraints(g);
+      labels.forEach((row, k) =>
+        row.forEach((l, j) => {
+          const label = g[labelName(k, j)];
+          // Just past the cell's first point along the axis, by the scale.
+          cs.push(
+            Constraint.position(
+              {
+                [track]: datum(l.at).offset(TIME_LABEL_PAD),
+                anchor: "start",
+              } as any,
+              [label]
+            )
+          );
+          // Past the line by the rows before it, on the axis's outer side.
+          cs.push(
+            Constraint.distribute(
+              { dir: crossName(dim), spacing: rowOffset[k] },
+              side === "end" ? [g[lineName], label] : [label, g[lineName]]
+            )
+          );
+        })
+      );
+      return cs;
+    },
+  };
+}
+
 /** One difference axis: bare tick marks at tick values, delta labels at
  *  midpoints. `space` is the content's space; the axis spans its niced width
  *  from 0, and the content sits centered in it (`contentAt`): a delta axis
@@ -714,7 +851,8 @@ function elaborationsFor(
   node: GoFishNode,
   sides: AxisSides,
   labelSettings: LabelRowSettings = () => undefined,
-  tierCounts: [number, number] = [0, 0]
+  tierCounts: [number, number] = [0, 0],
+  timeOptions: Pick<ChromeOptions, "timeRows" | "axisLengths"> = {}
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -809,7 +947,27 @@ function elaborationsFor(
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
-    if (kind === "absolute" && isCONTINUOUS(s)) {
+    const rowsOption = timeOptions.timeRows?.[dim];
+    if (rowsOption !== undefined && !(isCONTINUOUS(s) && s.calendar)) {
+      throw new Error(
+        `axes.${dirName(dim)}.rows: rows of calendar cells need a time axis, ` +
+          `but this axis is not over a time column. Declare the column with ` +
+          `Schema.time() in the chart's schema.`
+      );
+    }
+    if (kind === "absolute" && isCONTINUOUS(s) && s.calendar) {
+      const e = elaborateTimeAxis(
+        dim,
+        s,
+        prefix,
+        crossFloor,
+        axisSide(dim),
+        rowsOption && timeRowsFromOption(rowsOption, dirName(dim)),
+        timeOptions.axisLengths?.[dim] ?? 400
+      );
+      constrained.push(e);
+      anchors[dim] = e.anchor;
+    } else if (kind === "absolute" && isCONTINUOUS(s)) {
       const e = elaborateContinuousAxis(
         dim,
         nices[dim]!,
@@ -897,6 +1055,11 @@ export type ChromeOptions = {
   sides?: AxisSides;
   /** How each axis label row is drawn. */
   labelSettings?: LabelRowSettings;
+  /** Per-dim `rows` of a time axis (`AxisOptions.rows`), as authored. */
+  timeRows?: [TimeRowOption[] | undefined, TimeRowOption[] | undefined];
+  /** Per-dim length (px) a time axis assumes when it picks its default rows:
+   *  the chart's canvas size on that dim (see `elaborateTimeAxis`). */
+  axisLengths?: [number, number];
 };
 
 /**
@@ -956,7 +1119,8 @@ export async function elaborateChrome(
     node,
     options.sides ?? [undefined, undefined],
     options.labelSettings,
-    tierCounts
+    tierCounts,
+    options
   );
   // A title names an axis this node draws. The measure is read off the
   // node's own space, which elaboration has not re-resolved yet.

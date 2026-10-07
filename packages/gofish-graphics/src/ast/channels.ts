@@ -19,7 +19,7 @@ import {
   type Measure,
 } from "./data";
 import { evalFieldValues, type FieldExpr } from "./fieldExpr";
-import { columnType } from "./schema";
+import { columnType, type ColumnType } from "./schema";
 import {
   mapAxisDims,
   type AxisDims,
@@ -244,6 +244,11 @@ export const inferEntrySize = <T>(
  * precomputed `measure` (createOperator resolves it once per channel from the
  * provenance-bearing array); when omitted we resolve it locally from `d` — the
  * same behavior as resolving against the value array directly.
+ *
+ * A value read from a named column also carries that column's type
+ * (`fieldType`, from the chart's schema) when it has one, so a position over
+ * a time column (`HasCalendar`) builds a time space. The caller may pass it,
+ * resolved from the whole input array, as it does the measure.
  */
 const inferNumeric =
   (agg: typeof sumBy) =>
@@ -257,7 +262,8 @@ const inferNumeric =
       | Value<number>
       | undefined,
     d: T | T[],
-    measure?: Measure
+    measure?: Measure,
+    fieldType?: ColumnType
   ): MaybeValue<number> | undefined => {
     if (accessor === undefined) return undefined;
     if (typeof accessor === "number") return accessor;
@@ -274,7 +280,22 @@ const inferNumeric =
       data
     );
     const m = pipelineMeasure ?? measure ?? resolveMeasure(d, accessor);
-    return value(agg(values as any[]), m);
+    const field = isField(accessor)
+      ? (accessor as FieldAccessor).name
+      : typeof accessor === "string"
+        ? accessor
+        : undefined;
+    const type = fieldType ?? columnType(d, field);
+    return type === undefined
+      ? value(agg(values as any[]), m)
+      : new DatumValueImpl(
+          agg(values as any[]),
+          m,
+          undefined,
+          undefined,
+          field,
+          type
+        );
   };
 
 /** Infer a size value (sums the field/function across the data array). */
@@ -390,10 +411,12 @@ export const inferRaw = async <T extends Record<string, any>>(
  */
 export const CHANNEL_INFER: Record<
   ChannelType,
-  (val: any, data: any[], measure?: Measure) => any
+  (val: any, data: any[], measure?: Measure, fieldType?: ColumnType) => any
 > = {
-  size: (val, data, measure) => inferSize(val, data, measure),
-  pos: (val, data, measure) => inferPos(val, data, measure),
+  size: (val, data, measure, fieldType) =>
+    inferSize(val, data, measure, fieldType),
+  pos: (val, data, measure, fieldType) =>
+    inferPos(val, data, measure, fieldType),
   color: (val, data) => inferColor(val, data),
   raw: (val, data) => inferRaw(val, data),
   // Each slot resolves its own measure from `data`: the slots are separate

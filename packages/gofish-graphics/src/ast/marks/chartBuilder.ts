@@ -92,7 +92,9 @@ export type ChartOptions = {
    * e.g. `{ response: Schema.ordered(LEVELS).diverging() }`. An ordered column
    * (`HasOrder`) splits in the order of its levels, and a value outside them
    * is an error where the order is used; a stack over a column with `HasMidpoint` puts its 0 at the
-   * midpoint of the order. See schema.ts.
+   * midpoint of the order. A time column (`Schema.time()`, `HasCalendar`)
+   * becomes epoch milliseconds and gets a calendar axis; a column of JS
+   * `Date` values is a time column without a schema entry. See schema.ts.
    */
   schema?: Record<string, SchemaEntry>;
 };
@@ -982,11 +984,11 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (data instanceof GoFishRef) {
       data = resolveRefData(data, this.state.layerContext) as any;
     }
-    // Type the data with the chart's schema: a copy of the array carrying the
-    // column types, which every operator reads off the data it splits.
-    const schema = this.state.options?.schema;
-    if (schema !== undefined && Array.isArray(data)) {
-      data = applySchema(data, schema) as any;
+    // Type the data with the chart's schema (plus the time columns inferred
+    // from `Date` values): a copy of the array carrying the column types,
+    // which every operator reads off the data it splits.
+    if (Array.isArray(data)) {
+      data = (await applySchema(data, this.state.options?.schema)) as any;
     }
 
     const content = (

@@ -426,7 +426,7 @@ async function main() {
   console.log("\n# a schema keeps what the data array already carries");
   {
     const binned = bin([{ x: 1 }, { x: 2 }, { x: 7 }], "x");
-    const typed = applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
+    const typed = await applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
     check(
       "bin()'s measure provenance survives a schema",
       getMeasureProvenance(typed)?.start === "x",
