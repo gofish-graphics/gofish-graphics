@@ -10,7 +10,6 @@ import {
   Schema,
   Calendar,
 } from "../../src/lib";
-import { lcg } from "../../src/util/lcg";
 
 const meta: Meta = {
   title: "Forward Syntax/Time",
@@ -30,15 +29,18 @@ type Args = { w: number; h: number };
 const DAY = 864e5;
 
 // Fourteen months of daily prices, Nov 2023 to Dec 2024, as date strings: a
-// random walk with a slow swell.
+// slow swell with faster wiggles on top.
 const prices = (() => {
-  const rand = lcg(7);
   const start = Date.UTC(2023, 10, 1);
   const end = Date.UTC(2024, 11, 31);
   const out: { date: string; price: number }[] = [];
-  let p = 100;
   for (let t = start, i = 0; t <= end; t += DAY, i++) {
-    p += (rand() - 0.5) * 2.2 + Math.sin(i / 40) * 0.25;
+    const p =
+      100 +
+      6 * Math.sin(i / 45) +
+      2.5 * Math.sin(i / 9.3) +
+      1.2 * Math.sin(i / 2.7) +
+      0.6 * Math.sin(i * 1.9);
     out.push({
       date: new Date(t).toISOString().slice(0, 10),
       price: Math.round(p * 100) / 100,
@@ -70,12 +72,11 @@ export const DailyLine: StoryObj<Args> = {
 // Hourly temperatures from Feb 28 00:00 to Mar 2 12:00, 2024 (UTC, a leap
 // year), as JS Dates: a Date column is a time without a schema entry.
 const readings = (() => {
-  const rand = lcg(3);
   const start = Date.UTC(2024, 1, 28);
   const out: { time: Date; temp: number }[] = [];
   for (let h = 0; h <= 84; h++) {
     const temp =
-      4 - 5 * Math.cos(((h - 3) / 24) * 2 * Math.PI) + (rand() - 0.5) * 0.8;
+      4 - 5 * Math.cos(((h - 3) / 24) * 2 * Math.PI) + 0.4 * Math.sin(h * 1.7);
     out.push({
       time: new Date(start + h * 36e5),
       temp: Math.round(temp * 10) / 10,
@@ -162,12 +163,11 @@ export const EventTimeline: StoryObj<Args> = {
 // Daily counts over ten weeks, with a week row over a month row: rows are
 // independent partitions of the time line, so they need not nest.
 const visits = (() => {
-  const rand = lcg(11);
   const start = Date.UTC(2024, 0, 22);
   return Array.from({ length: 70 }, (_, i) => ({
     day: new Date(start + i * DAY).toISOString().slice(0, 10),
     visits: Math.round(
-      120 + 40 * Math.sin((i / 7) * 2 * Math.PI) + rand() * 30
+      120 + 40 * Math.sin((i / 7) * 2 * Math.PI) + 15 * Math.sin(i * 1.3)
     ),
   }));
 })();

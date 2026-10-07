@@ -11,28 +11,19 @@ from gofish import chart, scatter, line, circle, Schema, Calendar
 DAY = timedelta(days=1)
 
 
-def lcg(seed):
-    """The seeded generator of src/util/lcg.ts (d3's randomLcg constants)."""
-    m = 4294967296
-    s = int(seed) % m
-
-    def next_value():
-        nonlocal s
-        s = (1664525 * s + 1013904223) % m
-        return s / m
-
-    return next_value
-
-
 def _prices():
-    rand = lcg(7)
     t = datetime(2023, 11, 1, tzinfo=timezone.utc)
     end = datetime(2024, 12, 31, tzinfo=timezone.utc)
     out = []
-    p = 100.0
     i = 0
     while t <= end:
-        p += (rand() - 0.5) * 2.2 + math.sin(i / 40) * 0.25
+        p = (
+            100
+            + 6 * math.sin(i / 45)
+            + 2.5 * math.sin(i / 9.3)
+            + 1.2 * math.sin(i / 2.7)
+            + 0.6 * math.sin(i * 1.9)
+        )
         out.append({"date": t.strftime("%Y-%m-%d"), "price": round(p * 100) / 100})
         t += DAY
         i += 1
@@ -43,11 +34,10 @@ PRICES = _prices()
 
 
 def _readings():
-    rand = lcg(3)
     start = datetime(2024, 2, 28, tzinfo=timezone.utc)
     out = []
     for h in range(85):
-        temp = 4 - 5 * math.cos(((h - 3) / 24) * 2 * math.pi) + (rand() - 0.5) * 0.8
+        temp = 4 - 5 * math.cos(((h - 3) / 24) * 2 * math.pi) + 0.4 * math.sin(h * 1.7)
         out.append(
             {"time": start + timedelta(hours=h), "temp": round(temp * 10) / 10}
         )
@@ -87,13 +77,12 @@ RELEASES = [
 
 
 def _visits():
-    rand = lcg(11)
     start = datetime(2024, 1, 22, tzinfo=timezone.utc)
     return [
         {
             "day": (start + i * DAY).strftime("%Y-%m-%d"),
             "visits": round(
-                120 + 40 * math.sin((i / 7) * 2 * math.pi) + rand() * 30
+                120 + 40 * math.sin((i / 7) * 2 * math.pi) + 15 * math.sin(i * 1.3)
             ),
         }
         for i in range(70)
