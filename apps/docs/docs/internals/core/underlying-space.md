@@ -14,6 +14,7 @@ covers:
   - packages/gofish-graphics/src/ast/fieldExpr.ts
   - packages/gofish-graphics/src/ast/datumProjection.ts
   - packages/gofish-graphics/src/ast/schema.ts
+  - packages/gofish-graphics/src/ast/calendar.ts
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -241,6 +242,7 @@ type CONTINUOUS_TYPE = {
   origin: Origin; // where that origin sits
   measure?: Measure;
   mirrored?: true;
+  calendar?: HasCalendar; // the data are instants on this calendar
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
@@ -1295,7 +1297,10 @@ its own end), and a delta axis's width from 0, so a delta axis steps evenly
 (ticks 20, 40, …, 160 rather than 20, 40, …, 140 and a last step of 7). A
 **coord scope never
 nices** (its domains map into a fixed coordinate range; rounding them would
-break the mapping).
+break the mapping). Neither does a **time** space (`calendar` set, see the
+column types below): a round number of milliseconds means nothing on a
+calendar, and its axis's ticks are calendar cells, so the domain stays the
+data's own.
 
 And it is **demand-driven**: a scope nices its domain **iff at least one node
 in the scope renders an axis on that dim**. Nicing is a presentation
@@ -1697,7 +1702,7 @@ chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
 ```
 
 A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the builder words. Two classes exist:
+reads only the classes, never the builder words. Three classes exist:
 
 - `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
   order. `splitEntries` groups a `by` over the column in that order instead
@@ -1732,6 +1737,27 @@ reads only the classes, never the builder words. Two classes exist:
   (`orderEntries`), and `stackOrigin` reads the stack's direction off that,
   so a row with one part puts it where a full row does. A split order that
   is neither the order nor its reverse is an error.
+- `HasCalendar` (`Schema.time({ zone })`, #1057): the values are instants,
+  read on the calendar of the IANA zone `zone` (UTC by default). It is the
+  one class that changes the data: `applySchema` (now async, because it
+  loads Temporal; see `calendar.ts`) copies the rows and turns each value
+  into epoch milliseconds (`toEpochMs`: an ISO date is the start of that day
+  in the zone, a date-time without an offset is wall-clock time in the zone).
+  It is also the one class that is inferred, and only locally: a column
+  whose first value is a JS `Date` is a UTC time. Strings and numbers never
+  are. An instant has no zero. A position read from the column carries the
+  class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
+  for any typed column, with `createOperator` passing the type it resolved
+  from the whole input as it does the measure), and the point space it
+  builds carries it as `CONTINUOUS_TYPE.calendar` (`positionCalendar`,
+  `withCalendar`). The folds that build a continuous space from parts keep
+  it (`mergeCalendars`: the overlay fold, a layer's datum-position domain in
+  `compose.ts`, a rect's two ends, the `position` operator's offset), and
+  two parts on different zones are an error, like two measures. A time space
+  is not niced, and its axis is a time axis
+  ([Axes](/internals/frontend/axes#the-three-kinds)). Calendar cells
+  (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
+  on Temporal, native or the polyfill it loads when the runtime has none.
 
 The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
 same way a transform's measure provenance does: `ChartBuilder` copies the

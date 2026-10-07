@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 /**
  * Calendar partitions (#256, #1057): `Calendar.month`, `Calendar.hour.every(6)`,
  * `Calendar.week({ start: "sunday" })`, ...

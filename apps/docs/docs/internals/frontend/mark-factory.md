@@ -109,7 +109,12 @@ annotation, else transform provenance riding the data array (`bin()` tags its
 output), else the field name as a weak default; a contradictory
 annotation-vs-provenance pair throws at the channel. `createOperator` hoists
 `resolveMeasure` to once per channel and passes the result down, since the
-accessor and provenance are loop-invariant across split entries.
+accessor and provenance are loop-invariant across split entries. A value read
+from a named column also records the column's type from the chart's `schema`
+(`DatumValueImpl.fieldType`; an optional fourth argument, or read off `data`),
+so a position over a `Schema.time()` column builds a space on that column's
+calendar (see
+[Underlying Space](/internals/core/underlying-space#column-types-the-chart-schema)).
 
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.

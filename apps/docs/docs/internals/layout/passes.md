@@ -88,6 +88,11 @@ Three per-run session contexts are initialized:
 
 These are attached to the render session and propagated to the node tree, rather than stored as module-global mutable state. This establishes clean state for the rendering process and ensures no interference between multiple chart renders.
 
+Before the passes, `layout` awaits `loadTemporal()` (`calendar.ts`) once, so
+the calendar math of a time axis can run synchronously during elaboration:
+the native Temporal API where the runtime has one, else `temporal-polyfill`,
+imported only then.
+
 ### Pass 2: Color Scale Resolution
 
 **Location**: `src/ast/gofish.tsx:172`

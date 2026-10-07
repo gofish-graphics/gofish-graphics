@@ -67,16 +67,21 @@ chart(data, axes={"x": {"title": "Year"}, "y": True})   # custom x title
 chart(data, axes={"x": {"title": False}, "y": True})    # suppress inferred x title
 chart(data, axes={"x": {"side": "end"}})                # x-axis on the far edge
 chart(data, axes={"x": {"label_angle": 45}})            # x labels rotated 45 degrees
+chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})  # rows of a time axis
 ```
 
 Keys inside the per-axis dict are snake_case, like every keyword argument:
-`"title"`, `"side"`, and `"label_angle"`. Any other key, including the
+`"title"`, `"side"`, `"label_angle"`, and `"rows"`. Any other key, including the
 camelCase `"labelAngle"`, raises a `TypeError`.
 
 `"label_angle"` rotates the tick and category labels clockwise by that many
 degrees. A list rotates each tier of a nested axis separately, from the
 innermost tier outward (`[45]` rotates only the innermost row), and `"auto"`
 picks 0, 45, or 90 degrees for each label row so the labels do not collide.
+
+`"rows"` sets the label rows of a time axis, an axis over a
+[`Schema.time()`](/python/api/core/schema) column. See
+[`Calendar`](/python/api/core/calendar).
 
 Each per-axis dict also accepts `"side": "start" | "end"`. By default a
 **continuous/quantitative x-axis renders at the visual bottom** (and a continuous

@@ -27,6 +27,8 @@ chart(
 Schema.ordered(levels)               # HasOrder
 Schema.ordered(levels).diverging()   # HasOrder and HasMidpoint
 Schema.ordered(levels).diverging(midpoint=m)   # HasOrder and HasMidpoint
+Schema.time()                        # HasCalendar, in UTC
+Schema.time(zone=zone)               # HasCalendar, in the time zone `zone`
 ```
 
 A column type is a set of classes. Each builder method adds one class, and
@@ -37,6 +39,7 @@ is a point along an order.
 | ------------------------ | ------------- | ------------------------------------------------------ |
 | `Schema.ordered(levels)` | `HasOrder`    | The column's values are `levels`, in this order.       |
 | `.diverging()`           | `HasMidpoint` | The order has a midpoint, a point along it. See below. |
+| `Schema.time()`          | `HasCalendar` | The column's values are instants, read on a calendar.  |
 
 ## Parameters
 
@@ -44,6 +47,7 @@ is a point along an order.
 | ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | `levels`   | `list[str \| int]` | Every value the column takes, first to last.                                                                       |
 | `midpoint` | `float`            | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`. |
+| `zone`     | `str`              | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                  |
 
 ## Behavior
 
@@ -85,6 +89,26 @@ is a point along an order.
 - The parts must follow the column's order, or its reverse. Reordering them
   some other way is an error.
 
+**`HasCalendar`.**
+
+- Each value becomes epoch milliseconds (UTC) when the chart applies its
+  schema. A value may be an ISO 8601 string, a datetime, or epoch
+  milliseconds.
+- A date alone (`"2024-03-05"`) is the start of that day in `zone`. A
+  date-time with an offset (`"2024-03-05T14:30:00Z"`) is that instant. A
+  date-time without one (`"2024-03-05T14:30"`) is that wall-clock time in
+  `zone`. Any other value is an error that names the column and the value.
+- A pandas, polars or pyarrow datetime column is a time column without a
+  schema entry, in the column's own time zone (UTC for a naive or date
+  column). Strings and numbers are never taken as times.
+- An instant has no zero.
+- An axis over the column is a time axis. Its domain is the data's own,
+  not rounded, and its ticks and labels are calendar cells in rows: by
+  default the finest level whose labels fit, and below it that level's
+  parent. See [`Calendar`](/python/api/core/calendar) for the rows.
+- An unknown `zone` is an error. Two time columns on one axis must have the
+  same zone.
+
 ## Example
 
 A population pyramid is a two-level diverging order, with positive counts on
@@ -101,4 +125,15 @@ chart(
     spread(by=field("age").reverse(), dir="y", spacing=1),
     stack(by="sex", dir="x"),
 ).mark(rect(w="people", fill="sex"))
+```
+
+A column of date strings is a time with `Schema.time()`:
+
+::: gofish example:daily-price-line hidden
+:::
+
+```python
+chart(prices, schema={"date": Schema.time()}, axes=True).flow(
+    scatter(by="date", x="date", y="price")
+).mark(line(stroke="steelblue", stroke_width=2))
 ```

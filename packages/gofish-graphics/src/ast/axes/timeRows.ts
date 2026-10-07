@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Axes — /internals/frontend/axes
+// </gofish-wiki>
+
 /**
  * The rows of a time axis (#1057). A time axis is a continuous axis whose
  * ticks come from calendar partitions (calendar.ts): a "partitioned axis".

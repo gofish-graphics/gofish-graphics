@@ -38,7 +38,7 @@ never mistaken for data.
 | `options.color`  | `ColorConfig`                  | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
 | `options.axes`   | `AxesOptions`                  | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
 | `options.legend` | `boolean`                      | Whether to draw the color-scale legend. Default `true`. See [Legend](#legend) below.                                                                                         |
-| `options.schema` | `Record<string, ColumnSchema>` | Column types, keyed by column name, e.g. `{ response: Schema.ordered(LEVELS).diverging() }`. See [`Schema`](/js/api/core/schema).                                            |
+| `options.schema` | `Record<string, ColumnSchema>` | Column types, keyed by column name, e.g. `{ response: Schema.ordered(LEVELS).diverging() }` or `{ date: Schema.time() }`. See [`Schema`](/js/api/core/schema).               |
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 
@@ -52,14 +52,26 @@ chart(data, { axes: false }); // no axes (the default)
 chart(data, { axes: { x: true, y: false } }); // x only
 chart(data, { axes: { x: { title: "Year" }, y: true } }); // custom x title, inferred y title
 chart(data, { axes: { x: { title: false }, y: true } }); // suppress the inferred x title
+chart(data, { axes: { x: { rows: [Calendar.month, Calendar.year] } } }); // rows of a time axis
 ```
 
 The full type is:
 
 ```ts
 type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-type AxisOptions = boolean | { title?: string | false };
+type AxisOptions =
+  | boolean
+  | {
+      title?: string | false;
+      side?: "start" | "end";
+      labelAngle?: number | number[] | "auto";
+      rows?: TimeRowOption[];
+    };
 ```
+
+`rows` sets the label rows of a time axis, an axis over a
+[`Schema.time()`](/js/api/core/schema) column. See
+[`Calendar`](/js/api/core/calendar).
 
 Each axis title defaults to the field that dimension encodes (e.g. `count` for
 `rect({ h: "count" })`). Pass `{ title: "…" }` to override it, or `{ title: false }`

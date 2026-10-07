@@ -5,6 +5,7 @@ order: 50
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/axes/elaborate.tsx
+  - packages/gofish-graphics/src/ast/axes/timeRows.ts
   - packages/gofish-graphics/src/ast/axes/autoLabelAngle.ts
   - packages/gofish-graphics/src/ast/choice/choose.ts
   - packages/gofish-graphics/src/ast/_node.ts
@@ -370,6 +371,30 @@ difference axis), never off the size claim:
   both sides of 0 hold amounts measured away from it, so each tick is labeled
   with its distance from 0 (`60 40 20 0 20 40 60`). The label follows from the
   space's type; there is no format option.
+- **TIME (continuous, pinned, `calendar` set)** — a partitioned axis
+  (`elaborateTimeAxis`, #1057). It is a position axis: the same line, the
+  same gutter seating, and every tick and label pinned at its instant with
+  `Constraint.position`, so nothing sits in an ordinal slot. Its ticks and
+  labels come from calendar partitions (`CalendarPartition` in
+  `calendar.ts`) instead of `d3.ticks`, one row per partition
+  (`axes/timeRows.ts`). A row's ticks are its cells' starts inside the
+  domain, and each cell's label is pinned `TIME_LABEL_PAD` past its start
+  (anchor `start`), or past the axis start for a partial first cell. A
+  label that would run into the next one is dropped, and a cell starting at
+  the domain's end gets a tick but no label. Rows stack outward from the
+  line by a fixed offset each, the row's text height (its widest label on a
+  y axis) plus a gap, so the axis emits all its rows in one elaboration
+  rather than going through the ordinal tiers. Rows are independent
+  partitions, so they need not nest. A tick both rows share is drawn once,
+  with the outer row's longer length. `axes.x.rows` sets the rows; without
+  it, `defaultTimeRows` picks the finest level and step whose every cell is
+  wide enough for its label (steps per level in `AUTO_STEPS`), then that
+  level's parent. Fitting needs pixels before layout, so it takes the
+  axis's length to be the chart's canvas size on that dim
+  (`ChromeOptions.axisLengths`). That is exact for an axis the root owns and
+  an overestimate for a facet's (TODO(#1057): choose rows once the scope is
+  solved). The domain is not niced (see
+  [Underlying Space](/internals/core/underlying-space#nicing-is-a-scope-operation-applied-on-demand)).
 - **DIFFERENCE (continuous, `origin: "none"`)** — bare tick marks at the
   tick values over `[0, w]`, where `w` is the space's width niced from 0
   (`niceContinuous`, the same nicing the scope that sizes the content
