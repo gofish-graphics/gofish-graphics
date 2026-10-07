@@ -213,9 +213,8 @@ if (report.status === "rejected") {
     `run ${runId} has no visual-diff-report artifact (it reported no diffs, or the artifact expired)`
   );
 }
-// The capture comes in shards, one `js-dom-capture-<i>` artifact per
-// js-capture shard, which gh puts in a directory each. Their files are
-// disjoint, so merging them rebuilds the full capture.
+// gh puts each shard's `js-dom-capture-<i>` artifact in a directory of its
+// own; merge them into the full capture (see js-capture in visual-tests.yml).
 for (const shard of readdirSync(shardsDir)) {
   cpSync(join(shardsDir, shard), captureDir, { recursive: true });
 }

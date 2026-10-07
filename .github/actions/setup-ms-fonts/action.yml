@@ -1,0 +1,62 @@
+name: Set up MS core fonts
+description: >-
+  Install the Microsoft TrueType core fonts (Andale Mono, Verdana, ...) with
+  their .ttf files cached, and check that fontconfig resolves them.
+
+# Several stories (the PythonTutor ones among them) use Andale Mono, Verdana,
+# and other MS core fonts. ubuntu-latest doesn't ship those; without them
+# Chromium falls through to fontconfig's generic monospace / sans, and the JS
+# storybook and the Python harness end up measuring text against different
+# fallback resolutions. Installing the MS core fonts pins both captures to the
+# same font files.
+#
+# awalsh128/cache-apt-pkgs-action doesn't work for mscorefonts: the .deb is a
+# tiny installer stub whose postinst downloads ~30MB of .ttf files from
+# SourceForge (slow, ~50s) *after* dpkg has recorded the package's file list.
+# Those .ttf files aren't tracked by apt, so a restore of the dpkg-tracked
+# files leaves /usr/share/fonts/truetype/msttcorefonts/ empty, fc-match falls
+# back to DejaVu, and the fallback drift is back.
+#
+# So cache the .ttf files directly. A cache miss pays the full install and
+# SourceForge download; a hit copies the .ttf files into /usr/share/fonts/ in
+# ~3s.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore mscorefonts .ttf cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/msttcorefonts
+        key: msttcorefonts-v1
+
+    - name: Install MS TrueType core fonts
+      shell: bash
+      run: |
+        set -euo pipefail
+        DEST=/usr/share/fonts/truetype/msttcorefonts
+        CACHE="$HOME/.cache/msttcorefonts"
+        if [ -d "$CACHE" ] && ls "$CACHE"/*.ttf >/dev/null 2>&1; then
+          echo "Restoring fonts from cache: $CACHE"
+          sudo mkdir -p "$DEST"
+          sudo cp "$CACHE"/*.ttf "$DEST"/
+        else
+          echo "Cache miss; installing via apt (downloads from SourceForge)..."
+          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer
+          mkdir -p "$CACHE"
+          cp "$DEST"/*.ttf "$CACHE"/
+        fi
+        sudo fc-cache -f
+
+    # fc-match always finds *something* (DejaVu is the ultimate fallback), so
+    # a non-zero exit doesn't catch a silently broken install. Grep for the
+    # expected .ttf filename.
+    - name: Verify fonts resolve correctly
+      shell: bash
+      run: |
+        fc-match "Andale Mono" | grep -q "Andale_Mono.ttf" \
+          || { echo "FAIL: Andale Mono resolved to: $(fc-match 'Andale Mono')"; exit 1; }
+        fc-match "Verdana" | grep -q "Verdana.ttf" \
+          || { echo "FAIL: Verdana resolved to: $(fc-match 'Verdana')"; exit 1; }

@@ -82,27 +82,8 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install
 
-      - name: Restore Playwright browser cache
-        id: playwright-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
-
-      - name: Save Playwright browser cache
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
+      - name: Set up Playwright
+        uses: ./.github/actions/setup-playwright
 
       # Fetch the append-only benchmarks data branch (read-only worktree) to look
       # up the previous ruler and to short-circuit if this version is already

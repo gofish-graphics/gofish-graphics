@@ -30,10 +30,10 @@
  * Every story is thus measured in an identical fresh environment, byte-
  * comparable across runs, between the batch capture and capture-one (the
  * same code path), and with the Python parity capture
- * (capture-python-dom.ts). Each story's page loads only that story's module
- * (see `RunnerPageOptions.module`), so a context + load costs a few hundred
- * ms, the same order as one story render; loading the whole corpus there
- * took about four times as long.
+ * (capture-python-dom.ts). A runner page loads only the story module it
+ * renders (see tests/harness/stories-runner.ts), so a context + load costs a
+ * few hundred ms, the same order as one story render; loading the whole
+ * corpus there took about four times as long.
  *
  * Because every story already gets its own context, stories are captured
  * CONCURRENTLY: a small pool of workers (see `CaptureOptions.concurrency`)
@@ -84,6 +84,9 @@ export interface StoryInfo {
   hasLoaders: boolean;
 }
 
+/** What the runner needs to load and render a story: its module and export. */
+export type StoryRef = Pick<StoryInfo, "moduleKey" | "name">;
+
 export interface CaptureOptions {
   /** Directory containing vite.config.ts + stories-runner.html (the Vite root). */
   harnessDir: string;
@@ -108,8 +111,8 @@ export interface CaptureOptions {
 
 /**
  * One of `total` disjoint slices of a story list, numbered from 1 and written
- * `index/total` (e.g. `2/4`). CI captures each shard on its own runner and
- * merges the outputs, which are disjoint sets of files.
+ * `index/total` (e.g. `2/4`). CI's use of shards: the js-capture job in
+ * .github/workflows/visual-tests.yml.
  */
 export interface Shard {
   index: number;
@@ -133,7 +136,7 @@ export function parseShard(spec: string): Shard {
  * shards take about as long as each other. Every shard must be handed the
  * items in the same order for the shards to be disjoint and complete.
  */
-export function inShard<T>(items: T[], shard: Shard | undefined): T[] {
+function inShard<T>(items: T[], shard: Shard | undefined): T[] {
   if (!shard) return items;
   return items.filter((_, i) => i % shard.total === shard.index - 1);
 }
@@ -150,9 +153,9 @@ export interface CaptureResult {
 /** Wall-clock instant the fake clock is installed at. Any fixed value works;
  *  what matters is that it is the same on every run and every machine. */
 const CLOCK_EPOCH = Date.UTC(2024, 0, 1, 0, 0, 0);
-/** Where the clock is parked once the page has loaded. The page loads with time
- *  running normally (a clock paused across module init can deadlock on a
- *  loader's own timer), then jumps here and stops. */
+/** Where the clock is parked once the page and the story's module have loaded.
+ *  They load with time running normally (a clock paused across module init
+ *  can deadlock on a loader's own timer), then it jumps here and stops. */
 const CLOCK_PAUSE_AT = CLOCK_EPOCH + 60_000;
 /** Virtual ms handed to EVERY story after it first paints, in full. It has to
  *  cover the runner's rAF + 100ms settle with room to spare; beyond that the
@@ -239,18 +242,10 @@ export type Log = (line: LogLine) => void;
 export const printLine = ({ err, text }: LogLine) =>
   err ? console.error(text) : console.log(text);
 
-/** What a runner page loads and the browser context it opens in. */
-export interface RunnerPageOptions {
-  /** Load only this story module (a `StoryInfo.moduleKey`); default: all. */
-  module?: string;
-  /** Overrides of the context defaults. */
-  context?: BrowserContextOptions;
-}
-
 /** Opens a fresh runner page in its own context (see `openRunnerPage`). */
 export type OpenRunnerPage = (
   log: Log,
-  options?: RunnerPageOptions
+  contextOptions?: BrowserContextOptions
 ) => Promise<RunnerPage>;
 
 /**
@@ -275,7 +270,10 @@ export async function withHarness<T>(
     await waitForVite(port);
     browser = await chromium.launch({ headless: true });
     const b = browser;
-    return await fn((log, options) => openRunnerPage(b, port, log, options), b);
+    return await fn(
+      (log, contextOptions) => openRunnerPage(b, port, log, contextOptions),
+      b
+    );
   } finally {
     await browser?.close();
     viteProc.kill();
@@ -292,24 +290,23 @@ export type RunnerPage = { context: BrowserContext; page: Page };
  * flipped `300 18px monospace` metrics for every later story in the run — see
  * header comment). Context startup is ~tens of ms, same order as the
  * navigation itself. Browser console errors go to `log`, so a story's errors
- * print with that story. `options.context` overrides the context defaults
- * (capture-docs-images asks for `deviceScaleFactor: 2`). `options.module`
- * makes the page load only the story module it will render, instead of the
- * whole corpus (see tests/harness/stories-runner.ts).
+ * print with that story. `contextOptions` override the context defaults
+ * (capture-docs-images asks for `deviceScaleFactor: 2`).
  */
 async function openRunnerPage(
   browser: Browser,
   port: number,
   log: Log,
-  options: RunnerPageOptions = {}
+  contextOptions: BrowserContextOptions = {}
 ): Promise<RunnerPage> {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 720 },
-    ...options.context,
+    ...contextOptions,
   });
   // Install the fake clock BEFORE the first navigation so nothing in the
-  // page ever sees the real one; it keeps running at real speed until the
-  // pause below, so page load is unaffected (see header comment).
+  // page ever sees the real one; it keeps running at real speed until
+  // `renderStoryOnFakeClock` pauses it, so page load is unaffected (see
+  // header comment).
   await context.clock.install({ time: CLOCK_EPOCH });
   const page = await context.newPage();
   page.on("console", (msg) => {
@@ -321,34 +318,26 @@ async function openRunnerPage(
   page.on("pageerror", (err) =>
     log({ err: true, text: `[browser pageerror] ${err.message}` })
   );
-  const query = options.module
-    ? `?module=${encodeURIComponent(options.module)}`
-    : "";
-  await page.goto(`http://localhost:${port}/stories-runner.html${query}`, {
+  await page.goto(`http://localhost:${port}/stories-runner.html`, {
     waitUntil: "domcontentloaded",
   });
   await page.waitForFunction(
     () => (window as any).__STORIES_RUNNER_READY__ === true,
     { timeout: 30_000 }
   );
-  const runnerError = await page.evaluate(
-    () => (window as any).__STORIES_RUNNER_ERROR__
-  );
-  if (runnerError) {
-    await context.close();
-    throw new Error(`Stories runner failed to initialize: ${runnerError}`);
-  }
   // Warm the webfonts while time still runs, so that a story's own
   // `await document.fonts.ready` resolves in a microtask rather than after
   // a real network fetch of unpredictable length.
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
-  // From here on time only moves when this process says so.
-  await page.clock.pauseAt(CLOCK_PAUSE_AT);
   return { context, page };
 }
 
-async function discoverStories(
-  open: (log: Log) => Promise<RunnerPage>
+/**
+ * List every story, in a runner page of its own: listing is the one thing
+ * that loads every story module (see tests/harness/stories-runner.ts).
+ */
+export async function discoverStories(
+  open: OpenRunnerPage
 ): Promise<StoryInfo[]> {
   const { context, page } = await open(printLine);
   try {
@@ -372,23 +361,31 @@ type StoryOutcome =
   | { kind: "skipped"; path: string };
 
 /**
- * Render one story into a page from `openRunnerPage` (its fake clock paused)
- * and hand it the fixed virtual budget, after which its DOM is ready to read:
- * a still story is fully drawn and an animated one sits on the same frame
- * every run. Resolves to the story's render error, or null. Throws on timeout.
+ * Render one story into a fresh page from `openRunnerPage` and hand it the
+ * fixed virtual budget, after which its DOM is ready to read: a still story
+ * is fully drawn and an animated one sits on the same frame every run.
+ * Resolves to the story's render error, or null. Throws on timeout, and when
+ * the story's module fails to load.
  */
 export async function renderStoryOnFakeClock(
   page: Page,
-  storyId: string,
+  story: StoryRef,
   label: string,
   log: Log
 ): Promise<string | null> {
+  // Load the story's module while time still runs, as a page load does: a
+  // module's init may wait on a timer of its own, which a paused clock
+  // would never fire.
+  await page.evaluate((s) => window.__loadStory__(s), story);
+  // From here on time only moves when this process says so.
+  await page.clock.pauseAt(CLOCK_PAUSE_AT);
+
   // Kick the render off but do NOT await it: the runner's tail (a rAF
   // plus a 100ms settle) can only complete once the paused clock is
   // given virtual time below, so awaiting here would deadlock.
-  await page.evaluate((id) => {
-    void window.__renderStory__(id);
-  }, storyId);
+  await page.evaluate((s) => {
+    void window.__renderStory__(s);
+  }, story);
 
   // Phase 1 — real time only. Loaders, dynamic imports, fonts and the
   // gofish render promise are real promises that resolve on their own.
@@ -448,7 +445,7 @@ async function captureStory(
 
   const renderError = await renderStoryOnFakeClock(
     page,
-    story.id,
+    story,
     `${story.title}/${story.name}`,
     log
   );
@@ -579,9 +576,7 @@ export async function captureStories(
         // Fresh context (and page) per story: resets Chromium's renderer
         // font-metric state so text measurement can't be polluted by a
         // previous story's raster (see header comment).
-        const { context, page } = await open(log, {
-          module: story.moduleKey,
-        });
+        const { context, page } = await open(log);
         try {
           outcome = await captureStory(page, story, outDir, screenshot, log);
         } finally {

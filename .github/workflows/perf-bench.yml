@@ -51,8 +51,9 @@ jobs:
 
       # Same MS-core-fonts pinning as the visual-tests job: keeps text
       # measurement (and therefore layout timing) stable across runs rather
-      # than drifting on fontconfig fallbacks. See visual-tests.yml for the
-      # full rationale on caching the .ttf files directly.
+      # than drifting on fontconfig fallbacks. See
+      # .github/actions/setup-ms-fonts for why the .ttf files are cached
+      # directly.
       - name: Restore mscorefonts .ttf cache
         id: msfonts-cache
         uses: actions/cache@v4
@@ -106,27 +107,8 @@ jobs:
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
 
-      - name: Restore Playwright browser cache
-        id: playwright-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
-
-      - name: Save Playwright browser cache
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
+      - name: Set up Playwright
+        uses: ./.github/actions/setup-playwright
 
       # Fetch the append-only benchmarks data branch (history + main baseline).
       # Absent on the very first run — handled gracefully downstream.

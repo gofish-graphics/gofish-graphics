@@ -361,6 +361,46 @@ type StoryOutcome =
   | { kind: "failed"; reason: string }
   | { kind: "skipped"; reason: string };
 
+const storyName = (story: PythonStory) => `${story.module}::${story.function}`;
+
+/** A story's line in the capture log. */
+function statusLine(outcome: StoryOutcome): string {
+  if (outcome.kind === "ok") return "OK";
+  if (outcome.kind === "skipped") return `SKIP: ${outcome.reason}`;
+  return `FAILED: ${outcome.reason}`;
+}
+
+type OutcomeRecord = { id: string; story: string; reason: string };
+
+/**
+ * The stories that have an outcome, split by it: the paths of the captured
+ * ones and a record of each failed or skipped one. Stories without an outcome
+ * yet are left out.
+ */
+function partition(
+  stories: PythonStory[],
+  outcomes: (StoryOutcome | undefined)[]
+): { captured: string[]; failed: OutcomeRecord[]; skipped: OutcomeRecord[] } {
+  const captured: string[] = [];
+  const failed: OutcomeRecord[] = [];
+  const skipped: OutcomeRecord[] = [];
+  stories.forEach((story, i) => {
+    const outcome = outcomes[i];
+    if (!outcome) return;
+    if (outcome.kind === "ok") {
+      captured.push(story.path);
+      return;
+    }
+    const record = {
+      id: story.path,
+      story: storyName(story),
+      reason: outcome.reason,
+    };
+    (outcome.kind === "failed" ? failed : skipped).push(record);
+  });
+  return { captured, failed, skipped };
+}
+
 async function main() {
   console.log("=== Capturing Python DOM snapshots ===\n");
 
@@ -393,8 +433,6 @@ async function main() {
   // persist whatever we managed to collect even if the run or browser setup
   // throws.
   const outcomes: (StoryOutcome | undefined)[] = [];
-  const storyName = (story: PythonStory) =>
-    `${story.module}::${story.function}`;
 
   // Flush capture-results.json to disk, in story order. Called as each story
   // finishes and again in the outer `finally` so partial output survives a
@@ -402,35 +440,10 @@ async function main() {
   // silently render coverage-only state).
   mkdirSync(TMP_DIR, { recursive: true });
   const flushCaptureResults = () => {
-    const capturedIds: string[] = [];
-    const failedRecords: { id: string; story: string; reason: string }[] = [];
-    const skippedRecords: { id: string; story: string; reason: string }[] = [];
-    stories.forEach((story, i) => {
-      const outcome = outcomes[i];
-      if (outcome?.kind === "ok") capturedIds.push(story.path);
-      else if (outcome) {
-        const record = {
-          id: story.path,
-          story: storyName(story),
-          reason: outcome.reason,
-        };
-        (outcome.kind === "failed" ? failedRecords : skippedRecords).push(
-          record
-        );
-      }
-    });
     try {
       writeFileSync(
         join(TMP_DIR, "capture-results.json"),
-        JSON.stringify(
-          {
-            captured: capturedIds,
-            failed: failedRecords,
-            skipped: skippedRecords,
-          },
-          null,
-          2
-        )
+        JSON.stringify(partition(stories, outcomes), null, 2)
       );
     } catch {
       /* ignore — best-effort */
@@ -482,28 +495,19 @@ async function main() {
     const capture = async (
       story: PythonStory,
       log: (text: string) => void
-    ): Promise<{ outcome: StoryOutcome; status: string }> => {
+    ): Promise<StoryOutcome> => {
       // Skip stories whose JS source is file-level parity-exempt — the port
       // isn't expressible at all (e.g. NestedMosaicChart's function fill).
       if (exemptPythonFiles.has(story.file)) {
         return {
-          outcome: {
-            kind: "skipped",
-            reason: "JS story is parity-exempt (.python-sync-exempt)",
-          },
-          status: "SKIP (JS story is parity-exempt)",
+          kind: "skipped",
+          reason: "JS story is parity-exempt (.python-sync-exempt)",
         };
       }
 
       const ir = await loadStory(story);
       if (ir.kind === "error") {
-        return {
-          outcome: {
-            kind: "failed",
-            reason: `IR extraction failed: ${ir.reason}`,
-          },
-          status: `FAILED (IR extraction): ${ir.reason}`,
-        };
+        return { kind: "failed", reason: `IR extraction failed: ${ir.reason}` };
       }
 
       const { context, page, pageErrors } = await openPage(log);
@@ -526,13 +530,10 @@ async function main() {
         const screenshotPath = join(TMP_DIR, `${story.path}.png`);
         writeFileSync(screenshotPath, screenshot);
 
-        return { outcome: { kind: "ok" }, status: "OK" };
+        return { kind: "ok" };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        return {
-          outcome: { kind: "failed", reason: msg },
-          status: `FAILED: ${msg}`,
-        };
+        return { kind: "failed", reason: msg };
       } finally {
         await context.close();
       }
@@ -541,40 +542,29 @@ async function main() {
     // Stories run on capture-core's worker pool, each in its own context, so
     // nothing is shared between two stories in flight but the derive server,
     // which serves one request at a time and keys every story's lambdas by a
-    // fresh id. The log comes out in story order.
+    // fresh id. The log comes out in story order; the outcomes go to
+    // `outcomes`, not through runInOrder's results.
     await runInOrder(stories, defaultConcurrency(), async (story, i) => {
       const lines: LogLine[] = [];
       const log = (text: string) => lines.push({ err: false, text });
-      const { outcome, status } = await capture(story, log);
+      const outcome = await capture(story, log);
       lines.unshift({
         err: false,
-        text: `  ${storyName(story)} → ${story.path} ... ${status}`,
+        text: `  ${storyName(story)} → ${story.path} ... ${statusLine(outcome)}`,
       });
       outcomes[i] = outcome;
       flushCaptureResults();
-      return { result: outcome, lines };
+      return { result: undefined, lines };
     });
 
-    const records = stories.map((story, i) => ({
-      story: storyName(story),
-      outcome: outcomes[i]!,
-    }));
-    const failures = records.flatMap(({ story, outcome }) =>
-      outcome.kind === "failed" ? [{ story, reason: outcome.reason }] : []
-    );
-    const skips = records.flatMap(({ story, outcome }) =>
-      outcome.kind === "skipped" ? [{ story, reason: outcome.reason }] : []
-    );
-    const failed = failures.length;
-    const skipped = skips.length;
-    const captured = stories.length - failed - skipped;
+    const { captured, failed, skipped } = partition(stories, outcomes);
 
     console.log(
-      `\nDone: ${captured} captured, ${failed} failed, ${skipped} skipped`
+      `\nDone: ${captured.length} captured, ${failed.length} failed, ${skipped.length} skipped`
     );
-    if (skipped > 0) {
-      console.log(`\n${skipped} skipped (known limitations):`);
-      for (const s of skips) console.log(`  - ${s.story}: ${s.reason}`);
+    if (skipped.length > 0) {
+      console.log(`\n${skipped.length} skipped (known limitations):`);
+      for (const s of skipped) console.log(`  - ${s.story}: ${s.reason}`);
     }
 
     // Persist capture counts to parity-summary.json. compare-python.ts
@@ -593,7 +583,12 @@ async function main() {
     writeFileSync(
       summaryPath,
       JSON.stringify(
-        { ...prior, captured, captureFailed: failed, skipped },
+        {
+          ...prior,
+          captured: captured.length,
+          captureFailed: failed.length,
+          skipped: skipped.length,
+        },
         null,
         2
       )
@@ -604,9 +599,9 @@ async function main() {
     // nothing to compare and trivially "passes". A capture failure here
     // means the Python story is broken (stale API, bad import, etc.) —
     // we want it red, not invisible.
-    if (failed > 0) {
-      console.error(`\n${failed} Python story capture failure(s):`);
-      for (const f of failures) {
+    if (failed.length > 0) {
+      console.error(`\n${failed.length} Python story capture failure(s):`);
+      for (const f of failed) {
         console.error(`  - ${f.story}: ${f.reason}`);
       }
       process.exitCode = 1;
