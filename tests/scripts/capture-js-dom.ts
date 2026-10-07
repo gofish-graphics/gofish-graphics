@@ -5,6 +5,10 @@
  * PNG screenshots). compare.ts diffs it against the snapshot baselines and
  * compare-python.ts diffs the Python capture against it.
  *
+ * `--shard i/N` captures only shard i of N (see `inShard` in capture-core.ts).
+ * CI runs the N shards on separate runners and merges their outputs, which
+ * are disjoint, back into one `tmp/js/`.
+ *
  * The actual capture loop lives in `capture-core.ts` (shared with
  * `capture-diff.ts` and `capture-one.ts`): it starts a Vite dev server serving
  * the stories-runner page and renders each story in a fresh browser context,
@@ -12,7 +16,7 @@
  */
 
 import { join } from "path";
-import { captureStories } from "./capture-core.js";
+import { captureStories, parseShard } from "./capture-core.js";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const HARNESS_DIR = join(TESTS_DIR, "harness");
@@ -20,6 +24,10 @@ const TMP_DIR = join(TESTS_DIR, "tmp/js");
 const VITE_PORT = 3001;
 
 async function main() {
+  const shardArg = process.argv.indexOf("--shard");
+  const shard =
+    shardArg >= 0 ? parseShard(process.argv[shardArg + 1] ?? "") : undefined;
+
   console.log("=== Capturing JS DOM snapshots (batch mode) ===\n");
 
   const result = await captureStories({
@@ -28,6 +36,7 @@ async function main() {
     outDir: TMP_DIR,
     screenshot: true,
     cleanOutDir: true,
+    shard,
   });
 
   console.log(

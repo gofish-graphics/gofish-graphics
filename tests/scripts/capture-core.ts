@@ -2,14 +2,16 @@
  * capture-core.ts
  *
  * Shared headless-capture engine. `captureStories` is used by:
- *   - capture-js-dom.ts  (full corpus → baselines comparison)
+ *   - capture-js-dom.ts  (full corpus, or one CI shard of it → baselines
+ *                          comparison)
  *   - capture-diff.ts     (HEAD vs base-ref geometry/DOM diff)
  *   - capture-pixels.ts   (HEAD vs base-ref pixel diff)
  *   - capture-one.ts      (one story, for the iterate-example loop; also uses
  *                          `listStories`)
  * its per-story pieces (`withHarness`, a fresh runner page per story,
  * `renderStoryOnFakeClock`) by capture-docs-images.ts, and
- * `startViteServer`/`waitForVite` alone by capture-sweep.ts and dump-scopes.ts.
+ * `startViteServer`/`waitForVite` alone by capture-sweep.ts and dump-scopes.ts,
+ * and its worker pool (`runInOrder`) by capture-python-dom.ts.
  *
  * The capture loop: spin up a Vite dev server that serves the stories-runner
  * page, then render every (optionally filtered) story and extract + normalize
@@ -28,8 +30,10 @@
  * Every story is thus measured in an identical fresh environment, byte-
  * comparable across runs, between the batch capture and capture-one (the
  * same code path), and with the Python parity capture
- * (capture-python-dom.ts). With a warm Vite module cache a context + load
- * costs ~100-150ms/story, the same order as one story render.
+ * (capture-python-dom.ts). Each story's page loads only that story's module
+ * (see `RunnerPageOptions.module`), so a context + load costs a few hundred
+ * ms, the same order as one story render; loading the whole corpus there
+ * took about four times as long.
  *
  * Because every story already gets its own context, stories are captured
  * CONCURRENTLY: a small pool of workers (see `CaptureOptions.concurrency`)
@@ -95,10 +99,43 @@ export interface CaptureOptions {
   cleanOutDir?: boolean;
   /**
    * How many stories to capture at once, each in its own browser context.
-   * Default: the `CAPTURE_CONCURRENCY` env var if set, else
-   * `min(4, os.availableParallelism())`. Output does not depend on it.
+   * Default: `defaultConcurrency()`. Output does not depend on it.
    */
   concurrency?: number;
+  /** Capture only this shard of the (filtered) stories (see `inShard`). */
+  shard?: Shard;
+}
+
+/**
+ * One of `total` disjoint slices of a story list, numbered from 1 and written
+ * `index/total` (e.g. `2/4`). CI captures each shard on its own runner and
+ * merges the outputs, which are disjoint sets of files.
+ */
+export interface Shard {
+  index: number;
+  total: number;
+}
+
+export function parseShard(spec: string): Shard {
+  const m = /^(\d+)\/(\d+)$/.exec(spec);
+  const index = Number(m?.[1]);
+  const total = Number(m?.[2]);
+  if (!m || total < 1 || index < 1 || index > total) {
+    throw new Error(`bad shard "${spec}": expected index/total, e.g. 2/4`);
+  }
+  return { index, total };
+}
+
+/**
+ * The items of `shard`: item i belongs to shard `i % total + 1`. Dealing
+ * round-robin rather than in contiguous chunks spreads neighbors (often the
+ * stories of one file, which cost about the same) across the shards, so the
+ * shards take about as long as each other. Every shard must be handed the
+ * items in the same order for the shards to be disjoint and complete.
+ */
+export function inShard<T>(items: T[], shard: Shard | undefined): T[] {
+  if (!shard) return items;
+  return items.filter((_, i) => i % shard.total === shard.index - 1);
 }
 
 export interface CaptureResult {
@@ -202,10 +239,18 @@ export type Log = (line: LogLine) => void;
 export const printLine = ({ err, text }: LogLine) =>
   err ? console.error(text) : console.log(text);
 
+/** What a runner page loads and the browser context it opens in. */
+export interface RunnerPageOptions {
+  /** Load only this story module (a `StoryInfo.moduleKey`); default: all. */
+  module?: string;
+  /** Overrides of the context defaults. */
+  context?: BrowserContextOptions;
+}
+
 /** Opens a fresh runner page in its own context (see `openRunnerPage`). */
 export type OpenRunnerPage = (
   log: Log,
-  contextOptions?: BrowserContextOptions
+  options?: RunnerPageOptions
 ) => Promise<RunnerPage>;
 
 /**
@@ -230,10 +275,7 @@ export async function withHarness<T>(
     await waitForVite(port);
     browser = await chromium.launch({ headless: true });
     const b = browser;
-    return await fn(
-      (log, contextOptions) => openRunnerPage(b, port, log, contextOptions),
-      b
-    );
+    return await fn((log, options) => openRunnerPage(b, port, log, options), b);
   } finally {
     await browser?.close();
     viteProc.kill();
@@ -250,18 +292,20 @@ export type RunnerPage = { context: BrowserContext; page: Page };
  * flipped `300 18px monospace` metrics for every later story in the run — see
  * header comment). Context startup is ~tens of ms, same order as the
  * navigation itself. Browser console errors go to `log`, so a story's errors
- * print with that story. `contextOptions` override the context defaults
- * (capture-docs-images asks for `deviceScaleFactor: 2`).
+ * print with that story. `options.context` overrides the context defaults
+ * (capture-docs-images asks for `deviceScaleFactor: 2`). `options.module`
+ * makes the page load only the story module it will render, instead of the
+ * whole corpus (see tests/harness/stories-runner.ts).
  */
 async function openRunnerPage(
   browser: Browser,
   port: number,
   log: Log,
-  contextOptions: BrowserContextOptions = {}
+  options: RunnerPageOptions = {}
 ): Promise<RunnerPage> {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 720 },
-    ...contextOptions,
+    ...options.context,
   });
   // Install the fake clock BEFORE the first navigation so nothing in the
   // page ever sees the real one; it keeps running at real speed until the
@@ -277,7 +321,10 @@ async function openRunnerPage(
   page.on("pageerror", (err) =>
     log({ err: true, text: `[browser pageerror] ${err.message}` })
   );
-  await page.goto(`http://localhost:${port}/stories-runner.html`, {
+  const query = options.module
+    ? `?module=${encodeURIComponent(options.module)}`
+    : "";
+  await page.goto(`http://localhost:${port}/stories-runner.html${query}`, {
     waitUntil: "domcontentloaded",
   });
   await page.waitForFunction(
@@ -429,10 +476,45 @@ async function captureStory(
   return { kind: "ok", path, written: { html, png } };
 }
 
-function defaultConcurrency(): number {
+/** The `CAPTURE_CONCURRENCY` env var if set, else
+ *  `min(4, os.availableParallelism())`. */
+export function defaultConcurrency(): number {
   const env = Number(process.env.CAPTURE_CONCURRENCY);
   if (Number.isInteger(env) && env > 0) return env;
   return Math.max(1, Math.min(4, availableParallelism()));
+}
+
+/**
+ * Run `run` over `items` on a pool of `concurrency` workers and return the
+ * results in item order. Each item's log lines are buffered and printed in
+ * item order too, once every item before it has printed, so neither the log
+ * nor the results depend on which item finished first.
+ */
+export async function runInOrder<T, R>(
+  items: T[],
+  concurrency: number,
+  run: (item: T, index: number) => Promise<{ result: R; lines: LogLine[] }>
+): Promise<R[]> {
+  const done: { result: R; lines: LogLine[] }[] = [];
+  let printed = 0;
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      done[i] = await run(items[i], i);
+      while (printed < items.length && done[printed]) {
+        for (const line of done[printed].lines) printLine(line);
+        printed++;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.max(1, Math.min(concurrency, items.length)) },
+      worker
+    )
+  );
+  return done.map(({ result }) => result);
 }
 
 /**
@@ -441,13 +523,11 @@ function defaultConcurrency(): number {
  * Starts its own Vite server + Playwright browser, captures, then tears both
  * down before returning. Safe to call twice in one process with distinct ports.
  *
- * Stories run on a pool of `concurrency` workers. That is safe because nothing
- * is shared between two stories in flight: each gets its own browser context
- * (own renderer, so no font-metric state crosses over — see header comment)
- * and each context has its own fake clock, so one story's virtual budget is
- * never advanced by another's. Each story's log lines are buffered and
- * printed in story order, and the result arrays are in story order too, so
- * neither depends on which story finished first.
+ * Stories run on a pool of `concurrency` workers (`runInOrder`). That is safe
+ * because nothing is shared between two stories in flight: each gets its own
+ * browser context (own renderer, so no font-metric state crosses over — see
+ * header comment) and each context has its own fake clock, so one story's
+ * virtual budget is never advanced by another's.
  */
 export async function captureStories(
   opts: CaptureOptions
@@ -460,6 +540,7 @@ export async function captureStories(
     screenshot = false,
     cleanOutDir = false,
     concurrency = defaultConcurrency(),
+    shard,
   } = opts;
 
   return withHarness(harnessDir, port, async (open) => {
@@ -470,32 +551,26 @@ export async function captureStories(
 
     const allStories = await discoverStories(open);
     const needle = filter?.toLowerCase().trim();
-    const stories = needle
+    const matching = needle
       ? allStories.filter((s) => {
           const hay = `${s.title}/${s.name}`.toLowerCase();
           return hay.includes(needle) || s.id.includes(needle);
         })
       : allStories;
+    const stories = inShard(matching, shard);
 
     console.log(
-      `Found ${allStories.length} stories${needle ? `, ${stories.length} matching "${needle}"` : ""}\n`
+      `Found ${allStories.length} stories` +
+        (needle ? `, ${matching.length} matching "${needle}"` : "") +
+        (shard
+          ? `, ${stories.length} in shard ${shard.index}/${shard.total}`
+          : "") +
+        "\n"
     );
-
-    // Story i's outcome and log lines, filled in as it finishes; printed
-    // once every story before it has been printed.
-    const done: { outcome: StoryOutcome; lines: LogLine[] }[] = [];
-    let printed = 0;
-    const flush = () => {
-      while (printed < stories.length && done[printed]) {
-        const { lines } = done[printed];
-        for (const line of lines) printLine(line);
-        printed++;
-      }
-    };
 
     const run = async (
       story: StoryInfo
-    ): Promise<{ outcome: StoryOutcome; lines: LogLine[] }> => {
+    ): Promise<{ result: StoryOutcome; lines: LogLine[] }> => {
       const path = storyToPath(story.title, story.name);
       const lines: LogLine[] = [];
       const log: Log = (line) => lines.push(line);
@@ -504,7 +579,9 @@ export async function captureStories(
         // Fresh context (and page) per story: resets Chromium's renderer
         // font-metric state so text measurement can't be polluted by a
         // previous story's raster (see header comment).
-        const { context, page } = await open(log);
+        const { context, page } = await open(log, {
+          module: story.moduleKey,
+        });
         try {
           outcome = await captureStory(page, story, outDir, screenshot, log);
         } finally {
@@ -524,23 +601,9 @@ export async function captureStories(
         err: false,
         text: `  ${story.title}/${story.name} ... ${status}`,
       });
-      return { outcome, lines };
+      return { result: outcome, lines };
     };
-
-    let next = 0;
-    const worker = async () => {
-      while (next < stories.length) {
-        const i = next++;
-        done[i] = await run(stories[i]);
-        flush();
-      }
-    };
-    await Promise.all(
-      Array.from(
-        { length: Math.max(1, Math.min(concurrency, stories.length)) },
-        worker
-      )
-    );
+    const outcomes = await runInOrder(stories, concurrency, run);
 
     const result: CaptureResult = {
       captured: [],
@@ -548,7 +611,7 @@ export async function captureStories(
       skipped: [],
       written: [],
     };
-    for (const { outcome } of done) {
+    for (const outcome of outcomes) {
       if (outcome.kind === "ok") {
         result.captured.push(`${outcome.path}.html`);
         result.written.push(outcome.written);

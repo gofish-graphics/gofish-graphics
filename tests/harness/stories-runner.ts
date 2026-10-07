@@ -1,26 +1,30 @@
 /**
- * Batch story runner — imports all story modules via Vite's import.meta.glob,
- * then exposes functions for Playwright to list and render stories one at a time
+ * Batch story runner — loads story modules via Vite's import.meta.glob, then
+ * exposes functions for Playwright to list and render stories one at a time
  * in the same page (no navigation between stories).
+ *
+ * `?module=<moduleKey>` loads only that one story module (the key is a
+ * `StoryInfo.moduleKey` from an earlier `__listStories__`); without it every
+ * story module is loaded. The capture opens a fresh page per story (see
+ * tests/scripts/capture-core.ts), and loading the whole corpus there, data
+ * included, to render one story was most of each story's capture time.
  */
 
 import { disposeChart } from "../../packages/gofish-graphics/src/ast/gofish";
 
-// Import all story modules eagerly so they're available synchronously after page
-// load. Both workspace packages with stories are scanned: gofish-graphics and the
+// Both workspace packages with stories are scanned: gofish-graphics and the
 // gofish-gotree tree-DSL package (the latter compiles its SolidJS source directly
 // via the relative `../../src` import in its stories, so no built dist is needed).
-const storyModules = {
+const storyModuleLoaders = {
   ...import.meta.glob(
-    "../../packages/gofish-graphics/stories/**/*.stories.tsx",
-    {
-      eager: true,
-    }
+    "../../packages/gofish-graphics/stories/**/*.stories.tsx"
   ),
-  ...import.meta.glob("../../packages/gofish-gotree/stories/**/*.stories.tsx", {
-    eager: true,
-  }),
-} as Record<string, any>;
+  ...import.meta.glob("../../packages/gofish-gotree/stories/**/*.stories.tsx"),
+} as Record<string, () => Promise<any>>;
+
+/** The loaded story modules by module key, filled in before the runner
+ *  signals ready (see the bottom of this file). */
+const storyModules: Record<string, any> = {};
 
 interface StoryInfo {
   id: string;
@@ -66,7 +70,7 @@ function buildStoryList(): StoryInfo[] {
   return stories;
 }
 
-const allStories = buildStoryList();
+let allStories: StoryInfo[] = [];
 
 // ---------------------------------------------------------------------------
 // Exposed to Playwright via page.evaluate
@@ -192,12 +196,23 @@ window.__STORY_RENDER_WALL_MS__ = 0;
 window.__STORIES_RUNNER_READY__ = false;
 window.__STORIES_RUNNER_ERROR__ = null;
 
-// Signal that the runner is ready (or failed)
+// Load the requested story modules, then signal that the runner is ready (or
+// failed: READY is set either way, so Playwright is unblocked to read the
+// error). Modules are keyed in glob order, so the story list's order does not
+// depend on which import settles first.
+const requested = new URLSearchParams(location.search).get("module");
+const moduleKeys = requested ? [requested] : Object.keys(storyModuleLoaders);
 try {
-  // Touch allStories to force evaluation now (catches module-load errors)
-  void allStories.length;
-  window.__STORIES_RUNNER_READY__ = true;
+  const loaded = await Promise.all(
+    moduleKeys.map((key) => {
+      const load = storyModuleLoaders[key];
+      if (!load) throw new Error(`Unknown story module: ${key}`);
+      return load();
+    })
+  );
+  moduleKeys.forEach((key, i) => (storyModules[key] = loaded[i]));
+  allStories = buildStoryList();
 } catch (err: any) {
   window.__STORIES_RUNNER_ERROR__ = err?.message ?? String(err);
-  window.__STORIES_RUNNER_READY__ = true; // unblock Playwright so it can read the error
 }
+window.__STORIES_RUNNER_READY__ = true;

@@ -165,7 +165,9 @@ async function withStoryPage<T>(
 ): Promise<T> {
   // deviceScaleFactor 2 → screenshots are 2× PNGs (retina-sharp at the CSS
   // w/h recorded in the manifest).
-  const { context, page } = await open(printLine, { deviceScaleFactor: 2 });
+  const { context, page } = await open(printLine, {
+    context: { deviceScaleFactor: 2 },
+  });
   try {
     const error = await renderStoryOnFakeClock(
       page,

@@ -35,18 +35,29 @@ jobs:
               - ".github/workflows/visual-tests.yml"
 
   # Capturing every story is the expensive part of the visual tests.
-  # It runs once here and is uploaded as the `js-dom-capture` artifact, which
-  # two jobs consume in parallel: `visual-test` compares it against the
+  # It runs once per commit, split into shards that capture disjoint sets of
+  # stories on parallel runners (capture-js-dom.ts --shard i/N). Each shard
+  # uploads a `js-dom-capture-<i>` artifact, and the consumers download all of
+  # them into one `tests/tmp/js/`, the same tree an unsharded capture writes.
+  # Two jobs consume it in parallel: `visual-test` compares it against the
   # snapshot baselines, and `python-parity` compares the Python capture
   # against it. Accepting diffs on the review site re-runs only the cheap
   # `visual-test` compare job (#871), and parity no longer waits on the
   # visual review (#872).
+  #
+  # To change the shard count, edit the `shard` list; the total comes from
+  # `strategy.job-total`.
   js-capture:
     needs: changes
     # On push (already path-filtered above) always run; on PRs run only when
     # relevant files changed, otherwise skip (= success for required checks).
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.relevant == 'true' }}
     runs-on: ubuntu-latest
+    # A failed shard cancels the others: the capture is incomplete anyway, and
+    # the consumers fail on any result but success.
+    strategy:
+      matrix:
+        shard: [1, 2, 3, 4]
 
     steps:
       - name: Checkout code
@@ -126,12 +137,19 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install
 
+      # The browser binaries depend only on the Playwright version, so key the
+      # cache on that. Keyed on pnpm-lock.yaml it missed on every lockfile
+      # change, which is most dependency PRs.
+      - name: Read the Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @gofish/tests exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
       - name: Restore Playwright browser cache
         id: playwright-cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -146,7 +164,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       # On cache hit, browser binaries are restored but system libraries
       # (installed via apt by --with-deps) are not. Install just those.
@@ -155,12 +173,12 @@ jobs:
         run: pnpm --filter @gofish/tests exec playwright install-deps chromium
 
       - name: Capture JS DOM snapshots
-        run: pnpm --filter @gofish/tests capture-js
+        run: pnpm --filter @gofish/tests capture-js --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Upload JS DOM capture
         uses: actions/upload-artifact@v5
         with:
-          name: js-dom-capture
+          name: js-dom-capture-${{ matrix.shard }}
           path: tests/tmp/js
           if-no-files-found: error
 
@@ -230,10 +248,14 @@ jobs:
 
       # Artifacts belong to the workflow run, not the attempt, so the re-run
       # the review site's accept action triggers still finds this capture.
+      # The shards' files are disjoint, so merging them rebuilds the full
+      # capture; the removed-stories check in compare.ts and the snapshot
+      # update on main both see every story.
       - name: Download JS DOM capture
         uses: actions/download-artifact@v5
         with:
-          name: js-dom-capture
+          pattern: js-dom-capture-*
+          merge-multiple: true
           path: tests/tmp/js
 
       # On PRs: compare against baselines and fail if regressions are detected.
@@ -369,31 +391,17 @@ jobs:
               context: 'Visual Diff Review',
             });
 
-  # Compares the Python capture against the JS capture of the same commit,
-  # not against the snapshot baselines, so it runs in parallel with
-  # visual-test and does not wait on the visual review (#872).
-  python-parity:
+  # Captures the Python stories. It needs nothing from js-capture, so it runs
+  # alongside it; only python-parity, which compares the two, waits for both.
+  python-capture:
+    needs: changes
+    # Same condition as js-capture, so the two are skipped together.
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.relevant == 'true' }}
     runs-on: ubuntu-latest
-    needs: js-capture
-    # Same reasoning as visual-test: never let a failed js-capture turn this
-    # required check into a skipped (= passing) one.
-    if: ${{ !cancelled() && needs.js-capture.result != 'skipped' }}
-    permissions:
-      pull-requests: write
-      statuses: write # needed to publish parity-review-link commit status
 
     steps:
-      - name: Fail if the JS capture failed
-        if: needs.js-capture.result != 'success'
-        run: |
-          echo "::error::js-capture finished with '${{ needs.js-capture.result }}'; there is no capture to compare against."
-          exit 1
-
-      # fetch-depth 0: check-python-sync diffs against origin/main.
       - name: Checkout code
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
 
       # Match the JS capture's font set so the Python harness measures text
       # against the same actual fonts. See the js-capture job for the
@@ -457,12 +465,17 @@ jobs:
       # No gofish-graphics build: the Python capture renders through the same
       # source-aliased Vite harness as js-capture (tests/harness/vite.config.ts).
 
+      # Same version-keyed browser cache as js-capture.
+      - name: Read the Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @gofish/tests exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
       - name: Restore Playwright browser cache
         id: playwright-cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -473,17 +486,82 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       - name: Install Playwright system deps
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm --filter @gofish/tests exec playwright install-deps chromium
 
+      - name: Capture Python DOM snapshots
+        run: pnpm test:visual:capture-python
+
+      # Uploaded even when stories failed to capture: capture-results.json
+      # records the failures, and the parity review site shows them.
+      # parity-summary.json carries the capture counts; python-parity's steps
+      # add theirs to it.
+      - name: Upload Python DOM capture
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: python-dom-capture
+          path: |
+            tests/tmp/python
+            tests/tmp/parity-summary.json
+
+  # Compares the Python capture against the JS capture of the same commit,
+  # not against the snapshot baselines, so it runs in parallel with
+  # visual-test and does not wait on the visual review (#872).
+  python-parity:
+    runs-on: ubuntu-latest
+    needs: [js-capture, python-capture]
+    # Same reasoning as visual-test: never let a failed capture turn this
+    # required check into a skipped (= passing) one. python-capture is
+    # skipped exactly when js-capture is.
+    if: ${{ !cancelled() && needs.js-capture.result != 'skipped' }}
+    permissions:
+      pull-requests: write
+      statuses: write # needed to publish parity-review-link commit status
+
+    steps:
+      - name: Fail if the JS capture failed
+        if: needs.js-capture.result != 'success'
+        run: |
+          echo "::error::js-capture finished with '${{ needs.js-capture.result }}'; there is no capture to compare against."
+          exit 1
+
+      # fetch-depth 0: check-python-sync diffs against origin/main.
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install
+
       - name: Download JS DOM capture
         uses: actions/download-artifact@v5
         with:
-          name: js-dom-capture
+          pattern: js-dom-capture-*
+          merge-multiple: true
           path: tests/tmp/js
+
+      # Before the sync checks: they add their counts to the
+      # parity-summary.json this brings.
+      - name: Download Python DOM capture
+        if: always()
+        uses: actions/download-artifact@v5
+        with:
+          name: python-dom-capture
+          path: tests/tmp
 
       - name: Check Python story sync (coverage + spec sync)
         id: sync-check
@@ -501,10 +579,14 @@ jobs:
         if: always()
         run: pnpm test:visual:check-python-sync-all
 
-      - name: Capture Python DOM snapshots
-        id: capture-python
-        if: always()
-        run: pnpm test:visual:capture-python
+      # A story that failed to capture fails this check, as it did when the
+      # capture ran in this job; the steps below still compare what was
+      # captured and publish the review site that lists the failures.
+      - name: Fail if the Python capture failed
+        if: always() && needs.python-capture.result != 'success'
+        run: |
+          echo "::error::python-capture finished with '${{ needs.python-capture.result }}'; see its log for the stories that failed."
+          exit 1
 
       - name: Compare Python DOM against the JS capture
         id: compare-python

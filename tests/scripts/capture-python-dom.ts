@@ -26,6 +26,11 @@ import { join, dirname, relative } from "path";
 import type { Frontend } from "gofish-ir";
 import { normalizeDom } from "./normalize-dom.js";
 import { mapJsToPython } from "./path-mapping.js";
+import {
+  defaultConcurrency,
+  runInOrder,
+  type LogLine,
+} from "./capture-core.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -271,7 +276,14 @@ async function captureStory(
   story: PythonStory,
   ir: IRResult & { kind: "ok" }
 ): Promise<{ dom: string; screenshot: Buffer }> {
-  await page.goto(harnessUrl, { waitUntil: "networkidle" });
+  // Wait for the harness module and the webfonts, not for `networkidle`:
+  // that waits out 500ms of network silence after the load on every story.
+  // The same readiness the JS runner page is opened with (capture-core.ts).
+  await page.goto(harnessUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(
+    () => typeof window.__renderChart__ === "function"
+  );
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
 
   const deriveServerUrl =
     ir.deriveIds && ir.deriveIds.length > 0
@@ -293,7 +305,9 @@ async function captureStory(
 
   // Wait for render completion. Most charts resolve quickly; heavy unit-dot
   // treemaps can paint thousands of marks while the render promise is still
-  // settling, so fall back to waiting for visible SVG output.
+  // settling, so fall back to waiting for visible SVG output, plus a settle
+  // for the render that is still going. A completed render needs no settle:
+  // the harness signals completion a frame after the render resolves.
   try {
     await page.waitForFunction(
       () => window.__GOFISH_RENDER_COMPLETE__ === true,
@@ -310,14 +324,12 @@ async function captureStory(
       },
       { timeout: 40_000 }
     );
+    await page.waitForTimeout(300);
   }
 
   // Check for errors
   const error = await page.evaluate(() => window.__GOFISH_RENDER_ERROR__);
   if (error) throw new Error(`Render error: ${error}`);
-
-  // Extra settle time
-  await page.waitForTimeout(300);
 
   // Extract DOM
   const dom = await page.evaluate(() => {
@@ -343,6 +355,11 @@ async function captureStory(
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+
+type StoryOutcome =
+  | { kind: "ok" }
+  | { kind: "failed"; reason: string }
+  | { kind: "skipped"; reason: string };
 
 async function main() {
   console.log("=== Capturing Python DOM snapshots ===\n");
@@ -371,28 +388,37 @@ async function main() {
 
   let browser: Browser | undefined;
 
-  // Uncaught in-page errors for the story currently being captured; cleared
-  // per story, checked after captureStory (see the pageerror listener).
-  const pageErrors: string[] = [];
+  // Story i's outcome, set when it finishes. Hoisted to function scope so the
+  // outer `finally` (and the `flushCaptureResults` helper it relies on) can
+  // persist whatever we managed to collect even if the run or browser setup
+  // throws.
+  const outcomes: (StoryOutcome | undefined)[] = [];
+  const storyName = (story: PythonStory) =>
+    `${story.module}::${story.function}`;
 
-  // Hoisted to function scope so the outer `finally` (and the
-  // `flushCaptureResults` helper it relies on) can persist whatever
-  // we managed to collect even if the loop or browser setup throws.
-  let captured = 0;
-  let failed = 0;
-  let skipped = 0;
-  const failures: { story: string; reason: string }[] = [];
-  const skips: { story: string; reason: string }[] = [];
-  const capturedIds: string[] = [];
-  const failedRecords: { id: string; story: string; reason: string }[] = [];
-  const skippedRecords: { id: string; story: string; reason: string }[] = [];
-
-  // Flush capture-results.json to disk. Called incrementally per story
-  // and again in the outer `finally` so partial output survives a
-  // mid-loop crash (otherwise the build script would see no capture
-  // data and silently render coverage-only state).
+  // Flush capture-results.json to disk, in story order. Called as each story
+  // finishes and again in the outer `finally` so partial output survives a
+  // mid-run crash (otherwise the build script would see no capture data and
+  // silently render coverage-only state).
   mkdirSync(TMP_DIR, { recursive: true });
   const flushCaptureResults = () => {
+    const capturedIds: string[] = [];
+    const failedRecords: { id: string; story: string; reason: string }[] = [];
+    const skippedRecords: { id: string; story: string; reason: string }[] = [];
+    stories.forEach((story, i) => {
+      const outcome = outcomes[i];
+      if (outcome?.kind === "ok") capturedIds.push(story.path);
+      else if (outcome) {
+        const record = {
+          id: story.path,
+          story: storyName(story),
+          reason: outcome.reason,
+        };
+        (outcome.kind === "failed" ? failedRecords : skippedRecords).push(
+          record
+        );
+      }
+    });
     try {
       writeFileSync(
         join(TMP_DIR, "capture-results.json"),
@@ -423,71 +449,65 @@ async function main() {
     // font-metric isolation the JS capture uses (see capture-core.ts's
     // header): rasterized font faces mutate Chromium's measureText metrics
     // renderer-wide, and some of that state survives same-URL navigation.
-    const openPage = async (): Promise<{
+    // `pageErrors` collects the page's uncaught errors, checked after
+    // captureStory (see the pageerror listener).
+    const openPage = async (
+      log: (text: string) => void
+    ): Promise<{
       context: BrowserContext;
       page: Page;
+      pageErrors: string[];
     }> => {
       const context = await browser!.newContext({
         viewport: { width: 1280, height: 720 },
       });
       const page = await context.newPage();
+      const pageErrors: string[] = [];
       // Surface in-page failures in the capture log AND fail the story — an
       // uncaught exception thrown from an async render microtask escapes the
       // harness's try/catch (so __GOFISH_RENDER_ERROR__ never gets set), and
       // the story would otherwise "capture OK" with a Loading/blank DOM.
       page.on("pageerror", (err) => {
-        console.log(`    [pageerror] ${err.message}`);
+        log(`    [pageerror] ${err.message}`);
         pageErrors.push(err.message);
       });
       page.on("console", (msg) => {
         if (msg.type() === "error" || msg.type() === "warning") {
-          console.log(`    [console.${msg.type()}] ${msg.text()}`);
+          log(`    [console.${msg.type()}] ${msg.text()}`);
         }
       });
-      return { context, page };
+      return { context, page, pageErrors };
     };
 
-    for (const story of stories) {
-      process.stdout.write(
-        `  ${story.module}::${story.function} → ${story.path} ... `
-      );
-
+    const capture = async (
+      story: PythonStory,
+      log: (text: string) => void
+    ): Promise<{ outcome: StoryOutcome; status: string }> => {
       // Skip stories whose JS source is file-level parity-exempt — the port
       // isn't expressible at all (e.g. NestedMosaicChart's function fill).
       if (exemptPythonFiles.has(story.file)) {
-        console.log("SKIP (JS story is parity-exempt)");
-        skipped++;
-        const reason = "JS story is parity-exempt (.python-sync-exempt)";
-        skips.push({ story: `${story.module}::${story.function}`, reason });
-        skippedRecords.push({
-          id: story.path,
-          story: `${story.module}::${story.function}`,
-          reason,
-        });
-        flushCaptureResults();
-        continue;
+        return {
+          outcome: {
+            kind: "skipped",
+            reason: "JS story is parity-exempt (.python-sync-exempt)",
+          },
+          status: "SKIP (JS story is parity-exempt)",
+        };
       }
 
       const ir = await loadStory(story);
       if (ir.kind === "error") {
-        console.log(`FAILED (IR extraction): ${ir.reason}`);
-        failed++;
-        failures.push({
-          story: `${story.module}::${story.function}`,
-          reason: `IR extraction failed: ${ir.reason}`,
-        });
-        failedRecords.push({
-          id: story.path,
-          story: `${story.module}::${story.function}`,
-          reason: `IR extraction failed: ${ir.reason}`,
-        });
-        flushCaptureResults();
-        continue;
+        return {
+          outcome: {
+            kind: "failed",
+            reason: `IR extraction failed: ${ir.reason}`,
+          },
+          status: `FAILED (IR extraction): ${ir.reason}`,
+        };
       }
 
-      const { context, page } = await openPage();
+      const { context, page, pageErrors } = await openPage(log);
       try {
-        pageErrors.length = 0;
         const { dom, screenshot } = await captureStory(
           page,
           `http://localhost:${HARNESS_PORT}`,
@@ -506,27 +526,48 @@ async function main() {
         const screenshotPath = join(TMP_DIR, `${story.path}.png`);
         writeFileSync(screenshotPath, screenshot);
 
-        console.log("OK");
-        captured++;
-        capturedIds.push(story.path);
+        return { outcome: { kind: "ok" }, status: "OK" };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.log(`FAILED: ${msg}`);
-        failed++;
-        failures.push({
-          story: `${story.module}::${story.function}`,
-          reason: msg,
-        });
-        failedRecords.push({
-          id: story.path,
-          story: `${story.module}::${story.function}`,
-          reason: msg,
-        });
+        return {
+          outcome: { kind: "failed", reason: msg },
+          status: `FAILED: ${msg}`,
+        };
       } finally {
         await context.close();
       }
+    };
+
+    // Stories run on capture-core's worker pool, each in its own context, so
+    // nothing is shared between two stories in flight but the derive server,
+    // which serves one request at a time and keys every story's lambdas by a
+    // fresh id. The log comes out in story order.
+    await runInOrder(stories, defaultConcurrency(), async (story, i) => {
+      const lines: LogLine[] = [];
+      const log = (text: string) => lines.push({ err: false, text });
+      const { outcome, status } = await capture(story, log);
+      lines.unshift({
+        err: false,
+        text: `  ${storyName(story)} → ${story.path} ... ${status}`,
+      });
+      outcomes[i] = outcome;
       flushCaptureResults();
-    }
+      return { result: outcome, lines };
+    });
+
+    const records = stories.map((story, i) => ({
+      story: storyName(story),
+      outcome: outcomes[i]!,
+    }));
+    const failures = records.flatMap(({ story, outcome }) =>
+      outcome.kind === "failed" ? [{ story, reason: outcome.reason }] : []
+    );
+    const skips = records.flatMap(({ story, outcome }) =>
+      outcome.kind === "skipped" ? [{ story, reason: outcome.reason }] : []
+    );
+    const failed = failures.length;
+    const skipped = skips.length;
+    const captured = stories.length - failed - skipped;
 
     console.log(
       `\nDone: ${captured} captured, ${failed} failed, ${skipped} skipped`
