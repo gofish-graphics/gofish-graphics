@@ -233,6 +233,7 @@ export function rebuild(
     return OPERATOR_BUILDERS[type](opts, bridge);
   }
   const factory = FACTORIES[type];
+  if (factory === undefined) return undefined;
   return kind === "combinator-mark" ? factory(opts, children) : factory(opts);
 }
 
