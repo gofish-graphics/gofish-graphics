@@ -99,7 +99,7 @@ async function main() {
     check(
       "month.every(3) starts in Jan, Apr, Jul, Oct",
       same(
-        q.map((c) => c.zoned.month),
+        q.map((c) => c.month),
         [10, 1, 4, 7, 10]
       )
     );
@@ -109,7 +109,7 @@ async function main() {
     check(
       "day.every(2) restarts on the 1st (a 31st is a one-day cell)",
       same(
-        d2.map((c) => c.zoned.day),
+        d2.map((c) => c.day),
         [29, 31, 1, 3]
       ) && d2[1].end - d2[1].start === 864e5
     );
@@ -119,7 +119,7 @@ async function main() {
     check(
       "hour.every(6) starts at 0, 6, 12, 18",
       same(
-        h6.map((c) => c.zoned.hour),
+        h6.map((c) => c.hour),
         [0, 6, 12, 18, 0]
       )
     );
@@ -129,9 +129,30 @@ async function main() {
     check(
       "year.every(5) starts on years divisible by 5",
       same(
-        y5.map((c) => c.zoned.year),
+        y5.map((c) => c.year),
         [2015, 2020, 2025, 2030]
       )
+    );
+    const [leap] = Calendar.hour.cells(
+      Date.UTC(2024, 1, 29, 13, 30),
+      Date.UTC(2024, 1, 29, 13, 30),
+      "UTC"
+    );
+    check(
+      "a cell carries its start's calendar fields as plain numbers",
+      same(
+        [
+          leap.year,
+          leap.quarter,
+          leap.month,
+          leap.week,
+          leap.day,
+          leap.hour,
+          leap.minute,
+          leap.second,
+        ],
+        [2024, 1, 2, 9, 29, 13, 0, 0]
+      ) && !("zoned" in leap)
     );
     const wk = Calendar.week.cells(
       Date.UTC(2024, 0, 3),
@@ -140,7 +161,7 @@ async function main() {
     );
     check(
       "weeks start on Monday by default",
-      wk.every((c) => c.zoned.dayOfWeek === 1)
+      wk.every((c) => new Date(c.start).getUTCDay() === 1)
     );
     const sun = Calendar.week({ start: "sunday" }).cells(
       Date.UTC(2024, 0, 3),
@@ -149,7 +170,7 @@ async function main() {
     );
     check(
       'Calendar.week({ start: "sunday" }) starts on Sunday',
-      sun.every((c) => c.zoned.dayOfWeek === 7)
+      sun.every((c) => new Date(c.start).getUTCDay() === 0)
     );
     check(
       "Calendar.week is a Calendar value and a function",
@@ -185,7 +206,7 @@ async function main() {
     );
     check(
       "a day starts at local midnight",
-      days.every((c) => c.zoned.hour === 0 && c.zoned.minute === 0)
+      days.every((c) => c.hour === 0 && c.minute === 0)
     );
     check(
       "the spring-forward day lasts 23 hours",
@@ -355,7 +376,7 @@ async function main() {
 
   console.log("\n# the rows option");
   {
-    const fmt = (c: any) => `Q${Math.ceil(c.zoned.month / 3)}`;
+    const fmt = (c: any) => `Q${c.quarter}`;
     const rows = timeRowsFromOption(
       [
         Calendar.week,
@@ -436,7 +457,7 @@ async function main() {
             {
               unit: DistCalendar.quarter,
               format: (c: any) =>
-                `Q${Math.ceil(c.zoned.month / 3)} '${String(c.zoned.year).slice(2)}`,
+                `Q${c.quarter} '${String(c.year % 100).padStart(2, "0")}`,
             },
           ],
         },

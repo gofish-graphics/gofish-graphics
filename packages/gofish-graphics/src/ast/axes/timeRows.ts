@@ -125,7 +125,7 @@ export function rowLabels(
     .filter((cell) => cell.start < hi || lo === hi)
     .map((cell) => ({
       at: Math.max(cell.start, lo),
-      text: row.format ? row.format(cell) : row.partition.label(cell),
+      text: row.format ? row.format(cell) : row.partition.label(cell, zone),
       cell,
     }));
 }
@@ -204,7 +204,7 @@ function chooseInner(
       const fits = cells.every(
         (c) =>
           (c.end - c.start) * pxPerMs >=
-          TIME_LABEL_PAD + textWidth(p.label(c)) + LABEL_CLEARANCE
+          TIME_LABEL_PAD + textWidth(p.label(c, zone)) + LABEL_CLEARANCE
       );
       if (fits) return p;
     }

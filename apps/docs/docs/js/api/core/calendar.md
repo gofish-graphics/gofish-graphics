@@ -38,16 +38,23 @@ chart(data, { axes: { x: { rows: [{ unit: Calendar.quarter, format }] } } }); //
 | `unit`    | `CalendarPartition`              | The partition of a row that has a custom `format`.                                       |
 | `format`  | `(cell: CalendarCell) => string` | The label of each cell of the row.                                                       |
 
-A `CalendarCell` has these fields:
+A `CalendarCell` has these fields. The calendar fields are those of the
+cell's start in the zone of the axis's column, named like pandas' and
+polars' `dt` fields.
 
-| Field   | Type                     | Description                                                                                  |
-| ------- | ------------------------ | -------------------------------------------------------------------------------------------- |
-| `start` | `number`                 | The instant the cell starts, in epoch milliseconds.                                          |
-| `end`   | `number`                 | The instant the next cell starts.                                                            |
-| `unit`  | `CalendarUnit`           | The cell's level: `"second"`, `"minute"`, ... `"year"`.                                      |
-| `step`  | `number`                 | How many units the partition's cells span.                                                   |
-| `zone`  | `string`                 | The time zone of the axis's column.                                                          |
-| `zoned` | `Temporal.ZonedDateTime` | The start of the cell in `zone`: `zoned.year`, `zoned.month`, `zoned.day`, `zoned.hour`, ... |
+| Field     | Type           | Description                                             |
+| --------- | -------------- | ------------------------------------------------------- |
+| `start`   | `number`       | The instant the cell starts, in epoch milliseconds.     |
+| `end`     | `number`       | The instant the next cell starts.                       |
+| `unit`    | `CalendarUnit` | The cell's level: `"second"`, `"minute"`, ... `"year"`. |
+| `year`    | `number`       | The year.                                               |
+| `quarter` | `number`       | The quarter, `1` to `4`.                                |
+| `month`   | `number`       | The month, `1` to `12`.                                 |
+| `week`    | `number`       | The ISO 8601 week number.                               |
+| `day`     | `number`       | The day of the month.                                   |
+| `hour`    | `number`       | The hour, `0` to `23`.                                  |
+| `minute`  | `number`       | The minute.                                             |
+| `second`  | `number`       | The second.                                             |
 
 ## Behavior
 
@@ -102,7 +109,7 @@ chart(prices, {
         {
           unit: Calendar.quarter,
           format: (cell) =>
-            `Q${Math.ceil(cell.zoned.month / 3)} '${String(cell.zoned.year).slice(2)}`,
+            `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`,
         },
       ],
     },

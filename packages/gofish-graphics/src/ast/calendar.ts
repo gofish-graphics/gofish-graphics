@@ -133,17 +133,23 @@ function formatter(
 }
 
 /** One cell of a partition: the instants `[start, end)` (epoch ms, UTC), the
- *  partition it belongs to (`unit` at `step`), and its start read on the
- *  calendar of `zone` (`zoned`, a `Temporal.ZonedDateTime`, for zone-aware
- *  fields: `zoned.year`, `zoned.month`, `zoned.day`, `zoned.hour`, ...). A
- *  custom row label (`format`) is a function of this. */
+ *  level it belongs to (`unit`), and the calendar fields of its start in the
+ *  axis's zone, as plain numbers named like pandas' and polars' `dt.*`:
+ *  `year`, `quarter` (1 to 4), `month` (1 to 12), `week` (the ISO week
+ *  number), `day` (of the month), `hour`, `minute` and `second`. A custom
+ *  row label (`format`) is a function of this. */
 export type CalendarCell = {
   start: number;
   end: number;
   unit: CalendarUnit;
-  step: number;
-  zone: string;
-  zoned: TemporalNS.ZonedDateTime;
+  year: number;
+  quarter: number;
+  month: number;
+  week: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
 };
 
 const ISO_DOW: Record<WeekStart, number> = { monday: 1, sunday: 7 };
@@ -265,27 +271,32 @@ export class CalendarPartition {
     let s = this.floor(lo, zone);
     while (s <= hi) {
       const e = this.next(s, zone);
+      const z = T.Instant.fromEpochMilliseconds(s).toZonedDateTimeISO(zone);
       out.push({
         start: s,
         end: e,
         unit: this.unit,
-        step: this.step,
-        zone,
-        zoned: T.Instant.fromEpochMilliseconds(s).toZonedDateTimeISO(zone),
+        year: z.year,
+        quarter: Math.floor((z.month - 1) / 3) + 1,
+        month: z.month,
+        week: z.weekOfYear!,
+        day: z.day,
+        hour: z.hour,
+        minute: z.minute,
+        second: z.second,
       });
       s = e;
     }
     return out;
   }
 
-  /** A cell's default label: its level's field in its zone, formatted by
-   *  `Intl.DateTimeFormat` in the runtime's locale ("Jan", "12 AM",
-   *  "Feb 29", "2024"), or "Q1" to "Q4" for a quarter. */
-  label(cell: CalendarCell): string {
-    if (this.unit === "quarter") {
-      return `Q${Math.floor((cell.zoned.month - 1) / 3) + 1}`;
-    }
-    return formatter(this.unit, cell.zone).format(cell.start);
+  /** A cell's default label: its level's field in `zone` (the zone its
+   *  cells were read in), formatted by `Intl.DateTimeFormat` in the
+   *  runtime's locale ("Jan", "12 AM", "Feb 29", "2024"), or "Q1" to "Q4"
+   *  for a quarter. */
+  label(cell: CalendarCell, zone: string): string {
+    if (this.unit === "quarter") return `Q${cell.quarter}`;
+    return formatter(this.unit, zone).format(cell.start);
   }
 
   toJSON(): CalendarJSON {

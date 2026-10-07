@@ -214,7 +214,7 @@ export const QuarterlyBars: StoryObj<Args> = {
             {
               unit: Calendar.quarter,
               format: (cell) =>
-                `Q${Math.ceil(cell.zoned.month / 3)} '${String(cell.zoned.year).slice(2)}`,
+                `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`,
             },
           ],
         },
