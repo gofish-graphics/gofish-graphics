@@ -1182,6 +1182,42 @@ async function main() {
     );
   }
 
+  console.log("\n# Python lambda sentinels nested in operator options (#937)");
+  {
+    // Python emits `{__gofish_lambda: id}` wherever a callable sat in an
+    // option, e.g. inside scatter's `dims`. The deserializer turns it into an
+    // accessor that calls the bridge, in operator options as in mark options.
+    const spec = { type: "scatter", dims: { x: { __gofish_lambda: "px" } } };
+    let message = "";
+    try {
+      Serialize.mapOperator(spec);
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+    check(
+      "a nested operator sentinel needs a bridge",
+      message.includes("no DeriveBridge"),
+      message || "did not throw"
+    );
+    const calls: string[] = [];
+    const bridge = {
+      applyLambda: async (id: string, rows: any[]) => {
+        calls.push(id);
+        return rows.map((r) => r.a);
+      },
+    };
+    const op = Serialize.mapOperator(spec, bridge);
+    await chart([{ a: 1 }, { a: 2 }])
+      .flow(op)
+      .mark(circle({ r: 2 }))
+      .toDisplayList({ w: 100, h: 100 });
+    check(
+      "a nested operator sentinel becomes an accessor that calls the bridge",
+      calls.length > 0 && calls.every((id) => id === "px"),
+      JSON.stringify(calls)
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);

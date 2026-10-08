@@ -10,6 +10,8 @@ chain (there is no leaf-mark `label` kwarg — the legacy boolean/string
 shorthand kwarg was removed).
 """
 
+import json
+
 import pytest
 
 from gofish import (
@@ -252,6 +254,31 @@ def test_open_kwargs_channels_wrap_callables():
     d = circle(r=3, cx=lambda row: row["x"]).to_dict()
     assert isinstance(d["cx"], dict)
     assert "__gofish_lambda" in d["cx"]
+
+
+def test_callables_nested_in_options_bridge_at_any_depth():
+    # A callable inside an option's dicts/lists (here `dims`) gets the same
+    # derive-RPC sentinel as a top-level channel, and the collector that
+    # registers callbacks finds it under the same id (#937).
+    from gofish.ast import _collect_mark_lambdas, _collect_operator_lambdas
+
+    m = rect(dims={"theta": {"size": 0.9}, "r": {"size": lambda d: d["v"] * 2}})
+    d = m.to_dict()
+    assert d["dims"]["theta"] == {"size": 0.9}
+    sentinel = d["dims"]["r"]["size"]
+    pairs = dict(_collect_mark_lambdas(m))
+    assert list(pairs) == [sentinel["__gofish_lambda"]]
+    assert pairs[sentinel["__gofish_lambda"]]([{"v": 1}, {"v": 3}]) == [2, 6]
+    json.dumps(d)  # no raw function object left on the wire
+
+    op = scatter(dims={"theta": lambda d: d["a"], "r": "dist"})
+    od = op.to_dict()
+    assert od["dims"]["r"] == "dist"
+    op_pairs = dict(_collect_operator_lambdas([op]))
+    assert list(op_pairs) == [od["dims"]["theta"]["__gofish_lambda"]]
+    # Copies made by `.translate()` / `.label()` keep the same callback id.
+    assert op.translate(x=5).to_dict()["dims"] == od["dims"]
+    json.dumps(od)
 
 
 def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():

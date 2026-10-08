@@ -18,7 +18,9 @@ class Operator:
 
     def __init__(self, op_type: str, **kwargs):
         self.op_type = op_type
-        self.kwargs = kwargs
+        # A callable anywhere in an option value becomes an accessor the
+        # derive RPC bridge serves, as on a mark (see `_channel`).
+        self.kwargs = {k: _channel(v) for k, v in kwargs.items()}
         self._translate: Optional[dict] = None
         # One entry per `.label(accessor, options?)` call, in call order —
         # repeated calls append rather than overwrite. Mirrors JS
@@ -79,7 +81,10 @@ class Operator:
 
     def to_dict(self) -> dict:
         """Convert operator to dictionary for JSON IR."""
-        d = {"type": self.op_type, **self.kwargs}
+        d = {
+            "type": self.op_type,
+            **{k: _wire(v) for k, v in self.kwargs.items()},
+        }
         if self._translate:
             d["translate"] = self._translate
         if self._labels:
@@ -162,13 +167,14 @@ class _MarkFn:
 
 
 class _PendingAccessor:
-    """Sentinel wrapping a Python callable used as a mark kwarg accessor.
+    """Sentinel wrapping a Python callable used as an accessor in a mark or
+    operator option (top-level, or nested as in `dims={"r": {"size": fn}}`).
 
     JS's `createMark` accepts a callable for encoding channels like
     `text({text: (d) => `${d.amount}%`})`. The harness can't ship a Python
     callable to JS, so the factory wraps it here with a fresh `lambda_id`
     (same UUID shape as `DeriveOperator`, sharing one registry).
-    `Mark.to_dict()` serializes it as `{"__gofish_lambda": id}`; the
+    `_wire` serializes it as `{"__gofish_lambda": id}`; the
     harness/widget swaps that sentinel for an `async (d) => fetch
     /derive/<id>(d)` arrow at render time, so JS sees a real accessor
     function whose body happens to RPC into Python.
@@ -180,34 +186,77 @@ class _PendingAccessor:
 
 
 def _channel(v: Any) -> Any:
-    """Wrap a bare callable channel value in `_PendingAccessor`.
+    """Wrap every callable in an option value in `_PendingAccessor`.
 
-    Generalizes what `text()` already did for its `text=` kwarg (the only
-    channel that supported an accessor lambda) to any generated leaf-mark
-    channel kwarg — a plain literal/field-name/`datum()` passes through
-    unchanged, a callable `(row) -> value` gets wrapped so
-    `_collect_mark_lambdas` can register it with the derive RPC bridge.
+    A mark or operator option value is a literal, a field name, a tagged
+    value (`datum()`, `field(...)`), or a plain dict/list/tuple of those
+    (`dims={"r": {"size": ...}}`). A callable `(row) -> value` may sit at any
+    depth of that structure, so this walks the plain containers and wraps each
+    callable it finds, so `_collect_mark_lambdas` / `_collect_operator_lambdas`
+    can register it with the derive RPC bridge and `_wire` can emit its
+    sentinel. Tagged values are `dict` subclasses that already hold wire data,
+    so they are leaves. A container with no callable comes back as the same
+    object, so large literal options (rows, point lists) are not copied.
     """
-    if v is not None and not isinstance(v, (str, int, float, bool)) and callable(v):
+    if v is None or isinstance(v, (str, int, float, bool)):
+        return v
+    if type(v) is dict:
+        out = {k: _channel(x) for k, x in v.items()}
+        return v if all(out[k] is v[k] for k in v) else out
+    if type(v) in (list, tuple):
+        items = [_channel(x) for x in v]
+        if all(a is b for a, b in zip(items, v)):
+            return v
+        return type(v)(items)
+    if callable(v):
         return _PendingAccessor(v)
     return v
 
 
+def _accessors_in(v: Any):
+    """Yield every `_PendingAccessor` in an option value, at any depth of its
+    plain dicts, lists and tuples (the same structure `_channel` walks)."""
+    if isinstance(v, _PendingAccessor):
+        yield v
+    elif type(v) is dict:
+        for x in v.values():
+            yield from _accessors_in(x)
+    elif type(v) in (list, tuple):
+        for x in v:
+            yield from _accessors_in(x)
+
+
+def _wire(v: Any) -> Any:
+    """Replace every `_PendingAccessor` in an option value with its
+    `{"__gofish_lambda": id}` sentinel, at any depth. The JS deserializer
+    turns each sentinel back into an async `(d) => ...` accessor that RPCs
+    into Python, wherever it sits."""
+    if isinstance(v, _PendingAccessor):
+        return {"__gofish_lambda": v.lambda_id}
+    if type(v) is dict:
+        return {k: _wire(x) for k, x in v.items()}
+    if type(v) in (list, tuple):
+        return [_wire(x) for x in v]
+    return v
+
+
+def _lambda_pairs(options: Dict[str, Any]) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every accessor in an options dict. `rows_fn`
+    adapts the user's `(row) -> value` callable to the rows-in / rows-out
+    shape the `/derive/<id>` endpoint expects, so accessors and `derive()`
+    operators share one registry and one endpoint."""
+    return [
+        (acc.lambda_id, lambda rows, _fn=acc.fn: [_fn(r) for r in rows])
+        for acc in _accessors_in(options)
+    ]
+
+
 def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
     """Walk a Mark tree, yielding `(lambda_id, rows_fn)` pairs for every
-    `_PendingAccessor` in mark kwargs (and recursively in combinator
-    `_children` and in the marks of `.relate(...)` clauses). `rows_fn`
-    adapts the user's `(row) -> value` callable to the rows-in / rows-out
-    shape the existing `/derive/<id>` endpoint expects, so mark accessors
-    and `derive()` operators share one registry and one endpoint.
+    `_PendingAccessor` in mark kwargs, at any depth (and recursively in
+    combinator `_children` and in the marks of `.relate(...)` clauses).
     """
-    pairs: List[tuple] = []
-    for val in mark.kwargs.values():
-        if isinstance(val, _PendingAccessor):
-            fn = val.fn
-            pairs.append(
-                (val.lambda_id, lambda rows, _fn=fn: [_fn(r) for r in rows])
-            )
+    pairs = _lambda_pairs(mark.kwargs)
     if mark._children is not None:
         for child in mark._children:
             pairs.extend(_collect_mark_lambdas(child))
@@ -216,6 +265,12 @@ def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
         if isinstance(clause, Mark):
             pairs.extend(_collect_mark_lambdas(clause))
     return pairs
+
+
+def _collect_operator_lambdas(ops: List["Operator"]) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every accessor in the options of a chart's
+    operators (e.g. `scatter(dims={"r": lambda d: ...})`)."""
+    return [pair for op in ops for pair in _lambda_pairs(op.kwargs)]
 
 
 class Token:
@@ -440,16 +495,11 @@ class Mark:
 
     def to_dict(self) -> dict:
         """Convert mark to dictionary for JSON IR."""
-        # Replace `_PendingAccessor` kwarg values with their lambda-id
+        # Replace each `_PendingAccessor` (at any depth) with its lambda-id
         # sentinel. The derive-server walks the Mark tree separately to
         # register the underlying callable in the shared registry; the JS
         # harness/widget substitutes the sentinel for a real `(d) => ...`
         # arrow function whose body RPCs into Python.
-        def _wire(v):
-            if isinstance(v, _PendingAccessor):
-                return {"__gofish_lambda": v.lambda_id}
-            return v
-
         serialized_kwargs = {k: _wire(v) for k, v in self.kwargs.items()}
         if self._children is not None:
             # Combinator form: emit a nested payload the JS side reconstructs

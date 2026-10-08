@@ -23,7 +23,7 @@ export {
   mapOperator,
   resolveNameField,
   resolveRefSelection,
-  unwrapMarkOpts,
+  unwrapOpts,
   unwrapValues,
   wrapWithScope,
   type ChartSpec,

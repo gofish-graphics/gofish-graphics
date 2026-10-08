@@ -734,6 +734,15 @@ public schema — they extend it for the round-trip across anywidget:
 | `__scope: true`     | The `@mark` decorator's scope-wrap signal.                            |
 | `__datum` / `__key` | `bind_data()` pre-binding for Treemap-style invocation.               |
 
+A `{__gofish_lambda}` sentinel may sit anywhere inside a mark's or an
+operator's options, not only as a top-level channel: Python wraps every
+callable it finds in an option's plain dicts and lists
+(`dims={"r": {"size": lambda d: ...}}`), and `unwrapOpts` resolves the
+sentinels at any depth of both mark and operator options. The accessor it
+builds is async, so only a channel that awaits its accessor (a raw channel,
+such as `text`) can use it today; the size and position channels read their
+values synchronously (#1080).
+
 Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
 directly — no bridge sentinel needed.
 
