@@ -32,7 +32,6 @@ import type {
   AxisOptions,
   LabelSpecIR,
 } from "../frontend/schema.js";
-import { AXIS_INTERVAL_KEYS } from "../frontend/validate.js";
 
 declare const process: { exit(code: number): never };
 
@@ -217,11 +216,6 @@ for (const [name, keys] of Object.entries(SCHEMA_OPTION_TYPE_KEYS)) {
     JSON.stringify({ schemaKeys, descriptorKeys })
   );
 }
-check(
-  "AXIS_INTERVAL_KEYS (the runtime's interval anchors) === OPTION_TYPES.AxisInterval keys",
-  JSON.stringify([...AXIS_INTERVAL_KEYS].sort()) ===
-    JSON.stringify(optionTypeObjectKeys(OPTION_TYPES.AxisInterval.type).sort())
-);
 
 console.log("\n# LABEL_OPTIONS agree with schema.ts LabelSpecIR");
 {

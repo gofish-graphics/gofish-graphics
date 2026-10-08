@@ -14,6 +14,7 @@ import {
   LEAF_MARK_TYPES,
   OPERATOR_TYPES,
   type ChannelValue,
+  type AxisInterval,
   type CombinatorMarkIR,
   type ConstraintIR,
   type RelateClauseIR,
@@ -34,7 +35,9 @@ import {
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
+  MARK_BASE_FIELDS,
   t,
+  type FieldGroup,
   type FieldSpec,
   type FieldType,
 } from "./descriptors.js";
@@ -148,9 +151,7 @@ function walkChart(
   // Chart-level options (`CHART_OPTIONS`), checked like every declared
   // object: typed values, no unknown keys.
   optionalField(node, "options", path, ctx, (v, p) =>
-    walkFieldType(t.ref("ChartOptions"), v, p, ctx, (q, message) =>
-      ctx.errors.push({ path: q, message })
-    )
+    walkFieldType(t.ref("ChartOptions"), v, p, ctx)
   );
   optionalField(node, "zOrder", path, ctx, expectNumber);
   optionalField(node, "name", path, ctx, expectNameOrToken);
@@ -281,55 +282,51 @@ function walkDescriptorFields(
   fields: Record<string, FieldSpec>,
   callerKeys: readonly string[]
 ): void {
-  const push = (path: string, message: string) =>
-    ctx.errors.push({ path, message });
   for (const [name, spec] of Object.entries(fields)) {
     if (callerKeys.includes(name)) continue;
-    const check = (v: unknown, p: string) =>
-      walkFieldType(spec.type, v, p, ctx, push);
     if (spec.required) {
       if (!(name in node)) {
-        push(`${path}.${name}`, `required field "${name}" is missing`);
+        ctx.errors.push({
+          path: `${path}.${name}`,
+          message: `required field "${name}" is missing`,
+        });
       } else {
-        check(node[name], `${path}.${name}`);
+        walkFieldType(spec.type, node[name], `${path}.${name}`, ctx);
       }
     } else {
       if (!(name in node) || node[name] === undefined || node[name] === null)
         continue;
-      check(node[name], `${path}.${name}`);
+      walkFieldType(spec.type, node[name], `${path}.${name}`, ctx);
     }
   }
-  const known = [...callerKeys, ...Object.keys(fields)];
-  for (const k of Object.keys(node)) {
-    if (!known.includes(k)) push(`${path}.${k}`, `unknown field "${k}"`);
-  }
+  rejectUnknown(node, [...callerKeys, ...Object.keys(fields)], path, ctx);
 }
 
-/** Dispatch a single value against a descriptor `FieldType`. `push` records a
- *  finding: into `ctx.errors`, or into a union branch's probe. */
+/** Check a single value against a descriptor `FieldType`, recording each
+ *  finding in `ctx.errors`. */
 function walkFieldType(
   type: FieldType,
   value: unknown,
   path: string,
-  ctx: Context,
-  push: (path: string, message: string) => void
+  ctx: Context
 ): void {
+  const fail = (message: string, at = path) =>
+    ctx.errors.push({ path: at, message });
   switch (type.kind) {
     case "string":
       if (typeof value !== "string")
-        push(path, `expected string, got ${typeNameOf(value)}`);
+        fail(`expected string, got ${typeNameOf(value)}`);
       return;
     case "number":
-      if (!isIRNumber(value)) push(path, notANumber(value));
+      if (!isIRNumber(value)) fail(notANumber(value));
       return;
     case "boolean":
       if (typeof value !== "boolean")
-        push(path, `expected boolean, got ${typeNameOf(value)}`);
+        fail(`expected boolean, got ${typeNameOf(value)}`);
       return;
     case "literal":
       if (value !== type.value)
-        push(
-          path,
+        fail(
           `expected ${JSON.stringify(type.value)}, got ${JSON.stringify(value)}`
         );
       return;
@@ -337,109 +334,76 @@ function walkFieldType(
       return;
     case "enum":
       if (typeof value !== "string" || !type.values.includes(value)) {
-        push(
-          path,
+        fail(
           `expected one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}, got ${JSON.stringify(value)}`
         );
       }
       return;
-    case "channel": {
-      // Delegate to the ChannelValue walker, but redirect through a scratch
-      // context so its findings route through `push` (a union branch probes
-      // with its own `push`).
-      const probe: Context = { errors: [] };
-      walkChannelValue(value, path, probe);
-      for (const e of probe.errors) push(e.path, e.message);
+    case "channel":
+      walkChannelValue(value, path, ctx);
       return;
-    }
-    case "ref": {
-      // Same probe indirection as "channel": walkRefType pushes to
-      // ctx.errors, but this field's findings must route through `push`.
-      const probe: Context = { errors: [] };
-      walkRefType(type.name, value, path, probe);
-      for (const e of probe.errors) push(e.path, e.message);
+    case "ref":
+      walkRefType(type.name, value, path, ctx);
       return;
-    }
     case "union": {
-      // Valid if ANY branch matches cleanly (no errors raised by that branch).
+      // Valid if ANY branch matches cleanly: each branch is checked into a
+      // probe context of its own.
       for (const branch of type.options) {
         const probe: Context = { errors: [] };
-        walkFieldType(branch, value, path, probe, (p, m) =>
-          probe.errors.push({ path: p, message: m })
-        );
+        walkFieldType(branch, value, path, probe);
         if (probe.errors.length === 0) return;
       }
-      push(
-        path,
+      fail(
         `value did not match any of the expected shapes: ${JSON.stringify(value)}`
       );
       return;
     }
     case "array":
       if (!Array.isArray(value)) {
-        push(path, `expected array, got ${typeNameOf(value)}`);
+        fail(`expected array, got ${typeNameOf(value)}`);
         return;
       }
       value.forEach((item, i) =>
-        walkFieldType(type.items, item, `${path}[${i}]`, ctx, push)
+        walkFieldType(type.items, item, `${path}[${i}]`, ctx)
       );
       return;
     case "tuple":
       if (!Array.isArray(value) || value.length !== type.items.length) {
-        push(
-          path,
-          `expected a ${type.items.length}-tuple, got ${typeNameOf(value)}`
-        );
+        fail(`expected a ${type.items.length}-tuple, got ${typeNameOf(value)}`);
         return;
       }
       type.items.forEach((item, i) =>
-        walkFieldType(item, value[i], `${path}[${i}]`, ctx, push)
+        walkFieldType(item, value[i], `${path}[${i}]`, ctx)
       );
       return;
     case "record":
       if (!isObject(value)) {
-        push(path, `expected object, got ${typeNameOf(value)}`);
+        fail(`expected object, got ${typeNameOf(value)}`);
         return;
       }
       for (const [k, v] of Object.entries(value)) {
-        walkFieldType(type.valueType, v, `${path}.${k}`, ctx, push);
+        walkFieldType(type.valueType, v, `${path}.${k}`, ctx);
       }
       return;
     case "object":
       if (!isObject(value)) {
-        push(path, `expected object, got ${typeNameOf(value)}`);
+        fail(`expected object, got ${typeNameOf(value)}`);
         return;
       }
-      // Nested object fields validate the same way as top-level descriptor
-      // fields (required/optional). Strict mode also rejects a key the
-      // object does not declare (an `axes` entry other than x/y, a misspelled
-      // axis option).
-      for (const k of Object.keys(value)) {
-        if (!(k in type.fields)) {
-          push(`${path}.${k}`, `unknown field "${k}"`);
-        }
-      }
-      for (const [name, spec] of Object.entries(type.fields)) {
-        const has =
-          name in value && value[name] !== undefined && value[name] !== null;
-        if (spec.required && !has) {
-          push(`${path}.${name}`, `required field "${name}" is missing`);
-        } else if (has) {
-          walkFieldType(spec.type, value[name], `${path}.${name}`, ctx, push);
-        }
-      }
+      // Nested object fields validate like top-level descriptor fields: a
+      // key the object does not declare is an error (an `axes` entry other
+      // than x/y, a misspelled axis option).
+      walkDescriptorFields(value, path, ctx, type.fields, []);
       return;
   }
 }
 
-/** The anchors an axis interval may name: the keys of `AxisInterval`. */
-export const AXIS_INTERVAL_KEYS = [
-  "min",
-  "center",
-  "max",
-  "size",
-  "embedded",
-] as const;
+/** The anchors an axis interval may name: the fields of `AxisInterval` in
+ *  `OPTION_TYPES`. */
+export const AXIS_INTERVAL_KEYS = Object.keys(
+  (OPTION_TYPES.AxisInterval.type as Extract<FieldType, { kind: "object" }>)
+    .fields
+) as ReadonlyArray<keyof AxisInterval>;
 
 /**
  * Is this value an untagged plain object? A channel value that is an object
@@ -467,9 +431,7 @@ function walkRefType(
 ): void {
   const optionType = OPTION_TYPES[name];
   if (optionType !== undefined) {
-    walkFieldType(optionType.type, value, path, ctx, (p, message) =>
-      ctx.errors.push({ path: p, message })
-    );
+    walkFieldType(optionType.type, value, path, ctx);
     return;
   }
   switch (name) {
@@ -503,9 +465,9 @@ function walkRefType(
       walkFieldAccessor(value, path, ctx);
       return;
     default:
-      // Unknown ref name — permissive (forward-compat), mirrors the rest of
-      // this validator's stance on shapes it doesn't recognize yet.
-      return;
+      // Every ref a descriptor names is in OPTION_TYPES or AUTHORED_REFS, so
+      // this is a descriptor that names a shape no walker knows.
+      throw new Error(`validate: no walker for the ref type "${name}"`);
   }
 }
 
@@ -796,12 +758,43 @@ function walkMark(node: unknown, path: string, ctx: Context): void {
   });
 }
 
+/** The `MARK_BASE_FIELDS` a mark node of each kind carries beside its own
+ *  keys. `name` is not among them: a mark's name may be a hygienic-name token,
+ *  so every mark walker checks it with `expectNameOrToken`. */
+const markBaseFields = (...keys: string[]): FieldGroup =>
+  Object.fromEntries(keys.map((k) => [k, MARK_BASE_FIELDS[k]]));
+const {
+  name: _name,
+  debug: _debug,
+  ...COMBINATOR_NODE_FIELDS
+} = MARK_BASE_FIELDS;
+const REF_MARK_FIELDS = markBaseFields("label", "zOrder", "translate");
+const CUT_MARK_FIELDS = markBaseFields("zOrder", "translate");
+const OFFSET_MARK_FIELDS = markBaseFields("translate");
+
+/** The keys every mark walker checks itself, outside the descriptor walk. */
+const MARK_NODE_KEYS = ["type", "name", "origin", "meta"] as const;
+
+function walkMarkNode(
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context,
+  fields: FieldGroup,
+  ownKeys: readonly string[]
+): void {
+  walkBaseFields(node, path, ctx);
+  optionalField(node, "name", path, ctx, expectNameOrToken);
+  walkDescriptorFields(node, path, ctx, fields, [
+    ...MARK_NODE_KEYS,
+    ...ownKeys,
+  ]);
+}
+
 function walkRefMark(
   node: Record<string, unknown>,
   path: string,
   ctx: Context
 ): void {
-  walkBaseFields(node, path, ctx);
   expectField(node, "selection", path, ctx, (v, p) => {
     if (typeof v !== "string" && !Array.isArray(v)) {
       ctx.errors.push({
@@ -810,25 +803,7 @@ function walkRefMark(
       });
     }
   });
-  optionalField(node, "name", path, ctx, expectNameOrToken);
-  optionalField(node, "label", path, ctx, walkLabel);
-  optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  rejectUnknown(
-    node,
-    [
-      "type",
-      "selection",
-      "name",
-      "label",
-      "zOrder",
-      "translate",
-      "origin",
-      "meta",
-    ],
-    path,
-    ctx
-  );
+  walkMarkNode(node, path, ctx, REF_MARK_FIELDS, ["selection"]);
 }
 
 function walkOffsetMark(
@@ -836,10 +811,8 @@ function walkOffsetMark(
   path: string,
   ctx: Context
 ): void {
-  walkBaseFields(node, path, ctx);
   optionalField(node, "x", path, ctx, expectNumber);
   optionalField(node, "y", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
   expectField(node, "children", path, ctx, (v, p) => {
     if (!Array.isArray(v)) {
       ctx.errors.push({ path: p, message: "children must be an array" });
@@ -853,12 +826,7 @@ function walkOffsetMark(
     }
     v.forEach((item, i) => walkMark(item, `${p}[${i}]`, ctx));
   });
-  rejectUnknown(
-    node,
-    ["type", "x", "y", "children", "translate", "origin", "meta"],
-    path,
-    ctx
-  );
+  walkMarkNode(node, path, ctx, OFFSET_MARK_FIELDS, ["x", "y", "children"]);
 }
 
 /**
@@ -902,7 +870,6 @@ function walkCutMark(
   path: string,
   ctx: Context
 ): void {
-  walkBaseFields(node, path, ctx);
   expectField(node, "source", path, ctx, walkMark);
   expectField(node, "dir", path, ctx, (v, p) => {
     if (v !== "x" && v !== "y")
@@ -913,26 +880,12 @@ function walkCutMark(
   });
   optionalField(node, "size", path, ctx, walkCutSize);
   optionalField(node, "inset", path, ctx, expectNumber);
-  optionalField(node, "name", path, ctx, expectNameOrToken);
-  optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  rejectUnknown(
-    node,
-    [
-      "type",
-      "source",
-      "dir",
-      "size",
-      "inset",
-      "name",
-      "zOrder",
-      "translate",
-      "origin",
-      "meta",
-    ],
-    path,
-    ctx
-  );
+  walkMarkNode(node, path, ctx, CUT_MARK_FIELDS, [
+    "source",
+    "dir",
+    "size",
+    "inset",
+  ]);
 }
 
 function walkCombinatorMark(
@@ -948,7 +901,6 @@ function walkCombinatorMark(
       message: `combinator mark type must be one of ${COMBINATOR_MARK_TYPES.join(", ")}`,
     });
   }
-  walkBaseFields(node, path, ctx);
   optionalField(node, "options", path, ctx, (v, p) => {
     if (!isObject(v)) {
       ctx.errors.push({
@@ -968,35 +920,13 @@ function walkCombinatorMark(
   expectField(node, "children", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkMark)
   );
-  optionalField(node, "name", path, ctx, expectNameOrToken);
-  optionalField(node, "label", path, ctx, walkLabel);
-  optionalField(node, "relate", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkRelateClause)
-  );
-  optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  rejectUnknown(
-    node,
-    [
-      "type",
-      "__combinator",
-      "options",
-      "children",
-      "name",
-      "label",
-      "relate",
-      "zOrder",
-      "translate",
-      "origin",
-      "meta",
-      // Python bridge fields, declared in MARK_BASE_FIELDS.
-      "__scope",
-      "__datum",
-      "__key",
-    ],
-    path,
-    ctx
-  );
+  // The mark's base fields sit on the node; its own options (and `debug`)
+  // sit under `options`, checked above.
+  walkMarkNode(node, path, ctx, COMBINATOR_NODE_FIELDS, [
+    "__combinator",
+    "options",
+    "children",
+  ]);
 }
 
 function walkLeafMark(
@@ -1004,34 +934,17 @@ function walkLeafMark(
   path: string,
   ctx: Context
 ): void {
-  walkBaseFields(node, path, ctx);
-  optionalField(node, "name", path, ctx, expectNameOrToken);
-  optionalField(node, "label", path, ctx, walkLabel);
-  optionalField(node, "relate", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkRelateClause)
+  // The mark's own fields and MARK_BASE_FIELDS all sit on the node: the
+  // enumerated channel list in `descriptors.ts`'s `LEAF_MARKS` is each mark's
+  // real channel set (its factory's options plus the shared box-dims/paint
+  // groups it includes), so any other key is an error, as on every node.
+  walkMarkNode(
+    node,
+    path,
+    ctx,
+    acceptedFields("leaf-mark", node.type as string) ?? {},
+    []
   );
-  optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  // The mark's own fields: the enumerated channel list in `descriptors.ts`'s
-  // `LEAF_MARKS` is each mark's real channel set (its factory's options plus
-  // the shared box-dims/paint groups it includes), so any other key is an
-  // error, as on every other node.
-  const fields = acceptedFields("leaf-mark", node.type as string);
-  if (fields) {
-    // The base fields set by Mark methods were checked above; they are not
-    // checked a second time. `debug` and the bridge fields (MARK_BASE_FIELDS)
-    // are checked here with the mark's own fields.
-    walkDescriptorFields(node, path, ctx, fields, [
-      "type",
-      "name",
-      "label",
-      "relate",
-      "zOrder",
-      "translate",
-      "origin",
-      "meta",
-    ]);
-  }
 }
 
 /** One entry of a `LabelIR` array — the shape a single `.label(accessor,
