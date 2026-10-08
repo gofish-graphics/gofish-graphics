@@ -53,7 +53,7 @@ or a dict with any of `"min"`, `"center"`, `"max"`, `"size"`, and
 `"embedded"`:
 
 ```python
-# Inside polar(): the same wedge as rect(w=0.4, h="value")
+# Inside Coord.polar(): the same wedge as rect(w=0.4, h="value")
 rect(dims={"theta": {"size": 0.4}, "r": {"size": "value"}})
 ```
 

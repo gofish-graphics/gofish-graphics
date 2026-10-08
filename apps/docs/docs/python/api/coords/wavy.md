@@ -2,7 +2,7 @@
 order: 50
 ---
 
-# wavy
+# Coord.wavy
 
 Warps the plane with a sinusoidal ripple, so a straight edge is drawn as a wave.
 Used for decorative geometry — a balloon string, a flag, a squiggly connector.
@@ -11,15 +11,15 @@ Used for decorative geometry — a balloon string, a flag, a squiggly connector.
 :::
 
 ```python
-from gofish import layer, rect, wavy
+from gofish import layer, rect, Coord
 
-layer([rect(w=4, h=120)], coord=wavy(), x=0, y=0).render(w=200, h=200)
+layer([rect(w=4, h=120)], coord=Coord.wavy(), x=0, y=0).render(w=200, h=200)
 ```
 
 ## Signature
 
 ```python
-wavy() -> Coord
+Coord.wavy() -> Coord
 ```
 
 Pass it as the `coord` of a [`layer`](/python/api/operators/layer) (or of a

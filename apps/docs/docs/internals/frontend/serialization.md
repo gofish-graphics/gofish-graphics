@@ -131,11 +131,16 @@ auto-minted layer name never appears in the IR (mirroring how a relational
 mark's zBelow-by-default paint order stays a resolve-time constraint rather
 than a serialized field). Operators are a flat list (`derive`, `resolve`,
 `join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
-`pack`). `pack`'s `method` is a strategy object made by a function call
-(`circles()` in both languages), so on the wire it is plain data,
-`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. `treemap`'s
-`tile` works the same way (`squarify({ ratio })`, `slice()`, `dice()`,
-`binary()`, `sliceDice()`; e.g. `{ "kind": "squarify", "ratio": 1 }`). Note `join`
+`pack`). `treemap`'s `tile` is a strategy object made by a call in the `Tile`
+family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
+`Tile.binary()`, `Tile.sliceDice()` in both languages), so on the wire it is
+plain data, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
+dispatches on `kind`. `scatter`'s `overlap` works the same way (the `Overlap`
+family). A `line` or `ribbon` `curve` is a call in the `Curve` family, and on
+the wire it is `{ "type": "monotone" }`, with an `options` object for the
+curves that take some (`{ "type": "arc", "options": { "direction": "down" } }`);
+a bare curve name is not a curve. The families are namespaces in the two
+surfaces only; the wire carries the plain objects. Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
@@ -222,7 +227,7 @@ serialized as a field, so it composes with any explicit `.zOrder(...)` or
 A chart's **coordinate transform** rides the IR as a small spec the deserializer
 maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
 centralAngle, startAngle, direction, center }`. `fromJSON.ts` reconstructs it by
-calling `polar(coordSpec)` / `clock(coordSpec)` and passing the whole spec
+calling `Coord.polar(coordSpec)` / `Coord.clock(coordSpec)` and passing the whole spec
 through (the factory ignores the `type` key), so a parameterized polar/clock —
 donut hole, partial fan, start angle — round-trips without per-option plumbing.
 
@@ -594,7 +599,7 @@ through the same core, so they are spelled and checked as in `chart()`.
 The conversion is driven by the declared type, never by the dict itself, so
 dicts whose keys are data keep them: a `record` type's keys (a `schema` keyed
 by column name, the axis names of `dims`) are never renamed, and a field
-typed `any` (`color=palette({...})` keyed by category, `coord`) passes
+typed `any` (`color=Color.palette({...})` keyed by category, `coord`) passes
 through whole. Two rules keep this honest. A union may have only one branch
 that a dict could match, or generation fails, since `_to_wire` would have to
 guess. The one exception is a tagged union: when every dict branch is an

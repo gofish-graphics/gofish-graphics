@@ -169,7 +169,7 @@ The `computeIntrinsicSize()` function returns a `Monotonic` function that maps f
 
 `x`/`y`/`w`/`h` mean axis 0 and axis 1 in every coordinate space. A coordinate
 transform may also declare **names** for its two axes in its `aliases` field:
-`polar()`/`clock()` declare `{ x: "theta", y: "r" }` and `geo()` declares
+`Coord.polar()`/`Coord.clock()` declare `{ x: "theta", y: "r" }` and `Coord.geo()` declares
 `{ x: "lon", y: "lat" }`. That declaration is the only source of the names. They are
 used in two places, and in both the meaning of a name depends on where the node sits,
 which a factory does not know when it runs:
@@ -638,8 +638,8 @@ That is why `pack` keeps its children at their pixel size and does not fit
 itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
 
-The second consumer is `scatter`'s `overlap` option, `separate()` (#969) or
-`noise()` (#970, #1014). `sina()` and `jitter()` are `noise()` with other
+The second consumer is `scatter`'s `overlap` option, `Overlap.separate()` (#969) or
+`Overlap.noise()` (#970, #1014). `Overlap.sina()` and `Overlap.jitter()` are `Overlap.noise()` with other
 defaults filled in, so they reach layout as the same `{kind: "noise"}` object.
 `scatter` elaborates to a layer with a `position` constraint per child on each
 axis a field places, and an `align` on every other ("free") axis. With an

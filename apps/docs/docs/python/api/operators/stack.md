@@ -96,6 +96,6 @@ chart(seafood).flow(
 ## Notes
 
 - `dir` is required — `stack()` raises a `ValueError` without it.
-- Combine with `coord=clock()` on [`chart`](/python/api/core/chart) to turn a
+- Combine with `coord=Coord.clock()` on [`chart`](/python/api/core/chart) to turn a
   stack into a pie chart.
 - Use [`spread`](/python/api/operators/spread) when you want gaps between groups.

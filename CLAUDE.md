@@ -96,7 +96,7 @@ All paths are relative to `packages/gofish-graphics/`:
   - Render terminal for a bare node (no `chart()` at the root): `gofish(container, options, node | () => node)`
   - Example: `layer([rect({ x: 0, y: 0, w: 90, h: 40 }), rect({ x: 30, y: 50, w: 90, h: 40 })]).render(container, {})`
 
-- **One lowercase surface**: each operator has one lowercase name that works both inside `.flow(...)` and as a combinator over an explicit child list (`stack(opts, [a, b])`, `layer([...])`, `intersect([a, b])`). A combinator child may be a mark or an already-built node (e.g. `ref(...)`), and a `createMark` body may return a combinator's mark directly. The node-level building blocks (`Spread`, `Layer`, `Treemap`, the region-compositing node operators, …) are internal and not exported (#146). Apart from classes and namespaces (`GoFishRef`, `FieldExpr`, `Serialize`, …), only `Constraint` and `Schema` (the constraint and column-type factory namespaces) stay capitalized; the async map over a collection is the lowercase `map`.
+- **One lowercase surface**: each operator has one lowercase name that works both inside `.flow(...)` and as a combinator over an explicit child list (`stack(opts, [a, b])`, `layer([...])`, `intersect([a, b])`). A combinator child may be a mark or an already-built node (e.g. `ref(...)`), and a `createMark` body may return a combinator's mark directly. The node-level building blocks (`Spread`, `Layer`, `Treemap`, the region-compositing node operators, …) are internal and not exported (#146). A capital letter means a class or a namespace (`GoFishRef`, `FieldExpr`, `Serialize`, …): the factory namespaces `Constraint` and `Schema`, and the **strategy families** (#1013). An option whose value is one choice from a set of strategies has one family namespace, a module under `src/families/` bound in `lib.ts` with `export * as`: `Overlap.separate()`, `Tile.squarify()`, `Curve.monotone()`, `Coord.polar()`, `Color.palette()`, `Animation.grow()`. The family's type is inside it (`Curve.Curve`), each family is also a subpath (`gofish-graphics/curve`), and strategies are never also top-level exports. Python mirrors this (`from . import curve as Curve`; `from gofish.curve import monotone`). The async map over a collection is the lowercase `map`.
 
 ### Context System
 
@@ -108,13 +108,13 @@ The library uses several global contexts during rendering:
 
 ### Coordinate Transforms
 
-Key coordinate systems available:
+Key coordinate systems available, all in the `Coord` family (`Coord.polar()`):
 
-- `linear` - Standard Cartesian coordinates
-- `polar` - Polar coordinate system
-- `bipolar` - Two-pole coordinate system
-- `arcLengthPolar` - Arc-length based polar coordinates
-- `wavy` - Wavy/curved coordinate transformations
+- `Coord.linear` - Standard Cartesian coordinates
+- `Coord.polar` - Polar coordinate system
+- `Coord.bipolar` - Two-pole coordinate system
+- `Coord.arcLengthPolar` - Arc-length based polar coordinates
+- `Coord.wavy` - Wavy/curved coordinate transformations
 
 ### Build Configuration (packages/gofish-graphics/)
 

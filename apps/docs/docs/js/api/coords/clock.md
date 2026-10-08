@@ -2,14 +2,14 @@
 order: 20
 ---
 
-# clock
+# Coord.clock
 
 A polar coordinate system oriented like a clock face. 0° is at 12 o'clock (top) and angles increase clockwise. Ideal for pie charts, donut charts, and radial visualizations.
 
 ::: gofish
 
 ```js
-gf.chart(seafood, { coord: gf.clock() })
+gf.chart(seafood, { coord: gf.Coord.clock() })
   .flow(gf.stack({ by: "species", dir: "x" }))
   .mark(gf.rect({ w: "count", fill: "species" }))
   .render(root, {
@@ -24,7 +24,7 @@ gf.chart(seafood, { coord: gf.clock() })
 ## Signature
 
 ```ts
-clock();
+Coord.clock();
 ```
 
 ## Parameters
@@ -32,7 +32,7 @@ clock();
 ::: gofish-ref clock
 :::
 
-`clock()` is a [`polar()`](/js/api/coords/polar) preset and accepts the same
+`Coord.clock()` is a [`Coord.polar()`](/js/api/coords/polar) preset and accepts the same
 options — `innerRadius`, `centralAngle`, `startAngle`, `direction`, `center` — but
 with clock-face defaults (0° at 12 o'clock, clockwise). See
 [polar's Parameters](/js/api/coords/polar#parameters).
@@ -42,7 +42,7 @@ with clock-face defaults (0° at 12 o'clock, clockwise). See
 Pass the coordinate transform to `chart()` via the `coord` option:
 
 ```ts
-chart(data, { coord: clock() })
+chart(data, { coord: Coord.clock() })
   .flow(...)
   .mark(...)
   .render(container, opts);
@@ -59,17 +59,17 @@ chart(data, { coord: clock() })
 
 ```ts
 // Pie chart
-chart(data, { coord: clock() })
+chart(data, { coord: Coord.clock() })
   .flow(stack({ by: "category", dir: "x" }))
   .mark(rect({ w: "value", fill: "category" }));
 
 // Donut chart (hollow center via inner radius)
-chart(data, { coord: clock({ innerRadius: 0.6 }) })
+chart(data, { coord: Coord.clock({ innerRadius: 0.6 }) })
   .flow(stack({ by: "category", dir: "x" }))
   .mark(rect({ w: "value", fill: "category" }));
 
 // Rose chart (radial bar chart)
-chart(data, { coord: clock() })
+chart(data, { coord: Coord.clock() })
   .flow(stack({ by: "month", dir: "x" }))
   .mark(rect({ w: (Math.PI * 2) / 12, emX: true, h: "value" }));
 ```

@@ -1,7 +1,7 @@
-# gradient
+# Color.gradient
 
 ```ts
-gradient(stops);
+Color.gradient(stops);
 ```
 
 Creates a continuous color scale. Colors are interpolated across the numeric
@@ -16,13 +16,13 @@ heatmap with many distinct values still gets one compact legend.
 
 ```ts
 // Named scheme
-chart(data, { color: gradient("viridis") })
+chart(data, { color: Color.gradient("viridis") })
   .flow(spread({ by: "category", dir: "x" }))
   .mark(rect({ h: "value", fill: "temperature" }))
   .render(container, { w: 500, h: 300 });
 
 // Custom stops
-chart(data, { color: gradient(["#f7fbff", "#08306b"]) });
+chart(data, { color: Color.gradient(["#f7fbff", "#08306b"]) });
 ```
 
 **Built-in schemes:** `"viridis"`, `"blues"`, `"reds"`

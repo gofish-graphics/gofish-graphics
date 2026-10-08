@@ -49,14 +49,16 @@ operator works both inside `.flow(...)` and as a combinator over marks, and a
 `createMark` body may return that combinator's mark directly, because
 `createMark` resolves whatever its body returns the same way a combinator
 resolves a child. The async map over a collection, once the capitalized
-`For`, is now the lowercase `map`, so the factory namespaces `Constraint`
-(constraints) and `Schema` (column types for `chart`'s `schema` option) are
-the only capitalized function-like exports left. The fluent
+`For`, is now the lowercase `map`, so a capital letter now means only a
+namespace: the factory namespaces `Constraint` (constraints) and `Schema`
+(column types for `chart`'s `schema` option), and the strategy families
+described below. The fluent
 surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
-`treemap`, `pack`, `derive`, `resolve`, and `join` (`pack` takes a strategy
-object such as `circles()` as its `method`, never a string, and `scatter`
-takes an overlap strategy such as `separate()` or `jitter()` the same way; `resolve` dereferences reference columns into
+`treemap`, `pack`, `derive`, `resolve`, and `join` (`treemap` takes a tiling
+strategy object such as `Tile.squarify()` as its `tile`, never a string, and
+`scatter` takes an overlap strategy such as `Overlap.separate()` or
+`Overlap.jitter()` the same way; `resolve` dereferences reference columns into
 drawn node refs, driving the ribbon / node-link / labeling patterns via
 `.layer()` + `resolve`; `join` is a one-to-many equi-join relating two data
 tables on a shared key).
@@ -67,11 +69,12 @@ a connector is now the _combinator form_ of an ordinary mark — `line` (center)
 or `ribbon` (edge band, formerly the `area` mark) — invoked with an explicit
 array of `ref(...)` children. The shape of the drawn path is a single `curve`
 key, backed by the pluggable router registry that `lib.ts` re-exports from
-`ast/graphicalOperators/routers` (`registerRoute` / `getRoute` / `resolveCurve`
-and the built-in `linear` / `bezier` / `orthogonal` / `arc` / `perfectArrows`
-routers; every built-in but `linear` has a factory of the same name, since
-`linear()` is already the Cartesian coordinate transform, so that curve is
-written as the bare string `"linear"`). `curve: "auto"` smooths automatically
+`ast/graphicalOperators/routers` (`registerRoute` / `getRoute` /
+`resolveCurve`). Every curve is a call in the `Curve` family:
+`Curve.linear()`, `Curve.bezier()`, `Curve.orthogonal()`, `Curve.arc()`,
+`Curve.perfectArrows()`, and the curves that thread a whole run,
+`Curve.step()`, `Curve.monotone()`, `Curve.smooth()` and
+`Curve.catmullRom()`. A `line` with no `curve` smooths automatically
 on continuous axes — see [Underlying Space](/internals/core/underlying-space)
 for the positioning-space test that decides this.
 
@@ -110,12 +113,33 @@ construct at all: it is a pure function over rows, the data-space reading a
 `derive` hands an ordinary chart.
 
 The build-in prototype (draft PR #901) adds a second namespace beside it,
-`animation`. The split is WHEN against WHAT: `time.stagger` and
-`time.parallel` say when a chart's pieces enter, and `animation.grow`,
-`animation.fadeIn`, `animation.wipe` and the rest say how each one looks while
+`Animation`. The split is WHEN against WHAT: `time.stagger` and
+`time.parallel` say when a chart's pieces enter, and `Animation.grow`,
+`Animation.fadeIn`, `Animation.wipe` and the rest say how each one looks while
 it does. The effects are named by what they do, not by the phase they are used
 in, so the same value serves `enter` or `exit`. It is JavaScript-only for the
-same reason `time` is.
+same reason `time` is. `time` stays lowercase because it holds operators;
+`Animation` is capitalized because its members are option values, which makes
+it a strategy family.
+
+An option whose value is one choice from a set of named strategies, at least
+one of which takes arguments, gets one **strategy family** (#1013): `Overlap`
+(`scatter`'s `overlap`), `Tile` (`treemap`'s `tile`), `Curve` (the `curve` of
+`line`, `ribbon`, `time.transition` and `Animation.tween`, and
+`interpolate`'s `method`), `Coord` (a chart's or a layer's `coord`), `Color`
+(a chart's `color`), and `Animation` (`.transition()`'s `enter`, `exit` and
+`update`). Each family is one module with a lowercase file name,
+`src/families/<name>.ts`, which `lib.ts` binds under the capitalized name with
+`export * as Curve from "./families/curve"`, the same mechanism as
+`Serialize`. The same module is published as the subpath
+`gofish-graphics/curve`, so `Curve.monotone` and
+`import { monotone } from "gofish-graphics/curve"` are one function. The
+family's own type lives inside it under the family's name, `Curve.Curve`.
+Strategies are not also exported at the top level, so the lowercase `coord`
+combinator and the lowercase `color` object of named colors keep their names.
+An option with one strategy has no option at all: `pack` always packs
+enclosing circles. Python mirrors the families as modules bound the same way
+(`from . import curve as Curve` in `gofish/__init__.py`).
 
 ## Planned contents
 

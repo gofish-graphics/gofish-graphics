@@ -292,7 +292,7 @@ methods:
   round-trips through the IR; a callback is dropped from the emitted IR (like a
   function `.label` accessor).
 - `mark.transition({ enter, update, exit })` records how the mark looks in
-  each phase of an animation (`animation.grow()`, `animation.fadeIn()`, and
+  each phase of an animation (`Animation.grow()`, `Animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the
   build-in reads the `enter` effects back off the resolved tree
   (`src/animation/install.ts`). Under a sequence, the chart builder reads the

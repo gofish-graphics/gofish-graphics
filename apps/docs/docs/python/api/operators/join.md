@@ -33,10 +33,10 @@ The nested glyph chart leaves off its data, so it inherits its parent partition
 (the lake's row) and joins the catch table onto it:
 
 ```python
-from gofish import chart, scatter, join, stack, rect, clock
+from gofish import chart, scatter, join, stack, rect, Coord
 
 chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
-    chart(coord=clock())  # no data -> inherits this lake's partition
+    chart(coord=Coord.clock())  # no data -> inherits this lake's partition
     .flow(join(seafood, on="lake"), stack(by="species", dir="x", h=20))
     .mark(rect(w="count", fill="species"))
 ).render(w=400, h=400)

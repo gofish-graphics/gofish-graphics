@@ -41,10 +41,10 @@ key is an axis name, and each value is either a position (like `x`) or an
 object with any of `min`, `center`, `max`, `size`, and `embedded`:
 
 ```ts
-// Inside polar(): the same wedge as rect({ w: 0.4, h: "value" })
+// Inside Coord.polar(): the same wedge as rect({ w: 0.4, h: "value" })
 rect({ dims: { theta: { size: 0.4 }, r: { size: "value" } } });
 
-// Inside geo(): the same box as rect({ x: "lon", y: "lat", w: 4, h: 4 })
+// Inside Coord.geo(): the same box as rect({ x: "lon", y: "lat", w: 4, h: 4 })
 rect({ dims: { lon: "lon", lat: "lat" }, w: 4, h: 4 });
 ```
 

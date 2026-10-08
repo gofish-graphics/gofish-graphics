@@ -1,7 +1,7 @@
-# gradient
+# Color.gradient
 
 ```python
-gradient(stops)
+Color.gradient(stops)
 ```
 
 Creates a continuous color scale. Colors are interpolated across the numeric
@@ -13,15 +13,15 @@ range of the `fill` field.
 | `list[str]`  | Custom color stops interpolated in LAB space   |
 
 ```python
-from gofish import chart, spread, rect, gradient
+from gofish import chart, spread, rect, Color
 
 # Named scheme
-chart(data, color=gradient("viridis")).flow(
+chart(data, color=Color.gradient("viridis")).flow(
     spread(by="category", dir="x")
 ).mark(rect(h="value", fill="temperature"))
 
 # Custom stops
-chart(data, color=gradient(["#f7fbff", "#08306b"]))
+chart(data, color=Color.gradient(["#f7fbff", "#08306b"]))
 ```
 
 **Built-in schemes:** `"viridis"`, `"blues"`, `"reds"`

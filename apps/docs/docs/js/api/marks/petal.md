@@ -17,7 +17,7 @@ and rose glyphs where a rectangle's straight sides would look wrong.
 petal({ w?, h?, dims?, fill?, stroke?, strokeWidth? })
 ```
 
-Use it inside a [`polar()`](/js/api/coords/polar) or [`clock()`](/js/api/coords/clock)
+Use it inside a [`Coord.polar()`](/js/api/coords/polar) or [`Coord.clock()`](/js/api/coords/clock)
 coordinate space, where `w`/`h` read as the angular and radial extents, and
 `dims: { theta: ..., r: ... }` names the same two axes by their polar names
 (see [Axis names](/js/api/coords/polar#axis-names)).

@@ -543,8 +543,8 @@ export default defineConfig({
               text: "Color",
               collapsed: true,
               items: [
-                { text: "palette", link: "/js/api/color/palette" },
-                { text: "gradient", link: "/js/api/color/gradient" },
+                { text: "Color.palette", link: "/js/api/color/palette" },
+                { text: "Color.gradient", link: "/js/api/color/gradient" },
                 {
                   text: "assignGradientColor",
                   link: "/js/api/color/assign-gradient-color",
@@ -570,6 +570,11 @@ export default defineConfig({
               text: "Coordinates",
               collapsed: true,
               items: collectApiSidebarGroup("js", "coords"),
+            },
+            {
+              text: "Curve",
+              collapsed: true,
+              items: [{ text: "Curve", link: "/js/api/curve" }],
             },
             {
               text: "Reactivity",
@@ -644,8 +649,8 @@ export default defineConfig({
               text: "Color",
               collapsed: true,
               items: [
-                { text: "palette", link: "/python/api/color/palette" },
-                { text: "gradient", link: "/python/api/color/gradient" },
+                { text: "Color.palette", link: "/python/api/color/palette" },
+                { text: "Color.gradient", link: "/python/api/color/gradient" },
                 {
                   text: "assign_gradient_color",
                   link: "/python/api/color/assign-gradient-color",
@@ -676,6 +681,11 @@ export default defineConfig({
               text: "Coordinates",
               collapsed: true,
               items: collectApiSidebarGroup("python", "coords"),
+            },
+            {
+              text: "Curve",
+              collapsed: true,
+              items: [{ text: "Curve", link: "/python/api/curve" }],
             },
           ],
         },

@@ -44,11 +44,11 @@ value is the point, like `x`, and `{ min, max }` is the span, like
 `xMin`/`xMax`.
 
 ```ts
-// Under polar(): the same as scatter({ by: "id", x: "bearing", y: "distance" })
+// Under Coord.polar(): the same as scatter({ by: "id", x: "bearing", y: "distance" })
 .flow(scatter({ by: "id", dims: { theta: "bearing", r: "distance" } }))
 .mark(circle({ r: 4 }))
 
-// Under geo(): the same as scatter({ by: "name", x: "lon", y: "lat" })
+// Under Coord.geo(): the same as scatter({ by: "name", x: "lon", y: "lat" })
 .flow(scatter({ by: "name", dims: { lon: "lon", lat: "lat" } }))
 ```
 
@@ -67,16 +67,17 @@ axis, at the scatter's `alignment`. Dots with close values then cover each
 other. `overlap` moves each child along that free axis so the children no
 longer overlap. A strategy only ever moves children along the free axis: each
 child keeps the position its field gives it on the data axis, which `scatter`
-alone places. You make the strategy with a function call.
+alone places. You make the strategy with a function call in the `Overlap`
+family, which is also the module `gofish-graphics/overlap`.
 
 There are two strategies. They differ in what sets the width of the cloud.
 
-- `separate({ padding? })` keeps the dots apart. In data order, each dot
+- `Overlap.separate({ padding? })` keeps the dots apart. In data order, each dot
   moves along the free axis to the nearest free spot, so no two dots overlap.
   The counts set the width exactly: where many dots share a value, the cloud
   grows tall. The result is a beeswarm. `padding` is the number of pixels kept
   between neighboring dots. The default is 0.
-- `noise({ randomness?, smoothing?, padding?, seed? })` spreads the dots
+- `Overlap.noise({ randomness?, smoothing?, padding?, seed? })` spreads the dots
   inside an outline. The outline is wide where many dots share a part of the
   data axis and narrow where few do, so it shows the shape of the
   distribution. The dots are placed inside it and may touch.
@@ -84,11 +85,11 @@ There are two strategies. They differ in what sets the width of the cloud.
 Two more functions make `noise` with other defaults. Any option you pass
 replaces the default.
 
-| Function   | Same as                                                 | Looks like                         |
-| ---------- | ------------------------------------------------------- | ---------------------------------- |
-| `noise()`  | `noise()`                                               | an outline that follows every pile |
-| `sina()`   | `noise({ smoothing: "silverman" })`                     | a violin filled with dots          |
-| `jitter()` | `noise({ randomness: "uniform", smoothing: Infinity })` | classic jitter in a flat band      |
+| Function           | Same as                                                         | Looks like                         |
+| ------------------ | --------------------------------------------------------------- | ---------------------------------- |
+| `Overlap.noise()`  | `Overlap.noise()`                                               | an outline that follows every pile |
+| `Overlap.sina()`   | `Overlap.noise({ smoothing: "silverman" })`                     | a violin filled with dots          |
+| `Overlap.jitter()` | `Overlap.noise({ randomness: "uniform", smoothing: Infinity })` | classic jitter in a flat band      |
 
 ::: gofish
 
@@ -102,7 +103,7 @@ gf.chart(
     gf.scatter({
       x: "Body Mass (g)",
       alignment: "middle",
-      overlap: gf.separate({ padding: 1 }),
+      overlap: gf.Overlap.separate({ padding: 1 }),
     })
   )
   .mark(gf.circle({ r: 3, fill: "Species" }))
@@ -118,7 +119,7 @@ because that word names a family of layouts: greedy ones like this one,
 force-directed ones, and packed ones. The name comes from the separation
 constraints of constraint layout, as in WebCoLa and VPSC.
 
-The same data with `noise()`:
+The same data with `Overlap.noise()`:
 
 ::: gofish
 
@@ -132,7 +133,7 @@ gf.chart(
     gf.scatter({
       x: "Body Mass (g)",
       alignment: "middle",
-      overlap: gf.noise(),
+      overlap: gf.Overlap.noise(),
     })
   )
   .mark(gf.circle({ r: 3, fill: "Species" }))
@@ -141,7 +142,7 @@ gf.chart(
 
 :::
 
-And with `sina()`, which gives each species a smooth violin outline:
+And with `Overlap.sina()`, which gives each species a smooth violin outline:
 
 ::: gofish
 
@@ -155,7 +156,7 @@ gf.chart(
     gf.scatter({
       x: "Body Mass (g)",
       alignment: "middle",
-      overlap: gf.sina(),
+      overlap: gf.Overlap.sina(),
     })
   )
   .mark(gf.circle({ r: 3, fill: "Species" }))
@@ -248,7 +249,7 @@ Some cases are errors:
 
 - `overlap` when both `x` and `y` come from fields, because then no axis is
   free.
-- `overlap` inside a coordinate space that is not linear, such as `polar()`.
+- `overlap` inside a coordinate space that is not linear, such as `Coord.polar()`.
   The strategies measure distances in the layout frame, and a polar space
   bends that frame, so dots could still overlap on screen. See
   [#1002](https://github.com/gofish-graphics/gofish-graphics/issues/1002).
@@ -277,7 +278,7 @@ channels; `.translate()` is an outer pixel translation that preserves the
 scatter-computed axis.
 
 ```ts
-chart(seafood, { coord: clock() })
+chart(seafood, { coord: Coord.clock() })
   .flow(
     scatter({
       by: "lake",

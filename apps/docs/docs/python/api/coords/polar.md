@@ -2,7 +2,7 @@
 order: 10
 ---
 
-# polar
+# Coord.polar
 
 Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps to angle (theta) and the y-axis maps to radius.
 
@@ -10,9 +10,9 @@ Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps
 :::
 
 ```python
-from gofish import chart, stack, rect, polar
+from gofish import chart, stack, rect, Coord
 
-chart(seafood, coord=polar()) \
+chart(seafood, coord=Coord.polar()) \
     .flow(stack(by="species", dir="x")) \
     .mark(rect(w="count", fill="species")) \
     .render(w=400, h=300)
@@ -21,7 +21,7 @@ chart(seafood, coord=polar()) \
 ## Signature
 
 ```python
-polar(
+Coord.polar(
     inner_radius: float | None = None,   # donut hole, fraction [0,1) of outer radius
     central_angle: float | None = None,  # total sweep in radians (default 2π)
     start_angle: float | None = None,    # angle (radians) of θ=0 (default π/2)
@@ -53,7 +53,7 @@ Polar also declares its own names for the two axes: `theta` for the angle and
 - in an operator's `dir`, as in `stack(dir="theta")`.
 
 ```python
-chart(data, coord=polar()) \
+chart(data, coord=Coord.polar()) \
     .flow(spread(by="category", dir="theta")) \
     .mark(rect(dims={"theta": {"size": 0.4}, "r": {"size": "value"}},
                em_x=True, em_y=True))
@@ -63,7 +63,7 @@ This is the same chart as `spread(by="category", dir="x")` with
 `rect(w=0.4, h="value", em_x=True, em_y=True)`. The names only work inside a
 coordinate space that declares them; anywhere else, `"theta"` raises an error
 that lists the names you can use there. A coordinate space nested inside polar
-that declares no names, such as `wavy()`, hides them too.
+that declares no names, such as `Coord.wavy()`, hides them too.
 
 Each part of an axis can be set once. `w=0.4` together with
 `dims={"theta": {"size": 0.4}}` is an error, because both set the angular size.
@@ -80,7 +80,7 @@ Pass the coordinate transform to [`chart`](/python/api/core/chart) via the
 `coord` keyword:
 
 ```python
-chart(data, coord=polar()) \
+chart(data, coord=Coord.polar()) \
     .flow(...) \
     .mark(...) \
     .render(w=400, h=300)
@@ -97,23 +97,23 @@ chart(data, coord=polar()) \
 
 ```python
 # Basic polar chart
-chart(data, coord=polar()) \
+chart(data, coord=Coord.polar()) \
     .flow(stack(by="category", dir="x")) \
     .mark(rect(w="value"))
 
 # Polar with spread for radial segments
-chart(data, coord=polar()) \
+chart(data, coord=Coord.polar()) \
     .flow(spread(by="month", dir="x")) \
     .mark(rect(w=1, h="value"))
 
 # Donut: a hollow center (inner radius = 50% of the outer radius)
-chart(data, coord=polar(inner_radius=0.5)) \
+chart(data, coord=Coord.polar(inner_radius=0.5)) \
     .flow(stack(by="category", dir="x")) \
     .mark(rect(w="value"))
 
 # Partial fan: a 270° sweep instead of the full circle
 import math
-chart(data, coord=polar(central_angle=3 * math.pi / 2)) \
+chart(data, coord=Coord.polar(central_angle=3 * math.pi / 2)) \
     .flow(spread(by="month", dir="x")) \
     .mark(rect(w=1, h="value"))
 ```

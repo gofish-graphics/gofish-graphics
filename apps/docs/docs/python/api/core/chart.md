@@ -31,8 +31,8 @@ tier's marks inside [`.layer(...)`](/python/api/core/layer).
 | --------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `data`    | `list[dict]` \| dataframe | The dataset to visualize — a list of dict rows, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/) supports (pandas, polars, pyarrow, a DuckDB relation, ...) — or [`select_all()` / `ref()`](#cross-chart-references) for a layer reference |
 | `axes`    | keyword                   | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                                                                                                               |
-| `coord`   | keyword                   | Coordinate transform, e.g. `coord=clock()`                                                                                                                                                                                                                      |
-| `color`   | keyword                   | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                                                                                                                                                                            |
+| `coord`   | keyword                   | Coordinate transform, e.g. `coord=Coord.clock()`                                                                                                                                                                                                                |
+| `color`   | keyword                   | Color scale applied to all marks — `Color.palette(...)` or `Color.gradient(...)`                                                                                                                                                                                |
 | `legend`  | keyword                   | `False` drops the color legend; the marks keep their colors. Default `True`.                                                                                                                                                                                    |
 | `padding` | keyword                   | Extra SVG padding (px) — useful for polar charts and overflowing labels                                                                                                                                                                                         |
 | `schema`  | keyword                   | Column types, keyed by column name, e.g. `schema={"response": Schema.ordered(LEVELS).diverging()}`. See [`Schema`](/python/api/core/schema).                                                                                                                    |
@@ -40,8 +40,8 @@ tier's marks inside [`.layer(...)`](/python/api/core/layer).
 Chart-level options are passed as keyword arguments:
 
 ```python
-chart(data, color=palette("tableau10"))
-chart(data, color=gradient("blues"), coord=clock())
+chart(data, color=Color.palette("tableau10"))
+chart(data, color=Color.gradient("blues"), coord=Coord.clock())
 ```
 
 Returns a `ChartBuilder` with [`.flow()`](/python/api/core/flow),
@@ -91,7 +91,7 @@ forces the x-axis onto the opposite edge from the default.
 For polar charts, combine with `coord` (and `padding` for label room):
 
 ```python
-chart(seafood, coord=clock(), axes=True, padding=80)
+chart(seafood, coord=Coord.clock(), axes=True, padding=80)
 ```
 
 Per-operator overrides use the same shape on

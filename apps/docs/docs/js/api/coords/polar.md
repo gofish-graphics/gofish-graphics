@@ -2,14 +2,14 @@
 order: 10
 ---
 
-# polar
+# Coord.polar
 
 Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps to angle (theta) and the y-axis maps to radius.
 
 ::: gofish
 
 ```js
-gf.chart(seafood, { coord: gf.polar() })
+gf.chart(seafood, { coord: gf.Coord.polar() })
   .flow(gf.stack({ by: "species", dir: "x" }))
   .mark(gf.rect({ w: "count", fill: "species" }))
   .render(root, {
@@ -24,7 +24,7 @@ gf.chart(seafood, { coord: gf.polar() })
 ## Signature
 
 ```ts
-polar(options?: {
+Coord.polar(options?: {
   innerRadius?: number; // donut hole, fraction [0,1) of outer radius. Default 0
   centralAngle?: number; // total sweep in radians. Default 2π
   startAngle?: number; // angle (radians) of θ=0. Default π/2 (12 o'clock)
@@ -60,7 +60,7 @@ This chart is the one at the top of the page, written with the polar names:
 ::: gofish
 
 ```js
-gf.chart(seafood, { coord: gf.polar() })
+gf.chart(seafood, { coord: gf.Coord.polar() })
   .flow(gf.stack({ by: "species", dir: "theta" }))
   .mark(gf.rect({ dims: { theta: { size: "count" } }, fill: "species" }))
   .render(root, {
@@ -75,7 +75,7 @@ gf.chart(seafood, { coord: gf.polar() })
 The names only work inside a coordinate space that declares them. Outside
 polar, `theta` throws an error that lists the names you can use there. A
 coordinate space nested inside polar that declares no names, such as
-`wavy()`, hides them too.
+`Coord.wavy()`, hides them too.
 
 Each part of an axis can be set once. `w: 0.4` together with
 `dims: { theta: { size: 0.4 } }` is an error, because both set the angular
@@ -86,7 +86,7 @@ A circle's own `r` option is still its radius. The polar `r` axis only appears
 as a key inside `dims`, so the two do not collide:
 
 ```ts
-chart(trips, { coord: polar() })
+chart(trips, { coord: Coord.polar() })
   .flow(scatter({ by: "id", dims: { theta: "bearing", r: "distance" } }))
   .mark(circle({ r: 4 }));
 ```
@@ -96,7 +96,7 @@ chart(trips, { coord: polar() })
 Pass the coordinate transform to `chart()` via the `coord` option:
 
 ```ts
-chart(data, { coord: polar() })
+chart(data, { coord: Coord.polar() })
   .flow(...)
   .mark(...)
   .render(container, opts);
@@ -113,22 +113,22 @@ chart(data, { coord: polar() })
 
 ```ts
 // Basic polar chart
-chart(data, { coord: polar() })
+chart(data, { coord: Coord.polar() })
   .flow(stack({ by: "category", dir: "x" }))
   .mark(rect({ w: "value" }));
 
 // Polar with spread for radial segments
-chart(data, { coord: polar() })
+chart(data, { coord: Coord.polar() })
   .flow(spread({ by: "month", dir: "x" }))
   .mark(rect({ w: 1, h: "value" }));
 
 // Donut: a hollow center (inner radius = 50% of the outer radius)
-chart(data, { coord: polar({ innerRadius: 0.5 }) })
+chart(data, { coord: Coord.polar({ innerRadius: 0.5 }) })
   .flow(stack({ by: "category", dir: "x" }))
   .mark(rect({ w: "value" }));
 
 // Partial fan: a 270° sweep instead of the full circle
-chart(data, { coord: polar({ centralAngle: (3 * Math.PI) / 2 }) })
+chart(data, { coord: Coord.polar({ centralAngle: (3 * Math.PI) / 2 }) })
   .flow(spread({ by: "month", dir: "x" }))
   .mark(rect({ w: 1, h: "value" }));
 ```
