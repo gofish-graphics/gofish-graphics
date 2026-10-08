@@ -1749,7 +1749,7 @@ for the API.
       }
     },
     "CircleMark": {
-      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity) — position it via `spread`/`scatter`.",
+      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity/fillOpacity) — position it via `spread`/`scatter`.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1779,6 +1779,10 @@ for the API.
           "description": "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
           "default": 1
         },
+        "fillOpacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`."
+        },
         "debug": {
           "type": "boolean"
         },
@@ -1803,7 +1807,7 @@ for the API.
       }
     },
     "EllipseMark": {
-      "description": "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).",
+      "description": "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1875,6 +1879,10 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1.",
           "default": 1
+        },
+        "fillOpacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`."
         },
         "aspectRatio": {
           "$ref": "#/$defs/Number",
