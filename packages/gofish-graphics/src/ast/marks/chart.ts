@@ -10,7 +10,7 @@ import {
 import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
 import { getValue, type MaybeValue, type Value } from "../data";
-import type { FieldExpr } from "../fieldExpr";
+import { predicateWire, type FieldExpr } from "../fieldExpr";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
 import type { Token } from "../createName";
@@ -123,12 +123,18 @@ export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
  * a single row (or a ref) has nothing to filter, and throwing there would make
  * the operator unusable in a nested pipeline.
  *
- * Serialization: the predicate is a live JS callback, so this operator IS a
- * `derive` — it is defined as one below, and so carries `derive`'s
- * `{ type: "derive" }` tag on the wire.
+ * Serialization: a field predicate carries its own description, so the
+ * operator goes on the wire as `{ type: "filter", predicate: { field,
+ * between: [lo, hi], closed? } }` and the deserializer rebuilds it. A
+ * hand-written predicate is a live JS callback with no JSON form, so that
+ * filter is a `derive` and carries `derive`'s opaque `{ type: "derive" }` tag.
  */
 export function filter<T>(pred: (row: T) => boolean): Operator<T[], T[]> {
-  return derive<T[], T[]>((d) => (Array.isArray(d) ? d.filter(pred) : d));
+  const keep = (d: T[]) => (Array.isArray(d) ? d.filter(pred) : d);
+  const predicate = predicateWire(pred);
+  return predicate !== undefined
+    ? mapOperator(keep, { type: "filter", opts: { predicate } })
+    : derive(keep);
 }
 
 // return an array of copies of `d` repeated `d.field` times

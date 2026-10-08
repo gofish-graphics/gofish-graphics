@@ -130,14 +130,20 @@ the auto-naming + `selectAll` wiring at resolve time — the producer's
 auto-minted layer name never appears in the IR (mirroring how a relational
 mark's zBelow-by-default paint order stays a resolve-time constraint rather
 than a serialized field). Operators are a flat list (`derive`, `resolve`,
-`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
+`join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
 `pack`). `pack`'s `method` is a strategy object made by a function call
 (`circles()` in both languages), so on the wire it is plain data,
 `{ "kind": "circles" }`, and the JS layout dispatches on `kind`. `treemap`'s
 `tile` works the same way (`squarify({ ratio })`, `slice()`, `dice()`,
 `binary()`, `sliceDice()`; e.g. `{ "kind": "squarify", "ratio": 1 }`). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
-without a bridge. Marks are a tree — leaves
+without a bridge. `filter` round-trips the same way when its predicate is a
+field predicate: `field(name).between(lo, hi, { closed })` returns a row
+predicate that also carries its description, so the operator goes on the wire
+as `{ "type": "filter", "predicate": { "field": "day", "between": [100, 120],
+"closed": "right" } }`. The predicate is its own value, not an op in the field
+expression's `ops`. A `filter` over a hand-written JS predicate has no wire
+form and emits the opaque `derive`. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
@@ -629,7 +635,8 @@ It emits:
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 
-`derive`/`resolve`/`join` (real RPC-bridge/ref-shape/DataFrame logic) and
+`derive`/`resolve`/`join`/`filter` (real RPC-bridge/ref-shape/DataFrame/
+predicate logic) and
 `palette`/`gradient`/`field`/`datum`/`normalize`/`repeat`/`ref`/`select_all`
 (not in the descriptor table at all) stay fully hand-written in `ast.py`,
 alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
@@ -684,11 +691,13 @@ combinator mark is `factory(opts, children)`. A dual-form construct such as
 wire types map to their renamed factories (`inside` to `intersect`, and so on).
 Only an `OPERATOR_BUILDERS` entry sees the bridge.
 
-Four operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
+Five operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
 their IR is not their factory's options object: `derive` (it calls a Python
 lambda through the bridge and puts back the rows' measure provenance),
 `resolve` (the IR names a layer, the factory takes a selection), `join` and
-`log` (their factories take positional arguments). `mark-fn`, `cut`,
+`log` (their factories take positional arguments), and `filter` (the IR
+describes a field predicate, the factory takes the predicate function, which
+`fieldPredicate` builds from that description). `mark-fn`, `cut`,
 `offset` and `ref` are rebuilt structurally in `fromJSON.ts`'s `mapMark`.
 The serialize test fails when a descriptor has no factory or a factory has no
 descriptor.

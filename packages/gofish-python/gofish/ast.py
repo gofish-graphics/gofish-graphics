@@ -2848,6 +2848,64 @@ class FieldAccessor(dict):
         field. Valid only in a value (size/pos) slot."""
         return self._with_op({"op": "distinct"})
 
+    def between(
+        self, lo: float, hi: float, *, closed: Optional[str] = None
+    ) -> "FieldPredicate":
+        """A row predicate for :func:`filter`: is this field's value in
+        ``[lo, hi]``? ``closed`` picks which ends are inclusive (``"both"``,
+        the default, ``"left"``, ``"right"`` or ``"none"``), as in polars'
+        ``is_between``.
+
+        Not a pipeline op. Mirrors JS ``field(name).between(lo, hi,
+        { closed })``, which returns a predicate rather than appending to
+        ``ops``, so it raises when the expression already carries ops: the
+        predicate would test the raw field and silently drop them.
+        """
+        ops = self.get("ops", [])
+        if ops:
+            names = ", ".join(op["op"] for op in ops)
+            raise ValueError(
+                f'field("{self["name"]}").between(...) does not apply the '
+                f"expression pipeline ({names}): a predicate is not a value "
+                "slot. Filter on the raw field, or derive the binned/sorted "
+                "column first."
+            )
+        pred = FieldPredicate(field=self["name"], between=[lo, hi])
+        if closed is not None:
+            pred["closed"] = closed
+        return pred
+
+
+class FieldPredicate(dict):
+    """The ``{field, between: [lo, hi], closed?}`` wire shape of a field
+    predicate, built by ``field(name).between(lo, hi, closed=...)`` and
+    consumed by :func:`filter`. It is data, so a filter over it crosses to JS
+    with no callback."""
+
+
+def filter(
+    predicate: Union[FieldPredicate, Callable[[dict], bool]],
+) -> Operator:
+    """Keep the rows a predicate accepts, and drop the rest.
+
+    Mirrors JS ``filter(pred)``. A field predicate,
+    ``field("day").between(100, 120, closed="right")``, goes on the wire as
+    ``{type: "filter", predicate}``. A plain Python function of one row is a
+    callback, so that filter is a :func:`derive` and runs in Python, like
+    JS's ``filter`` over a hand-written predicate.
+
+    Returns:
+        Operator object for use inside ``.flow()``.
+    """
+    if isinstance(predicate, FieldPredicate):
+        return Operator("filter", predicate=dict(predicate))
+    if callable(predicate):
+        return derive(lambda rows: [row for row in rows if predicate(row)])
+    raise TypeError(
+        "filter(...) expects field(name).between(lo, hi) or a function of one "
+        f"row, got {type(predicate).__name__}"
+    )
+
 
 def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
     """

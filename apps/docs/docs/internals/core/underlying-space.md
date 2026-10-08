@@ -1804,6 +1804,12 @@ is a lambda around the bare-value form, exported as
 `between(v, lo, hi, { closed })` — which is also the loose-ends spelling of
 `contains` in `util/interval.ts`.
 
+The predicate still serializes. It carries its description
+`{ field, between: [lo, hi], closed? }` beside the function (`fieldPredicate`
+builds both from that description), and `filter` puts it on the wire as
+`{ type: "filter", predicate }`. The description travels with the operator,
+never in the expression's `ops`, so the three slots stay as they are.
+
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
 called `sumBy`/`meanBy` over the raw per-row values; it now instead calls

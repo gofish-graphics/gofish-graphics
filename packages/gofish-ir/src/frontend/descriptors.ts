@@ -535,6 +535,33 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     },
   }),
 
+  filter: operator("filter", {
+    doc: "Keep the rows a field predicate accepts (`filter(field(name).between(lo, hi, { closed }))`). A filter over a hand-written predicate has no wire form and serializes as an opaque `derive`.",
+    fields: {
+      predicate: {
+        type: t.object({
+          field: {
+            type: t.string,
+            required: true,
+            doc: "The field whose value is tested.",
+          },
+          between: {
+            type: t.tuple(t.number, t.number),
+            required: true,
+            doc: "The interval's ends, `[lo, hi]`, compared by value.",
+          },
+          closed: {
+            type: t.enum("both", "left", "right", "none"),
+            default: "both",
+            doc: "Which ends of the interval are inclusive, as in polars' `is_between`.",
+          },
+        }),
+        required: true,
+        doc: "The field predicate `field(name).between(lo, hi, { closed })` builds: `{ field, between: [lo, hi], closed? }`.",
+      },
+    },
+  }),
+
   spread: operator("spread", {
     doc: "Arrange children along `dir` with spacing, aligning them on the cross axis.",
     fields: {

@@ -1,3 +1,7 @@
+---
+order: 135
+---
+
 # filter
 
 Keeps the rows a predicate accepts, and drops the rest. It sits in `.flow()`
@@ -21,20 +25,29 @@ gf.chart(seafood, { axes: true })
 ## Signature
 
 ```ts
-filter(pred);
+filter(predicate);
 ```
 
 ## Parameters
 
-| Parameter | Type                  | Description               |
-| --------- | --------------------- | ------------------------- |
-| `pred`    | `(row: T) => boolean` | Kept when it returns true |
+`predicate` is a row predicate, `(row) => boolean`. Write it by hand, or build
+it from a field expression with
+[`field(name).between(lo, hi, { closed })`](/js/api/operators/spread#field-expression-pipeline).
+Its bounds are plain numbers, and it throws if the expression carries pipeline
+ops (`field("x").bin(10).between(...)`), which would otherwise test the raw
+field: a predicate is not a value slot.
 
-The predicate can be written by hand, or built from a field expression —
-[`field(name).between(lo, hi)`](/js/api/operators/spread#field-expression-pipeline)
-returns exactly this shape. Its bounds are plain numbers, and it throws if the
-expression carries pipeline ops (`field("x").bin(10).between(...)`), which would
-otherwise test the raw field: a predicate is not a value slot.
+A field predicate also carries its own description, so a `filter` over one
+serializes. This table lists the fields of that serialized form:
+
+::: gofish-ref filter
+:::
+
+A hand-written predicate is a JavaScript function, which has no serialized
+form, so a `filter` over one serializes as an opaque
+[`derive`](/js/api/operators/derive).
+
+Returns an `Operator` for use inside [`.flow()`](/js/api/core/flow).
 
 ## Examples
 
@@ -75,6 +88,8 @@ extent and nothing else. Two ways to hold the scales still:
 
 ## Python
 
-`filter` is JavaScript only. Its predicate is a live JavaScript function with
-nothing to put on the wire, the same reason `derive`'s callback does not cross
-the bridge.
+`filter` is also in Python. A field predicate,
+`field("day").between(100, 120, closed="right")`, crosses to JavaScript as
+data. A Python function of one row runs in your kernel, as a
+[`derive`](/python/api/operators/derive) does. See the
+[Python `filter`](/python/api/operators/filter) page.

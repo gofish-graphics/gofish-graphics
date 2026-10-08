@@ -62,6 +62,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   derive: ["lambdaId", "provenance"],
   resolve: ["cols", "from", "key"],
   join: ["on", "right"],
+  filter: ["predicate"],
   spread: [
     "by",
     "dir",

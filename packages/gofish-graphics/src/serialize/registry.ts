@@ -24,6 +24,7 @@ import {
   blank,
   circle,
   derive,
+  filter,
   resolve as resolveOp,
   join as joinOp,
   selectAll,
@@ -65,6 +66,7 @@ import { pack } from "../ast/graphicalOperators/pack";
 import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
 import { offset as offsetOp } from "../ast/graphicalOperators/offset";
 import { setMeasureProvenance, type MeasureProvenance } from "../ast/data";
+import { fieldPredicate } from "../ast/fieldExpr";
 import { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
@@ -205,6 +207,9 @@ export const OPERATOR_BUILDERS: Record<
       key: opts.key as string | undefined,
     });
   },
+  // The IR carries the field predicate as data; the factory takes the
+  // predicate function `field(name).between(...)` builds from it.
+  filter: (opts) => filter(fieldPredicate(opts.predicate)),
   // The factory takes the right-hand table as its first argument.
   join: (opts) => joinOp(opts.right as any[], { on: opts.on as string }),
   // The factory takes the prefix as its only argument.

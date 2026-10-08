@@ -361,6 +361,42 @@ check(
 );
 
 check(
+  "filter with a field predicate accepts",
+  validate(
+    chart([
+      {
+        type: "filter",
+        predicate: { field: "day", between: [100, 120], closed: "right" },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "filter predicate with a non-numeric bound rejected",
+  !validate(
+    chart([{ type: "filter", predicate: { field: "day", between: [1, "x"] } }])
+  ).valid
+);
+
+check(
+  "filter predicate with an unknown closed rejected",
+  !validate(
+    chart([
+      {
+        type: "filter",
+        predicate: { field: "day", between: [1, 2], closed: "open" },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "filter without a predicate rejected",
+  !validate(chart([{ type: "filter" }])).valid
+);
+
+check(
   "derive with non-string lambdaId rejected",
   !validate(chart([{ type: "derive", lambdaId: 42 }])).valid
 );
