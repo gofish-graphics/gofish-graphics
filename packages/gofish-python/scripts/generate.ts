@@ -291,7 +291,36 @@ function wireShape(type: FieldType, where: string): string | null {
  *  keys renamed by `_to_wire`. */
 function wireValue(py: string, spec: FieldSpec): string {
   const shape = wireShape(spec.type, py);
-  return shape === null ? py : `_to_wire(${shape}, ${py}, ${pyStr(py)})`;
+  const wired = shape === null ? py : `_to_wire(${shape}, ${py}, ${pyStr(py)})`;
+  return carriesChannel(spec.type) ? `_channel(${wired})` : wired;
+}
+
+/** Whether a value of this type may hold a channel at some depth: the only
+ *  places a Python callable is an accessor the JS side resolves. Each
+ *  generated function wraps those values with `_channel`; a callable left in
+ *  any other option is a TypeError (`Mark` / `Operator` check it). */
+function carriesChannel(type: FieldType): boolean {
+  switch (type.kind) {
+    case "channel":
+      return true;
+    case "union":
+      return type.options.some(carriesChannel);
+    case "array":
+      return carriesChannel(type.items);
+    case "tuple":
+      return type.items.some(carriesChannel);
+    case "record":
+      return carriesChannel(type.valueType);
+    case "object":
+      return Object.values(type.fields).some((f) => carriesChannel(f.type));
+    case "ref":
+      return (
+        type.name in OPTION_TYPES &&
+        carriesChannel(OPTION_TYPES[type.name].type)
+      );
+    default:
+      return false;
+  }
 }
 
 /** The `(wireKey, value)` pair lines a generated function loops over to
@@ -536,7 +565,7 @@ for (const name of GENERATED_LEAF_MARKS) {
     pairs,
     `    ]:`,
     `        if _v is not None:`,
-    `            _kw[_k] = _channel(_v)`,
+    `            _kw[_k] = _v`,
   ];
   bodyLines.push(`    return Mark(${pyStr(d.type)}, **_kw)`);
   parts.push(

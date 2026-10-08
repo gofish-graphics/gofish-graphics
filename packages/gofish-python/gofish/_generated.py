@@ -133,19 +133,19 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
         ("emX", em_x),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
         ("emY", em_y),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
-        ("fill", fill),
-        ("stroke", stroke),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
         ("filter", filter),
@@ -155,7 +155,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         ("aspectRatio", aspect_ratio),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("rect", **_kw)
 
 def circle(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None) -> Mark:
@@ -184,26 +184,26 @@ def circle(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] 
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
         ("emX", em_x),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
         ("emY", em_y),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
-        ("r", r),
-        ("fill", fill),
-        ("stroke", stroke),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("r", _channel(r)),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
         ("fillOpacity", fill_opacity),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("circle", **_kw)
 
 def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
@@ -232,26 +232,26 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]]
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
         ("emX", em_x),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
         ("emY", em_y),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
-        ("fill", fill),
-        ("stroke", stroke),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
         ("fillOpacity", fill_opacity),
         ("aspectRatio", aspect_ratio),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("ellipse", **_kw)
 
 def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None) -> Mark:
@@ -277,23 +277,23 @@ def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
         ("emX", em_x),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
         ("emY", em_y),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
-        ("fill", fill),
-        ("stroke", stroke),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("petal", **_kw)
 
 def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, filter: Optional[str] = None, font_size: Optional[float] = None, font_family: Optional[str] = None, font_style: Optional[str] = None, font_weight: Optional[Union[float, str]] = None, debug_bounding_box: Optional[bool] = None, rotate: Optional[float] = None, text_anchor: Optional[str] = None) -> Mark:
@@ -329,21 +329,21 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
         ("emX", em_x),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
         ("emY", em_y),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("key", key),
-        ("text", text),
-        ("fill", fill),
-        ("stroke", stroke),
+        ("text", _channel(text)),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
         ("filter", filter),
         ("fontSize", font_size),
@@ -355,7 +355,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         ("textAnchor", text_anchor),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("text", **_kw)
 
 def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
@@ -383,17 +383,17 @@ def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
         ("emX", em_x),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
         ("emY", em_y),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("key", key),
         ("href", href),
         ("filter", filter),
@@ -401,7 +401,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         ("preserveAspectRatio", preserve_aspect_ratio),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("image", **_kw)
 
 def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
@@ -419,13 +419,13 @@ def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = 
     for _k, _v in [
         ("debug", debug),
         ("points", points),
-        ("fill", fill),
-        ("stroke", stroke),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("polygon", **_kw)
 
 def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, fill: Optional[str] = None) -> Mark:
@@ -444,12 +444,12 @@ def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Op
         ("debug", debug),
         ("emX", em_x),
         ("emY", em_y),
-        ("w", w),
-        ("h", h),
-        ("fill", fill),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("fill", _channel(fill)),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("blank", **_kw)
 
 
@@ -569,8 +569,8 @@ def position(children: List["Mark"], *, key: Optional[str] = None, x: Optional[U
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
         ("key", key),
-        ("x", x),
-        ("y", y),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
     ]:
         if _v is not None:
             kwargs[_k] = _v
@@ -643,11 +643,11 @@ def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing
         ("reverse", reverse),
         ("glue", glue),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("x", x),
-        ("y", y),
-        ("w", w),
-        ("h", h),
-        ("size", size),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("size", _channel(size)),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -684,11 +684,11 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
         ("anchor", anchor),
         ("reverse", reverse),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("x", x),
-        ("y", y),
-        ("w", w),
-        ("h", h),
-        ("size", size),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("size", _channel(size)),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -716,18 +716,18 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
-        ("x", x),
-        ("y", y),
-        ("xMin", x_min),
-        ("xMax", x_max),
-        ("yMin", y_min),
-        ("yMax", y_max),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("xMin", _channel(x_min)),
+        ("xMax", _channel(x_max)),
+        ("yMin", _channel(y_min)),
+        ("yMax", _channel(y_max)),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("alignment", alignment),
         ("overlap", _to_wire(("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}), overlap, "overlap")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("w", w),
-        ("h", h),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -790,18 +790,18 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("x", x),
-        ("y", y),
-        ("w", w),
-        ("h", h),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("spacing", spacing),
         ("padding", padding),
         ("round", round),
         ("tile", _to_wire(("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "sliceDice": ("object", {"kind": ("kind", None)})}), tile, "tile")),
         ("sort", sort),
-        ("size", size),
+        ("size", _channel(size)),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -847,18 +847,18 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("x", x),
-        ("y", y),
-        ("w", w),
-        ("h", h),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("spacing", spacing),
         ("padding", padding),
         ("round", round),
         ("tile", _to_wire(("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "sliceDice": ("object", {"kind": ("kind", None)})}), tile, "tile")),
         ("sort", sort),
-        ("size", size),
+        ("size", _channel(size)),
         ("key", key),
         ("debug", debug),
     ]:
@@ -895,17 +895,17 @@ def _spread_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: O
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
         ("emX", em_x),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
         ("emY", em_y),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
         ("spacing", spacing),
@@ -915,7 +915,7 @@ def _spread_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: O
         ("reverse", reverse),
         ("glue", glue),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("size", size),
+        ("size", _channel(size)),
         ("key", key),
         ("debug", debug),
     ]:
@@ -952,17 +952,17 @@ def _stack_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: Op
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
         ("emX", em_x),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
         ("emY", em_y),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
         ("spacing", spacing),
@@ -972,7 +972,7 @@ def _stack_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: Op
         ("anchor", anchor),
         ("reverse", reverse),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("size", size),
+        ("size", _channel(size)),
         ("key", key),
         ("debug", debug),
     ]:
@@ -1033,7 +1033,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("fill", fill),
+        ("fill", _channel(fill)),
         ("stroke", stroke),
         ("strokeWidth", stroke_width),
         ("strokeDasharray", stroke_dasharray),
@@ -1048,8 +1048,8 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         ("along", along),
         ("emX", em_x),
         ("emY", em_y),
-        ("w", w),
-        ("h", h),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -1076,7 +1076,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("fill", fill),
+        ("fill", _channel(fill)),
         ("stroke", stroke),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
@@ -1088,8 +1088,8 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         ("along", along),
         ("emX", em_x),
         ("emY", em_y),
-        ("w", w),
-        ("h", h),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -1119,17 +1119,17 @@ def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Unio
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
         ("emX", em_x),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
         ("emY", em_y),
-        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("key", key),
         ("coord", coord),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),

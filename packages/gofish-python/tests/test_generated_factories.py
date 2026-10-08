@@ -321,6 +321,24 @@ def test_callables_nested_in_options_bridge_at_any_depth():
     json.dumps(od)
 
 
+def test_a_callable_outside_a_channel_is_a_type_error():
+    # Only channel options become accessors the JS side resolves. A callable
+    # anywhere else (a grouping key, a direction) has no meaning on the wire,
+    # so it fails at construction rather than grouping one row per group.
+    for make in (
+        lambda: spread(by=lambda d: d["a"], dir="x"),
+        lambda: stack(by=lambda d: d["a"], dir="y"),
+        lambda: group(by=lambda d: d["a"]),
+        lambda: treemap(by=lambda d: d["a"]),
+        lambda: rect(h="v", rx=lambda d: 2),
+    ):
+        with pytest.raises(TypeError, match="only channel options take a function"):
+            make()
+    # Channel options still take one.
+    assert "__gofish_lambda" in rect(h=lambda d: d["v"]).to_dict()["h"]
+    assert "__gofish_lambda" in spread(by="a", dir="x", w=lambda d: 1).to_dict()["w"]
+
+
 def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():
     # Python kwargs are snake_case; the IR keeps the camelCase wire keys.
     assert text(text="hi", font_size=12, text_anchor="start").to_dict() == {

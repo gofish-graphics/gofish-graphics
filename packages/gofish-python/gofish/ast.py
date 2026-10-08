@@ -18,9 +18,10 @@ class Operator:
 
     def __init__(self, op_type: str, **kwargs):
         self.op_type = op_type
-        # A callable anywhere in an option value becomes an accessor the
-        # derive RPC bridge serves, as on a mark (see `_channel`).
-        self.kwargs = {k: _channel(v) for k, v in kwargs.items()}
+        # A callable in a channel option was wrapped as an accessor by the
+        # factory (`_channel`); one anywhere else has no meaning on the wire.
+        _reject_callables(op_type, kwargs)
+        self.kwargs = kwargs
         self._translate: Optional[dict] = None
         # One entry per `.label(accessor, options?)` call, in call order —
         # repeated calls append rather than overwrite. Mirrors JS
@@ -245,6 +246,43 @@ def _channel(v: Any) -> Any:
     return v
 
 
+def _callable_path(v: Any, path: str) -> Optional[str]:
+    """The path of the first raw callable in an option value, walking the same
+    plain dicts, lists and tuples as `_channel`, or None."""
+    if isinstance(v, _PendingAccessor):
+        return None
+    if type(v) is dict:
+        for k, x in v.items():
+            found = _callable_path(x, f"{path}[{k!r}]")
+            if found is not None:
+                return found
+        return None
+    if type(v) in (list, tuple):
+        for i, x in enumerate(v):
+            found = _callable_path(x, f"{path}[{i}]")
+            if found is not None:
+                return found
+        return None
+    return path if callable(v) else None
+
+
+def _reject_callables(construct: str, options: Dict[str, Any]) -> None:
+    """Raise TypeError for a callable in an option that is not a channel.
+
+    A Python callable crosses to JS only as a channel accessor, which the
+    generated factories wrap with `_channel` for the options the descriptor
+    declares as channels. Anywhere else (a `by`, a `dir`, ...) the JS side
+    would get an RPC handle it does not resolve, so it fails loudly here.
+    """
+    for key, value in options.items():
+        found = _callable_path(value, key)
+        if found is not None:
+            raise TypeError(
+                f"{construct}: {found} is a function, but only channel options "
+                f"take a function. Pass a field name or a field(...) accessor."
+            )
+
+
 def _accessors_in(v: Any):
     """Yield every `_PendingAccessor` in an option value, at any depth of its
     plain dicts, lists and tuples (the same structure `_channel` walks)."""
@@ -367,6 +405,8 @@ class Mark:
         **kwargs,
     ):
         self.mark_type = mark_type
+        # As on Operator: only channel options may hold a callable.
+        _reject_callables(mark_type, kwargs)
         self.kwargs = kwargs
         self._name: Optional[Union[str, "Token"]] = None
         # One entry per `.label(accessor, options?)` call, in call order —
