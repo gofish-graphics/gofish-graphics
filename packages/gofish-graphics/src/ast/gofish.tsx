@@ -384,7 +384,6 @@ export async function layout(
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
     timeRows: perDimAxisOption(axes, "rows"),
-    axisLengths: [w ?? DEFAULT_CANVAS_SIZE, h ?? DEFAULT_CANVAS_SIZE],
   });
   if (elaborated.changed) {
     child = elaborated.node;

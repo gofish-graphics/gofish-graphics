@@ -87,7 +87,7 @@ polars' `dt` fields.
   left out.
 - Rows need not nest: `[Calendar.week, Calendar.month]` is valid.
 - The first row sits next to the axis line, and each further row sits past
-  the one before it. The ticks of the outer rows are longer.
+  the one before it. An outer-row tick that falls between inner ticks is longer.
 - Without `rows`, the axis has two rows. The inner row gives about 10
   ticks over the data, as a numeric axis does: it is the level and step
   whose cells are nearest in length to a tenth of the data's span, out of

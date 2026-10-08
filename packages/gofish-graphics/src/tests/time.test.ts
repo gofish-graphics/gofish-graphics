@@ -28,7 +28,6 @@ import {
 } from "../ast/schema";
 import {
   defaultTimeRows,
-  labelsWithRoom,
   rowLabels,
   timeRowsFromOption,
 } from "../ast/axes/timeRows";
@@ -405,21 +404,6 @@ async function main() {
           ["2025", "2025-01-01"],
         ]
       )
-    );
-    const lo = Date.UTC(2024, 0, 1);
-    const hi = Date.UTC(2024, 0, 8);
-    const crowded = labelsWithRoom(
-      rowLabels({ partition: Calendar.day }, lo, hi, "UTC"),
-      100 / (hi - lo),
-      textWidth
-    );
-    check(
-      "a label within 5px of the last kept one is dropped",
-      same(
-        crowded.map((l) => l.text),
-        ["Jan 1", "Jan 4", "Jan 7"]
-      ),
-      crowded.map((l) => l.text).join(" ")
     );
   }
 

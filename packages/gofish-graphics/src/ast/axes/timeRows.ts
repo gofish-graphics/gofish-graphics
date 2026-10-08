@@ -55,9 +55,6 @@ export type TimeRow = { partition: CalendarPartition; format?: CellFormat };
  *  before the domain), and its cell. */
 export type TimeLabel = { at: number; text: string; cell: CalendarCell };
 
-/** The least room between two labels of a row, in pixels. */
-const LABEL_CLEARANCE = 5;
-
 /** Read `axes.<dim>.rows` (inner first) into rows. An entry that is not a
  *  Calendar value is a loud error. */
 export function timeRowsFromOption(
@@ -141,29 +138,4 @@ export function rowTicks(
     .cells(lo, hi, zone)
     .map((c) => c.start)
     .filter((t) => t >= lo && t <= hi);
-}
-
-/**
- * The labels of a row that have room, first to last: a label is dropped
- * when it comes within {@link LABEL_CLEARANCE} pixels of the last label
- * kept, both centered on their ticks. `pxPerMs` is the axis's pixels per
- * millisecond, and `extent` measures a label along the axis (its width on
- * x, its height on y). A label at either end of the axis may overhang it,
- * as a numeric axis's labels do.
- */
-export function labelsWithRoom(
-  labels: TimeLabel[],
-  pxPerMs: number,
-  extent: (s: string) => number
-): TimeLabel[] {
-  const kept: TimeLabel[] = [];
-  for (const l of labels) {
-    const last = kept[kept.length - 1];
-    const room =
-      last === undefined
-        ? Infinity
-        : (l.at - last.at) * pxPerMs - (extent(last.text) + extent(l.text)) / 2;
-    if (room >= LABEL_CLEARANCE) kept.push(l);
-  }
-  return kept;
 }

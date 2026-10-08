@@ -41,7 +41,6 @@ import {
 } from "../axisDirection";
 import {
   defaultTimeRows,
-  labelsWithRoom,
   rowLabels,
   rowTicks,
   timeRowsFromOption,
@@ -567,9 +566,9 @@ function elaborateContinuousAxis(
  * partition: its cells' starts are its ticks, and each label is centered on
  * its cell's start tick, as a numeric axis's labels are. Row 0 (the inner
  * row) sits past the ticks, as a continuous axis's labels do, and each
- * further row sits past the one before it. The inner row's ticks are short;
- * an outer row's are longer, so its boundaries stand out (where two rows
- * share a tick, it is drawn once, long).
+ * further row sits past the one before it. Each tick is drawn once. A tick the
+ * inner row has is short; an outer-row tick that falls between inner ticks
+ * is longer, so it stands out.
  *
  * `nice` is the axis's domain, niced outward to the cells of the inner row
  * (`niceContinuous` with the axis's `ticks`, the same nicing its scope's
@@ -579,13 +578,8 @@ function elaborateContinuousAxis(
  * (`axes.x.rows`), else the inner row the domain picks
  * (`axisTickPartition`) and its parent level.
  *
- * A label is dropped when it comes within 5px of the last label kept in its row
- * (`labelsWithRoom`). Telling that needs the axis's pixel length before
- * layout: `axisLength`.
- * TODO(#1073): `axisLength` is the chart's canvas size on this dim, which is
- * the axis's length for an axis the chart root owns, but an overestimate for
- * an axis owned by a facet. It decides only which labels are dropped, never
- * the ticks or the domain.
+ * Like a numeric axis, a time axis labels every tick and never drops a
+ * label; choosing ticks from the labels' room is #1063.
  */
 function elaborateTimeAxis(
   dim: 0 | 1,
@@ -595,33 +589,28 @@ function elaborateTimeAxis(
   prefix: string,
   crossFloor: number | undefined,
   side: "start" | "end",
-  rowsOption: TimeRow[] | undefined,
-  axisLength: number
+  rowsOption: TimeRow[] | undefined
 ): AxisElaboration {
   const [lo, hi] = nice;
   const zone = space.calendar!.zone;
   const font = (t: string) =>
     estimateTextDimensions(t, LABEL_FONT_SIZE, LABEL_FONT_FAMILY);
   const textWidth = (t: string) => font(t).width;
-  // A label's length along the axis: its width on x, its height on y.
-  const extent = dim === 0 ? textWidth : (t: string) => font(t).height;
-  const pxPerMs = hi > lo ? axisLength / (hi - lo) : 0;
   const rows = rowsOption ?? defaultTimeRows(axisTickPartition(space, ticks));
 
-  // Ticks: every row's cell starts, each drawn once, long if an outer row
-  // has it.
+  // Ticks: every row's cell starts, each drawn once. A tick the inner row
+  // has is short; only an outer-row tick that falls between inner ticks is
+  // long, so it stands out from the inner ticks around it.
   const tickLen = new Map<number, number>();
   rows.forEach((row, i) => {
     for (const t of rowTicks(row, lo, hi, zone)) {
-      const len = i === 0 ? TICK_LEN : TIME_OUTER_TICK_LEN;
-      tickLen.set(t, Math.max(tickLen.get(t) ?? 0, len));
+      if (!tickLen.has(t))
+        tickLen.set(t, i === 0 ? TICK_LEN : TIME_OUTER_TICK_LEN);
     }
   });
   const tickValues = [...tickLen.keys()].sort((a, b) => a - b);
 
-  const labels = rows.map((row) =>
-    labelsWithRoom(rowLabels(row, lo, hi, zone), pxPerMs, extent)
-  );
+  const labels = rows.map((row) => rowLabels(row, lo, hi, zone));
   // How far each row sits past the line: the ticks and gap, then every row
   // before it. A row's depth across the axis is its labels' height (x) or
   // its widest label (y).
@@ -862,7 +851,7 @@ function elaborationsFor(
   sides: AxisSides,
   labelSettings: LabelRowSettings = () => undefined,
   tierCounts: [number, number] = [0, 0],
-  timeOptions: Pick<ChromeOptions, "timeRows" | "axisLengths"> = {}
+  timeOptions: Pick<ChromeOptions, "timeRows"> = {}
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -978,8 +967,7 @@ function elaborationsFor(
         prefix,
         crossFloor,
         axisSide(dim),
-        rowsOption && timeRowsFromOption(rowsOption, dirName(dim)),
-        timeOptions.axisLengths?.[dim] ?? 400
+        rowsOption && timeRowsFromOption(rowsOption, dirName(dim))
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
@@ -1073,9 +1061,6 @@ export type ChromeOptions = {
   labelSettings?: LabelRowSettings;
   /** Per-dim `rows` of a time axis (`AxisOptions.rows`), as authored. */
   timeRows?: [TimeRowOption[] | undefined, TimeRowOption[] | undefined];
-  /** Per-dim length (px) a time axis assumes when it drops labels that have
-   *  no room: the chart's canvas size on that dim (see `elaborateTimeAxis`). */
-  axisLengths?: [number, number];
 };
 
 /**

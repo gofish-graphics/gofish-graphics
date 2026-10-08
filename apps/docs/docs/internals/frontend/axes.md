@@ -386,17 +386,13 @@ difference axis), never off the size claim:
   An outer row's first cell may start before the domain: its label is
   centered on the axis's first tick, under the inner row's first label
   ("2023" under "Nov"). A cell starting at the domain's end is labeled at
-  the last tick. A label within 5px of the last label kept in its row is
-  dropped (`labelsWithRoom`); that needs pixels before layout, so it takes
-  the axis's length to be the chart's canvas size on that dim
-  (`ChromeOptions.axisLengths`), exact for an axis the root owns and an
-  overestimate for a facet's (TODO #1073). It decides only which labels are dropped,
-  never the ticks or the domain. Rows stack outward from the
+  the last tick. Like a numeric axis, it labels every tick and never drops
+  a label; choosing ticks from the labels' room is #1063. Rows stack outward from the
   line by a fixed offset each, the row's text height (its widest label on a
   y axis) plus a gap, so the axis emits all its rows in one elaboration
   rather than going through the ordinal tiers. Rows are independent
   partitions, so they need not nest. A tick both rows share is drawn once,
-  with the outer row's longer length. `axes.x.rows` sets the rows; without
+  short; an outer-row tick between inner ticks is longer. `axes.x.rows` sets the rows; without
   them the inner row is the level and step whose cells are nearest in
   length to a tenth of the domain (`tickPartition` in `calendar.ts`, like
   d3's time ticks, and like a numeric axis's ~10 ticks), and the outer row
