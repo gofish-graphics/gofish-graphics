@@ -12,19 +12,13 @@ PENGUINS_URL = "https://vega.github.io/vega-datasets/data/penguins.json"
 def story_default():
     raw = pd.read_json(PENGUINS_URL)
     cleaned = raw.dropna(subset=["Flipper Length (mm)", "Body Mass (g)", "Species"])
-    penguins = cleaned.reset_index(drop=True).to_dict("records")
-    for i, row in enumerate(penguins):
-        row["id"] = i
-
-    species_list = []
-    seen = set()
-    for row in penguins:
-        if row["Species"] not in seen:
-            seen.add(row["Species"])
-            species_list.append(row["Species"])
+    # Pass the DataFrame, not to_dict("records"): records turn a missing
+    # "Sex" into NaN, a number in a text column, which chart() rejects.
+    penguins = cleaned.reset_index(drop=True)
+    penguins["id"] = penguins.index
 
     charts = [
-        chart([row for row in penguins if row["Species"] == species])
+        chart(penguins[penguins["Species"] == species].reset_index(drop=True))
         .flow(
             scatter(
                 by="id",
@@ -40,7 +34,7 @@ def story_default():
                 stroke_width=3,
             )
         )
-        for species in species_list
+        for species in penguins["Species"].unique()
     ]
 
     return (
