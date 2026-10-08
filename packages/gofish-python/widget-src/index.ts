@@ -11,14 +11,16 @@
  *
  * The deserializer (mapMark/mapOperator/buildChart and friends) lives in
  * `gofish-graphics/serialize`. This file retains only the widget-bridge
- * concerns: WidgetModel I/O, Arrow encoding for the bridge transport,
- * and the render entry points.
+ * concerns: WidgetModel I/O, the Arrow transport (encoding in
+ * `arrowTransport.ts`, decoding in `arrowDecode.ts`, which the parity
+ * harness shares), and the render entry points.
  */
 
 import * as Arrow from "apache-arrow";
 import { Serialize, serializeSVG, type View } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
+import { arrowBytesToRows } from "./arrowDecode";
 
 // Type aliases pointing at the canonical IR schema. Internal usages below
 // keep the legacy `…Spec` names for readability.
@@ -57,39 +59,6 @@ interface RawDeriveBridge {
 // ---------------------------------------------------------------------------
 // Arrow utilities (widget transport)
 // ---------------------------------------------------------------------------
-
-function arrowTableToArray(table: Arrow.Table): Record<string, any>[] {
-  const numRows = table.numRows;
-  const columns = table.schema.fields.map((field, i) => {
-    const column = table.getChildAt(i);
-    const values = column.toArray();
-    return { name: field.name, type: field.type, values };
-  });
-
-  const data: Record<string, any>[] = [];
-  for (let i = 0; i < numRows; i++) {
-    const row: Record<string, any> = {};
-    columns.forEach((col) => {
-      let value = col.values[i];
-      if (typeof value === "bigint") {
-        value = Number(value);
-      } else if (value !== null && value !== undefined) {
-        const typeStr = col.type ? col.type.toString() : "";
-        if (
-          typeStr.includes("Int64") ||
-          typeStr.includes("UInt64") ||
-          typeStr.includes("Int32") ||
-          typeStr.includes("UInt32")
-        ) {
-          value = Number(value);
-        }
-      }
-      row[col.name] = value;
-    });
-    data.push(row);
-  }
-  return data;
-}
 
 function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
   if (!rows || rows.length === 0) {
@@ -130,9 +99,7 @@ function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
 
 function decodeArrowB64(b64: string): Record<string, any>[] {
   if (!b64) return [];
-  const arrowBuffer = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  const table = Arrow.tableFromIPC(arrowBuffer);
-  return arrowTableToArray(table);
+  return arrowBytesToRows(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +121,7 @@ function makeDeriveBridgeFromRaw(raw: RawDeriveBridge): Serialize.DeriveBridge {
       const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
         c.charCodeAt(0)
       );
-      return arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
+      return arrowBytesToRows(resultBuffer);
     },
   };
 }

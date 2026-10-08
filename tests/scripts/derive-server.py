@@ -3,8 +3,9 @@ Python derive server — executes Python derive functions during test rendering.
 
 Endpoints:
   POST /load           — Import a story file, build its IR, and register
-                         derive functions in one shot. Returns the IR (rows
-                         inlined), the render options, and the deriveIds.
+                         derive functions in one shot. Returns the IR, each
+                         chart tier's rows as base64 Arrow (as the widget
+                         ships them), the render options, and the deriveIds.
                          Combining import + register avoids the
                          two-process pitfall: `derive(lambda)` mints a fresh
                          UUID per call, so importing the story separately
@@ -18,6 +19,7 @@ story (which both extracts the IR and registers derives), then the test
 harness calls /derive/<id> during chart rendering.
 """
 
+import base64
 import importlib
 import importlib.util
 import json
@@ -106,7 +108,10 @@ class DeriveHandler(BaseHTTPRequestHandler):
         Body: {"storyFile": "/abs/path/test_X.py", "function": "story_default",
                "pythonStoriesDir": "/abs/path/tests/python-stories"}
 
-        Response: {"ir": <the builder's `to_ir()`, its rows inlined>,
+        Response: {"ir": <the builder's `to_ir()`>,
+                   "tierArrow": [<each chart tier's rows: base64 Arrow IPC,
+                                  `tier_arrow_bytes`, as the widget ships
+                                  them>],
                    "render": <the story's render options>,
                    "deriveIds": [<every lambda id the IR names>]}
         """
@@ -179,6 +184,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 _collect_mark_lambdas,
                 _MarkFn,
                 _InputRef,
+                tier_arrow_bytes,
             )
 
             derive_ids: list = []
@@ -211,15 +217,18 @@ class DeriveHandler(BaseHTTPRequestHandler):
                         else row
                         for row in data
                     ]
-                    return [ir_of(user_fn(wrapped_data))]
+                    return [ir_of(user_fn(wrapped_data), inline=True)]
 
                 return wrapped
 
-            def chart_ir(chart_ir: dict, chart: "ChartBuilder") -> dict:
-                """A chart's IR with its own rows inlined in the IR's inline
-                form, `{type: "inline", rows}` (the widget ships them in an
-                Arrow sidecar instead), after registering the callbacks it
-                names. Select and previous-tier data are already in the IR."""
+            def chart_ir(chart_ir: dict, chart: "ChartBuilder", inline: bool) -> dict:
+                """A chart's IR, after registering the callbacks it names.
+                The story's own tiers ship their rows beside the IR, as
+                Arrow (`tierArrow`), like the widget. A chart a mark
+                function returns comes back over the JSON `/derive` RPC, so
+                with `inline` its rows are inlined in the IR's inline form,
+                `{type: "inline", rows}`. Select and previous-tier data are
+                already in the IR."""
                 for op in chart.operators:
                     if isinstance(op, DeriveOperator):
                         register(op.lambda_id, op.fn)
@@ -227,7 +236,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     register(chart._mark.lambda_id, mark_fn(chart._mark.fn))
                 elif chart._mark is not None:
                     register_mark(chart._mark)
-                if chart_ir.get("data") is not None:
+                if not inline or chart_ir.get("data") is not None:
                     return chart_ir
                 raw = chart.data
                 if hasattr(raw, "to_dict"):
@@ -240,8 +249,9 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     return {**chart_ir, "data": {"type": "inline", "rows": rows}}
                 return {**chart_ir, "data": rows}
 
-            def ir_of(b) -> dict:
-                """`b.to_ir()`, unchanged except for inlined rows."""
+            def ir_of(b, inline: bool = False) -> dict:
+                """`b.to_ir()`, unchanged except for inlined rows (with
+                `inline`; see `chart_ir`)."""
                 if isinstance(b, Mark):
                     register_mark(b)
                     return b.to_ir()
@@ -253,7 +263,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                             register_mark(child)
                             tiers.append(tier)
                         else:
-                            tiers.append(chart_ir(tier, child))
+                            tiers.append(chart_ir(tier, child, inline))
                     # A `.relate(...)` clause that draws is a mark, and may
                     # carry accessors too (a constraint carries none).
                     for clause in b._relate or []:
@@ -261,13 +271,26 @@ class DeriveHandler(BaseHTTPRequestHandler):
                             register_mark(clause)
                     return {**ir, "charts": tiers}
                 if isinstance(b, ChartBuilder):
-                    return chart_ir(b.to_ir(), b)
+                    return chart_ir(b.to_ir(), b, inline)
                 raise TypeError(
                     f"a story must return a chart, layer or mark, got {type(b).__name__}"
                 )
 
+            # Each chart tier's rows, as the widget ships them: one tier for
+            # a chart, one per child for a layer, none for a bare mark.
+            tiers = (
+                builder.children
+                if isinstance(builder, LayerBuilder)
+                else [builder]
+                if isinstance(builder, ChartBuilder)
+                else []
+            )
             self._json_response(200, {
                 "ir": ir_of(builder),
+                "tierArrow": [
+                    base64.b64encode(tier_arrow_bytes(t)).decode("ascii")
+                    for t in tiers
+                ],
                 "render": render,
                 "deriveIds": derive_ids,
             })

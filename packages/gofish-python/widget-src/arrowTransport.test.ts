@@ -1,5 +1,8 @@
 /**
- * Tests for `buildArrowTable` — the explicit-schema Arrow encoder that
+ * Tests for the widget's Arrow transport: `buildArrowTable` (encode) and
+ * `arrowTableToRows` (decode).
+ *
+ * `buildArrowTable` is the explicit-schema Arrow encoder that
  * replaced `Arrow.tableFromJSON` for the widget RPC transport (issue #783).
  *
  * Every case round-trips through `tableToIPC` / `tableFromIPC` (the same
@@ -10,6 +13,7 @@
 
 import * as Arrow from "apache-arrow";
 import { buildArrowTable } from "./arrowTransport";
+import { arrowTableToRows } from "./arrowDecode";
 
 // This file is runnable as a script in Node, but the repo doesn't necessarily
 // include Node type definitions in all TS contexts.
@@ -181,6 +185,59 @@ function testConflictingNestedTypesThrow(): boolean {
   }
 }
 
+/** The decode (`arrowDecode.ts`): a timestamp or date column reads as
+ *  `Date`s, and the rows carry `HasCalendar` in the column's zone. */
+function testTimeColumnsDecodeAsTimes(): boolean {
+  console.log("Test: time columns decode as Dates with HasCalendar");
+  const ms = Date.UTC(2024, 2, 10, 5);
+  const day = Date.UTC(2024, 2, 1);
+  const table = new Arrow.Table({
+    ny: Arrow.vectorFromArray(
+      [ms, null],
+      new Arrow.TimestampMicrosecond("America/New_York")
+    ),
+    naive: Arrow.vectorFromArray([ms, ms], new Arrow.TimestampMillisecond()),
+    d: Arrow.vectorFromArray(
+      [new Date(day), new Date(day)],
+      new Arrow.DateDay()
+    ),
+    n: Arrow.vectorFromArray([1, 2], new Arrow.Int32()),
+  });
+  const rows = arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table)));
+  // The column types ride the array under schema.ts's COLUMN_TYPES symbol.
+  const types = (rows as any)[Symbol.for("gofish.columnTypes")];
+  const ok =
+    rows[0].ny instanceof Date &&
+    rows[0].ny.getTime() === ms &&
+    rows[1].ny === null &&
+    rows[0].naive.getTime() === ms &&
+    rows[0].d instanceof Date &&
+    rows[0].d.getTime() === day &&
+    rows[1].n === 2 &&
+    JSON.stringify(types) ===
+      JSON.stringify({
+        ny: { HasCalendar: { zone: "America/New_York" } },
+        naive: { HasCalendar: { zone: "UTC" } },
+        d: { HasCalendar: { zone: "UTC" } },
+      });
+  console.log(
+    ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify({ rows, types })}`
+  );
+  return ok;
+}
+
+/** Rows without a time column carry no column types. */
+function testPlainColumnsCarryNoTypes(): boolean {
+  console.log("Test: plain columns carry no column types");
+  const rows = arrowTableToRows(roundTrip([{ x: 1, s: "a" }]));
+  const ok =
+    rows[0].x === 1 &&
+    rows[0].s === "a" &&
+    (rows as any)[Symbol.for("gofish.columnTypes")] === undefined;
+  console.log(ok ? "  ✓ PASSED" : "  ✗ FAILED");
+  return ok;
+}
+
 export function runArrowTransportTests(): boolean {
   console.log("Running Arrow transport tests...\n");
 
@@ -192,6 +249,8 @@ export function runArrowTransportTests(): boolean {
     testEmptyBag(),
     testConflictingTypesThrow(),
     testConflictingNestedTypesThrow(),
+    testTimeColumnsDecodeAsTimes(),
+    testPlainColumnsCarryNoTypes(),
   ];
 
   const allPassed = results.every((r) => r);

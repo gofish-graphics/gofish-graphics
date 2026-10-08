@@ -670,23 +670,29 @@ class TestTime:
             {"unit": "year", "step": 1},
         ]
 
-    def test_datetime_columns_are_time(self):
+    def test_datetime_columns_cross_as_arrow_times(self):
+        """A datetime column is not marked in the IR: its Arrow type crosses
+        unchanged, zone included, and JS reads it as a time."""
         pd = pytest.importorskip("pandas")
+        import pyarrow as pa
+
+        from gofish.arrow_utils import data_to_arrow_bytes
+
         df = pd.DataFrame(
             {
                 "naive": pd.to_datetime(["2024-02-28", "2024-02-29"]),
                 "ny": pd.to_datetime(["2024-02-28", "2024-02-29"]).tz_localize(
                     "America/New_York"
                 ),
-                "label": ["a", "b"],
                 "n": [1, 2],
             }
         )
         ir = chart(df).flow(scatter(by="naive", x="naive", y="n")).mark(line()).to_ir()
-        assert ir["options"]["schema"] == {
-            "naive": {"HasCalendar": {"zone": "UTC"}},
-            "ny": {"HasCalendar": {"zone": "America/New_York"}},
-        }
+        assert "schema" not in (ir["options"] or {})
+        schema = pa.ipc.open_stream(data_to_arrow_bytes(df)).read_all().schema
+        assert pa.types.is_timestamp(schema.field("naive").type)
+        assert schema.field("naive").type.tz is None
+        assert schema.field("ny").type.tz == "America/New_York"
 
     def test_a_declared_schema_wins(self):
         pd = pytest.importorskip("pandas")
@@ -696,13 +702,13 @@ class TestTime:
             .mark(rect(w=1))
             .to_ir()
         )
-        assert ir["options"]["schema"]["t"] == {"HasCalendar": {"zone": "Asia/Tokyo"}}
+        assert ir["options"]["schema"] == {"t": {"HasCalendar": {"zone": "Asia/Tokyo"}}}
 
     def test_strings_are_never_inferred(self):
         ir = chart([{"t": "2024-01-01", "n": 1}]).mark(rect(w=1)).to_ir()
         assert "schema" not in (ir["options"] or {})
 
-    def test_times_cross_as_epoch_ms(self):
+    def test_times_cross_as_arrow_times(self):
         import datetime
 
         import pyarrow as pa
@@ -719,5 +725,19 @@ class TestTime:
             }
         )
         back = pa.ipc.open_stream(arrow_table_to_bytes(table)).read_all()
-        assert back.column("t").to_pylist() == [1709208000000.0]
-        assert back.column("d").to_pylist() == [1709251200000.0]
+        assert back.schema.field("t").type == pa.timestamp("ns", tz="UTC")
+        assert back.schema.field("d").type == pa.date32()
+        assert back.column("t").to_pylist() == table.column("t").to_pylist()
+        assert back.column("d").to_pylist() == [datetime.date(2024, 3, 1)]
+
+    def test_wide_ints_keep_their_width(self):
+        """Epoch milliseconds do not fit in 32 bits: the Int64 downcast
+        leaves such a column at 64 bits instead of failing."""
+        import pyarrow as pa
+
+        from gofish.arrow_utils import data_to_arrow_bytes
+
+        rows = [{"t": 1709960400000, "n": 1}]
+        schema = pa.ipc.open_stream(data_to_arrow_bytes(rows)).read_all().schema
+        assert schema.field("t").type == pa.int64()
+        assert schema.field("n").type == pa.int32()

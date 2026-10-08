@@ -75,33 +75,6 @@ def to_arrow_table(data: Any) -> pa.Table:
     return nwdata.to_arrow()
 
 
-def _times_to_epoch_ms(table: pa.Table) -> pa.Table:
-    """
-    Convert timestamp and date columns to float64 epoch milliseconds (UTC),
-    the time values JS reads (`HasCalendar` in schema.ts). The chart's IR
-    marks these columns as time (`ChartBuilder._options_with_time_schema`),
-    so the zone a timestamp column carries reaches JS there, not here. A
-    naive timestamp is read as UTC.
-    """
-    fields = []
-    arrays = []
-    changed = False
-    for i, field in enumerate(table.schema):
-        array = table.column(i)
-        if pa.types.is_timestamp(field.type) or pa.types.is_date(field.type):
-            tz = field.type.tz if pa.types.is_timestamp(field.type) else None
-            ms = array.cast(pa.timestamp("ms", tz=tz)).cast(pa.int64())
-            array = ms.cast(pa.float64())
-            fields.append(pa.field(field.name, pa.float64()))
-            changed = True
-        else:
-            fields.append(field)
-        arrays.append(array)
-    if changed:
-        table = pa.Table.from_arrays(arrays, schema=pa.schema(fields))
-    return table
-
-
 def _downcast_wide_ints(table: pa.Table) -> pa.Table:
     """
     Convert Int64/UInt64 columns to Int32/UInt32 where the values fit, to
@@ -123,7 +96,7 @@ def _downcast_wide_ints(table: pa.Table) -> pa.Table:
                 array = array.cast(new_type, safe=True)
                 fields.append(pa.field(field.name, new_type))
                 schema_changed = True
-            except (pa.ArrowInvalidError, OverflowError):
+            except (pa.ArrowInvalid, OverflowError):
                 # Values too large to fit — keep the original width.
                 fields.append(field)
         else:
@@ -138,8 +111,9 @@ def _downcast_wide_ints(table: pa.Table) -> pa.Table:
 def arrow_table_to_bytes(table: pa.Table) -> bytes:
     """
     Serialize a `pyarrow.Table` to Arrow IPC format (bytes), applying the
-    Int64/UInt64 -> Int32/UInt32 downcast described in `_downcast_wide_ints`
-    and the time-to-epoch-milliseconds conversion in `_times_to_epoch_ms`.
+    Int64/UInt64 -> Int32/UInt32 downcast described in `_downcast_wide_ints`.
+    Timestamp and date columns cross unchanged, time zone included: the
+    widget's decode (`widget-src/arrowDecode.ts`) reads them as times.
 
     Args:
         table: `pyarrow.Table` to serialize.
@@ -147,7 +121,7 @@ def arrow_table_to_bytes(table: pa.Table) -> bytes:
     Returns:
         Arrow IPC format bytes.
     """
-    table = _downcast_wide_ints(_times_to_epoch_ms(table))
+    table = _downcast_wide_ints(table)
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, table.schema) as writer:
         writer.write_table(table)

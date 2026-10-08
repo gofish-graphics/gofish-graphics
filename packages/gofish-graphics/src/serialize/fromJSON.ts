@@ -778,7 +778,8 @@ export interface IRHost {
   /** Rows shipped beside the IR instead of inline in it (the widget's Arrow
    *  sidecar), one array per chart tier; a lone chart is tier 0. A chart
    *  whose `data` is inline, a selection, or the previous tier ignores its
-   *  entry. */
+   *  entry. An array may carry column types (`setColumnTypes`), which the
+   *  chart reads as it reads its own `schema`'s, and its `schema` wins. */
   tierRows?: Record<string, any>[][];
 }
 
@@ -793,7 +794,8 @@ function definedFields<T extends Record<string, unknown>>(o: T): Partial<T> {
 /**
  * Render a whole frontend-IR root (a chart, a layer, or a bare mark) into
  * `container`. This is the one entry point both hosts use: the Python widget
- * (Arrow sidecar, anywidget RPC) and the parity harness (inline rows, HTTP).
+ * (Arrow sidecar, anywidget RPC) and the parity harness (the same Arrow
+ * sidecar, HTTP RPC).
  * Building throws synchronously on a bad spec; the returned promise settles
  * with the {@link View} once the chart has rendered.
  */

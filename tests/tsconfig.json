@@ -13,7 +13,12 @@
     "jsxImportSource": "solid-js",
     "types": ["vite/client", "node"],
     "paths": {
-      "gofish-graphics": ["../packages/gofish-graphics/src/lib.ts"]
+      "gofish-graphics": ["../packages/gofish-graphics/src/lib.ts"],
+      // The harness imports the widget's Arrow decode; apache-arrow 14's
+      // package.json "exports" names no types, so point at its browser ones.
+      "apache-arrow": [
+        "../packages/gofish-python/node_modules/apache-arrow/Arrow.dom.d.ts"
+      ]
     }
   },
   "include": [

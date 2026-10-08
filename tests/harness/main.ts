@@ -3,11 +3,13 @@
  *
  * It renders a Python story's IR through the library's own deserializer,
  * `Serialize.renderIR`, the same function the notebook widget calls. Only the
- * transport is the harness's own. Python callbacks (derive operators, lambda
- * accessors, mark functions) run in `tests/scripts/derive-server.py` and are
- * reached over HTTP POST to `<deriveServerUrl>/derive/<id>` instead of over
- * anywidget traitlets, and rows travel inline in the IR instead of in an Arrow
- * sidecar.
+ * callback transport is the harness's own: Python callbacks (derive
+ * operators, lambda accessors, mark functions) run in
+ * `tests/scripts/derive-server.py` and are reached over HTTP POST to
+ * `<deriveServerUrl>/derive/<id>` instead of over anywidget traitlets. The
+ * rows of each chart tier cross as the widget's do: Arrow bytes from
+ * Python's `tier_arrow_bytes`, decoded by the widget's own decode
+ * (`arrowBytesToRows`), so parity covers that transport too.
  *
  * The caller (Playwright) calls `__renderChart__(spec)` (or sets
  * `__GOFISH_SPEC__` before load) and waits for `__GOFISH_RENDER_COMPLETE__`.
@@ -15,14 +17,16 @@
 
 import { Serialize } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
+import { arrowBytesToRows } from "../../packages/gofish-python/widget-src/arrowDecode";
 
 /**
  * What `capture-python-dom.ts` sends: a story's IR as the derive server
- * returns it (the builder's own `to_ir()`, rows inlined), the story's render
- * options, and the derive server's address.
+ * returns it (the builder's own `to_ir()`), each chart tier's rows as base64
+ * Arrow, the story's render options, and the derive server's address.
  */
 interface HarnessSpec {
   ir: Frontend.FrontendIR;
+  tierArrow?: string[];
   render: Serialize.RenderIROptions;
   deriveServerUrl?: string;
 }
@@ -69,6 +73,9 @@ function renderChart(spec: HarnessSpec) {
     try {
       await Serialize.renderIR(spec.ir, container, spec.render, {
         bridge: httpBridge(spec.deriveServerUrl),
+        tierRows: (spec.tierArrow ?? []).map((b64) =>
+          arrowBytesToRows(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))
+        ),
       });
       // Allow a tick for SolidJS to flush renders.
       await new Promise<void>((resolve) =>

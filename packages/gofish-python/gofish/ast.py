@@ -1298,25 +1298,6 @@ class ChartBuilder:
         """
         return encode_non_finite(self._ir())
 
-    def _options_with_time_schema(self) -> Any:
-        """The chart options, with ``HasCalendar`` added to the schema for
-        each datetime column of the data (pandas, polars or pyarrow) that the
-        schema does not declare. Datetimes cross the bridge as epoch
-        milliseconds; the schema marks them as time."""
-        if self.data is None or isinstance(self.data, _RefProxy):
-            return self.options
-        if self._uses_previous_marks():
-            return self.options
-        inferred = _time_schema(self.data)
-        if not inferred:
-            return self.options
-        options = dict(self.options or {})
-        schema = dict(options.get("schema") or {})
-        for column, column_type in inferred.items():
-            schema.setdefault(column, column_type)
-        options["schema"] = schema
-        return options
-
     def _ir(self) -> dict:
         """``to_ir()`` before its non-finite numbers are encoded (see
         ``Mark._ir``)."""
@@ -1364,7 +1345,7 @@ class ChartBuilder:
             "data": data_ir,
             "operators": [op.to_dict() for op in self.operators],
             "mark": mark_ir,
-            "options": self._options_with_time_schema(),
+            "options": self.options,
         }
         if self._z_order is not None:
             result["zOrder"] = self._z_order
@@ -1421,14 +1402,8 @@ class ChartBuilder:
 
         # Import here to avoid circular dependencies
         from .widget import GoFishChartWidget
-        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
 
-        # Ref-data charts (`ref(name)` / `select_all(name)`) have no data of
-        # their own — they borrow nodes from a sibling chart.
-        if isinstance(self.data, _RefProxy):
-            arrow_data = empty_placeholder_arrow_bytes()
-        else:
-            arrow_data = data_to_arrow_bytes(self.data)
+        arrow_data = tier_arrow_bytes(self)
 
         # Get the IR spec
         spec = self.to_ir()
@@ -2478,27 +2453,6 @@ class Calendar:
     year = CalendarPartition("year")
 
 
-def _time_schema(data: Any) -> dict:
-    """The column types of ``data``'s datetime columns: ``HasCalendar`` in
-    the column's own time zone, or UTC for a naive or date column. Inference
-    is local, from the column's dtype: strings and numbers are never time."""
-    import pyarrow as pa
-
-    from .arrow_utils import to_arrow_table
-
-    try:
-        table = to_arrow_table(data)
-    except Exception:
-        return {}
-    out = {}
-    for field in table.schema:
-        if pa.types.is_timestamp(field.type):
-            out[field.name] = {"HasCalendar": {"zone": field.type.tz or "UTC"}}
-        elif pa.types.is_date(field.type):
-            out[field.name] = {"HasCalendar": {"zone": "UTC"}}
-    return out
-
-
 # Color configuration
 
 
@@ -3312,6 +3266,25 @@ def chart(
     return ChartBuilder(data, _chart_opts(**options) or None)
 
 
+def tier_arrow_bytes(tier: Any) -> bytes:
+    """The Arrow IPC bytes of one chart tier's own rows, as the widget ships
+    them beside the IR (``arrow_data`` / ``arrow_dict``) and the parity
+    harness's derive server ships them too. Timestamp and date columns cross
+    as Arrow times, and the widget's decode reads them as times. A tier with
+    no rows of its own ships the empty placeholder: a mark, a chart whose
+    data is a ``ref`` / ``select_all`` (it borrows a sibling's nodes), and an
+    empty ``chart()`` scope (it takes the previous tier's marks)."""
+    from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
+
+    if (
+        not isinstance(tier, ChartBuilder)
+        or isinstance(tier.data, _RefProxy)
+        or tier._uses_previous_marks()
+    ):
+        return empty_placeholder_arrow_bytes()
+    return data_to_arrow_bytes(tier.data)
+
+
 class LayerBuilder:
     """Builder class for composing multiple ChartBuilder instances as a layer."""
 
@@ -3421,27 +3394,14 @@ class LayerBuilder:
             GoFishChartWidget instance that will display in Jupyter
         """
         from .widget import GoFishChartWidget
-        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
 
-        def _serialize_child_data(child: ChartBuilder) -> bytes:
-            """Serialize a child chart's data to raw Arrow IPC bytes.
-
-            ``GoFishChartWidget`` owns the base64/JSON wire encoding (see
-            ``arrow_dict`` there) — this only ever hands it plain bytes.
-            """
-            # Ref-data tiers borrow nodes from a sibling; empty `chart()`
-            # scopes (previous-tier) inherit the preceding tier's marks
-            # JS-side — neither ships rows of its own.
-            if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
-                return empty_placeholder_arrow_bytes()
-
-            return data_to_arrow_bytes(child.data)
-
-        # Serialize each child's data and collect derive functions
+        # Serialize each child's data (``GoFishChartWidget`` owns the
+        # base64/JSON wire encoding, see ``arrow_dict`` there) and collect
+        # derive functions
         arrow_dict: dict = {}
         derive_functions: dict = {}
         for i, child in enumerate(self.children):
-            arrow_dict[str(i)] = _serialize_child_data(child)
+            arrow_dict[str(i)] = tier_arrow_bytes(child)
             for op in _collect_derive_operators(child.operators):
                 derive_functions[op.lambda_id] = op.fn
 

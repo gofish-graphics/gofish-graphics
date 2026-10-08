@@ -711,10 +711,18 @@ renders it. What differs between the hosts is only transport:
 - **Callbacks.** The widget's `DeriveBridge` sends rows as Arrow over
   anywidget traitlets; the harness's sends them as JSON in an HTTP POST to
   `tests/scripts/derive-server.py` (`/derive/<id>`).
-- **Rows.** The widget ships each chart tier's rows in an Arrow sidecar and
-  passes them as `tierRows`; the derive server inlines them in the IR as
-  `{type: "inline", rows}`. Otherwise the derive server returns the builder's
-  own `to_ir()` untouched. Data in the IR wins over `tierRows`.
+- **Rows.** Both hosts ship each chart tier's rows the same way: as Arrow
+  IPC bytes from Python's `tier_arrow_bytes` (`gofish/ast.py`), decoded by
+  the widget's `arrowBytesToRows` (`widget-src/arrowDecode.ts`, which the
+  harness imports) and passed as `tierRows`. The widget sends them in its
+  `arrow_data` trait; the derive server returns them as `tierArrow` beside
+  the builder's own `to_ir()`, which it returns untouched. Data in the IR
+  wins over `tierRows`. A timestamp or date column crosses as an Arrow
+  time, and the decode marks it as a time column (`HasCalendar` in its zone,
+  attached with `Serialize.setColumnTypes`), so the chart's `applySchema`
+  converts it like any time column. The one exception is a chart that a
+  mark function returns: it comes back over the derive RPC, so the derive
+  server inlines its rows in the IR as `{type: "inline", rows}`.
 - **Render options.** These are the JS `.render(container, options)` options:
   `w`, `h`, `axes`, `padding`, `debug`. The widget reads them from its traits,
   which the Python `.render(...)` call sets; the harness reads the story's
