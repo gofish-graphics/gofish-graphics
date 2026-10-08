@@ -37,7 +37,9 @@ Curve.perfectArrows({ bow?, stretch?, stretchMin?, stretchMax?, padStart?, padEn
 ```
 
 Every member is a function call, including the ones that take no options. Each
-returns a plain object, `{ type, options? }`, of type `Curve.Curve`.
+returns a plain object, `{ kind, ...params }`, of type `Curve.Curve`, for
+example `{ kind: "arc", direction: "down" }`. The same object is the curve's
+wire form.
 
 The family is also a module of its own:
 
@@ -155,5 +157,6 @@ up by default; `{ direction: "down" }` flips it. A line threaded through the
 keyframes of a `time.sequence` cannot use `Curve.orthogonal()`, `Curve.arc()` or
 `Curve.perfectArrows()`.
 
-A route added with `registerRoute(name, fn)` is a curve too: write it as
-`{ type: name }`, with its options under `options`.
+A route added with `registerRoute(name, fn)` is drawn the same way: write it as
+`{ kind: name, ...params }`. It is not one of the kinds of `Curve.Curve`, so a
+TypeScript caller casts it, and it cannot come from Python.

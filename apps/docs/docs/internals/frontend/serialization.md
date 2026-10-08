@@ -45,6 +45,7 @@ expansion and elaboration. Three consumers:
 | JS-side deserializer (`Serialize.renderIR`, `buildChart`, `mapMark`, …)                                 | `packages/gofish-graphics/src/serialize/fromJSON.ts`                       |
 | Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                       |
 | Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`) |
+| Generated Python strategy families (checked in, CI freshness-checked)                                   | `packages/gofish-python/gofish/{tile,overlap,curve}.py` (same script)      |
 | Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                     |
 
 v0 matches the existing widget wire format exactly — lowercase `type`
@@ -133,14 +134,15 @@ than a serialized field). Operators are a flat list (`derive`, `resolve`,
 `join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
 `pack`). `treemap`'s `tile` is a strategy object made by a call in the `Tile`
 family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
-`Tile.binary()`, `Tile.sliceDice()` in both languages), so on the wire it is
-plain data, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
-dispatches on `kind`. `scatter`'s `overlap` works the same way (the `Overlap`
-family). A `line` or `ribbon` `curve` is a call in the `Curve` family, and on
-the wire it is `{ "type": "monotone" }`, with an `options` object for the
-curves that take some (`{ "type": "arc", "options": { "direction": "down" } }`);
-a bare curve name is not a curve. The families are namespaces in the two
-surfaces only; the wire carries the plain objects. Note `join`
+`Tile.binary()`, `Tile.sliceDice()` in both languages). Every strategy has
+one shape, `{ kind, ...params }`, which is both the JS value and the wire
+form, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
+dispatches on `kind`. `scatter`'s `overlap` (the `Overlap` family) and a
+`line` or `ribbon` `curve` (the `Curve` family:
+`{ "kind": "arc", "direction": "down" }`) work the same way; a bare curve name
+is not a curve. The families are namespaces in the two surfaces only; the
+wire carries the plain objects. Their kinds and params are declared once, in
+the `STRATEGIES` table (below). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
@@ -400,12 +402,37 @@ keyed by axis name; `paint`, the five paint channels) are declared once and pull
 into a mark's entry by reference, so most mark entries list only the
 fields genuinely their own.
 
-Two smaller tables sit beside the construct entries. `OPTION_TYPES` declares
+Three smaller tables sit beside the construct entries. `OPTION_TYPES` declares
 the nested option objects a field points at by name, in the same type DSL:
-today `AxesOptions` (a boolean, or `{x, y}`) and `AxisOptions` (a boolean, or
-`{title, side, labelAngle}`). A `t.ref(name)` resolves against it first, so
-the validator, the JSON Schema, and the Python generator all read one
-declaration of the axes option. `CHART_OPTIONS` lists the chart-level
+`AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
+`{title, side, labelAngle}`), and one entry per strategy family. A
+`t.ref(name)` resolves against it first, so the validator, the JSON Schema,
+and the Python generator all read one declaration of the axes option.
+
+`STRATEGIES` declares the strategy families whose values cross the wire:
+`Tile`, `Overlap` and `Curve`. For each it lists the kinds, each with its
+params (types, defaults and docs), and the presets: a factory that makes a
+kind with some params already set, such as `Overlap.sina()`, which is
+`noise` with `smoothing: "silverman"`. Each family derives its
+`OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
+so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")` and
+`t.ref("Curve")`. A param may carry bounds, `t.num({ min: 0, finite: true })`
+for a pixel padding, which the validator and the JSON Schema check. The JS
+layout checks a strategy where it reads it, with `checkStrategy(family,
+value, where)` from `validate.ts`, the same walk the validator runs over a
+whole document. So an unknown kind, an undeclared param, and a value out of
+bounds each fail in one place, whether the strategy came from a factory, a
+hand-written object, or Python IR. `Coord` and `Color` are families on the
+two surfaces but not in this table: a coordinate transform is a JS object of
+functions, rebuilt from a `type`-tagged config (`COORDS`), and a color scale
+is tagged by `_tag` and takes its one argument by position.
+
+`schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
+`OverlapIR` and `CurveIR`, by hand, and each family's JS type is one of them
+(`Curve.Curve` is `CurveIR`). `descriptors.test.ts` checks that their kinds
+and params agree with `STRATEGIES`. A curve route added in JS with
+`registerRoute` is not in the table, so it is not a `Curve.Curve` and cannot
+cross the wire. `CHART_OPTIONS` lists the chart-level
 options (`w`, `h`, `coord`, `color`, `axes`, `legend`, `padding`, `schema`),
 mirroring the JS `ChartOptions`. Only the Python generator reads it so far;
 the validator and the schema still take `ChartIR.options` as an open object.
@@ -545,7 +572,9 @@ described above, plus the structural checks for the hand-authored parts
 (e.g. `table.by` requires `{x, y}`). A field typed with a named option type,
 such as the `axes` override on `spread`/`stack`/`scatter`, is walked by the
 same generic interpreter against its `OPTION_TYPES` entry. In strict mode a
-nested object rejects a key it does not declare. It runs in permissive mode by
+nested object rejects a key it does not declare. A tagged union (every branch
+an object with a literal `kind`, as a strategy family is) is walked by the
+branch its `kind` picks, so an unknown kind gets its own error. It runs in permissive mode by
 default (unknown fields ignored, for forward-compat) and strict mode in
 CI tests — "strict" here composes with the operator-reject/leaf-mark-warn
 split above, it doesn't override it.
@@ -562,7 +591,9 @@ its JSON Schema enum, matching what `descriptors.ts` already modeled.
 [`packages/gofish-python/scripts/generate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-python/scripts/generate.ts)
 imports the same `descriptors.ts` table (via the `gofish-ir/frontend`
 package export, so it needs `pnpm --filter gofish-ir build` to have run
-first) and emits `gofish/_generated.py` — checked into the repo, with a
+first) and emits `gofish/_generated.py` and the strategy family modules
+`gofish/tile.py`, `gofish/overlap.py` and `gofish/curve.py` (from
+`STRATEGIES`) — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
 --exit-code`) rather than a build-time step, matching the "commit the
 generated Python" norm Altair and Plotly.py both follow.
@@ -604,9 +635,8 @@ through whole. Two rules keep this honest. A union may have only one branch
 that a dict could match, or generation fails, since `_to_wire` would have to
 guess. The one exception is a tagged union: when every dict branch is an
 object whose `kind` field is a literal or enum, and no two branches share a
-`kind` value (treemap's `tile`: `{kind: "squarify", ratio?}` or
-`{kind: "slice" | "dice" | ...}`; scatter's `overlap`:
-`{kind: "separate", ...}` or `{kind: "noise", ...}`), the generator emits a
+`kind` value (a strategy family: treemap's `tile`, `{kind: "squarify",
+ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
 branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
@@ -633,10 +663,22 @@ It emits:
   `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
+- One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
+  `gofish/overlap.py`, `gofish/curve.py`), bound in `__init__.py` under the
+  family name (`Tile`, `Overlap`, `Curve`): one factory per kind and per
+  preset, named by `pyKwarg` (`Tile.slice_dice()`, `Curve.catmull_rom()`).
+  Each returns `{"kind": ..., **params}` with snake_case param keys, and the
+  option it is passed to renames them to wire keys through the family's
+  `_OPTION_TYPES` entry, like any nested option dict, so
+  `Curve.perfect_arrows(pad_end=4)` reaches the wire as
+  `{"kind": "perfectArrows", "padEnd": 4}`. The factories check nothing
+  themselves: a param's type and bounds are checked on the JS side by
+  `checkStrategy`.
 
 `derive`/`resolve`/`join` (real RPC-bridge/ref-shape/DataFrame logic) and
-`palette`/`gradient`/`field`/`datum`/`normalize`/`repeat`/`ref`/`select_all`
-(not in the descriptor table at all) stay fully hand-written in `ast.py`,
+`field`/`datum`/`normalize`/`repeat`/`ref`/`select_all`
+(not in the descriptor table at all) stay fully hand-written in `ast.py`, as
+do the `Color` and `Coord` family modules (`color.py`, `coord.py`),
 alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
 widget/RPC layer — see
 [Design space: generating the Python wrapper](/internals/design/python-wrapper-codegen)
