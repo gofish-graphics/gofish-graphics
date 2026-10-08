@@ -3,12 +3,12 @@
 from gofish import (
     chart,
     circle,
-    clock,
     join,
     line,
     rect,
     scatter,
     stack,
+    Coord,
 )
 from python_stories.data import (
     CATCH_DATA_WITH_LOCATIONS,
@@ -36,7 +36,7 @@ def story_with_pie_glyphs():
         chart(CATCH_LOCATIONS_ARRAY, axes=True)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(
-            chart(coord=clock())
+            chart(coord=Coord.clock())
             .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
             .mark(rect(w="count", fill="species"))
         ),
@@ -53,7 +53,7 @@ def story_with_pie_glyphs_denormalized():
         chart(CATCH_DATA_WITH_LOCATIONS, axes=True)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(
-            chart(coord=clock())
+            chart(coord=Coord.clock())
             .flow(stack(by="species", dir="x", h=20))
             .mark(rect(w="count", fill="species"))
         ),

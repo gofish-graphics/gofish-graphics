@@ -4,7 +4,7 @@ from math import ceil, sqrt
 
 import pandas as pd
 
-from gofish import chart, circle, derive, palette, spread, table
+from gofish import chart, circle, derive, spread, table, Color
 
 
 def story_default():
@@ -20,7 +20,7 @@ def story_default():
         return [rows[i : i + size] for i in range(0, len(rows), size)]
 
     return (
-        chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]), axes=True)
+        chart(titanic_passengers, color=Color.palette(["#2b8cbe", "#ff8408"]), axes=True)
         .flow(
             table(
                 by={"x": "pclass", "y": "sex"},

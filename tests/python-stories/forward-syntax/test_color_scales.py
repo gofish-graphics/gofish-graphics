@@ -4,15 +4,14 @@ import math
 
 from gofish import (
     chart,
-    clock,
     spread,
     stack,
     derive,
     rect,
     ribbon,
-    palette,
-    gradient,
     field,
+    Color,
+    Coord,
 )
 from gofish.ast import assign_gradient_color
 from python_stories.data import SEAFOOD, SCORES_DATA
@@ -20,7 +19,7 @@ from python_stories.data import SEAFOOD, SCORES_DATA
 
 def story_palette_named_scheme():
     return (
-        chart(SEAFOOD, color=palette("tableau10"), axes=True)
+        chart(SEAFOOD, color=Color.palette("tableau10"), axes=True)
         .flow(spread(by="species", dir="x"))
         .mark(rect(h="count", fill="species")),
         {"w": 400, "h": 400},
@@ -29,7 +28,7 @@ def story_palette_named_scheme():
 
 def story_palette_string_array():
     return (
-        chart(SEAFOOD, color=palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]), axes=True)
+        chart(SEAFOOD, color=Color.palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]), axes=True)
         .flow(spread(by="species", dir="x"))
         .mark(rect(h="count", fill="species")),
         {"w": 400, "h": 400},
@@ -38,7 +37,7 @@ def story_palette_string_array():
 
 def story_gradient_named_scheme():
     return (
-        chart(SCORES_DATA, color=gradient("blues"), axes=True)
+        chart(SCORES_DATA, color=Color.gradient("blues"), axes=True)
         .flow(spread(by="label", dir="x"))
         .mark(rect(h="value", fill="value")),
         {"w": 400, "h": 400},
@@ -47,7 +46,7 @@ def story_gradient_named_scheme():
 
 def story_gradient_string_array():
     return (
-        chart(SCORES_DATA, color=gradient(["#f7fbff", "#42c663", "#6b0808"]), axes=True)
+        chart(SCORES_DATA, color=Color.gradient(["#f7fbff", "#42c663", "#6b0808"]), axes=True)
         .flow(spread(by="label", dir="x"))
         .mark(rect(h="value", fill="value")),
         {"w": 400, "h": 400},
@@ -65,8 +64,8 @@ _PAIRED_BARS = [
     {"pair": "P4", "type": "cold", "value": 90},
 ]
 
-_WARM_GRADIENT = gradient(["#ffe0b2", "#e65100"])
-_COLD_GRADIENT = gradient(["#bbdefb", "#0d47a1"])
+_WARM_GRADIENT = Color.gradient(["#ffe0b2", "#e65100"])
+_COLD_GRADIENT = Color.gradient(["#bbdefb", "#0d47a1"])
 
 
 def story_paired_palettes():
@@ -95,7 +94,7 @@ def story_paired_palettes():
 def story_nested_derive():
     lake_order = ["Lake A", "Lake B", "Lake C", "Lake D", "Lake E", "Lake F"]
     return (
-        chart(SEAFOOD, color=palette({"salmon-highlight": "#e15759", "first-half": "#4e79a7"}), axes=True)
+        chart(SEAFOOD, color=Color.palette({"salmon-highlight": "#e15759", "first-half": "#4e79a7"}), axes=True)
         .flow(
             derive(lambda d: [
                 {
@@ -120,7 +119,7 @@ def story_nested_derive():
 
 def story_selective_derive():
     return (
-        chart(SEAFOOD, color=palette({"highlighted": "#e15759"}), axes=True)
+        chart(SEAFOOD, color=Color.palette({"highlighted": "#e15759"}), axes=True)
         .flow(
             derive(lambda d: [
                 {**item, "highlight": "highlighted" if item["species"] == "Salmon" else ""}
@@ -136,7 +135,7 @@ def story_selective_derive():
 
 def story_selective_group():
     return (
-        chart(SEAFOOD, color=palette({"Salmon": "#e15759"}), axes=True)
+        chart(SEAFOOD, color=Color.palette({"Salmon": "#e15759"}), axes=True)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="x"),
@@ -161,7 +160,7 @@ _ROSE_DATA = [
 
 def story_rose_gradient():
     return (
-        chart(_ROSE_DATA, color=gradient("blues"), coord=clock(), axes=True)
+        chart(_ROSE_DATA, color=Color.gradient("blues"), coord=Coord.clock(), axes=True)
         .flow(
             spread(by="sector", dir="x", spacing=0, axes=False),
             stack(by="ring", dir="y", axes=True),
@@ -175,7 +174,7 @@ def story_ribbon_highlight():
     return (
         chart(
             SEAFOOD,
-            color=palette({"Salmon": "#e15759", "Trout": "#4e79a7"}),
+            color=Color.palette({"Salmon": "#e15759", "Trout": "#4e79a7"}),
             axes=True,
         )
         .flow(

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from gofish import chart, derive, field, spread, stack, rect, palette
+from gofish import chart, derive, field, spread, stack, rect, Color
 from python_stories.vega_data_urls import read_csv
 
 MONTHS = [
@@ -29,7 +29,7 @@ def story_default():
     return (
         chart(
             weather,
-            color=palette({
+            color=Color.palette({
                 "sun": "#e7ba52",
                 "fog": "#dfdfdf",
                 "drizzle": "#79a1d5",
