@@ -377,8 +377,11 @@ difference axis), never off the size claim:
   same gutter seating, and every tick and label pinned at its instant with
   `Constraint.position`, so nothing sits in an ordinal slot: it is built by
   the same `positionAxis` as a numeric axis, its row labels passed as
-  `extraLabels` (each with its row's offset past the line, and tagged with
-  its row as label tier `k` for `labelAngle: "auto"`). Its ticks and
+  `extraLabels` (each with its row's offset past the line). `labelAngle`
+  does not rotate them yet (a rotated row would need its depth from the
+  rotated label boxes), so, like a difference axis's delta labels, they
+  carry no `axisLabel` tag and `labelAngle: "auto"` does not score them. Its
+  ticks and
   labels come from calendar partitions (`CalendarPartition` in
   `calendar.ts`) instead of `d3.ticks`, one row per partition
   (`axes/timeRows.ts`). Its domain is niced like a numeric axis's, by
@@ -397,7 +400,11 @@ difference axis), never off the size claim:
   rather than going through the ordinal tiers. Rows are independent
   partitions, so they need not nest. A tick both rows share is drawn once,
   short; an outer-row tick between inner ticks is longer. `axes.x.rows` sets the rows
-  (parsed once, by `layout`, into the axis demand below); without
+  (parsed once, by `layout`, into the axis demand below). The demand
+  reaches every axis on the dim, but only a time axis reads the rows: in a
+  faceted chart the facets' ordinal axis shares the dim with the time axes
+  inside the facets. `elaborateChrome` reports which dims drew a time axis
+  (`timeAxes`), and `layout` rejects rows on a dim that drew none. Without
   them the inner row is the level and step whose cells are nearest in
   length to a tenth of the domain (`tickPartition` in `calendar.ts`, like
   d3's time ticks, and like a numeric axis's ~10 ticks), and the outer row

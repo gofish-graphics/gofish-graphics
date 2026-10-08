@@ -13,7 +13,7 @@
 
 import * as Arrow from "apache-arrow";
 import { buildArrowTable } from "./arrowTransport";
-import { Serialize } from "gofish-graphics";
+import { Serialize, chart, scatter, circle, Schema } from "gofish-graphics";
 import { arrowTableToRows } from "./arrowDecode";
 
 // This file is runnable as a script in Node, but the repo doesn't necessarily
@@ -186,10 +186,11 @@ function testConflictingNestedTypesThrow(): boolean {
   }
 }
 
-/** The decode (`arrowDecode.ts`): a timestamp or date column reads as epoch
- *  milliseconds, and the rows carry `HasCalendar` in the column's zone. */
+/** The decode (`arrowDecode.ts`): a tz-aware timestamp column reads as epoch
+ *  milliseconds tagged with its zone; a naive timestamp or a date reads as
+ *  an ISO wall-clock string without an offset, tagged UTC. */
 function testTimeColumnsDecodeAsTimes(): boolean {
-  console.log("Test: time columns decode as epoch ms with HasCalendar");
+  console.log("Test: time columns decode with HasCalendar");
   const ms = Date.UTC(2024, 2, 10, 5);
   const day = Date.UTC(2024, 2, 1);
   const table = new Arrow.Table({
@@ -209,8 +210,8 @@ function testTimeColumnsDecodeAsTimes(): boolean {
   const ok =
     rows[0].ny === ms &&
     rows[1].ny === null &&
-    rows[0].naive === ms &&
-    rows[0].d === day &&
+    rows[0].naive === "2024-03-10T05:00:00" &&
+    rows[0].d === "2024-03-01" &&
     rows[1].n === 2 &&
     JSON.stringify(types) ===
       JSON.stringify({
@@ -220,6 +221,65 @@ function testTimeColumnsDecodeAsTimes(): boolean {
       });
   console.log(
     ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify({ rows, types })}`
+  );
+  return ok;
+}
+
+/** A naive timestamp is a wall-clock time: a chart that declares the column
+ *  in America/New_York reads midnight Feb 28 as midnight in New York, as it
+ *  reads the string "2024-02-28T00:00:00", not as midnight UTC (7 PM on Feb
+ *  27 in New York). A tz-aware timestamp is an instant and is unchanged by
+ *  the chart's zone. */
+async function testNaiveTimesReadInTheChartZone(): Promise<boolean> {
+  console.log("Test: naive timestamps read in the chart's zone");
+  const feb28 = Date.UTC(2024, 1, 28); // the wall clock, counted as UTC
+  const mar1 = Date.UTC(2024, 2, 1);
+  const table = new Arrow.Table({
+    t: Arrow.vectorFromArray([feb28, mar1], new Arrow.TimestampMicrosecond()),
+    v: Arrow.vectorFromArray([1, 2], new Arrow.Int32()),
+  });
+  const rows = arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table)));
+  const labels = async (data: any[], zone: string) => {
+    const dl = await chart(data, {
+      schema: { t: Schema.time({ zone }) },
+      axes: { x: { title: false }, y: false },
+    })
+      .flow(scatter({ by: "t", x: "t", y: "v" }))
+      .mark(circle({ r: 2 }))
+      .toDisplayList({ w: 300, h: 100 });
+    const out: string[] = [];
+    const walk = (it: any) => {
+      if (it.kind === "text") out.push(it.text);
+      for (const c of it.children ?? []) walk(c);
+    };
+    dl.items.forEach(walk);
+    return out;
+  };
+  const naive = await labels(rows, "America/New_York");
+  // The same instants as a tz-aware column (midnight UTC): read in New York
+  // they start on Feb 27.
+  const aware = arrowTableToRows(
+    Arrow.tableFromIPC(
+      Arrow.tableToIPC(
+        new Arrow.Table({
+          t: Arrow.vectorFromArray(
+            [feb28, mar1],
+            new Arrow.TimestampMicrosecond("UTC")
+          ),
+          v: Arrow.vectorFromArray([1, 2], new Arrow.Int32()),
+        })
+      )
+    )
+  );
+  const awareLabels = await labels(aware, "America/New_York");
+  const ok =
+    rows[0].t === "2024-02-28T00:00:00" &&
+    naive.includes("Feb 28") &&
+    !naive.includes("Feb 27") &&
+    aware[0].t === feb28 &&
+    awareLabels.includes("Feb 27");
+  console.log(
+    ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify({ naive, awareLabels })}`
   );
   return ok;
 }
@@ -317,7 +377,7 @@ function testWideIntsAndStructs(): boolean {
   return ok;
 }
 
-export function runArrowTransportTests(): boolean {
+export async function runArrowTransportTests(): Promise<boolean> {
   console.log("Running Arrow transport tests...\n");
 
   const results = [
@@ -333,6 +393,7 @@ export function runArrowTransportTests(): boolean {
     testListColumnsDecodeAsArrays(),
     testNumericNullsDecodeAsNull(),
     testWideIntsAndStructs(),
+    await testNaiveTimesReadInTheChartZone(),
   ];
 
   const allPassed = results.every((r) => r);
@@ -346,6 +407,5 @@ export function runArrowTransportTests(): boolean {
 }
 
 if (import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, "/") || "")) {
-  const ok = runArrowTransportTests();
-  process.exit(ok ? 0 : 1);
+  runArrowTransportTests().then((ok) => process.exit(ok ? 0 : 1));
 }

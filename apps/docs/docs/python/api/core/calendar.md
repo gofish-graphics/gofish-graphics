@@ -86,10 +86,15 @@ in JS) is JS-only.
   outer row is the inner level's parent: minutes for seconds, hours for
   minutes, days for hours, months for days and weeks, years for months and
   quarters. Year has no parent, so a year row is the only row.
-- Default labels come from `Intl.DateTimeFormat` in the browser's locale:
-  `12 AM` for an hour, `Feb 29` for a day or week, `Jan` for a month, `2024`
-  for a year.
-- `"rows"` on an axis that is not over a time column is an error.
+- A domain of one instant spans the day that holds it.
+- Default labels come from `Intl.DateTimeFormat` in English (`en-US`),
+  whatever the browser's locale: `12 AM` for an hour, `Feb 29` for a day or
+  week, `Jan` for a month, `2024` for a year. A locale option is
+  [#1098](https://github.com/gofish-graphics/gofish-graphics/issues/1098).
+- `"label_angle"` does not rotate the labels of a time axis.
+- In a faceted chart, `"rows"` applies to the time axes inside the facets.
+  The facets' category axis on the same dimension ignores it.
+- `"rows"` on a chart with no time axis on that dimension is an error.
 
 ## Example
 

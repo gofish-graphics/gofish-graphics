@@ -99,8 +99,11 @@ is a point along an order.
   date-time without one (`"2024-03-05T14:30"`) is that wall-clock time in
   `zone`. Any other value is an error that names the column and the value.
 - A pandas, polars or pyarrow datetime column is a time column without a
-  schema entry, in the column's own time zone (UTC for a naive or date
-  column). Strings and numbers are never taken as times.
+  schema entry. A tz-aware datetime is an instant, read in its own time
+  zone. A naive datetime or a date is a wall-clock time, like a string
+  without an offset: it is read in the `zone` of the column's
+  `Schema.time()` entry, or in UTC without one. Strings and numbers are
+  never taken as times.
 - An instant has no zero.
 - An axis over the column is a time axis. Its ticks and labels are
   calendar cells in rows: by default the level that gives about 10 ticks,

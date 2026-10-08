@@ -35,7 +35,7 @@ chart(data, { axes: { x: { rows: [{ unit: Calendar.quarter, format }] } } }); //
 | `n`       | `number`                         | `.every(n)`: how many units one cell spans. A whole number, 1 or more. Default `1`.      |
 | `start`   | `"monday" \| "sunday"`           | `Calendar.week({ start })`: the first day of a week. Default `"monday"`, as in ISO 8601. |
 | `rows`    | `TimeRowOption[]`                | An axis's label rows, inner row first. Each is a Calendar value, or `{ unit, format }`.  |
-| `unit`    | `CalendarPartition`              | The partition of a row that has a custom `format`.                                       |
+| `unit`    | `CalendarPartition`              | The partition of a row that has a custom `format`, e.g. `Calendar.week`.                 |
 | `format`  | `(cell: CalendarCell) => string` | The label of each cell of the row.                                                       |
 
 A `CalendarCell` has these fields. The calendar fields are those of the
@@ -95,10 +95,15 @@ polars' `dt` fields.
   outer row is the inner level's parent: minutes for seconds, hours for
   minutes, days for hours, months for days and weeks, years for months and
   quarters. Year has no parent, so a year row is the only row.
-- Default labels come from `Intl.DateTimeFormat` in the runtime's locale:
-  `12 AM` for an hour, `Feb 29` for a day or week, `Jan` for a month, `2024`
-  for a year.
-- `rows` on an axis that is not over a time column is an error.
+- A domain of one instant spans the day that holds it.
+- Default labels come from `Intl.DateTimeFormat` in English (`en-US`),
+  whatever the runtime's locale: `12 AM` for an hour, `Feb 29` for a day or
+  week, `Jan` for a month, `2024` for a year. A locale option is
+  [#1098](https://github.com/gofish-graphics/gofish-graphics/issues/1098).
+- `labelAngle` does not rotate the labels of a time axis.
+- In a faceted chart, `rows` applies to the time axes inside the facets.
+  The facets' category axis on the same dimension ignores it.
+- `rows` on a chart with no time axis on that dimension is an error.
 
 ## Example
 

@@ -39,7 +39,7 @@ import {
 } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
-const { chart, scatter, line, circle, Schema } = GoFish as any;
+const { chart, scatter, spread, line, circle, Schema } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 
 declare const process: { exit(code: number): never };
@@ -481,6 +481,175 @@ async function main() {
       bad?.includes("axes.x.rows[0]") === true,
       bad
     );
+    const callable = timeRowsFromOption(
+      [
+        { unit: Calendar.week, format: fmt },
+        { unit: { unit: "month", step: 3 }, format: fmt } as any,
+      ],
+      "x"
+    );
+    check(
+      "{ unit, format } takes the callable Calendar.week and a wire form",
+      callable[0].partition.unit === "week" &&
+        callable[0].format === fmt &&
+        callable[1].partition.toString() === "Calendar.month.every(3)" &&
+        callable[1].format === fmt
+    );
+    const named = await errorOf(() =>
+      timeRowsFromOption([{ unit: "month", format: fmt }] as any, "x")
+    );
+    check(
+      "{ unit, format } with a level name is a loud error, not a dropped format",
+      named?.includes("axes.x.rows[0].unit") === true,
+      named
+    );
+  }
+
+  console.log("\n# week starts are checked in the wire form");
+  {
+    const bad = await errorOf(() =>
+      calendarPartition({ unit: "week", start: "tuesday" } as any, "rows[0]")
+    );
+    check(
+      'a week start that is not "monday" or "sunday" is a loud error',
+      bad?.includes('start must be "monday" or "sunday"') === true &&
+        bad.includes("rows[0]"),
+      bad
+    );
+    check(
+      "a valid wire week start is read",
+      calendarPartition({ unit: "week", step: 1, start: "sunday" }, "w")
+        .start === "sunday"
+    );
+  }
+
+  console.log("\n# Date inference reads the first non-null value");
+  {
+    const at = Date.UTC(2024, 0, 2);
+    const rows = await applySchema([
+      { d: null, n: null },
+      { d: new Date(at), n: 1 },
+    ]);
+    check(
+      "a column whose first value is null is still inferred from its Dates",
+      rows[1].d === at &&
+        same(getColumnTypes(rows), { d: { HasCalendar: { zone: "UTC" } } }),
+      JSON.stringify([rows, getColumnTypes(rows)])
+    );
+  }
+
+  console.log("\n# naive wall-clock values read in the schema's zone");
+  {
+    // What the widget's Arrow decode hands a chart for a naive timestamp, a
+    // date, and a tz-aware timestamp (arrowDecode.ts): wall-clock strings
+    // and epoch ms, all typed HasCalendar.
+    const decoded = setColumnTypes(
+      [
+        {
+          naive: "2024-02-28T13:00:00",
+          day: "2024-02-28",
+          aware: Date.UTC(2024, 1, 28, 13),
+        },
+      ],
+      {
+        naive: { HasCalendar: { zone: "UTC" } },
+        day: { HasCalendar: { zone: "UTC" } },
+        aware: { HasCalendar: { zone: "UTC" } },
+      }
+    );
+    const ny = SrcSchema.time({ zone: "America/New_York" });
+    const rows = await applySchema(decoded, {
+      naive: ny,
+      day: ny,
+      aware: ny,
+    });
+    check(
+      "a naive date-time is that wall-clock time in New York",
+      rows[0].naive === Date.UTC(2024, 1, 28, 18),
+      iso(rows[0].naive)
+    );
+    check(
+      "a date is midnight Feb 28 in New York, not Feb 27",
+      rows[0].day === Date.UTC(2024, 1, 28, 5),
+      iso(rows[0].day)
+    );
+    check(
+      "a tz-aware instant is unchanged by the zone",
+      rows[0].aware === Date.UTC(2024, 1, 28, 13)
+    );
+    const utc = await applySchema(decoded);
+    check(
+      "with no schema a wall-clock value reads in UTC",
+      utc[0].naive === Date.UTC(2024, 1, 28, 13) &&
+        utc[0].day === Date.UTC(2024, 1, 28)
+    );
+  }
+
+  console.log("\n# one instant");
+  {
+    const one = withCalendar(
+      CONTINUOUS(
+        interval(Date.UTC(2024, 1, 28, 15), Date.UTC(2024, 1, 28, 15)),
+        "pinned"
+      ),
+      { zone: "UTC" }
+    );
+    const iv = (niceContinuous(one) as any).dataInterval;
+    check(
+      "a one-instant domain nices out to the day that holds it",
+      iso(iv.min) === "2024-02-28T00:00:00.000Z" &&
+        iso(iv.max) === "2024-02-29T00:00:00.000Z",
+      `${iso(iv.min)} ${iso(iv.max)}`
+    );
+    const midnight = withCalendar(
+      CONTINUOUS(
+        interval(Date.UTC(2024, 1, 28), Date.UTC(2024, 1, 28)),
+        "pinned"
+      ),
+      { zone: "UTC" }
+    );
+    const iv2 = (niceContinuous(midnight) as any).dataInterval;
+    check(
+      "an instant on a cell start still spans its cell",
+      iv2.max - iv2.min === 864e5
+    );
+  }
+
+  console.log("\n# labels are en-US whatever the runtime locale");
+  {
+    // Simulate a runtime whose default locale is de-DE: a formatter built
+    // with no locale formats in German. (A zone no earlier check used, so
+    // the label formatters are built after the swap.)
+    const Native = Intl.DateTimeFormat;
+    (Intl as any).DateTimeFormat = function (
+      locale?: string | string[],
+      opts?: Intl.DateTimeFormatOptions
+    ) {
+      return new Native(locale ?? "de-DE", opts);
+    };
+    try {
+      const german = new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        timeZone: "UTC",
+      }).format(Date.UTC(2024, 2, 1));
+      const zone = "Europe/Berlin";
+      const lo = Date.UTC(2024, 2, 1);
+      const labelOf = (p: CalendarPartition) =>
+        p.label(p.cells(lo, lo, zone)[0], zone);
+      check(
+        "the simulated runtime locale is German",
+        german.startsWith("Mär"),
+        german
+      );
+      check(
+        "month and day labels stay English",
+        labelOf(Calendar.month) === "Mar" &&
+          labelOf(Calendar.day) === "Mar 1",
+        `${labelOf(Calendar.month)} ${labelOf(Calendar.day)}`
+      );
+    } finally {
+      (Intl as any).DateTimeFormat = Native;
+    }
   }
 
   console.log("\n# rendered time axes");
@@ -578,6 +747,52 @@ async function main() {
       "rows on a non-time axis are a loud error",
       notTime?.includes("need a time axis") === true,
       notTime
+    );
+
+    // A faceted chart: the facets' ordinal x axis shares the dim with the
+    // time axis in each facet. The rows reach the time axes and the ordinal
+    // axis ignores them.
+    const cities = ["A", "B"].flatMap((city) =>
+      ["2024-01-15", "2024-03-10", "2024-05-20"].map((date, i) => ({
+        city,
+        date,
+        v: i,
+      }))
+    );
+    const facetWords = textsOf(
+      await chart(cities, {
+        schema: { date: Schema.time() },
+        axes: { x: { rows: [DistCalendar.month] }, y: false },
+      })
+        .flow(
+          spread({ by: "city", dir: "x" }),
+          scatter({ by: "date", x: "date", y: "v", axes: { x: true } })
+        )
+        .mark(circle({ r: 2 }))
+        .toDisplayList({ w: 400, h: 200 })
+    ).map((t) => t.text);
+    check(
+      "a faceted chart's rows reach its time axes, not its category axis",
+      facetWords.filter((w) => w === "Jan").length === 2 &&
+        !facetWords.includes("2024") &&
+        facetWords.includes("A"),
+      facetWords.join(" ")
+    );
+
+    // One date: the axis spans its day and shows the date, not seconds.
+    const oneWords = textsOf(
+      await chart([{ date: "2024-02-28", v: 1 }], {
+        schema: { date: Schema.time() },
+        axes: { x: { title: false }, y: false },
+      })
+        .flow(scatter({ by: "date", x: "date", y: "v" }))
+        .mark(circle({ r: 2 }))
+        .toDisplayList({ w: 300, h: 100 })
+    ).map((t) => t.text);
+    check(
+      "a one-date chart labels the date",
+      oneWords.includes("Feb 28") && !oneWords.some((w) => /:\d\d:/.test(w)),
+      oneWords.join(" ")
     );
   }
 

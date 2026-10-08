@@ -360,7 +360,6 @@ type ExtraLabel = {
   value: number;
   text: string;
   offset?: number;
-  tier?: number;
 };
 
 /**
@@ -395,8 +394,9 @@ function positionAxis(opts: {
   /** Extra labels placed at a data position, with no tick of their own:
    *  the delta labels of a difference axis, and the row labels of a time
    *  axis. Each sits `offset` pixels past the line (default: past the ticks,
-   *  where a continuous axis's labels sit), and belongs to continuous label
-   *  row `tier` (default 0; see `GoFishNode.axisLabel`). */
+   *  where a continuous axis's labels sit). `labelAngle` does not rotate
+   *  them, so they carry no `axisLabel` tag and `labelAngle: "auto"` does
+   *  not score them. */
   extraLabels?: ExtraLabel[];
   /** The other dim's scale floor, when it also carries a position-like axis —
    *  seats this line at the plot corner instead of the content edge. */
@@ -421,15 +421,11 @@ function positionAxis(opts: {
   // Extra labels are PLAIN text — no tick mark of their own, or a
   // difference axis ends up with a second row of ticks at the midpoints.
   const extra = opts.extraLabels ?? [];
-  const labelNodes = extra.map((e, i) => {
-    const label = Text({
-      text: e.text,
-      fontSize: LABEL_FONT_SIZE,
-      fill: AXIS_COLOR,
-    }).name(labelName(i));
-    label.axisLabel = { dim, kind: "continuous", tier: e.tier ?? 0 };
-    return label;
-  });
+  const labelNodes = extra.map((e, i) =>
+    Text({ text: e.text, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }).name(
+      labelName(i)
+    )
+  );
 
   const constraints = (g: Record<string, any>) => {
     const ticks = tickValues.map((_, i) => g[tickName(i)]);
@@ -591,7 +587,9 @@ function elaborateContinuousAxis(
  * domain picks (`axisTickPartition`) and its parent level.
  *
  * Like a numeric axis, a time axis labels every tick and never drops a
- * label; choosing ticks from the labels' room is #1063.
+ * label; choosing ticks from the labels' room is #1063. `labelAngle` does
+ * not rotate its labels yet: a rotated row would need its depth, and so the
+ * offset of the rows past it, from its rotated label boxes.
  */
 function elaborateTimeAxis(
   dim: 0 | 1,
@@ -645,12 +643,7 @@ function elaborateTimeAxis(
     tickValues,
     tickNode: (v, _i, name) => tickRect(dim, tickLen.get(v)!).name(name),
     extraLabels: labels.flatMap((row, k) =>
-      row.map((l) => ({
-        value: l.at,
-        text: l.text,
-        offset: rowOffset[k],
-        tier: k,
-      }))
+      row.map((l) => ({ value: l.at, text: l.text, offset: rowOffset[k] }))
     ),
     crossFloor,
     side,
@@ -843,6 +836,8 @@ function elaborationsFor(
   /** Per-dim ordinal-tier count, incremented for each dim this node claimed
    *  an ordinal axis on (see the doc comment above). */
   tierCounts: [number, number];
+  /** Per-dim [x, y]: did this node draw a time axis on that dim. */
+  timeAxes: [boolean, boolean];
 } {
   const space = node._underlyingSpace;
   if (!space)
@@ -853,6 +848,7 @@ function elaborationsFor(
       owned: [false, false],
       sides: [undefined, undefined],
       tierCounts,
+      timeAxes: [false, false],
     };
   // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
   // `_underlyingSpace` is the UNDEFINED sentinel — self-scaled children
@@ -921,20 +917,18 @@ function elaborationsFor(
     return resolveLabelRotation(setting);
   };
   const outTierCounts: [number, number] = [...tierCounts];
+  const timeAxes: [boolean, boolean] = [false, false];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
+    // The chart's `rows` reach every axis on the dim, but only a time axis
+    // reads them: in a faceted chart the facets' ordinal axis shares the dim
+    // with the time axes inside it. A chart with rows and no time axis on the
+    // dim is an error, raised once the whole chart is elaborated (`layout`).
     const ticks = ticksFor(dim);
-    if (ticks.rows !== undefined && !(isCONTINUOUS(s) && s.calendar)) {
-      throw new Error(
-        `axes.${axisName(dim)}.rows: rows of calendar cells need a time axis, ` +
-          `but this axis is not over a time column. Declare the column with ` +
-          `Schema.time() in the chart's schema.`
-      );
-    }
     if (kind === "absolute" && isCONTINUOUS(s) && s.calendar) {
       const e = elaborateTimeAxis(
         dim,
@@ -947,6 +941,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
+      timeAxes[dim] = true;
     } else if (kind === "absolute" && isCONTINUOUS(s)) {
       const e = elaborateContinuousAxis(
         dim,
@@ -1009,6 +1004,7 @@ function elaborationsFor(
       owned[1] ? axisSide(1) : undefined,
     ],
     tierCounts: outTierCounts,
+    timeAxes,
   };
 }
 
@@ -1058,6 +1054,10 @@ export type ChromeOptions = {
  * for the next one out (its city row), which `elaborationsFor` uses to pick
  * the right entry of a per-tier `labelAngle` array. Sibling subtrees don't
  * interfere: each call only sees counts folded from ITS OWN children.
+ *
+ * It also reports, per dim, whether any node in the subtree drew a time axis
+ * (`timeAxes`), so `layout` can reject `axes.<dim>.rows` on a chart with no
+ * time axis on that dim.
  */
 export async function elaborateChrome(
   node: GoFishNode,
@@ -1066,9 +1066,11 @@ export async function elaborateChrome(
   node: GoFishNode;
   changed: boolean;
   tierCounts: [number, number];
+  timeAxes: [boolean, boolean];
 }> {
   let changed = false;
   const tierCounts: [number, number] = [0, 0];
+  const timeAxes: [boolean, boolean] = [false, false];
   // Bottom-up: replace each child with its elaborated form.
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
@@ -1077,6 +1079,7 @@ export async function elaborateChrome(
       if (res.changed) changed = true;
       for (const dim of [0, 1] as (0 | 1)[]) {
         tierCounts[dim] = Math.max(tierCounts[dim], res.tierCounts[dim]);
+        timeAxes[dim] ||= res.timeAxes[dim];
       }
       if (res.node !== child) {
         node.children[i] = res.node;
@@ -1092,12 +1095,14 @@ export async function elaborateChrome(
     owned,
     sides,
     tierCounts: nextTierCounts,
+    timeAxes: ownTimeAxes,
   } = elaborationsFor(
     node,
     options.sides ?? [undefined, undefined],
     options.labelSettings,
     tierCounts
   );
+  for (const dim of [0, 1] as (0 | 1)[]) timeAxes[dim] ||= ownTimeAxes[dim];
   // A title names an axis this node draws. The measure is read off the
   // node's own space, which elaboration has not re-resolved yet.
   const request = node._chromeRequest;
@@ -1120,7 +1125,7 @@ export async function elaborateChrome(
     titles[1] === undefined &&
     legend === undefined
   ) {
-    return { node, changed, tierCounts: nextTierCounts };
+    return { node, changed, tierCounts: nextTierCounts, timeAxes };
   }
 
   let withAxes: GoFishNode = node;
@@ -1193,7 +1198,12 @@ export async function elaborateChrome(
   });
   root.chrome = { content: node, withAxes };
 
-  return { node: root, changed: true, tierCounts: nextTierCounts };
+  return {
+    node: root,
+    changed: true,
+    tierCounts: nextTierCounts,
+    timeAxes,
+  };
 }
 
 // ── Axis titles ──────────────────────────────────────────────────────────────

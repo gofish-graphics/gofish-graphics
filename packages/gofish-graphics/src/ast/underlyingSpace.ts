@@ -269,7 +269,7 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   // interval means nothing, so it stays.
   const [lo, hi] =
     axis === "absolute"
-      ? s.calendar !== undefined && iv.max > iv.min
+      ? s.calendar !== undefined
         ? niceToCells(
             iv.min,
             iv.max,

@@ -40,8 +40,10 @@ import {
 export type CellFormat = (cell: CalendarCell) => string;
 
 /** One entry of `axes.x.rows`: a Calendar value (default labels), or one
- *  with a `format` function for its labels. The wire form of a Calendar
- *  value (`{ unit: "month", step: 1 }`, what Python sends) is accepted too. */
+ *  with a `format` function for its labels, `{ unit, format }`, whose `unit`
+ *  is a Calendar value. The wire form of a Calendar value
+ *  (`{ unit: "month", step: 1 }`, what Python sends) is accepted in both
+ *  places. */
 export type TimeRowOption =
   | CalendarPartition
   | CalendarJSON
@@ -55,7 +57,10 @@ export type TimeRow = { partition: CalendarPartition; format?: CellFormat };
  *  before the domain). */
 export type TimeLabel = { at: number; text: string };
 
-/** Read `axes.<dim>.rows` (inner first) into rows. An entry that is not a
+/** Read `axes.<dim>.rows` (inner first) into rows. An entry is the row
+ *  form `{ unit, format }` when it has a `format` key or its `unit` is not a
+ *  level name (a wire form's `unit` is a string, like `"month"`); either way
+ *  the Calendar value is read by `calendarPartition`. An entry that is not a
  *  Calendar value is a loud error. */
 export function timeRowsFromOption(
   rows: readonly TimeRowOption[],
@@ -73,8 +78,7 @@ export function timeRowsFromOption(
       r !== null &&
       typeof r === "object" &&
       !(r instanceof CalendarPartition) &&
-      "unit" in r &&
-      typeof (r as { unit: unknown }).unit === "object"
+      ("format" in r || typeof (r as { unit?: unknown }).unit !== "string")
     ) {
       const { unit, format } = r as {
         unit: CalendarPartition | CalendarJSON;
@@ -87,7 +91,7 @@ export function timeRowsFromOption(
         );
       }
       return {
-        partition: calendarPartition(unit, where),
+        partition: calendarPartition(unit, `${where}.unit`),
         format: format as CellFormat | undefined,
       };
     }

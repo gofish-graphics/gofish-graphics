@@ -224,8 +224,9 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
  * schemas.
  *
  * A column the schema does not name is a time column (`HasCalendar`, UTC)
- * when its first value is a JS `Date`: inference is local, from the value
- * alone. Strings and numbers are never inferred as time; they need
+ * when its first non-null value is a JS `Date` (a column is a key of the
+ * first row): inference is local, from the value alone, and a missing value
+ * says nothing about the column. Strings and numbers are never inferred as time; they need
  * `Schema.time()`. Every time column's values become epoch milliseconds (see
  * {@link toEpochMs}); the rows are copied only when some value is not one
  * already.
@@ -246,8 +247,12 @@ export async function applySchema<T>(
   const first = rows.find((r) => r != null) as
     | Record<string, unknown>
     | undefined;
-  for (const [column, v] of Object.entries(first ?? {})) {
-    if (types[column] === undefined && v instanceof Date) {
+  for (const column of Object.keys(first ?? {})) {
+    if (types[column] !== undefined) continue;
+    const v = rows.find(
+      (r) => r != null && (r as Record<string, unknown>)[column] != null
+    ) as Record<string, unknown> | undefined;
+    if (v?.[column] instanceof Date) {
       types[column] = { HasCalendar: { zone: "UTC" } };
     }
   }

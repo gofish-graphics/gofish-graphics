@@ -168,7 +168,11 @@ export type AxisOptions =
        *  each label is centered on its cell's start tick. The axis's domain
        *  is niced outward to the cells of the inner row. Rows need not nest.
        *  Omitted, the axis has two rows: the level-and-step the domain picks
-       *  for about 10 ticks, and its parent level. */
+       *  for about 10 ticks, and its parent level. Only time axes read the
+       *  rows (in a faceted chart, the time axes inside the facets, not the
+       *  facets' category axis); a chart with rows and no time axis on the
+       *  dim is an error. `labelAngle` does not rotate a time axis's labels
+       *  yet. */
       rows?: TimeRowOption[];
     };
 
@@ -377,6 +381,19 @@ export async function layout(
   const elaborated = await elaborateChrome(child, {
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
+  });
+  // `rows` reach every axis on their dim, but only a time axis reads them
+  // (a faceted chart's ordinal axis shares the dim with the time axes inside
+  // it). Rows that no time axis read are an error.
+  perDimAxisOption(axes, "rows").forEach((rows, dim) => {
+    if (rows !== undefined && !elaborated.timeAxes[dim]) {
+      throw new Error(
+        `axes.${axisName(dim as 0 | 1)}.rows: rows of calendar cells need a ` +
+          `time axis, but no ${axisName(dim as 0 | 1)} axis of this chart is ` +
+          `over a time column. Declare the column with Schema.time() in the ` +
+          `chart's schema.`
+      );
+    }
   });
   if (elaborated.changed) {
     child = elaborated.node;

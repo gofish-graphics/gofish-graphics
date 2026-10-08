@@ -1756,13 +1756,16 @@ reads only the classes, never the builder words. Three classes exist:
   into epoch milliseconds (`toEpochMs`: an ISO date is the start of that day
   in the zone, a date-time without an offset is wall-clock time in the zone).
   It is also the one class that is inferred, and only locally: a column
-  whose first value is a JS `Date` is a UTC time. Strings and numbers never
-  are. A pandas, polars or pyarrow datetime column crosses from Python as an
-  Arrow timestamp or date column, unchanged, and the widget's decode
-  (`widget-src/arrowDecode.ts`) reads it as epoch milliseconds and attaches
-  `HasCalendar` in the column's own zone to the rows, as column types, so
-  `applySchema` finds the values already converted, and a declared `schema`
-  entry wins over the decoded type. An instant has no zero. A position read from the column carries the
+  whose first non-null value is a JS `Date` is a UTC time. Strings and
+  numbers never are. A pandas, polars or pyarrow datetime column crosses
+  from Python as an Arrow timestamp or date column, unchanged, and the
+  widget's decode (`widget-src/arrowDecode.ts`) attaches `HasCalendar` to
+  the rows, as column types. A tz-aware timestamp is an instant: it decodes
+  to epoch milliseconds, typed in its own zone. A naive timestamp or a date
+  is a wall-clock value: it decodes to an ISO string without an offset,
+  typed UTC, so `applySchema` reads it in the zone of a declared `schema`
+  entry (which wins over the decoded type) exactly as it reads the same
+  string from JS data, or in UTC without one. An instant has no zero. A position read from the column carries the
   class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
   for any typed column, with `createOperator` passing the column it resolved
   from the whole input, measure and type together, `resolveColumn`), and the point space it
@@ -1771,7 +1774,10 @@ reads only the classes, never the builder words. Three classes exist:
   it (`mergeCalendars`: the overlay fold, a layer's datum-position domain in
   `compose.ts`, a rect's two ends, the `position` operator's offset), and
   two parts on different zones are an error, like two measures. A time space
-  is niced to the cells of its axis's inner row, and its axis is a time axis
+  is niced to the cells of its axis's inner row (`niceToCells`: the
+  smallest run of whole cells that covers the domain, so a domain of one
+  instant, which `tickPartition` ticks at days, spans the day that holds
+  it), and its axis is a time axis
   ([Axes](/internals/frontend/axes#the-three-kinds)). Calendar cells
   (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
   on Temporal, native or the polyfill it loads when the runtime has none.

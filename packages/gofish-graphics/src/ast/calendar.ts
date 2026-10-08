@@ -124,6 +124,12 @@ const LABEL_FORMAT: Record<
   year: { year: "numeric" },
 };
 
+/** The locale of default labels: always en-US, not the runtime's locale,
+ *  so a chart reads the same on every machine (like `fmtNum`'s numbers, which
+ *  never group digits or localize the decimal point). A chart-level locale
+ *  option is #1098. */
+const LABEL_LOCALE = "en-US";
+
 const formatters = new Map<string, Intl.DateTimeFormat>();
 function formatter(
   unit: Exclude<CalendarUnit, "quarter">,
@@ -132,7 +138,7 @@ function formatter(
   const key = `${unit}|${zone}`;
   let f = formatters.get(key);
   if (f === undefined) {
-    f = new Intl.DateTimeFormat(undefined, {
+    f = new Intl.DateTimeFormat(LABEL_LOCALE, {
       ...LABEL_FORMAT[unit],
       timeZone: zone,
     });
@@ -280,9 +286,9 @@ export class CalendarPartition {
   }
 
   /** A cell's default label: its level's field in `zone` (the zone its
-   *  cells were read in), formatted by `Intl.DateTimeFormat` in the
-   *  runtime's locale ("Jan", "12 AM", "Feb 29", "2024"), or "Q1" to "Q4"
-   *  for a quarter. */
+   *  cells were read in), formatted by `Intl.DateTimeFormat` in en-US
+   *  ({@link LABEL_LOCALE}: "Jan", "12 AM", "Feb 29", "2024"), or "Q1" to
+   *  "Q4" for a quarter. */
   label(cell: CalendarCell, zone: string): string {
     if (this.unit === "quarter") return `Q${cell.quarter}`;
     return formatter(this.unit, zone).format(cell.start);
@@ -310,13 +316,19 @@ export class CalendarPartition {
 export type WeekPartition = CalendarPartition &
   ((opts?: { start?: WeekStart }) => CalendarPartition);
 
+/** The loud error for a week start that is not "monday" or "sunday".
+ *  `where` names the value (`Calendar.week`, or the option it came in). */
+function checkWeekStart(start: unknown, where: string): void {
+  if (start !== undefined && start !== "monday" && start !== "sunday") {
+    throw new Error(
+      `${where}: start must be "monday" or "sunday", not ${JSON.stringify(start)}.`
+    );
+  }
+}
+
 function weekPartition(): WeekPartition {
   const make = ({ start }: { start?: WeekStart } = {}) => {
-    if (start !== undefined && start !== "monday" && start !== "sunday") {
-      throw new Error(
-        `Calendar.week: start must be "monday" or "sunday", not ${JSON.stringify(start)}.`
-      );
-    }
+    checkWeekStart(start, "Calendar.week");
     return new CalendarPartition("week", 1, start);
   };
   // A function that is also the default partition: same prototype, same
@@ -345,7 +357,8 @@ export const Calendar = {
 };
 
 /** A Calendar value from a builder value or its wire form (Python sends the
- *  wire form). An unknown unit is a loud error. */
+ *  wire form). An unknown unit, or a `start` that is not "monday" or
+ *  "sunday" or is given for a level other than weeks, is a loud error. */
 export function calendarPartition(
   value: CalendarPartition | CalendarJSON,
   where: string
@@ -365,6 +378,7 @@ export function calendarPartition(
   if (v.start !== undefined && v.unit !== "week") {
     throw new Error(`${where}: only Calendar.week takes a start day.`);
   }
+  checkWeekStart(v.start, where);
   return new CalendarPartition(v.unit as CalendarUnit, v.step ?? 1, v.start);
 }
 
@@ -401,21 +415,23 @@ function nominalMs(unit: CalendarUnit, step: number): number {
  * The partition a time axis over `[lo, hi]` ticks at when its rows are not
  * given: about `count` ticks, as a numeric axis aims for `count` ticks. Like
  * d3's time ticks, it takes the entry of {@link AUTO_STEPS} whose nominal
- * cell length is nearest (by ratio) to `(hi − lo) / count`. It reads only
- * the domain, never pixels.
+ * cell length is nearest (by ratio) to `(hi − lo) / count`. A domain of one
+ * instant (`lo === hi`) has no length to divide, so it ticks at days: its
+ * axis spans the day that holds it. It reads only the domain, never pixels.
  */
 export function tickPartition(
   lo: number,
   hi: number,
   count: number
 ): CalendarPartition {
+  if (hi === lo) return Calendar.day;
   const target = (hi - lo) / count;
   let best: CalendarPartition | undefined;
   let bestRatio = Infinity;
   for (const [unit, steps] of AUTO_STEPS) {
     for (const step of steps) {
       const d = nominalMs(unit, step);
-      const ratio = target > 0 ? Math.max(d / target, target / d) : d;
+      const ratio = Math.max(d / target, target / d);
       if (ratio < bestRatio) {
         bestRatio = ratio;
         best = new CalendarPartition(unit, step);
@@ -427,16 +443,21 @@ export function tickPartition(
 
 /** `[lo, hi]` rounded outward to cell starts of `partition` in `zone`: the
  *  start of the cell that holds `lo`, and the first cell start at or after
- *  `hi`. The time analog of d3's `nice`. */
+ *  `hi`, the smallest run of whole cells that covers the domain. A domain of
+ *  one instant is covered by the one cell that holds it. The time analog of
+ *  d3's `nice`. */
 export function niceToCells(
   lo: number,
   hi: number,
   partition: CalendarPartition,
   zone: string
 ): [number, number] {
+  const first = partition.floor(zoned(lo, zone));
   const last = partition.floor(zoned(hi, zone));
   return [
-    partition.floor(zoned(lo, zone)).epochMilliseconds,
-    last.epochMilliseconds === hi ? hi : partition.next(last).epochMilliseconds,
+    first.epochMilliseconds,
+    last.epochMilliseconds === hi && hi > lo
+      ? hi
+      : partition.next(last).epochMilliseconds,
   ];
 }

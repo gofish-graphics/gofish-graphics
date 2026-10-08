@@ -720,9 +720,12 @@ renders it. What differs between the hosts is only transport:
   `decodeTierRows` (`widget-src/arrowDecode.ts`, which the harness imports
   as the `gofish-python/arrowDecode` package export) and pass the result as
   `tierRows`. Data in the IR wins over `tierRows`. The decode converts each
-  column once by its Arrow type: a timestamp or date becomes epoch
+  column once by its Arrow type: a tz-aware timestamp becomes epoch
   milliseconds and marks the column as a time (`HasCalendar` in its zone,
-  attached with `Serialize.setColumnTypes`), a list becomes a plain array, a
+  attached with `Serialize.setColumnTypes`); a naive timestamp or a date is
+  a wall-clock value, so it becomes an ISO string without an offset and is
+  marked `HasCalendar` in UTC, which `applySchema` reads in the zone the
+  chart declares for the column, as it reads the same string from JS data; a list becomes a plain array, a
   struct a plain object, a 64-bit integer a JS number, and a null stays
   `null`. A float NaN stays NaN: GoFish never reads NaN as missing. Only a
   pandas DataFrame's NaN crosses as null, because pandas defines NaN as the
