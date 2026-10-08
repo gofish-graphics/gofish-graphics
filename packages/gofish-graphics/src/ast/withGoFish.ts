@@ -15,7 +15,7 @@ import type { LayerContext } from "./marks/chart";
 import { resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
-  resolveAccessors,
+  resolveChannelAccessors,
   ChannelAnnotations,
   ChannelType,
   DeriveMarkProps,
@@ -500,17 +500,19 @@ function buildCreatedMark(
     // resolve-time value; the paint layer re-evaluates it reactively per frame
     // via the datum-bound thunk baked at lower time. One split, shared with
     // every other mark factory — see `splitLiveChannels`.
-    const { static: resolvedOpts, live: liveChannels } = splitLiveChannels(
+    const { static: staticOpts, live: liveChannels } = splitLiveChannels(
       markOpts,
       d
+    );
+    const resolvedOpts = await resolveChannelAccessors(
+      staticOpts,
+      channels,
+      data
     );
     for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
-      const markValue =
-        channelSpec === undefined
-          ? resolvedOpts[propName]
-          : await resolveAccessors(resolvedOpts[propName], data);
+      const markValue = resolvedOpts[propName];
 
       const channelType: ChannelType | undefined =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;

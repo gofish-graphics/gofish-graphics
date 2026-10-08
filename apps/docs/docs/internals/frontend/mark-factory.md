@@ -113,11 +113,12 @@ accessor and provenance are loop-invariant across split entries.
 
 Inference is synchronous. An accessor that returns a Promise (a Python
 lambda reaches JS as one, and so does a JS `async (d) => ...`) is resolved
-over the mark's rows before inference: `resolveAccessors` (`channels.ts`)
-calls it on each row, awaits the values together, and hands inference a
+over the mark's rows before inference: `resolveChannelAccessors`
+(`channels.ts`) resolves every channel at once, calling each async accessor
+on each row, awaiting the values together, and handing inference a
 synchronous accessor that reads them back. It also walks a `dims` bag, so a
-nested accessor is resolved the same way. The operator factory does the same
-before its own channel inference.
+nested accessor is resolved the same way. The operator factory uses the same
+helper before its own channel inference.
 
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.

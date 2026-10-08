@@ -165,7 +165,8 @@ Walking `createOperator.ts:391-415`:
    producing an array of values (one per child); otherwise it aggregates
    over all of `d` and produces one value. Inference is synchronous, so
    `buildLayoutOpts` first resolves any async accessor in a channel (a
-   Python lambda) over the rows of `d` with `resolveAccessors` (#1080).
+   Python lambda) with `resolveChannelAccessors` (#1080), over every row
+   inference reads: the rows of `d` plus each split entry's rows.
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator

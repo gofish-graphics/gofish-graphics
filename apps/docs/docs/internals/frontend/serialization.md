@@ -767,7 +767,7 @@ channels. The accessor it
 builds is async: each call is one `/derive/<id>` round trip for one row.
 Channel inference is synchronous, so the mark factory and the operator factory
 first resolve every async accessor in a channel over the rows they are about
-to infer from (`resolveAccessors` in `channels.ts`), and inference reads the
+to infer from (`resolveChannelAccessors` in `channels.ts`), and inference reads the
 resolved values (#1080). That works the same in every channel kind, size and
 position included, and for a JS `async (d) => ...` accessor too. The cost is
 one round trip per row. To make it cheaper later, the accessor can collect the

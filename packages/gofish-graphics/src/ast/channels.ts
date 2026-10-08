@@ -398,11 +398,14 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> => {
  * too; tagged values (`field(...)`, `datum(...)`) are class instances and stay
  * as they are.
  *
- * The mark factory and the operator factory call this in their async bodies,
- * once per channel, right before inference. It is the one place an async
- * accessor is awaited.
+ * Called through {@link resolveChannelAccessors}, which the mark factory and
+ * the operator factory run in their async bodies right before inference. It
+ * is the one place an async accessor is awaited.
  */
-export async function resolveAccessors<V>(value: V, rows: any[]): Promise<V> {
+export async function resolveAccessors<V>(
+  value: V,
+  rows: readonly any[]
+): Promise<V> {
   if (typeof value === "function") {
     if (rows.length === 0) return value;
     const fn = value as (d: any) => unknown;
@@ -416,7 +419,9 @@ export async function resolveAccessors<V>(value: V, rows: any[]): Promise<V> {
     return ((row: unknown) => {
       if (!byRow.has(row)) {
         throw new Error(
-          "an async channel accessor was read on a row it was not resolved over"
+          "an async channel accessor was read on a row it was not resolved " +
+            "over. resolveChannelAccessors must be given every row that " +
+            "inference reads."
         );
       }
       return byRow.get(row);
@@ -431,6 +436,29 @@ export async function resolveAccessors<V>(value: V, rows: any[]): Promise<V> {
     return Object.fromEntries(entries) as V;
   }
   return value;
+}
+
+/**
+ * Resolve the async accessors in every channel of `opts` over `rows`, all
+ * channels at once (see {@link resolveAccessors}). `rows` must hold every row
+ * inference will read: the operator factory passes its whole input plus each
+ * split entry's rows, so a split that hands inference other row objects than
+ * its input still finds each one. Options that are not channels are left as
+ * they are.
+ */
+export async function resolveChannelAccessors<O extends Record<string, any>>(
+  opts: O,
+  channels: Record<string, unknown> | undefined,
+  rows: readonly any[]
+): Promise<O> {
+  const keys = Object.keys(channels ?? {}).filter((k) => opts[k] !== undefined);
+  if (keys.length === 0) return opts;
+  const values = await Promise.all(
+    keys.map((k) => resolveAccessors(opts[k], rows))
+  );
+  const out: Record<string, any> = { ...opts };
+  keys.forEach((k, i) => (out[k] = values[i]));
+  return out as O;
 }
 
 /**
