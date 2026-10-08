@@ -409,15 +409,22 @@ embedded}`), `AxisDimsValue` (a channel value or an `AxisInterval`, the
 value of a `dims` entry), and `FieldPredicate` (`{field, between, closed}`,
 the predicate of `filter`). A `t.ref(name)` resolves against it first, so the
 validator, the JSON Schema, and the Python generator all read one declaration
-of each. The docs options tables print a ref by its name on JS pages. On
-Python pages they print the name only when the Python package defines a class
-by that name (`FieldAccessor`, `FieldPredicate`); any other named option type
-prints as the Python type it stands for (`AxesOptions` is `bool | dict`). `CHART_OPTIONS` lists the chart-level options (`w`, `h`, `coord`,
-`color`, `axes`, `legend`, `padding`, `schema`), mirroring the JS
-`ChartOptions`. The validator walks `ChartIR.options` against it, the JSON
-Schema emits it as the `ChartOptions` `$def`, the Python generator builds
-`_chart_opts` from it, and the docs build the `chart` options table from it
+of each. `ChartOptions` is one of them: `t.object(CHART_OPTIONS)`, the
+chart-level options (`w`, `h`, `coord`, `color`, `axes`, `legend`, `padding`,
+`schema`), mirroring the JS `ChartOptions`. The validator walks
+`ChartIR.options` as `t.ref("ChartOptions")`, the JSON Schema emits its
+`$def` with the others, the Python generator builds `_chart_opts` from
+`CHART_OPTIONS`, and the docs build the chart options table from it
 (`::: gofish-ref ChartOptions`).
+
+A named type may say which Python class builds a value of it (`pyClass`):
+`FieldPredicate` here, and `FieldAccessor` in `AUTHORED_REFS`, the list of
+refs to hand-authored shapes. Such a value already carries its wire keys, so
+the Python generator passes it through. One function, `pyType` in
+`descriptors.ts`, gives the Python type of a field: the generated factory
+signatures annotate with it and the Python docs tables print it, so the two
+agree. A ref prints as its `pyClass` when it has one, else as the Python type
+it stands for (`AxesOptions` is `bool | dict`).
 
 **What's still authored, not in the table**: the envelope
 (`ChartIR`/`LayerIR`/`DataIR`/`MarkIR` union, `ChannelValue`,

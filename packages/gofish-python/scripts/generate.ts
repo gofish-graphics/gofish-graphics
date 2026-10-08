@@ -54,6 +54,9 @@ import {
   type FieldSpec,
   type FieldType,
   carriesChannel,
+  pyType,
+  refPyClass,
+  AUTHORED_REFS,
 } from "gofish-ir/frontend";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -62,53 +65,6 @@ const OUT_FILE = join(HERE, "..", "gofish", "_generated.py");
 // ---------------------------------------------------------------------------
 // small helpers
 // ---------------------------------------------------------------------------
-
-function literalPyType(value: string | number | boolean): string {
-  if (typeof value === "string") return "str";
-  if (typeof value === "number") return "float";
-  return "bool";
-}
-
-function pyType(f: FieldType): string {
-  switch (f.kind) {
-    case "string":
-      return "str";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "channel":
-      return f.inner === "number" ? "Union[int, float, str]" : "str";
-    case "enum":
-      return "str";
-    case "literal":
-      // Annotated by the literal's base type, like `enum` → str; the IR
-      // validator checks the exact value.
-      return literalPyType(f.value);
-    case "array":
-      return "List[Any]";
-    case "union": {
-      // A union of primitive kinds renders as a real Union; anything richer
-      // falls back to Any.
-      const prims = f.options.map((o) => {
-        if (o.kind === "string") return "str";
-        if (o.kind === "number") return "float";
-        if (o.kind === "boolean") return "bool";
-        if (o.kind === "literal") return literalPyType(o.value);
-        return null;
-      });
-      if (prims.every(Boolean)) return `Union[${prims.join(", ")}]`;
-      return "Any";
-    }
-    case "any":
-    case "ref":
-    case "tuple":
-    case "object":
-    case "record":
-    default:
-      return "Any";
-  }
-}
 
 function pySig(name: string, f: FieldSpec): string {
   // Descriptor-required wire fields are required keyword arguments: missing
@@ -149,15 +105,6 @@ function pyStr(s: string): string {
 // ---------------------------------------------------------------------------
 // nested option dicts
 // ---------------------------------------------------------------------------
-
-/** Refs outside `OPTION_TYPES` that a generated kwarg may carry. Their values
- *  pass through unchanged, so each entry says why that is right. A ref in
- *  neither table fails generation, so a new nested type has to be declared
- *  before Python can take it. */
-const PASSTHROUGH_REFS: Record<string, string> = {
-  FieldAccessor:
-    "built by field(...), whose dict already carries the wire keys (type, name, measure, ops)",
-};
 
 /** Whether a value of this type may be a Python dict that `_to_wire` has to
  *  route. A channel value may be a dict too (field(...), datum(...)), but
@@ -245,11 +192,13 @@ function wireShape(type: FieldType, where: string): string | null {
           ? null
           : `("ref", ${pyStr(type.name)})`;
       }
-      if (type.name in PASSTHROUGH_REFS) return null;
+      // A value of a type with a Python class (`field(...)` builds a
+      // FieldAccessor) already carries the wire keys, so it passes through.
+      if (refPyClass(type.name) !== undefined) return null;
       throw new Error(
         `${where}: t.ref("${type.name}") is neither a named option type ` +
           `(OPTION_TYPES in descriptors.ts) nor a known pass-through ref ` +
-          `(PASSTHROUGH_REFS in generate.ts). Declare it before Python takes it.`
+          `(a pyClass in AUTHORED_REFS). Declare it before Python takes it.`
       );
     }
     case "union": {
@@ -397,10 +346,24 @@ operator-vs-combinator, ref-shape narrowing, DataFrame conversion, the
 lambda/RPC bridge) stays hand-written there.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from . import ast as _ast
 from .ast import Mark, _channel
+
+if TYPE_CHECKING:
+    from .ast import ${[
+      ...new Set(
+        [
+          ...Object.values(OPTION_TYPES).map((s) => s.pyClass),
+          ...Object.values(AUTHORED_REFS).map((r) => r.pyClass),
+        ].filter((c): c is string => c !== undefined)
+      ),
+    ]
+      .sort()
+      .join(", ")}
 `);
 
 // --- Nested option dicts ------------------------------------------------------

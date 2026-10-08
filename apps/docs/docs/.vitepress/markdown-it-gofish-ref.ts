@@ -36,9 +36,6 @@
  * `pnpm --filter gofish-ir build` (the file is dependency-free TypeScript).
  */
 
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import container from "markdown-it-container";
 import {
   COMBINATOR_MARKS,
@@ -48,6 +45,7 @@ import {
   OPTION_TYPES,
   SHARED_FIELD_GROUPS,
   pyKwarg,
+  pyType,
   resolveFields,
   type ConstructDescriptor,
   type FieldGroup,
@@ -130,69 +128,6 @@ function tsType(f: FieldType): string {
       return "object";
     case "record":
       return `Record<string, ${tsType(f.valueType)}>`;
-  }
-}
-
-/** The classes the Python package defines: every top-level `class Name` in
- *  `packages/gofish-python/gofish/*.py`. A ref names a Python type only when
- *  Python has a class by that name (`field(...)` returns a `FieldAccessor`,
- *  `.between(...)` a `FieldPredicate`). */
-const PYTHON_CLASSES: ReadonlySet<string> = (() => {
-  const dir = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "../../../../packages/gofish-python/gofish"
-  );
-  const names = new Set<string>();
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".py")) continue;
-    const src = readFileSync(join(dir, file), "utf-8");
-    for (const m of src.matchAll(/^class (\w+)\b/gm)) names.add(m[1]);
-  }
-  return names;
-})();
-
-function pyType(f: FieldType): string {
-  switch (f.kind) {
-    case "string":
-    case "enum":
-      return "str";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "literal":
-      // Python spelling of the one value: False/True, or a repr.
-      return typeof f.value === "boolean"
-        ? f.value
-          ? "True"
-          : "False"
-        : JSON.stringify(f.value);
-    case "channel":
-      switch (f.inner) {
-        case "number":
-          return "int | float | str";
-        case "boolean":
-          return "bool";
-        default:
-          return "str";
-      }
-    case "union":
-      return [...new Set(f.options.map(pyType))].join(" | ");
-    case "array":
-      return "list";
-    case "tuple":
-      return "tuple";
-    case "object":
-    case "record":
-      return "dict";
-    case "ref":
-      // Python's own class by this name; else a named option type is a plain
-      // dict (or a union with one), so print the type it stands for.
-      if (PYTHON_CLASSES.has(f.name)) return f.name;
-      if (f.name in OPTION_TYPES) return pyType(OPTION_TYPES[f.name].type);
-      return "Any";
-    case "any":
-      return "Any";
   }
 }
 

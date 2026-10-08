@@ -10,10 +10,15 @@ operator-vs-combinator, ref-shape narrowing, DataFrame conversion, the
 lambda/RPC bridge) stays hand-written there.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from . import ast as _ast
 from .ast import Mark, _channel
+
+if TYPE_CHECKING:
+    from .ast import FieldAccessor, FieldPredicate
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -105,7 +110,7 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
 
 # --- Leaf marks -------------------------------------------------------------
 
-def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
+def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
@@ -159,7 +164,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
             _kw[_k] = _v
     return Mark("rect", **_kw)
 
-def circle(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[Union[int, float, str]] = None, fill_opacity: Optional[float] = None) -> Mark:
+def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, r: Optional[int | float | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[int | float | str] = None, fill_opacity: Optional[float] = None) -> Mark:
     """A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.
 
     Args:
@@ -207,7 +212,7 @@ def circle(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] 
             _kw[_k] = _v
     return Mark("circle", **_kw)
 
-def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
+def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
     """An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.
 
     Args:
@@ -255,7 +260,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]]
             _kw[_k] = _v
     return Mark("ellipse", **_kw)
 
-def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None) -> Mark:
+def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None) -> Mark:
     """A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.
 
     Args:
@@ -297,7 +302,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
             _kw[_k] = _v
     return Mark("petal", **_kw)
 
-def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, filter: Optional[str] = None, font_size: Optional[float] = None, font_family: Optional[str] = None, font_style: Optional[str] = None, font_weight: Optional[Union[float, str]] = None, debug_bounding_box: Optional[bool] = None, rotate: Optional[float] = None, text_anchor: Optional[str] = None) -> Mark:
+def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, filter: Optional[str] = None, font_size: Optional[float] = None, font_family: Optional[str] = None, font_style: Optional[str] = None, font_weight: Optional[float | str] = None, debug_bounding_box: Optional[bool] = None, rotate: Optional[float] = None, text_anchor: Optional[str] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
@@ -359,7 +364,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
             _kw[_k] = _v
     return Mark("text", **_kw)
 
-def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
+def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
     """An embedded raster/SVG image. Box geometry via the shared dims channels.
 
     Args:
@@ -405,7 +410,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
             _kw[_k] = _v
     return Mark("image", **_kw)
 
-def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+def polygon(*, debug: Optional[bool] = None, points: list | str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
     """A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.
 
     Args:
@@ -429,7 +434,7 @@ def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = 
             _kw[_k] = _v
     return Mark("polygon", **_kw)
 
-def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, fill: Optional[str] = None) -> Mark:
+def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, fill: Optional[str] = None) -> Mark:
     """An invisible sizing/positioning guide — a rect that emits no display items at all, with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
 
     Args:
@@ -559,7 +564,7 @@ def enclose(children: List["Mark"], *, padding: Optional[float] = None, rx: Opti
             kwargs[_k] = _v
     return Mark("enclose", _children=list(children), **kwargs)
 
-def position(children: List["Mark"], *, key: Optional[str] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None) -> Mark:
+def position(children: List["Mark"], *, key: Optional[str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None) -> Mark:
     """Set a single child's min-corner (x, y) in parent coordinates — an absolute-offset placement primitive, NOT center-anchored. Unlike `enclose`'s convex-hull styling, `position` draws nothing of its own; it exists for cases (e.g. the Topology story's combinator trees) that need to place one child precisely without `enclose`'s fill/stroke/hull limits.
 
     Args:
@@ -614,7 +619,7 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str | FieldAccessor] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
@@ -655,7 +660,7 @@ def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_opts(*, by: Optional[str | FieldAccessor] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
 
     Args:
@@ -696,7 +701,7 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
             opts[_k] = _v
     return opts
 
-def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, x_min: Optional[Union[int, float, str]] = None, x_max: Optional[Union[int, float, str]] = None, y_min: Optional[Union[int, float, str]] = None, y_max: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, alignment: Optional[str] = None, overlap: Optional[Any] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _scatter_opts(*, by: Optional[str | FieldAccessor] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, x_min: Optional[int | float | str] = None, x_max: Optional[int | float | str] = None, y_min: Optional[int | float | str] = None, y_max: Optional[int | float | str] = None, dims: Optional[dict] = None, alignment: Optional[str] = None, overlap: Optional[dict] = None, axes: Optional[bool | dict] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Position each child at an explicit (x, y) point or [min, max] span in data space.
 
     Args:
@@ -735,7 +740,7 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
             opts[_k] = _v
     return opts
 
-def _group_opts(*, by: Any, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _group_opts(*, by: str | FieldAccessor, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Partition rows by `by` into a flat `Frame` (no layout beyond grouping).
 
     Args:
@@ -751,7 +756,7 @@ def _group_opts(*, by: Any, debug: Optional[bool] = None) -> Dict[str, Any]:
             opts[_k] = _v
     return opts
 
-def _table_opts(*, by: Any, spacing: Optional[Any] = None, num_cols: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _table_opts(*, by: dict, spacing: Optional[float | tuple] = None, num_cols: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange cells in a `numCols`-wide grid (or a `{x, y}` keyed grid via `by`).
 
     Args:
@@ -771,7 +776,7 @@ def _table_opts(*, by: Any, spacing: Optional[Any] = None, num_cols: Optional[fl
             opts[_k] = _v
     return opts
 
-def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[Any] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.
 
     Args:
@@ -809,7 +814,7 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
             opts[_k] = _v
     return opts
 
-def _pack_opts(*, by: Optional[Any] = None, method: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _pack_opts(*, by: Optional[str | FieldAccessor] = None, method: Optional[dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).
 
     Args:
@@ -827,7 +832,7 @@ def _pack_opts(*, by: Optional[Any] = None, method: Optional[Any] = None, debug:
             opts[_k] = _v
     return opts
 
-def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, dims: Optional[Any] = None, by: Optional[Any] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[Any] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
 
     Args:
@@ -867,7 +872,7 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
             opts[_k] = _v
     return opts
 
-def _spread_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, size: Optional[Union[int, float, str]] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
 
     Args:
@@ -924,7 +929,7 @@ def _spread_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: O
             opts[_k] = _v
     return opts
 
-def _stack_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, size: Optional[Union[int, float, str]] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.
 
     Args:
@@ -981,7 +986,7 @@ def _stack_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: Op
             opts[_k] = _v
     return opts
 
-def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[Union[float, str]] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
+def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[float | str] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
     """Options of one .label(accessor, **options) call.
 
     Args:
@@ -1009,7 +1014,7 @@ def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = 
             opts[_k] = _v
     return opts
 
-def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
@@ -1057,7 +1062,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
             opts[_k] = _v
     return opts
 
-def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
     Args:
@@ -1097,7 +1102,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
             opts[_k] = _v
     return opts
 
-def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[Any] = None, transform: Optional[Any] = None, box: Optional[bool] = None) -> Dict[str, Any]:
+def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, transform: Optional[dict] = None, box: Optional[bool] = None) -> Dict[str, Any]:
     """Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.
 
     Args:
@@ -1141,7 +1146,7 @@ def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Unio
             opts[_k] = _v
     return opts
 
-def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[Any] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[Any] = None) -> Dict[str, Any]:
+def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
     """Chart-level options for chart(data, **options).
 
     Args:
@@ -1172,7 +1177,7 @@ def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: 
 
 # --- Coord transforms ---------------------------------------------------------
 
-def _polar_config(transform_type: str, *, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[Any] = None) -> Dict[str, Any]:
+def _polar_config(transform_type: str, *, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
     """Shared builder for the polar-family coord configs (polar()/clock()).
 
     Only set options are emitted, so defaults stay on the JS side. Wire keys

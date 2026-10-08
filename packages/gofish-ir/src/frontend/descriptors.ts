@@ -76,6 +76,10 @@ export interface FieldSpec {
   doc?: string;
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
+  /** On a named type (`OPTION_TYPES`, `AUTHORED_REFS`): the Python class
+   *  that builds a value of it. Its instances already carry the wire keys,
+   *  so Python passes them through, and {@link pyType} names the class. */
+  pyClass?: string;
 }
 
 export type FieldGroup = Record<string, FieldSpec>;
@@ -444,6 +448,7 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
     }),
   },
   FieldPredicate: {
+    pyClass: "FieldPredicate",
     doc: "A field predicate, as `field(name).between(lo, hi, { closed })` builds it: the field it reads and the interval it tests.",
     type: t.object({
       field: {
@@ -472,6 +477,63 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
     type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
   },
 };
+
+/** The refs a field may name that are not `OPTION_TYPES` entries: shapes
+ *  authored by hand in schema.ts / jsonSchema.ts and walked by their own
+ *  validator walkers. `pyClass` names the Python class that builds a value. */
+export const AUTHORED_REFS: Readonly<Record<string, { pyClass?: string }>> = {
+  FieldAccessor: { pyClass: "FieldAccessor" },
+  LabelIR: {},
+  TranslateIR: {},
+  RelateClauseIR: {},
+};
+
+/** The Python class for a named type, if it has one. */
+export function refPyClass(name: string): string | undefined {
+  return OPTION_TYPES[name]?.pyClass ?? AUTHORED_REFS[name]?.pyClass;
+}
+
+/**
+ * The Python type of a field type, as the generated factory signatures
+ * annotate it and the Python docs tables print it (one spelling for both). A
+ * channel takes a literal or a field name; a named type is its Python class
+ * when it has one, else the type it stands for.
+ */
+export function pyType(f: FieldType): string {
+  switch (f.kind) {
+    case "string":
+    case "enum":
+      return "str";
+    case "number":
+      return "float";
+    case "boolean":
+      return "bool";
+    case "literal":
+      return `Literal[${typeof f.value === "boolean" ? (f.value ? "True" : "False") : JSON.stringify(f.value)}]`;
+    case "channel":
+      return f.inner === "number"
+        ? "int | float | str"
+        : f.inner === "boolean"
+          ? "bool"
+          : "str";
+    case "union":
+      return [...new Set(f.options.map(pyType))].join(" | ");
+    case "array":
+      return "list";
+    case "tuple":
+      return "tuple";
+    case "object":
+    case "record":
+      return "dict";
+    case "ref": {
+      const cls = refPyClass(f.name);
+      if (cls !== undefined) return cls;
+      return f.name in OPTION_TYPES ? pyType(OPTION_TYPES[f.name].type) : "Any";
+    }
+    case "any":
+      return "Any";
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Shared field groups
