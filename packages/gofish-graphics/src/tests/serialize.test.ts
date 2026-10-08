@@ -1288,6 +1288,124 @@ async function main() {
     );
   }
 
+  console.log("\n# Async accessors in size and position channels (#1080)");
+  {
+    // A Python lambda reaches JS as an accessor that returns a Promise. The
+    // mark and operator factories resolve it over the rows before inference,
+    // so size and position channels read numbers, not Promises.
+    const rows = [
+      { k: "a", v: 1 },
+      { k: "b", v: 3 },
+    ];
+    const rectsOf = (dl: any): { w: number; h: number }[] => {
+      const out: { w: number; h: number }[] = [];
+      const walk = (it: any) => {
+        if (it.kind === "rect") out.push({ w: it.w, h: it.h });
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return out;
+    };
+    const bars = (h: unknown) =>
+      chart(rows)
+        .flow(spread({ by: "k", dir: "x" }))
+        .mark(rect({ w: 10, h } as any))
+        .toDisplayList({ w: 100, h: 100 });
+    const expected = rectsOf(await bars("v"));
+    const sameAs = (got: { w: number; h: number }[]) =>
+      got.length === expected.length &&
+      got.every(
+        (r, i) =>
+          Math.abs(r.w - expected[i].w) < 1e-9 &&
+          Math.abs(r.h - expected[i].h) < 1e-9
+      );
+    const jsAsync = rectsOf(await bars(async (d: any) => d.v));
+    check(
+      "a JS async h accessor draws the same bars as a field",
+      sameAs(jsAsync) && jsAsync.every((r) => Number.isFinite(r.h)),
+      JSON.stringify({ jsAsync, expected })
+    );
+
+    const calls: string[] = [];
+    const bridge = {
+      applyLambda: async (id: string, batch: any[]) => {
+        calls.push(id);
+        return batch.map((r) => r.v);
+      },
+    };
+    const ir = {
+      type: "chart",
+      operators: [{ type: "spread", by: "k", dir: "x" }],
+      mark: { type: "rect", w: 10, h: { __gofish_lambda: "hv" } },
+    } as any;
+    const fromPython = rectsOf(
+      await Serialize.buildChart(
+        ir,
+        rows,
+        bridge,
+        Serialize.makeTokenResolver()
+      ).toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a bridged h accessor (a Python lambda) draws the same bars as a field",
+      sameAs(fromPython) && calls.length > 0,
+      JSON.stringify({ fromPython, expected, calls })
+    );
+
+    const dimsIR = {
+      type: "chart",
+      operators: [{ type: "spread", by: "k", dir: "x" }],
+      mark: {
+        type: "rect",
+        w: 10,
+        dims: { y: { size: { __gofish_lambda: "hv" } } },
+      },
+    } as any;
+    const fromDims = rectsOf(
+      await Serialize.buildChart(
+        dimsIR,
+        rows,
+        bridge,
+        Serialize.makeTokenResolver()
+      ).toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a bridged accessor nested in dims draws the same bars as a field",
+      sameAs(fromDims),
+      JSON.stringify({ fromDims, expected })
+    );
+
+    const scatterIR = {
+      type: "chart",
+      operators: [
+        {
+          type: "scatter",
+          by: "k",
+          x: { __gofish_lambda: "hv" },
+          y: "v",
+        },
+      ],
+      mark: { type: "circle", r: 2 },
+    } as any;
+    const dl = await Serialize.buildChart(
+      scatterIR,
+      rows,
+      bridge,
+      Serialize.makeTokenResolver()
+    ).toDisplayList({ w: 100, h: 100 });
+    const cxs: number[] = [];
+    const walk = (it: any) => {
+      if (it.kind === "ellipse") cxs.push(it.cx);
+      for (const c of it.children ?? []) walk(c);
+    };
+    dl.items.forEach(walk);
+    check(
+      "a bridged operator position accessor places the points",
+      cxs.length === 2 && cxs.every(Number.isFinite) && cxs[0] < cxs[1],
+      JSON.stringify(cxs)
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);

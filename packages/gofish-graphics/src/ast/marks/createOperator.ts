@@ -41,6 +41,7 @@ import {
 } from "./markResult";
 import {
   CHANNEL_INFER,
+  resolveAccessors,
   axisSlotKind,
   resolveMeasure,
   type DimsChannelSpec,
@@ -987,15 +988,24 @@ function stripFactoryKeys<Options extends Record<string, any>>(
   return out as Options;
 }
 
-/** Build the low-level opts passed to `layout`. */
-function buildLayoutOpts<Datum, Options extends Record<string, any>>(
+/** Build the low-level opts passed to `layout`. An async accessor in a
+ *  channel is resolved over the operator's rows first, so `applyChannels`
+ *  stays synchronous (`resolveAccessors`, #1080). */
+async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   channels: ChannelAnnotations<Options> | undefined,
   opts: Options,
   d: Datum | Datum[],
   entries: Map<string | number, Datum | Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined
-): Options {
-  const withChannels = applyChannels(opts, channels, d, entries);
+): Promise<Options> {
+  const rows = Array.isArray(d) ? d : [d];
+  const resolved: Record<string, any> = { ...opts };
+  for (const key of Object.keys(channels ?? {})) {
+    if (resolved[key] !== undefined) {
+      resolved[key] = await resolveAccessors(resolved[key], rows);
+    }
+  }
+  const withChannels = applyChannels(resolved as Options, channels, d, entries);
   const stripped = stripFactoryKeys(withChannels);
   // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
   return { ...stripped, ...layoutOpts } as Options;
@@ -1047,7 +1057,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             return resolveMarkResult(result, layerContext);
           })
         );
-        const lowOpts = buildLayoutOpts(
+        const lowOpts = await buildLayoutOpts(
           cfg.channels,
           opts,
           d,
@@ -1189,7 +1199,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           })
         );
         const nodes = nodesPerLeaf.flat();
-        const lowOpts = buildLayoutOpts(
+        const lowOpts = await buildLayoutOpts(
           cfg.channels,
           opts,
           d,

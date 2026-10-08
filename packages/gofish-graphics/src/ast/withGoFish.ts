@@ -15,6 +15,7 @@ import type { LayerContext } from "./marks/chart";
 import { resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
+  resolveAccessors,
   ChannelAnnotations,
   ChannelType,
   DeriveMarkProps,
@@ -491,8 +492,9 @@ function buildCreatedMark(
     // single value. The object form `{type, entry: true}` produces a
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
-    // `CHANNEL_INFER.raw` is async so a callable accessor may return a Promise
-    // — the Python wrapper bridges `text(text=lambda d: ...)` that way.
+    // An async accessor (a Python lambda, or a JS `async (d) => ...`) is
+    // resolved over the rows first, so inference below is synchronous
+    // (`resolveAccessors`, #1080).
     const shapeProps: Record<string, any> = {};
     // `live(...)` channels: the pipeline renders (and measures) the accessor's
     // resolve-time value; the paint layer re-evaluates it reactively per frame
@@ -505,7 +507,10 @@ function buildCreatedMark(
     for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
-      const markValue = resolvedOpts[propName];
+      const markValue =
+        channelSpec === undefined
+          ? resolvedOpts[propName]
+          : await resolveAccessors(resolvedOpts[propName], data);
 
       const channelType: ChannelType | undefined =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
@@ -518,10 +523,7 @@ function buildCreatedMark(
       } else if (isEntry && channelType === "size") {
         shapeProps[propName] = inferEntrySize(markValue, data);
       } else if (channelType !== undefined) {
-        shapeProps[propName] = await CHANNEL_INFER[channelType](
-          markValue,
-          data
-        );
+        shapeProps[propName] = CHANNEL_INFER[channelType](markValue, data);
       } else {
         shapeProps[propName] = markValue;
       }

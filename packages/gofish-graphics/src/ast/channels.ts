@@ -290,8 +290,7 @@ export const inferPos = inferNumeric(meanBy);
  *   wrapper, or a string that names no field on the row (e.g. a CSS color).
  * - "row": the value read off the row, with the `field` it was read from when
  *   the accessor named one (not for a function accessor). The caller wraps it
- *   in `value(...)`;
- *   `inferRaw` awaits it first, so a function accessor may be async.
+ *   in `value(...)`.
  * - "none": there is no usable row to read.
  */
 function firstRowValue<T extends Record<string, any>>(
@@ -353,29 +352,86 @@ export const inferColor = <T extends Record<string, any>>(
 /**
  * Infer a raw scalar value from a field name, function accessor, or literal.
  * Same resolution as {@link inferColor} (plus numbers), with no aggregation —
- * suitable for text content, labels, unscaled identifiers. Async so a callable
- * accessor may return a Promise: the Python wrapper bridges `text(text=lambda
- * d: ...)` through the derive-server RPC that way. Awaiting a non-Promise is a
- * no-op, so plain `(d) => d.amount` accessors work unchanged.
+ * suitable for text content, labels, unscaled identifiers. An async accessor
+ * (a Python lambda) has already been resolved by {@link resolveAccessors}.
  */
-export const inferRaw = async <T extends Record<string, any>>(
+export const inferRaw = <T extends Record<string, any>>(
   accessor:
     | string
     | number
-    | ((d: T) => string | number | Promise<string | number>)
+    | ((d: T) => string | number)
     | FieldAccessor
     | LiteralValue
     | undefined,
   data: T[]
-): Promise<MaybeValue<string | number> | undefined> => {
+): MaybeValue<string | number> | undefined => {
   if (accessor === undefined) return undefined;
   if (typeof accessor === "number") return accessor;
   const resolved = firstRowValue(accessor, data);
   if (resolved.kind === "none") return undefined;
   return resolved.kind === "literal"
     ? (resolved.value as string | number)
-    : value(await resolved.value);
+    : value(resolved.value);
 };
+
+const isThenable = (v: unknown): v is PromiseLike<unknown> =>
+  v !== null &&
+  (typeof v === "object" || typeof v === "function") &&
+  typeof (v as any).then === "function";
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> => {
+  if (v === null || typeof v !== "object") return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+};
+
+/**
+ * Resolve the async accessors in a channel value over `rows`, so channel
+ * inference stays synchronous (#1080). An accessor is async when it returns a
+ * Promise: a Python lambda reaches JS that way (`fromJSON.ts` turns its
+ * `{ __gofish_lambda }` sentinel into an RPC per row), and so does a JS
+ * `async (d) => ...`. Each such accessor is called once per row, the values
+ * are awaited together, and it is replaced by a synchronous accessor that
+ * reads them back by row. A synchronous accessor is left as it is (it was
+ * called on the first row to find out). Plain objects are walked, so an
+ * accessor nested in a `dims` bag (`dims: { r: { size: fn } }`) is resolved
+ * too; tagged values (`field(...)`, `datum(...)`) are class instances and stay
+ * as they are.
+ *
+ * The mark factory and the operator factory call this in their async bodies,
+ * once per channel, right before inference. It is the one place an async
+ * accessor is awaited.
+ */
+export async function resolveAccessors<V>(value: V, rows: any[]): Promise<V> {
+  if (typeof value === "function") {
+    if (rows.length === 0) return value;
+    const fn = value as (d: any) => unknown;
+    const first = fn(rows[0]);
+    if (!isThenable(first)) return value;
+    const values = await Promise.all([
+      first,
+      ...rows.slice(1).map((row) => fn(row)),
+    ]);
+    const byRow = new Map<unknown, unknown>(rows.map((r, i) => [r, values[i]]));
+    return ((row: unknown) => {
+      if (!byRow.has(row)) {
+        throw new Error(
+          "an async channel accessor was read on a row it was not resolved over"
+        );
+      }
+      return byRow.get(row);
+    }) as V;
+  }
+  if (isPlainObject(value)) {
+    const entries = await Promise.all(
+      Object.entries(value).map(
+        async ([k, v]) => [k, await resolveAccessors(v, rows)] as const
+      )
+    );
+    return Object.fromEntries(entries) as V;
+  }
+  return value;
+}
 
 /**
  * The one channel-type → inference dispatch table, shared by the mark factory

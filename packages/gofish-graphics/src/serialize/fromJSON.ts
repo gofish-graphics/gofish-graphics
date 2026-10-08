@@ -108,8 +108,9 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
 // ---------------------------------------------------------------------------
 
 /**
- * Build the async arrow for a `{ __gofish_lambda: id }` sentinel. The arrow
- * is what JS-side `inferRaw` (and equivalents) calls per row. The body
+ * Build the async arrow for a `{ __gofish_lambda: id }` sentinel. The mark
+ * and operator factories resolve it over their rows before channel inference
+ * (`resolveAccessors` in channels.ts), calling it once per row. The body
  * issues a one-row RPC through the bridge and returns the lambda's result for
  * that row as the bridge hands it back: plain JSON values, with any
  * transport-specific wrapping already undone by the bridge.

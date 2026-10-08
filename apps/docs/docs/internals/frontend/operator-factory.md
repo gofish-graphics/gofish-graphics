@@ -163,7 +163,9 @@ Walking `createOperator.ts:391-415`:
    `inferColor` on annotated opts. For an entry-flagged channel
    (`{type, entry: true}`), the inference runs once per split entry,
    producing an array of values (one per child); otherwise it aggregates
-   over all of `d` and produces one value.
+   over all of `d` and produces one value. Inference is synchronous, so
+   `buildLayoutOpts` first resolves any async accessor in a channel (a
+   Python lambda) over the rows of `d` with `resolveAccessors` (#1080).
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator
