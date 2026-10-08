@@ -18,6 +18,10 @@
  * TS-ish type; Python pages (`docs/python/**`) show the snake_case kwarg names and a
  * Python type — the language is detected from `env.relativePath`.
  *
+ * A name may also be an option group that is not a construct (`OPTION_GROUPS`
+ * below): `::: gofish-ref chart` renders the chart-level options
+ * (`CHART_OPTIONS`) as one table.
+ *
  * Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
  * their own open subsection ("Box dimensions", "Paint") below the table of the
  * construct's own fields.
@@ -34,6 +38,7 @@
 
 import container from "markdown-it-container";
 import {
+  CHART_OPTIONS,
   COMBINATOR_MARKS,
   COORDS,
   LEAF_MARKS,
@@ -42,11 +47,19 @@ import {
   pyKwarg,
   resolveFields,
   type ConstructDescriptor,
+  type FieldGroup,
   type FieldSpec,
   type FieldType,
 } from "../../../../packages/gofish-ir/src/frontend/descriptors";
 
 type Lang = "js" | "python";
+
+/** Option groups that are not constructs but get a generated table by name:
+ *  `::: gofish-ref chart` is the options of `chart(data, options)`.
+ *  `scripts/check-api-coverage.mjs` lists the same names. */
+export const OPTION_GROUPS: Record<string, FieldGroup> = {
+  chart: CHART_OPTIONS,
+};
 
 const TABLES: Record<string, ConstructDescriptor>[] = [
   OPERATORS,
@@ -297,12 +310,20 @@ function renderName(
   name: string,
   opts: { lang: Lang; md: { render(src: string): string }; titled: boolean }
 ): string {
+  const optionGroup = OPTION_GROUPS[name];
+  if (optionGroup !== undefined) {
+    const heading = opts.titled ? opts.md.render(`### \`${name}\``) : "";
+    return (
+      heading + optionsTable(Object.entries(optionGroup), opts.lang, opts.md)
+    );
+  }
   const found = lookupConstructs(name);
   if (found.length === 0) {
     throw new Error(
       `Unknown gofish-ref construct "${name}". It must be a construct in ` +
         `packages/gofish-ir/src/frontend/descriptors.ts (OPERATORS, LEAF_MARKS, ` +
-        `COMBINATOR_MARKS or COORDS), named by its wire type or its pyName.`
+        `COMBINATOR_MARKS or COORDS), named by its wire type or its pyName, ` +
+        `or an option group (${Object.keys(OPTION_GROUPS).join(", ")}).`
     );
   }
   const byFields = new Map<string, ConstructDescriptor[]>();

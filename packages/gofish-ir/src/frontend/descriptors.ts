@@ -347,7 +347,7 @@ const axisOptions: FieldSpec = {
  *  (`axes={"x": {"label_angle": 45}}` serializes as `labelAngle`).
  *
  *  A ref that is not in this table names a hand-authored envelope `$def`
- *  (LabelIR, TranslateIR, FieldAccessor, AxisDimsValue, ...). */
+ *  (LabelIR, TranslateIR, FieldAccessor, ...). */
 export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   AxisOptions: axisOptions,
   AxesOptions: {
@@ -360,13 +360,30 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
       })
     ),
   },
+  AxisInterval: {
+    doc: "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
+    type: t.object({
+      min: ch.num("Start edge position."),
+      center: ch.num("Center position."),
+      max: ch.num("End edge position."),
+      size: ch.num("Size along the axis."),
+      embedded: {
+        type: t.boolean,
+        doc: "Embed this axis in the parent's space.",
+      },
+    }),
+  },
+  AxisDimsValue: {
+    doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
+    type: t.union(t.channel("number"), t.ref("AxisInterval")),
+  },
 };
 
 /** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
  *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
- *  `gofish-graphics/src/ast/marks/chartBuilder.ts`. Read by the Python
- *  generator (`_chart_opts`); the IR validator and JSON Schema still take
- *  `options` as an open object. */
+ *  `gofish-graphics/src/ast/marks/chartBuilder.ts`. The Python generator
+ *  (`_chart_opts`), the IR validator, the JSON Schema (`ChartOptions`), and
+ *  the docs options table (`::: gofish-ref chart`) all read it. */
 export const CHART_OPTIONS: FieldGroup = group({
   w: { type: t.number, doc: "Chart width in pixels." },
   h: { type: t.number, doc: "Chart height in pixels." },

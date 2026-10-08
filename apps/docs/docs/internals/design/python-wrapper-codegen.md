@@ -198,7 +198,8 @@ signature cannot list names that only exist at render time, and the earlier
 approach (the four polar names as top-level kwargs, from a hand-kept list)
 drifted: geo's `lon`/`lat` were silently dropped. So the names moved into one
 named kwarg, `dims={...}`, on the box-dims marks and on `scatter`. Its keys
-are open (`t.record(t.ref("AxisDimsValue"))`, a dict in Python), and every
+are open (`t.record(t.ref("AxisDimsValue"))`, a dict in Python; the values
+are still checked), and every
 other kwarg stays closed. The top-level `x/y/w/h` keys keep working in every
 coordinate space, where they mean axis 0 and axis 1.
 
@@ -418,6 +419,24 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   entries, which replaced their hand-written axes shapes; those had fallen
   behind the JS type and lacked `side` and `labelAngle`. See
   [§ Generating the Python factory layer](/internals/frontend/serialization#generating-the-python-factory-layer).
+
+- **The last unchecked option surfaces (#1010).** `dims` values are
+  checked: `AxisInterval` and `AxisDimsValue` moved into `OPTION_TYPES`,
+  replacing their hand-written JSON Schema `$defs` and validator walker.
+  `_to_wire` passes a `field(...)` or `datum(...)` value through by its
+  class, since it is already in wire form, so a channel branch no longer
+  counts against the one-dict-branch rule and any other dict in a `dims`
+  entry is an interval whose keys are checked. On the JS side, a channel
+  value that is an untagged object is now an error, which is what lets the
+  validator's generic union walk read such an object only as an interval.
+  The validator walks `ChartIR.options` against `CHART_OPTIONS`, the JSON
+  Schema emits a `ChartOptions` `$def` for it, and the `chart` reference
+  pages build their options table from it with `::: gofish-ref chart`
+  instead of a hand-written copy. The JSON Schema now writes every
+  descriptor union as `anyOf`, matching the validator's "any branch"
+  reading (a `datum(...)` object fits both branches of `AxisDimsValue`).
+  The `axes` option of `.render(...)` was already converted in the widget
+  constructor; a test now covers it on charts, marks, and layers.
 
 **Deliberately deferred**, not follow-up bugs:
 

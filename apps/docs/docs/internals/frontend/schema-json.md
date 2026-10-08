@@ -155,7 +155,7 @@ for the API.
           "$ref": "#/$defs/MarkIR"
         },
         "options": {
-          "type": "object"
+          "$ref": "#/$defs/ChartOptions"
         },
         "zOrder": {
           "$ref": "#/$defs/Number"
@@ -676,7 +676,7 @@ for the API.
                 "description": "Font family of the label's text node. Omitted, the elaborator's own font family."
               },
               "fontWeight": {
-                "oneOf": [
+                "anyOf": [
                   {
                     "$ref": "#/$defs/Number"
                   },
@@ -802,39 +802,6 @@ for the API.
               "type": "string"
             }
           }
-        }
-      ]
-    },
-    "AxisInterval": {
-      "description": "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "min": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "center": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "max": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "size": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "embedded": {
-          "type": "boolean"
-        }
-      }
-    },
-    "AxisDimsValue": {
-      "description": "A `dims` entry: a bare channel value (a position) or an AxisInterval.",
-      "oneOf": [
-        {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        {
-          "$ref": "#/$defs/AxisInterval"
         }
       ]
     },
@@ -964,7 +931,7 @@ for the API.
           "const": "spread"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1058,7 +1025,7 @@ for the API.
           "const": "stack"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1150,7 +1117,7 @@ for the API.
           "const": "group"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1187,7 +1154,7 @@ for the API.
           "const": "scatter"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1234,7 +1201,7 @@ for the API.
           "default": "baseline"
         },
         "overlap": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "object",
               "properties": {
@@ -1257,7 +1224,7 @@ for the API.
                   "enum": ["blue", "quasi", "uniform"]
                 },
                 "smoothing": {
-                  "oneOf": [
+                  "anyOf": [
                     {
                       "$ref": "#/$defs/Number"
                     },
@@ -1329,7 +1296,7 @@ for the API.
           "description": "Grouping fields for the column/row keys — the table operator can't run without both."
         },
         "spacing": {
-          "oneOf": [
+          "anyOf": [
             {
               "$ref": "#/$defs/Number"
             },
@@ -1434,7 +1401,7 @@ for the API.
           "description": "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1460,7 +1427,7 @@ for the API.
           "default": true
         },
         "tile": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "object",
               "properties": {
@@ -1525,7 +1492,7 @@ for the API.
           "const": "pack"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -2066,7 +2033,7 @@ for the API.
           "description": "Raw CSS font-style (e.g. \"italic\")."
         },
         "fontWeight": {
-          "oneOf": [
+          "anyOf": [
             {
               "$ref": "#/$defs/Number"
             },
@@ -2224,7 +2191,7 @@ for the API.
           "const": "polygon"
         },
         "points": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -2601,7 +2568,7 @@ for the API.
       ]
     },
     "AxisOptions": {
-      "oneOf": [
+      "anyOf": [
         {
           "type": "boolean"
         },
@@ -2609,7 +2576,7 @@ for the API.
           "type": "object",
           "properties": {
             "title": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "string"
                 },
@@ -2624,7 +2591,7 @@ for the API.
               "description": "Which frame edge the axis sits on: \"start\" is the near (origin) edge, \"end\" the far edge. Omitted, a continuous x-axis sits at the visual bottom."
             },
             "labelAngle": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "$ref": "#/$defs/Number"
                 },
@@ -2646,7 +2613,7 @@ for the API.
       "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle."
     },
     "AxesOptions": {
-      "oneOf": [
+      "anyOf": [
         {
           "type": "boolean"
         },
@@ -2665,6 +2632,81 @@ for the API.
         }
       ],
       "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own."
+    },
+    "AxisInterval": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Start edge position."
+        },
+        "center": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center position."
+        },
+        "max": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "End edge position."
+        },
+        "size": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Size along the axis."
+        },
+        "embedded": {
+          "type": "boolean",
+          "description": "Embed this axis in the parent's space."
+        }
+      },
+      "description": "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels."
+    },
+    "AxisDimsValue": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        {
+          "$ref": "#/$defs/AxisInterval"
+        }
+      ],
+      "description": "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval."
+    },
+    "ChartOptions": {
+      "description": "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python.",
+      "type": "object",
+      "properties": {
+        "w": {
+          "$ref": "#/$defs/Number",
+          "description": "Chart width in pixels."
+        },
+        "h": {
+          "$ref": "#/$defs/Number",
+          "description": "Chart height in pixels."
+        },
+        "coord": {
+          "description": "Coordinate transform for the whole chart: polar(), clock(), wavy(), ..."
+        },
+        "color": {
+          "description": "Color scale for every mark: palette(...) or gradient(...)."
+        },
+        "axes": {
+          "$ref": "#/$defs/AxesOptions",
+          "description": "Draw axes: a boolean for both axes, or per-axis options {x?, y?}."
+        },
+        "legend": {
+          "type": "boolean",
+          "description": "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
+          "default": true
+        },
+        "padding": {
+          "$ref": "#/$defs/Number",
+          "description": "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels)."
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "Column types, keyed by column name, e.g. Schema.ordered(levels)."
+        }
+      }
     }
   }
 }

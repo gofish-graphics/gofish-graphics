@@ -18,7 +18,9 @@ from gofish import (
     chart,
     circle,
     circles,
+    datum,
     dice,
+    field,
     group,
     jitter,
     join,
@@ -364,6 +366,53 @@ def test_layer_of_charts_takes_js_layer_options():
         layer([c1, c2], labelAngle=45)
     with pytest.raises(TypeError):
         layer([c1, c2], padding=80)
+
+
+def test_render_axes_convert_on_every_render_path():
+    # `.render(axes=...)` on a chart, a mark, and a layer takes the same typed
+    # conversion as `chart(axes=...)`: snake_case keys become wire keys, and
+    # an unknown key raises TypeError.
+    c = chart([{"v": 1}]).mark(rect(h="v"))
+    for renderable in [c, rect(w=10, h=10), layer([c])]:
+        widget = renderable.render(axes={"x": {"label_angle": 45}, "y": False})
+        assert widget.axes == {"x": {"labelAngle": 45}, "y": False}
+        assert renderable.render(axes=True).axes is True
+        assert renderable.render().axes is None
+        with pytest.raises(TypeError, match="did you mean 'label_angle'"):
+            renderable.render(axes={"x": {"labelAngle": 45}})
+
+
+# --- Axis-name dims -----------------------------------------------------------
+# A `dims` entry (AxisDimsValue) is a channel value or an interval. field(...)
+# and datum(...) values are already in wire form and pass through; any other
+# dict is an interval, whose keys are checked.
+
+
+def test_dims_values_pass_channel_values_and_check_intervals():
+    d = rect(
+        dims={
+            "theta": {"size": datum(1), "embedded": True},
+            "r": field("v").sort(),
+            "lon": "a",
+            "lat": {"min": "a", "max": datum(2) + 3},
+        }
+    ).to_dict()
+    assert d["dims"] == {
+        "theta": {"size": {"type": "datum", "datum": 1}, "embedded": True},
+        "r": {"type": "field", "name": "v", "ops": [{"op": "sort"}]},
+        "lon": "a",
+        "lat": {"min": "a", "max": {"type": "datum", "datum": 2, "offset": 3}},
+    }
+    assert scatter(dims={"lon": field("x")}).to_dict()["dims"] == {
+        "lon": {"type": "field", "name": "x"}
+    }
+
+
+def test_dims_interval_with_unknown_key_is_rejected():
+    with pytest.raises(TypeError, match="unexpected key 'width'"):
+        rect(dims={"theta": {"width": 2}})
+    with pytest.raises(TypeError, match="unexpected key 'start'"):
+        scatter(dims={"lon": {"start": "a"}})
 
 
 # --- Combinator box dims ------------------------------------------------------

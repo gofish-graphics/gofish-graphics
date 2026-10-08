@@ -32,12 +32,17 @@ import {
 } from "./schema.js";
 import { isNonFiniteNumberIR, isTaggedInfinity } from "./nonFinite.js";
 import {
+  CHART_OPTIONS,
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
+  t,
   type FieldSpec,
   type FieldType,
 } from "./descriptors.js";
+
+/** `ChartIR.options`: an object of the chart-level options. */
+const CHART_OPTIONS_TYPE: FieldType = t.object(CHART_OPTIONS);
 
 /**
  * Is `value` a number as the IR carries it: a JSON number, or the tagged
@@ -175,7 +180,13 @@ function walkChart(
     walkArray(v, p, ctx, walkOperator)
   );
   expectField(node, "mark", path, ctx, walkMark);
-  optionalField(node, "options", path, ctx, expectObject);
+  // Chart-level options (`CHART_OPTIONS`): typed checks always; an unknown
+  // key only in strict mode, as for every declared object.
+  optionalField(node, "options", path, ctx, (v, p) =>
+    walkFieldType(CHART_OPTIONS_TYPE, v, p, ctx, (q, message) =>
+      ctx.errors.push({ path: q, message })
+    )
+  );
   optionalField(node, "zOrder", path, ctx, expectNumber);
   optionalField(node, "name", path, ctx, expectNameOrToken);
   if (ctx.strict) {
@@ -509,10 +520,12 @@ export const AXIS_INTERVAL_KEYS = [
 ] as const;
 
 /**
- * Is this `dims` entry (`AxisDimsValue`) an interval? A bare channel value (a
- * number, field name, function, a tagged `datum(...)`/`field(...)` object, a
- * bridge sentinel, an array) is not: it is a position. An interval is a plain
- * object with no `type` tag. Shared with gofish-graphics' dims.ts, where a
+ * Is this value an untagged plain object? A channel value that is an object
+ * always carries a tag: `type` (`field(...)`, `datum(...)`, `literal`) or the
+ * `__gofish_lambda` bridge sentinel. So an untagged plain object is never a
+ * channel value, which is how a `dims` entry (`AxisDimsValue`, declared in
+ * `OPTION_TYPES`) tells an interval from a position, and why
+ * `walkChannelValue` rejects one. Shared with gofish-graphics' dims.ts, where a
  * runtime value may be a class instance, hence the plain-prototype check.
  */
 export const isAxisInterval = (v: unknown): v is Record<string, unknown> =>
@@ -520,27 +533,6 @@ export const isAxisInterval = (v: unknown): v is Record<string, unknown> =>
   Object.getPrototypeOf(v) === Object.prototype &&
   !("type" in v) &&
   !("__gofish_lambda" in v);
-
-/** A `dims` entry: a bare channel value, or an interval whose keys are all
- *  anchors ({@link isAxisInterval}). */
-function walkAxisDimsValue(value: unknown, path: string, ctx: Context): void {
-  if (!isAxisInterval(value)) {
-    walkChannelValue(value, path, ctx);
-    return;
-  }
-  for (const [key, v] of Object.entries(value)) {
-    if (!(AXIS_INTERVAL_KEYS as readonly string[]).includes(key)) {
-      ctx.errors.push({
-        path: `${path}.${key}`,
-        message: `unknown axis interval key "${key}" (expected ${AXIS_INTERVAL_KEYS.join(", ")})`,
-      });
-    } else if (key === "embedded") {
-      expectBoolean(v, `${path}.embedded`, ctx);
-    } else {
-      walkChannelValue(v, `${path}.${key}`, ctx);
-    }
-  }
-}
 
 /** Resolve a `t.ref(name)`: a named option type (`OPTION_TYPES`) walks with
  *  the generic field-type interpreter; any other name is one of the authored
@@ -587,9 +579,6 @@ function walkRefType(
         return;
       }
       walkFieldAccessor(value, path, ctx);
-      return;
-    case "AxisDimsValue":
-      walkAxisDimsValue(value, path, ctx);
       return;
     default:
       // Unknown ref name — permissive (forward-compat), mirrors the rest of
@@ -665,6 +654,14 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     return;
   }
   // Object form: one of the recognized tagged shapes.
+  if (isAxisInterval(value)) {
+    ctx.errors.push({
+      path,
+      message:
+        'a channel value object must be tagged: field(...), datum(...), or {type: "literal", value}',
+    });
+    return;
+  }
   const obj = value as Record<string, unknown>;
   if ("__gofish_lambda" in obj) return; // Python-bridge sentinel
   if (obj.type === "datum") {
@@ -713,7 +710,8 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     }
     return;
   }
-  // Permissive fallback: allow unknown object shapes for forward-compat.
+  // Permissive fallback: allow an unknown `type` tag (and arrays) for
+  // forward-compat.
 }
 
 /**

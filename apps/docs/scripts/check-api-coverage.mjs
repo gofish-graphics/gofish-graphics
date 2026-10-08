@@ -64,6 +64,9 @@ for (const [kind, table] of TABLES) {
     constructs.get(name).kinds.push(kind);
   }
 }
+// Option groups that are not constructs but have a generated table
+// (`OPTION_GROUPS` in markdown-it-gofish-ref.ts): `chart` is CHART_OPTIONS.
+constructs.set("chart", { kinds: ["chart options"], wire: "chart" });
 
 /** Every `::: gofish-ref a b c` name, per language, with the page it came from. */
 function collectRefs(lang) {
