@@ -448,6 +448,14 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
 });
 
+/** Option groups that are not constructs but get a generated docs options
+ *  table by name: `::: gofish-ref chart` is the options of
+ *  `chart(data, options)`. The docs plugin renders them and
+ *  `check-api-coverage` requires each on both language pages. */
+export const OPTION_GROUPS: Readonly<Record<string, FieldGroup>> = {
+  chart: CHART_OPTIONS,
+};
+
 // ---------------------------------------------------------------------------
 // Shared field groups
 // ---------------------------------------------------------------------------

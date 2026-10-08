@@ -19,7 +19,7 @@
  * Python type — the language is detected from `env.relativePath`.
  *
  * A name may also be an option group that is not a construct (`OPTION_GROUPS`
- * below): `::: gofish-ref chart` renders the chart-level options
+ * in descriptors.ts): `::: gofish-ref chart` renders the chart-level options
  * (`CHART_OPTIONS`) as one table.
  *
  * Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
@@ -41,11 +41,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import container from "markdown-it-container";
 import {
-  CHART_OPTIONS,
   COMBINATOR_MARKS,
   COORDS,
   LEAF_MARKS,
   OPERATORS,
+  OPTION_GROUPS,
   OPTION_TYPES,
   SHARED_FIELD_GROUPS,
   pyKwarg,
@@ -57,13 +57,6 @@ import {
 } from "../../../../packages/gofish-ir/src/frontend/descriptors";
 
 type Lang = "js" | "python";
-
-/** Option groups that are not constructs but get a generated table by name:
- *  `::: gofish-ref chart` is the options of `chart(data, options)`.
- *  `scripts/check-api-coverage.mjs` lists the same names. */
-export const OPTION_GROUPS: Record<string, FieldGroup> = {
-  chart: CHART_OPTIONS,
-};
 
 const TABLES: Record<string, ConstructDescriptor>[] = [
   OPERATORS,
