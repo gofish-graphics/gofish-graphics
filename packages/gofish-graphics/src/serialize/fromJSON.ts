@@ -122,7 +122,9 @@ function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
 }
 
 /**
- * Walk an arbitrary value and resolve Python-emitted lambda sentinels.
+ * Walk a mark's or operator's options and resolve Python-emitted lambda
+ * sentinels at any depth (a top-level channel, or nested as in
+ * `dims: { r: { size: … } }`).
  *
  *  - `{ __gofish_lambda: id }` becomes an `async (d) => …` arrow that
  *    RPCs into Python via the supplied bridge.
@@ -132,10 +134,10 @@ function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
  * supplied, lambda sentinels throw — a pure-JS consumer should never
  * emit one.
  */
-export function unwrapMarkOpts(value: any, bridge?: DeriveBridge): any {
+export function unwrapOpts(value: any, bridge?: DeriveBridge): any {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) {
-    return value.map((item) => unwrapMarkOpts(item, bridge));
+    return value.map((item) => unwrapOpts(item, bridge));
   }
   if (typeof value.__gofish_lambda === "string") {
     if (bridge === undefined) {
@@ -147,7 +149,7 @@ export function unwrapMarkOpts(value: any, bridge?: DeriveBridge): any {
   }
   const out: Record<string, any> = {};
   for (const [k, val] of Object.entries(value)) {
-    out[k] = unwrapMarkOpts(val, bridge);
+    out[k] = unwrapOpts(val, bridge);
   }
   return out;
 }
@@ -276,7 +278,9 @@ export function mapOperator(
   bridge?: DeriveBridge
 ): Operator<any, any> | null {
   const { type, translate, label, ...opts } = op as Record<string, any>;
-  let operator = rebuild("operator", type as string, opts, { bridge });
+  let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
+    bridge,
+  });
   if (operator === undefined) return null;
   if (
     operator &&
@@ -332,7 +336,7 @@ export function mapMarkChildren(
       // valid in the chart `.mark(cut(...))` (data-bound expand) form.
       const slices = cutSlices(sourceMark as any, {
         dir: child.dir,
-        size: unwrapMarkOpts(child.size, bridge),
+        size: unwrapOpts(child.size, bridge),
         inset: child.inset,
       });
       out.push(...slices);
@@ -507,7 +511,7 @@ export function mapMark(
     let mark = cutMark({
       source: sourceMark as any,
       dir: spec.dir,
-      size: unwrapMarkOpts(spec.size, bridge),
+      size: unwrapOpts(spec.size, bridge),
       inset: spec.inset,
     });
     mark = applyTranslate(mark);
@@ -535,7 +539,7 @@ export function mapMark(
     );
     // Resolve color/coord configs (e.g. a `layer({coord: polar()})` carries
     // its coord transform in the combinator options, not chart options).
-    const opts = resolveOptions(unwrapMarkOpts(spec.options ?? {}, bridge));
+    const opts = resolveOptions(unwrapOpts(spec.options ?? {}, bridge));
     let mark = rebuild("combinator-mark", spec.type, opts, {
       children: childMarks,
     });
@@ -585,7 +589,7 @@ export function mapMark(
     opts = rest;
   }
 
-  let mark = rebuild("leaf-mark", type as string, unwrapMarkOpts(opts, bridge));
+  let mark = rebuild("leaf-mark", type as string, unwrapOpts(opts, bridge));
   if (mark === undefined) {
     throw new Error(`Unknown mark type: ${String(type)}`);
   }
