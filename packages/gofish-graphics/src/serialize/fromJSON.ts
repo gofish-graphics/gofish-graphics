@@ -700,7 +700,7 @@ function chartFromIR(
   //                                        does the auto-naming/selectAll
   //                                        wiring (see chartBuilder.ts)
   //   - null / undefined                 — data was shipped via the bridge's
-  //                                        arrow_data sidecar; use the
+  //                                        tier_arrow sidecar; use the
   //                                        `data` argument the caller passed
   // Data in the IR (inline rows, a selection, the previous tier) wins over
   // rows the host shipped beside it.

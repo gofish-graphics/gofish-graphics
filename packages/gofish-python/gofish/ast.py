@@ -529,13 +529,10 @@ class Mark:
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
         from .widget import GoFishChartWidget
-        from .arrow_utils import empty_placeholder_arrow_bytes
-
-        arrow_data = empty_placeholder_arrow_bytes()
 
         widget = GoFishChartWidget(
             spec=self.to_ir(),
-            arrow_data=arrow_data,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions={},
             width=w,
             height=h,
@@ -1403,8 +1400,6 @@ class ChartBuilder:
         # Import here to avoid circular dependencies
         from .widget import GoFishChartWidget
 
-        arrow_data = tier_arrow_bytes(self)
-
         # Get the IR spec
         spec = self.to_ir()
 
@@ -1416,7 +1411,7 @@ class ChartBuilder:
 
         widget = GoFishChartWidget(
             spec=spec,
-            arrow_data=arrow_data,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions=derive_functions,
             width=w,
             height=h,
@@ -3266,23 +3261,31 @@ def chart(
     return ChartBuilder(data, _chart_opts(**options) or None)
 
 
-def tier_arrow_bytes(tier: Any) -> bytes:
-    """The Arrow IPC bytes of one chart tier's own rows, as the widget ships
-    them beside the IR (``arrow_data`` / ``arrow_dict``) and the parity
-    harness's derive server ships them too. Timestamp and date columns cross
-    as Arrow times, and the widget's decode reads them as times. A tier with
-    no rows of its own ships the empty placeholder: a mark, a chart whose
-    data is a ``ref`` / ``select_all`` (it borrows a sibling's nodes), and an
+def tiers_arrow_bytes(root: Any) -> List[bytes]:
+    """The Arrow IPC bytes of each chart tier's own rows, as the widget ships
+    them beside the IR (the ``tier_arrow`` trait) and the parity harness's
+    derive server ships them too: one tier for a chart, one per child for a
+    layer, none for a bare mark. Timestamp and date columns cross as Arrow
+    times, and the widget's decode reads them as times. A tier with no rows
+    of its own ships the empty placeholder: a mark child, a chart whose data
+    is a ``ref`` / ``select_all`` (it borrows a sibling's nodes), and an
     empty ``chart()`` scope (it takes the previous tier's marks)."""
     from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
 
-    if (
-        not isinstance(tier, ChartBuilder)
-        or isinstance(tier.data, _RefProxy)
-        or tier._uses_previous_marks()
-    ):
-        return empty_placeholder_arrow_bytes()
-    return data_to_arrow_bytes(tier.data)
+    def tier(t: Any) -> bytes:
+        if (
+            not isinstance(t, ChartBuilder)
+            or isinstance(t.data, _RefProxy)
+            or t._uses_previous_marks()
+        ):
+            return empty_placeholder_arrow_bytes()
+        return data_to_arrow_bytes(t.data)
+
+    if isinstance(root, LayerBuilder):
+        return [tier(child) for child in root.children]
+    if isinstance(root, ChartBuilder):
+        return [tier(root)]
+    return []
 
 
 class LayerBuilder:
@@ -3395,13 +3398,9 @@ class LayerBuilder:
         """
         from .widget import GoFishChartWidget
 
-        # Serialize each child's data (``GoFishChartWidget`` owns the
-        # base64/JSON wire encoding, see ``arrow_dict`` there) and collect
-        # derive functions
-        arrow_dict: dict = {}
+        # Collect derive functions
         derive_functions: dict = {}
-        for i, child in enumerate(self.children):
-            arrow_dict[str(i)] = tier_arrow_bytes(child)
+        for child in self.children:
             for op in _collect_derive_operators(child.operators):
                 derive_functions[op.lambda_id] = op.fn
 
@@ -3409,7 +3408,7 @@ class LayerBuilder:
 
         widget = GoFishChartWidget(
             spec=spec,
-            arrow_dict=arrow_dict,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions=derive_functions,
             width=w,
             height=h,

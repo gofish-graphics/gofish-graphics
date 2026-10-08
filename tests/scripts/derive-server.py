@@ -110,7 +110,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
 
         Response: {"ir": <the builder's `to_ir()`>,
                    "tierArrow": [<each chart tier's rows: base64 Arrow IPC,
-                                  `tier_arrow_bytes`, as the widget ships
+                                  `tiers_arrow_bytes`, as the widget ships
                                   them>],
                    "render": <the story's render options>,
                    "deriveIds": [<every lambda id the IR names>]}
@@ -184,7 +184,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 _collect_mark_lambdas,
                 _MarkFn,
                 _InputRef,
-                tier_arrow_bytes,
+                tiers_arrow_bytes,
             )
 
             derive_ids: list = []
@@ -221,6 +221,8 @@ class DeriveHandler(BaseHTTPRequestHandler):
 
                 return wrapped
 
+            # TODO(#1088): a chart a mark function returns crosses the JSON
+            # `/derive` RPC with its rows inlined, not as Arrow.
             def chart_ir(chart_ir: dict, chart: "ChartBuilder", inline: bool) -> dict:
                 """A chart's IR, after registering the callbacks it names.
                 The story's own tiers ship their rows beside the IR, as
@@ -276,20 +278,11 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     f"a story must return a chart, layer or mark, got {type(b).__name__}"
                 )
 
-            # Each chart tier's rows, as the widget ships them: one tier for
-            # a chart, one per child for a layer, none for a bare mark.
-            tiers = (
-                builder.children
-                if isinstance(builder, LayerBuilder)
-                else [builder]
-                if isinstance(builder, ChartBuilder)
-                else []
-            )
             self._json_response(200, {
                 "ir": ir_of(builder),
                 "tierArrow": [
-                    base64.b64encode(tier_arrow_bytes(t)).decode("ascii")
-                    for t in tiers
+                    base64.b64encode(b).decode("ascii")
+                    for b in tiers_arrow_bytes(builder)
                 ],
                 "render": render,
                 "deriveIds": derive_ids,
@@ -300,6 +293,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 "traceback": traceback.format_exc(),
             })
 
+    # TODO(#1088): rows cross this RPC as JSON, not as the widget's Arrow.
     def _handle_derive(self, lambda_id: str, body: bytes):
         """Execute a registered derive function on JSON data."""
         if lambda_id not in _registry:

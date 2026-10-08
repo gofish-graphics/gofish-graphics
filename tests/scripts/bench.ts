@@ -670,12 +670,7 @@ async function benchExamplesPy(
             ir.deriveIds?.length > 0
               ? `http://localhost:${DERIVE_SERVER_PORT}`
               : undefined;
-          const spec = {
-            ir: ir.ir,
-            tierArrow: ir.tierArrow,
-            render: ir.render,
-            deriveServerUrl,
-          };
+          const spec = { ...ir, deriveServerUrl };
 
           const r = await withinBudget(
             page.evaluate(async (s) => {

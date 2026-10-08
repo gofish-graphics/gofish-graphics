@@ -8,8 +8,8 @@
  * `tests/scripts/derive-server.py` and are reached over HTTP POST to
  * `<deriveServerUrl>/derive/<id>` instead of over anywidget traitlets. The
  * rows of each chart tier cross as the widget's do: Arrow bytes from
- * Python's `tier_arrow_bytes`, decoded by the widget's own decode
- * (`arrowBytesToRows`), so parity covers that transport too.
+ * Python's `tiers_arrow_bytes`, decoded by the widget's own decode
+ * (`decodeTierRows`), so parity covers that transport too.
  *
  * The caller (Playwright) calls `__renderChart__(spec)` (or sets
  * `__GOFISH_SPEC__` before load) and waits for `__GOFISH_RENDER_COMPLETE__`.
@@ -17,7 +17,7 @@
 
 import { Serialize } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
-import { arrowBytesToRows } from "../../packages/gofish-python/widget-src/arrowDecode";
+import { decodeTierRows } from "gofish-python/arrowDecode";
 
 /**
  * What `capture-python-dom.ts` sends: a story's IR as the derive server
@@ -73,9 +73,7 @@ function renderChart(spec: HarnessSpec) {
     try {
       await Serialize.renderIR(spec.ir, container, spec.render, {
         bridge: httpBridge(spec.deriveServerUrl),
-        tierRows: (spec.tierArrow ?? []).map((b64) =>
-          arrowBytesToRows(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))
-        ),
+        tierRows: decodeTierRows(spec.tierArrow ?? []),
       });
       // Allow a tick for SolidJS to flush renders.
       await new Promise<void>((resolve) =>

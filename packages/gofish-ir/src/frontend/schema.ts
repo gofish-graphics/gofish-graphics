@@ -144,7 +144,7 @@ export interface RawMarkIR extends BaseIRNode {
  *   The `select()` factory no longer exists in either frontend; `mode: "one"`
  *   (or absent) corresponds to `ref(name)`.
  * - **External**: `{type: "external", id?: "..."}` indicates data ships over a
- *   sidecar transport (anywidget's `arrow_data` trait) and the id keys into it.
+ *   sidecar transport (anywidget's `tier_arrow` trait) and the id keys into it.
  * - **Previous tier**: `{type: "previous-tier"}` marks an empty `chart()` /
  *   `Chart()` scope inside a `.layer(...)` chain — "inherit the immediately
  *   preceding tier's marks". The deserializer maps this to the JS

@@ -282,12 +282,7 @@ async function captureStory(
   // Inject the spec and trigger the render. The harness decodes the tiers'
   // rows from `tierArrow`, renders `ir` with `render` as its render options,
   // and reaches Python over `deriveServerUrl`.
-  const spec = {
-    ir: ir.ir,
-    tierArrow: ir.tierArrow,
-    render: ir.render,
-    deriveServerUrl,
-  };
+  const spec = { ...ir, deriveServerUrl };
 
   await page.evaluate((s) => {
     window.__GOFISH_RENDER_COMPLETE__ = false;
