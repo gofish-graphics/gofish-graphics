@@ -11,7 +11,6 @@ import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 
 import { GoFishNode, Placeable } from "../_node";
 import { GoFishAST } from "../_ast";
-import { fromFrameStart } from "../axisDirection";
 import { createNodeOperator } from "../withGoFish";
 import {
   FancyDims,
@@ -24,8 +23,7 @@ import {
 import { getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
-import { UnderlyingSpace, CONTINUOUS, magnitude } from "../underlyingSpace";
-import { interval } from "../../util/interval";
+import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
@@ -118,16 +116,14 @@ const Treemap = createNodeOperator(
           // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
           // data-driven size is declared on an axis (e.g. `h: "fare"` auto-summed
           // to a Value), emit SIZE so the parent faceting spread can co-solve a
-          // scale shared across sibling treemaps. Otherwise the treemap is a
-          // positioned box that fills the slot it is given.
+          // scale shared across sibling treemaps. Otherwise the treemap orders
+          // nothing along the axis by data: it has no axis there and fills the
+          // slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace =>
-            isValue(dims[i].size)
-              ? magnitude(dims[i].size)
-              : CONTINUOUS(interval(0, 1), "pinned");
+            isValue(dims[i].size) ? magnitude(dims[i].size) : UNDEFINED;
           return [axisSpace(0), axisSpace(1)];
         },
         layout: (_shared, size, scales, childAsts, node) => {
-          const yDirection = node.yFrame.direction;
           const xPos = computeAesthetic(
             dims[0].min,
             posFn(scales?.[0]?.map)!,
@@ -255,17 +251,10 @@ const Treemap = createNodeOperator(
             const h = Math.max(0, y1 - y0);
 
             const placeable = childAsts[i].layout([w, h], scales);
-            // d3 lays out in y-down pixels over the frame `[0, h]`: its first
-            // tile (the largest, under the default sort) lands at the top
-            // left, in reading order. The treemap places in its own axis
-            // order, which starts at the frame's bottom when its y is a
-            // magnitude, so it reads d3's y from the frame's start edge.
+            // d3's tiles are placed in the treemap's own axis order, like
+            // any operator's: top-down in free space, upward in a chart.
             placeable.place(0, x0 + w / 2, "center");
-            placeable.place(
-              1,
-              fromFrameStart(y0 + h / 2, resolvedSize[1], yDirection),
-              "center"
-            );
+            placeable.place(1, y0 + h / 2, "center");
             placed[i] = placeable;
           }
 
