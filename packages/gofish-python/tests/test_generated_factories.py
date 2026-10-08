@@ -257,7 +257,7 @@ def test_circle_ellipse_petal_blank_signatures_are_closed():
     # (#1007). Now an undeclared or camelCase kwarg is a TypeError, as on
     # every other generated factory.
     with pytest.raises(TypeError):
-        circle(r=3, cx=10)
+        circle(r=3, rx=10)
     with pytest.raises(TypeError):
         circle(r=3, fillOpacity=0.6)
     with pytest.raises(TypeError):
@@ -266,6 +266,25 @@ def test_circle_ellipse_petal_blank_signatures_are_closed():
         petal(w=4, h=4, opacity=0.5)
     with pytest.raises(TypeError):
         blank(w=4, stroke="red")
+
+
+def test_circle_takes_box_dims():
+    # circle takes ellipse's box dimensions (#851): w or h sets the diameter,
+    # and the positions and dims pass through.
+    assert circle(h="value", fill="red").to_dict() == {
+        "type": "circle",
+        "h": "value",
+        "fill": "red",
+    }
+    assert circle(w=8, cx=10, em_x=True).to_dict() == {
+        "type": "circle",
+        "w": 8,
+        "cx": 10,
+        "emX": True,
+    }
+    assert circle(dims={"r": {"size": "v"}}).to_dict()["dims"] == {
+        "r": {"size": "v"}
+    }
 
 
 def test_fill_opacity_serializes_to_camel_case():

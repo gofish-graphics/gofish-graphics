@@ -1749,7 +1749,7 @@ for the API.
       }
     },
     "CircleMark": {
-      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity/fillOpacity) — position it via `spread`/`scatter`.",
+      "description": "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by exactly one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1757,9 +1757,56 @@ for the API.
         "type": {
           "const": "circle"
         },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge position."
+        },
+        "cx": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center x."
+        },
+        "x2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Right edge position."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center y."
+        },
+        "y2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Other y edge position."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
+        },
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        },
         "r": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Radius; becomes w=h=2r on the underlying ellipse."
+          "description": "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",

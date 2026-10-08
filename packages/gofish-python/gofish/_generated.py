@@ -157,12 +157,23 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
             _kw[_k] = _channel(_v)
     return Mark("rect", **_kw)
 
-def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None) -> Mark:
-    """A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity/fillOpacity) — position it via `spread`/`scatter`.
+def circle(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None) -> Mark:
+    """A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by exactly one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
-        r: Radius; becomes w=h=2r on the underlying ellipse.
+        x: Left edge position.
+        cx: Center x.
+        x2: Right edge position.
+        w: Width.
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
+        cy: Center y.
+        y2: Other y edge position.
+        h: Height.
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        r: Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h.
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
@@ -172,6 +183,17 @@ def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] 
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
+        ("x", x),
+        ("cx", cx),
+        ("x2", x2),
+        ("w", w),
+        ("emX", em_x),
+        ("y", y),
+        ("cy", cy),
+        ("y2", y2),
+        ("h", h),
+        ("emY", em_y),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("r", r),
         ("fill", fill),
         ("stroke", stroke),

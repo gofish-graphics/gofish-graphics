@@ -114,6 +114,14 @@ accessor and provenance are loop-invariant across split entries.
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.
 
+A shape function may also work on the inferred values before it builds the
+node. `circle` (in `chart.ts`) is `createMark` over `Ellipse` with
+`aspectRatio: 1`. Its `r`, `w`, and `h` are all size channels, and the body
+turns whichever one was given into the ellipse's diameter. For `r` it doubles
+the inferred value, keeping its measure (`value(2 * v, measure)`), so the
+diameter is `2r` for a number, a field, and an accessor alike. A data `w` or
+`h` stays on its own axis, and the aspect lock derives the other.
+
 ## What happens at render time
 
 Walking `withGoFish.ts:431-477`:

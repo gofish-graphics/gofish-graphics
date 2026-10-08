@@ -9,7 +9,14 @@ import {
 } from "../graphicalOperators/connect";
 import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
-import { getValue, type MaybeValue, type Value } from "../data";
+import {
+  getMeasure,
+  getValue,
+  isValue,
+  value,
+  type MaybeValue,
+  type Value,
+} from "../data";
 import { predicateWire, type FieldExpr } from "../fieldExpr";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
@@ -26,6 +33,7 @@ import {
 } from "../../interaction/live";
 import { rect as generatedRect, baseBlank } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
+import type { XYWHDims } from "../dims";
 import { Mark, MarkChild, Operator } from "../types";
 import { addRenderMethod, createMark, type NameableMark } from "../withGoFish";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -282,36 +290,73 @@ export function join<
 
 /* END Data Transformation Operators */
 
+type CircleProps = XYWHDims<MaybeValue<number>> & {
+  /** Radius. The diameter is `2r`, whether `r` is a number, a field, or an
+   *  accessor. */
+  r?: MaybeValue<number>;
+  fill?: MaybeValue<string>;
+  stroke?: MaybeValue<string>;
+  strokeWidth?: number;
+  opacity?: MaybeValue<number>;
+  /** Opacity of the fill alone, 0 to 1; the stroke keeps `opacity`. */
+  fillOpacity?: number;
+};
+
+/** Twice a size channel's value, in the same measure: a radius as a diameter. */
+const twice = (r: MaybeValue<number>): MaybeValue<number> =>
+  isValue(r) ? value(2 * getValue(r), getMeasure(r)) : 2 * r;
+
 /**
- * A circle: an ellipse with a 1:1 aspect ratio, sized by RADIUS. A numeric `r`
- * is a pixel radius (so the ellipse is `2r` across); a data-driven `r` is a
- * size channel, and its aggregated value is the ellipse's extent directly.
+ * A circle: an ellipse locked to a 1:1 aspect ratio. It takes the same box
+ * dimensions as `ellipse`. Its one size is the diameter, set by at most one of
+ * `r`, `w`, or `h`. All three are size channels: a number is pixels, and a
+ * field name, `field(...)`, or accessor is data.
+ *
+ * - `r` is the radius, so the diameter is `2r` for every kind of value. It has
+ *   no axis, so it sizes both axes, and a data `r` claims the same data size
+ *   on both (a circle in data space).
+ * - `w` or `h` is the diameter along that axis. A data `w` or `h` claims only
+ *   its own axis; the other axis follows it through the aspect lock, in
+ *   pixels. So `circle({ h: "value" })` in a bar chart reads against the value
+ *   axis and takes no data space along the category axis.
+ *
+ * With none of them, the circle fills the space it is given.
  */
 export const circle = createMark(
-  (p: {
-    r?: MaybeValue<number>;
-    fill?: MaybeValue<string>;
-    stroke?: MaybeValue<string>;
-    strokeWidth?: number;
-    opacity?: MaybeValue<number>;
-    /** Opacity of the fill alone, 0 to 1; the stroke keeps `opacity`. */
-    fillOpacity?: number;
-  }) => {
-    const size = typeof p.r === "number" ? p.r * 2 : p.r;
+  ({ r, w, h, opacity, ...rest }: CircleProps) => {
+    const given = [r, w, h].filter((v) => v !== undefined).length;
+    if (given > 1) {
+      throw new Error(
+        "circle: pass one of r, w, or h. Each one sets the diameter."
+      );
+    }
+    // The other axis copies a pixel diameter and follows a data one.
+    const follow = (d: MaybeValue<number> | undefined) =>
+      d !== undefined && isValue(d) ? undefined : d;
+    const diameter =
+      r !== undefined
+        ? { w: twice(r), h: twice(r) }
+        : w !== undefined
+          ? { w, h: follow(w) }
+          : { w: follow(h), h };
     return Ellipse({
-      w: size,
-      h: size,
+      ...rest,
+      ...diameter,
       aspectRatio: 1,
-      fill: p.fill,
-      stroke: p.stroke,
-      strokeWidth: p.strokeWidth,
       // `opacity` is a RAW channel, so a per-datum accessor has already been
       // evaluated against the row and wrapped; `Ellipse` paints a plain number.
-      opacity: p.opacity === undefined ? undefined : getValue(p.opacity),
-      fillOpacity: p.fillOpacity,
+      opacity: opacity === undefined ? undefined : getValue(opacity),
     });
   },
-  { r: "size", fill: "color", stroke: "color", opacity: "raw" },
+  {
+    r: "size",
+    w: "size",
+    h: "size",
+    dims: "dims",
+    fill: "color",
+    stroke: "color",
+    opacity: "raw",
+  },
   "circle"
 );
 

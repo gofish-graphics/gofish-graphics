@@ -431,9 +431,9 @@ const axisDims = (doc: string): FieldSpec => ({
  *  which mean axis 0/1 in every coordinate space, plus the open `dims` bag
  *  keyed by axis name. Included wholesale by marks whose factory spreads a
  *  bare `...fancyDims: FancyDims<MaybeValue<number>>` (rect, ellipse, petal,
- *  text, image, treemap, layer's `Layer(dims, children)` form). Marks that
- *  destructure a fixed subset (blank, circle) declare their own fields
- *  instead of including this group. */
+ *  text, image, treemap, layer's `Layer(dims, children)` form), and by
+ *  circle, which hands them to its ellipse. Marks that destructure a fixed
+ *  subset (blank) declare their own fields instead of including this group. */
 export const boxDims: FieldGroup = group({
   x: ch.num("Left edge position."),
   cx: ch.num("Center x."),
@@ -896,9 +896,12 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   circle: leafMark("circle", {
-    doc: "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity/fillOpacity) — position it via `spread`/`scatter`.",
+    doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by exactly one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
+    include: [boxDims],
     fields: {
-      r: ch.num("Radius; becomes w=h=2r on the underlying ellipse."),
+      r: ch.num(
+        "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
+      ),
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
       strokeWidth: {

@@ -429,10 +429,10 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   story used that the descriptors lacked, `fillOpacity`, is now a real
   option: JS `Ellipse` paints it as `fill-opacity`, `circle` passes it
   through, and both descriptors declare it (`fill_opacity` in Python). The
-  bar chart template stories had passed `circle` as the custom mark, and the
-  template calls it with `h` or `w`, which `circle` does not take, so their
-  circles never showed the value. They now pass `ellipse`. No escape hatch
-  was needed.
+  bar chart template stories pass `circle` as the custom mark, and the
+  template calls it with `h` or `w`, which `circle` did not take. Instead of
+  changing the stories, `circle` now takes `ellipse`'s box dimensions, and
+  `w` or `h` sets its diameter (#851). No escape hatch was needed.
 
 - **The last unchecked option surfaces (#1010).** `dims` values are
   checked: `AxisInterval` and `AxisDimsValue` moved into `OPTION_TYPES`,

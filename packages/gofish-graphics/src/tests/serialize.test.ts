@@ -1202,7 +1202,7 @@ async function main() {
       .mark(
         circle({
           r: 3,
-          w: "v",
+          rx: "v",
           bogus: 0.5,
           fillOpacity: 0.6,
           debug: false,
@@ -1219,7 +1219,7 @@ async function main() {
     );
     check(
       "unknown leaf-mark keys are dropped",
-      !("w" in mark) && !("bogus" in mark)
+      !("rx" in mark) && !("bogus" in mark)
     );
     check("leaf-mark base field `debug` is kept", mark.debug === false);
     check("a callback channel is dropped", !("opacity" in mark));

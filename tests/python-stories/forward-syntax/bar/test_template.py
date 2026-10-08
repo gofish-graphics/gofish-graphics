@@ -4,7 +4,7 @@ Every story uses the ``bar_chart`` template helper (gofish/charts.py, the
 Python mirror of src/charts/bar.ts) rather than a hand-written builder chain.
 """
 
-from gofish import ellipse
+from gofish import circle
 from gofish.charts import bar_chart
 
 # Test data for template-based bar charts (mirrors the JS testData).
@@ -77,7 +77,7 @@ def story_horizontal_with_fill_field():
 
 def story_vertical_with_custom_mark():
     return (
-        bar_chart(TEST_DATA, x="category", y="value", mark=ellipse, axes=True),
+        bar_chart(TEST_DATA, x="category", y="value", mark=circle, axes=True),
         _OPTIONS,
     )
 
@@ -89,7 +89,7 @@ def story_horizontal_with_custom_mark():
             x="value",
             y="category",
             orientation="x",
-            mark=ellipse,
+            mark=circle,
             axes=True,
         ),
         _OPTIONS,
@@ -103,7 +103,7 @@ def story_vertical_with_custom_mark_and_fill():
             x="category",
             y="value",
             fill="#45b7d1",
-            mark=ellipse,
+            mark=circle,
             axes=True,
         ),
         _OPTIONS,
@@ -118,7 +118,7 @@ def story_horizontal_with_custom_mark_and_fill():
             y="category",
             orientation="x",
             fill="#f9ca24",
-            mark=ellipse,
+            mark=circle,
             axes=True,
         ),
         _OPTIONS,
