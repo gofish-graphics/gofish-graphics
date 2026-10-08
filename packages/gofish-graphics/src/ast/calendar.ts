@@ -15,7 +15,7 @@
  *
  * The interface is {@link CalendarPartition.cells} (the cells that meet an
  * interval) and {@link CalendarPartition.label} (a cell's default label). A
- * time axis reads its rows off it (axes/timeAxis.ts); the 1D `partition`
+ * time axis reads its rows off it (axes/timeRows.ts); the 1D `partition`
  * layout operator (#1058) is meant to read its cells off the same interface.
  *
  * Steps (`.every(n)`) are aligned to the next level up, the way calendars
@@ -27,6 +27,7 @@
  * since weeks do not nest in months.
  */
 import type { Temporal as TemporalNS } from "temporal-polyfill";
+import type { Frontend } from "gofish-ir";
 
 // ── Temporal ──────────────────────────────────────────────────────────────
 
@@ -58,10 +59,31 @@ export function temporal(): TemporalApi {
   return _temporal;
 }
 
+/** Instant `t` (epoch ms) on the calendar of `zone`. */
+const zoned = (t: number, zone: string): TemporalNS.ZonedDateTime =>
+  temporal().Instant.fromEpochMilliseconds(t).toZonedDateTimeISO(zone);
+
+let _epochDay: TemporalNS.PlainDate | undefined;
+/** 1970-01-01, the day weeks count from (built once, on first use). */
+const epochDay = (): TemporalNS.PlainDate =>
+  (_epochDay ??= temporal().PlainDate.from("1970-01-01"));
+
 // ── Units ─────────────────────────────────────────────────────────────────
 
+/** The wire form of a Calendar value (what Python sends, and what
+ *  `toJSON` writes): the IR's `CalendarPartitionIR`. `start` is only for
+ *  weeks. */
+export type CalendarJSON = Frontend.CalendarPartitionIR;
+
+/** The calendar levels. */
+export type CalendarUnit = CalendarJSON["unit"];
+
+/** The day a week starts on. Monday is the ISO 8601 default (as in polars and
+ *  pandas). */
+export type WeekStart = NonNullable<CalendarJSON["start"]>;
+
 /** The calendar levels, finest first. */
-export const CALENDAR_UNITS = [
+const CALENDAR_UNITS: readonly CalendarUnit[] = [
   "second",
   "minute",
   "hour",
@@ -70,20 +92,7 @@ export const CALENDAR_UNITS = [
   "month",
   "quarter",
   "year",
-] as const;
-export type CalendarUnit = (typeof CALENDAR_UNITS)[number];
-
-/** The day a week starts on. Monday is the ISO 8601 default (as in polars and
- *  pandas). */
-export type WeekStart = "monday" | "sunday";
-
-/** The wire form of a Calendar value (what Python sends, and what
- *  `toJSON` writes). `start` is only for weeks. */
-export type CalendarJSON = {
-  unit: CalendarUnit;
-  step?: number;
-  start?: WeekStart;
-};
+];
 
 /** The level whose cells hold this level's cells: the outer row of a time
  *  axis. A week's parent is the month its start falls in (weeks do not nest
@@ -159,10 +168,13 @@ const ISO_DOW: Record<WeekStart, number> = { monday: 1, sunday: 7 };
 /** A partition of the time line into calendar cells: a level (`unit`) at a
  *  step. See the module comment. */
 export class CalendarPartition {
+  /** The first day of a week, for weeks only (Monday unless given). */
+  readonly start: WeekStart | undefined;
+
   constructor(
     readonly unit: CalendarUnit,
     readonly step: number = 1,
-    readonly start: WeekStart | undefined = undefined
+    start?: WeekStart
   ) {
     if (!Number.isInteger(step) || step < 1) {
       throw new Error(
@@ -170,6 +182,7 @@ export class CalendarPartition {
           `number of ${unit}s, 1 or more.`
       );
     }
+    this.start = unit === "week" ? (start ?? "monday") : undefined;
   }
 
   /** The same level, `n` units per cell (`Calendar.month.every(3)`). */
@@ -184,106 +197,82 @@ export class CalendarPartition {
     return p === undefined ? undefined : new CalendarPartition(p);
   }
 
-  /** The start of the cell that holds instant `t`, in `zone`. */
-  floor(t: number, zone: string): number {
-    const T = temporal();
-    const z = T.Instant.fromEpochMilliseconds(t).toZonedDateTimeISO(zone);
-    const n = this.step;
+  /** The level and step the cell math runs on: a quarter is 3 months, so
+   *  "quarter" matters only to labels. */
+  private get span(): [Exclude<CalendarUnit, "quarter">, number] {
+    return this.unit === "quarter"
+      ? ["month", 3 * this.step]
+      : [this.unit, this.step];
+  }
+
+  /** The start of the cell that holds `z` (in `z`'s zone). */
+  floor(z: TemporalNS.ZonedDateTime): TemporalNS.ZonedDateTime {
+    const [unit, n] = this.span;
     const down = (v: number, base = 0) => Math.floor((v - base) / n) * n + base;
-    let s: TemporalNS.ZonedDateTime;
-    switch (this.unit) {
+    switch (unit) {
       case "second":
-        s = z.round({ smallestUnit: "second", roundingMode: "floor" });
-        s = s.with({ second: down(s.second) });
-        break;
       case "minute":
-        s = z.round({ smallestUnit: "minute", roundingMode: "floor" });
-        s = s.with({ minute: down(s.minute) });
-        break;
-      case "hour":
-        s = z.round({ smallestUnit: "hour", roundingMode: "floor" });
-        s = s.with({ hour: down(s.hour) });
-        break;
+      case "hour": {
+        const s = z.round({ smallestUnit: unit, roundingMode: "floor" });
+        return s.with({ [unit]: down(s[unit]) });
+      }
       case "day":
-        s = z.with({ day: down(z.day, 1) }).startOfDay();
-        break;
+        return z.with({ day: down(z.day, 1) }).startOfDay();
       case "week": {
-        const first = ISO_DOW[this.start ?? "monday"];
+        const first = ISO_DOW[this.start!];
         const day = z.startOfDay().subtract({
           days: (z.dayOfWeek - first + 7) % 7,
         });
-        if (n === 1) {
-          s = day;
-          break;
-        }
+        if (n === 1) return day;
         // Count whole weeks from the week holding 1970-01-01, so a step of
         // n weeks lands on the same weeks whatever the domain.
-        const epochWeek = T.PlainDate.from("1970-01-01").subtract({
+        const epochWeek = epochDay().subtract({
           days: (4 - first + 7) % 7, // 1970-01-01 was a Thursday (ISO 4)
         });
         const weeks = Math.floor(
           day.toPlainDate().since(epochWeek, { largestUnit: "days" }).days / 7
         );
-        s = day.subtract({ days: (weeks - down(weeks)) * 7 });
-        break;
+        return day.subtract({ days: (weeks - down(weeks)) * 7 });
       }
       case "month":
-        s = z.with({ month: down(z.month, 1), day: 1 }).startOfDay();
-        break;
-      case "quarter":
-        s = z
-          .with({
-            month: Math.floor((z.month - 1) / (3 * n)) * 3 * n + 1,
-            day: 1,
-          })
-          .startOfDay();
-        break;
+        return z.with({ month: down(z.month, 1), day: 1 }).startOfDay();
       case "year":
-        s = z.with({ year: down(z.year), month: 1, day: 1 }).startOfDay();
-        break;
+        return z.with({ year: down(z.year), month: 1, day: 1 }).startOfDay();
     }
-    return s.epochMilliseconds;
   }
 
   /** The start of the cell after the one that starts at `start`. */
-  next(start: number, zone: string): number {
-    const T = temporal();
-    const z = T.Instant.fromEpochMilliseconds(start).toZonedDateTimeISO(zone);
-    const units = this.unit === "quarter" ? "months" : `${this.unit}s`;
-    const per = this.unit === "quarter" ? 3 : 1;
+  next(start: TemporalNS.ZonedDateTime): TemporalNS.ZonedDateTime {
+    const [unit, n] = this.span;
     // Step forward and floor: a step aligned to the level above (days 1, 3,
     // ..., 31 of a month) can end a cell early, at the next aligned start.
     for (let k = 1; ; k++) {
       const end = this.floor(
-        z.add({ [units]: this.step * per * k } as TemporalNS.DurationLike)
-          .epochMilliseconds,
-        zone
+        start.add({ [`${unit}s`]: n * k } as TemporalNS.DurationLike)
       );
-      if (end > start) return end;
+      if (end.epochMilliseconds > start.epochMilliseconds) return end;
     }
   }
 
   /** The cells that meet `[lo, hi]`: the first may start before `lo`, and
    *  the last may end after `hi`. */
   cells(lo: number, hi: number, zone: string): CalendarCell[] {
-    const T = temporal();
     const out: CalendarCell[] = [];
-    let s = this.floor(lo, zone);
-    while (s <= hi) {
-      const e = this.next(s, zone);
-      const z = T.Instant.fromEpochMilliseconds(s).toZonedDateTimeISO(zone);
+    let s = this.floor(zoned(lo, zone));
+    while (s.epochMilliseconds <= hi) {
+      const e = this.next(s);
       out.push({
-        start: s,
-        end: e,
+        start: s.epochMilliseconds,
+        end: e.epochMilliseconds,
         unit: this.unit,
-        year: z.year,
-        quarter: Math.floor((z.month - 1) / 3) + 1,
-        month: z.month,
-        week: z.weekOfYear!,
-        day: z.day,
-        hour: z.hour,
-        minute: z.minute,
-        second: z.second,
+        year: s.year,
+        quarter: Math.floor((s.month - 1) / 3) + 1,
+        month: s.month,
+        week: s.weekOfYear!,
+        day: s.day,
+        hour: s.hour,
+        minute: s.minute,
+        second: s.second,
       });
       s = e;
     }
@@ -322,9 +311,8 @@ export type WeekPartition = CalendarPartition &
   ((opts?: { start?: WeekStart }) => CalendarPartition);
 
 function weekPartition(): WeekPartition {
-  const make = (opts: { start?: WeekStart } = {}) => {
-    const start = opts.start ?? "monday";
-    if (start !== "monday" && start !== "sunday") {
+  const make = ({ start }: { start?: WeekStart } = {}) => {
+    if (start !== undefined && start !== "monday" && start !== "sunday") {
       throw new Error(
         `Calendar.week: start must be "monday" or "sunday", not ${JSON.stringify(start)}.`
       );
@@ -334,11 +322,12 @@ function weekPartition(): WeekPartition {
   // A function that is also the default partition: same prototype, same
   // fields, so `Calendar.week` works as a value and as a call.
   const fn = make as unknown as WeekPartition;
+  const week = make();
   Object.setPrototypeOf(fn, CalendarPartition.prototype);
   Object.defineProperties(fn, {
-    unit: { value: "week", enumerable: true },
-    step: { value: 1, enumerable: true },
-    start: { value: "monday", enumerable: true },
+    unit: { value: week.unit, enumerable: true },
+    step: { value: week.step, enumerable: true },
+    start: { value: week.start, enumerable: true },
   });
   return fn;
 }
@@ -376,11 +365,7 @@ export function calendarPartition(
   if (v.start !== undefined && v.unit !== "week") {
     throw new Error(`${where}: only Calendar.week takes a start day.`);
   }
-  return new CalendarPartition(
-    v.unit as CalendarUnit,
-    v.step ?? 1,
-    v.unit === "week" ? (v.start ?? "monday") : undefined
-  );
+  return new CalendarPartition(v.unit as CalendarUnit, v.step ?? 1, v.start);
 }
 
 // ── Ticks ─────────────────────────────────────────────────────────────────
@@ -449,9 +434,9 @@ export function niceToCells(
   partition: CalendarPartition,
   zone: string
 ): [number, number] {
-  const last = partition.floor(hi, zone);
+  const last = partition.floor(zoned(hi, zone));
   return [
-    partition.floor(lo, zone),
-    last === hi ? hi : partition.next(last, zone),
+    partition.floor(zoned(lo, zone)).epochMilliseconds,
+    last.epochMilliseconds === hi ? hi : partition.next(last).epochMilliseconds,
   ];
 }
