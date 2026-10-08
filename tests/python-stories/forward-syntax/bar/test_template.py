@@ -77,7 +77,8 @@ def story_horizontal_with_fill_field():
 
 def story_vertical_with_custom_mark():
     return (
-        bar_chart(TEST_DATA, x="category", y="value", mark=circle, axes=True),
+        bar_chart(TEST_DATA, x="category", y="value", mark=lambda h, fill=None: circle(r=5, cy=h, fill=fill),
+            axes=True),
         _OPTIONS,
     )
 
@@ -89,7 +90,7 @@ def story_horizontal_with_custom_mark():
             x="value",
             y="category",
             orientation="x",
-            mark=circle,
+            mark=lambda w, fill=None: circle(r=5, cx=w, fill=fill),
             axes=True,
         ),
         _OPTIONS,
@@ -103,7 +104,7 @@ def story_vertical_with_custom_mark_and_fill():
             x="category",
             y="value",
             fill="#45b7d1",
-            mark=circle,
+            mark=lambda h, fill=None: circle(r=5, cy=h, fill=fill),
             axes=True,
         ),
         _OPTIONS,
@@ -118,7 +119,7 @@ def story_horizontal_with_custom_mark_and_fill():
             y="category",
             orientation="x",
             fill="#f9ca24",
-            mark=circle,
+            mark=lambda w, fill=None: circle(r=5, cx=w, fill=fill),
             axes=True,
         ),
         _OPTIONS,

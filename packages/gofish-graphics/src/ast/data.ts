@@ -325,6 +325,18 @@ export const getValueOffset = <T>(value: MaybeValue<T>): number => {
   return typeof v._offset === "number" ? v._offset : 0;
 };
 
+/** A data value shifted `px` pixels after its scale, in either form of the
+ *  value: "this data position, plus pixels". */
+export const offsetValue = (v: Value<number>, px: number): DatumValueImpl =>
+  new DatumValueImpl(
+    getValue(v),
+    getMeasure(v),
+    getValueOffset(v) + px,
+    getValueColorOps(v),
+    getValueField(v),
+    getValueFieldType(v)
+  );
+
 /**
  * The post-scale color transforms carried by a datum value, in either of its
  * two forms: a JS {@link DatumValueImpl} instance (ops in `_colorOps`;

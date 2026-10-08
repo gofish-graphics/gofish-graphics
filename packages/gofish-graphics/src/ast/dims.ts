@@ -1,4 +1,12 @@
 import { Frontend } from "gofish-ir";
+import {
+  getMeasure,
+  getValue,
+  isValue,
+  offsetValue,
+  value,
+  type MaybeValue,
+} from "./data";
 
 export type Interval<T = number> = {
   min?: T;
@@ -276,10 +284,29 @@ export const applyAxisDims = (
   }
 };
 
-/** `min` from `center` and `size`: the one derivation `elaborateDims` (for
- *  `cx` with `w`) and {@link applyAxisDims} share. */
-const deriveMin = <T>(center: T, size: T): T =>
-  ((center as number) - (size as number) / 2) as T;
+/**
+ * `min` from `center` and `size`: the one derivation `elaborateDims` (for
+ * `cx` with `w`) and {@link applyAxisDims} share. A data center with a pixel
+ * size (`circle({ cy: "value", r: 5 })`) is the same data position shifted
+ * back half the size in pixels, after the scale (`datum(v).offset(px)`). Two
+ * data values in one measure subtract in data units. A pixel center with a
+ * data size, or data values in two measures, have no single unit to work in,
+ * so there is no `min`.
+ */
+const deriveMin = <T>(center: T, size: T): T | undefined => {
+  const c = center as MaybeValue<number>;
+  const s = size as MaybeValue<number>;
+  if (isValue(c) && isValue(s)) {
+    // Data units only subtract in one measure; a size in another measure (a
+    // bubble's "pop" around an "amount" position) has no common unit.
+    return getMeasure(c) === getMeasure(s)
+      ? (value(getValue(c) - getValue(s) / 2, getMeasure(c)) as T)
+      : undefined;
+  }
+  if (isValue(c)) return offsetValue(c, -(s as number) / 2) as T;
+  if (isValue(s)) return undefined;
+  return ((c as number) - (s as number) / 2) as T;
+};
 
 export type IndexedDims<T = number> = {
   0?: Interval<T>;

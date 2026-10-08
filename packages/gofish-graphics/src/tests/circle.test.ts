@@ -121,6 +121,17 @@ console.log("# circle: w or h sets the diameter");
   );
 }
 
+/** Every ellipse in a display list, with its center. */
+const ellipsesAt = (dl: any): { cy: number; rx: number }[] => {
+  const out: { cy: number; rx: number }[] = [];
+  const walk = (it: any) => {
+    if (it.kind === "ellipse") out.push({ cy: it.cy, rx: it.rx });
+    for (const c of it.children ?? []) walk(c);
+  };
+  dl.items.forEach(walk);
+  return out;
+};
+
 /** Every ellipse in a display list. */
 const ellipsesOf = (dl: any): { rx: number; ry: number }[] => {
   const out: { rx: number; ry: number }[] = [];
@@ -174,6 +185,45 @@ console.log("# circle: rendered");
     "a data h draws round circles",
     byH.every((e) => Math.abs(e.rx - e.ry) < 1e-6),
     JSON.stringify(byH)
+  );
+}
+
+console.log("# a data center (cx/cy) positions the circle (#1099)");
+{
+  // A data center with a pixel size becomes the box's min: the same data
+  // position, shifted back half the size in pixels after the scale.
+  const node = await circle({ r: 5, cy: "v" })(rows);
+  const min = node.args.dims[1].min;
+  check(
+    "cy: \"v\" with r: 5 sets min to the mean of v, minus 5 px",
+    min?.datum === 3.5 && (min?._offset ?? min?.offset) === -5,
+    JSON.stringify(min)
+  );
+
+  const data = [
+    { k: "a", v: 20 },
+    { k: "b", v: 80 },
+    { k: "c", v: 50 },
+  ];
+  const centers = (mark: unknown) =>
+    chart(data, { axes: true })
+      .flow(spread({ by: "k", dir: "x" }))
+      .mark(mark)
+      .toDisplayList({ w: 300, h: 300 })
+      .then((dl: any) => ellipsesAt(dl));
+  const dots = await centers(circle({ r: 5, cy: "v" }));
+  check("one dot per row", dots.length === 3, `${dots.length}`);
+  // The centers sit on one linear scale of v: c is halfway between a and b.
+  const mid = (dots[0].cy + dots[1].cy) / 2;
+  check(
+    "each dot's center sits at its value on the value axis",
+    Math.abs(dots[2].cy - mid) < 1e-6 && dots[0].cy !== dots[1].cy,
+    JSON.stringify(dots)
+  );
+  check(
+    "the dot keeps its pixel radius",
+    dots.every((d) => Math.abs(d.rx - 5) < 1e-9),
+    JSON.stringify(dots)
   );
 }
 

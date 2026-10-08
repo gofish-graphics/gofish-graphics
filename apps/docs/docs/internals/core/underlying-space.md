@@ -882,7 +882,10 @@ cannot resize something another child already laid out.
 
 The placement-coordinate compiler preserves the literal/datum distinction until
 facts are emitted: literals are pixels, while datum coordinates elaborate
-through the already-solved data→pixel scale plus any post-scale offset. This
+through the already-solved data→pixel scale plus any post-scale offset (a
+box mark given a data center and a pixel size, `circle({ cy: "value", r: 5 })`,
+stores its `min` as that center shifted back half the size in pixels,
+`offsetValue` in `data.ts`; the derivation lives in `dims.ts`). This
 keeps the unified constraint semantics without a generic dense linear solver:
 strong facts win, relation cycles are checked for contradiction, and components
 without an absolute pin are normalized so the minimum solved coordinate in that
