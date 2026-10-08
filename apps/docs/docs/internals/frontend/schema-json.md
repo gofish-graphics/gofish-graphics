@@ -954,6 +954,62 @@ for the API.
         }
       }
     },
+    "FilterOperator": {
+      "description": "Keep the rows a field predicate accepts (`filter(field(name).between(lo, hi, { closed }))`). A filter over a hand-written predicate has no wire form and serializes as an opaque `derive`.",
+      "type": "object",
+      "required": ["type", "predicate"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "filter"
+        },
+        "predicate": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string",
+              "description": "The field whose value is tested."
+            },
+            "between": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/Number"
+                },
+                {
+                  "$ref": "#/$defs/Number"
+                }
+              ],
+              "description": "The interval's ends, `[lo, hi]`, compared by value."
+            },
+            "closed": {
+              "enum": ["both", "left", "right", "none"],
+              "description": "Which ends of the interval are inclusive, as in polars' `is_between`.",
+              "default": "both"
+            }
+          },
+          "required": ["field", "between"],
+          "description": "The field predicate `field(name).between(lo, hi, { closed })` builds: `{ field, between: [lo, hi], closed? }`."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
     "SpreadOperator": {
       "description": "Arrange children along `dir` with spacing, aligning them on the cross axis.",
       "type": "object",
@@ -1576,6 +1632,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/JoinOperator"
+        },
+        {
+          "$ref": "#/$defs/FilterOperator"
         },
         {
           "$ref": "#/$defs/SpreadOperator"

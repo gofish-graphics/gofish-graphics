@@ -9,6 +9,8 @@ from gofish import (
     stack,
     derive,
     compose,
+    field,
+    filter,
     log,
     clock,
     ref,
@@ -86,6 +88,37 @@ class TestOperators:
         d = op.to_dict()
         assert d["type"] == "log"
         assert "prefix" not in d
+
+    def test_filter_field_predicate(self):
+        """A field predicate filter serializes as {type: filter, predicate}."""
+        op = filter(field("day").between(100, 120, closed="right"))
+        assert op.to_dict() == {
+            "type": "filter",
+            "predicate": {"field": "day", "between": [100, 120], "closed": "right"},
+        }
+
+    def test_filter_field_predicate_default_closed(self):
+        """An unset `closed` stays off the wire (JS defaults it to "both")."""
+        op = filter(field("day").between(1, 2))
+        assert op.to_dict() == {
+            "type": "filter",
+            "predicate": {"field": "day", "between": [1, 2]},
+        }
+
+    def test_between_rejects_pipeline_ops(self):
+        """A predicate is not a value slot: ops on the field are an error."""
+        with pytest.raises(ValueError, match="does not apply the expression"):
+            field("x").bin(10).between(0, 1)
+
+    def test_filter_callable_is_derive(self):
+        """A Python function predicate runs through the derive bridge."""
+        op = filter(lambda row: row["day"] > 1)
+        assert op.to_dict()["type"] == "derive"
+        assert op.fn([{"day": 1}, {"day": 2}]) == [{"day": 2}]
+
+    def test_filter_rejects_other_values(self):
+        with pytest.raises(TypeError, match="filter"):
+            filter("day")
 
     def test_log_operator_with_prefix(self):
         """Test log operator with prefix."""

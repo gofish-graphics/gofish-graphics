@@ -34,6 +34,7 @@ const {
   jitter,
   derive,
   join,
+  filter,
   log,
   v,
   field,
@@ -192,6 +193,71 @@ async function main() {
     check(
       "round-trip preserves join op",
       JSON.stringify(ops2[0]) === JSON.stringify(ops[0])
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Filter: a field predicate is data, so the operator gets its own wire type
+  // and round-trips; a hand-written predicate is a live callback, so that
+  // filter stays an opaque derive (#853).
+  // -------------------------------------------------------------------------
+  {
+    const rows = [{ day: 99 }, { day: 100 }, { day: 110 }, { day: 120 }];
+    const c = chart(rows)
+      .flow(filter(field("day").between(100, 120, { closed: "right" })))
+      .mark(circle({ r: 3 }));
+    const doc = await c.toJSON();
+    validateDoc(doc, "filter chart");
+    const ops = (doc.root as Frontend.ChartIR).operators!;
+    check(
+      "field-predicate filter emits { type: filter, predicate }",
+      JSON.stringify(ops[0]) ===
+        JSON.stringify({
+          type: "filter",
+          predicate: { field: "day", between: [100, 120], closed: "right" },
+        }),
+      JSON.stringify(ops[0])
+    );
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      rows,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    check(
+      "round-trip preserves filter op",
+      JSON.stringify((doc2.root as Frontend.ChartIR).operators![0]) ===
+        JSON.stringify(ops[0])
+    );
+    // The rebuilt operator runs the same predicate: (100, 120] keeps 110, 120.
+    const op = Serialize.rebuild("operator", "filter", ops[0]);
+    const kept = await (await op(async (d: any) => d))(rows);
+    check(
+      "rebuilt filter keeps the rows the predicate accepts",
+      JSON.stringify(kept) === JSON.stringify([{ day: 110 }, { day: 120 }]),
+      JSON.stringify(kept)
+    );
+    const { type: _t, ...noClosed } = (
+      await chart(rows)
+        .flow(filter(field("day").between(1, 2)))
+        .mark(circle({ r: 3 }))
+        .toJSON()
+    ).root.operators[0];
+    check(
+      "an unset closed stays off the wire",
+      JSON.stringify(noClosed) ===
+        JSON.stringify({ predicate: { field: "day", between: [1, 2] } })
+    );
+    const opaque = (
+      await chart(rows)
+        .flow(filter((d: any) => d.day > 100))
+        .mark(circle({ r: 3 }))
+        .toJSON()
+    ).root.operators[0];
+    check(
+      "hand-written predicate filter stays an opaque derive",
+      JSON.stringify(opaque) === JSON.stringify({ type: "derive" })
     );
   }
 

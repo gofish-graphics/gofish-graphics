@@ -168,6 +168,7 @@ export type OperatorIR =
   | DeriveOperator
   | ResolveOperator
   | JoinOperator
+  | FilterOperator
   | SpreadOperator
   | StackOperator
   | GroupOperator
@@ -234,6 +235,29 @@ export interface JoinOperator
   on: string;
   /** The right-hand table, inlined as JSON rows. */
   right: Record<string, unknown>[];
+}
+
+/**
+ * `filter(field(name).between(lo, hi, { closed }))` — keep the rows whose
+ * `field` value lies in `[lo, hi]`, compared by value; `closed` picks the
+ * inclusive ends (default `"both"`, as in polars' `is_between`). Only a field
+ * predicate has this form: a hand-written JS predicate is a live callback, so
+ * that filter serializes as an opaque `derive`. The predicate is its own
+ * value, not a field-expression op (`FieldExprWire.ops`).
+ */
+export interface FilterOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "filter";
+  predicate: FieldPredicateIR;
+}
+
+/** A field predicate: the field it reads and the interval it tests. */
+export interface FieldPredicateIR {
+  field: string;
+  between: [number, number];
+  closed?: "both" | "left" | "right" | "none";
 }
 
 export interface SpreadOperator
@@ -838,6 +862,7 @@ export const OPERATOR_TYPES = [
   "derive",
   "resolve",
   "join",
+  "filter",
   "spread",
   "stack",
   "group",
