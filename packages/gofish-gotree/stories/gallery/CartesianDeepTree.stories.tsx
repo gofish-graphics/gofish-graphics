@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -57,7 +57,7 @@ export const CartesianDeepTree: StoryObj = {
     tree(
       {
         node,
-        link: { curve: "linear", stroke: "#5f6b7a", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#5f6b7a", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
           // order "reverse" puts the parent at HIGH y = the bottom in y-down

@@ -7,10 +7,9 @@ import {
   stack,
   table,
   rect,
-  gradient,
   derive,
-  palette,
   field,
+  Color,
 } from "../../src/lib";
 import {
   parseLabelPosition,
@@ -375,7 +374,7 @@ export const HeatmapWithLabels: StoryObj<Args> = {
   },
   render: (args) => {
     const container = initializeContainer();
-    chart(heatData, { color: gradient(["#e0f3ff", "#08519c"]), axes: true })
+    chart(heatData, { color: Color.gradient(["#e0f3ff", "#08519c"]), axes: true })
       .flow(table({ by: { x: "hour", y: "day" },  spacing: 4 }))
       .mark(
         rect({ fill: "value" }).label("value", { position: "center", fontSize: 11 })
@@ -458,7 +457,7 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
     chart(
       context.loaded.population.filter((row: any) => row.year === 2000) as any[],
       {
-        color: palette({ Female: "#675193", Male: "#ca8861" }),
+        color: Color.palette({ Female: "#675193", Male: "#ca8861" }),
         // Keep the continuous proportion x-axis at the bottom (y-end).
         axes: { x: { side: "end", title: "proportion" }, y: true },
       }

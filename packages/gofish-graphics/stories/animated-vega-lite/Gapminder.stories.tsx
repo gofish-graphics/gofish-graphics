@@ -27,7 +27,6 @@ import { initializeContainer } from "../helper";
 import {
   frame,
   gofish,
-  animation,
   chart,
   circle,
   filter,
@@ -40,10 +39,12 @@ import {
   spread,
   spreadX,
   spreadY,
-  linear,
   text,
   time,
   timer,
+  Animation,
+  Coord,
+  Curve,
 } from "../../src/lib";
 import { SMOOTH_CURVES, channelSpline } from "../../src/spline";
 import { pausedClock } from "./pausedClock";
@@ -227,25 +228,22 @@ const PANEL_GAP = 16;
 
 /** How a panel reads the run. `null` is the sequence with nothing layered over
  *  it, which is what the step curve coincides with. */
-type Reading = "step" | "linear" | "monotone" | "smooth" | null;
-
-/** A reading that moves the marks: every reading but the sequence alone. */
-type Curve = Exclude<Reading, null>;
+type Reading = Curve.Curve | null;
 
 /** The four readings, left to right. */
 const CURVES: { caption: string; curve: Reading }[] = [
   { caption: "no transition (sequence alone)", curve: null },
-  { caption: "step: hold, then jump", curve: "step" },
-  { caption: "linear", curve: "linear" },
-  { caption: "monotone (default)", curve: "monotone" },
+  { caption: "step: hold, then jump", curve: Curve.step() },
+  { caption: "linear", curve: Curve.linear() },
+  { caption: "monotone (default)", curve: Curve.monotone() },
 ];
 
 /** The three-panel cut: the step panel is left out because it is the same
  *  picture as the sequence alone. */
 const CURVES_THREE: { caption: string; curve: Reading }[] = [
   { caption: "no interpolation", curve: null },
-  { caption: "linear", curve: "linear" },
-  { caption: "monotone", curve: "monotone" },
+  { caption: "linear", curve: Curve.linear() },
+  { caption: "monotone", curve: Curve.monotone() },
 ];
 
 /** One panel of the comparison: the same animated scatter, read one way, on a
@@ -357,11 +355,11 @@ export const CurvesThree: StoryObj<Args> = {
 
 /** The four readings of the curve ladder, left to right, each captioned with
  *  what it guarantees. The kinematics stories read these. */
-const LADDER: { caption: string; curve: Curve }[] = [
-  { caption: "step: hold, then jump", curve: "step" },
-  { caption: "linear: C0, velocity jumps", curve: "linear" },
-  { caption: "monotone: C1, no overshoot", curve: "monotone" },
-  { caption: "smooth: C1, rounds peaks", curve: "smooth" },
+const LADDER: { caption: string; curve: Curve.Curve }[] = [
+  { caption: "step: hold, then jump", curve: Curve.step() },
+  { caption: "linear: C0, velocity jumps", curve: Curve.linear() },
+  { caption: "monotone: C1, no overshoot", curve: Curve.monotone() },
+  { caption: "smooth: C1, rounds peaks", curve: Curve.smooth() },
 ];
 /** The kinematics stories' panels are narrower than the other rows', so four
  *  of them fit across beside the column of sparkline labels. */
@@ -596,7 +594,7 @@ const sparkRow = (samples: Sample[], clock: any, w: number) =>
   // itself, and an `axes: false` on the operators only silences the operator
   // that carries it, not the frame above it that ends up drawing the axis. A
   // coordinate frame owns its space, so no Cartesian axis is drawn inside one.
-  frame({ w, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
+  frame({ w, h: SPARK_H_PX, coord: Coord.linear(), padding: 0 }, [
     frame({ w, h: SPARK_H_PX }, [
       sparkSamples(samples)
         // `curve: "linear"` is not a default worth leaning on here, it is
@@ -605,14 +603,14 @@ const sparkRow = (samples: Sample[], clock: any, w: number) =>
         // corners off the staircase and turn the impulses into bumps, drawing
         // the smooth reading of a picture whose subject is that the readings
         // differ. The samples are already dense wherever a curve bends.
-        .layer(line({ stroke: "#999", strokeWidth: 1, curve: "linear" })),
+        .layer(line({ stroke: "#999", strokeWidth: 1, curve: Curve.linear() })),
     ]),
     frame({ w, h: SPARK_H_PX }, [
       sparkSamples(samples).layer(
         time.transition({
           along: "t",
           at: clock,
-          curve: "linear",
+          curve: Curve.linear(),
           fill: "#e4572e",
           opacity: 1,
         })
@@ -679,7 +677,7 @@ const kinematicsBlock = (rows: any[], clock: any) => {
  * The layered charts place their marks by the same fields as the panel, so
  * they share its x and y scales.
  */
-const highlightPanel = (rows: any[], clock: any, curve: Curve) => {
+const highlightPanel = (rows: any[], clock: any, curve: Curve.Curve) => {
   const own = rows.filter((d) => d.country === SPARK_COUNTRY);
   const place = scatter({ x: "fertility", y: "life_expect" });
   return chart(rows, { legend: false, padding: 0 })
@@ -846,7 +844,7 @@ const TRAIL_COUNTRIES = [
 const trails = (
   rows: any[],
   clock: any,
-  curve: "linear" | "monotone",
+  curve: Curve.Curve,
   options: Record<string, unknown> = {}
 ) =>
   chart(
@@ -861,7 +859,7 @@ const trails = (
       layer([
         time.history([circle({ r: 4, fill: "country", opacity: 0.3 })]),
         circle({ r: 4, fill: "country" }).transition({
-          update: animation.tween({ curve }),
+          update: Animation.tween({ curve }),
         }),
       ])
     )
@@ -891,7 +889,7 @@ export const Trails: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    trails(gapminder, year, "monotone")
+    trails(gapminder, year, Curve.monotone())
       .layer(yearReadout(year))
       .render(container, { w: args.w, h: args.h, axes: true } as any);
 
@@ -910,7 +908,7 @@ export const TrailsPaused: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = pausedClock(yearRange(gapminder), 10000, 1997.5);
-    trails(gapminder, year, "monotone")
+    trails(gapminder, year, Curve.monotone())
       .layer(yearReadout(year))
       .render(container, { w: args.w, h: args.h, axes: true } as any);
 
@@ -922,8 +920,8 @@ export const TrailsPaused: StoryObj<Args> = {
  *  the left, the smooth curve on the right. Each moving dot stays on the tip
  *  of its own line either way, because the line and the transition in a panel
  *  use the same curve. */
-const TRAIL_CURVES = (["linear", "monotone"] as const).map((curve) => ({
-  caption: curve,
+const TRAIL_CURVES = [Curve.linear(), Curve.monotone()].map((curve) => ({
+  caption: curve.type,
   curve,
 }));
 

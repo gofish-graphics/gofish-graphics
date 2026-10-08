@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, gradient, polygon } from "../../src/lib";
+import { chart, polygon, Color } from "../../src/lib";
 
 const meta: Meta = {
   title: "Shapes/Polygon Marks",
@@ -38,7 +38,7 @@ export const DataDrivenFill: StoryObj<Args> = {
         ],
       },
     ];
-    chart(rows, { color: gradient(["#fff5eb", "#7f2704"]) })
+    chart(rows, { color: Color.gradient(["#fff5eb", "#7f2704"]) })
       .mark(polygon({ points: "ring", fill: "n" }))
       .render(container, { w: args.w, h: args.h });
     return container;

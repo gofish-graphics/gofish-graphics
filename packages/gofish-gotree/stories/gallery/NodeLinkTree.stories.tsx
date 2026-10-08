@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -68,7 +68,7 @@ export const NodeLinkTree: StoryObj = {
       {
         node,
         // straight links → linear interpolation.
-        link: { curve: "linear", stroke: "#555", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#555", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
           y: { kind: "distribute", spacing: 90 },

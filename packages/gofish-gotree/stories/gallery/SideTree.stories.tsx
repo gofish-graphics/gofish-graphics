@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, polar } from "gofish-graphics";
+import { circle, Coord, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — SideTree (polar node-link, "side-leaning" tree).
@@ -50,7 +50,7 @@ export const SideTree: StoryObj = {
     mount(
       {
         node,
-        link: { curve: "linear", stroke: "#607d8b", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#607d8b", strokeWidth: 1.5 },
         // parentChild = (distribute θ, distribute r): child leans away in angle
         // and steps outward in radius from its parent.
         parentChild: combine({
@@ -67,7 +67,7 @@ export const SideTree: StoryObj = {
           x: { kind: "align", alignment: "middle" },
           y: { kind: "distribute", spacing: 90, anchor: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 560, h: 560 }
     ),

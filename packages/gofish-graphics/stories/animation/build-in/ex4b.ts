@@ -1,11 +1,11 @@
 // 4b. One group at a time, and the bars inside each group staggered too.
 import {
-  animation,
   chart,
   rect,
   spread,
   time,
   type BuildClockOptions,
+  Animation,
 } from "../../../src/lib";
 import { weather } from "./data";
 
@@ -21,7 +21,7 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
     )
     .mark(
       rect({ h: "precipitation", fill: "city" }).transition({
-        enter: animation.grow({ duration: 400 }),
+        enter: Animation.grow({ duration: 400 }),
       })
     )
     .render(container, { w: 560, h: 220, axes: true, ...clock });

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar, datum } from "gofish-graphics";
+import { rect, datum, Coord } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — SectorTree (concentric rings of thin sector wedges).
@@ -134,7 +134,7 @@ export const SectorTree: StoryObj = {
           x: { kind: "distribute", spacing: 0, anchor: "edge" },
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 560, h: 560 },
       deepBalancedTree

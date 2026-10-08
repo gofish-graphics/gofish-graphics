@@ -1,12 +1,12 @@
 // CAST Fig. 3. Dots appear one at a time, 100 ms apart, in order of a value.
 import {
-  animation,
   chart,
   circle,
   field,
   scatter,
   time,
   type BuildClockOptions,
+  Animation,
 } from "../../../src/lib";
 import { chinstraps } from "./data";
 
@@ -19,7 +19,7 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
     )
     .mark(
       circle({ r: 4, fill: "sex" }).transition({
-        enter: animation.wipe({ shape: "circle", duration: 500 }),
+        enter: Animation.wipe({ shape: "circle", duration: 500 }),
       })
     )
     .render(container, { w: 420, h: 260, axes: true, ...clock });

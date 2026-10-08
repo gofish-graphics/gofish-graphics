@@ -1,12 +1,12 @@
 // 4c. One city at a time across all months. REGROUPS, so it is a selection.
 import {
-  animation,
   chart,
   rect,
   selectAll,
   spread,
   time,
   type BuildClockOptions,
+  Animation,
 } from "../../../src/lib";
 import { weather } from "./data";
 
@@ -20,6 +20,6 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
     .layer(
       chart(selectAll("bars"))
         .flow(time.stagger({ by: "city", spacing: 0 }))
-        .mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
+        .mark(time.transition({ enter: Animation.grow({ duration: 400 }) }))
     )
     .render(container, { w: 560, h: 220, axes: true, ...clock });

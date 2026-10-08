@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, polar } from "gofish-graphics";
+import { circle, Coord, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — OakTreeVis (polar node-link, depth-colored circles).
@@ -72,7 +72,7 @@ export const OakTreeVis: StoryObj = {
       {
         node,
         // curveStepBefore unsupported → linear (see GAP 4).
-        link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 2 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 2 },
         parentChild: combine({
           // θ: parent angularly centered over its subtree's span (dsl within/align).
           x: { kind: "align", alignment: "middle" },
@@ -95,7 +95,7 @@ export const OakTreeVis: StoryObj = {
           // r: stagger siblings radially — the spiral/oak stagger (dsl flatten).
           y: { kind: "distribute", spacing: 30, anchor: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 520, h: 520 }
     ),

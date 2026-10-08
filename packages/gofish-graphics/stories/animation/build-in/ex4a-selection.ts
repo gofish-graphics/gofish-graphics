@@ -1,12 +1,12 @@
 // 4a, selection form: the same build, timed over the selected bars.
 import {
-  animation,
   chart,
   rect,
   selectAll,
   spread,
   time,
   type BuildClockOptions,
+  Animation,
 } from "../../../src/lib";
 import { weather } from "./data";
 
@@ -20,6 +20,6 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
     .layer(
       chart(selectAll("bars"))
         .flow(time.stagger({ by: "month", lag: 300 }))
-        .mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
+        .mark(time.transition({ enter: Animation.grow({ duration: 400 }) }))
     )
     .render(container, { w: 560, h: 220, axes: true, ...clock });

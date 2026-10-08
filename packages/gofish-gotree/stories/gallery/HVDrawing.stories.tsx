@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 import { tree, combine, alternate } from "../../src";
 import { byDepth, sampleTree } from "../data";
 import { initializeContainer } from "../helper";
@@ -44,7 +44,7 @@ export const HVDrawing: StoryObj = {
     tree(
       {
         node,
-        link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
         mode: "bottomUp",
         // Both relations alternate in sync (resolved at the same node depth).
         parentChild: alternate([H, V]),

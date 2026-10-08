@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth, sampleTree } from "../data";
 import { initializeContainer } from "../helper";
@@ -35,7 +35,11 @@ export const OrthogonalTree: StoryObj = {
     tree(
       {
         node,
-        link: { curve: "orthogonal", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: {
+          curve: Curve.orthogonal(),
+          stroke: "#90a4ae",
+          strokeWidth: 1.5,
+        },
         // parent up-left of its subtree: distribute x forward (parent at low x =
         // left), distribute y reverse (parent at high y = top, GoFish is y-up).
         parentChild: combine({

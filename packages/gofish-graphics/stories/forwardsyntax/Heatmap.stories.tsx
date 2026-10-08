@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, table, rect, gradient } from "../../src/lib";
+import { chart, table, rect, Color } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax/Heatmap",
@@ -51,7 +51,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(heatmapData, {
-      color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
+      color: Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
       axes: true,
     })
       .flow(table({ by: { x: "hour", y: "day" },  spacing: 4 }))

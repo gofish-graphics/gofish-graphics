@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, stack, rect, palette } from "../../../src/lib";
+import { chart, spread, stack, rect, Color } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/stacked_bar_h.html
@@ -30,7 +30,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.barley as any[], { color: palette("tableau10"), axes: true })
+    chart(context.loaded.barley as any[], { color: Color.palette("tableau10"), axes: true })
       .flow(spread({ by: "variety",  dir: "y" }), stack({ by: "site",  dir: "x" }))
       .mark(rect({ w: "yield", fill: "site" }))
       .render(container, { w: args.w, h: args.h });

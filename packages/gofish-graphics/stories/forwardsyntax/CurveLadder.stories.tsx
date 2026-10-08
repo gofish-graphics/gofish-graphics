@@ -11,6 +11,7 @@ import {
   text,
   time,
   timer,
+  Curve,
 } from "../../src/lib";
 import { pausedClock } from "../animated-vega-lite/pausedClock";
 import {
@@ -72,7 +73,7 @@ export const Ladder: StoryObj = {
           .mark(
             circle({ r: 2.5, fill: "white", stroke: "black", strokeWidth: 1 })
           )
-          .layer(line({ along: "year", curve, stroke: "steelblue" }))
+          .layer(line({ along: "year", curve: Curve[curve](), stroke: "steelblue" }))
           .render(into, { w, h: 240 });
       panel("year", byYear, 600);
       panel("miles", connected, 360);
@@ -174,7 +175,7 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
     panel = panel.layer(
       line({
         along: "year",
-        curve: below.below,
+        curve: Curve[below.below](),
         stroke: "#999",
         strokeWidth: 1.5,
         strokeDasharray: "6,4",
@@ -188,7 +189,12 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
           circle({ r: 3.5, fill: "white", stroke: "black", strokeWidth: 1 })
         )
         .layer(
-          line({ along: "year", curve, stroke: "steelblue", strokeWidth: 2.5 })
+          line({
+            along: "year",
+            curve: Curve[curve](),
+            stroke: "steelblue",
+            strokeWidth: 2.5,
+          })
         )
     )
     .layer(
@@ -198,7 +204,7 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
           scatter({ x: "miles", y: "gas" })
         )
         .mark(circle({ r: 7, fill: "#e4572e", stroke: "black", strokeWidth: 1.5 }))
-        .layer(time.transition({ curve }))
+        .layer(time.transition({ curve: Curve[curve]() }))
     );
   for (const ringChart of below === undefined ? [] : rings(below.gaps)) {
     panel = panel.layer(ringChart);

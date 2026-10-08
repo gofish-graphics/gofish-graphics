@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood, type CatchData } from "../../src/data/catch";
-import { chart, circle, circles, pack } from "../../src/lib";
+import { chart, circle, pack } from "../../src/lib";
 
 // Nested circle packing: one pack per lake, and the lakes packed together.
 //
@@ -19,7 +19,7 @@ export const Nested: StoryObj = {
     const container = initializeContainer();
 
     chart(seafood)
-      .flow(pack({ by: "lake" }), pack({ method: circles() }))
+      .flow(pack({ by: "lake" }), pack())
       .mark(circle({ r: 12, fill: "species" }))
       .render(container, { w: 420, h: 420 });
 

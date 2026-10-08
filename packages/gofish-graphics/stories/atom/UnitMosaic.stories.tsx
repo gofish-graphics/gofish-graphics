@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { chunk, groupBy, orderBy } from "lodash";
 import { initializeContainer } from "../helper";
 
-import { chart, circle, derive, palette, spread } from "../../src/lib";
+import { chart, circle, derive, spread, Color } from "../../src/lib";
 import { titanicPassengers } from "../../src/data/titanicPassengers";
 
 /**
@@ -73,7 +73,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(mosaicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) })
+    chart(mosaicPassengers, { color: Color.palette(["#2b8cbe", "#ff8408"]) })
       .flow(
         // pclass rows: 1st at the bottom, 3rd at the top
         spread({ by: "pclass", dir: "y", spacing: 6, alignment: "start" }),
