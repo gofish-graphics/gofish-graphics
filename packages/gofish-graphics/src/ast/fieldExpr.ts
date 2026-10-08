@@ -30,6 +30,7 @@
 import sumBy from "lodash/sumBy";
 import meanBy from "lodash/meanBy";
 import type { Measure, MaybeValue } from "./data";
+import { withWire, wireOf } from "./wire";
 
 export type FieldOp =
   | {
@@ -233,11 +234,9 @@ export type FieldPredicateWire = {
   closed?: BetweenOptions["closed"];
 };
 
-/** A row predicate that also carries its own description as data
- *  (`__predicate`), so `filter` can put it on the wire. */
-export type FieldPredicate = ((row: any) => boolean) & {
-  readonly __predicate: FieldPredicateWire;
-};
+/** A row predicate that also carries its own description as data (its wire
+ *  form, `withWire`), so `filter` can put it on the wire. */
+export type FieldPredicate = (row: any) => boolean;
 
 /**
  * Build the row predicate a {@link FieldPredicateWire} describes. Both
@@ -254,15 +253,13 @@ export function fieldPredicate(wire: FieldPredicateWire): FieldPredicate {
       hi,
       options
     );
-  return Object.assign(pred, { __predicate: wire });
+  return withWire(pred, wire);
 }
 
 /** The wire description a predicate carries, if it is a field predicate. A
  *  hand-written `(row) => boolean` has none. */
 export function predicateWire(pred: unknown): FieldPredicateWire | undefined {
-  return typeof pred === "function"
-    ? (pred as Partial<FieldPredicate>).__predicate
-    : undefined;
+  return wireOf<FieldPredicateWire>(pred);
 }
 
 /**

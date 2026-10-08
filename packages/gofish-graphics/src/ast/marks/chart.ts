@@ -80,6 +80,7 @@ import {
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
 import { copyColumnTypes } from "../schema";
+import { withWire } from "../wire";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -105,7 +106,7 @@ function mapOperator<T, U>(
         copyColumnTypes(out, d);
       return mark(out, key, layerContext);
     }) as Mark<T>;
-  (op as any).__serialize = serialize;
+  withWire(op, serialize);
   return op;
 }
 
@@ -730,8 +731,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         );
         return Layer({}, segments);
       };
-      const result = nameableMark(mark);
-      (result as any).__serialize = { type, opts };
+      const result = withWire(nameableMark(mark), { type, opts });
       return result;
     }
 
@@ -794,8 +794,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         datum
       );
     };
-    const result = nameableMark(mark);
-    (result as any).__serialize = { type, opts };
+    const result = withWire(nameableMark(mark), { type, opts });
     tagRelationalFusable(result, type, opts, inferred, config.temporal);
     return result;
   }

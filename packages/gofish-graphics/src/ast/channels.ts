@@ -18,6 +18,7 @@ import {
   type LiteralValue,
   type Measure,
 } from "./data";
+import { Frontend } from "gofish-ir";
 import { evalFieldValues, type FieldExpr } from "./fieldExpr";
 import { columnType } from "./schema";
 import {
@@ -368,8 +369,8 @@ export const inferColor = <T extends Record<string, any>>(
 /**
  * Infer a raw scalar value from a field name, function accessor, or literal.
  * Same resolution as {@link inferColor} (plus numbers), with no aggregation —
- * suitable for text content, labels, unscaled identifiers. An async accessor
- * (a Python lambda) has already been resolved by {@link resolveAccessors}.
+ * suitable for text content, labels, unscaled identifiers. A Python accessor
+ * has already been resolved by {@link resolveChannelAccessors}.
  */
 export const inferRaw = <T extends Record<string, any>>(
   accessor:
@@ -390,91 +391,90 @@ export const inferRaw = <T extends Record<string, any>>(
     : value(resolved.value);
 };
 
-const isThenable = (v: unknown): v is PromiseLike<unknown> =>
-  v !== null &&
-  (typeof v === "object" || typeof v === "function") &&
-  typeof (v as any).then === "function";
+/** The symbol under which an accessor carries its batch form: given the rows,
+ *  the value for each row, in one call. A Python accessor arrives this way
+ *  (`makeLambdaAccessor` in serialize/fromJSON.ts). */
+export const RESOLVE_ROWS: unique symbol = Symbol.for("gofish.resolveRows");
 
-const isPlainObject = (v: unknown): v is Record<string, unknown> => {
-  if (v === null || typeof v !== "object") return false;
-  const proto = Object.getPrototypeOf(v);
-  return proto === Object.prototype || proto === null;
+/** An accessor that has a batch form. */
+export type BatchAccessor = ((row: any) => unknown) & {
+  [RESOLVE_ROWS]: (rows: readonly unknown[]) => Promise<unknown[]>;
 };
 
-/**
- * Resolve the async accessors in a channel value over `rows`, so channel
- * inference stays synchronous (#1080). An accessor is async when it returns a
- * Promise: a Python lambda reaches JS that way (`fromJSON.ts` turns its
- * `{ __gofish_lambda }` sentinel into an RPC per row), and so does a JS
- * `async (d) => ...`. Each such accessor is called once per row, the values
- * are awaited together, and it is replaced by a synchronous accessor that
- * reads them back by row. A synchronous accessor is left as it is (it was
- * called on the first row to find out). Plain objects are walked, so an
- * accessor nested in a `dims` bag (`dims: { r: { size: fn } }`) is resolved
- * too; tagged values (`field(...)`, `datum(...)`) are class instances and stay
- * as they are.
- *
- * Called through {@link resolveChannelAccessors}, which the mark factory and
- * the operator factory run in their async bodies right before inference. It
- * is the one place an async accessor is awaited.
- */
-export async function resolveAccessors<V>(
-  value: V,
-  rows: readonly any[]
-): Promise<V> {
-  if (typeof value === "function") {
-    if (rows.length === 0) return value;
-    const fn = value as (d: any) => unknown;
-    const first = fn(rows[0]);
-    if (!isThenable(first)) return value;
-    const values = await Promise.all([
-      first,
-      ...rows.slice(1).map((row) => fn(row)),
-    ]);
-    const byRow = new Map<unknown, unknown>(rows.map((r, i) => [r, values[i]]));
-    return ((row: unknown) => {
-      if (!byRow.has(row)) {
-        throw new Error(
-          "an async channel accessor was read on a row it was not resolved " +
-            "over. resolveChannelAccessors must be given every row that " +
-            "inference reads."
-        );
-      }
-      return byRow.get(row);
-    }) as V;
+const isBatchAccessor = (v: unknown): v is BatchAccessor =>
+  typeof v === "function" && RESOLVE_ROWS in v;
+
+/** Whether a channel value holds a batch accessor, at any depth of its plain
+ *  objects (a `dims` bag). */
+const holdsBatchAccessor = (v: unknown): boolean =>
+  isBatchAccessor(v) ||
+  (Frontend.isPlainObject(v) && Object.values(v).some(holdsBatchAccessor));
+
+/** A synchronous accessor that reads a resolved value back by row. */
+const readByRow =
+  (byRow: Map<unknown, unknown>) =>
+  (row: unknown): unknown => {
+    if (!byRow.has(row)) {
+      throw new Error(
+        "a Python channel accessor was read on a row it was not resolved " +
+          "over. resolveChannelAccessors must be given every row inference reads."
+      );
+    }
+    return byRow.get(row);
+  };
+
+/** Resolve the batch accessors in one channel value over `rows`: each is
+ *  called once, with all the rows, and replaced by {@link readByRow}. A plain
+ *  object is rebuilt only when a child changed. */
+async function resolveValue(
+  value: unknown,
+  rows: readonly unknown[]
+): Promise<unknown> {
+  if (isBatchAccessor(value)) {
+    const values = await value[RESOLVE_ROWS](rows);
+    return readByRow(new Map(rows.map((row, i) => [row, values[i]])));
   }
-  if (isPlainObject(value)) {
-    const entries = await Promise.all(
-      Object.entries(value).map(
-        async ([k, v]) => [k, await resolveAccessors(v, rows)] as const
-      )
-    );
-    return Object.fromEntries(entries) as V;
+  if (!Frontend.isPlainObject(value) || !holdsBatchAccessor(value)) {
+    return value;
   }
-  return value;
+  const entries = Object.entries(value);
+  const resolved = await Promise.all(
+    entries.map(([, v]) => resolveValue(v, rows))
+  );
+  return Object.fromEntries(entries.map(([k], i) => [k, resolved[i]]));
 }
 
 /**
- * Resolve the async accessors in every channel of `opts` over `rows`, all
- * channels at once (see {@link resolveAccessors}). `rows` must hold every row
- * inference will read: the operator factory passes its whole input plus each
- * split entry's rows, so a split that hands inference other row objects than
- * its input still finds each one. Options that are not channels are left as
- * they are.
+ * Resolve the batch accessors in the channels of `opts`, so channel inference
+ * stays synchronous (#1080). A Python lambda reaches JS as an accessor with a
+ * batch form ({@link RESOLVE_ROWS}): it is called once with every row, and
+ * inference gets a synchronous accessor that reads each row's value back. An
+ * accessor nested in a `dims` bag is resolved too. Options that are not
+ * channels are left as they are.
+ *
+ * `rowsOf` gives every row inference will read; the operator factory gives
+ * its whole input plus each split entry's rows. When no channel holds a batch
+ * accessor (the common case), `opts` comes back as it is, synchronously, and
+ * `rowsOf` is never called. The mark factory and the operator factory call
+ * this right before inference; it is the one place a Python accessor runs.
  */
-export async function resolveChannelAccessors<O extends Record<string, any>>(
+export function resolveChannelAccessors<O extends Record<string, any>>(
   opts: O,
   channels: Record<string, unknown> | undefined,
-  rows: readonly any[]
-): Promise<O> {
-  const keys = Object.keys(channels ?? {}).filter((k) => opts[k] !== undefined);
-  if (keys.length === 0) return opts;
-  const values = await Promise.all(
-    keys.map((k) => resolveAccessors(opts[k], rows))
+  rowsOf: () => readonly unknown[]
+): O | Promise<O> {
+  const keys = Object.keys(channels ?? {}).filter((k) =>
+    holdsBatchAccessor(opts[k])
   );
-  const out: Record<string, any> = { ...opts };
-  keys.forEach((k, i) => (out[k] = values[i]));
-  return out as O;
+  if (keys.length === 0) return opts;
+  const rows = rowsOf();
+  return Promise.all(keys.map((k) => resolveValue(opts[k], rows))).then(
+    (values) => {
+      const out: Record<string, any> = { ...opts };
+      keys.forEach((k, i) => (out[k] = values[i]));
+      return out as O;
+    }
+  );
 }
 
 /**

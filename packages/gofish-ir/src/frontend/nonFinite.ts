@@ -39,7 +39,9 @@ const SPELLINGS: Record<NonFiniteSpelling, number> = {
   NaN: NaN,
 };
 
-const isPlainObject = (v: unknown): v is Record<string, unknown> => {
+/** Whether `v` is a plain object (an object literal or `Object.create(null)`),
+ *  not an array or a class instance. */
+export const isPlainObject = (v: unknown): v is Record<string, unknown> => {
   if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
   const proto = Object.getPrototypeOf(v);
   return proto === Object.prototype || proto === null;
@@ -79,10 +81,13 @@ function encodeNumber(n: number): number | NonFiniteNumberIR {
  * same value otherwise.
  */
 export function encodeNonFinite<T>(value: T): T {
-  return walk(value, (v) =>
-    typeof v === "number" && !Number.isFinite(v) ? encodeNumber(v) : undefined
-  ) as T;
+  return walk(value, swapNonFinite) as T;
 }
+
+/** The tagged form of a non-finite number, or `undefined` for anything else
+ *  (a {@link walk} swap). */
+const swapNonFinite = (v: unknown): unknown =>
+  typeof v === "number" && !Number.isFinite(v) ? encodeNumber(v) : undefined;
 
 /**
  * Encode a value as an IR document carries it, in one pass: every non-finite
@@ -97,8 +102,7 @@ export function encodeNonFinite<T>(value: T): T {
  */
 export function encodeIR<T>(value: T): T {
   const swap = (v: unknown): unknown => {
-    if (typeof v === "number")
-      return Number.isFinite(v) ? undefined : encodeNumber(v);
+    if (typeof v === "number") return swapNonFinite(v);
     if (
       v === null ||
       typeof v !== "object" ||

@@ -13,6 +13,7 @@ covers:
   - packages/gofish-graphics/src/serialize/toJSON.ts
   - packages/gofish-graphics/src/serialize/fromJSON.ts
   - packages/gofish-graphics/src/serialize/registry.ts
+  - packages/gofish-graphics/src/ast/wire.ts
   - packages/gofish-python/scripts/generate.ts
 ---
 
@@ -669,8 +670,8 @@ JS factory, and gained the box-dims channels it was missing.
 ## Modularity — the registry pattern
 
 Each operator and leaf-mark factory takes an optional `serialize`
-config; the factory tags the produced value with `__serialize`
-metadata. The emitter (`toJSON`) reads the tag at walk time. Adding a
+config; the factory attaches the produced value's wire form with `withWire`
+(`ast/wire.ts`). The emitter (`toJSON`) reads the tag at walk time. Adding a
 new operator is a one-line config change to its existing factory call,
 not a switch-statement edit.
 
@@ -767,15 +768,16 @@ sentinels at any depth of both mark and operator options. A callable in any
 other option (`spread(by=lambda d: ...)`) is a `TypeError` when the Python
 `Mark` or `Operator` is built, since the JS side resolves accessors only in
 channels. The accessor it
-builds is async: each call is one `/derive/<id>` round trip for one row.
-Channel inference is synchronous, so the mark factory and the operator factory
-first resolve every async accessor in a channel over the rows they are about
-to infer from (`resolveChannelAccessors` in `channels.ts`), and inference reads the
-resolved values (#1080). That works the same in every channel kind, size and
-position included, and for a JS `async (d) => ...` accessor too. The cost is
-one round trip per row. To make it cheaper later, the accessor can collect the
-rows it is called with in one tick and send them as one `applyLambda(id,
-rows)` call, which the endpoint already takes; nothing else would change.
+builds has only a batch form (`RESOLVE_ROWS`): channel inference is
+synchronous, so the mark factory and the operator factory first resolve every
+Python accessor in a channel over the rows they are about to infer from
+(`resolveChannelAccessors` in `channels.ts`), with one `applyLambda(id, rows)`
+call per accessor, and inference reads the resolved values (#1080). That works
+the same in every channel kind, size and position included. It is the one
+place a Python accessor crosses the bridge, and calling one per row throws. A
+JS `async (d) => ...` accessor is not supported: only Python accessors are
+resolved this way. When no channel holds a Python accessor, nothing is awaited
+or copied.
 
 Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
 directly — no bridge sentinel needed.

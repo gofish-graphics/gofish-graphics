@@ -40,6 +40,7 @@ import {
   installBuildIn,
   type BuildClockOptions,
 } from "../../animation/install";
+import { wireOf } from "../wire";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -817,7 +818,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
         : undefined;
     if (fusable === undefined) return;
     if (this.hasOwnFlow()) {
-      const anchorOpts = (this.state.finalMark as any)?.__serialize?.opts as
+      const anchorOpts = wireOf(this.state.finalMark)?.opts as
         | Record<string, any>
         | undefined;
       applyDefaultRelational(fusable, this.state.operators, anchorOpts);

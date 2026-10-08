@@ -10,11 +10,11 @@ import {
   allExamples,
   validate,
   encodeIR,
-  encodeNonFinite,
   decodeNonFinite,
   FRONTEND_IR_JSON_SCHEMA,
   type FrontendIRDocument,
 } from "../frontend/index.js";
+import { encodeNonFinite } from "../frontend/nonFinite.js";
 
 declare const process: { exit(code: number): never };
 

@@ -1062,8 +1062,8 @@ async function main() {
   {
     const rib = ribbon({ along: "g", opacity: 0.8 });
     check(
-      "ribbon({ along }) carries along in __serialize.opts",
-      (rib as any).__serialize?.opts?.along === "g"
+      "ribbon({ along }) carries along in its wire opts",
+      Serialize.wireOf(rib)?.opts?.along === "g"
     );
   }
 
@@ -1235,8 +1235,10 @@ async function main() {
       comb.options.spacing === 4 && !("bogus" in comb.options)
     );
 
-    const undeclared: any = async () => undefined;
-    undeclared.__serialize = { type: "not-a-construct", opts: {} };
+    const undeclared: any = Serialize.withWire(async () => undefined, {
+      type: "not-a-construct",
+      opts: {},
+    });
     let message = "";
     try {
       await chart(rows).mark(undeclared).toJSON();
@@ -1286,11 +1288,11 @@ async function main() {
     );
   }
 
-  console.log("\n# Async accessors in size and position channels (#1080)");
+  console.log("\n# Python accessors in size and position channels (#1080)");
   {
-    // A Python lambda reaches JS as an accessor that returns a Promise. The
-    // mark and operator factories resolve it over the rows before inference,
-    // so size and position channels read numbers, not Promises.
+    // A Python lambda reaches JS as an accessor with a batch form. The mark
+    // and operator factories resolve it over the rows before inference, one
+    // bridge call per accessor, so size and position channels read numbers.
     const rows = [
       { k: "a", v: 1 },
       { k: "b", v: 3 },
@@ -1317,13 +1319,6 @@ async function main() {
           Math.abs(r.w - expected[i].w) < 1e-9 &&
           Math.abs(r.h - expected[i].h) < 1e-9
       );
-    const jsAsync = rectsOf(await bars(async (d: any) => d.v));
-    check(
-      "a JS async h accessor draws the same bars as a field",
-      sameAs(jsAsync) && jsAsync.every((r) => Number.isFinite(r.h)),
-      JSON.stringify({ jsAsync, expected })
-    );
-
     const calls: string[] = [];
     const bridge = {
       applyLambda: async (id: string, batch: any[]) => {

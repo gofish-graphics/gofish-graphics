@@ -111,14 +111,15 @@ annotation-vs-provenance pair throws at the channel. `createOperator` hoists
 `resolveMeasure` to once per channel and passes the result down, since the
 accessor and provenance are loop-invariant across split entries.
 
-Inference is synchronous. An accessor that returns a Promise (a Python
-lambda reaches JS as one, and so does a JS `async (d) => ...`) is resolved
-over the mark's rows before inference: `resolveChannelAccessors`
-(`channels.ts`) resolves every channel at once, calling each async accessor
-on each row, awaiting the values together, and handing inference a
-synchronous accessor that reads them back. It also walks a `dims` bag, so a
-nested accessor is resolved the same way. The operator factory uses the same
-helper before its own channel inference.
+Inference is synchronous. A Python lambda reaches JS as an accessor with a
+batch form (`RESOLVE_ROWS`), and it is resolved over the mark's rows before
+inference: `resolveChannelAccessors` (`channels.ts`) calls each one once with
+all the rows and hands inference a synchronous accessor that reads each row's
+value back. It also walks a `dims` bag, so a nested accessor is resolved the
+same way. With no Python accessor in any channel it returns the options as
+they are, without awaiting. The operator factory uses the same helper before
+its own channel inference. A JS `async (d) => ...` accessor is not
+supported.
 
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.
@@ -300,7 +301,7 @@ methods:
   (defined in `markResult.ts`, called by every `.name()` implementation, and
   carried forward by every modifier chained after it), so `.layer()`'s
   producer-tier auto-naming and a sequenced tier's naming can detect a
-  user-chained name without parsing the `__serialize` tag. A `createName`
+  user-chained name without parsing the wire tag (`wireOf`). A `createName`
   token is filed in the layer context under its own symbol (`layerKey`), so
   those tiers find a token-named mark's nodes too, while no string
   `selectAll` or `ref` can reach them. (An earlier `ChartBuilder.connect()`
@@ -347,7 +348,7 @@ which is one application of the shared **modifier factory** in
 mutates each produced node (once per node — every slice for an expand mark like
 `cut`) and receives the per-instance datum, so a modifier like `.zOrder` can
 derive a value from the data; `tag` stamps metadata on the
-wrapped mark function once (propagating the `__serialize` tag and stashing the
+wrapped mark function once (propagating the wire tag, `wireOf`, and stashing the
 layer name — a mark no longer carries an axis-field tag, since axis titles now
 derive from each node's resolved space `measure`).
 `attachModifiers` wires the set onto the base and
@@ -546,7 +547,7 @@ either throws instead (see the previous section).
 Crucially, the computed default is written into a **separate mutable cell**,
 `inferred`, not into `opts` — `tagRelationalFusable` stamps `{ type, opts,
 inferred, anchorKeys, makeAnchor }`, and `opts` stays the untouched record of
-what the user wrote (the same object `__serialize.opts` reads, so mutating it
+what the user wrote (the same object the wire tag's `opts` reads, so mutating it
 would corrupt the emitted IR and make an inferred split look
 user-specified). The connector's mark closure reads the split off `inferred`
 only — there's no `opts.by` to check anymore — and resolves `dir = opts.dir
@@ -696,7 +697,7 @@ positions.
 - The companion factory for layout operators:
   [The Operator Factory](/internals/frontend/operator-factory).
 - The factory's optional `serialize` config (third argument, the IR `type`)
-  tags the produced mark with `__serialize` metadata that the frontend-IR
+  attaches the produced mark's wire tag (`withWire`) that the frontend-IR
   emitter reads. The tag holds the options as the caller passed them; the
   emitter keeps only the keys the mark's descriptor declares — see
   [Frontend IR (Serialization)](/internals/frontend/serialization).

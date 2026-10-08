@@ -36,6 +36,8 @@ import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
 import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
+import { withWire } from "./wire";
+import { isThenable } from "../util";
 
 export interface RenderOptions {
   w?: number;
@@ -503,9 +505,8 @@ function buildCreatedMark(
     // single value. The object form `{type, entry: true}` produces a
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
-    // An async accessor (a Python lambda, or a JS `async (d) => ...`) is
-    // resolved over the rows first, so inference below is synchronous
-    // (`resolveAccessors`, #1080).
+    // A Python accessor is resolved over the rows first, in one batch call,
+    // so inference below is synchronous (`resolveChannelAccessors`, #1080).
     const shapeProps: Record<string, any> = {};
     // `live(...)` channels: the pipeline renders (and measures) the accessor's
     // resolve-time value; the paint layer re-evaluates it reactively per frame
@@ -515,11 +516,8 @@ function buildCreatedMark(
       markOpts,
       d
     );
-    const resolvedOpts = await resolveChannelAccessors(
-      staticOpts,
-      channels,
-      data
-    );
+    const pending = resolveChannelAccessors(staticOpts, channels, () => data);
+    const resolvedOpts = isThenable(pending) ? await pending : pending;
     for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
@@ -568,7 +566,7 @@ function buildCreatedMark(
 
   // Tag with IR-serialization metadata for the frontend-IR emitter.
   if (serialize) {
-    (baseMark as any).__serialize = { type: serialize, opts: markOpts };
+    withWire(baseMark, { type: serialize, opts: markOpts });
   }
 
   return nameableMark(baseMark);

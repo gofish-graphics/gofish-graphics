@@ -388,8 +388,8 @@ async function main() {
       { w: 200, h: 200 }
     );
     check(
-      "fusing a no-along connector leaves __serialize.opts.along undefined",
-      (conn as any).__serialize?.opts?.along === undefined
+      "fusing a no-along connector leaves its wire opts.along undefined",
+      (GoFish as any).Serialize.wireOf(conn)?.opts?.along === undefined
     );
     check(
       "...while the computed default split still happened (2 connectors)",

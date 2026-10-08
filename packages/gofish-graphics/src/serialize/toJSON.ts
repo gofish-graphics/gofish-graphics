@@ -22,6 +22,7 @@
 import { Frontend } from "gofish-ir";
 import type { ChartBuilder, Mark, Operator } from "./registry";
 import { GoFishRef } from "../ast/_ref";
+import { wireOf } from "../ast/wire";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -84,7 +85,7 @@ function wireOpts(
 }
 
 function readTag(value: unknown): SerializeTag | undefined {
-  const tag = (value as any)?.__serialize;
+  const tag = wireOf<SerializeTag>(value);
   if (!tag || typeof tag.type !== "string") return undefined;
   return tag as SerializeTag;
 }
@@ -274,7 +275,7 @@ async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
   if (!tag) {
     throw new Error(
       "encountered an untagged mark in toJSON; either add a serialize " +
-        "config to its factory or attach an explicit __serialize metadata " +
+        "config to its factory or attach its IR form with withWire " +
         "field at the construction site"
     );
   }

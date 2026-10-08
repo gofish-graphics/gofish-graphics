@@ -1,10 +1,10 @@
 /**
- * `resolveAccessors` / `resolveChannelAccessors` (#1080): an async channel
- * accessor (a Python lambda) is resolved over the rows before inference, and
- * inference reads the values back by row. The checks pin what makes the
- * lookup safe: the operator factory resolves over its whole input plus every
- * split entry's rows, and the splits hand inference the input's own row
- * objects.
+ * `resolveChannelAccessors` (#1080): a Python accessor (an accessor with a
+ * batch form, `RESOLVE_ROWS`) is resolved over the rows before inference, in
+ * one call, and inference reads the values back by row. The checks also pin
+ * what makes the by-row lookup safe: the operator factory resolves over its
+ * whole input plus every split entry's rows, and the splits hand inference
+ * the input's own row objects.
  *
  * Run: `tsx src/tests/resolveAccessors.test.ts` (wired as
  * `pnpm test:resolve-accessors`).
@@ -12,10 +12,7 @@
 
 import "../lib";
 import { field } from "../ast/data";
-import {
-  resolveAccessors,
-  resolveChannelAccessors,
-} from "../ast/channels";
+import { RESOLVE_ROWS, resolveChannelAccessors } from "../ast/channels";
 import { splitEntries } from "../ast/datumProjection";
 
 declare const process: { exit(code: number): never };
@@ -38,38 +35,62 @@ const rows = [
   { k: "a", v: 3 },
 ];
 
-console.log("# resolveAccessors");
+/** An accessor with a batch form, as `makeLambdaAccessor` builds one. */
+function batched(fn: (d: any) => unknown) {
+  const calls: unknown[][] = [];
+  const accessor = Object.assign(
+    () => {
+      throw new Error("called per row");
+    },
+    {
+      [RESOLVE_ROWS]: async (rs: readonly unknown[]) => {
+        calls.push([...rs]);
+        return rs.map(fn);
+      },
+    }
+  );
+  return { accessor, calls };
+}
+
+console.log("# resolveChannelAccessors");
 {
-  let calls = 0;
-  const asyncV = async (d: { v: number }) => {
-    calls += 1;
-    return d.v * 10;
-  };
-  const resolved = await resolveAccessors(asyncV, rows);
+  const { accessor, calls } = batched((d) => d.v * 10);
+  const out = (await resolveChannelAccessors(
+    { h: accessor, dir: "x" },
+    { h: "size" },
+    () => rows
+  )) as any;
   check(
-    "an async accessor reads back each row's value synchronously",
-    rows.every((r) => resolved(r) === r.v * 10),
-    JSON.stringify(rows.map((r) => resolved(r)))
+    "a batch accessor reads back each row's value synchronously",
+    rows.every((r) => out.h(r) === r.v * 10)
   );
-  check("it is called once per row", calls === rows.length, `${calls}`);
+  check("it is resolved in one call", calls.length === 1, `${calls.length}`);
 
-  const sync = (d: { v: number }) => d.v;
+  const nested = batched((d) => d.v);
+  const dims = (await resolveChannelAccessors(
+    { dims: { r: { size: nested.accessor }, x: "k" } },
+    { dims: "dims" },
+    () => rows
+  )) as any;
   check(
-    "a sync accessor is left as it is",
-    (await resolveAccessors(sync, rows)) === sync
+    "a batch accessor nested in a dims bag is resolved",
+    dims.dims.r.size(rows[1]) === 2 && dims.dims.x === "k"
   );
 
-  const dims = await resolveAccessors({ r: { size: asyncV }, x: "k" }, rows);
+  const notChannel = batched((d) => d.k);
+  const kept = (await resolveChannelAccessors(
+    { by: notChannel.accessor },
+    { h: "size" },
+    () => rows
+  )) as any;
   check(
-    "an accessor nested in a dims bag is resolved",
-    typeof dims.r.size === "function" &&
-      dims.r.size(rows[1]) === 20 &&
-      dims.x === "k"
+    "an option that is not a channel is left as it is",
+    kept.by === notChannel.accessor && notChannel.calls.length === 0
   );
 
   let message = "";
   try {
-    resolved({ k: "a", v: 1 });
+    out.h({ k: "a", v: 1 });
   } catch (e) {
     message = (e as Error).message;
   }
@@ -78,30 +99,45 @@ console.log("# resolveAccessors");
     message.includes("not resolved over"),
     message
   );
-}
-
-console.log("# resolveChannelAccessors");
-{
-  const by = async (d: { k: string }) => d.k;
-  const h = async (d: { v: number }) => d.v;
-  const out = await resolveChannelAccessors(
-    { by, h, dir: "x" },
-    { h: "size" },
-    rows
-  );
-  check("a channel is resolved", out.h(rows[2]) === 3);
-  check("an option that is not a channel is left as it is", out.by === by);
 
   // A split that hands inference copies: resolving over the input plus the
   // entries' rows (what the operator factory passes) finds every one.
   const copies = rows.map((r) => ({ ...r }));
-  const both = await resolveChannelAccessors({ h }, { h: "size" }, [
-    ...rows,
-    ...copies,
-  ]);
+  const both = (await resolveChannelAccessors(
+    { h: batched((d) => d.v).accessor },
+    { h: "size" },
+    () => [...rows, ...copies]
+  )) as any;
   check(
     "resolving over input and entry rows covers rows a split copied",
     copies.every((r) => both.h(r) === r.v)
+  );
+}
+
+console.log("# the fast path");
+{
+  const opts = { h: "v", w: (d: any) => d.v, dims: { r: { size: 3 } } };
+  let asked = false;
+  const out = resolveChannelAccessors(
+    opts,
+    { h: "size", w: "size", dims: "dims" },
+    () => {
+      asked = true;
+      return rows;
+    }
+  );
+  check(
+    "with no batch accessor, opts come back as they are, synchronously",
+    out === opts
+  );
+  check("and the rows are never gathered", !asked);
+  const asyncFn = async (d: any) => d.v;
+  check(
+    "a plain async function is not a Python accessor and is left alone",
+    resolveChannelAccessors({ h: asyncFn }, { h: "size" }, () => rows) !==
+      undefined &&
+      (resolveChannelAccessors({ h: asyncFn }, { h: "size" }, () => rows) as any)
+        .h === asyncFn
   );
 }
 

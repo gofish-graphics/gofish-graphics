@@ -164,9 +164,10 @@ Walking `createOperator.ts:391-415`:
    (`{type, entry: true}`), the inference runs once per split entry,
    producing an array of values (one per child); otherwise it aggregates
    over all of `d` and produces one value. Inference is synchronous, so
-   `buildLayoutOpts` first resolves any async accessor in a channel (a
-   Python lambda) with `resolveChannelAccessors` (#1080), over every row
-   inference reads: the rows of `d` plus each split entry's rows.
+   `buildLayoutOpts` first resolves any Python accessor in a channel with
+   `resolveChannelAccessors` (#1080), one call per accessor over every row
+   inference reads: the rows of `d` plus each split entry's rows. That row
+   set is built only when some channel holds a Python accessor.
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator
@@ -365,7 +366,7 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   a function accessor warns and is dropped from the emitted IR (functions
   aren't serializable). `.translate()`'s wrapper has no tag of its own by
   default (the wrapped function is new), so `translateOperator` copies the
-  base operator's `__serialize` tag onto the wrapper and stamps
+  base operator's wire tag (`wireOf`) onto the wrapper and stamps
   `tag.translate` — without that copy, a translated operator would silently
   serialize as the opaque `{type: "derive"}` fallback, losing both
   `translate` and any chained `.label()`.
@@ -400,7 +401,7 @@ the **modifier factory** that also lives in this file — `ModifierConfig` +
 stashes the passed name on the returned mark function via `stashLayerName`
 (defined in `markResult.ts`, called by the `name` modifier's `tag` hook), so
 [`.layer()`](/js/api/core/layer)'s producer-tier auto-naming can detect a
-user-chained name without parsing the `__serialize` tag. (An earlier
+user-chained name without parsing the wire tag (`wireOf`). (An earlier
 `ChartBuilder.connect()` method used this same stashed name; it was deleted
 in favor of `.layer()`, which generalizes the pattern to every tier — see
 [The Mark Factory](/internals/frontend/mark-factory#createrelationalmark-connectors-as-marks).)
@@ -522,8 +523,8 @@ to `createOperator`; Encodable doesn't address layout multiplicity.
     extracted to keep the chartBuilder ↔ createOperator import graph
     acyclic).
 - The companion mark factory: [The Mark Factory](/internals/frontend/mark-factory).
-- The `serialize` config field (the IR `type`, e.g. `"spread"`) tags the produced operator with
-  `__serialize` metadata the frontend-IR emitter reads. The tag holds the
+- The `serialize` config field (the IR `type`, e.g. `"spread"`) attaches the produced operator's
+  wire tag (`withWire`), which the frontend-IR emitter reads. The tag holds the
   options as the caller passed them, and the emitter keeps only the keys the
   operator's descriptor declares — see
   [Frontend IR (Serialization)](/internals/frontend/serialization).

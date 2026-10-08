@@ -18,6 +18,7 @@ import {
   pathToPixelSVG,
   roleFor,
 } from "../displayList/lowerHelpers";
+import { withWire } from "../wire";
 
 export type Ring = [number, number][];
 
@@ -263,6 +264,6 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
     return group;
   };
   const result = nameableMark(mark);
-  (result as any).__serialize = { type: "polygon", opts };
+  withWire(result, { type: "polygon", opts });
   return result;
 };

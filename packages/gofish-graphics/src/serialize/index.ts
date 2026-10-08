@@ -40,3 +40,5 @@ export {
 } from "./fromJSON";
 
 export { toJSON, toJSONLayer, toJSONRawMark } from "./toJSON";
+
+export { withWire, wireOf } from "../ast/wire";

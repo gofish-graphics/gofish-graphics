@@ -31,6 +31,7 @@ import { ref } from "../ast/shapes/ref";
 import { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";
 import { Frontend } from "gofish-ir";
+import { RESOLVE_ROWS } from "../ast/channels";
 import {
   rebuild,
   cutSlices,
@@ -108,18 +109,23 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
 // ---------------------------------------------------------------------------
 
 /**
- * Build the async arrow for a `{ __gofish_lambda: id }` sentinel. The mark
- * and operator factories resolve it over their rows before channel inference
- * (`resolveAccessors` in channels.ts), calling it once per row. The body
- * issues a one-row RPC through the bridge and returns the lambda's result for
- * that row as the bridge hands it back: plain JSON values, with any
- * transport-specific wrapping already undone by the bridge.
+ * Build the accessor for a `{ __gofish_lambda: id }` sentinel. It has only a
+ * batch form ({@link RESOLVE_ROWS}): the mark and operator factories resolve
+ * it before channel inference (`resolveChannelAccessors` in channels.ts) with
+ * one `applyLambda(id, rows)` call for all of its rows. That call is the one
+ * place a Python accessor crosses the bridge. Called per row, it throws: a
+ * Python accessor works only in a channel.
  */
 function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
-  return async (d: any) => {
-    const [result] = await bridge.applyLambda(lambdaId, [d]);
-    return result;
+  const accessor = () => {
+    throw new Error(
+      "a Python accessor was called per row; it is resolved only in a channel"
+    );
   };
+  return Object.assign(accessor, {
+    [RESOLVE_ROWS]: (rows: readonly unknown[]) =>
+      bridge.applyLambda(lambdaId, [...rows]),
+  });
 }
 
 /**

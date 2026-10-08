@@ -17,8 +17,8 @@ export {
 export { FRONTEND_IR_JSON_SCHEMA } from "./jsonSchema.js";
 export {
   encodeIR,
-  encodeNonFinite,
   decodeNonFinite,
+  isPlainObject,
   type NonFiniteNumberIR,
 } from "./nonFinite.js";
 export {

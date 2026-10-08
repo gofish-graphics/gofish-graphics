@@ -25,6 +25,7 @@ import {
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
+import { withWire, wireOf } from "../wire";
 
 // Utility function to unwrap lodash wrapped arrays
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
@@ -328,14 +329,10 @@ export function stack(
   // of `{ type: "spread", glue: true, ... }`. Preserve `__combinator` and
   // `children` when present (combinator form) — dropping them would make
   // toJSON emit a leaf-shaped node missing its children.
-  const tag = (result as any).__serialize;
+  const tag = wireOf(result);
   if (tag) {
     const { glue: _glue, ...stackPayload } = tag.opts;
-    (result as any).__serialize = {
-      ...tag,
-      type: "stack",
-      opts: stackPayload,
-    };
+    withWire(result, { ...tag, type: "stack", opts: stackPayload });
   }
   return result;
 }

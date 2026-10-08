@@ -77,6 +77,8 @@ import {
   type MarkTransition,
   type OperatorTransition,
 } from "../../animation/transition";
+import { withWire, wireOf } from "../wire";
+import { isThenable } from "../../util";
 
 export type { LayerContext } from "./markResult";
 export { resolveMarkResult } from "./markResult";
@@ -211,11 +213,11 @@ function propagateSerialize(
   to: object,
   merge: (tag: Record<string, any>) => void
 ): void {
-  const tag = (from as any).__serialize;
+  const tag = wireOf(from);
   if (tag) {
     const nextTag: any = { ...tag };
     merge(nextTag);
-    (to as any).__serialize = nextTag;
+    withWire(to, nextTag);
   }
 }
 
@@ -682,7 +684,7 @@ export function tagCombinator<M extends object>(
   opts: Record<string, unknown>,
   children: unknown
 ): M {
-  (mark as any).__serialize = { type, opts, __combinator: true, children };
+  withWire(mark, { type, opts, __combinator: true, children });
   return mark;
 }
 
@@ -774,9 +776,9 @@ function translateOperator<T, U>(
   // `readTag` would find nothing here and silently fall back to the opaque
   // `{type: "derive"}` IR — losing both `.translate()` and any chained
   // `.label()` from the wire.
-  const baseTag = (operator as any).__serialize;
+  const baseTag = wireOf(operator);
   if (baseTag) {
-    (translated as any).__serialize = { ...baseTag, translate: opts };
+    withWire(translated, { ...baseTag, translate: opts });
   }
   // Same for the spatial classification: a translated operator arranges its
   // groups exactly as the base one does.
@@ -794,7 +796,7 @@ function translateOperator<T, U>(
   if (typeof (operator as any).label === "function") {
     attachLabelOption(withTranslate, (accessor, options) => {
       (operator as any).label(accessor, options);
-      const tag = (translated as any).__serialize;
+      const tag = wireOf(translated);
       if (tag) {
         pushLabelField(tag, labelIRField(accessor, options));
       }
@@ -988,7 +990,7 @@ function stripFactoryKeys<Options extends Record<string, any>>(
   return out as Options;
 }
 
-/** Build the low-level opts passed to `layout`. An async accessor in a
+/** Build the low-level opts passed to `layout`. A Python accessor in a
  *  channel is resolved first, over every row `applyChannels` reads (the
  *  whole input and each entry's rows), so `applyChannels` stays synchronous
  *  (`resolveChannelAccessors`, #1080). */
@@ -999,11 +1001,14 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   entries: Map<string | number, Datum | Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined
 ): Promise<Options> {
-  const rows = new Set<unknown>(Array.isArray(d) ? d : [d]);
-  for (const items of entries?.values() ?? []) {
-    for (const row of Array.isArray(items) ? items : [items]) rows.add(row);
-  }
-  const resolved = await resolveChannelAccessors(opts, channels, [...rows]);
+  const pending = resolveChannelAccessors(opts, channels, () => {
+    const rows = new Set<unknown>(Array.isArray(d) ? d : [d]);
+    for (const items of entries?.values() ?? []) {
+      for (const row of Array.isArray(items) ? items : [items]) rows.add(row);
+    }
+    return [...rows];
+  });
+  const resolved = isThenable(pending) ? await pending : pending;
   const withChannels = applyChannels(resolved, channels, d, entries);
   const stripped = stripFactoryKeys(withChannels);
   // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
@@ -1239,14 +1244,14 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     // Tag the operator with IR-serialization metadata so the frontend-IR
     // emitter can reconstruct it as `{ type, ...opts }` on the wire.
     if (cfg.serialize) {
-      (operator as any).__serialize = { type: cfg.serialize, opts };
+      withWire(operator, { type: cfg.serialize, opts });
     }
     const withTranslate = attachTranslateOption(operator, (translateOpts) =>
       translateOperator(operator, translateOpts)
     ) as TranslatableOperator<Datum[], Datum[]>;
     attachLabelOption(withTranslate, (accessor, options) => {
       labelState = [...labelState, { accessor, options }];
-      const tag = (operator as any).__serialize;
+      const tag = wireOf(operator);
       if (tag) {
         pushLabelField(tag, labelIRField(accessor, options));
       }
