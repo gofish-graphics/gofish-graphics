@@ -373,6 +373,26 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
       },
     }),
   },
+  FieldPredicate: {
+    doc: "A field predicate, as `field(name).between(lo, hi, { closed })` builds it: the field it reads and the interval it tests.",
+    type: t.object({
+      field: {
+        type: t.string,
+        required: true,
+        doc: "The field whose value is tested.",
+      },
+      between: {
+        type: t.tuple(t.number, t.number),
+        required: true,
+        doc: "The interval's ends, `[lo, hi]`, compared by value.",
+      },
+      closed: {
+        type: t.enum("both", "left", "right", "none"),
+        default: "both",
+        doc: "Which ends of the interval are inclusive, as in polars' `is_between`.",
+      },
+    }),
+  },
   AxisDimsValue: {
     doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
     type: t.union(t.channel("number"), t.ref("AxisInterval")),
@@ -557,23 +577,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     doc: "Keep the rows a field predicate accepts (`filter(field(name).between(lo, hi, { closed }))`). A filter over a hand-written predicate has no wire form and serializes as an opaque `derive`.",
     fields: {
       predicate: {
-        type: t.object({
-          field: {
-            type: t.string,
-            required: true,
-            doc: "The field whose value is tested.",
-          },
-          between: {
-            type: t.tuple(t.number, t.number),
-            required: true,
-            doc: "The interval's ends, `[lo, hi]`, compared by value.",
-          },
-          closed: {
-            type: t.enum("both", "left", "right", "none"),
-            default: "both",
-            doc: "Which ends of the interval are inclusive, as in polars' `is_between`.",
-          },
-        }),
+        type: t.ref("FieldPredicate"),
         required: true,
         doc: "The field predicate `field(name).between(lo, hi, { closed })` builds: `{ field, between: [lo, hi], closed? }`.",
       },

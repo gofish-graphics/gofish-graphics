@@ -28,6 +28,7 @@ import {
 import type {
   AxesOptions,
   AxisInterval,
+  FieldPredicateIR,
   AxisOptions,
   LabelSpecIR,
 } from "../frontend/schema.js";
@@ -189,6 +190,11 @@ const SCHEMA_OPTION_TYPE_KEYS: Record<string, Record<string, true>> = {
     size: true,
     embedded: true,
   } satisfies Record<keyof AxisInterval, true>,
+  FieldPredicate: {
+    field: true,
+    between: true,
+    closed: true,
+  } satisfies Record<keyof FieldPredicateIR, true>,
 };
 
 /** The fields of the one object branch of a named option type. */

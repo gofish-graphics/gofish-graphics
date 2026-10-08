@@ -931,33 +931,7 @@ for the API.
           "const": "filter"
         },
         "predicate": {
-          "type": "object",
-          "properties": {
-            "field": {
-              "type": "string",
-              "description": "The field whose value is tested."
-            },
-            "between": {
-              "type": "array",
-              "minItems": 2,
-              "maxItems": 2,
-              "prefixItems": [
-                {
-                  "$ref": "#/$defs/Number"
-                },
-                {
-                  "$ref": "#/$defs/Number"
-                }
-              ],
-              "description": "The interval's ends, `[lo, hi]`, compared by value."
-            },
-            "closed": {
-              "enum": ["both", "left", "right", "none"],
-              "description": "Which ends of the interval are inclusive, as in polars' `is_between`.",
-              "default": "both"
-            }
-          },
-          "required": ["field", "between"],
+          "$ref": "#/$defs/FieldPredicate",
           "description": "The field predicate `field(name).between(lo, hi, { closed })` builds: `{ field, between: [lo, hi], closed? }`."
         },
         "label": {
@@ -2772,6 +2746,36 @@ for the API.
         }
       },
       "description": "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels."
+    },
+    "FieldPredicate": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "The field whose value is tested."
+        },
+        "between": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Number"
+            }
+          ],
+          "description": "The interval's ends, `[lo, hi]`, compared by value."
+        },
+        "closed": {
+          "enum": ["both", "left", "right", "none"],
+          "description": "Which ends of the interval are inclusive, as in polars' `is_between`.",
+          "default": "both"
+        }
+      },
+      "required": ["field", "between"],
+      "description": "A field predicate, as `field(name).between(lo, hi, { closed })` builds it: the field it reads and the interval it tests."
     },
     "AxisDimsValue": {
       "anyOf": [

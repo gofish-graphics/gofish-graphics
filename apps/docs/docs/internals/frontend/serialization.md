@@ -405,10 +405,14 @@ Two smaller tables sit beside the construct entries. `OPTION_TYPES` declares
 the nested option objects a field points at by name, in the same type DSL:
 today `AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
 `{title, side, labelAngle}`), `AxisInterval` (`{min, center, max, size,
-embedded}`), and `AxisDimsValue` (a channel value or an `AxisInterval`, the
-value of a `dims` entry). A `t.ref(name)` resolves against it first, so the
+embedded}`), `AxisDimsValue` (a channel value or an `AxisInterval`, the
+value of a `dims` entry), and `FieldPredicate` (`{field, between, closed}`,
+the predicate of `filter`). A `t.ref(name)` resolves against it first, so the
 validator, the JSON Schema, and the Python generator all read one declaration
-of each. `CHART_OPTIONS` lists the chart-level options (`w`, `h`, `coord`,
+of each. The docs options tables print a ref by its name on JS pages. On
+Python pages they print the name only when the Python package defines a class
+by that name (`FieldAccessor`, `FieldPredicate`); any other named option type
+prints as the Python type it stands for (`AxesOptions` is `bool | dict`). `CHART_OPTIONS` lists the chart-level options (`w`, `h`, `coord`,
 `color`, `axes`, `legend`, `padding`, `schema`), mirroring the JS
 `ChartOptions`. The validator walks `ChartIR.options` against it, the JSON
 Schema emits it as the `ChartOptions` `$def`, the Python generator builds
@@ -546,7 +550,7 @@ The high-level structure:
     "ConstraintIR": { /* type, options, refs */ },
     "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] },
     "ChartOptions": { /* GENERATED from CHART_OPTIONS: w, h, coord, color, axes, ... */ },
-    "AxesOptions":  { /* GENERATED from OPTION_TYPES, as are AxisOptions, AxisInterval, AxisDimsValue */ }
+    "AxesOptions":  { /* GENERATED from OPTION_TYPES, as are AxisOptions, AxisInterval, AxisDimsValue, FieldPredicate */ }
   }
 }
 ```

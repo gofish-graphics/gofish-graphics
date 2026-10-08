@@ -36,6 +36,9 @@
  * `pnpm --filter gofish-ir build` (the file is dependency-free TypeScript).
  */
 
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import container from "markdown-it-container";
 import {
   CHART_OPTIONS,
@@ -43,6 +46,7 @@ import {
   COORDS,
   LEAF_MARKS,
   OPERATORS,
+  OPTION_TYPES,
   SHARED_FIELD_GROUPS,
   pyKwarg,
   resolveFields,
@@ -137,6 +141,24 @@ function tsType(f: FieldType): string {
   }
 }
 
+/** The classes the Python package defines: every top-level `class Name` in
+ *  `packages/gofish-python/gofish/*.py`. A ref names a Python type only when
+ *  Python has a class by that name (`field(...)` returns a `FieldAccessor`,
+ *  `.between(...)` a `FieldPredicate`). */
+const PYTHON_CLASSES: ReadonlySet<string> = (() => {
+  const dir = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../../packages/gofish-python/gofish"
+  );
+  const names = new Set<string>();
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".py")) continue;
+    const src = readFileSync(join(dir, file), "utf-8");
+    for (const m of src.matchAll(/^class (\w+)\b/gm)) names.add(m[1]);
+  }
+  return names;
+})();
+
 function pyType(f: FieldType): string {
   switch (f.kind) {
     case "string":
@@ -171,8 +193,13 @@ function pyType(f: FieldType): string {
     case "object":
     case "record":
       return "dict";
-    case "any":
     case "ref":
+      // Python's own class by this name; else a named option type is a plain
+      // dict (or a union with one), so print the type it stands for.
+      if (PYTHON_CLASSES.has(f.name)) return f.name;
+      if (f.name in OPTION_TYPES) return pyType(OPTION_TYPES[f.name].type);
+      return "Any";
+    case "any":
       return "Any";
   }
 }
