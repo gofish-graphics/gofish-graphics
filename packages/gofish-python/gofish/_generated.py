@@ -1018,7 +1018,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
     """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
-        fill: A line's path is never filled. `fill` is the channel the shared color scale reads, so a field name colors each line by group, and it is the line color when `stroke` is omitted.
+        fill: A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted.
         stroke: Line color.
         stroke_width: Line thickness in pixels. Default 1.
         stroke_dasharray: Raw SVG stroke-dasharray (e.g. "12") for a dashed line.
@@ -1066,7 +1066,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
     """Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
     Args:
-        fill: Fill color of the band, or a field name for a color scale. Omitted, the band takes the color of the marks it connects.
+        fill: Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects.
         stroke: Stroke color.
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1.

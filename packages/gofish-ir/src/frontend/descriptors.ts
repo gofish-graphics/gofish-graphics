@@ -1205,7 +1205,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       // color scale reads (`color: isValue(fill) ? fill : stroke`) and the
       // stroke's fallback (`stroke ?? fill ?? "black"`).
       fill: ch.color(
-        "A line's path is never filled. `fill` is the channel the shared color scale reads, so a field name colors each line by group, and it is the line color when `stroke` is omitted."
+        "A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted."
       ),
       stroke: { type: t.string, doc: "Line color." },
       strokeWidth: {
@@ -1267,7 +1267,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     doc: "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
     fields: {
       fill: ch.color(
-        "Fill color of the band, or a field name for a color scale. Omitted, the band takes the color of the marks it connects."
+        "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
       ),
       stroke: { type: t.string, doc: "Stroke color." },
       strokeWidth: {

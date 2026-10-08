@@ -24,7 +24,8 @@ import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
-import { inferColor } from "../channels";
+import { inferColor, resolveChannelAccessors } from "../channels";
+import { isThenable } from "../../util";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import {
   liveChannelsOf,
@@ -79,7 +80,7 @@ import {
   PREVIOUS_LAYER_MARKS,
 } from "./chartBuilder";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
-import { projectPath } from "../datumProjection";
+import { projectBy, projectPath } from "../datumProjection";
 import { copyColumnTypes } from "../schema";
 import { withWire } from "../wire";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
@@ -531,11 +532,20 @@ function tagRelationalFusable(
  * error `resolveLabelText` throws for `.label(field)` — see
  * `labels/labelPlacement.ts`).
  *
+ * A function is the same thing as a field name (`"species"` is shorthand for
+ * `(d) => d.species`): it is read off each row by the same projection, with
+ * the same collapse and the same error. A Python accessor has already been
+ * resolved over the bag's rows (`resolveChannelAccessors`).
+ *
  * A no-op for literal colors, `Value`s, and undefined — `inferColor` itself
  * tells a field name from a literal (falls through unchanged when the string
  * isn't a key of the sampled row).
  */
 const PAINT_KEYS = ["fill", "stroke"] as const;
+
+/** The channels of the relational marks, from their descriptors. */
+const RELATIONAL_CHANNELS: Record<string, Record<string, unknown> | undefined> =
+  { line: MARK_CHANNELS.line, ribbon: MARK_CHANNELS.ribbon };
 
 function resolveGroupFill<O extends RelationalMarkOptions>(
   type: string,
@@ -548,25 +558,30 @@ function resolveGroupFill<O extends RelationalMarkOptions>(
   let resolvedOpts = opts;
   for (const key of PAINT_KEYS) {
     const raw = (opts as any)[key];
-    if (typeof raw !== "string") continue;
-    if (rows.length === 0 || rows[0] == null || !(raw in rows[0])) {
+    // A field name is shorthand for an accessor (`"species"` is
+    // `(d) => d.species`), so both take the one path below.
+    const isAccessor = typeof raw === "function";
+    if (!isAccessor && typeof raw !== "string") continue;
+    if (
+      !isAccessor &&
+      (rows.length === 0 || rows[0] == null || !(raw in rows[0]))
+    ) {
       // Not a field name on this data (e.g. a literal color like
       // "steelblue") — inferColor's own fallthrough passes it through
       // unchanged.
       continue;
     }
-    // `raw` names a field on the data: reuse `projectPath`'s projection +
-    // homogeneity collapse (same rule `by` uses elsewhere in this file) —
-    // the common value iff the group agrees on it, `undefined` if not.
-    // `groupRefs` (not the flattened `rows`) so it walks each ref's `.datum`
-    // bag itself, same as any other `projectPath` caller.
-    if (projectPath(groupRefs, raw) === undefined) {
+    // `raw` reads a value off each row: reuse `projectBy`'s projection +
+    // homogeneity collapse (the rule `by` uses) — the common value iff the
+    // group agrees on it, `undefined` if not. `groupRefs` (not the flattened
+    // `rows`) so it walks each ref's `.datum` bag itself.
+    if (projectBy(groupRefs, raw) === undefined) {
+      const what = isAccessor ? "the accessor's value" : `"${raw}"`;
       throw new Error(
-        `[gofish] ${type}({ ${key}: "${raw}" }): "${raw}" is not constant ` +
-          `across the connected group; make sure the flow this ${type} fuses ` +
-          `over groups by "${raw}" (or a field it agrees with) — or, over a ` +
-          `refs bag, add \`flow(group({ by: "${raw}" }))\` — or pass an ` +
-          `explicit color.`
+        `[gofish] ${type}({ ${key} }): ${what} is not constant across the ` +
+          `connected group; make sure the flow this ${type} fuses over ` +
+          `groups by that value (or one it agrees with) — or, over a refs ` +
+          `bag, add \`flow(group({ by }))\` — or pass an explicit color.`
       );
     }
     const resolved = inferColor(raw, rows);
@@ -747,10 +762,18 @@ export function createRelationalMark<O extends Record<string, unknown>>(
       // splice in — `produce` (line/ribbon's Connect call) reads `o.dir` off
       // whatever opts object it's given, defaulting to "x" itself when
       // absent, so this is a no-op when nothing was inferred.
+      // A Python accessor in a paint channel is resolved over the bag's rows
+      // first, in one batch call, like a channel of any other mark.
+      const pending = resolveChannelAccessors(
+        opts,
+        RELATIONAL_CHANNELS[type],
+        () => d.flatMap((r) => (Array.isArray(r.datum) ? r.datum : [r.datum]))
+      );
+      const paintOpts = isThenable(pending) ? await pending : pending;
       const baseOpts: O =
-        (opts as any).dir === undefined && dir !== undefined
-          ? ({ ...opts, dir } as O)
-          : opts;
+        (paintOpts as any).dir === undefined && dir !== undefined
+          ? ({ ...paintOpts, dir } as O)
+          : paintOpts;
 
       if (by !== undefined) {
         const entries = splitEntries(by, d as any);

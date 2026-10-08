@@ -2409,7 +2409,7 @@ for the API.
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "A line's path is never filled. `fill` is the channel the shared color scale reads, so a field name colors each line by group, and it is the line color when `stroke` is omitted."
+          "description": "A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted."
         },
         "stroke": {
           "type": "string",
@@ -2507,7 +2507,7 @@ for the API.
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Fill color of the band, or a field name for a color scale. Omitted, the band takes the color of the marks it connects."
+          "description": "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
         },
         "stroke": {
           "type": "string",

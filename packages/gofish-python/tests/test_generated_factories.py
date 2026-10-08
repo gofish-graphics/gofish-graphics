@@ -30,6 +30,7 @@ from gofish import (
     join,
     noise,
     layer,
+    line,
     pack,
     petal,
     palette,
@@ -37,6 +38,7 @@ from gofish import (
     slice,
     slice_dice,
     rect,
+    ribbon,
     spread,
     scatter,
     squarify,
@@ -339,6 +341,22 @@ def test_a_callable_outside_a_channel_is_a_type_error():
     assert "__gofish_lambda" in circle(r=3, opacity=lambda d: 0.5).to_dict()["opacity"]
     assert "__gofish_lambda" in ellipse(w=4, h=4, stroke=lambda d: "red").to_dict()["stroke"]
     assert "__gofish_lambda" in spread(by="a", dir="x", w=lambda d: 1).to_dict()["w"]
+
+
+def test_line_and_ribbon_fill_take_a_function():
+    # A field name is shorthand for an accessor, so the connector fill takes
+    # a lambda wherever it takes a field name (#1097). It crosses as a
+    # sentinel the derive server registers.
+    from gofish.ast import _collect_mark_lambdas
+
+    for m in (line(fill=lambda d: d["g"]), ribbon(fill=lambda d: d["g"])):
+        sentinel = m.to_dict()["fill"]
+        pairs = dict(_collect_mark_lambdas(m))
+        assert list(pairs) == [sentinel["__gofish_lambda"]]
+        assert pairs[sentinel["__gofish_lambda"]]([{"g": "a"}]) == ["a"]
+    # stroke is a plain color, so a function there is still a TypeError.
+    with pytest.raises(TypeError, match="only channel options take a function"):
+        line(stroke=lambda d: "red")
 
 
 def test_wire_does_not_copy_options_without_accessors():

@@ -28,8 +28,9 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_FILE = join(HERE, "..", "src", "ast", "markChannels.generated.ts");
 
-/** The leaf marks built with `createMark`. `line` and `ribbon` are relational
- *  marks with their own factory (`createRelationalMark`). */
+/** The leaf marks built with `createMark`, and the relational marks
+ *  (`line`, `ribbon`, built with `createRelationalMark`), which resolve their
+ *  Python accessors by the same map. */
 const CREATE_MARK_TYPES = [
   "rect",
   "circle",
@@ -39,6 +40,8 @@ const CREATE_MARK_TYPES = [
   "image",
   "polygon",
   "blank",
+  "line",
+  "ribbon",
 ];
 
 function channelKind(type: FieldType, where: string): string {

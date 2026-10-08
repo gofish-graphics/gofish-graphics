@@ -91,4 +91,14 @@ export const MARK_CHANNELS = {
     h: "size",
     fill: "color",
   },
+  line: {
+    fill: "color",
+    w: "size",
+    h: "size",
+  },
+  ribbon: {
+    fill: "color",
+    w: "size",
+    h: "size",
+  },
 } as const;

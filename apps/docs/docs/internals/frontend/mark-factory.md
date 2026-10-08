@@ -507,11 +507,14 @@ bag (`chart(selectAll("bars")).mark(ribbon(opts))`, or an empty-scope
 unfused, since there's nothing to anchor; `along` on either of those, or on
 the pairwise form, is a builder-time error rather than a silent no-op
 (`rejectAlongWithoutFlow` in chartBuilder.ts, and the pairwise branch in
-chart.ts). A split connector's `fill` may be a shared field name rather than
-a literal color; `resolveGroupFill` in chart.ts resolves it per group via
-`inferColor` (same channel helper `createMark` uses) before it reaches
-`Connect`, reading a representative row off the group's ref bag (so the
-resolved paint carries its field the same way).
+chart.ts). A split connector's `fill` may be a shared field name, or an
+accessor (a field name is shorthand for one), rather than a literal color;
+`resolveGroupFill` in chart.ts reads it off each row with `projectBy` (the
+same collapse `by` uses) and resolves it per group via `inferColor` (same
+channel helper `createMark` uses) before it reaches `Connect`. A Python
+accessor there is resolved first, over the bag's rows, in one batch call
+(`resolveChannelAccessors`, with the channel map generated for `line` and
+`ribbon`).
 
 ### Default grouping: a fused connector's split, and `along`
 

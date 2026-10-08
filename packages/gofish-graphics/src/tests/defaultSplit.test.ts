@@ -499,6 +499,94 @@ async function main() {
     );
   }
 
+  console.log("\n# A function fill is a field-name fill (#1097)");
+
+  // -- 9d. A field name is shorthand for an accessor, so `fill: (d) => d.g`
+  //    draws exactly what `fill: "g"` draws: one color per connector,
+  //    through the same per-group collapse and color scale. ---------------
+  {
+    const data = [
+      { g: "a", x: 1, y: 1 },
+      { g: "a", x: 2, y: 3 },
+      { g: "b", x: 1, y: 2 },
+      { g: "b", x: 2, y: 1 },
+    ];
+    const lines = (fill: unknown) =>
+      renderDisplayList(
+        chart(data, { w: 200, h: 200 })
+          .flow(group({ by: "g" }), scatter({ by: "x", x: "x", y: "y" }))
+          .mark(line({ fill } as any)),
+        { w: 200, h: 200 }
+      );
+    const paint = (doc: any) =>
+      JSON.stringify(
+        doc.items
+          .filter((it: any) => it.kind === "path")
+          .map((it: any) => [it.d, it.style])
+      );
+    const byField = await lines("g");
+    const byFn = await lines((d: { g: string }) => d.g);
+    check(
+      "a function fill draws the same connectors as the field-name fill",
+      paint(byFn) === paint(byField) && paint(byField) !== "[]",
+      `${paint(byFn)} vs ${paint(byField)}`
+    );
+
+    // A Python lambda arrives as a batch accessor and is resolved in one
+    // bridge call before the per-group collapse.
+    const calls: string[] = [];
+    const bridge = {
+      applyLambda: async (id: string, rows: any[]) => {
+        calls.push(id);
+        return rows.map((r) => r.g);
+      },
+    };
+    const ir = {
+      type: "chart",
+      operators: [
+        { type: "group", by: "g" },
+        { type: "scatter", by: "x", x: "x", y: "y" },
+      ],
+      mark: { type: "line", fill: { __gofish_lambda: "fg" } },
+    } as any;
+    const byPython = await renderDisplayList(
+      (GoFish as any).Serialize.buildChart(
+        ir,
+        data,
+        bridge,
+        (GoFish as any).Serialize.makeTokenResolver()
+      ),
+      { w: 200, h: 200 }
+    );
+    check(
+      "a bridged (Python) fill draws the same connectors, in one call",
+      paint(byPython) === paint(byField) && calls.length === 1,
+      `${paint(byPython)} / calls ${calls.length}`
+    );
+  }
+
+  // -- 9e. A function fill that differs within a connected group throws the
+  //    same homogeneity error a field name does. -------------------------
+  {
+    const data = [
+      { lake: "L1", count: 3 },
+      { lake: "L2", count: 5 },
+    ];
+    const err = await expectThrows(() =>
+      renderDisplayList(
+        chart(data, { w: 200, h: 200 })
+          .flow(spread({ by: "lake", dir: "x", spacing: 50 }))
+          .mark(ribbon({ h: "count", fill: (d: any) => d.lake } as any)),
+        { w: 200, h: 200 }
+      )
+    );
+    check(
+      "a heterogeneous function fill on a connector throws",
+      err instanceof Error && /not constant/.test((err as Error).message),
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+
   // -- 10. A path tier keyed by a FUNCTION: a smooth line reads each point's
   //    key off its rows, not off the ref standing in for them. -------------
   {
