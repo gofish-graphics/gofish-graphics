@@ -84,6 +84,38 @@ export function encodeNonFinite<T>(value: T): T {
   ) as T;
 }
 
+/**
+ * Encode a value as an IR document carries it, in one pass: every non-finite
+ * number in its tagged form ({@link encodeNonFinite}), and every IR value
+ * instance in its plain form. An IR value instance is an object whose
+ * `toJSON()` returns an object, such as gofish-graphics' `field(...)` and
+ * `datum(...)`; its plain form is walked the same way. A value whose
+ * `toJSON()` returns a primitive (a `Date`, a Temporal value) is data, not an
+ * IR value, and stays as it is, so an in-memory reader gets it back
+ * unchanged. Shares every subtree that did not change, so data rows with
+ * nothing to encode are not copied.
+ */
+export function encodeIR<T>(value: T): T {
+  const swap = (v: unknown): unknown => {
+    if (typeof v === "number")
+      return Number.isFinite(v) ? undefined : encodeNumber(v);
+    if (
+      v === null ||
+      typeof v !== "object" ||
+      isPlainObject(v) ||
+      Array.isArray(v)
+    )
+      return undefined;
+    const toJSON = (v as { toJSON?: unknown }).toJSON;
+    if (typeof toJSON !== "function") return undefined;
+    const plain = toJSON.call(v);
+    return plain !== null && typeof plain === "object"
+      ? walk(plain, swap)
+      : undefined;
+  };
+  return walk(value, swap) as T;
+}
+
 /** Decode every tagged non-finite number in a JSON-shaped value back to a
  *  number. The inverse of {@link encodeNonFinite}. */
 export function decodeNonFinite<T>(value: T): T {

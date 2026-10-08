@@ -9,6 +9,7 @@
 import {
   allExamples,
   validate,
+  encodeIR,
   encodeNonFinite,
   decodeNonFinite,
   FRONTEND_IR_JSON_SCHEMA,
@@ -772,6 +773,28 @@ console.log("\n# Non-finite numbers");
     "encode and decode share an unchanged value",
     encodeNonFinite(finite) === finite && decodeNonFinite(finite) === finite
   );
+  {
+    // encodeIR: IR value instances become their plain form in the same
+    // pass; data rows with nothing to encode are shared, and a Date stays.
+    class Tagged {
+      constructor(readonly v: number) {}
+      toJSON() {
+        return { type: "datum", datum: this.v };
+      }
+    }
+    const when = new Date(0);
+    const rows = [{ t: when, n: 1 }];
+    const doc = { mark: { h: new Tagged(Infinity) }, rows };
+    const enc = encodeIR(doc) as any;
+    check(
+      "encodeIR writes an IR value instance as its plain form, encoded",
+      enc.mark.h.type === "datum" &&
+        enc.mark.h.datum.$numberDouble === "Infinity" &&
+        Object.getPrototypeOf(enc.mark.h) === Object.prototype
+    );
+    check("encodeIR shares unchanged data rows", enc.rows === rows);
+    check("encodeIR leaves a Date as it is", enc.rows[0].t === when);
+  }
   check(
     "a look-alike object with another key is not decoded",
     (decodeNonFinite({ x: { $numberDouble: "Infinity", y: 1 } }) as any).x

@@ -258,7 +258,7 @@ It is one mechanism for every number in the document (an option such as
 boundary, with no per-field rule:
 
 - A writer encodes the whole document as it makes it: JS `toJSON` (through
-  `Frontend.encodeNonFinite`, gofish-ir's `frontend/nonFinite.ts`) and Python
+  `Frontend.encodeIR`, gofish-ir's `frontend/nonFinite.ts`) and Python
   `to_ir()` (`gofish/_nonfinite.py`). The test derive server encodes the
   infinities in what it sends the same way.
 - A reader decodes in one place, `Serialize.readIR` (`fromJSON.ts`), which
@@ -476,9 +476,12 @@ Six consumers read the table:
   or leaf-mark node against them. On a leaf mark, the base fields that Mark
   methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked by
   their own walkers, so the check of the mark's channels skips them. The
-  emitter writes plain JSON data: a `field(...)` or `datum(...)` instance is
-  replaced by its `toJSON()` form, so the document it returns is the one the
-  wire carries and validates as such.
+  emitter writes each `field(...)` or `datum(...)` instance in its plain
+  `toJSON()` form, so the document it returns validates as the wire carries
+  it. It does this in the same pass that encodes non-finite numbers
+  (`Frontend.encodeIR`), which shares unchanged subtrees, so inline rows are
+  not copied, and leaves a value whose `toJSON()` is a primitive (a `Date`,
+  a Temporal value) as it is.
 
 - **The JS deserializer** (`registry.ts`) rebuilds a wire type through
   the factory its descriptor names — see § Modularity below.
