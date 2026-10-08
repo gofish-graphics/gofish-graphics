@@ -25,6 +25,7 @@ import {
   curve,
 } from "../../path";
 import type { Dimensions } from "../dims";
+import type { Curve } from "../../families/curve";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { getBoxToBoxArrow } from "perfect-arrows";
 import {
@@ -56,19 +57,30 @@ export type Router = (
 ) => Path;
 
 /**
- * A serializable curve value, produced by a curve factory (`bezier()`,
- * `orthogonal()`, `arc({ direction: "down" })`, …) — the same builder-object
- * idiom GoFish uses for coordinate spaces, axes, and labels. `type` names a
- * registered router; `options` are forwarded to it. A bare string is accepted
- * as shorthand for an option-less curve (`"linear"`).
- *
  * `curve` is the single screen-space path-shaping key on `line`/`ribbon` — it
  * holds both interpolating curves that thread the point sequence (linear,
  * bezier, step, monotone, smooth, catmullRom) and routing curves that shape the stroke between two
- * anchors (orthogonal, arc, perfectArrows). A curve resolves to a `Router`.
+ * anchors (orthogonal, arc, perfectArrows). Its value is a `Curve`, made by a
+ * call in the `Curve` family (`families/curve.ts`). A curve resolves to a
+ * `Router`.
  */
-export type CurveSpec = { type: string; options?: Record<string, any> };
-export type Curve = string | CurveSpec;
+
+/** The name of a curve value, or undefined when it is omitted. Anything that
+ *  is not a curve object throws, naming `where` the option was written. */
+export function curveName(
+  curve: Curve | undefined,
+  where: string
+): string | undefined {
+  if (curve === undefined) return undefined;
+  if (typeof curve !== "object" || curve === null || !("type" in curve)) {
+    throw new Error(
+      `[gofish] ${where}: ${JSON.stringify(curve)} is not a curve. Make one ` +
+        `with a call in the Curve family: Curve.monotone(), Curve.linear(), ` +
+        `Curve.bezier(), ...`
+    );
+  }
+  return curve.type;
+}
 
 type RouteEntry = {
   fn: Router;
@@ -153,12 +165,11 @@ export function sequenceCurve(
 /** The names of the registered sequence curves. */
 export const sequenceCurveNames = (): string[] => [...sequenceCurves.keys()];
 
-/** Resolve a `Curve` (string or spec) to its router fn + options. */
+/** Resolve a `Curve` to its router fn + options. */
 export function resolveCurve(curve: Curve): {
   router: Router;
   options?: Record<string, any>;
 } {
-  if (typeof curve === "string") return { router: getRoute(curve) };
   return { router: getRoute(curve.type), options: curve.options };
 }
 
@@ -323,38 +334,4 @@ for (const smooth of SMOOTH_CURVES) {
 sequenceCurves.set("catmullRom", {
   thread: (points) => catmullRomPath(points).map((seg) => evenStep([seg])),
   takesKnots: false,
-});
-
-// --- curve factories --------------------------------------------------------
-// Builder-object idiom (like `polar({…})` / axis / label specs): each returns a
-// serializable `CurveSpec` carrying its own options, so call sites read
-// `line({ curve: orthogonal() })`, `line({ curve: arc({ direction: "down" }) })`.
-// The option-less `"linear"`, `"step"`, `"monotone"`, `"smooth"` and
-// `"catmullRom"` have no factory; pass the bare name. (`linear()` is
-// already the Cartesian coordinate transform.)
-
-/** Cubic bezier (d3.linkVertical/horizontal convention). */
-export const bezier = (): CurveSpec => ({ type: "bezier" });
-
-/**
- * Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal). The
- * bend axis is the connector's `dir` by default; pass `{ bend: "auto" }` to
- * infer it from the endpoint geometry instead (for layouts with no single
- * declared growth axis, like a diagonal tree cascade).
- */
-export const orthogonal = (options?: { bend?: "auto" }): CurveSpec => ({
-  type: "orthogonal",
-  ...(options ? { options } : {}),
-});
-
-/** Semicircular arc through both endpoints (GoTree arccurve). */
-export const arc = (options?: { direction?: "up" | "down" }): CurveSpec => ({
-  type: "arc",
-  ...(options ? { options } : {}),
-});
-
-/** Box-to-box arrow arc via perfect-arrows (bow/stretch/pad/… options). */
-export const perfectArrows = (options?: Record<string, any>): CurveSpec => ({
-  type: "perfectArrows",
-  ...(options ? { options } : {}),
 });

@@ -18,22 +18,8 @@ import type { MarkChild } from "../types";
 import { SplitBy, splitEntries } from "../datumProjection";
 import { boxOfDims, enclosingCircle } from "../geometry";
 
-/**
- * How `pack` packs its children. A strategy is a plain object made by a
- * function call (`circles()`), so it crosses the Python bridge as IR and can
- * take parameters later. `kind` names the strategy.
- */
-export type PackMethod = { kind: "circles" };
-
-/**
- * Pack each child's enclosing circle with d3's front-chain algorithm
- * (`packSiblings`, Wang et al. 2006). Takes no options yet; padding is #967.
- */
-export const circles = (): PackMethod => ({ kind: "circles" });
-
 type PackProps = {
   key?: string;
-  method?: PackMethod;
 };
 
 /**
@@ -42,15 +28,18 @@ type PackProps = {
  *
  * A foreign layout, like `treemap`: it lays out each child, reads the child's
  * geometry, runs d3, and `place()`s each child. The children keep the pixel
- * size they lay out at, and the pack's size follows from them.
+ * size they lay out at, and the pack's size follows from them. It packs each
+ * child's enclosing circle with d3's front-chain algorithm (`packSiblings`,
+ * Wang et al. 2006). There is one packing strategy, so there is no option to
+ * choose one (#1013); a gap between circles is #973.
  */
 export const Pack = createNodeOperator(
   (opts: PackProps, children: GoFishAST[]) => {
-    const { key, method = circles() } = opts;
+    const { key } = opts;
     return new GoFishNode(
       {
         type: "pack",
-        args: { key, method },
+        args: { key },
         key,
         shared: [false, false],
         // TODO(#967): pack does not fit itself to the available size; radii stay in pixels. See issue #967.
@@ -61,11 +50,6 @@ export const Pack = createNodeOperator(
           UNDEFINED,
         ],
         layout: (_shared, size, scales, childAsts) => {
-          if (method.kind !== "circles")
-            throw new Error(
-              `[gofish] pack: unknown method kind "${(method as { kind: string }).kind}"`
-            );
-
           const placed = childAsts.map((child) => child.layout(size, scales));
           const local = placed.map((p) => enclosingCircle(p.geometry()));
           for (const c of local) {
@@ -127,8 +111,6 @@ export type PackOptions = {
   /** Field to partition rows by (like `spread`/`scatter`); also accepts a
    *  `field(...)` accessor. Without `by`, one child per row. */
   by?: SplitBy;
-  /** The packing strategy. Default `circles()`. */
-  method?: PackMethod;
 };
 
 const packOperator = createOperator<any, PackOptions>(
@@ -142,8 +124,7 @@ const packOperator = createOperator<any, PackOptions>(
 
 /**
  * Pack the flow's groups (or rows, without `by`) by their enclosing circles.
- * Every option is optional, so `pack()` alone packs one child per row with
- * `circles()`.
+ * Every option is optional, so `pack()` alone packs one child per row.
  */
 export function pack(
   opts: PackOptions,

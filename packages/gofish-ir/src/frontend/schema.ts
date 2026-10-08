@@ -339,10 +339,10 @@ export interface ScatterOperator
   h?: ChannelValue;
 }
 
-/** A `scatter` overlap strategy, made by a function call (`separate()`,
- *  `noise()`; `sina()` and `jitter()` make kind `"noise"` with other
- *  defaults). Mirrors JS's `OverlapStrategy`
- *  (`graphicalOperators/overlap.ts`). */
+/** A `scatter` overlap strategy, made by a call in the `Overlap` family
+ *  (`Overlap.separate()`, `Overlap.noise()`; `Overlap.sina()` and
+ *  `Overlap.jitter()` make kind `"noise"` with other defaults). Mirrors JS's
+ *  `Overlap.Overlap` (`families/overlap.ts`). */
 export type OverlapStrategyIR =
   | { kind: "separate"; padding?: number }
   | {
@@ -398,8 +398,9 @@ export interface LogOperator
   prefix?: string;
 }
 
-/** A `treemap` tiling strategy, made by a function call (`squarify()`,
- *  `slice()`, `dice()`, `binary()`, `sliceDice()`). */
+/** A `treemap` tiling strategy, made by a call in the `Tile` family
+ *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
+ *  `Tile.sliceDice()`). */
 export type TreemapTileIR =
   | { kind: "squarify"; ratio?: number }
   | { kind: "slice" }
@@ -448,9 +449,6 @@ export interface TreemapOperator
   dims?: AxisDims;
 }
 
-/** A `pack` strategy, made by a function call (`circles()`). */
-export type PackMethodIR = { kind: "circles" };
-
 /**
  * `pack({...})` — circle packing: children are placed so their enclosing
  * circles touch without overlapping. Dual-form like `treemap`: also a
@@ -466,8 +464,6 @@ export interface PackOperator
   label?: LabelIR;
   /** Field to partition rows by. Without `by`, one child per row. */
   by?: string | FieldAccessor;
-  /** The packing strategy. Default `{ kind: "circles" }`. */
-  method?: PackMethodIR;
 }
 
 // ---------------------------------------------------------------------------

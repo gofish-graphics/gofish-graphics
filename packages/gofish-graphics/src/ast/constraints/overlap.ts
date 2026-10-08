@@ -7,8 +7,8 @@ import { enclosingCircle } from "../geometry";
 import {
   resolveOverlap,
   type OverlapSide,
-  type OverlapStrategy,
 } from "../graphicalOperators/overlap";
+import type { Overlap } from "../../families/overlap";
 import type {
   AlignAnchor,
   Axis,
@@ -34,7 +34,7 @@ export interface OverlapConstraint {
   axis: Axis;
   /** The line the children grow from (scatter's `alignment`). */
   alignment: AlignAnchor;
-  strategy: OverlapStrategy;
+  strategy: Overlap;
   /** The children, in priority order (data order). */
   children: ConstraintRef[];
 }
@@ -42,7 +42,7 @@ export interface OverlapConstraint {
 export const createOverlapConstraint = (
   axis: Axis,
   alignment: AlignAnchor,
-  strategy: OverlapStrategy,
+  strategy: Overlap,
   children: ConstraintRef[]
 ): OverlapConstraint => ({
   type: "overlap",

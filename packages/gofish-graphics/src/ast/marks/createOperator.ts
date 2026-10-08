@@ -449,7 +449,7 @@ export const zOrderModifier = {
 
 /**
  * `.transition({ enter, update, exit })` — how the mark looks in each phase
- * of an animation (`animation.grow()`, `animation.fadeIn()`, …). It records
+ * of an animation (`Animation.grow()`, `Animation.fadeIn()`, …). It records
  * the effects on each produced node. The build-in reads them there
  * (`src/animation/install.ts`), and so does the chart builder when the flow
  * has a `time.sequence` (then the phases are `time.transition()`'s,

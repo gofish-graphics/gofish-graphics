@@ -6,7 +6,7 @@
  *              arranges the spread's children in time.
  *   SELECTION  .layer(chart(selectAll("bars"))
  *                .flow(time.stagger({ by: "city", spacing: 0 }))
- *                .mark(time.transition({ enter: animation.grow() })))
+ *                .mark(time.transition({ enter: Animation.grow() })))
  *              regroups the selected marks by `by` and arranges the groups.
  *
  * So each call returns a flow OPERATOR (the selection form's) that also

@@ -20,7 +20,7 @@ import { layer } from "./layer";
 import { Constraint, type ConstraintSpec } from "../constraints";
 import { axisName, ensureChildNames } from "../constraints/shared";
 import { createOverlapConstraint } from "../constraints/overlap";
-import type { OverlapStrategy } from "./overlap";
+import type { Overlap } from "../../families/overlap";
 
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
   if (typeof value === "object" && value !== null && "value" in value) {
@@ -43,7 +43,7 @@ export type ScatterProps = {
   alignment?: Alignment;
   /** How children on a free axis keep clear of each other; see
    *  {@link ScatterOptions.overlap}. */
-  overlap?: OverlapStrategy;
+  overlap?: Overlap;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 } & Omit<FancyDims<MaybeValue<number>>, "dims">;
 
@@ -306,7 +306,7 @@ export type ScatterOptions = {
    * the positive side, `"end"` to the negative side. Omit it, and every
    * child sits on the line. Only in a linear coordinate space.
    */
-  overlap?: OverlapStrategy;
+  overlap?: Overlap;
   debug?: boolean;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
   w?: MaybeValue<number>;

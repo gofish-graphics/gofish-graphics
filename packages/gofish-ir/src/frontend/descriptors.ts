@@ -362,6 +362,27 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   },
 };
 
+/** A curve, made by a call in the Curve family (`Curve.monotone()`,
+ *  `Curve.arc({ direction: "down" })`): the name of the curve and the options
+ *  it takes. Shared by `line` and `ribbon`. */
+const curveType = t.object({
+  type: {
+    type: t.enum(
+      "linear",
+      "step",
+      "monotone",
+      "smooth",
+      "catmullRom",
+      "bezier",
+      "orthogonal",
+      "arc",
+      "perfectArrows"
+    ),
+    required: true,
+  },
+  options: { type: t.record(t.any) },
+});
+
 /** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
  *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
  *  `gofish-graphics/src/ast/marks/chartBuilder.ts`. Read by the Python
@@ -372,11 +393,11 @@ export const CHART_OPTIONS: FieldGroup = group({
   h: { type: t.number, doc: "Chart height in pixels." },
   coord: {
     type: t.any,
-    doc: "Coordinate transform for the whole chart: polar(), clock(), wavy(), ...",
+    doc: "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...",
   },
   color: {
     type: t.any,
-    doc: "Color scale for every mark: palette(...) or gradient(...).",
+    doc: "Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...).",
   },
   axes: {
     type: t.ref("AxesOptions"),
@@ -678,7 +699,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
             seed: { type: t.number },
           })
         ),
-        doc: 'How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. sina() is noise with smoothing "silverman" (a violin outline), and jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.',
+        doc: 'How children keep clear of each other on the axis no field places, made by a call in the Overlap family. Overlap.separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. Overlap.noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. Overlap.sina() is noise with smoothing "silverman" (a violin outline), and Overlap.jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.',
       },
       axes: { type: t.ref("AxesOptions") },
       w: ch.num(
@@ -788,7 +809,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
           })
         ),
         default: { kind: "squarify" },
-        doc: "The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+        doc: "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
       },
       sort: {
         type: t.enum("asc", "desc", "none"),
@@ -802,18 +823,11 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   pack: operator("pack", {
-    doc: "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
+    doc: "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
     fields: {
       by: {
         type: t.union(t.string, t.ref("FieldAccessor")),
         doc: "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.",
-      },
-      method: {
-        type: t.object({
-          kind: { type: t.enum("circles"), required: true },
-        }),
-        default: { kind: "circles" },
-        doc: "The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm.",
       },
     },
   }),
@@ -1060,8 +1074,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Blend mode where connectors overlap.",
       },
       curve: {
-        type: t.any,
-        doc: 'Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name ("linear"/"bezier"/"step"/"monotone"/"smooth"/"catmullRom"). "step", "linear", "monotone" and "smooth" are read over the parameter of the run, from the least to the most smooth. "step" holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). "monotone" is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". "smooth" rounds a peak a little past its point, but keeps a run of equal values flat. "catmullRom" is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted = "auto" (monotone on a homogeneous continuous connection axis, else linear).',
+        type: curveType,
+        doc: 'Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear().',
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       source: {
@@ -1120,8 +1134,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
-        type: t.any,
-        doc: 'Screen-space band-edge shape ("linear" | bezier() | "step" | "monotone" | "smooth" | "catmullRom"). "step" steps both edges, as a stepped area does. "monotone" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); "smooth" is a rounder reading over the same parameter, and can go a little past a point; "catmullRom" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = "auto" (monotone on a homogeneous continuous connection axis, else a bezier band).',
+        type: curveType,
+        doc: 'Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band.',
       },
       from: { type: t.string },
       to: { type: t.string },
@@ -1201,7 +1215,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       // options (`resolveOptions` in serialize/fromJSON.ts).
       coord: {
         type: t.any,
-        doc: "Coordinate transform (`polar()`, `clock()`, `wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.",
+        doc: "Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.",
       },
       // Rides the same `...restDims` passthrough into `coord(...)`, so it is a
       // real option of the coord-bearing form only (a plain layer ignores it).
@@ -1418,7 +1432,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 // dispatch; they don't need JSON Schema $defs yet (per the design doc).
 // ---------------------------------------------------------------------------
 
-// The field names are the camelCase wire keys; Python's polar()/clock() spell
+// The field names are the camelCase wire keys; Python's Coord.polar()/clock() spell
 // them in snake_case (inner_radius, ...) like every other generated kwarg (see
 // `pyKwarg`).
 const polarFields: FieldGroup = group({
@@ -1455,7 +1469,7 @@ export const COORDS: Record<string, ConstructDescriptor> = {
     fields: polarFields,
   }),
   clock: coordTransform("clock", {
-    doc: "A `polar()` preset (0° at 12 o'clock, clockwise — already polar's defaults) kept as a distinct type tag for bbox sampling and user intent.",
+    doc: "A `Coord.polar()` preset (0° at 12 o'clock, clockwise — already polar's defaults) kept as a distinct type tag for bbox sampling and user intent.",
     fields: polarFields,
   }),
   wavy: coordTransform("wavy", {

@@ -1,6 +1,18 @@
 import { defineConfig } from "vite";
 import solidPlugin from "vite-plugin-solid";
 import dts from "vite-plugin-dts";
+import { readdirSync } from "node:fs";
+
+// One library entry per strategy family (#1013): `src/families/curve.ts` is
+// built to `dist/curve.js`, the `gofish-graphics/curve` subpath in
+// package.json's `exports`. Code an entry shares with `index` goes in a common
+// chunk, so a family module is loaded once whichever path a user takes.
+// `src/tests/families.test.ts` checks that `exports` lists exactly these.
+const FAMILY_ENTRIES = Object.fromEntries(
+  readdirSync(new URL("./src/families", import.meta.url))
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => [f.replace(/\.ts$/, ""), `src/families/${f}`])
+);
 
 export default defineConfig(({ command, mode }) => {
   // `build:bench` (`vite build --mode bench`) produces an instrumented, minified,
@@ -44,9 +56,9 @@ export default defineConfig(({ command, mode }) => {
       target: "esnext",
       outDir,
       lib: {
-        entry: "src/lib.ts",
+        entry: { index: "src/lib.ts", ...FAMILY_ENTRIES },
         name: "GoFishGraphics",
-        fileName: "index",
+        fileName: (_format, entryName) => `${entryName}.js`,
         formats: ["es"],
       },
       rollupOptions: {

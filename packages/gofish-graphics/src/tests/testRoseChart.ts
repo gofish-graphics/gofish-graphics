@@ -1,4 +1,5 @@
-import { coord, map, groupBy, polar_DEPRECATED, rect, stack, stackX, v } from "../lib";
+import { coord, map, groupBy, rect, stack, stackX, v } from "../lib";
+import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { nightingale } from "../data/nightingale";
 
 export const testRoseChart = () =>
