@@ -142,7 +142,8 @@ Walking `withGoFish.ts:431-477`:
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
      ordered column lists its domain in that order. (A `derive` keeps its
-     input's column types on its result, so they reach the mark.)
+     input's column types on its result and types it with `applySchema`,
+     like chart data, so they reach the mark.)
    - `"dims"` channel → the axis-name-keyed `dims` option
      (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
      channel, and its kind comes from its structure, not its name: `size` is

@@ -71,7 +71,7 @@ import {
 } from "./chartBuilder";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
-import { copyColumnTypes } from "../schema";
+import { applySchema, copyColumnTypes } from "../schema";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -82,9 +82,13 @@ export type { ChartOptions };
  * with `fn`, hand the result to the mark, and carry an IR-serialization tag.
  * `fn` receives the layer context so it can resolve refs (see `resolve`).
  *
- * The result keeps the input's column types (the chart's `schema`, see
- * schema.ts) unless it declares its own: a `filter` or a `derive` that adds a
- * column leaves the other columns' types as they were.
+ * The result is typed like chart data: it keeps the input's column types (the
+ * chart's `schema`, see schema.ts) for every column it does not type itself,
+ * so a `filter` or a `derive` that adds a column leaves the other columns'
+ * types as they were, and it goes through `applySchema`, so a column of
+ * `Date`s it returns (or a datetime column a Python callback returns, which
+ * the widget decodes as one) is a time, and every time column holds epoch
+ * milliseconds.
  */
 function mapOperator<T, U>(
   fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
@@ -93,9 +97,11 @@ function mapOperator<T, U>(
   const op: Operator<T, U> = async (mark: Mark<U>) =>
     (async (d: T, key?: string | number, layerContext?: LayerContext) => {
       const out = await fn(d, layerContext);
-      if (Array.isArray(out) && Object.isExtensible(out))
-        copyColumnTypes(out, d);
-      return mark(out, key, layerContext);
+      const typed =
+        Array.isArray(out) && Object.isExtensible(out)
+          ? ((await applySchema(copyColumnTypes(out, d))) as U)
+          : out;
+      return mark(typed, key, layerContext);
     }) as Mark<T>;
   (op as any).__serialize = serialize;
   return op;

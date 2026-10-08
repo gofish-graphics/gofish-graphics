@@ -186,12 +186,13 @@ export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
   return data;
 };
 
-/** Copy `source`'s column types onto `target` (both arrays), if it has any. A
- *  split leaf or a derive's result is a fresh array, so it has to be told. */
+/** Copy `source`'s column types onto `target` (both arrays), for every
+ *  column `target` does not type itself. A split leaf or a derive's result is
+ *  a fresh array, so it has to be told. */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
   const types = getColumnTypes(source);
-  if (types !== undefined && getColumnTypes(target) === undefined)
-    setColumnTypes(target, types);
+  if (types !== undefined)
+    setColumnTypes(target, { ...types, ...getColumnTypes(target) });
   return target;
 };
 

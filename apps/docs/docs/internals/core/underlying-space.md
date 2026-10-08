@@ -1780,7 +1780,12 @@ The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
 same way a transform's measure provenance does: `ChartBuilder` copies the
 array and tags it (`applySchema`, which keeps the measure provenance the
 array already carries), `createOperator` copies the tag onto each
-split leaf, and a `derive` keeps it on its result. So the stack's split reads
+split leaf, and a `derive` (any data-transform operator, `mapOperator` in
+`marks/chart.ts`) keeps it on its result for every column the result does
+not type itself, then puts the result through `applySchema` too, so a
+returned column of `Date`s (or a datetime column a Python callback returns,
+which the widget decodes as one) is a time in epoch milliseconds, as chart
+data is. So the stack's split reads
 its `by` column's type off the data it splits, and a color channel's
 `DatumValueImpl` records the type of the field it read (`fieldType`), which
 lets the categorical color scale list its domain in the column's order. A

@@ -23,6 +23,7 @@ import {
 import {
   applySchema,
   getColumnTypes,
+  setColumnTypes,
   toEpochMs,
   Schema as SrcSchema,
 } from "../ast/schema";
@@ -307,6 +308,55 @@ async function main() {
       "an unknown zone is a loud error",
       zoneErr?.includes("IANA") === true,
       zoneErr
+    );
+  }
+
+  console.log("\n# derive results are typed like chart data");
+  {
+    const input = await applySchema([{ day: "2024-01-01", n: 1 }], {
+      day: SrcSchema.time(),
+    });
+    // Run a derive operator on `input` and return the rows its mark gets.
+    const derived = async (fn: (rows: any[]) => any[]) => {
+      let seen: any;
+      const mark = await GoFish.derive(fn)(async (d: any) => {
+        seen = d;
+        return undefined;
+      });
+      await mark(input);
+      return seen;
+    };
+    const at = Date.UTC(2024, 0, 2);
+    const fromJs = await derived((rows) =>
+      rows.map((r) => ({ ...r, at: new Date(at) }))
+    );
+    check(
+      "a derive's Date column is a time, in epoch ms",
+      fromJs[0].at === at &&
+        same(getColumnTypes(fromJs), {
+          day: { HasCalendar: { zone: "UTC" } },
+          at: { HasCalendar: { zone: "UTC" } },
+        }),
+      JSON.stringify([fromJs[0], getColumnTypes(fromJs)])
+    );
+    check(
+      "the input's time column keeps its type and its epoch ms",
+      fromJs[0].day === Date.UTC(2024, 0, 1)
+    );
+    // What the widget's decode hands back for a Python callback that
+    // returns a tz-aware datetime column: Dates, typed with the zone.
+    const fromPython = await derived((rows) =>
+      setColumnTypes(
+        rows.map((r) => ({ ...r, at: new Date(at) })),
+        { at: { HasCalendar: { zone: "America/New_York" } } }
+      )
+    );
+    check(
+      "a typed derive result keeps its own type for its columns",
+      fromPython[0].at === at &&
+        getColumnTypes(fromPython)?.at?.HasCalendar?.zone ===
+          "America/New_York" &&
+        getColumnTypes(fromPython)?.day?.HasCalendar?.zone === "UTC"
     );
   }
 
