@@ -403,13 +403,17 @@ fields genuinely their own.
 
 Two smaller tables sit beside the construct entries. `OPTION_TYPES` declares
 the nested option objects a field points at by name, in the same type DSL:
-today `AxesOptions` (a boolean, or `{x, y}`) and `AxisOptions` (a boolean, or
-`{title, side, labelAngle}`). A `t.ref(name)` resolves against it first, so
-the validator, the JSON Schema, and the Python generator all read one
-declaration of the axes option. `CHART_OPTIONS` lists the chart-level
-options (`w`, `h`, `coord`, `color`, `axes`, `legend`, `padding`, `schema`),
-mirroring the JS `ChartOptions`. Only the Python generator reads it so far;
-the validator and the schema still take `ChartIR.options` as an open object.
+today `AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
+`{title, side, labelAngle}`), `AxisInterval` (`{min, center, max, size,
+embedded}`), and `AxisDimsValue` (a channel value or an `AxisInterval`, the
+value of a `dims` entry). A `t.ref(name)` resolves against it first, so the
+validator, the JSON Schema, and the Python generator all read one declaration
+of each. `CHART_OPTIONS` lists the chart-level options (`w`, `h`, `coord`,
+`color`, `axes`, `legend`, `padding`, `schema`), mirroring the JS
+`ChartOptions`. The validator walks `ChartIR.options` against it, the JSON
+Schema emits it as the `ChartOptions` `$def`, the Python generator builds
+`_chart_opts` from it, and the docs build the `chart` options table from it
+(`::: gofish-ref chart`).
 
 **What's still authored, not in the table**: the envelope
 (`ChartIR`/`LayerIR`/`DataIR`/`MarkIR` union, `ChannelValue`,
@@ -417,14 +421,20 @@ the validator and the schema still take `ChartIR.options` as an open object.
 `ref` — these are structural or recursive shapes rather than flat field
 bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
 of those files the doc comment marks as "stays hand-written below").
-Constraints likewise stay authored. So do `AxisInterval` and `AxisDimsValue`,
-the value shape of a `dims` option (`t.record(t.ref("AxisDimsValue"))` in the
-table): a bare `ChannelValue` or an interval object with only
-`min`/`center`/`max`/`size`/`embedded` keys. `validate.ts` tells the two apart
-with `isAxisInterval` (an interval is a plain object with no `type` tag), so a
-misspelled anchor is reported rather than read as an unknown channel shape. It
-exports that predicate and the key list `AXIS_INTERVAL_KEYS`, and the renderer's
-`dims.ts` imports both, so the wire and the renderer share one definition.
+Constraints likewise stay authored.
+
+A `dims` option is `t.record(t.ref("AxisDimsValue"))`: each value is a bare
+`ChannelValue` or an interval object with only
+`min`/`center`/`max`/`size`/`embedded` keys. The two are told apart by a tag.
+A channel value that is an object always carries one (`type` for
+`field(...)`, `datum(...)`, and literals, or the `__gofish_lambda` bridge
+sentinel), so an untagged plain object is an interval. `validate.ts` exports
+that test as `isAxisInterval`, and its channel check rejects an untagged
+object, so the generic union walk reads an untagged object only as an
+interval and reports a misspelled anchor (in strict mode) or a mistyped one.
+The renderer's `dims.ts` imports `isAxisInterval` and the key list
+`AXIS_INTERVAL_KEYS`, so the wire and the renderer share one definition; a
+test checks that the key list matches the `AxisInterval` declaration.
 The keys of `dims` are axis names that only mean something inside the enclosing
 coordinate space, so the wire keeps them open and carries them verbatim; the
 same goes for `spread`/`stack`'s `dir`, which is a plain string on the wire.
@@ -534,7 +544,9 @@ The high-level structure:
     "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
     "LabelIR":      { "oneOf": [/* boolean shorthand, array of {accessor, position, fontSize, ...} specs */] },
     "ConstraintIR": { /* type, options, refs */ },
-    "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] }
+    "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] },
+    "ChartOptions": { /* GENERATED from CHART_OPTIONS: w, h, coord, color, axes, ... */ },
+    "AxesOptions":  { /* GENERATED from OPTION_TYPES, as are AxisOptions, AxisInterval, AxisDimsValue */ }
   }
 }
 ```
@@ -545,8 +557,11 @@ covers the same shapes, generically interpreting the descriptor table as
 described above, plus the structural checks for the hand-authored parts
 (e.g. `table.by` requires `{x, y}`). A field typed with a named option type,
 such as the `axes` override on `spread`/`stack`/`scatter`, is walked by the
-same generic interpreter against its `OPTION_TYPES` entry. In strict mode a
-nested object rejects a key it does not declare. It runs in permissive mode by
+same generic interpreter against its `OPTION_TYPES` entry, and so is a
+chart's `options`, against `CHART_OPTIONS`. In strict mode a nested object
+rejects a key it does not declare. A union accepts a value when any branch
+does, which is why the JSON Schema writes a union as `anyOf`, not `oneOf`.
+It runs in permissive mode by
 default (unknown fields ignored, for forward-compat) and strict mode in
 CI tests — "strict" here composes with the operator-reject/leaf-mark-warn
 split above, it doesn't override it.
@@ -594,16 +609,22 @@ field. So `chart(data, axes={"x": {"label_angle": 45}})` serializes as
 camelCase `"labelAngle"`, is a `TypeError` that names the expected keys.
 Python's `chart()` now goes through a generated `_chart_opts` core built from
 `CHART_OPTIONS`, so an unknown chart keyword is a `TypeError` too. The
-chart-tier form `layer([chart1, chart2], **options)` takes its options
-through the same core, so they are spelled and checked as in `chart()`.
+`axes` option of `.render(...)`, on a chart, a mark, or a layer, goes through
+`_to_wire` as well (in the widget constructor), so it is spelled and checked
+as in `chart()`.
 
 The conversion is driven by the declared type, never by the dict itself, so
 dicts whose keys are data keep them: a `record` type's keys (a `schema` keyed
 by column name, the axis names of `dims`) are never renamed, and a field
 typed `any` (`color=palette({...})` keyed by category, `coord`) passes
-through whole. Two rules keep this honest. A union may have only one branch
-that a dict could match, or generation fails, since `_to_wire` would have to
-guess. The one exception is a tagged union: when every dict branch is an
+through whole. A channel value built by `field(...)` or `datum(...)` is a
+dict already in wire form, so `_to_wire` passes it through by its class
+wherever it appears. That is how a `dims` entry works: `field("x")` passes
+through, and any other dict is an interval whose keys are checked
+(`dims={"theta": {"width": 2}}` is a `TypeError`). Two rules keep this
+honest. A union may have only one branch that a dict could match (a channel
+branch does not count, for the reason just given), or generation fails,
+since `_to_wire` would have to guess. The one exception is a tagged union: when every dict branch is an
 object whose `kind` field is a literal or enum, and no two branches share a
 `kind` value (treemap's `tile`: `{kind: "squarify", ratio?}` or
 `{kind: "slice" | "dice" | ...}`; scatter's `overlap`:
@@ -611,10 +632,9 @@ object whose `kind` field is a literal or enum, and no two branches share a
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
 branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
-few refs the generator lists as already in wire form (`FieldAccessor`, built
-by `field(...)`; `AxisDimsValue`, whose plain dict could be a channel value
-or an interval), or generation fails, so a new nested type has to be
-declared before Python can take it.
+few refs the generator lists as already in wire form (today only
+`FieldAccessor`, built by `field(...)`), or generation fails, so a new nested
+type has to be declared before Python can take it.
 
 It emits:
 

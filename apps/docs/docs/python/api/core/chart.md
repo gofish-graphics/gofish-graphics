@@ -27,15 +27,17 @@ tier's marks inside [`.layer(...)`](/python/api/core/layer).
 
 ## Parameters
 
-| Parameter | Type                      | Description                                                                                                                                                                                                                                                     |
-| --------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`    | `list[dict]` \| dataframe | The dataset to visualize — a list of dict rows, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/) supports (pandas, polars, pyarrow, a DuckDB relation, ...) — or [`select_all()` / `ref()`](#cross-chart-references) for a layer reference |
-| `axes`    | keyword                   | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                                                                                                               |
-| `coord`   | keyword                   | Coordinate transform, e.g. `coord=clock()`                                                                                                                                                                                                                      |
-| `color`   | keyword                   | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                                                                                                                                                                            |
-| `legend`  | keyword                   | `False` drops the color legend; the marks keep their colors. Default `True`.                                                                                                                                                                                    |
-| `padding` | keyword                   | Extra SVG padding (px) — useful for polar charts and overflowing labels                                                                                                                                                                                         |
-| `schema`  | keyword                   | Column types, keyed by column name, e.g. `schema={"response": Schema.ordered(LEVELS).diverging()}`. See [`Schema`](/python/api/core/schema).                                                                                                                    |
+`data` (`list[dict]` or a dataframe) is the dataset to visualize: a list of
+dict rows, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/)
+supports (pandas, polars, pyarrow, a DuckDB relation, ...), or
+[`select_all()` / `ref()`](#cross-chart-references) for a layer reference.
+
+The chart-level options are keyword arguments. Any other keyword raises a
+`TypeError`. See [Axes](#axes) for the full `axes` shape and
+[`Schema`](/python/api/core/schema) for `schema`.
+
+::: gofish-ref chart
+:::
 
 Chart-level options are passed as keyword arguments:
 

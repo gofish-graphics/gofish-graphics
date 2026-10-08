@@ -136,7 +136,9 @@ single source the generated Python factory layer
   for the renamed compositing operators (`intersect`, `exclude`, `subtract`,
   `paint`). Several names in one block render one titled subsection each
   (`::: gofish-ref intersect exclude subtract paint mask`). An unknown name
-  throws and fails the build.
+  throws and fails the build. `chart` is the one name that is not a
+  construct: it renders the chart-level options (`CHART_OPTIONS`), and
+  `check-api-coverage` requires it on both `chart` pages.
 - JS pages get the JS field names and a TS-ish type; Python pages get the snake_case
   kwarg names (`pyKwarg` in `descriptors.ts`) and a Python type. The language comes from the page's path.
 - Fields a construct picks up from a shared group (`boxDims`, `paint`) render as

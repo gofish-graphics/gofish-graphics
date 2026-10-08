@@ -12,6 +12,7 @@ lambda/RPC bridge) stays hand-written there.
 
 from typing import Any, Dict, List, Optional, Union
 
+from . import ast as _ast
 from .ast import Mark, _channel
 
 
@@ -24,6 +25,8 @@ from .ast import Mark, _channel
 _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
+    "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
+    "AxisDimsValue": ("ref", "AxisInterval"),
 }
 
 
@@ -36,9 +39,13 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     raises TypeError, as an unknown kwarg does. Record keys (column names,
     axis names) and values of any other type pass through unchanged. A
     tagged union picks its branch by the dict's tag key (`kind`); a missing
-    or unknown tag raises TypeError.
+    or unknown tag raises TypeError. A channel value built by field(...) or
+    datum(...) is a dict already in wire form, so it passes through too:
+    that is how a `dims` entry tells a channel value from an interval.
     """
     if shape is None or value is None:
+        return value
+    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue)):
         return value
     kind = shape[0]
     if kind == "ref":
@@ -135,7 +142,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         ("y2", y2),
         ("h", h),
         ("emY", em_y),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", stroke_width),
@@ -212,7 +219,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]]
         ("y2", y2),
         ("h", h),
         ("emY", em_y),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", stroke_width),
@@ -257,7 +264,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         ("y2", y2),
         ("h", h),
         ("emY", em_y),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", stroke_width),
@@ -309,7 +316,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         ("y2", y2),
         ("h", h),
         ("emY", em_y),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("key", key),
         ("text", text),
         ("fill", fill),
@@ -363,7 +370,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         ("y2", y2),
         ("h", h),
         ("emY", em_y),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("key", key),
         ("href", href),
         ("filter", filter),
@@ -692,7 +699,7 @@ def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str
         ("xMax", x_max),
         ("yMin", y_min),
         ("yMax", y_max),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("alignment", alignment),
         ("overlap", _to_wire(("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}), overlap, "overlap")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
@@ -764,7 +771,7 @@ def _treemap_opts(*, x: Optional[Union[int, float, str]] = None, y: Optional[Uni
         ("y", y),
         ("w", w),
         ("h", h),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("by", by),
         ("spacing", spacing),
         ("padding", padding),
@@ -821,7 +828,7 @@ def _treemap_combinator_opts(*, x: Optional[Union[int, float, str]] = None, y: O
         ("y", y),
         ("w", w),
         ("h", h),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("by", by),
         ("spacing", spacing),
         ("padding", padding),
@@ -875,7 +882,7 @@ def _spread_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: O
         ("y2", y2),
         ("h", h),
         ("emY", em_y),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("by", by),
         ("dir", dir),
         ("spacing", spacing),
@@ -932,7 +939,7 @@ def _stack_combinator_opts(*, x: Optional[Union[int, float, str]] = None, cx: Op
         ("y2", y2),
         ("h", h),
         ("emY", em_y),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("by", by),
         ("dir", dir),
         ("spacing", spacing),
@@ -1099,7 +1106,7 @@ def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Unio
         ("y2", y2),
         ("h", h),
         ("emY", em_y),
-        ("dims", dims),
+        ("dims", _to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims")),
         ("key", key),
         ("coord", coord),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),

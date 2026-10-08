@@ -27,9 +27,11 @@ import {
 } from "../frontend/descriptors.js";
 import type {
   AxesOptions,
+  AxisInterval,
   AxisOptions,
   LabelSpecIR,
 } from "../frontend/schema.js";
+import { AXIS_INTERVAL_KEYS } from "../frontend/validate.js";
 
 declare const process: { exit(code: number): never };
 
@@ -180,6 +182,13 @@ const SCHEMA_OPTION_TYPE_KEYS: Record<string, Record<string, true>> = {
     x: true,
     y: true,
   } satisfies Record<keyof Exclude<AxesOptions, boolean>, true>,
+  AxisInterval: {
+    min: true,
+    center: true,
+    max: true,
+    size: true,
+    embedded: true,
+  } satisfies Record<keyof AxisInterval, true>,
 };
 
 /** The fields of the one object branch of a named option type. */
@@ -189,7 +198,7 @@ function optionTypeObjectKeys(type: FieldType): string[] {
   return [];
 }
 
-console.log("\n# OPTION_TYPES agree with schema.ts AxisOptions / AxesOptions");
+console.log("\n# OPTION_TYPES agree with schema.ts option types");
 for (const [name, keys] of Object.entries(SCHEMA_OPTION_TYPE_KEYS)) {
   const spec = OPTION_TYPES[name];
   check(`OPTION_TYPES["${name}"] exists`, spec !== undefined);
@@ -202,6 +211,11 @@ for (const [name, keys] of Object.entries(SCHEMA_OPTION_TYPE_KEYS)) {
     JSON.stringify({ schemaKeys, descriptorKeys })
   );
 }
+check(
+  "AXIS_INTERVAL_KEYS (the runtime's interval anchors) === OPTION_TYPES.AxisInterval keys",
+  JSON.stringify([...AXIS_INTERVAL_KEYS].sort()) ===
+    JSON.stringify(optionTypeObjectKeys(OPTION_TYPES.AxisInterval.type).sort())
+);
 
 console.log("\n# LABEL_OPTIONS agree with schema.ts LabelSpecIR");
 {

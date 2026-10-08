@@ -292,9 +292,122 @@ check(
   ).valid
 );
 
+// `AxisDimsValue` is declared in OPTION_TYPES: an interval is an object like
+// any other declared object, so an unknown key is rejected in strict mode, and
+// a mistyped anchor in either mode.
 check(
-  "scatter dims interval with a non-anchor key rejected",
-  !validate(chart([{ type: "scatter", dims: { lon: { width: 2 } } }])).valid
+  "scatter dims interval with a non-anchor key rejected (strict)",
+  !validate(chart([{ type: "scatter", dims: { lon: { width: 2 } } }]), {
+    strict: true,
+  }).valid
+);
+
+check(
+  "scatter dims interval with a non-boolean embedded rejected",
+  !validate(chart([{ type: "scatter", dims: { lon: { embedded: "yes" } } }]))
+    .valid
+);
+
+check(
+  "scatter dims interval with an untagged object anchor rejected",
+  !validate(chart([{ type: "scatter", dims: { lon: { min: { name: "a" } } } }]))
+    .valid
+);
+
+check(
+  "scatter dims with a field(...) value accepts (strict)",
+  validate(
+    chart([
+      {
+        type: "scatter",
+        dims: { lon: { type: "field", name: "lon" }, lat: { size: 4 } },
+      },
+    ]),
+    { strict: true }
+  ).valid
+);
+
+check(
+  "an untagged object in a channel slot rejected",
+  !validate(chart([{ type: "scatter", x: { name: "hp" } }])).valid
+);
+
+// ChartIR.options is walked against CHART_OPTIONS.
+function chartWithOptions(options: unknown) {
+  return {
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: { type: "chart", mark: { type: "rect" }, options },
+  } as unknown as FrontendIRDocument;
+}
+
+check(
+  "chart options accept every CHART_OPTIONS key (strict)",
+  validate(
+    chartWithOptions({
+      w: 400,
+      h: 300,
+      coord: { type: "polar" },
+      color: { type: "palette", values: "tableau10" },
+      axes: { x: { title: "Year", labelAngle: 45, side: "end" }, y: true },
+      legend: false,
+      padding: 20,
+      schema: { response: { type: "ordered", levels: ["a", "b"] } },
+    }),
+    { strict: true }
+  ).valid
+);
+
+check(
+  "chart options with a mistyped value rejected",
+  !validate(chartWithOptions({ legend: "no" })).valid
+);
+
+check(
+  "chart options with a bad nested axis option rejected",
+  !validate(chartWithOptions({ axes: { x: { side: "left" } } })).valid
+);
+
+check(
+  "chart options with an unknown key accepted (permissive)",
+  validate(chartWithOptions({ bogus: 1 })).valid
+);
+
+check(
+  "chart options with an unknown key rejected (strict)",
+  !validate(chartWithOptions({ bogus: 1 }), { strict: true }).valid
+);
+
+check("chart options must be an object", !validate(chartWithOptions(5)).valid);
+
+check(
+  "JSON Schema ChartIR.options refers to the generated ChartOptions $def",
+  (FRONTEND_IR_JSON_SCHEMA as any).$defs.ChartIR.properties.options.$ref ===
+    "#/$defs/ChartOptions" &&
+    JSON.stringify(
+      Object.keys(
+        (FRONTEND_IR_JSON_SCHEMA as any).$defs.ChartOptions.properties
+      )
+    ) ===
+      JSON.stringify([
+        "w",
+        "h",
+        "coord",
+        "color",
+        "axes",
+        "legend",
+        "padding",
+        "schema",
+      ])
+);
+
+check(
+  "JSON Schema AxisDimsValue is generated: a channel value or an AxisInterval",
+  JSON.stringify((FRONTEND_IR_JSON_SCHEMA as any).$defs.AxisDimsValue.anyOf) ===
+    JSON.stringify([
+      { $ref: "#/$defs/ChannelValue" },
+      { $ref: "#/$defs/AxisInterval" },
+    ])
 );
 
 check(

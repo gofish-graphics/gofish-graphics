@@ -156,19 +156,17 @@ function pyStr(s: string): string {
 const PASSTHROUGH_REFS: Record<string, string> = {
   FieldAccessor:
     "built by field(...), whose dict already carries the wire keys (type, name, measure, ops)",
-  AxisDimsValue:
-    "a `dims` entry: a channel value or an interval {min, center, max, size, embedded}; " +
-    "a channel value can itself be a dict (field(...), datum(...)), so a plain dict here " +
-    "cannot be routed to the interval shape, and the interval keys are single words",
 };
 
-/** Whether a value of this type may be a Python dict. */
+/** Whether a value of this type may be a Python dict that `_to_wire` has to
+ *  route. A channel value may be a dict too (field(...), datum(...)), but
+ *  `_to_wire` passes those through by their class, so a channel branch never
+ *  competes with a union's dict-shaped branch. */
 function acceptsDict(type: FieldType): boolean {
   switch (type.kind) {
     case "object":
     case "record":
     case "any":
-    case "channel": // field(...) / datum(...) are dicts
       return true;
     case "ref":
       return type.name in OPTION_TYPES
@@ -399,6 +397,7 @@ lambda/RPC bridge) stays hand-written there.
 
 from typing import Any, Dict, List, Optional, Union
 
+from . import ast as _ast
 from .ast import Mark, _channel
 `);
 
@@ -434,9 +433,13 @@ parts.push(
       `    raises TypeError, as an unknown kwarg does. Record keys (column names,`,
       `    axis names) and values of any other type pass through unchanged. A`,
       `    tagged union picks its branch by the dict's tag key (\`kind\`); a missing`,
-      `    or unknown tag raises TypeError.`,
+      `    or unknown tag raises TypeError. A channel value built by field(...) or`,
+      `    datum(...) is a dict already in wire form, so it passes through too:`,
+      `    that is how a \`dims\` entry tells a channel value from an interval.`,
       `    """`,
       `    if shape is None or value is None:`,
+      `        return value`,
+      `    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue)):`,
       `        return value`,
       `    kind = shape[0]`,
       `    if kind == "ref":`,
