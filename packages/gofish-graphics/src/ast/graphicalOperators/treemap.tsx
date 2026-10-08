@@ -31,6 +31,7 @@ import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
 import { squarify, type Tile } from "../../families/tile";
+import { Frontend } from "gofish-ir";
 
 const D3_TILES = {
   squarify: treemapSquarify,
@@ -38,21 +39,16 @@ const D3_TILES = {
   dice: treemapDice,
   binary: treemapBinary,
   sliceDice: treemapSliceDice,
-};
+} satisfies Record<Tile["kind"], unknown>;
 
+/** The d3 tiling method of a `Tile` strategy, checked against its family
+ *  (a known kind; a squarify ratio of at least 1, which d3 would clamp
+ *  silently). */
 function d3Tile(tile: Tile) {
-  if (tile.kind === "squarify" && tile.ratio !== undefined) {
-    // d3 silently clamps a ratio below 1 to 1; say so instead.
-    if (!(tile.ratio >= 1))
-      throw new Error(
-        `[gofish] treemap: squarify ratio must be at least 1 (longer side over shorter side), got ${tile.ratio}`
-      );
-    return treemapSquarify.ratio(tile.ratio);
-  }
-  const method = D3_TILES[tile.kind];
-  if (!method)
-    throw new Error(`[gofish] treemap: unknown tile kind "${tile.kind}"`);
-  return method;
+  Frontend.checkStrategy("Tile", tile, "treemap({ tile })");
+  return tile.kind === "squarify" && tile.ratio !== undefined
+    ? treemapSquarify.ratio(tile.ratio)
+    : D3_TILES[tile.kind];
 }
 
 type TreemapSort = "asc" | "desc" | "none";

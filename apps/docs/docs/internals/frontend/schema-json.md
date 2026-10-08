@@ -1234,48 +1234,7 @@ for the API.
           "default": "baseline"
         },
         "overlap": {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "enum": ["separate"]
-                },
-                "padding": {
-                  "$ref": "#/$defs/Number"
-                }
-              },
-              "required": ["kind"]
-            },
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "enum": ["noise"]
-                },
-                "randomness": {
-                  "enum": ["blue", "quasi", "uniform"]
-                },
-                "smoothing": {
-                  "oneOf": [
-                    {
-                      "$ref": "#/$defs/Number"
-                    },
-                    {
-                      "enum": ["silverman"]
-                    }
-                  ]
-                },
-                "padding": {
-                  "$ref": "#/$defs/Number"
-                },
-                "seed": {
-                  "$ref": "#/$defs/Number"
-                }
-              },
-              "required": ["kind"]
-            }
-          ],
+          "$ref": "#/$defs/Overlap",
           "description": "How children keep clear of each other on the axis no field places, made by a call in the Overlap family. Overlap.separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. Overlap.noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is \"blue\" (default), \"quasi\" or \"uniform\". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or \"silverman\" to compute it from the data. Overlap.sina() is noise with smoothing \"silverman\" (a violin outline), and Overlap.jitter() is noise with randomness \"uniform\" and smoothing Infinity (classic jitter); both make kind \"noise\". Both kinds grow from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only."
         },
         "axes": {
@@ -1460,30 +1419,7 @@ for the API.
           "default": true
         },
         "tile": {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "enum": ["squarify"]
-                },
-                "ratio": {
-                  "$ref": "#/$defs/Number",
-                  "description": "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio."
-                }
-              },
-              "required": ["kind"]
-            },
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "enum": ["slice", "dice", "binary", "sliceDice"]
-                }
-              },
-              "required": ["kind"]
-            }
-          ],
+          "$ref": "#/$defs/Tile",
           "description": "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
           "default": {
             "kind": "squarify"
@@ -2365,27 +2301,7 @@ for the API.
           "description": "Blend mode where connectors overlap."
         },
         "curve": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "enum": [
-                "linear",
-                "step",
-                "monotone",
-                "smooth",
-                "catmullRom",
-                "bezier",
-                "orthogonal",
-                "arc",
-                "perfectArrows"
-              ]
-            },
-            "options": {
-              "type": "object",
-              "additionalProperties": {}
-            }
-          },
-          "required": ["type"],
+          "$ref": "#/$defs/Curve",
           "description": "Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate \"monotone\". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear()."
         },
         "dir": {
@@ -2485,27 +2401,7 @@ for the API.
           "description": "Connection axis."
         },
         "curve": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "enum": [
-                "linear",
-                "step",
-                "monotone",
-                "smooth",
-                "catmullRom",
-                "bezier",
-                "orthogonal",
-                "arc",
-                "perfectArrows"
-              ]
-            },
-            "options": {
-              "type": "object",
-              "additionalProperties": {}
-            }
-          },
-          "required": ["type"],
+          "$ref": "#/$defs/Curve",
           "description": "Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate \"monotone\"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band."
         },
         "from": {
@@ -2694,6 +2590,254 @@ for the API.
         }
       ],
       "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own."
+    },
+    "Tile": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "squarify"
+            },
+            "ratio": {
+              "$ref": "#/$defs/Number",
+              "minimum": 1,
+              "description": "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio. 1 aims for square tiles, which suits one circle per leaf."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "slice"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "dice"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "binary"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "sliceDice"
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods."
+    },
+    "Overlap": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "separate"
+            },
+            "padding": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Pixels kept between neighboring dots.",
+              "default": 0
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "noise"
+            },
+            "randomness": {
+              "enum": ["blue", "quasi", "uniform"],
+              "description": "How offsets are drawn inside the outline: \"blue\" keeps each dot as far from its placed neighbors as it can, \"quasi\" spreads the dots by rank (fastest), \"uniform\" draws seeded uniform offsets.",
+              "default": "blue"
+            },
+            "smoothing": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Number",
+                  "minimum": 0
+                },
+                {
+                  "enum": ["silverman"]
+                }
+              ],
+              "description": "The bandwidth of each dot's bell, in data units of the data axis: 0 is no smoothing beyond the dots' own size, Infinity is a flat band, and \"silverman\" computes it from the data.",
+              "default": 0
+            },
+            "padding": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Pixels added to each dot's width when the outline is sized and, for \"blue\" randomness, when distances are compared.",
+              "default": 0
+            },
+            "seed": {
+              "type": "number",
+              "description": "Seed for \"blue\" and \"uniform\" randomness, so a render is the same every time.",
+              "default": 0
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How `scatter` keeps its children clear of each other on the axis no field places: the value of its `overlap` option. Both kinds grow from the `alignment` line and move only that free axis."
+    },
+    "Curve": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "linear"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "step"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "monotone"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "smooth"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "catmullRom"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "bezier"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "orthogonal"
+            },
+            "bend": {
+              "enum": ["auto"],
+              "description": "Omitted, the elbow bends on the connector's `dir` axis; \"auto\" infers the bend axis from the endpoint geometry instead, for layouts with no single growth axis."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "arc"
+            },
+            "direction": {
+              "enum": ["up", "down"],
+              "description": "Which side the arc bulges toward.",
+              "default": "up"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "perfectArrows"
+            },
+            "bow": {
+              "$ref": "#/$defs/Number",
+              "description": "Baseline curvature. 0 is a straight line.",
+              "default": 0
+            },
+            "stretch": {
+              "$ref": "#/$defs/Number",
+              "description": "How much the bow grows as the endpoints get closer, and shrinks as they get farther apart.",
+              "default": 0.25
+            },
+            "stretchMin": {
+              "$ref": "#/$defs/Number",
+              "description": "Distance in pixels below which stretch has its full effect.",
+              "default": 50
+            },
+            "stretchMax": {
+              "$ref": "#/$defs/Number",
+              "description": "Distance in pixels above which stretch has no effect.",
+              "default": 420
+            },
+            "padStart": {
+              "$ref": "#/$defs/Number",
+              "description": "Gap in pixels between the source box and the start of the arc.",
+              "default": 0
+            },
+            "padEnd": {
+              "$ref": "#/$defs/Number",
+              "description": "Gap in pixels between the end of the arc and the target box.",
+              "default": 20
+            },
+            "flip": {
+              "type": "boolean",
+              "description": "Flip which side the arc bows toward.",
+              "default": false
+            },
+            "straights": {
+              "type": "boolean",
+              "description": "Allow a straight line when the endpoints are axis-aligned, instead of forcing a slight bow.",
+              "default": true
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points."
     }
   }
 }

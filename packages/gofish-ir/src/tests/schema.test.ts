@@ -9,6 +9,7 @@
 import {
   allExamples,
   validate,
+  checkStrategy,
   encodeNonFinite,
   decodeNonFinite,
   FRONTEND_IR_JSON_SCHEMA,
@@ -693,6 +694,96 @@ console.log("\n# Non-finite numbers");
   check(
     "the JSON Schema has one shared Number def admitting the tag",
     JSON.stringify(defs.Number).includes("$numberDouble")
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Strategies (STRATEGIES, checkStrategy)
+// ---------------------------------------------------------------------------
+
+console.log("\n# Strategies");
+{
+  /** The error checkStrategy throws, or "" when it accepts the value. */
+  const thrown = (
+    family: Parameters<typeof checkStrategy>[0],
+    value: unknown
+  ): string => {
+    try {
+      checkStrategy(family, value, "where");
+      return "";
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+  const accepts: Array<[Parameters<typeof checkStrategy>[0], unknown]> = [
+    ["Tile", { kind: "squarify" }],
+    ["Tile", { kind: "squarify", ratio: 1 }],
+    ["Tile", { kind: "squarify", ratio: undefined }],
+    ["Tile", { kind: "sliceDice" }],
+    ["Overlap", { kind: "separate", padding: 2 }],
+    ["Overlap", { kind: "noise", smoothing: Infinity, randomness: "uniform" }],
+    ["Overlap", { kind: "noise", smoothing: { $numberDouble: "Infinity" } }],
+    ["Overlap", { kind: "noise", smoothing: "silverman", seed: 3 }],
+    ["Curve", { kind: "monotone" }],
+    ["Curve", { kind: "arc", direction: "down" }],
+    ["Curve", { kind: "perfectArrows", bow: 0.3, padEnd: 4 }],
+  ];
+  for (const [family, value] of accepts) {
+    const why = thrown(family, value);
+    check(`${family} accepts ${JSON.stringify(value)}`, why === "", why);
+  }
+  const rejects: Array<[Parameters<typeof checkStrategy>[0], unknown, RegExp]> =
+    [
+      ["Tile", { kind: "strip" }, /where\.kind: unknown kind "strip"/],
+      ["Tile", "squarify", /expected object/],
+      ["Tile", { kind: "squarify", ratio: 0.5 }, /at least 1/],
+      ["Tile", { kind: "slice", ratio: 2 }, /unknown field "ratio"/],
+      ["Overlap", { kind: "separate", padding: -1 }, /at least 0/],
+      ["Overlap", { kind: "separate", padding: Infinity }, /finite/],
+      ["Overlap", { kind: "noise", randomness: "pink" }, /randomness/],
+      ["Overlap", { kind: "noise", smoothing: -1 }, /smoothing/],
+      ["Overlap", { kind: "noise", smoothing: NaN }, /smoothing/],
+      ["Overlap", { kind: "noise", smoothing: "scott" }, /smoothing/],
+      ["Overlap", { kind: "noise", seed: Infinity }, /seed: expected a finite/],
+      ["Overlap", { kind: "swarm" }, /unknown kind "swarm"/],
+      ["Curve", { type: "monotone" }, /unknown kind undefined/],
+      ["Curve", { kind: "arc", direction: "left" }, /direction/],
+      ["Curve", { kind: "linear", options: {} }, /unknown field "options"/],
+    ];
+  for (const [family, value, pattern] of rejects) {
+    const why = thrown(family, value);
+    check(
+      `${family} rejects ${JSON.stringify(value)}`,
+      pattern.test(why) && why.includes(`the ${family} family`),
+      why
+    );
+  }
+
+  // The validator walks a strategy option the same way.
+  const doc = (tile: unknown) =>
+    ({
+      irVersion: 0,
+      ir: "gofish-frontend",
+      root: {
+        type: "chart",
+        data: { type: "inline", rows: [] },
+        operators: [{ type: "treemap", tile }],
+        mark: { type: "rect" },
+      },
+    }) as unknown as FrontendIRDocument;
+  const unknownKind = validate(doc({ kind: "strip" }));
+  check(
+    "the validator names an unknown strategy kind",
+    !unknownKind.valid &&
+      unknownKind.errors.some(
+        (e) =>
+          /tile\.kind$/.test(e.path) && /unknown kind "strip"/.test(e.message)
+      ),
+    JSON.stringify(unknownKind)
+  );
+  check(
+    "the validator checks a strategy's param bounds",
+    !validate(doc({ kind: "squarify", ratio: 0 })).valid
   );
 }
 

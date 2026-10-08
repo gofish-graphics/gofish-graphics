@@ -333,25 +333,11 @@ export interface ScatterOperator
   alignment?: string;
   /** How children keep clear of each other on the free axis. Default: none
    *  (every child sits on the alignment line). */
-  overlap?: OverlapStrategyIR;
+  overlap?: OverlapIR;
   axes?: AxesOptions;
   w?: ChannelValue;
   h?: ChannelValue;
 }
-
-/** A `scatter` overlap strategy, made by a call in the `Overlap` family
- *  (`Overlap.separate()`, `Overlap.noise()`; `Overlap.sina()` and
- *  `Overlap.jitter()` make kind `"noise"` with other defaults). Mirrors JS's
- *  `Overlap.Overlap` (`families/overlap.ts`). */
-export type OverlapStrategyIR =
-  | { kind: "separate"; padding?: number }
-  | {
-      kind: "noise";
-      randomness?: "blue" | "quasi" | "uniform";
-      smoothing?: number | "silverman";
-      padding?: number;
-      seed?: number;
-    };
 
 /**
  * Per-node axis-rendering override. Mirrors the JS-side `AxesOptions` /
@@ -398,16 +384,6 @@ export interface LogOperator
   prefix?: string;
 }
 
-/** A `treemap` tiling strategy, made by a call in the `Tile` family
- *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
- *  `Tile.sliceDice()`). */
-export type TreemapTileIR =
-  | { kind: "squarify"; ratio?: number }
-  | { kind: "slice" }
-  | { kind: "dice" }
-  | { kind: "binary" }
-  | { kind: "sliceDice" };
-
 /**
  * `treemap({...})` — d3-hierarchy treemap layout over the flow's rows,
  * fare/weight-proportional. Dual-form like `spread`/`stack`/`scatter`/
@@ -433,7 +409,7 @@ export interface TreemapOperator
   padding?: number;
   round?: boolean;
   /** The tiling strategy. Default `{ kind: "squarify" }`. */
-  tile?: TreemapTileIR;
+  tile?: TileIR;
   sort?: "asc" | "desc" | "none";
   /** Per-leaf weight driving tile area (entry-flagged per split entry). */
   size?: ChannelValue;
@@ -465,6 +441,62 @@ export interface PackOperator
   /** Field to partition rows by. Without `by`, one child per row. */
   by?: string | FieldAccessor;
 }
+
+// ---------------------------------------------------------------------------
+// Strategies
+// ---------------------------------------------------------------------------
+
+// The value types of the strategy families (`STRATEGIES` in descriptors.ts):
+// a plain object `{ kind, ...params }`, the same in JS (the family's own
+// type, e.g. `Curve.Curve`) and on the wire. descriptors.test.ts checks that
+// these kinds and params agree with the table.
+
+/** How `treemap` tiles its box, made by a call in the `Tile` family
+ *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
+ *  `Tile.sliceDice()`). */
+export type TileIR =
+  | { kind: "squarify"; ratio?: number }
+  | { kind: "slice" }
+  | { kind: "dice" }
+  | { kind: "binary" }
+  | { kind: "sliceDice" };
+
+/** How `scatter` keeps its children clear of each other, made by a call in
+ *  the `Overlap` family (`Overlap.separate()`, `Overlap.noise()`;
+ *  `Overlap.sina()` and `Overlap.jitter()` make kind `"noise"` with other
+ *  params preset). */
+export type OverlapIR =
+  | { kind: "separate"; padding?: number }
+  | {
+      kind: "noise";
+      randomness?: "blue" | "quasi" | "uniform";
+      smoothing?: number | "silverman";
+      padding?: number;
+      seed?: number;
+    };
+
+/** How a path runs through its points, made by a call in the `Curve` family
+ *  (`Curve.monotone()`, `Curve.arc({ direction: "down" })`, ...). */
+export type CurveIR =
+  | { kind: "linear" }
+  | { kind: "step" }
+  | { kind: "monotone" }
+  | { kind: "smooth" }
+  | { kind: "catmullRom" }
+  | { kind: "bezier" }
+  | { kind: "orthogonal"; bend?: "auto" }
+  | { kind: "arc"; direction?: "up" | "down" }
+  | {
+      kind: "perfectArrows";
+      bow?: number;
+      stretch?: number;
+      stretchMin?: number;
+      stretchMax?: number;
+      padStart?: number;
+      padEnd?: number;
+      flip?: boolean;
+      straights?: boolean;
+    };
 
 // ---------------------------------------------------------------------------
 // Marks

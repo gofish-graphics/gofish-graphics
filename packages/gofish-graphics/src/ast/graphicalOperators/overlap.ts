@@ -24,6 +24,7 @@
  */
 import { deviation, quantile } from "d3-array";
 import { lcg } from "../../util/lcg";
+import { Frontend } from "gofish-ir";
 import type { Overlap, NoiseRandomness } from "../../families/overlap";
 
 /** One child as an overlap strategy sees it: the pixel position of its
@@ -55,6 +56,7 @@ export function resolveOverlap(
   side: OverlapSide,
   pxPerUnit?: number
 ): number[] {
+  Frontend.checkStrategy("Overlap", strategy, "scatter({ overlap })");
   items.forEach(({ at, r }, i) => {
     if (!Number.isFinite(at) || !Number.isFinite(r))
       throw new Error(
@@ -62,7 +64,7 @@ export function resolveOverlap(
           `size (position ${at}, radius ${r})`
       );
   });
-  switch (strategy?.kind) {
+  switch (strategy.kind) {
     case "separate":
       return separateOffsets(items, side, strategy.padding ?? 0);
     case "noise": {
@@ -85,12 +87,6 @@ export function resolveOverlap(
         seed: strategy.seed ?? 0,
       });
     }
-    default:
-      throw new Error(
-        `[gofish] scatter overlap: unknown strategy kind ` +
-          `"${(strategy as { kind?: unknown })?.kind}". Make one with ` +
-          `Overlap.separate(), Overlap.noise(), Overlap.sina() or Overlap.jitter().`
-      );
   }
 }
 

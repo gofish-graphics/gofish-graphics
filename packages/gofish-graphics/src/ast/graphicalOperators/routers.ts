@@ -72,14 +72,14 @@ export function curveName(
   where: string
 ): string | undefined {
   if (curve === undefined) return undefined;
-  if (typeof curve !== "object" || curve === null || !("type" in curve)) {
+  if (typeof curve !== "object" || curve === null || !("kind" in curve)) {
     throw new Error(
       `[gofish] ${where}: ${JSON.stringify(curve)} is not a curve. Make one ` +
         `with a call in the Curve family: Curve.monotone(), Curve.linear(), ` +
         `Curve.bezier(), ...`
     );
   }
-  return curve.type;
+  return curve.kind;
 }
 
 type RouteEntry = {
@@ -165,12 +165,14 @@ export function sequenceCurve(
 /** The names of the registered sequence curves. */
 export const sequenceCurveNames = (): string[] => [...sequenceCurves.keys()];
 
-/** Resolve a `Curve` to its router fn + options. */
+/** Resolve a `Curve` to its router fn + options: the params beside its
+ *  `kind`. */
 export function resolveCurve(curve: Curve): {
   router: Router;
-  options?: Record<string, any>;
+  options: Record<string, any>;
 } {
-  return { router: getRoute(curve.type), options: curve.options };
+  const { kind, ...options } = curve;
+  return { router: getRoute(kind), options };
 }
 
 // --- geometry helpers -------------------------------------------------------

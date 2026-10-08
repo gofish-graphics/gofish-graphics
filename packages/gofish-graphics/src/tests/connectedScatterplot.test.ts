@@ -892,7 +892,7 @@ async function main(): Promise<void> {
       /Curve\.catmullRom\(\) is not a way.*Curve\.step\(\), Curve\.linear\(\), Curve\.monotone\(\) or Curve\.smooth\(\).*screen-space path curve/,
     ],
     [
-      { type: "linaer" },
+      { kind: "linaer" },
       /Curve\.linaer\(\) is not a way.*Curve\.step\(\), Curve\.linear\(\), Curve\.monotone\(\) or Curve\.smooth\(\)/,
     ],
     ["monotone", /"monotone" is not a curve\. Make one with a call in the Curve family/],

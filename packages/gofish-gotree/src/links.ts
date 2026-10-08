@@ -39,8 +39,8 @@ function linkMark(
   // infer the bend from the endpoint geometry.
   // Each link `curve` is a GoFish curve, so it passes through as is.
   const curve: Curve.Curve =
-    linkCurve.type === "orthogonal" &&
-    linkCurve.options === undefined &&
+    linkCurve.kind === "orthogonal" &&
+    linkCurve.bend === undefined &&
     growthDir === undefined
       ? Curve.orthogonal({ bend: "auto" })
       : linkCurve;

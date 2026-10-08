@@ -921,7 +921,7 @@ export const TrailsPaused: StoryObj<Args> = {
  *  of its own line either way, because the line and the transition in a panel
  *  use the same curve. */
 const TRAIL_CURVES = [Curve.linear(), Curve.monotone()].map((curve) => ({
-  caption: curve.type,
+  caption: curve.kind,
   curve,
 }));
 
