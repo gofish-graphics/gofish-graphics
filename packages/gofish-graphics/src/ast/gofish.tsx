@@ -52,7 +52,7 @@ import {
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import { timeRowsFromOption, type TimeRowOption } from "./axes/timeRows";
-import { loadTemporal } from "./calendar";
+import { axisName } from "./constraints/shared";
 import {
   getScopeRegistry,
   scopeFrame,
@@ -297,9 +297,6 @@ export async function layout(
     debugInputSceneGraph(child);
   }
 
-  // Calendar math (time axes) runs on Temporal, loaded once, natively or by
-  // polyfill (calendar.ts).
-  await loadTemporal();
   const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
@@ -333,19 +330,16 @@ export async function layout(
   // object, a dim is enabled unless it is explicitly `false` — an unspecified
   // (undefined) dim still shows (specifying one axis doesn't disable the
   // other); only `false` suppresses. Each enabled dim carries what its axis
-  // ticks at: about 10 ticks, or the cells of a time axis's inner row
-  // (`rows[0]`), which its scope's domain is niced to.
+  // ticks at: about 10 ticks, or the rows of a time axis (`rows`, parsed
+  // here, once), whose inner row its scope's domain is niced to. The axis is
+  // drawn from the same stamp.
   if (axes) {
     const rows = perDimAxisOption(axes, "rows");
     const ticksOf = (dim: 0 | 1): AxisTicks => {
       const r = rows[dim];
       return r === undefined
         ? DEFAULT_AXIS_TICKS
-        : {
-            ...DEFAULT_AXIS_TICKS,
-            partition: timeRowsFromOption(r, dim === 0 ? "x" : "y")[0]
-              .partition,
-          };
+        : { ...DEFAULT_AXIS_TICKS, rows: timeRowsFromOption(r, axisName(dim)) };
     };
     const enabled = new Map<0 | 1, AxisTicks>();
     for (const dim of [0, 1] as const) {
@@ -383,7 +377,6 @@ export async function layout(
   const elaborated = await elaborateChrome(child, {
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
-    timeRows: perDimAxisOption(axes, "rows"),
   });
   if (elaborated.changed) {
     child = elaborated.node;

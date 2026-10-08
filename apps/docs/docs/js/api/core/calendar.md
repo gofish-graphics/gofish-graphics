@@ -83,8 +83,7 @@ polars' `dt` fields.
   row's first cell can start before the domain: its label is centered on
   the first tick, under the inner row's first label. The labels at the ends
   may reach past the axis, as a numeric axis's do.
-- A label that comes within 5 pixels of the label before it in its row is
-  left out.
+- The axis labels every tick, as a numeric axis does.
 - Rows need not nest: `[Calendar.week, Calendar.month]` is valid.
 - The first row sits next to the axis line, and each further row sits past
   the one before it. An outer-row tick that falls between inner ticks is longer.
@@ -96,8 +95,6 @@ polars' `dt` fields.
   outer row is the inner level's parent: minutes for seconds, hours for
   minutes, days for hours, months for days and weeks, years for months and
   quarters. Year has no parent, so a year row is the only row.
-- To tell which labels have room, the axis takes its length to be the
-  chart's `w` (or `h` for a y axis).
 - Default labels come from `Intl.DateTimeFormat` in the runtime's locale:
   `12 AM` for an hour, `Feb 29` for a day or week, `Jan` for a month, `2024`
   for a year.

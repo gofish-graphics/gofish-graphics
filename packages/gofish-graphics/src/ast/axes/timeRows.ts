@@ -50,10 +50,10 @@ export type TimeRowOption =
 /** A resolved row: a partition and how its cells are labeled. */
 export type TimeRow = { partition: CalendarPartition; format?: CellFormat };
 
-/** One label of a row: its text, the tick it is centered on (`at`, epoch
+/** One label of a row: its text and the tick it is centered on (`at`, epoch
  *  ms: its cell's start, or the axis's first tick for a cell that starts
- *  before the domain), and its cell. */
-export type TimeLabel = { at: number; text: string; cell: CalendarCell };
+ *  before the domain). */
+export type TimeLabel = { at: number; text: string };
 
 /** Read `axes.<dim>.rows` (inner first) into rows. An entry that is not a
  *  Calendar value is a loud error. */
@@ -110,10 +110,10 @@ export function defaultTimeRows(inner: CalendarPartition): TimeRow[] {
 }
 
 /** The labels of `row` over the domain `[lo, hi]`, one per cell that meets
- *  it, before any is dropped for room. Each is centered on its cell's start,
- *  or on the axis's first tick (`lo`) for a cell that starts before it. A
- *  cell that starts at the domain's end is labeled at that last tick, as a
- *  numeric axis labels its last tick. */
+ *  it. Each is centered on its cell's start, or on the axis's first tick
+ *  (`lo`) for a cell that starts before it. A cell that starts at the
+ *  domain's end is labeled at that last tick, as a numeric axis labels its
+ *  last tick. The `at` values are the row's ticks. */
 export function rowLabels(
   row: TimeRow,
   lo: number,
@@ -123,19 +123,5 @@ export function rowLabels(
   return row.partition.cells(lo, hi, zone).map((cell) => ({
     at: Math.max(cell.start, lo),
     text: row.format ? row.format(cell) : row.partition.label(cell, zone),
-    cell,
   }));
-}
-
-/** The ticks of `row` over `[lo, hi]`: its cell starts inside the domain. */
-export function rowTicks(
-  row: TimeRow,
-  lo: number,
-  hi: number,
-  zone: string
-): number[] {
-  return row.partition
-    .cells(lo, hi, zone)
-    .map((c) => c.start)
-    .filter((t) => t >= lo && t <= hi);
 }

@@ -1306,7 +1306,9 @@ the axis's inner row, rounded outward to its cells (`niceToCells` in
 `calendar.ts`), so both ends of the axis are ticks. A round number of
 milliseconds means nothing on a calendar, so a time space branches on its
 kind inside the one `niceContinuous`. The partition is the axis's explicit
-`rows[0]`, else the one the domain picks for about the tick count
+inner row (`rows[0]` of the stamped `AxisTicks`: `layout` parses
+`axes.x.rows` once, and the axis is drawn from the same rows), else the one
+the domain picks for about the tick count
 (`tickPartition`, like d3's time ticks). Both read the domain and the axis
 options only, never pixels.
 
@@ -1757,8 +1759,8 @@ reads only the classes, never the builder words. Three classes exist:
   whose first value is a JS `Date` is a UTC time. Strings and numbers never
   are. An instant has no zero. A position read from the column carries the
   class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
-  for any typed column, with `createOperator` passing the type it resolved
-  from the whole input as it does the measure), and the point space it
+  for any typed column, with `createOperator` passing the column it resolved
+  from the whole input, measure and type together, `resolveColumn`), and the point space it
   builds carries it as `CONTINUOUS_TYPE.calendar` (`positionCalendar`,
   `withCalendar`). The folds that build a continuous space from parts keep
   it (`mergeCalendars`: the overlay fold, a layer's datum-position domain in

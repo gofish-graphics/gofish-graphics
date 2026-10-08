@@ -16,6 +16,7 @@ import {
 import { nice as d3Nice } from "d3-array";
 import type { HasCalendar } from "./schema";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
+import type { TimeRow } from "./axes/timeRows";
 
 // This module is the TYPE half of an axis: what the axis means, with no σ in
 // it. The SIZE CLAIM half (how much room the content needs, as functions of
@@ -206,11 +207,12 @@ export const dataWidth = (space: CONTINUOUS_TYPE): number =>
 
 /** What an axis ticks at, which is what a scope that draws the axis nices
  *  its domain to (#659, #1057): about `count` ticks, or, on a time axis, the
- *  cells of `partition`, the axis's inner row (`axes.x.rows[0]`). A time
- *  axis with no `partition` picks one from its domain and `count`
- *  ({@link axisTickPartition}). `resolveAxes` stamps it on every node that
- *  draws an axis (`GoFishNode.axisDemand`). */
-export type AxisTicks = { count: number; partition?: CalendarPartition };
+ *  cells of its `rows` (`axes.x.rows`, parsed once by `layout`), whose inner
+ *  row (`rows[0]`) sets the nicing. A time axis with no `rows` picks its
+ *  inner row from its domain and `count` ({@link axisTickPartition}).
+ *  `resolveAxes` stamps it on every node that draws an axis
+ *  (`GoFishNode.axisDemand`), and the axis is drawn from the same stamp. */
+export type AxisTicks = { count: number; rows?: TimeRow[] };
 
 /** An axis's ticks when it asks for nothing else: about 10. */
 export const DEFAULT_AXIS_TICKS: AxisTicks = { count: 10 };
@@ -221,7 +223,7 @@ export const axisTickPartition = (
   space: CONTINUOUS_TYPE,
   ticks: AxisTicks
 ): CalendarPartition =>
-  ticks.partition ??
+  ticks.rows?.[0].partition ??
   tickPartition(space.dataInterval.min, space.dataInterval.max, ticks.count);
 
 /** Nice the interval a space renders an axis over (issue #659): a pinned

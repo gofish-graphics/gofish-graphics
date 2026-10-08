@@ -375,14 +375,18 @@ difference axis), never off the size claim:
 - **TIME (continuous, pinned, `calendar` set)** — a partitioned axis
   (`elaborateTimeAxis`, #1057). It is a position axis: the same line, the
   same gutter seating, and every tick and label pinned at its instant with
-  `Constraint.position`, so nothing sits in an ordinal slot. Its ticks and
+  `Constraint.position`, so nothing sits in an ordinal slot: it is built by
+  the same `positionAxis` as a numeric axis, its row labels passed as
+  `extraLabels` (each with its row's offset past the line, and tagged with
+  its row as label tier `k` for `labelAngle: "auto"`). Its ticks and
   labels come from calendar partitions (`CalendarPartition` in
   `calendar.ts`) instead of `d3.ticks`, one row per partition
   (`axes/timeRows.ts`). Its domain is niced like a numeric axis's, by
   the same `niceContinuous`, but outward to the cells of the inner row
   instead of to round numbers, so both ends of the axis are inner ticks. A
-  row's ticks are its cells' starts inside the domain, and each label is
-  centered on its cell's start tick, as a numeric axis centers its labels.
+  row's ticks are where its labels sit (`rowLabels`): its cells' starts
+  inside the domain, and each label is centered on its cell's start tick, as
+  a numeric axis centers its labels.
   An outer row's first cell may start before the domain: its label is
   centered on the axis's first tick, under the inner row's first label
   ("2023" under "Nov"). A cell starting at the domain's end is labeled at
@@ -392,13 +396,15 @@ difference axis), never off the size claim:
   y axis) plus a gap, so the axis emits all its rows in one elaboration
   rather than going through the ordinal tiers. Rows are independent
   partitions, so they need not nest. A tick both rows share is drawn once,
-  short; an outer-row tick between inner ticks is longer. `axes.x.rows` sets the rows; without
+  short; an outer-row tick between inner ticks is longer. `axes.x.rows` sets the rows
+  (parsed once, by `layout`, into the axis demand below); without
   them the inner row is the level and step whose cells are nearest in
   length to a tenth of the domain (`tickPartition` in `calendar.ts`, like
   d3's time ticks, and like a numeric axis's ~10 ticks), and the outer row
   is that level's parent. Both choices read the domain only, never pixels.
   The axis's ticks reach its scope's nicing through the axis demand
-  (`AxisTicks`, see
+  (`AxisTicks`: the tick count, and a time axis's rows), and the axis is
+  drawn from the same stamp, so nicing and drawing read one source (see
   [Underlying Space](/internals/core/underlying-space#nicing-is-a-scope-operation-applied-on-demand)).
 - **DIFFERENCE (continuous, `origin: "none"`)** — bare tick marks at the
   tick values over `[0, w]`, where `w` is the space's width niced from 0

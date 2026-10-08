@@ -229,8 +229,8 @@ async function main() {
     );
     check(
       "labels read in the zone",
-      Calendar.hour.label(days[1]) === "12 AM" &&
-        Calendar.day.label(days[1]) === "Mar 10"
+      Calendar.hour.label(days[1], zone) === "12 AM" &&
+        Calendar.day.label(days[1], zone) === "Mar 10"
     );
   }
 
@@ -361,7 +361,7 @@ async function main() {
       same(
         nicedIso(timeSpace(Date.UTC(2024, 0, 24), Date.UTC(2024, 2, 31)), {
           count: 10,
-          partition: Calendar.week,
+          rows: [{ partition: Calendar.week }],
         }),
         ["2024-01-22T00:00:00.000Z", "2024-04-01T00:00:00.000Z"]
       )

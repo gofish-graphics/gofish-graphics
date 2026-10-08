@@ -88,10 +88,12 @@ Three per-run session contexts are initialized:
 
 These are attached to the render session and propagated to the node tree, rather than stored as module-global mutable state. This establishes clean state for the rendering process and ensures no interference between multiple chart renders.
 
-Before the passes, `layout` awaits `loadTemporal()` (`calendar.ts`) once, so
-the calendar math of a time axis can run synchronously during elaboration:
-the native Temporal API where the runtime has one, else `temporal-polyfill`,
-imported only then.
+Calendar math (a time axis's cells) runs synchronously during elaboration,
+on the Temporal API that `applySchema` (`schema.ts`) loads when the chart's
+data has a time column (`loadTemporal()` in `calendar.ts`): the native API
+where the runtime has one, else `temporal-polyfill`, imported only then. A
+time axis needs a time column, so `layout` itself loads nothing, and a chart
+without one never loads the polyfill.
 
 ### Pass 2: Color Scale Resolution
 
@@ -318,7 +320,7 @@ level). So a grouped or faceted chart renders one ordinal axis per grouping
 level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
 `lake` axis and a per-lake `species` axis. Wherever it sets an owning flag,
 `resolveAxes` also leaves a persistent `axisDemand` stamp — the axis's ticks
-(`AxisTicks`: a count, or a time axis's inner partition), which later gate and
+(`AxisTicks`: a count, and a time axis's rows), which later gate and
 shape per-scope domain nicing at the σ-scope solves (issue #659), since
 `resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
 driven at each scope's own solve (below). Then
