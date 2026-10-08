@@ -142,6 +142,38 @@ def _collect_derive_operators(ops: List[Operator]) -> List[DeriveOperator]:
     return [op for op in ops if isinstance(op, DeriveOperator)]
 
 
+class Composed:
+    """A reusable flow fragment: a left-to-right sequence of operators.
+
+    Built by :func:`compose`. It holds its operators already flattened, and
+    ``ChartBuilder.flow()`` expands it into them, so the IR carries the
+    constituent operators and has no compose node. Mirrors JS
+    ``compose(...ops)`` (ast/marks/compose.ts).
+    """
+
+    def __init__(self, operators: List[Operator]):
+        self.operators: tuple = tuple(operators)
+
+
+def _expand_composed(op: Union[Operator, Composed]) -> tuple:
+    return op.operators if isinstance(op, Composed) else (op,)
+
+
+def compose(*ops: Union[Operator, Composed]) -> Composed:
+    """Package a left-to-right sequence of operators as one flow fragment.
+
+    Nested fragments are flattened, and ``compose()`` with no arguments is
+    the identity fragment. Pass the result to ``.flow()`` like an operator;
+    it expands into its constituent operators.
+
+    Example::
+
+        grid = compose(spread(dir="y"), spread(dir="x"))
+        chart(data).flow(spread(by="lake", dir="x"), grid).mark(rect(w=8, h=8))
+    """
+    return Composed([o for op in ops for o in _expand_composed(op)])
+
+
 class _MarkFn:
     """Sentinel wrapping a Python callable used as a *whole* mark.
 
@@ -1150,12 +1182,13 @@ class ChartBuilder:
         self._z_order = z_order
         self._name: Optional[Union[str, "Token"]] = None
 
-    def flow(self, *ops: Operator) -> "ChartBuilder":
+    def flow(self, *ops: Union[Operator, Composed]) -> "ChartBuilder":
         """
         Add operators to the flow pipeline.
 
         Args:
-            *ops: One or more operators (spread, stack, derive, etc.)
+            *ops: One or more operators (spread, stack, derive, etc.) or
+                ``compose(...)`` fragments, which expand into their operators
 
         Returns:
             New ChartBuilder with operators added
@@ -1163,7 +1196,10 @@ class ChartBuilder:
         return ChartBuilder(
             self.data,
             self.options,
-            operators=[*self.operators, *ops],
+            operators=[
+                *self.operators,
+                *(o for op in ops for o in _expand_composed(op)),
+            ],
             z_order=self._z_order,
         )
 

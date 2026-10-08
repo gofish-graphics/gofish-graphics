@@ -8,6 +8,7 @@ from gofish import (
     spread,
     stack,
     derive,
+    compose,
     log,
     clock,
     ref,
@@ -92,6 +93,42 @@ class TestOperators:
         d = op.to_dict()
         assert d["type"] == "log"
         assert d["prefix"] == "my label"
+
+
+class TestCompose:
+    """Test compose() flow fragments."""
+
+    def test_flow_expands_fragment_in_order(self):
+        """A fragment in .flow() becomes its operators, left to right."""
+        ir = (
+            chart([{"category": "A"}])
+            .flow(compose(spread(by="category", dir="x"), stack(dir="y")))
+            .mark(rect(w=1, h=1))
+            .to_ir()
+        )
+        ops = ir["operators"]
+        assert [op["type"] for op in ops] == ["spread", "stack"]
+        assert ops[0]["by"] == "category"
+
+    def test_nested_fragments_flatten(self):
+        """Nested fragments flatten and keep their order."""
+        a, b, c = spread(dir="x"), stack(dir="y"), log("c")
+        fragment = compose(a, compose(b, compose(c)))
+        assert fragment.operators == (a, b, c)
+        builder = chart([]).flow(fragment)
+        assert builder.operators == [a, b, c]
+
+    def test_empty_compose_is_identity(self):
+        """compose() adds no operators."""
+        op = spread(dir="x")
+        assert chart([]).flow(compose(), op, compose()).operators == [op]
+
+    def test_fragment_keeps_derive_lambdas(self):
+        """A derive inside a fragment is still registered with the bridge."""
+        d = derive(lambda rows: rows)
+        builder = chart([{"a": 1}]).flow(compose(d, spread(dir="x")))
+        ops = builder.mark(rect(w=1, h=1)).to_ir()["operators"]
+        assert ops[0] == {"type": "derive", "lambdaId": d.lambda_id}
 
 
 class TestMarkName:

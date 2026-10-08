@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { chart, spread, rect, derive } from "../../src/lib";
+import { chart, compose, spread, rect, derive } from "../../src/lib";
 import { repeat } from "../../src/lib";
 import _ from "lodash";
 
@@ -37,6 +37,36 @@ export const Default: StoryObj<Args> = {
         // the full rows fill the baseline upward (y-down free space).
         spread({ spacing: 2, dir: "y", reverse: true }),
         spread({ spacing: 2, dir: "x" })
+      )
+      .mark(rect({ w: 8, h: 8, fill: "species" }))
+      .render(container, {});
+
+    return container;
+  },
+};
+
+// The same waffle with its steps packaged as reusable `compose` fragments. The
+// outer fragment nests two inner ones; `.flow()` flattens them, so this renders
+// exactly like `Default`.
+export const Composed: StoryObj<Args> = {
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const units = (count: string, rowSize: number) =>
+      compose(
+        derive((d: any[]) => d.flatMap((d) => repeat(d, count))),
+        derive((d: any[]) => _.chunk(d, rowSize))
+      );
+    const grid = compose(
+      spread({ spacing: 2, dir: "y", reverse: true }),
+      spread({ spacing: 2, dir: "x" })
+    );
+    const waffle = compose(units("count", 5), grid);
+
+    chart(seafood, { axes: { x: { side: "end" } } })
+      .flow(
+        spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),
+        waffle
       )
       .mark(rect({ w: 8, h: 8, fill: "species" }))
       .render(container, {});
