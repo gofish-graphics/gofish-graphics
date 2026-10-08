@@ -37,6 +37,7 @@ import {
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
+import { BOX_CHANNELS } from "../channels";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -427,17 +428,7 @@ export const Rect = ({
 };
 
 const RECT_CHANNELS = {
-  w: "size",
-  h: "size",
-  x: "pos",
-  y: "pos",
-  l: "pos",
-  r: "pos",
-  t: "pos",
-  b: "pos",
-  cx: "pos",
-  cy: "pos",
-  dims: "dims",
+  ...BOX_CHANNELS,
   fill: "color",
   stroke: "color",
 } as const;
@@ -471,6 +462,11 @@ export const Blank = (opts: Parameters<typeof Rect>[0]): GoFishNode => {
 };
 
 /** The `blank` mark factory — `marks/chart.ts`'s `blank()` is the typed,
- *  documented front for this. Same channels as `rect` (a blank's `w`/`h` can be
- *  data-driven; its `fill` still seeds the unit color scale), IR type `blank`. */
-export const baseBlank = createMark(Blank, RECT_CHANNELS, "blank");
+ *  documented front for this. Its channels are the ones `blank()` takes: a
+ *  data-driven `w`/`h`, and a `fill` that still seeds the unit color scale.
+ *  IR type `blank`. */
+export const baseBlank = createMark(
+  Blank,
+  { w: "size", h: "size", fill: "color" },
+  "blank"
+);

@@ -18,6 +18,7 @@ import {
 import { aesthetic, continuous, posFn } from "../domain";
 import { UnderlyingSpace, pointOrMagnitude } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import { BOX_CHANNELS } from "../channels";
 import { boxOfDims } from "../geometry";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -297,11 +298,6 @@ export const Ellipse = ({
 
 export const ellipse = createMark(
   Ellipse,
-  {
-    w: "size",
-    h: "size",
-    dims: "dims",
-    fill: "color",
-  },
+  { ...BOX_CHANNELS, fill: "color", stroke: "color" },
   "ellipse"
 );

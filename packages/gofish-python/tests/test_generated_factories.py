@@ -334,8 +334,10 @@ def test_a_callable_outside_a_channel_is_a_type_error():
     ):
         with pytest.raises(TypeError, match="only channel options take a function"):
             make()
-    # Channel options still take one.
+    # Channel options still take one, including circle's raw opacity channel.
     assert "__gofish_lambda" in rect(h=lambda d: d["v"]).to_dict()["h"]
+    assert "__gofish_lambda" in circle(r=3, opacity=lambda d: 0.5).to_dict()["opacity"]
+    assert "__gofish_lambda" in ellipse(w=4, h=4, stroke=lambda d: "red").to_dict()["stroke"]
     assert "__gofish_lambda" in spread(by="a", dir="x", w=lambda d: 1).to_dict()["w"]
 
 

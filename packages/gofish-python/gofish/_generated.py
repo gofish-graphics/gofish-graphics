@@ -158,7 +158,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
             _kw[_k] = _v
     return Mark("rect", **_kw)
 
-def circle(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None) -> Mark:
+def circle(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[Union[int, float, str]] = None, fill_opacity: Optional[float] = None) -> Mark:
     """A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by exactly one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.
 
     Args:
@@ -178,7 +178,7 @@ def circle(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] 
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
-        opacity: Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire. Default 1.
+        opacity: Opacity, 0 to 1, applied to fill and stroke: a number, a field name, or a per-datum accessor (in JS also a `live(...)` value, which does not cross the wire). Default 1.
         fill_opacity: Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`.
     """
     _kw: Dict[str, Any] = {}
@@ -199,7 +199,7 @@ def circle(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] 
         ("fill", _channel(fill)),
         ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
-        ("opacity", opacity),
+        ("opacity", _channel(opacity)),
         ("fillOpacity", fill_opacity),
     ]:
         if _v is not None:

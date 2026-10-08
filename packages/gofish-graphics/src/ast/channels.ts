@@ -67,6 +67,22 @@ export type DimsChannelSpec = { type: "dims"; form: AxisDimsForm };
 export const axisSlotKind = (slot: AxisDimsSlot): "pos" | "size" =>
   slot === "size" ? "size" : "pos";
 
+/** The box-dimension channels of every box mark (`XYWHDims` in dims.ts):
+ *  the sizes and the six positions, plus the axis-named `dims` bag. Each box
+ *  mark's descriptor declares the same keys as channels (`boxDims`), which a
+ *  test checks. */
+export const BOX_CHANNELS = {
+  w: "size",
+  h: "size",
+  x: "pos",
+  cx: "pos",
+  x2: "pos",
+  y: "pos",
+  cy: "pos",
+  y2: "pos",
+  dims: "dims",
+} as const;
+
 export type ChannelAnnotations<T, C extends ChannelType = ChannelType> = {
   [K in keyof T]?: ChannelSpec<C>;
 };

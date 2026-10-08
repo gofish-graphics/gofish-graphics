@@ -24,7 +24,7 @@ import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
-import { inferColor } from "../channels";
+import { BOX_CHANNELS, inferColor } from "../channels";
 import {
   liveChannelsOf,
   withLiveStatics,
@@ -349,10 +349,8 @@ export const circle = createMark(
     });
   },
   {
+    ...BOX_CHANNELS,
     r: "size",
-    w: "size",
-    h: "size",
-    dims: "dims",
     fill: "color",
     stroke: "color",
     opacity: "raw",

@@ -936,9 +936,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Stroke width in pixels.",
       },
       opacity: {
-        type: t.number,
+        ...ch.num(
+          "Opacity, 0 to 1, applied to fill and stroke: a number, a field name, or a per-datum accessor (in JS also a `live(...)` value, which does not cross the wire)."
+        ),
         default: 1,
-        doc: "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
       },
       fillOpacity: {
         type: t.number,
@@ -1637,4 +1638,33 @@ export function acceptedFields(
   }
   acceptedFieldsCache.set(cacheKey, fields);
   return fields;
+}
+
+/** Whether a value of this type may hold a channel at some depth: a channel,
+ *  or a union, array, tuple, record, object or named option type containing
+ *  one. A mark factory's channel map (`createMark` in gofish-graphics) names
+ *  exactly the fields of this kind, and the Python generator wraps exactly
+ *  these fields' callables as accessors. */
+export function carriesChannel(type: FieldType): boolean {
+  switch (type.kind) {
+    case "channel":
+      return true;
+    case "union":
+      return type.options.some(carriesChannel);
+    case "array":
+      return carriesChannel(type.items);
+    case "tuple":
+      return type.items.some(carriesChannel);
+    case "record":
+      return carriesChannel(type.valueType);
+    case "object":
+      return Object.values(type.fields).some((f) => carriesChannel(f.type));
+    case "ref":
+      return (
+        type.name in OPTION_TYPES &&
+        carriesChannel(OPTION_TYPES[type.name].type)
+      );
+    default:
+      return false;
+  }
 }

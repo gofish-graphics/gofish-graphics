@@ -123,6 +123,16 @@ helper before its own channel inference.
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.
 
+The annotations map and the mark's descriptor in gofish-ir must agree: the
+map names exactly the descriptor fields that can hold a channel
+(`carriesChannel`). `createMark` records each serializable mark's map in
+`MARK_CHANNELS`, and `test:mark-channels` checks the agreement. It matters
+for Python: the generated factories wrap a callable as an accessor exactly
+where the descriptor says channel, so a Python lambda works exactly where a
+JS per-datum accessor does. The box marks share one map of their box
+dimensions, `BOX_CHANNELS` (`channels.ts`), the counterpart of the
+descriptors' `boxDims` group.
+
 A shape function may also work on the inferred values before it builds the
 node. `circle` (in `chart.ts`) is `createMark` over `Ellipse` with
 `aspectRatio: 1`. Its `r`, `w`, and `h` are all size channels, and the body

@@ -1796,8 +1796,8 @@ for the API.
           "default": 0
         },
         "opacity": {
-          "$ref": "#/$defs/Number",
-          "description": "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Opacity, 0 to 1, applied to fill and stroke: a number, a field name, or a per-datum accessor (in JS also a `live(...)` value, which does not cross the wire).",
           "default": 1
         },
         "fillOpacity": {

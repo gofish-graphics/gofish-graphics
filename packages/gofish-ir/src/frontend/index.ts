@@ -41,6 +41,7 @@ export {
   COMBINATOR_OPTIONS_BASE_FIELDS,
   DESCRIPTOR_TABLES,
   acceptedFields,
+  carriesChannel,
   LABEL_OPTIONS,
   boxDims,
   paint,
