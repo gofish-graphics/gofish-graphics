@@ -252,12 +252,21 @@ export async function applySchema<T>(
     await loadTemporal();
     for (const [column, t] of timeColumns)
       checkZone(column, t.HasCalendar!.zone);
+    // Long-format data repeats its dates, so each string is parsed once per
+    // zone (for this call only).
+    const parsed = new Map<string, unknown>();
+    const epochMs = (v: unknown, zone: string, column: string): unknown => {
+      if (typeof v !== "string") return toEpochMs(v, zone, column);
+      const key = `${zone}\n${v}`;
+      if (!parsed.has(key)) parsed.set(key, toEpochMs(v, zone, column));
+      return parsed.get(key);
+    };
     out = rows.map((row) => {
       if (row == null || typeof row !== "object") return row;
       const copy = { ...(row as Record<string, unknown>) };
       for (const [column, t] of timeColumns) {
         if (column in copy) {
-          copy[column] = toEpochMs(copy[column], t.HasCalendar!.zone, column);
+          copy[column] = epochMs(copy[column], t.HasCalendar!.zone, column);
         }
       }
       return copy as T;

@@ -275,7 +275,8 @@ export function collectPositionDomains(
   let yMeasure: Measure | undefined;
   // The calendar of time datums (`CONTINUOUS_TYPE.calendar`); literals carry
   // none.
-  const calendars: [HasCalendar | undefined, HasCalendar | undefined][] = [];
+  let xCalendar: HasCalendar | undefined;
+  let yCalendar: HasCalendar | undefined;
   const coordCalendar = (
     coord: PositionConstraint["x"] | undefined
   ): HasCalendar | undefined =>
@@ -332,18 +333,10 @@ export function collectPositionDomains(
       axis: 1,
       where: "across position constraints",
     });
-    calendars.push([coordCalendar(c.x), coordCalendar(c.y)]);
+    xCalendar = mergeCalendars([xCalendar, coordCalendar(c.x)]);
+    yCalendar = mergeCalendars([yCalendar, coordCalendar(c.y)]);
   }
-  const xCalendar = mergeCalendars(calendars.map((c) => c[0]));
-  const yCalendar = mergeCalendars(calendars.map((c) => c[1]));
-  return {
-    x,
-    y,
-    xMeasure,
-    yMeasure,
-    ...(xCalendar ? { xCalendar } : {}),
-    ...(yCalendar ? { yCalendar } : {}),
-  };
+  return { x, y, xMeasure, yMeasure, xCalendar, yCalendar };
 }
 
 /**

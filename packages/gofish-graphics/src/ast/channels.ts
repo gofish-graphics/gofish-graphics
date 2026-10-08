@@ -11,6 +11,7 @@ import {
   value,
   DatumValueImpl,
   isField,
+  fieldNameOf,
   isLiteral,
   isValue,
   getMeasureProvenance,
@@ -204,6 +205,29 @@ export const resolveMeasure = <T>(
   return provenance ?? fieldName;
 };
 
+/** What a channel's column says about its values: its {@link Measure} and
+ *  its type in the chart's schema (schema.ts). */
+export type ColumnInfo = { measure?: Measure; type?: ColumnType };
+
+/** The {@link ColumnInfo} of `accessor`'s column, read off
+ *  `provenanceData` (see {@link resolveMeasure}). An accessor that names no
+ *  column (a function, a literal, a value) has neither. */
+export const resolveColumn = (
+  provenanceData: unknown,
+  accessor: unknown
+): ColumnInfo => {
+  const field = fieldNameOf(accessor);
+  return field === undefined
+    ? {}
+    : {
+        measure: resolveMeasure(
+          provenanceData,
+          accessor as string | FieldAccessor
+        ),
+        type: columnType(provenanceData, field),
+      };
+};
+
 /**
  * Entry-flagged size resolver: produces a per-row array instead of a sum.
  * Used by expand-kind marks (e.g. `cut`) where each datum maps to one output
@@ -239,16 +263,14 @@ export const inferEntrySize = <T>(
  *   `evalFieldValues` (fieldExpr.ts) — an aggregate op like `.mean()` folds
  *   the rows there — then aggregated across whatever that evaluation produced.
  *
- * Field/string accessors are tagged with a resolved {@link Measure} so the
- * underlying-space layer can unify per measure. The caller may pass a
- * precomputed `measure` (createOperator resolves it once per channel from the
- * provenance-bearing array); when omitted we resolve it locally from `d` — the
- * same behavior as resolving against the value array directly.
- *
- * A value read from a named column also carries that column's type
- * (`fieldType`, from the chart's schema) when it has one, so a position over
- * a time column (`HasCalendar`) builds a time space. The caller may pass it,
- * resolved from the whole input array, as it does the measure.
+ * Field/string accessors are tagged with what their column says
+ * ({@link resolveColumn}): a resolved {@link Measure}, so the
+ * underlying-space layer can unify per measure, and the column's type from
+ * the chart's schema, when it has one, so a position over a time column
+ * (`HasCalendar`) builds a time space. A value with a column type also
+ * records the field it was read from. The caller may pass the column
+ * (createOperator resolves it once per channel from the provenance-bearing
+ * array); when omitted it is resolved locally from `d`.
  */
 const inferNumeric =
   (agg: typeof sumBy) =>
@@ -262,8 +284,7 @@ const inferNumeric =
       | Value<number>
       | undefined,
     d: T | T[],
-    measure?: Measure,
-    fieldType?: ColumnType
+    column: ColumnInfo = resolveColumn(d, accessor)
   ): MaybeValue<number> | undefined => {
     if (accessor === undefined) return undefined;
     if (typeof accessor === "number") return accessor;
@@ -279,23 +300,14 @@ const inferNumeric =
       accessor,
       data
     );
-    const m = pipelineMeasure ?? measure ?? resolveMeasure(d, accessor);
-    const field = isField(accessor)
-      ? (accessor as FieldAccessor).name
-      : typeof accessor === "string"
-        ? accessor
-        : undefined;
-    const type = fieldType ?? columnType(d, field);
-    return type === undefined
-      ? value(agg(values as any[]), m)
-      : new DatumValueImpl(
-          agg(values as any[]),
-          m,
-          undefined,
-          undefined,
-          field,
-          type
-        );
+    return new DatumValueImpl(
+      agg(values as any[]),
+      pipelineMeasure ?? column.measure,
+      undefined,
+      undefined,
+      column.type === undefined ? undefined : fieldNameOf(accessor),
+      column.type
+    );
   };
 
 /** Infer a size value (sums the field/function across the data array). */
@@ -411,12 +423,10 @@ export const inferRaw = async <T extends Record<string, any>>(
  */
 export const CHANNEL_INFER: Record<
   ChannelType,
-  (val: any, data: any[], measure?: Measure, fieldType?: ColumnType) => any
+  (val: any, data: any[], column?: ColumnInfo) => any
 > = {
-  size: (val, data, measure, fieldType) =>
-    inferSize(val, data, measure, fieldType),
-  pos: (val, data, measure, fieldType) =>
-    inferPos(val, data, measure, fieldType),
+  size: (val, data, column) => inferSize(val, data, column),
+  pos: (val, data, column) => inferPos(val, data, column),
   color: (val, data) => inferColor(val, data),
   raw: (val, data) => inferRaw(val, data),
   // Each slot resolves its own measure from `data`: the slots are separate

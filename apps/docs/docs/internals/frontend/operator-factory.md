@@ -231,9 +231,9 @@ so a slot infers exactly as its counterpart: scatter's bare value and
 slot as given (treemap's `min` stands for its unannotated `x`), and the
 counterparts on the two axes must share one spec.
 
-A `size` or `pos` channel resolves its column's type (`columnType`, from the
-chart's `schema`) off the whole input once, next to its measure, and passes
-both to every entry's inference, since a split entry's slice may not carry
+A `size` or `pos` channel resolves its column (`resolveColumn`: its measure
+and its type from the chart's `schema`) off the whole input once, and passes
+it to every entry's inference, since a split entry's slice may not carry
 the column types. The value then records the type (`fieldType`), which is
 how a scatter's `x` over a `Schema.time()` column puts its points on a
 calendar. Which axis `theta` means is

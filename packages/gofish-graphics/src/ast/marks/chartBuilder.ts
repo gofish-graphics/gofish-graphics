@@ -8,10 +8,9 @@ import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
-import { isField } from "../data";
+import { fieldNameOf, isField } from "../data";
 import {
   splitKeyFn,
-  fieldNameOf,
   type SplitBy,
   type InferredRelational,
   type TimeTier,
