@@ -1787,12 +1787,18 @@ same way a transform's measure provenance does: `ChartBuilder` copies the
 array and tags it (`applySchema`, which keeps the measure provenance the
 array already carries), `createOperator` copies the tag onto each
 split leaf, and a `derive` (any data-transform operator, `mapOperator` in
-`marks/chart.ts`) types its result with `applySchema` too, passing its
-input's types as the inherited ones, which the result's own types override
-column by column. So a returned column of `Date`s is a time in epoch
-milliseconds, as chart data is (a datetime column a Python callback returns
-arrives typed and in epoch milliseconds from the widget's decode), and the
-operator never tags the array its function returned. `applySchema` copies
+`marks/chart.ts`) types its result with `applySchema` too. Its inherited
+types are only the input's types that still fit the result's values
+(`typesThatFit`: a time column holds epoch milliseconds, an ordered column
+holds its levels); they never convert or check values, so a date rewritten
+to "Mar" is plain text, not an error. The result's own types override them
+column by column, inference types a column of `Date`s as a UTC time, and
+`derive(fn, { schema })` overrides all of that for the columns it names and
+converts their values like a chart's schema (a datetime column a Python
+callback returns arrives typed from the widget's decode). The operator never
+tags the array its function returned. A `filter` keeps its input's types,
+since its rows are the input's rows (a filter that keeps a value outside an
+order drops the order rather than raising the stray-level error). `applySchema` copies
 the rows only when some time value is not epoch milliseconds already;
 otherwise it tags a shallow copy of the array. So the stack's split reads
 its `by` column's type off the data it splits, and a color channel's

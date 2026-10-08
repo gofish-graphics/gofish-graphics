@@ -71,7 +71,12 @@ import {
 } from "./chartBuilder";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
-import { applySchema, getColumnTypes } from "../schema";
+import {
+  applySchema,
+  getColumnTypes,
+  typesThatFit,
+  type SchemaEntry,
+} from "../schema";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -82,24 +87,38 @@ export type { ChartOptions };
  * with `fn`, hand the result to the mark, and carry an IR-serialization tag.
  * `fn` receives the layer context so it can resolve refs (see `resolve`).
  *
- * The result is typed like chart data: it keeps the input's column types (the
- * chart's `schema`, see schema.ts) for every column it does not type itself,
- * so a `filter` or a `derive` that adds a column leaves the other columns'
- * types as they were, and it goes through `applySchema`, so a column of
- * `Date`s it returns is a time, and every time column holds epoch
- * milliseconds. (A datetime column a Python callback returns arrives already
- * typed and in epoch milliseconds from the widget's decode.) The returned
- * array itself is left as `fn` made it: `applySchema` types a copy.
+ * The result is typed like chart data, column by column, through
+ * `applySchema`:
+ *
+ *  1. A column whose values still fit the type it had in the input keeps it
+ *     (`typesThatFit`): a time column of untouched epoch milliseconds stays a
+ *     time, so a `filter`, or a `derive` that adds a column, leaves the other
+ *     columns as they were. The input's types never convert or check values.
+ *  2. A column of `Date`s is a time (UTC), inferred as for chart data.
+ *  3. Any other column has no type: a `derive` that rewrites a date to
+ *     "Mar" makes it plain text.
+ *  4. `schema` (the `derive(fn, { schema })` annotation) types the columns it
+ *     names over all of that, and converts their values as a chart's schema
+ *     does (an ISO string in a time column becomes epoch milliseconds).
+ *
+ * Types the result carries itself win over 1 and 2 (a datetime column a
+ * Python callback returns arrives typed from the widget's decode). The
+ * returned array itself is left as `fn` made it: `applySchema` types a copy.
  */
 function mapOperator<T, U>(
   fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
-  serialize: { type: string; opts: Record<string, unknown> }
+  serialize: { type: string; opts: Record<string, unknown> },
+  schema: Record<string, SchemaEntry> = {}
 ): Operator<T, U> {
   const op: Operator<T, U> = async (mark: Mark<U>) =>
     (async (d: T, key?: string | number, layerContext?: LayerContext) => {
       const out = await fn(d, layerContext);
       const typed = Array.isArray(out)
-        ? ((await applySchema(out, {}, getColumnTypes(d))) as U)
+        ? ((await applySchema(
+            out,
+            schema,
+            typesThatFit(out, getColumnTypes(d))
+          )) as U)
         : out;
       return mark(typed, key, layerContext);
     }) as Mark<T>;
@@ -107,12 +126,22 @@ function mapOperator<T, U>(
   return op;
 }
 
-export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
+/** What `derive` takes besides its function: `schema`, the column types of
+ *  its result, as a chart's `schema` takes them (see `mapOperator`). */
+export type DeriveOptions = { schema?: Record<string, SchemaEntry> };
+
+export function derive<T, U>(
+  fn: (d: T) => U | Promise<U>,
+  { schema }: DeriveOptions = {}
+): Operator<T, U> {
   // The function body is not serializable; the frontend-IR emitter sees
-  // an opaque `{ type: "derive" }`. The Python-bridge widget emits its own
-  // `{ type: "derive", lambdaId }` shape; pure-JS callers leave the
-  // payload empty.
-  return mapOperator(fn, { type: "derive", opts: {} });
+  // an opaque `{ type: "derive" }` (with its `schema`, if any). The
+  // Python-bridge widget emits its own `{ type: "derive", lambdaId }` shape.
+  return mapOperator(
+    fn,
+    { type: "derive", opts: schema !== undefined ? { schema } : {} },
+    schema
+  );
 }
 
 /**

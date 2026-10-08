@@ -6,7 +6,7 @@ QuarterlyBars is exempt: its row labels come from a JS format function.
 import math
 from datetime import datetime, timedelta, timezone
 
-from gofish import chart, scatter, line, circle, Schema, Calendar
+from gofish import chart, scatter, spread, derive, line, circle, rect, Schema, Calendar
 
 DAY = timedelta(days=1)
 
@@ -151,4 +151,29 @@ def story_vertical_daily_dots():
         .flow(scatter(by="date", x="price", y="date"))
         .mark(circle(r=1.5, fill="steelblue")),
         {"w": 300, "h": 480},
+    )
+
+
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _monthly_highs(rows):
+    high = {}
+    for r in rows:
+        month = MONTHS[int(r["date"][5:7]) - 1]
+        high[month] = max(high.get(month, -math.inf), r["price"])
+    out = [{"month": m, "price": p} for m, p in high.items()]
+    return sorted(out, key=lambda r: -r["price"])
+
+
+def story_monthly_highs():
+    return (
+        chart([p for p in PRICES if p["date"].startswith("2024")], axes=True)
+        .flow(
+            derive(_monthly_highs, schema={"month": Schema.ordered(MONTHS)}),
+            spread(by="month", dir="x"),
+        )
+        .mark(rect(h="price", fill="steelblue")),
+        {"w": 480, "h": 200},
     )

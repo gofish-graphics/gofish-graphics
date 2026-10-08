@@ -297,6 +297,44 @@ export async function applySchema<T>(
   return setColumnTypes(copyMeasureProvenance(out, rows), types);
 }
 
+/** Whether one value fits a column type as it stands, without conversion: a
+ *  time (`HasCalendar`) holds epoch milliseconds, and an order (`HasOrder`,
+ *  and the midpoint along it) holds one of its levels. A missing value fits
+ *  any type. */
+function valueFits(type: ColumnType, v: unknown): boolean {
+  if (v === null || v === undefined) return true;
+  if (type.HasCalendar && !(typeof v === "number" && Number.isFinite(v)))
+    return false;
+  if (type.HasOrder && !type.HasOrder.levels.includes(v as Level)) return false;
+  return true;
+}
+
+/**
+ * The types of `inherited` (an operator's input's) that still fit the values
+ * of `rows` (its result), column by column: a column keeps its type only when
+ * every value fits it as it stands ({@link valueFits}). The types are never
+ * used to convert or check the values: a column that no longer fits (a date
+ * rewritten to "Mar") just has no type. A column the rows do not hold fits
+ * (it has no values).
+ */
+export function typesThatFit(
+  rows: readonly unknown[],
+  inherited: ColumnTypes | undefined
+): ColumnTypes | undefined {
+  if (inherited === undefined) return undefined;
+  const out: ColumnTypes = {};
+  for (const [column, type] of Object.entries(inherited)) {
+    const fits = rows.every(
+      (r) =>
+        r == null ||
+        typeof r !== "object" ||
+        valueFits(type, (r as Record<string, unknown>)[column])
+    );
+    if (fits) out[column] = type;
+  }
+  return out;
+}
+
 /** The zones {@link checkZone} has found valid. */
 const knownZones = new Set<string>();
 

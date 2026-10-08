@@ -137,7 +137,10 @@ than a serialized field). Operators are a flat list (`derive`, `resolve`,
 `tile` works the same way (`squarify({ ratio })`, `slice()`, `dice()`,
 `binary()`, `sliceDice()`; e.g. `{ "kind": "squarify", "ratio": 1 }`). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
-without a bridge. Marks are a tree — leaves
+without a bridge. A `derive`'s `schema` (`derive(fn, { schema })`, Python
+`derive(fn, schema={...})`) is plain data, the wire form of a chart's
+`schema`, and the registry passes it to the rebuilt `derive`, which applies
+it to the rows the Python callback returns. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,

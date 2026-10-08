@@ -316,14 +316,19 @@ async function main() {
     const input = await applySchema([{ day: "2024-01-01", n: 1 }], {
       day: SrcSchema.time(),
     });
-    // Run a derive operator on `input` and return the rows its mark gets.
-    const derived = async (fn: (rows: any[]) => any[]) => {
+    // Run a derive operator on `data` (default `input`) and return the rows
+    // its mark gets.
+    const derived = async (
+      fn: (rows: any[]) => any[],
+      opts?: any,
+      data: any = input
+    ) => {
       let seen: any;
-      const mark = await GoFish.derive(fn)(async (d: any) => {
+      const mark = await GoFish.derive(fn, opts)(async (d: any) => {
         seen = d;
         return undefined;
       });
-      await mark(input);
+      await mark(data);
       return seen;
     };
     const at = Date.UTC(2024, 0, 2);
@@ -350,6 +355,65 @@ async function main() {
         rows.map((r) => ({ ...r, at: new Date(at) })),
         { at: { HasCalendar: { zone: "America/New_York" } } }
       )
+    );
+    const rewritten = await derived((rows) =>
+      rows.map((r) => ({ ...r, day: "Mar" }))
+    );
+    check(
+      "a derive that rewrites a date to text makes it plain text",
+      rewritten[0].day === "Mar" &&
+        getColumnTypes(rewritten)?.day === undefined,
+      JSON.stringify([rewritten[0], getColumnTypes(rewritten)])
+    );
+    const annotated = await derived(
+      (rows) => rows.map((r) => ({ ...r, at: "2024-03-05" })),
+      { schema: { at: Schema.time({ zone: "America/New_York" }) } }
+    );
+    check(
+      "derive(fn, { schema }) converts ISO strings to instants in its zone",
+      annotated[0].at === Date.UTC(2024, 2, 5, 5) &&
+        getColumnTypes(annotated)?.at?.HasCalendar?.zone ===
+          "America/New_York",
+      JSON.stringify([annotated[0], getColumnTypes(annotated)])
+    );
+    const months = await applySchema(
+      [
+        { m: "Jan", n: 1 },
+        { m: "Feb", n: 2 },
+      ],
+      { m: SrcSchema.ordered(["Jan", "Feb", "Mar"]) }
+    );
+    const kept = await derived((rows) => rows.slice(1), undefined, months);
+    const quarters = await derived(
+      (rows) => rows.map((r) => ({ ...r, m: "Q1" })),
+      undefined,
+      months
+    );
+    const reordered = await derived(
+      (rows) => rows.map((r) => ({ ...r, m: "Q1" })),
+      { schema: { m: Schema.ordered(["Q1", "Q2"]) } },
+      months
+    );
+    check(
+      "an ordered column keeps its order while its values are levels, and " +
+        "loses it when they are not",
+      same(getColumnTypes(kept)?.m?.HasOrder?.levels, ["Jan", "Feb", "Mar"]) &&
+        getColumnTypes(quarters)?.m === undefined &&
+        same(getColumnTypes(reordered)?.m?.HasOrder?.levels, ["Q1", "Q2"])
+    );
+    const filtered = await (async () => {
+      let seen: any;
+      const mark = await GoFish.filter((r: any) => r.n > 0)(async (d: any) => {
+        seen = d;
+        return undefined;
+      });
+      await mark(input);
+      return seen;
+    })();
+    check(
+      "filter keeps its input's types",
+      filtered[0].day === Date.UTC(2024, 0, 1) &&
+        getColumnTypes(filtered)?.day?.HasCalendar?.zone === "UTC"
     );
     check(
       "a typed derive result keeps its own type for its columns",

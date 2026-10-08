@@ -194,6 +194,11 @@ export interface DeriveOperator
    *  can't ride the data rows across the derive RPC; the deserializer re-applies
    *  it via `setMeasureProvenance`. */
   provenance?: Record<string, string>;
+  /** The column types of the derive's result, keyed by column name, in the
+   *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
+   *  type the result over the types it keeps or infers, and convert values
+   *  as a chart's schema does. */
+  schema?: Record<string, Record<string, unknown>>;
 }
 
 /**

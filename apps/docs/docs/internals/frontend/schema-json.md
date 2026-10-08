@@ -858,6 +858,11 @@ for the API.
           },
           "description": "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure."
         },
+        "schema": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Schema.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant)."
+        },
         "label": {
           "$ref": "#/$defs/LabelIR"
         },

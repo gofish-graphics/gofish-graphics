@@ -141,9 +141,10 @@ Walking `withGoFish.ts:431-477`:
      scale knows which field it maps; a function accessor records none. It
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
-     ordered column lists its domain in that order. (A `derive` keeps its
-     input's column types on its result and types it with `applySchema`,
-     like chart data, so they reach the mark.)
+     ordered column lists its domain in that order. (A `derive` types its
+     result with `applySchema`, like chart data: a column keeps its input's
+     type while its values still fit it, and `derive(fn, { schema })`
+     overrides that, so the types reach the mark.)
    - `"dims"` channel → the axis-name-keyed `dims` option
      (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
      channel, and its kind comes from its structure, not its name: `size` is

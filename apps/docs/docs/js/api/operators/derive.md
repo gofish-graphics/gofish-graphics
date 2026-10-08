@@ -24,15 +24,37 @@ gf.chart(seafood, { axes: true })
 
 ```ts
 derive(fn);
+derive(fn, { schema });
 ```
 
 ## Parameters
 
-`derive` takes one positional argument and no options.
+| Parameter | Type                           | Description                                                                                                                                                               |
+| --------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fn`      | `(d: T) => U \| Promise<U>`    | **Required.** Receives the data at this point in the flow (inside `.flow()`, the current group's rows) and returns what the rest of the pipeline sees. It may be `async`. |
+| `schema`  | `Record<string, ColumnSchema>` | Column types of the result, keyed by column name, as in [`chart`'s `schema`](/js/api/core/schema): `Schema.ordered(levels)` or `Schema.time({ zone })`.                   |
 
-| Parameter | Type                        | Description                                                                                                                                                               |
-| --------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fn`      | `(d: T) => U \| Promise<U>` | **Required.** Receives the data at this point in the flow (inside `.flow()`, the current group's rows) and returns what the rest of the pipeline sees. It may be `async`. |
+## Column types of the result
+
+Each column of the returned rows is typed like chart data:
+
+- A column whose values still fit the type it had in the input keeps that
+  type. A time column of unchanged instants stays a time, and an ordered
+  column whose values are all levels of its order keeps the order.
+- A column of `Date` values is a time in UTC.
+- Any other column has no type. A `derive` that rewrites a date to `"Mar"`
+  makes the column plain text.
+- A `schema` entry overrides these for its column and converts the values
+  as a chart's schema does: an ISO 8601 string in a `Schema.time()` column
+  becomes an instant.
+
+[`filter`](/js/api/operators/filter) keeps the input's types, since its rows
+are the input's rows.
+
+```ts
+// Monthly highs, months in calendar order
+derive(monthlyHighs, { schema: { month: Schema.ordered(MONTHS) } });
+```
 
 ## Examples
 

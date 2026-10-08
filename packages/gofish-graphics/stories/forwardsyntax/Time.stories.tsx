@@ -7,6 +7,8 @@ import {
   circle,
   rect,
   field,
+  derive,
+  spread,
   Schema,
   Calendar,
 } from "../../src/lib";
@@ -245,6 +247,54 @@ export const VerticalDailyDots: StoryObj<Args> = {
     chart(prices, { schema: { date: Schema.time() }, axes: true })
       .flow(scatter({ by: "date", x: "price", y: "date" }))
       .mark(circle({ r: 1.5, fill: "steelblue" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+// The highest price of each month of 2024. The derive returns its months
+// highest first; its `schema` declares the month order, so the bars run
+// January to December.
+export const MonthlyHighs: StoryObj<Args> = {
+  args: { w: 480, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(
+      prices.filter((p) => p.date.startsWith("2024")),
+      { axes: true }
+    )
+      .flow(
+        derive(
+          (rows: { date: string; price: number }[]) => {
+            const high = new Map<string, number>();
+            for (const r of rows) {
+              const month = MONTHS[Number(r.date.slice(5, 7)) - 1];
+              high.set(month, Math.max(high.get(month) ?? -Infinity, r.price));
+            }
+            return [...high]
+              .map(([month, price]) => ({ month, price }))
+              .sort((a, b) => b.price - a.price);
+          },
+          { schema: { month: Schema.ordered(MONTHS) } }
+        ),
+        spread({ by: "month", dir: "x" })
+      )
+      .mark(rect({ h: "price", fill: "steelblue" }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },

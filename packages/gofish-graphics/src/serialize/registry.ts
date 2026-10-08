@@ -185,18 +185,21 @@ export const OPERATOR_MAP: Record<
     // the RPC). Re-apply it to the returned rows so channel inference unifies a
     // histogram's edges on the source field's axis (mirrors the JS bin).
     const provenance = opts.provenance as MeasureProvenance | undefined;
-    return derive(async (d: any) => {
-      const rows = Array.isArray(d) ? d : d == null ? [] : [d];
-      if (rows.length === 0) {
-        return Array.isArray(d) ? d : (d ?? null);
-      }
-      const result = await bridge.applyLambda(lambdaId, rows);
-      const tagged =
-        provenance !== undefined
-          ? setMeasureProvenance(result, provenance)
-          : result;
-      return Array.isArray(d) ? tagged : (tagged[0] ?? null);
-    });
+    return derive(
+      async (d: any) => {
+        const rows = Array.isArray(d) ? d : d == null ? [] : [d];
+        if (rows.length === 0) {
+          return Array.isArray(d) ? d : (d ?? null);
+        }
+        const result = await bridge.applyLambda(lambdaId, rows);
+        const tagged =
+          provenance !== undefined
+            ? setMeasureProvenance(result, provenance)
+            : result;
+        return Array.isArray(d) ? tagged : (tagged[0] ?? null);
+      },
+      { schema: opts.schema }
+    );
   },
   resolve: (opts) => {
     if (typeof opts.from !== "string") {

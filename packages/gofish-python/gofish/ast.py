@@ -90,10 +90,19 @@ class Operator:
 class DeriveOperator(Operator):
     """Operator for deriving new data via Python function."""
 
-    def __init__(self, fn: Callable, provenance: Optional[dict] = None):
+    def __init__(
+        self,
+        fn: Callable,
+        provenance: Optional[dict] = None,
+        schema: Optional[dict] = None,
+    ):
         super().__init__("derive")
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
+        # The column types of the result (``derive(fn, schema={...})``), in
+        # the wire form of a chart's ``schema``; JS applies them to the rows
+        # the callback returns.
+        self.schema = schema
         # Measure provenance a data transform (e.g. `bin`) declares for its
         # output columns. It can't ride the data rows across the derive RPC
         # bridge, so it travels in the operator IR and is re-applied JS-side via
@@ -108,7 +117,7 @@ class DeriveOperator(Operator):
         y: Optional[float] = None,
     ) -> "DeriveOperator":
         """Translate a derived operator while preserving its lambda handle."""
-        new_op = DeriveOperator(self.fn, self.provenance)
+        new_op = DeriveOperator(self.fn, self.provenance, self.schema)
         new_op.lambda_id = self.lambda_id
         new_op._labels = list(self._labels)
         new_op._translate = {
@@ -133,6 +142,8 @@ class DeriveOperator(Operator):
         out = {"type": "derive", "lambdaId": self.lambda_id}
         if self.provenance:
             out["provenance"] = self.provenance
+        if self.schema is not None:
+            out["schema"] = {k: dict(v) for k, v in self.schema.items()}
         if self._translate:
             out["translate"] = self._translate
         return out
@@ -1758,12 +1769,19 @@ def stack(
     return Operator("stack", **_stack_opts(**options))
 
 
-def derive(fn: Callable) -> DeriveOperator:
+def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     """
     Derive operator - apply a Python function to transform data.
 
     Args:
         fn: Function that takes data and returns transformed data
+        schema: Column types of the result, keyed by column name, as in
+            ``chart(data, schema={...})``: ``Schema.ordered(levels)`` or
+            ``Schema.time(zone=...)``. Without it, a result column keeps the
+            type it had in the input while its values still fit it, a
+            datetime column is a time, and any other column has no type. A
+            ``schema`` entry overrides those and converts the column's
+            values, as a chart's schema does.
 
     Returns:
         DeriveOperator object
@@ -1775,7 +1793,7 @@ def derive(fn: Callable) -> DeriveOperator:
     unify on X's axis without an explicit `field(name, measure=...)`.
     """
     provenance = getattr(fn, "_gofish_measure_provenance", None)
-    return DeriveOperator(fn, provenance)
+    return DeriveOperator(fn, provenance, schema)
 
 
 def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:

@@ -72,6 +72,28 @@ class TestOperators:
         assert "lambdaId" in op.to_dict()
         assert op.to_dict()["type"] == "derive"
 
+    def test_derive_schema_round_trips(self):
+        """`derive(fn, schema=...)` carries the result's column types in the
+        wire form of a chart's schema, and keeps them through `.translate`."""
+        from gofish import Schema
+
+        op = derive(
+            lambda d: d,
+            schema={
+                "month": Schema.ordered(["Jan", "Feb"]),
+                "at": Schema.time(zone="America/New_York"),
+            },
+        )
+        expected = {
+            "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
+            "at": {"HasCalendar": {"zone": "America/New_York"}},
+        }
+        assert op.to_dict()["schema"] == expected
+        assert op.translate(x=1).to_dict()["schema"] == expected
+        assert "schema" not in derive(lambda d: d).to_dict()
+        ir = chart([{"x": 1}]).flow(op).mark(rect(h="x")).to_ir()
+        assert ir["operators"][0]["schema"] == expected
+
     def test_derive_operator_unique_ids(self):
         """Test derive operators have unique lambda IDs."""
         fn = lambda d: d

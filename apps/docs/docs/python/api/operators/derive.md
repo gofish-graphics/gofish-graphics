@@ -27,17 +27,36 @@ chart(data).flow(
 
 ```python
 derive(fn) -> DeriveOperator
+derive(fn, schema={...}) -> DeriveOperator
 ```
 
 ## Parameters
 
-`derive` takes one positional argument and no options.
-
-| Parameter | Type       | Description                                                                                                                                                                                        |
-| --------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fn`      | `Callable` | **Required.** Receives the current group's rows and returns the new ones — a list of dicts, `None`, or a dataframe from any backend [narwhals](https://narwhals-dev.github.io/narwhals/) supports. |
+| Parameter | Type                      | Description                                                                                                                                                                                        |
+| --------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fn`      | `Callable`                | **Required.** Receives the current group's rows and returns the new ones — a list of dicts, `None`, or a dataframe from any backend [narwhals](https://narwhals-dev.github.io/narwhals/) supports. |
+| `schema`  | `dict[str, ColumnSchema]` | Column types of the result, keyed by column name, as in [`chart`'s `schema`](/python/api/core/schema): `Schema.ordered(levels)` or `Schema.time(zone=...)`.                                        |
 
 Returns a `DeriveOperator` for use inside [`.flow()`](/python/api/core/flow).
+
+## Column types of the result
+
+Each column of the returned rows is typed like chart data:
+
+- A column whose values still fit the type it had in the input keeps that
+  type. A time column of unchanged instants stays a time, and an ordered
+  column whose values are all levels of its order keeps the order.
+- A datetime column is a time.
+- Any other column has no type. A `derive` that rewrites a date to `"Mar"`
+  makes the column plain text.
+- A `schema` entry overrides these for its column and converts the values
+  as a chart's schema does: an ISO 8601 string in a `Schema.time()` column
+  becomes an instant.
+
+```python
+# Monthly highs, months in calendar order
+derive(monthly_highs, schema={"month": Schema.ordered(MONTHS)})
+```
 
 ## How it works
 

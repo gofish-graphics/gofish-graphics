@@ -235,7 +235,7 @@ export {
   subtract,
   mask,
 } from "./ast/marks/chart";
-export type { RelatableMark } from "./ast/marks/chart";
+export type { RelatableMark, DeriveOptions } from "./ast/marks/chart";
 export { compose } from "./ast/marks/compose";
 // Animation (JS-only, like the rest of the reactive layer: a sequence owns a
 // clock, which is a live signal and does not cross the Python bridge).
