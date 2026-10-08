@@ -378,16 +378,6 @@ export type NameableMark<T> = Mark<T> & {
   ): ReturnType<GoFishNode["toDisplayList"]>;
 };
 
-/** Each serializable mark type's channel map, as its `createMark` call
- *  declares it. A test checks it against the mark's descriptor in gofish-ir:
- *  the keys here are exactly the descriptor fields that can hold a channel
- *  (`carriesChannel`), so a Python accessor is accepted exactly where JS
- *  infers a channel. */
-export const MARK_CHANNELS = new Map<
-  string,
-  Readonly<Record<string, unknown>>
->();
-
 /**
  * Creates a high-level mark from a low-level shape function plus optional
  * channel annotations. Channel annotations describe how each prop encodes data:
@@ -450,7 +440,6 @@ export function createMark(
   serialize?: string,
   cfg?: { kind?: MarkKind }
 ): any {
-  if (serialize) MARK_CHANNELS.set(serialize, channels);
   const kind: MarkKind = cfg?.kind ?? "per-item";
   return (markOpts: Record<string, any>) =>
     buildCreatedMark(shapeFn, channels, serialize, kind, markOpts);

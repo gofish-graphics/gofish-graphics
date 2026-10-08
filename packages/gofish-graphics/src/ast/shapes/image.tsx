@@ -12,7 +12,7 @@ import {
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
-import { BOX_CHANNELS } from "../channels";
+import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
 import { lowerStyle, pixelBox, roleFor } from "../displayList/lowerHelpers";
@@ -349,7 +349,7 @@ export const Image = ({
   return node;
 };
 
-const rawImage = createMark(Image, BOX_CHANNELS, "image");
+const rawImage = createMark(Image, MARK_CHANNELS.image, "image");
 
 /** Wrap an image mark so it awaits intrinsic dimension loading before producing
  *  a node. Recursively wraps .name/.label so chained calls stay awaiting. */

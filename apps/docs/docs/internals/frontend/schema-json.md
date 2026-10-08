@@ -1723,7 +1723,7 @@ for the API.
       }
     },
     "CircleMark": {
-      "description": "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by exactly one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
+      "description": "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,

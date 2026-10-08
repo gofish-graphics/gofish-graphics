@@ -39,6 +39,14 @@
  *  expected JS type for docgen (e.g. Python's generated signature/docstring). */
 export type ChannelInner = "number" | "string" | "boolean" | "color";
 
+/** How a mark or operator infers a channel's value from its rows: a `size`
+ *  sums them, a `pos` averages them, a `color` reads the first row through
+ *  the color scale, and a `raw` reads the first row as is. The JS mark
+ *  factories' channel maps are generated from it
+ *  (gofish-graphics' `markChannels.generated.ts`); the wire, the validator,
+ *  the JSON Schema, and Python treat every kind alike. */
+export type ChannelInfer = "size" | "pos" | "color" | "raw";
+
 /** The value a `literal` type admits: exactly one string, number, or boolean
  *  (`false` in `title: string | false`). */
 export type LiteralValue = string | number | boolean;
@@ -50,7 +58,7 @@ export type FieldType =
   | { kind: "any" }
   | { kind: "enum"; values: readonly string[] }
   | { kind: "literal"; value: LiteralValue }
-  | { kind: "channel"; inner: ChannelInner }
+  | { kind: "channel"; inner: ChannelInner; infer: ChannelInfer }
   | { kind: "ref"; name: string }
   | { kind: "union"; options: readonly FieldType[] }
   | { kind: "array"; items: FieldType }
@@ -136,9 +144,10 @@ export const t = {
   /** Exactly one value, e.g. `t.literal(false)` for the `false` in JS's
    *  `string | false`. */
   literal: (value: LiteralValue): FieldType => ({ kind: "literal", value }),
-  channel: (inner: ChannelInner = "number"): FieldType => ({
+  channel: (inner: ChannelInner, infer: ChannelInfer): FieldType => ({
     kind: "channel",
     inner,
+    infer,
   }),
   /** A reference by name: to a named option type in `OPTION_TYPES`
    *  (AxesOptions, ...), or to an authored envelope `$def` (LabelIR,
@@ -157,12 +166,23 @@ export const t = {
   }),
 };
 
-/** `ch.num(doc?)` / `ch.color(doc?)` / `ch.str(doc?)` — shorthand for a bare
- *  `ChannelValue` slot of the given literal flavor. */
+/** Shorthand for a bare `ChannelValue` slot, one per inference kind
+ *  ({@link ChannelInfer}): `ch.size(doc?)` and `ch.pos(doc?)` take a number,
+ *  `ch.color(doc?)` a color, and `ch.raw(inner, doc?)` a literal of `inner`. */
 export const ch = {
-  num: (doc?: string): FieldSpec => ({ type: t.channel("number"), doc }),
-  color: (doc?: string): FieldSpec => ({ type: t.channel("color"), doc }),
-  str: (doc?: string): FieldSpec => ({ type: t.channel("string"), doc }),
+  size: (doc?: string): FieldSpec => ({
+    type: t.channel("number", "size"),
+    doc,
+  }),
+  pos: (doc?: string): FieldSpec => ({ type: t.channel("number", "pos"), doc }),
+  color: (doc?: string): FieldSpec => ({
+    type: t.channel("color", "color"),
+    doc,
+  }),
+  raw: (inner: ChannelInner, doc?: string): FieldSpec => ({
+    type: t.channel(inner, "raw"),
+    doc,
+  }),
 };
 
 /** Declare a shared field group (included by reference from multiple
@@ -377,10 +397,10 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   AxisInterval: {
     doc: "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
     type: t.object({
-      min: ch.num("Start edge position."),
-      center: ch.num("Center position."),
-      max: ch.num("End edge position."),
-      size: ch.num("Size along the axis."),
+      min: ch.pos("Start edge position."),
+      center: ch.pos("Center position."),
+      max: ch.pos("End edge position."),
+      size: ch.size("Size along the axis."),
       embedded: {
         type: t.boolean,
         doc: "Embed this axis in the parent's space.",
@@ -409,7 +429,7 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   },
   AxisDimsValue: {
     doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
-    type: t.union(t.channel("number"), t.ref("AxisInterval")),
+    type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
   },
 };
 
@@ -477,17 +497,17 @@ const axisDims = (doc: string): FieldSpec => ({
  *  circle, which hands them to its ellipse. Marks that destructure a fixed
  *  subset (blank) declare their own fields instead of including this group. */
 export const boxDims: FieldGroup = group({
-  x: ch.num("Left edge position."),
-  cx: ch.num("Center x."),
-  x2: ch.num("Right edge position."),
-  w: ch.num("Width."),
+  x: ch.pos("Left edge position."),
+  cx: ch.pos("Center x."),
+  x2: ch.pos("Right edge position."),
+  w: ch.size("Width."),
   emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
-  y: ch.num(
+  y: ch.pos(
     "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
   ),
-  cy: ch.num("Center y."),
-  y2: ch.num("Other y edge position."),
-  h: ch.num("Height."),
+  cy: ch.pos("Center y."),
+  y2: ch.pos("Other y edge position."),
+  h: ch.size("Height."),
   emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
   dims: axisDims(
     "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
@@ -527,15 +547,15 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
  *  pipeline op) is the space-filling spine (mosaic/marimekko) that replaced
  *  the old `normalize: true` layout flag. */
 const spreadBoxFields: FieldGroup = group({
-  x: ch.num(
+  x: ch.pos(
     "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
   ),
-  y: ch.num(
+  y: ch.pos(
     "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
   ),
-  w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-  h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-  size: ch.num(
+  w: ch.size("Data-driven cross-axis extent (field/datum-sized children)."),
+  h: ch.size("Data-driven cross-axis extent (field/datum-sized children)."),
+  size: ch.size(
     "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
   ),
 });
@@ -721,12 +741,12 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.union(t.string, t.ref("FieldAccessor")),
         doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
       },
-      x: ch.num("Point position, x."),
-      y: ch.num("Point position, y."),
-      xMin: ch.num("Range form: left/bottom edge, x."),
-      xMax: ch.num("Range form: right/top edge, x."),
-      yMin: ch.num("Range form: left/bottom edge, y."),
-      yMax: ch.num("Range form: right/top edge, y."),
+      x: ch.pos("Point position, x."),
+      y: ch.pos("Point position, y."),
+      xMin: ch.pos("Range form: left/bottom edge, x."),
+      xMax: ch.pos("Range form: right/top edge, x."),
+      yMin: ch.pos("Range form: left/bottom edge, y."),
+      yMax: ch.pos("Range form: right/top edge, y."),
       dims: axisDims(
         "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span."
       ),
@@ -752,10 +772,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: 'How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. sina() is noise with smoothing "silverman" (a violin outline), and jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.',
       },
       axes: { type: t.ref("AxesOptions") },
-      w: ch.num(
+      w: ch.size(
         "Fixed cross-axis extent, or a field name sizing this operator's own box from data."
       ),
-      h: ch.num(
+      h: ch.size(
         "Fixed cross-axis extent, or a field name sizing this operator's own box from data."
       ),
     },
@@ -808,16 +828,16 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       // `dims` names the same box by axis name and is written onto it by the
       // resolveAliases pass (`deferAxisDims`); each slot infers as its
       // top-level counterpart.
-      x: ch.num(
+      x: ch.pos(
         "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
       ),
-      y: ch.num(
+      y: ch.pos(
         "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
       ),
-      w: ch.num(
+      w: ch.size(
         "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
       ),
-      h: ch.num(
+      h: ch.size(
         "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
       ),
       dims: axisDims(
@@ -866,7 +886,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         default: "desc",
         doc: "Sort leaves by weight before layout.",
       },
-      size: ch.num(
+      size: ch.size(
         "Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group."
       ),
     },
@@ -922,10 +942,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   circle: leafMark("circle", {
-    doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by exactly one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
+    doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
     include: [boxDims],
     fields: {
-      r: ch.num(
+      r: ch.size(
         "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
       ),
       fill: ch.color("Fill color, or a field name for a color scale."),
@@ -936,7 +956,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Stroke width in pixels.",
       },
       opacity: {
-        ...ch.num(
+        ...ch.raw(
+          "number",
           "Opacity, 0 to 1, applied to fill and stroke: a number, a field name, or a per-datum accessor (in JS also a `live(...)` value, which does not cross the wire)."
         ),
         default: 1,
@@ -1003,7 +1024,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       text: {
-        type: t.channel("string"),
+        type: t.channel("string", "raw"),
         required: true,
         doc: "Text content (raw channel — a literal, field name, or accessor).",
       },
@@ -1105,8 +1126,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     fields: {
       emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
       emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
-      w: { ...ch.num("Width."), default: 0 },
-      h: { ...ch.num("Height."), default: 0 },
+      w: { ...ch.size("Width."), default: 0 },
+      h: { ...ch.size("Height."), default: 0 },
       fill: ch.color(
         "Fill color. A blank never paints; `fill` only seeds the shared color scale."
       ),
@@ -1173,11 +1194,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
       },
       w: {
-        ...ch.num(),
+        ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
       },
       h: {
-        ...ch.num(),
+        ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
       },
     },
@@ -1221,11 +1242,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
       },
       w: {
-        ...ch.num(),
+        ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
       },
       h: {
-        ...ch.num(),
+        ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
       },
     },
@@ -1347,8 +1368,8 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     doc: "Set a single child's min-corner (x, y) in parent coordinates — an absolute-offset placement primitive, NOT center-anchored. Unlike `enclose`'s convex-hull styling, `position` draws nothing of its own; it exists for cases (e.g. the Topology story's combinator trees) that need to place one child precisely without `enclose`'s fill/stroke/hull limits.",
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
-      x: ch.num("Min-corner x offset."),
-      y: ch.num("Min-corner y offset."),
+      x: ch.pos("Min-corner x offset."),
+      y: ch.pos("Min-corner y offset."),
     },
   }),
 

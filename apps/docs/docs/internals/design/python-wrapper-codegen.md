@@ -219,10 +219,10 @@ small field-type DSL (`t.*`):
 ```ts
 // Shared field groups — declared once, included by reference.
 const boxDims = group({
-  x: ch.num("Left edge position."),        cx: ch.num("Center x."),
-  x2: ch.num("Right edge position."),      w: ch.num("Width."),
+  x: ch.pos("Left edge position."),        cx: ch.pos("Center x."),
+  x2: ch.pos("Right edge position."),      w: ch.size("Width."),
   emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
-  y: ch.num(), cy: ch.num(), y2: ch.num(), h: ch.num(),
+  y: ch.pos(), cy: ch.pos(), y2: ch.pos(), h: ch.size(),
   emY: { type: t.boolean },
   // Axis names a coordinate space declares — resolved by resolveAliases.
   dims: { type: t.record(t.ref("AxisDimsValue")) },
@@ -275,9 +275,11 @@ mark("inside", {
 });
 ```
 
-`ch.num(doc?)` / `ch.color(doc?)` are shorthand for
-`{ type: t.channel(number|color) }` — a `ChannelValue` slot accepting a
-literal, a field name, or a `datum()` wrapper. The Python kwarg for a field
+`ch.size(doc?)` / `ch.pos(doc?)` / `ch.color(doc?)` / `ch.raw(inner, doc?)`
+are shorthand for `{ type: t.channel(inner, infer) }`, a `ChannelValue` slot
+accepting a literal, a field name, or a `datum()` wrapper. `infer` is how the
+JS mark infers the value (sum, mean, color scale, or as is); the JS mark
+factories' channel maps are generated from it. The Python kwarg for a field
 is its name in snake case (`strokeWidth` becomes `stroke_width`), computed by
 one function, `pyKwarg`, which adds a trailing underscore when the name is a
 Python keyword (`line`'s `from` field becomes `from_`).

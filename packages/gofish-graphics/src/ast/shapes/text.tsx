@@ -14,7 +14,7 @@ import {
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
-import { BOX_CHANNELS } from "../channels";
+import { MARK_CHANNELS } from "../markChannels.generated";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -425,8 +425,4 @@ export const Text = ({
   return node;
 };
 
-export const text = createMark(
-  Text,
-  { ...BOX_CHANNELS, fill: "color", stroke: "color", text: "raw" },
-  "text"
-);
+export const text = createMark(Text, MARK_CHANNELS.text, "text");

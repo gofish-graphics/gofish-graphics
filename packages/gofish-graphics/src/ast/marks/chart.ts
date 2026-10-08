@@ -24,7 +24,8 @@ import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
-import { BOX_CHANNELS, inferColor } from "../channels";
+import { inferColor } from "../channels";
+import { MARK_CHANNELS } from "../markChannels.generated";
 import {
   liveChannelsOf,
   withLiveStatics,
@@ -349,13 +350,7 @@ export const circle = createMark(
       opacity: opacity === undefined ? undefined : getValue(opacity),
     });
   },
-  {
-    ...BOX_CHANNELS,
-    r: "size",
-    fill: "color",
-    stroke: "color",
-    opacity: "raw",
-  },
+  MARK_CHANNELS.circle,
   "circle"
 );
 
