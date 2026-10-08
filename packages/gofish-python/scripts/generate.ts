@@ -495,7 +495,6 @@ parts.push(
 }
 
 // --- Leaf marks -------------------------------------------------------------
-const OPEN_KWARGS_MARKS = new Set(["circle", "ellipse", "petal", "blank"]);
 const GENERATED_LEAF_MARKS = [
   "rect",
   "circle",
@@ -516,13 +515,9 @@ for (const name of GENERATED_LEAF_MARKS) {
   // declared field of the same name wins. Labeling is done exclusively via
   // the `.label(accessor, options?)` chain — no leaf-mark `label` kwarg.
   const fields = { ...PY_LEAF_BASE_KWARGS, ...resolveFields(d) };
-  const openKwargs = OPEN_KWARGS_MARKS.has(name);
-  // Render manually (not via renderLeafFactory's half-baked openKwargs path)
-  // for full control over the **kwargs merge.
+  // The signature is closed: an undeclared kwarg is a TypeError (#1007).
   const ents = entries(fields);
-  const sigParts = ents.map(([py, , spec]) => pySig(py, spec));
-  if (openKwargs) sigParts.push("**kwargs: Any");
-  const sig = sigParts.join(", ");
+  const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const docLines = ents
     .map(([py, , spec]) => docLine(py, spec))
     .filter(Boolean);
@@ -540,14 +535,6 @@ for (const name of GENERATED_LEAF_MARKS) {
     `        if _v is not None:`,
     `            _kw[_k] = _channel(_v)`,
   ];
-  if (openKwargs) {
-    // Extras route through _channel too, so a callable accessor on an
-    // undeclared channel (e.g. circle(cx=lambda d: ...)) bridges via the
-    // derive RPC exactly like a declared one.
-    bodyLines.push(`    for _k, _v in kwargs.items():`);
-    bodyLines.push(`        if _v is not None:`);
-    bodyLines.push(`            _kw[_k] = _channel(_v)`);
-  }
   bodyLines.push(`    return Mark(${pyStr(d.type)}, **_kw)`);
   parts.push(
     [`def ${name}(*, ${sig}) -> Mark:`, docstring, bodyLines.join("\n")].join(

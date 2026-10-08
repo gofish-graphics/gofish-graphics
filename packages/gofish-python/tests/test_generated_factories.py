@@ -14,17 +14,20 @@ import pytest
 
 from gofish import (
     binary,
+    blank,
     Schema,
     chart,
     circle,
     circles,
     dice,
+    ellipse,
     group,
     jitter,
     join,
     noise,
     layer,
     pack,
+    petal,
     palette,
     polygon,
     slice,
@@ -245,13 +248,29 @@ def test_polygon_requires_points():
     assert d["points"] == [[0, 0], [1, 1], [0, 1]]
 
 
-def test_open_kwargs_channels_wrap_callables():
-    # circle's cx is undeclared (reaches the wire via **kwargs); a callable
-    # there must bridge through the derive RPC sentinel like any declared
-    # channel, not serialize as a raw function object.
-    d = circle(r=3, cx=lambda row: row["x"]).to_dict()
-    assert isinstance(d["cx"], dict)
-    assert "__gofish_lambda" in d["cx"]
+def test_circle_ellipse_petal_blank_signatures_are_closed():
+    # These four used to take open **kwargs that reached the wire unchecked
+    # (#1007). Now an undeclared or camelCase kwarg is a TypeError, as on
+    # every other generated factory.
+    with pytest.raises(TypeError):
+        circle(r=3, cx=10)
+    with pytest.raises(TypeError):
+        circle(r=3, fillOpacity=0.6)
+    with pytest.raises(TypeError):
+        ellipse(w=4, h=4, stroke_dasharray="2 2")
+    with pytest.raises(TypeError):
+        petal(w=4, h=4, opacity=0.5)
+    with pytest.raises(TypeError):
+        blank(w=4, stroke="red")
+
+
+def test_fill_opacity_serializes_to_camel_case():
+    assert circle(r=3, fill_opacity=0.6).to_dict() == {
+        "type": "circle",
+        "r": 3,
+        "fillOpacity": 0.6,
+    }
+    assert ellipse(w=4, h=4, fill_opacity=0.5).to_dict()["fillOpacity"] == 0.5
 
 
 def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():

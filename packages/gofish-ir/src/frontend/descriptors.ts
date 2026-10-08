@@ -436,8 +436,9 @@ export const boxDims: FieldGroup = group({
 });
 
 /** `rect`'s full paint group (the only leaf mark that supports all five —
- *  ellipse/petal/circle support a strict subset and declare their fill/
- *  stroke/strokeWidth directly rather than including this group). */
+ *  ellipse/petal/circle support a different set (no filter; ellipse and
+ *  circle add fillOpacity) and declare their paint fields directly rather
+ *  than including this group). */
 export const paint: FieldGroup = group({
   fill: ch.color("Fill color, or a field name for a color scale."),
   stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -851,7 +852,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   circle: leafMark("circle", {
-    doc: "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity) — position it via `spread`/`scatter`.",
+    doc: "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity/fillOpacity) — position it via `spread`/`scatter`.",
     fields: {
       r: ch.num("Radius; becomes w=h=2r on the underlying ellipse."),
       fill: ch.color("Fill color, or a field name for a color scale."),
@@ -866,6 +867,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         default: 1,
         doc: "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
       },
+      fillOpacity: {
+        type: t.number,
+        doc: "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`.",
+      },
       debug: {
         type: t.boolean,
         doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
@@ -874,7 +879,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   ellipse: leafMark("ellipse", {
-    doc: "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).",
+    doc: "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
     include: [boxDims],
     fields: {
       fill: ch.color("Fill color, or a field name for a color scale."),
@@ -885,6 +890,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Stroke width in pixels.",
       },
       opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
+      fillOpacity: {
+        type: t.number,
+        doc: "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`.",
+      },
       aspectRatio: {
         type: t.number,
         doc: "w/h ratio to enforce. When both dims are data-driven, the constraining axis is used.",

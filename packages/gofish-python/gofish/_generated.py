@@ -150,8 +150,8 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
             _kw[_k] = _channel(_v)
     return Mark("rect", **_kw)
 
-def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, **kwargs: Any) -> Mark:
-    """A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity) — position it via `spread`/`scatter`.
+def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None) -> Mark:
+    """A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity/fillOpacity) — position it via `spread`/`scatter`.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
@@ -160,6 +160,7 @@ def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] 
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire. Default 1.
+        fill_opacity: Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -169,16 +170,14 @@ def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] 
         ("stroke", stroke),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
+        ("fillOpacity", fill_opacity),
     ]:
-        if _v is not None:
-            _kw[_k] = _channel(_v)
-    for _k, _v in kwargs.items():
         if _v is not None:
             _kw[_k] = _channel(_v)
     return Mark("circle", **_kw)
 
-def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, aspect_ratio: Optional[float] = None, **kwargs: Any) -> Mark:
-    """An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).
+def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
+    """An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
@@ -197,6 +196,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]]
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1. Default 1.
+        fill_opacity: Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`.
         aspect_ratio: w/h ratio to enforce. When both dims are data-driven, the constraining axis is used.
     """
     _kw: Dict[str, Any] = {}
@@ -217,16 +217,14 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]]
         ("stroke", stroke),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
+        ("fillOpacity", fill_opacity),
         ("aspectRatio", aspect_ratio),
     ]:
         if _v is not None:
             _kw[_k] = _channel(_v)
-    for _k, _v in kwargs.items():
-        if _v is not None:
-            _kw[_k] = _channel(_v)
     return Mark("ellipse", **_kw)
 
-def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, **kwargs: Any) -> Mark:
+def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, em_x: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, em_y: Optional[bool] = None, dims: Optional[Any] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None) -> Mark:
     """A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.
 
     Args:
@@ -264,9 +262,6 @@ def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] =
         ("stroke", stroke),
         ("strokeWidth", stroke_width),
     ]:
-        if _v is not None:
-            _kw[_k] = _channel(_v)
-    for _k, _v in kwargs.items():
         if _v is not None:
             _kw[_k] = _channel(_v)
     return Mark("petal", **_kw)
@@ -403,7 +398,7 @@ def polygon(*, debug: Optional[bool] = None, points: Any, fill: Optional[str] = 
             _kw[_k] = _channel(_v)
     return Mark("polygon", **_kw)
 
-def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, **kwargs: Any) -> Mark:
+def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, fill: Optional[str] = None) -> Mark:
     """An invisible sizing/positioning guide — a rect that emits no display items at all, with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
 
     Args:
@@ -423,9 +418,6 @@ def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Op
         ("h", h),
         ("fill", fill),
     ]:
-        if _v is not None:
-            _kw[_k] = _channel(_v)
-    for _k, _v in kwargs.items():
         if _v is not None:
             _kw[_k] = _channel(_v)
     return Mark("blank", **_kw)
