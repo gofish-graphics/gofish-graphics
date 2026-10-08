@@ -729,15 +729,3 @@ class TestTime:
         assert back.schema.field("d").type == pa.date32()
         assert back.column("t").to_pylist() == table.column("t").to_pylist()
         assert back.column("d").to_pylist() == [datetime.date(2024, 3, 1)]
-
-    def test_wide_ints_keep_their_width(self):
-        """Epoch milliseconds do not fit in 32 bits: the Int64 downcast
-        leaves such a column at 64 bits instead of failing."""
-        import pyarrow as pa
-
-        from gofish.arrow_utils import data_to_arrow_bytes
-
-        rows = [{"t": 1709960400000, "n": 1}]
-        schema = pa.ipc.open_stream(data_to_arrow_bytes(rows)).read_all().schema
-        assert schema.field("t").type == pa.int64()
-        assert schema.field("n").type == pa.int32()

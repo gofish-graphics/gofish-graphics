@@ -16,7 +16,6 @@ from typing import Any, List
 
 import narwhals as nw
 import pyarrow as pa
-import pyarrow.compute as pc
 
 _SUPPORTED_INPUTS_MSG = (
     "a list of dict rows, or a dataframe supported by narwhals "
@@ -33,23 +32,25 @@ def to_arrow_table(data: Any) -> pa.Table:
 
     Supported shapes:
         - A list of dict rows (including `[]`) — built directly with
-          `pa.Table.from_pylist`, no dataframe library involved. A float NaN
-          is a missing value (null), as pandas reads it and as
-          `pa.Table.from_pandas` converts it, so rows from
-          `df.to_dict("records")` cross like the DataFrame itself.
+          pyarrow, one column per key in the order keys first appear, no
+          dataframe library involved. None is a missing value (null); a
+          float NaN stays NaN, a number, since GoFish never reads NaN as
+          missing.
         - A `pyarrow.Table` — returned as-is.
         - Any dataframe/lazyframe narwhals recognizes (pandas, polars,
           pyarrow, DuckDB relation, cuDF, Modin, ...) — routed through
           `narwhals.from_native`. Lazy frames are collected before the
           Arrow export, since the wire format is always a materialized
-          table.
+          table. A pandas float column's NaN crosses as null: pandas
+          defines NaN as the missing value of its own float columns, and
+          pyarrow's `from_pandas` follows that rule. It is pandas' rule
+          about pandas data, not a GoFish rule; a polars NaN stays NaN.
 
     Anything else raises `TypeError` naming the actual type received and
     the supported inputs, rather than failing deep inside pandas/pyarrow
     with an opaque message. So do dict rows whose column holds values of
     conflicting types (a string in one row, a number in another): the error
-    names the column and the types (see `_conflicting_column`); the data is
-    never coerced silently.
+    names the column and the types; the data is never coerced silently.
 
     Args:
         data: List of dict rows, or a narwhals-supported dataframe.
@@ -63,20 +64,7 @@ def to_arrow_table(data: Any) -> pa.Table:
         >>> to_arrow_table(pl.DataFrame({"x": [1, 2]}))
     """
     if isinstance(data, (list, tuple)):
-        rows = list(data)
-        try:
-            return _nan_to_null(pa.Table.from_pylist(rows))
-        except (pa.ArrowTypeError, pa.ArrowInvalid):
-            conflict = _conflicting_column(rows)
-            if conflict is None:
-                raise
-            column, kinds = conflict
-            raise TypeError(
-                f'Chart data: column "{column}" has conflicting types across '
-                f"rows ({', '.join(kinds)}) — rows sharing a column must share "
-                f"a type; coerce the column to one type or drop it before "
-                f"passing the data to chart()."
-            ) from None
+        return _rows_to_table(list(data))
 
     if isinstance(data, pa.Table):
         return data
@@ -95,19 +83,27 @@ def to_arrow_table(data: Any) -> pa.Table:
     return nwdata.to_arrow()
 
 
-def _nan_to_null(table: pa.Table) -> pa.Table:
-    """`table` with every NaN in its float columns replaced by null (see
-    `to_arrow_table`)."""
+def _rows_to_table(rows: List[dict]) -> pa.Table:
+    """Dict `rows` as a table: one column per key, in the order keys first
+    appear (a row without the key holds null there). A column whose values
+    have conflicting types is a loud `TypeError` naming the column."""
+    names = list(dict.fromkeys(key for row in rows for key in row))
     columns = []
-    changed = False
-    for column in table.columns:
-        if pa.types.is_floating(column.type):
-            nan = pc.is_nan(column)
-            if pc.any(nan).as_py():
-                column = pc.if_else(nan, pa.scalar(None, column.type), column)
-                changed = True
-        columns.append(column)
-    return pa.Table.from_arrays(columns, schema=table.schema) if changed else table
+    for name in names:
+        values = [row.get(name) for row in rows]
+        try:
+            columns.append(pa.array(values, from_pandas=False))
+        except (pa.ArrowTypeError, pa.ArrowInvalid):
+            kinds = dict.fromkeys(_value_kind(v) for v in values if v is not None)
+            if len(kinds) < 2:
+                raise
+            raise TypeError(
+                f'Chart data: column "{name}" has conflicting types across '
+                f"rows ({', '.join(kinds)}) — rows sharing a column must share "
+                f"a type; coerce the column to one type or drop it before "
+                f"passing the data to chart()."
+            ) from None
+    return pa.Table.from_arrays(columns, names=names)
 
 
 def _value_kind(value: Any) -> str:
@@ -126,66 +122,13 @@ def _value_kind(value: Any) -> str:
     return type(value).__name__
 
 
-def _conflicting_column(rows: List[Any]):
-    """The first column of dict `rows` whose non-null values have more than
-    one kind, with those kinds in the order they first appear; None if every
-    column has one kind."""
-    kinds: dict = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        for column, value in row.items():
-            if value is None:
-                continue
-            seen = kinds.setdefault(column, [])
-            kind = _value_kind(value)
-            if kind not in seen:
-                seen.append(kind)
-    for column, seen in kinds.items():
-        if len(seen) > 1:
-            return column, seen
-    return None
-
-
-def _downcast_wide_ints(table: pa.Table) -> pa.Table:
-    """
-    Convert Int64/UInt64 columns to Int32/UInt32 where the values fit, to
-    avoid BigInt issues in JavaScript (JS numbers safely represent
-    integers only up to 2**53, and the Arrow JS bindings surface 64-bit
-    integer columns as `BigInt64Array`, which most chart code doesn't
-    expect). This is safe for the reasonable-magnitude values charting
-    data has in practice; if a column doesn't fit, it's left at its
-    original width.
-    """
-    fields = []
-    arrays = []
-    schema_changed = False
-    for i, field in enumerate(table.schema):
-        array = table.column(i)
-        if pa.types.is_int64(field.type) or pa.types.is_uint64(field.type):
-            try:
-                new_type = pa.int32() if pa.types.is_int64(field.type) else pa.uint32()
-                array = array.cast(new_type, safe=True)
-                fields.append(pa.field(field.name, new_type))
-                schema_changed = True
-            except (pa.ArrowInvalid, OverflowError):
-                # Values too large to fit — keep the original width.
-                fields.append(field)
-        else:
-            fields.append(field)
-        arrays.append(array)
-
-    if schema_changed:
-        table = pa.Table.from_arrays(arrays, schema=pa.schema(fields))
-    return table
-
-
 def arrow_table_to_bytes(table: pa.Table) -> bytes:
     """
-    Serialize a `pyarrow.Table` to Arrow IPC format (bytes), applying the
-    Int64/UInt64 -> Int32/UInt32 downcast described in `_downcast_wide_ints`.
-    Timestamp and date columns cross unchanged, time zone included: the
-    widget's decode (`widget-src/arrowDecode.ts`) reads them as times.
+    Serialize a `pyarrow.Table` to Arrow IPC format (bytes). Every column
+    crosses unchanged: timestamp and date columns keep their time zone, and
+    64-bit integers keep their width. The widget's decode
+    (`widget-src/arrowDecode.ts`) reads times as times and turns 64-bit
+    integers into JS numbers.
 
     Args:
         table: `pyarrow.Table` to serialize.
@@ -193,7 +136,6 @@ def arrow_table_to_bytes(table: pa.Table) -> bytes:
     Returns:
         Arrow IPC format bytes.
     """
-    table = _downcast_wide_ints(table)
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, table.schema) as writer:
         writer.write_table(table)

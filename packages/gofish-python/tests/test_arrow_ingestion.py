@@ -6,6 +6,7 @@ longer a hard runtime dependency: any narwhals-supported dataframe backend
 (pandas, polars, pyarrow, ...) or a plain list of dict rows works.
 """
 
+import math
 import subprocess
 import sys
 import textwrap
@@ -87,12 +88,27 @@ class TestUnsupportedInput:
         assert "(string, number)" in message
         assert "coerce" in message
 
-    def test_nan_in_rows_is_missing_like_a_dataframe(self):
+    def test_nan_in_rows_stays_nan(self):
+        """GoFish never reads NaN as missing: in dict rows NaN crosses as
+        NaN, and only None is null."""
+        values = to_arrow_table(
+            [{"x": 1.0}, {"x": float("nan")}, {"x": None}]
+        ).column("x").to_pylist()
+        assert values[0] == 1.0
+        assert math.isnan(values[1])
+        assert values[2] is None
+
+    def test_pandas_nan_is_missing_by_pandas_rule(self):
+        """pandas defines NaN as its float columns' missing value, so a
+        DataFrame's NaN crosses as null."""
         pd = pytest.importorskip("pandas")
         df = pd.DataFrame({"x": [1.0, float("nan")]})
-        from_rows = to_arrow_table(df.to_dict("records"))
-        assert from_rows.column("x").to_pylist() == [1.0, None]
         assert to_arrow_table(df).column("x").to_pylist() == [1.0, None]
+
+    def test_columns_follow_first_seen_keys(self):
+        table = to_arrow_table([{"a": 1}, {"a": 2, "b": "x"}])
+        assert table.column_names == ["a", "b"]
+        assert table.column("b").to_pylist() == [None, "x"]
 
     def test_ints_and_floats_share_a_column(self):
         table = to_arrow_table([{"n": 1}, {"n": 2.5}, {"n": None}])
@@ -156,7 +172,7 @@ class TestNoPandasInstalled:
                 .mark(rect(h="y"))
                 .render(w=200, h=200)
             )
-            assert widget.arrow_data
+            assert widget.tier_arrow
             assert "pandas" not in sys.modules
             print("OK")
             """

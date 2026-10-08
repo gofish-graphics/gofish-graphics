@@ -14,7 +14,7 @@ GRAY = "#D1D9E2"  # mirrors packages/gofish-graphics/src/color.ts:492
 
 def story_default():
     # A few titles are numbers (1776, 2012): give the column one type.
-    movies_raw = read_json("movies.json").astype({"Title": str}).to_dict("records")
+    movies_raw = read_json("movies.json").astype({"Title": str})
 
     return (
         chart(movies_raw)
