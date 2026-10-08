@@ -116,7 +116,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = 
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1. Default 1.
-        filter: Raw SVG filter attribute.
+        filter: SVG filter attribute, or a field name or accessor for a per-item filter.
         key: Internal per-node key override.
         rx: Corner radius, x. Default 0.
         ry: Corner radius, y. Default 0.

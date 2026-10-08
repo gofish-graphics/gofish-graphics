@@ -1678,8 +1678,8 @@ for the API.
           "default": 1
         },
         "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
+          "$ref": "#/$defs/ChannelValue",
+          "description": "SVG filter attribute, or a field name or accessor for a per-item filter."
         },
         "key": {
           "type": "string",
