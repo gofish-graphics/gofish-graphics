@@ -8,7 +8,8 @@ import math
 import re
 import uuid
 
-from ._nonfinite import encode_non_finite
+from . import _nonfinite
+from ._nonfinite import KEEP, encode_non_finite
 
 T = TypeVar("T")
 
@@ -20,7 +21,7 @@ class Operator:
         self.op_type = op_type
         # A callable in a channel option was wrapped as an accessor by the
         # factory (`_channel`); one anywhere else has no meaning on the wire.
-        _reject_callables(op_type, kwargs)
+        self._accessors = _scan_options(op_type, kwargs)
         self.kwargs = kwargs
         self._translate: Optional[dict] = None
         # One entry per `.label(accessor, options?)` call, in call order —
@@ -84,7 +85,7 @@ class Operator:
         """Convert operator to dictionary for JSON IR."""
         d = {
             "type": self.op_type,
-            **{k: _wire(v) for k, v in self.kwargs.items()},
+            **_wire_options(self.kwargs, self._accessors),
         }
         if self._translate:
             d["translate"] = self._translate
@@ -218,110 +219,97 @@ class _PendingAccessor:
         self.lambda_id = str(uuid.uuid4())
 
 
+def _is_tagged(v: Any) -> bool:
+    """A `field(...)` or `datum(...)` value: a dict subclass that already holds
+    wire data, so the option walks treat it as a leaf."""
+    return isinstance(v, (FieldAccessor, DatumValue))
+
+
 def _channel(v: Any) -> Any:
-    """Wrap every callable in an option value in `_PendingAccessor`.
+    """Wrap every callable in a channel option's value in `_PendingAccessor`.
 
-    A mark or operator option value is a literal, a field name, a tagged
-    value (`datum()`, `field(...)`), or a plain dict/list/tuple of those
+    A channel value is a literal, a field name, a tagged value (`datum()`,
+    `field(...)`), or a plain dict/list/tuple of those
     (`dims={"r": {"size": ...}}`). A callable `(row) -> value` may sit at any
-    depth of that structure, so this walks the plain containers and wraps each
-    callable it finds, so `_collect_mark_lambdas` / `_collect_operator_lambdas`
-    can register it with the derive RPC bridge and `_wire` can emit its
-    sentinel. Tagged values are `dict` subclasses that already hold wire data,
-    so they are leaves. A container with no callable comes back as the same
-    object, so large literal options (rows, point lists) are not copied.
+    depth, so this wraps each one; the `Mark` or `Operator` built from the
+    options records the accessors (`_scan_options`). The generated factories
+    call it only on options the descriptor declares as channels. A value with
+    no callable comes back as the same object.
     """
-    if v is None or isinstance(v, (str, int, float, bool)):
-        return v
-    if type(v) is dict:
-        out = {k: _channel(x) for k, x in v.items()}
-        return v if all(out[k] is v[k] for k in v) else out
-    if type(v) in (list, tuple):
-        items = [_channel(x) for x in v]
-        if all(a is b for a, b in zip(items, v)):
-            return v
-        return type(v)(items)
-    if callable(v):
-        return _PendingAccessor(v)
-    return v
+    return _nonfinite.walk(
+        v,
+        lambda x: x
+        if _is_tagged(x)
+        else _PendingAccessor(x)
+        if callable(x) and not isinstance(x, _PendingAccessor)
+        else KEEP,
+    )
 
 
-def _callable_path(v: Any, path: str) -> Optional[str]:
-    """The path of the first raw callable in an option value, walking the same
-    plain dicts, lists and tuples as `_channel`, or None."""
-    if isinstance(v, _PendingAccessor):
-        return None
-    if type(v) is dict:
-        for k, x in v.items():
-            found = _callable_path(x, f"{path}[{k!r}]")
-            if found is not None:
-                return found
-        return None
-    if type(v) in (list, tuple):
-        for i, x in enumerate(v):
-            found = _callable_path(x, f"{path}[{i}]")
-            if found is not None:
-                return found
-        return None
-    return path if callable(v) else None
-
-
-def _reject_callables(construct: str, options: Dict[str, Any]) -> None:
-    """Raise TypeError for a callable in an option that is not a channel.
+def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_PendingAccessor"]]:
+    """The accessors in a construct's options, by option key, in one walk.
 
     A Python callable crosses to JS only as a channel accessor, which the
     generated factories wrap with `_channel` for the options the descriptor
-    declares as channels. Anywhere else (a `by`, a `dir`, ...) the JS side
-    would get an RPC handle it does not resolve, so it fails loudly here.
+    declares as channels. A raw callable anywhere else (a `by`, a `dir`, ...)
+    would reach JS as an RPC handle it never resolves, so it fails loudly
+    here. The `Mark` / `Operator` keeps the result, so serializing and
+    registering its accessors never walks large options (`join`'s rows) again.
     """
+    found: Dict[str, List[_PendingAccessor]] = {}
     for key, value in options.items():
-        found = _callable_path(value, key)
-        if found is not None:
-            raise TypeError(
-                f"{construct}: {found} is a function, but only channel options "
-                f"take a function. Pass a field name or a field(...) accessor."
-            )
+        accessors: List[_PendingAccessor] = []
+
+        def visit(x: Any, key: str = key, accessors: list = accessors) -> Any:
+            if isinstance(x, _PendingAccessor):
+                accessors.append(x)
+                return x
+            if _is_tagged(x):
+                return x
+            if callable(x):
+                raise TypeError(
+                    f"{construct}: {key} holds a function, but only channel "
+                    f"options take a function. Pass a field name or a "
+                    f"field(...) accessor."
+                )
+            return KEEP
+
+        _nonfinite.walk(value, visit)
+        if accessors:
+            found[key] = accessors
+    return found
 
 
-def _accessors_in(v: Any):
-    """Yield every `_PendingAccessor` in an option value, at any depth of its
-    plain dicts, lists and tuples (the same structure `_channel` walks)."""
-    if isinstance(v, _PendingAccessor):
-        yield v
-    elif type(v) is dict:
-        for x in v.values():
-            yield from _accessors_in(x)
-    elif type(v) in (list, tuple):
-        for x in v:
-            yield from _accessors_in(x)
+def _wire_options(options: Dict[str, Any], accessors: Dict[str, list]) -> Dict[str, Any]:
+    """The options as the wire carries them: each `_PendingAccessor` becomes
+    its `{"__gofish_lambda": id}` sentinel, at any depth. Only the options
+    `_scan_options` found accessors in are walked; the rest are the same
+    objects. The JS deserializer turns each sentinel back into an accessor
+    that calls into Python."""
+    return {
+        k: _nonfinite.walk(
+            v,
+            lambda x: {"__gofish_lambda": x.lambda_id}
+            if isinstance(x, _PendingAccessor)
+            else x
+            if _is_tagged(x)
+            else KEEP,
+        )
+        if k in accessors
+        else v
+        for k, v in options.items()
+    }
 
 
-def _wire(v: Any) -> Any:
-    """Replace every `_PendingAccessor` in an option value with its
-    `{"__gofish_lambda": id}` sentinel, at any depth. The JS deserializer
-    turns each sentinel back into an async `(d) => ...` accessor that RPCs
-    into Python, wherever it sits. A container with no accessor comes back as
-    the same object, as in `_channel`, so large literal options (`join`'s
-    right-hand rows) are not copied."""
-    if isinstance(v, _PendingAccessor):
-        return {"__gofish_lambda": v.lambda_id}
-    if type(v) is dict:
-        out = {k: _wire(x) for k, x in v.items()}
-        return v if all(out[k] is v[k] for k in v) else out
-    if type(v) in (list, tuple):
-        items = [_wire(x) for x in v]
-        return v if all(a is b for a, b in zip(items, v)) else items
-    return v
-
-
-def _lambda_pairs(options: Dict[str, Any]) -> List[tuple]:
-    """`(lambda_id, rows_fn)` for every accessor in an options dict. `rows_fn`
-    adapts the user's `(row) -> value` callable to the rows-in / rows-out
-    shape the `/derive/<id>` endpoint expects, so accessors and `derive()`
-    operators share one registry and one endpoint."""
+def _lambda_pairs(accessors: Dict[str, list]) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every accessor a construct recorded.
+    `rows_fn` adapts the user's `(row) -> value` callable to the rows-in /
+    rows-out shape the `/derive/<id>` endpoint expects, so accessors and
+    `derive()` operators share one registry and one endpoint."""
     return [
         (acc.lambda_id, lambda rows, _fn=acc.fn: [_fn(r) for r in rows])
-        for acc in _accessors_in(options)
+        for accs in accessors.values()
+        for acc in accs
     ]
 
 
@@ -330,7 +318,7 @@ def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
     `_PendingAccessor` in mark kwargs, at any depth (and recursively in
     combinator `_children` and in the marks of `.relate(...)` clauses).
     """
-    pairs = _lambda_pairs(mark.kwargs)
+    pairs = _lambda_pairs(mark._accessors)
     if mark._children is not None:
         for child in mark._children:
             pairs.extend(_collect_mark_lambdas(child))
@@ -344,7 +332,7 @@ def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
 def _collect_operator_lambdas(ops: List["Operator"]) -> List[tuple]:
     """`(lambda_id, rows_fn)` for every accessor in the options of a chart's
     operators (e.g. `scatter(dims={"r": lambda d: ...})`)."""
-    return [pair for op in ops for pair in _lambda_pairs(op.kwargs)]
+    return [pair for op in ops for pair in _lambda_pairs(op._accessors)]
 
 
 class Token:
@@ -410,7 +398,7 @@ class Mark:
     ):
         self.mark_type = mark_type
         # As on Operator: only channel options may hold a callable.
-        _reject_callables(mark_type, kwargs)
+        self._accessors = _scan_options(mark_type, kwargs)
         self.kwargs = kwargs
         self._name: Optional[Union[str, "Token"]] = None
         # One entry per `.label(accessor, options?)` call, in call order —
@@ -576,7 +564,7 @@ class Mark:
         # register the underlying callable in the shared registry; the JS
         # harness/widget substitutes the sentinel for a real `(d) => ...`
         # arrow function whose body RPCs into Python.
-        serialized_kwargs = {k: _wire(v) for k, v in self.kwargs.items()}
+        serialized_kwargs = _wire_options(self.kwargs, self._accessors)
         if self._children is not None:
             # Combinator form: emit a nested payload the JS side reconstructs
             # via the operator's `(opts, marks)` overload.

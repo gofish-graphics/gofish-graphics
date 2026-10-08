@@ -768,13 +768,17 @@ public schema — they extend it for the round-trip across anywidget:
 
 A `{__gofish_lambda}` sentinel may sit at any depth of a channel option, not
 only as a top-level channel: for each option whose descriptor type can hold
-a channel (`carriesChannel` in the generator), the generated Python factory
-wraps every callable it finds in the option's plain dicts and lists
+a channel (`carriesChannel`), the generated Python factory wraps every
+callable it finds in the option's plain dicts and lists
 (`dims={"r": {"size": lambda d: ...}}`), and `unwrapOpts` resolves the
-sentinels at any depth of both mark and operator options. A callable in any
-other option (`spread(by=lambda d: ...)`) is a `TypeError` when the Python
-`Mark` or `Operator` is built, since the JS side resolves accessors only in
-channels. The accessor it
+sentinels at any depth of both mark and operator options. When the Python
+`Mark` or `Operator` is built, one walk of its options (`_scan_options`)
+records the accessors per option and raises a `TypeError` for a callable in
+any other option (`spread(by=lambda d: ...)`), since the JS side resolves
+accessors only in channels. Serializing and registering the accessors read
+that record, so only the options that hold one are walked again. The Python
+option walks share one copy-on-write `walk` (`_nonfinite.py`), which keeps
+unchanged values as the same objects. The accessor JS
 builds has only a batch form (`RESOLVE_ROWS`): channel inference is
 synchronous, so the mark factory and the operator factory first resolve every
 Python accessor in a channel over the rows they are about to infer from
