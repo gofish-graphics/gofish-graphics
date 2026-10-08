@@ -44,7 +44,6 @@ const {
   interpolate,
   layer,
   line,
-  registerRoute,
   ribbon,
   scatter,
   selectAll,
@@ -884,18 +883,22 @@ async function main(): Promise<void> {
   ok("a transition split by a function names the run's key", !why, why);
 
   // A curve that is not a reading of values over time is an error wherever
-  // it is written, and Catmull-Rom says it is a path curve. A bare name is
-  // not a curve at all: curves are made by calls in the Curve family.
+  // it is written, and Catmull-Rom says it is a path curve. An unknown kind
+  // and a bare name are not curves at all: curves are made by calls in the
+  // Curve family, and each pattern starts after the option's name.
   const notAMethod: [any, RegExp][] = [
     [
       Curve.catmullRom(),
-      /Curve\.catmullRom\(\) is not a way.*Curve\.step\(\), Curve\.linear\(\), Curve\.monotone\(\) or Curve\.smooth\(\).*screen-space path curve/,
+      /: Curve\.catmullRom\(\) is not a way.*Curve\.step\(\), Curve\.linear\(\), Curve\.monotone\(\) or Curve\.smooth\(\).*screen-space path curve/,
     ],
     [
       { kind: "linaer" },
-      /Curve\.linaer\(\) is not a way.*Curve\.step\(\), Curve\.linear\(\), Curve\.monotone\(\) or Curve\.smooth\(\)/,
+      /\.kind: unknown kind "linaer".*Make one with a call in the Curve family/,
     ],
-    ["monotone", /"monotone" is not a curve\. Make one with a call in the Curve family/],
+    [
+      "monotone",
+      /: expected object, got string\. Make one with a call in the Curve family/,
+    ],
   ];
   for (const [curve, pattern] of notAMethod) {
     why = await throws(
@@ -904,12 +907,12 @@ async function main(): Promise<void> {
           .mark(circle({ r: 4 }))
           .layer(time.transition({ curve }))
           .toDisplayList(OPTIONS),
-      new RegExp(`time\\.transition\\(\\{ curve \\}\\): ${pattern.source}`)
+      new RegExp(`time\\.transition\\(\\{ curve \\}\\)${pattern.source}`)
     );
     ok(`time.transition({ curve: ${JSON.stringify(curve)} })`, !why, why);
     why = await throws(
       async () => Animation.tween({ curve }),
-      new RegExp(`Animation\\.tween\\(\\{ curve \\}\\): ${pattern.source}`)
+      new RegExp(`Animation\\.tween\\(\\{ curve \\}\\)${pattern.source}`)
     );
     ok(`Animation.tween({ curve: ${JSON.stringify(curve)} })`, !why, why);
     why = await throws(
@@ -918,16 +921,38 @@ async function main(): Promise<void> {
           drivingShifts.map((d: any) => ({ ...d, key: "us" })),
           { along: "year", key: "key", at: 1958.5, method: curve }
         ),
-      new RegExp(`interpolate\\(\\{ method \\}\\): ${pattern.source}`)
+      new RegExp(`interpolate\\(\\{ method \\}\\)${pattern.source}`)
     );
     ok(`interpolate({ method: ${JSON.stringify(curve)} })`, !why, why);
+  }
+
+  // A line's curve is checked against the Curve family like any strategy:
+  // an unknown kind and a bad param fail where the connector is made.
+  for (const [curve, pattern] of [
+    [{ kind: "swoop" }, /\.kind: unknown kind "swoop"/],
+    [
+      { kind: "arc", direction: "left" },
+      /\.direction: expected one of "up", "down"/,
+    ],
+  ] as [any, RegExp][]) {
+    why = await throws(
+      async () =>
+        keyframes(drivingShifts, 1958.5, Infinity)
+          .mark(line({ along: "year", curve }))
+          .toDisplayList(OPTIONS),
+      new RegExp(`line/ribbon\\(\\{ curve \\}\\)${pattern.source}`)
+    );
+    ok(`line({ curve: ${JSON.stringify(curve)} })`, !why, why);
   }
 
   // Unset and Curve.monotone() are one curve, so one transition moves
   // marks that chain either of them.
   ok(
     "tween() and tween({ curve: Curve.monotone() }) are one tween",
-    sameTween(Animation.tween(), Animation.tween({ curve: Curve.monotone() })) &&
+    sameTween(
+      Animation.tween(),
+      Animation.tween({ curve: Curve.monotone() })
+    ) &&
       !sameTween(Animation.tween(), Animation.tween({ curve: Curve.linear() }))
   );
 
@@ -996,17 +1021,6 @@ async function main(): Promise<void> {
         staircase(band.slice(edge, 2 * edge).reverse()),
       `${band.length} vertices`
     );
-  }
-
-  // The sequence curves are built in: a route cannot take their names.
-  for (const name of ["step", "monotone", "catmullRom"]) {
-    why = await throws(
-      async () => registerRoute(name, () => []),
-      new RegExp(
-        `registerRoute\\("${name}"\\): "${name}" is a built-in sequence curve`
-      )
-    );
-    ok(`registerRoute("${name}", ...)`, !why, why);
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

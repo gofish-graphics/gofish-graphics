@@ -156,7 +156,3 @@ geometry instead, for layouts with no single growth axis. `Curve.arc()` bulges
 up by default; `{ direction: "down" }` flips it. A line threaded through the
 keyframes of a `time.sequence` cannot use `Curve.orthogonal()`, `Curve.arc()` or
 `Curve.perfectArrows()`.
-
-A route added with `registerRoute(name, fn)` is drawn the same way: write it as
-`{ kind: name, ...params }`. It is not one of the kinds of `Curve.Curve`, so a
-TypeScript caller casts it, and it cannot come from Python.

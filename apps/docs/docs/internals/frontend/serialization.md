@@ -430,9 +430,9 @@ is tagged by `_tag` and takes its one argument by position.
 `schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
 `OverlapIR` and `CurveIR`, by hand, and each family's JS type is one of them
 (`Curve.Curve` is `CurveIR`). `descriptors.test.ts` checks that their kinds
-and params agree with `STRATEGIES`. A curve route added in JS with
-`registerRoute` is not in the table, so it is not a `Curve.Curve` and cannot
-cross the wire. `CHART_OPTIONS` lists the chart-level
+and params agree with `STRATEGIES`. Every family is closed: there is no
+public way to add a kind, so every strategy can cross the wire (user-defined
+strategies are designed in #1101). `CHART_OPTIONS` lists the chart-level
 options (`w`, `h`, `coord`, `color`, `axes`, `legend`, `padding`, `schema`),
 mirroring the JS `ChartOptions`. Only the Python generator reads it so far;
 the validator and the schema still take `ChartIR.options` as an open object.
