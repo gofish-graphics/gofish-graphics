@@ -71,7 +71,7 @@ import {
 } from "./chartBuilder";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
-import { applySchema, copyColumnTypes } from "../schema";
+import { applySchema, getColumnTypes } from "../schema";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -86,9 +86,10 @@ export type { ChartOptions };
  * chart's `schema`, see schema.ts) for every column it does not type itself,
  * so a `filter` or a `derive` that adds a column leaves the other columns'
  * types as they were, and it goes through `applySchema`, so a column of
- * `Date`s it returns (or a datetime column a Python callback returns, which
- * the widget decodes as one) is a time, and every time column holds epoch
- * milliseconds.
+ * `Date`s it returns is a time, and every time column holds epoch
+ * milliseconds. (A datetime column a Python callback returns arrives already
+ * typed and in epoch milliseconds from the widget's decode.) The returned
+ * array itself is left as `fn` made it: `applySchema` types a copy.
  */
 function mapOperator<T, U>(
   fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
@@ -97,10 +98,9 @@ function mapOperator<T, U>(
   const op: Operator<T, U> = async (mark: Mark<U>) =>
     (async (d: T, key?: string | number, layerContext?: LayerContext) => {
       const out = await fn(d, layerContext);
-      const typed =
-        Array.isArray(out) && Object.isExtensible(out)
-          ? ((await applySchema(copyColumnTypes(out, d))) as U)
-          : out;
+      const typed = Array.isArray(out)
+        ? ((await applySchema(out, {}, getColumnTypes(d))) as U)
+        : out;
       return mark(typed, key, layerContext);
     }) as Mark<T>;
   (op as any).__serialize = serialize;

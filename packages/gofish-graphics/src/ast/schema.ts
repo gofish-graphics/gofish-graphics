@@ -191,9 +191,12 @@ export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
  *  a fresh array, so it has to be told. */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
   const types = getColumnTypes(source);
-  if (types !== undefined)
-    setColumnTypes(target, { ...types, ...getColumnTypes(target) });
-  return target;
+  if (types === undefined) return target;
+  const own = getColumnTypes(target);
+  return setColumnTypes(
+    target,
+    own === undefined ? types : { ...types, ...own }
+  );
 };
 
 const showLevel = (level: unknown): string =>
@@ -214,15 +217,18 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
 
 /**
  * Type `rows` with `schema`: a copy of the array carrying the column types
- * (merged over any the array already carries) and the measure provenance it
- * carries. The copy leaves the caller's array untagged, so one array can feed
- * charts with different schemas.
+ * and the measure provenance it carries. The types are `inherited` (an
+ * operator's input's, for its result), then the ones the array already
+ * carries, then `schema`'s, each winning over the one before. The copy leaves
+ * the caller's array untagged, so one array can feed charts with different
+ * schemas.
  *
  * A column the schema does not name is a time column (`HasCalendar`, UTC)
  * when its first value is a JS `Date`: inference is local, from the value
  * alone. Strings and numbers are never inferred as time; they need
- * `Schema.time()`. Every time column's values become epoch milliseconds, in
- * copied rows (see {@link toEpochMs}).
+ * `Schema.time()`. Every time column's values become epoch milliseconds (see
+ * {@link toEpochMs}); the rows are copied only when some value is not one
+ * already.
  *
  * It does not check the values against an order: a value outside an order is
  * an error where the order is used (`orderByLevels`), so a `filter` in the
@@ -230,9 +236,10 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
  */
 export async function applySchema<T>(
   rows: T[],
-  schema: Record<string, SchemaEntry> = {}
+  schema: Record<string, SchemaEntry> = {},
+  inherited?: ColumnTypes
 ): Promise<T[]> {
-  const types: ColumnTypes = { ...getColumnTypes(rows) };
+  const types: ColumnTypes = { ...inherited, ...getColumnTypes(rows) };
   for (const [column, entry] of Object.entries(schema)) {
     types[column] = columnTypeOf(column, entry);
   }
@@ -248,11 +255,20 @@ export async function applySchema<T>(
   const timeColumns = Object.entries(types).filter(
     ([, t]) => t.HasCalendar !== undefined
   );
+  const isEpochMs = (row: T): boolean =>
+    row == null ||
+    typeof row !== "object" ||
+    timeColumns.every(([column]) => {
+      const v = (row as Record<string, unknown>)[column];
+      return v == null || (typeof v === "number" && Number.isFinite(v));
+    });
   let out: T[] = [...rows];
   if (timeColumns.length > 0) {
     await loadTemporal();
     for (const [column, t] of timeColumns)
       checkZone(column, t.HasCalendar!.zone);
+  }
+  if (!rows.every(isEpochMs)) {
     // Long-format data repeats its dates, so each string is parsed once per
     // zone (for this call only).
     const parsed = new Map<string, unknown>();
@@ -276,10 +292,15 @@ export async function applySchema<T>(
   return setColumnTypes(copyMeasureProvenance(out, rows), types);
 }
 
+/** The zones {@link checkZone} has found valid. */
+const knownZones = new Set<string>();
+
 /** The loud error for a time zone Temporal does not know. */
 function checkZone(column: string, zone: string): void {
+  if (knownZones.has(zone)) return;
   try {
     temporal().Now.zonedDateTimeISO(zone);
+    knownZones.add(zone);
   } catch {
     throw new Error(
       `schema: column "${column}" has the time zone ${JSON.stringify(zone)}, ` +
