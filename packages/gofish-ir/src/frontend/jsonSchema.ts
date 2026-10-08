@@ -117,9 +117,8 @@ const pascalCase = (s: string): string =>
  * `meta`/`debug` always present as properties. `additionalProperties` stays
  * `true`: the published schema keeps the permissive wire contract (the JS
  * low-level factories accept passthrough options the fluent operators' IR doesn't model,
- * e.g. spread/stack `FancyDims` — real producers emit them); strict
- * unknown-field rejection is validate.ts strict mode's job, not the wire
- * artifact's.
+ * e.g. spread/stack `FancyDims` — real producers emit them); rejecting an
+ * unknown field is validate.ts's job, not the wire artifact's.
  */
 function buildOperatorDefs(): Record<string, unknown> {
   const defs: Record<string, unknown> = {};
@@ -158,12 +157,11 @@ function buildOperatorDefs(): Record<string, unknown> {
 
 /**
  * Build one `$def` per leaf-mark type (`RectMark`, `TextMark`, ...) plus the
- * `LeafMarkIR` union referencing them. Unlike operators, `additionalProperties`
- * stays `true` (leaf marks are open-world for now — the gradual-rollout
- * stance `validate.ts`'s leaf-mark warnings implement) and `required` is
- * just `["type"]` regardless of the descriptor's own required fields, so an
- * external strict consumer of this schema doesn't start rejecting documents
- * our own validator only warns about.
+ * `LeafMarkIR` union referencing them. Like the operator `$defs`,
+ * `additionalProperties` stays `true`, and `required` is just `["type"]`
+ * regardless of the descriptor's own required fields: the published schema
+ * keeps the open wire contract, and rejecting an unknown or missing field is
+ * validate.ts's job.
  */
 function buildLeafMarkDefs(): Record<string, unknown> {
   const defs: Record<string, unknown> = {};
@@ -207,7 +205,7 @@ function buildOptionTypeDefs(): Record<string, unknown> {
 
 /** `ChartOptions`, the `$def` of `ChartIR.options`, from `CHART_OPTIONS`. It
  *  stays open (no `additionalProperties: false`), like the operator `$defs`:
- *  an unknown key is validate.ts strict mode's to reject. */
+ *  an unknown key is validate.ts's to reject. */
 function buildChartOptionsDef(): Record<string, unknown> {
   return {
     ChartOptions: {

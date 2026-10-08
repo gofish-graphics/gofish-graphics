@@ -107,17 +107,32 @@ export async function toJSON(
 }
 
 /**
- * Wrap a root in the IR document envelope, with every non-finite number
- * (`Infinity`, `-Infinity`, `NaN`) in its tagged form, since JSON has no
- * spelling for them (see gofish-ir's `nonFinite.ts`). A reader decodes them
- * with `Serialize.readIR` before rebuilding the chart.
+ * Wrap a root in the IR document envelope, as plain JSON data: a value with a
+ * `toJSON` method (a `field(...)` or `datum(...)` instance) is replaced by
+ * its wire form, and every non-finite number (`Infinity`, `-Infinity`, `NaN`)
+ * is in its tagged form, since JSON has no spelling for them (see gofish-ir's
+ * `nonFinite.ts`). A reader decodes them with `Serialize.readIR` before
+ * rebuilding the chart.
  */
 function document(root: Frontend.FrontendIRDocument["root"]) {
   return Frontend.encodeNonFinite<Frontend.FrontendIRDocument>({
     irVersion: 0,
     ir: "gofish-frontend",
-    root,
+    root: wireForm(root) as Frontend.FrontendIRDocument["root"],
   });
+}
+
+/** `value` as the wire carries it: what `JSON.stringify` would write for an
+ *  object with a `toJSON` method, applied at every depth. */
+function wireForm(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (typeof (value as any).toJSON === "function") {
+    return wireForm((value as any).toJSON());
+  }
+  if (Array.isArray(value)) return value.map(wireForm);
+  const out: AnyObject = {};
+  for (const [k, v] of Object.entries(value)) out[k] = wireForm(v);
+  return out;
 }
 
 /**

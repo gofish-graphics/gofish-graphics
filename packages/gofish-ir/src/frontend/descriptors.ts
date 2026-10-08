@@ -237,6 +237,20 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
     type: t.boolean,
     doc: "Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.",
   },
+  // Python bridge fields (the serialization essay's "Bridge extensions"):
+  // the renderer reads them, so they are declared like any other field.
+  __scope: {
+    type: t.literal(true),
+    doc: "The mark is a component: the Python @mark decorator's output. The renderer seals it like a JS createMark component.",
+  },
+  __datum: {
+    type: t.any,
+    doc: "Python bind_data(): the datum the mark is pre-bound to.",
+  },
+  __key: {
+    type: t.union(t.string, t.number),
+    doc: "Python bind_data(): the key the mark is pre-bound to.",
+  },
 });
 
 /** The base fields the Python generator exposes as leaf-mark kwargs (the

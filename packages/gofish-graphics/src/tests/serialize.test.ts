@@ -58,10 +58,10 @@ function check(name: string, ok: boolean, detail?: string): void {
   }
 }
 
-function validateDoc(doc: unknown, label: string, strict = true) {
-  const r = Frontend.validate(doc, { strict });
+function validateDoc(doc: unknown, label: string) {
+  const r = Frontend.validate(doc);
   check(
-    `${label} validates (${strict ? "strict" : "permissive"})`,
+    `${label} validates`,
     r.valid,
     r.valid ? undefined : JSON.stringify(r.errors).slice(0, 200)
   );
@@ -351,13 +351,11 @@ async function main() {
           ...root,
           mark: { type: "rect", dims: { theta: { width: 2 } } },
         },
-      },
-      { strict: true }
+      }
     );
-    // Leaf marks only warn during the descriptor rollout (validate.ts).
     check(
-      "an interval with a non-anchor key is flagged",
-      bad.warnings.some((w: any) => w.message.includes('"width"'))
+      "an interval with a non-anchor key is rejected",
+      !bad.valid && bad.errors.some((e: any) => e.message.includes('"width"'))
     );
   }
 
@@ -455,7 +453,7 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // Per-operator `axes` override propagates and validates strict.
+  // Per-operator `axes` override propagates and validates.
   // -------------------------------------------------------------------------
   {
     const c = chart([
@@ -518,7 +516,7 @@ async function main() {
     const c = chart(data)
       .mark(rect({ h: field("count"), fill: literal("steelblue") }));
     const doc = await c.toJSON();
-    validateDoc(doc, "field/literal explicit chart", false);
+    validateDoc(doc, "field/literal explicit chart");
     const mark = (doc.root as Frontend.ChartIR).mark as any;
     check(
       "field('count') survives on the wire",

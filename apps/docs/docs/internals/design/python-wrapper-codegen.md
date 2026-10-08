@@ -203,10 +203,11 @@ are still checked), and every
 other kwarg stays closed. The top-level `x/y/w/h` keys keep working in every
 coordinate space, where they mean axis 0 and axis 1.
 
-Strictness rolls out gradually: the generated Python signatures are closed
-immediately (that's where autocomplete lives); `validate.ts` can start
-warning rather than rejecting unknown leaf-mark fields until the enumerated
-lists have been proven against the story corpus, then flip to strict.
+Strictness rolled out gradually: the generated Python signatures were closed
+immediately (that's where autocomplete lives); `validate.ts` warned rather
+than rejecting unknown leaf-mark fields until the enumerated lists had been
+proven against the story corpus. That flip has now happened: the validator
+has one mode, and an unknown field is an error everywhere.
 
 ## What a descriptor entry looks like
 
@@ -452,6 +453,12 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   The `axes` option of `.render(...)` was already converted in the widget
   constructor; a test now covers it on charts, marks, and layers.
 
+- **One validator mode.** The validator's permissive mode is gone: an
+  unknown field is an error on the envelope, on operators, on leaf marks
+  (no longer a warning), and in a combinator mark's `options`. The Python
+  bridge fields the renderer reads (`__scope`, `__datum`, `__key`) are
+  declared in `MARK_BASE_FIELDS`. Every Python story validates.
+
 **Deliberately deferred**, not follow-up bugs:
 
 - **The relate ref-walk** (`RelatableMark.relate`'s Python-side
@@ -472,6 +479,3 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   passthrough that the fluent operators' IR doesn't expose; `descriptors.ts`
   documents this as IR truth rather than resolving it (see the `NOTE`
   comments on `OPERATORS.spread`/`OPERATORS.stack`).
-- **Flipping leaf-mark validation from warn to strict** — waiting on the
-  enumerated channel lists being checked against the full story corpus,
-  per the gradual-rollout stance in § The mark-channel decision above.

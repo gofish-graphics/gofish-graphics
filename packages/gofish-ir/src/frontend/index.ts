@@ -5,7 +5,6 @@ export {
   isAxisInterval,
   type ValidationResult,
   type ValidationError,
-  type ValidationWarning,
 } from "./validate.js";
 export {
   exampleBarChart,

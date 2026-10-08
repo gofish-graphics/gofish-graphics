@@ -92,12 +92,11 @@ Validate either against the schema:
 
 ```ts
 import { Frontend } from "gofish-ir";
-const result = Frontend.validate(doc, { strict: true });
+const result = Frontend.validate(doc);
 if (!result.valid) console.error(result.errors);
 ```
 
-`strict: true` rejects unknown fields (for tests + CI); the default
-permissive mode ignores them for forward-compatible reading.
+The validator has one mode: an unknown field is an error, wherever it sits.
 
 ## The document at a glance
 
@@ -435,7 +434,7 @@ A channel value that is an object always carries one (`type` for
 sentinel), so an untagged plain object is an interval. `validate.ts` exports
 that test as `isAxisInterval`, and its channel check rejects an untagged
 object, so the generic union walk reads an untagged object only as an
-interval and reports a misspelled anchor (in strict mode) or a mistyped one.
+interval and reports a misspelled anchor or a mistyped one.
 The renderer's `dims.ts` imports `isAxisInterval` and the key list
 `AXIS_INTERVAL_KEYS`, so the wire and the renderer share one definition; a
 test checks that the key list matches the `AxisInterval` declaration.
@@ -447,29 +446,19 @@ Six consumers read the table:
 
 - **`validate.ts`** interprets it generically — a single walk over each
   descriptor's resolved fields instead of a per-type imperative switch.
-  **Operators keep their original exact accept/reject behavior**: an
-  unknown field or a wrong-shaped known one is a hard validation error,
-  same as before the refactor. **Leaf marks only warn**, never reject, on
-  an unknown or mistyped field — a deliberate rollout stance. Leaf-mark
-  channel lists were previously open-world in the IR (`[key: string]:
-unknown`) even though they aren't really open on the JS side (a mark's
-  real channels are exactly its factory's destructured options); flipping
-  straight to strict rejection risked breaking specs that happen to rely
-  on a field the descriptor entry hasn't caught up to yet. The warning
-  period is the mechanism for finding those gaps safely; once the
-  enumerated lists have been checked against the story corpus, leaf marks
-  flip to strict like operators. Until then, don't read "validated"
-  against a leaf mark's field list as "guaranteed accepted."
+  Operators, leaf marks, and a combinator mark's `options` are all checked
+  the same way: an unknown field or a wrong-shaped known one is an error.
+  Leaf marks used to only warn, during a rollout that ended once every
+  Python story validated with no warnings. The Python bridge fields the
+  renderer reads (`__scope`, `__datum`, `__key`) are declared in
+  `MARK_BASE_FIELDS` like any other field, so nothing is exempt by name.
 - **`jsonSchema.ts`** builds one `$def` per operator (`SpreadOperator`,
   `TableOperator`, …) and one per leaf mark (`RectMark`, `TextMark`, …)
   from the table (`buildOperatorDefs()` / `buildLeafMarkDefs()`), and one
   per named option type (`buildOptionTypeDefs()`), merged into the
-  hand-written `$defs` object. Operator `$defs` are
-  `additionalProperties: false` (schema-level strict, matching
-  `validate.ts`'s operator behavior); leaf-mark `$defs` stay
-  `additionalProperties: true` so an external strict consumer of the
-  published schema doesn't start rejecting documents our own validator
-  only warns about.
+  hand-written `$defs` object. These `$defs` stay
+  `additionalProperties: true`: the published schema keeps the open wire
+  contract, and rejecting an unknown field is `validate.ts`'s job.
 - **The JS emitter** (`toJSON`) filters what reaches the wire through it.
   A factory tags its options as the caller passed them; `wireOpts` keeps
   only the keys `acceptedFields(kind, type)` lists, and drops any function
@@ -485,9 +474,11 @@ unknown`) even though they aren't really open on the JS side (a mark's
   `COMBINATOR_OPTIONS_BASE_FIELDS` (`debug`) ride; its other base fields sit on
   the node. The emitter keeps these keys, and the validator checks an operator
   or leaf-mark node against them. On a leaf mark, the base fields that Mark
-  methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked as
-  errors by their own walkers, so the warning-level check of the mark's
-  channels skips them.
+  methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked by
+  their own walkers, so the check of the mark's channels skips them. The
+  emitter writes plain JSON data: a `field(...)` or `datum(...)` instance is
+  replaced by its `toJSON()` form, so the document it returns is the one the
+  wire carries and validates as such.
 
 - **The JS deserializer** (`registry.ts`) rebuilds a wire type through
   the factory its descriptor names — see § Modularity below.
@@ -562,13 +553,9 @@ described above, plus the structural checks for the hand-authored parts
 (e.g. `table.by` requires `{x, y}`). A field typed with a named option type,
 such as the `axes` override on `spread`/`stack`/`scatter`, is walked by the
 same generic interpreter against its `OPTION_TYPES` entry, and so is a
-chart's `options`, against `CHART_OPTIONS`. In strict mode a nested object
-rejects a key it does not declare. A union accepts a value when any branch
-does, which is why the JSON Schema writes a union as `anyOf`, not `oneOf`.
-It runs in permissive mode by
-default (unknown fields ignored, for forward-compat) and strict mode in
-CI tests — "strict" here composes with the operator-reject/leaf-mark-warn
-split above, it doesn't override it.
+chart's `options`, against `CHART_OPTIONS`. A nested object rejects a key it
+does not declare. A union accepts a value when any branch does, which is why
+the JSON Schema writes a union as `anyOf`, not `oneOf`.
 
 ## Generating the Python factory layer
 
