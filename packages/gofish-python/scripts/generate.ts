@@ -29,10 +29,15 @@
  *    type (OPTION_TYPES) and the one interpreter that renames the keys of a
  *    nested option dict (`axes={"x": {"label_angle": 45}}`) to wire keys by
  *    the field's declared type, raising TypeError on an undeclared key.
+ *  - The strategy family modules, `gofish/<family>.py` (`tile.py`,
+ *    `overlap.py`, `curve.py`), one factory per kind and per preset of the
+ *    STRATEGIES table. Each builds `{"kind": ..., **params}` with snake_case
+ *    keys, which `_to_wire` renames at the option the strategy is passed to
+ *    (each family is an OPTION_TYPES entry).
  * `derive`/`resolve`/`join` (real logic: RPC bridge, ref-shape narrowing,
- * DataFrame conversion) and `palette`/`gradient`/`field`/`datum`/`normalize`/
- * `repeat`/`ref`/`selectAll` (not in the descriptor table) stay fully
- * hand-written.
+ * DataFrame conversion), `field`/`datum`/`normalize`/`repeat`/`ref`/
+ * `selectAll`, and the Color and Coord family modules (`color.py`,
+ * `coord.py`; see the note on STRATEGIES) stay hand-written.
  */
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -48,8 +53,10 @@ import {
   PY_LEAF_BASE_KWARGS,
   PY_OPERATOR_BASE_KWARGS,
   LABEL_OPTIONS,
+  STRATEGIES,
   pyKwarg,
   resolveFields,
+  type StrategyFamily,
   type FieldGroup,
   type FieldSpec,
   type FieldType,
@@ -94,6 +101,7 @@ function pyType(f: FieldType): string {
         if (o.kind === "number") return "float";
         if (o.kind === "boolean") return "bool";
         if (o.kind === "literal") return literalPyType(o.value);
+        if (o.kind === "enum") return "str";
         return null;
       });
       if (prims.every(Boolean)) return `Union[${prims.join(", ")}]`;
@@ -122,9 +130,12 @@ function docLine(name: string, f: FieldSpec): string | null {
   if (!f.doc && f.default === undefined) return null;
   let text = f.doc ?? "";
   if (f.default !== undefined) {
-    text = text
-      ? `${text} Default ${JSON.stringify(f.default)}.`
-      : `Default ${JSON.stringify(f.default)}.`;
+    // JSON has no Infinity; the docs spell it as JS and Python read it.
+    const shown =
+      typeof f.default === "number" && !Number.isFinite(f.default)
+        ? String(f.default)
+        : JSON.stringify(f.default);
+    text = text ? `${text} Default ${shown}.` : `Default ${shown}.`;
   }
   return `        ${name}: ${text}`;
 }
@@ -697,3 +708,120 @@ parts.push(
 
 writeFileSync(OUT_FILE, parts.join("\n").replace(/\n{3,}/g, "\n\n\n") + "\n");
 console.log(`wrote ${OUT_FILE}`);
+
+// ---------------------------------------------------------------------------
+// Strategy families: one module per family, gofish/<family>.py
+// ---------------------------------------------------------------------------
+
+/** A preset param value as a Python literal. */
+function pyLiteral(v: unknown): string {
+  if (v === Infinity) return "math.inf";
+  if (v === -Infinity) return "-math.inf";
+  if (typeof v === "boolean") return v ? "True" : "False";
+  if (typeof v === "string" || typeof v === "number") return JSON.stringify(v);
+  throw new Error(`no Python literal for preset value ${JSON.stringify(v)}`);
+}
+
+/** One factory of a family: a function that builds the strategy dict. Its
+ *  keys are the snake_case kwarg names; the option the dict is passed to
+ *  renames them to wire keys (`_to_wire`, by the family's OPTION_TYPES
+ *  entry), as for any nested option dict. */
+function renderStrategyFactory(opts: {
+  name: string;
+  kind: string;
+  params: FieldGroup;
+  preset: Record<string, unknown>;
+  doc: string;
+}): string {
+  const { name, kind, params, preset, doc } = opts;
+  const ents = entries(params);
+  // A preset value is this factory's default for that param.
+  const docLines = ents
+    .map(([py, , spec]) => {
+      const field = Object.keys(params).find((f) => pyKwarg(f) === py)!;
+      return docLine(
+        py,
+        field in preset ? { ...spec, default: preset[field] } : spec
+      );
+    })
+    .filter(Boolean);
+  const docstring = docLines.length
+    ? [`    """${doc}`, "", "    Args:", ...docLines, `    """`].join("\n")
+    : `    """${doc}"""`;
+  const head = [
+    `${pyStr("kind")}: ${pyStr(kind)}`,
+    ...Object.entries(preset).map(
+      ([field, value]) => `${pyStr(pyKwarg(field))}: ${pyLiteral(value)}`
+    ),
+  ].join(", ");
+  if (ents.length === 0) {
+    return [
+      `def ${name}() -> Dict[str, Any]:`,
+      docstring,
+      `    return {${head}}`,
+    ].join("\n");
+  }
+  const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
+  const body = [
+    `    out: Dict[str, Any] = {${head}}`,
+    `    for _k, _v in [`,
+    ...ents.map(([py]) => `        (${pyStr(py)}, ${py}),`),
+    `    ]:`,
+    `        if _v is not None:`,
+    `            out[_k] = _v`,
+    `    return out`,
+  ].join("\n");
+  return [`def ${name}(*, ${sig}) -> Dict[str, Any]:`, docstring, body].join(
+    "\n"
+  );
+}
+
+for (const [family, spec] of Object.entries(STRATEGIES) as Array<
+  [string, StrategyFamily]
+>) {
+  const module = family.toLowerCase();
+  const factories = [
+    ...Object.entries(spec.kinds).map(([kind, k]) => ({
+      name: pyKwarg(kind),
+      kind,
+      params: k.params,
+      preset: {},
+      doc: k.doc,
+    })),
+    ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
+      name: pyKwarg(name),
+      kind: p.kind,
+      params: spec.kinds[p.kind].params,
+      preset: p.values,
+      doc: p.doc,
+    })),
+  ];
+  const example = factories[0].name;
+  const functions = factories.map(renderStrategyFactory);
+  const usesMath = functions.some((f) => f.includes("math."));
+  const source = [
+    `# GENERATED by packages/gofish-python/scripts/generate.ts from the gofish-ir`,
+    `# STRATEGIES table — do not edit; run \`pnpm --filter gofish-python gen\`.`,
+    `"""`,
+    `The \`\`${family}\`\` family. ${spec.doc}`,
+    ``,
+    `The package binds this module as \`\`${family}\`\`, so \`\`${family}.${example}()\`\` and`,
+    `\`\`from gofish.${module} import ${example}\`\` reach the same function. A strategy is a`,
+    `plain dict, \`\`{"kind": ..., **params}\`\`, with snake_case param keys; the option it`,
+    `is passed to renames them to the camelCase wire keys. Mirrors JS`,
+    `\`\`gofish-graphics/${module}\`\`.`,
+    `"""`,
+    ``,
+    ...(usesMath ? [`import math`] : []),
+    `from typing import Any, Dict, Optional, Union`,
+    ``,
+    `__all__ = [${factories.map((f) => pyStr(f.name)).join(", ")}]`,
+    ``,
+    ``,
+    functions.join("\n\n\n"),
+    ``,
+  ].join("\n");
+  const outFile = join(HERE, "..", "gofish", `${module}.py`);
+  writeFileSync(outFile, source);
+  console.log(`wrote ${outFile}`);
+}
