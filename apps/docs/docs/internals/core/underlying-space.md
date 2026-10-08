@@ -1759,10 +1759,10 @@ reads only the classes, never the builder words. Three classes exist:
   whose first value is a JS `Date` is a UTC time. Strings and numbers never
   are. A pandas, polars or pyarrow datetime column crosses from Python as an
   Arrow timestamp or date column, unchanged, and the widget's decode
-  (`widget-src/arrowDecode.ts`) reads it as `Date`s and attaches
+  (`widget-src/arrowDecode.ts`) reads it as epoch milliseconds and attaches
   `HasCalendar` in the column's own zone to the rows, as column types, so
-  `applySchema` is still the one place that converts values, and a declared
-  `schema` entry wins over the decoded type. An instant has no zero. A position read from the column carries the
+  `applySchema` finds the values already converted, and a declared `schema`
+  entry wins over the decoded type. An instant has no zero. A position read from the column carries the
   class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
   for any typed column, with `createOperator` passing the column it resolved
   from the whole input, measure and type together, `resolveColumn`), and the point space it
@@ -1781,11 +1781,14 @@ same way a transform's measure provenance does: `ChartBuilder` copies the
 array and tags it (`applySchema`, which keeps the measure provenance the
 array already carries), `createOperator` copies the tag onto each
 split leaf, and a `derive` (any data-transform operator, `mapOperator` in
-`marks/chart.ts`) keeps it on its result for every column the result does
-not type itself, then puts the result through `applySchema` too, so a
-returned column of `Date`s (or a datetime column a Python callback returns,
-which the widget decodes as one) is a time in epoch milliseconds, as chart
-data is. So the stack's split reads
+`marks/chart.ts`) types its result with `applySchema` too, passing its
+input's types as the inherited ones, which the result's own types override
+column by column. So a returned column of `Date`s is a time in epoch
+milliseconds, as chart data is (a datetime column a Python callback returns
+arrives typed and in epoch milliseconds from the widget's decode), and the
+operator never tags the array its function returned. `applySchema` copies
+the rows only when some time value is not epoch milliseconds already;
+otherwise it tags a shallow copy of the array. So the stack's split reads
 its `by` column's type off the data it splits, and a color channel's
 `DatumValueImpl` records the type of the field it read (`fieldType`), which
 lets the categorical color scale list its domain in the column's order. A
