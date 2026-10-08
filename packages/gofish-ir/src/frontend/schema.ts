@@ -364,7 +364,8 @@ export type OverlapStrategyIR =
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
  * object: `title` (string for a custom title, `false` to suppress), `side`
- * (the frame edge), and `labelAngle` (label rotation in degrees).
+ * (the frame edge), `labelAngle` (label rotation in degrees), and `rows` (the
+ * label rows of a time axis, inner row first).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions =
@@ -373,7 +374,24 @@ export type AxisOptions =
       title?: string | false;
       side?: "start" | "end";
       labelAngle?: number | number[] | "auto";
+      rows?: CalendarPartitionIR[];
     };
+
+/** A Calendar value's wire form (`Calendar.month.every(3)`): a calendar level
+ *  at a step. `start` is the first day of a week, for weeks only. */
+export type CalendarPartitionIR = {
+  unit:
+    | "second"
+    | "minute"
+    | "hour"
+    | "day"
+    | "week"
+    | "month"
+    | "quarter"
+    | "year";
+  step?: number;
+  start?: "monday" | "sunday";
+};
 
 export interface TableOperator
   extends BaseIRNode,

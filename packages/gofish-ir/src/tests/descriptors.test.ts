@@ -174,6 +174,7 @@ const SCHEMA_OPTION_TYPE_KEYS: Record<string, Record<string, true>> = {
     title: true,
     side: true,
     labelAngle: true,
+    rows: true,
   } satisfies Record<keyof Exclude<AxisOptions, boolean>, true>,
   AxesOptions: {
     x: true,
