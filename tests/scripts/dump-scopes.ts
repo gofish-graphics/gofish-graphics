@@ -45,7 +45,7 @@ async function main() {
     );
     for (const story of stories) {
       buffer = [];
-      await page.evaluate(async (id) => window.__renderStory__(id), story.id);
+      await page.evaluate(async (s) => window.__renderStory__(s), story);
       await page.waitForFunction(() => window.__STORY_RENDER_DONE__ === true, {
         timeout: 15_000,
       });

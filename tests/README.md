@@ -82,7 +82,9 @@ there is no pass/fail signal for a layout change.
 `capture-diff` fills that gap. It answers **"did my change move anything I didn't
 intend?"** by capturing the normalized DOM of every story twice — once from the
 current worktree (HEAD) and once from a throwaway git worktree checked out at a
-base ref — and diffing the two per story:
+base ref — and diffing the two per story. Both captures use the current
+worktree's capture tooling (`tests/harness/` and `tests/scripts/`), so only the
+library and the stories come from the base ref:
 
 ```bash
 pnpm capture-diff main          # whole suite vs main
@@ -163,11 +165,12 @@ open tests/tmp/diff-report.html
 
 ### CI
 
-The `Visual Tests` workflow splits the work into three jobs:
+The `Visual Tests` workflow splits the work into these jobs:
 
-- `js-capture` captures every story once (the slow part) and uploads `tests/tmp/js/` as the `js-dom-capture` artifact.
-- `visual-test` downloads that artifact and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there sends only the run id and the accepted story paths, as a `visual-baselines-accept` repository_dispatch. The `Accept Visual Baselines` workflow (`accept-visual-baselines.yml`) has two jobs. The `accept` job runs `scripts/accept-baselines.ts`. It first checks that the run is a Visual Tests run of that branch in this repository, and only then marks the PR's `Visual Diff Review` status as pending. It copies the accepted files from the run's `js-dom-capture` artifact to `snapshots/<branch>` in one commit, through the same writer (`commitToSnapshotBranch` in `snapshot-branch.ts`) that updates `snapshots/main` after a merge. An accept that finds the branch moved is redone on top of the new head. A full update of `snapshots/main` fails instead, so older captures never overwrite newer baselines. The `rerun` job waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and then re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again. You can accept by hand too: `pnpm --filter @gofish/tests accept-baselines <run-id> <branch> --all [--dry-run]`, or `--accept-file`/`--remove-file` with one story path per line (absolute paths, since the command runs in `tests/`). `--all` accepts exactly the diffs the run reported, which are the ones its review site lists. The diff report writes that list to `diff-list.json`, which CI uploads in the `visual-diff-report` artifact next to `diff-report.html`. `--all` fails if the file is missing.
-- `python-parity` downloads the same artifact, captures the Python stories, and runs `compare-python.ts` against the JS capture. It runs at the same time as `visual-test` and does not wait on the visual review.
+- `js-capture` captures every story once (the slow part). It runs as a matrix of shards on parallel runners (`capture-js-dom.ts --shard i/N`), each uploading a `js-dom-capture-<i>` artifact; the job's comment in `visual-tests.yml` says how they merge.
+- `python-capture` captures the Python stories at the same time, and uploads `tests/tmp/python/` as the `python-dom-capture` artifact.
+- `visual-test` downloads the JS capture and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there sends only the run id and the accepted story paths, as a `visual-baselines-accept` repository_dispatch. The `Accept Visual Baselines` workflow (`accept-visual-baselines.yml`) has two jobs. The `accept` job runs `scripts/accept-baselines.ts`. It first checks that the run is a Visual Tests run of that branch in this repository, and only then marks the PR's `Visual Diff Review` status as pending. It copies the accepted files from the run's `js-dom-capture-<i>` artifacts to `snapshots/<branch>` in one commit, through the same writer (`commitToSnapshotBranch` in `snapshot-branch.ts`) that updates `snapshots/main` after a merge. An accept that finds the branch moved is redone on top of the new head. A full update of `snapshots/main` fails instead, so older captures never overwrite newer baselines. The `rerun` job waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and then re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again. You can accept by hand too: `pnpm --filter @gofish/tests accept-baselines <run-id> <branch> --all [--dry-run]`, or `--accept-file`/`--remove-file` with one story path per line (absolute paths, since the command runs in `tests/`). `--all` accepts exactly the diffs the run reported, which are the ones its review site lists. The diff report writes that list to `diff-list.json`, which CI uploads in the `visual-diff-report` artifact next to `diff-report.html`. `--all` fails if the file is missing.
+- `python-parity` downloads both captures and runs `compare-python.ts` on them. It runs at the same time as `visual-test` and does not wait on the visual review.
 
 ## Python Parity
 

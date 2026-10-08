@@ -46,29 +46,8 @@ jobs:
       # Same MS-core-fonts pinning as perf-bench.yml: the splice step renders and
       # measures both ruler bundles, so text-metric stability matters for the
       # ratio to be trustworthy.
-      - name: Restore mscorefonts .ttf cache
-        id: msfonts-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/msttcorefonts
-          key: msttcorefonts-v1
-
-      - name: Install MS TrueType core fonts
-        run: |
-          set -euo pipefail
-          DEST=/usr/share/fonts/truetype/msttcorefonts
-          CACHE="$HOME/.cache/msttcorefonts"
-          if [ -d "$CACHE" ] && ls "$CACHE"/*.ttf >/dev/null 2>&1; then
-            sudo mkdir -p "$DEST"
-            sudo cp "$CACHE"/*.ttf "$DEST"/
-          else
-            echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
-            sudo apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer
-            mkdir -p "$CACHE"
-            cp "$DEST"/*.ttf "$CACHE"/
-          fi
-          sudo fc-cache -f
+      - name: Set up MS core fonts
+        uses: ./.github/actions/setup-ms-fonts
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -82,27 +61,8 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install
 
-      - name: Restore Playwright browser cache
-        id: playwright-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
-
-      - name: Save Playwright browser cache
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
+      - name: Set up Playwright
+        uses: ./.github/actions/setup-playwright
 
       # Fetch the append-only benchmarks data branch (read-only worktree) to look
       # up the previous ruler and to short-circuit if this version is already

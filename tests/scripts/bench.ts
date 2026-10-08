@@ -453,11 +453,11 @@ async function benchExamplesJs(
       () =>
         sampleLoop<Sample>(page, async () => {
           const r = await withinBudget(
-            page.evaluate(async (id) => {
+            page.evaluate(async (s) => {
               const w = window as any;
               w.__GOFISH_PERF__ = { enabled: true, current: null };
               w.__STORY_RENDER_WALL_MS__ = 0;
-              const success = await w.__renderStory__(id);
+              const success = await w.__renderStory__(s);
               if (!success)
                 return {
                   ok: false as const,
@@ -472,7 +472,7 @@ async function benchExamplesJs(
                   | Counts
                   | undefined,
               };
-            }, story.id)
+            }, story)
           );
           if (!r.ok) return { ok: false };
           return {

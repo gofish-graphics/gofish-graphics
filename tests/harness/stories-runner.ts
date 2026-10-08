@@ -1,26 +1,41 @@
 /**
- * Batch story runner — imports all story modules via Vite's import.meta.glob,
- * then exposes functions for Playwright to list and render stories one at a time
- * in the same page (no navigation between stories).
+ * Batch story runner — exposes functions for Playwright to list and render
+ * stories one at a time in the same page (no navigation between stories).
+ *
+ * Story modules are loaded lazily, through Vite's import.meta.glob:
+ * `__renderStory__` loads only the module of the story it renders, and
+ * `__listStories__` is the one call that loads every module. The capture
+ * opens a fresh page per story (see tests/scripts/capture-core.ts), and
+ * loading the whole corpus there, data included, to render one story was
+ * most of each story's capture time.
  */
 
 import { disposeChart } from "../../packages/gofish-graphics/src/ast/gofish";
 
-// Import all story modules eagerly so they're available synchronously after page
-// load. Both workspace packages with stories are scanned: gofish-graphics and the
+// Both workspace packages with stories are scanned: gofish-graphics and the
 // gofish-gotree tree-DSL package (the latter compiles its SolidJS source directly
 // via the relative `../../src` import in its stories, so no built dist is needed).
-const storyModules = {
+const storyModuleLoaders = {
   ...import.meta.glob(
-    "../../packages/gofish-graphics/stories/**/*.stories.tsx",
-    {
-      eager: true,
-    }
+    "../../packages/gofish-graphics/stories/**/*.stories.tsx"
   ),
-  ...import.meta.glob("../../packages/gofish-gotree/stories/**/*.stories.tsx", {
-    eager: true,
-  }),
-} as Record<string, any>;
+  ...import.meta.glob("../../packages/gofish-gotree/stories/**/*.stories.tsx"),
+} as Record<string, () => Promise<any>>;
+
+/** Story modules by module key, each loaded on first use. */
+const storyModules = new Map<string, Promise<any>>();
+
+function loadModule(moduleKey: string): Promise<any> {
+  let mod = storyModules.get(moduleKey);
+  if (!mod) {
+    const load = storyModuleLoaders[moduleKey];
+    if (!load)
+      return Promise.reject(new Error(`Unknown story module: ${moduleKey}`));
+    mod = load();
+    storyModules.set(moduleKey, mod);
+  }
+  return mod;
+}
 
 interface StoryInfo {
   id: string;
@@ -32,11 +47,17 @@ interface StoryInfo {
   gallery?: { title: string; description: string };
 }
 
-/** Build a flat list of all stories from the imported modules. */
-function buildStoryList(): StoryInfo[] {
+/** What `__renderStory__` takes: a story's module and export name. */
+type StoryRef = Pick<StoryInfo, "moduleKey" | "name">;
+
+/** Load every story module and list their stories, in glob order. */
+async function listStories(): Promise<StoryInfo[]> {
+  const moduleKeys = Object.keys(storyModuleLoaders);
+  const modules = await Promise.all(moduleKeys.map(loadModule));
   const stories: StoryInfo[] = [];
 
-  for (const [moduleKey, mod] of Object.entries(storyModules)) {
+  for (const [i, moduleKey] of moduleKeys.entries()) {
+    const mod = modules[i];
     const meta = mod.default;
     if (!meta?.title) continue;
 
@@ -66,27 +87,34 @@ function buildStoryList(): StoryInfo[] {
   return stories;
 }
 
-const allStories = buildStoryList();
-
 // ---------------------------------------------------------------------------
 // Exposed to Playwright via page.evaluate
 // ---------------------------------------------------------------------------
 
 declare global {
   interface Window {
-    __listStories__: () => StoryInfo[];
-    __renderStory__: (id: string) => Promise<boolean>;
+    __listStories__: () => Promise<StoryInfo[]>;
+    __loadStory__: (story: StoryRef) => Promise<void>;
+    __renderStory__: (story: StoryRef) => Promise<boolean>;
     __STORY_RENDER_DONE__: boolean;
     __STORY_RENDER_ERROR__: string | null;
     // Wall time from render start through the rAF flush, EXCLUDING the trailing
     // settle setTimeout — the bench reads this as the un-instrumented engine time.
     __STORY_RENDER_WALL_MS__: number;
     __STORIES_RUNNER_READY__: boolean;
-    __STORIES_RUNNER_ERROR__: string | null;
   }
 }
 
-window.__listStories__ = () => allStories;
+window.__listStories__ = listStories;
+
+/**
+ * Load a story's module without rendering it. `__renderStory__` loads it
+ * anyway; this is for a caller that must have the module loaded before the
+ * render starts (capture-core's fake clock, which it pauses in between).
+ */
+window.__loadStory__ = async (story: StoryRef): Promise<void> => {
+  await loadModule(story.moduleKey);
+};
 
 /** The children `<body>` had at load; anything else there a story appended. */
 const bodyAtLoad = new Set<Node>(document.body.childNodes);
@@ -115,27 +143,22 @@ function disposePreviousStory(root: HTMLElement): void {
 }
 
 /**
- * Render a single story into #stories-root.
+ * Render a single story into #stories-root, loading its module first.
  * Returns true on success, false on error (check __STORY_RENDER_ERROR__).
  */
-window.__renderStory__ = async (id: string): Promise<boolean> => {
+window.__renderStory__ = async (ref: StoryRef): Promise<boolean> => {
   window.__STORY_RENDER_DONE__ = false;
   window.__STORY_RENDER_ERROR__ = null;
 
   const root = document.getElementById("stories-root")!;
   disposePreviousStory(root);
 
-  const info = allStories.find((s) => s.id === id);
-  if (!info) {
-    window.__STORY_RENDER_ERROR__ = `Story not found: ${id}`;
-    window.__STORY_RENDER_DONE__ = true;
-    return false;
-  }
-
-  const mod = storyModules[info.moduleKey];
-  const story = mod[info.name];
-
   try {
+    const story = (await loadModule(ref.moduleKey))[ref.name];
+    if (typeof story?.render !== "function") {
+      throw new Error(`Story not found: ${ref.moduleKey} ${ref.name}`);
+    }
+
     // Handle async loaders (vega-lite stories that fetch datasets)
     let context: any = {};
     if (story.loaders?.length) {
@@ -189,15 +212,4 @@ window.__renderStory__ = async (id: string): Promise<boolean> => {
 window.__STORY_RENDER_DONE__ = false;
 window.__STORY_RENDER_ERROR__ = null;
 window.__STORY_RENDER_WALL_MS__ = 0;
-window.__STORIES_RUNNER_READY__ = false;
-window.__STORIES_RUNNER_ERROR__ = null;
-
-// Signal that the runner is ready (or failed)
-try {
-  // Touch allStories to force evaluation now (catches module-load errors)
-  void allStories.length;
-  window.__STORIES_RUNNER_READY__ = true;
-} catch (err: any) {
-  window.__STORIES_RUNNER_ERROR__ = err?.message ?? String(err);
-  window.__STORIES_RUNNER_READY__ = true; // unblock Playwright so it can read the error
-}
+window.__STORIES_RUNNER_READY__ = true;

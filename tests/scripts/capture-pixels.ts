@@ -31,16 +31,18 @@
  * render failed / a story exists in only one ref).
  */
 
-import { execSync } from "child_process";
 import { readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
-import { captureStories } from "./capture-core.js";
-import { git, removeWorktree } from "./snapshot-branch.js";
+import {
+  captureStories,
+  HARNESS_DIR,
+  withBaseRefHarness,
+} from "./capture-core.js";
+import { git } from "./snapshot-branch.js";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
-const HARNESS_DIR = join(TESTS_DIR, "harness");
 const OUT_DIR = join(TESTS_DIR, "tmp/capture-pixels");
 const HEAD_DIR = join(OUT_DIR, "head");
 const BASE_DIR = join(OUT_DIR, "base");
@@ -110,38 +112,21 @@ async function main() {
   });
 
   // 2. <base-ref> from a throwaway worktree → PNGs (same process/browser).
-  const wtPath = join("/tmp", `gofish-capture-pixels-${process.pid}`);
-  removeWorktree(wtPath);
-  let baseResult;
-  try {
-    console.log(
-      `\n=== Checking out ${baseRef} (${baseShort}) into a temp worktree ===`
-    );
-    git(`git worktree add --detach "${wtPath}" ${baseSha}`);
-    console.log(`Installing dependencies in the temp worktree...`);
-    execSync("pnpm install --ignore-scripts", {
-      cwd: wtPath,
-      stdio: "inherit",
-    });
-
-    // --ignore-scripts also skips gofish-ir's `prepare` build, which the
-    // harness needs to resolve the package. Build it explicitly.
-    execSync("pnpm --filter gofish-ir build", {
-      cwd: wtPath,
-      stdio: "inherit",
-    });
-
+  //    Only the library and stories come from <base-ref>; the harness is this
+  //    tree's (see `withBaseRefHarness`).
+  console.log(
+    `\n=== Checking out ${baseRef} (${baseShort}) into a temp worktree ===`
+  );
+  const baseResult = await withBaseRefHarness(baseSha, (harnessDir) => {
     console.log(`\n=== Capturing ${baseRef} (${baseShort}) → PNG ===\n`);
-    baseResult = await captureStories({
-      harnessDir: join(wtPath, "tests/harness"),
+    return captureStories({
+      harnessDir,
       port: BASE_PORT,
       outDir: BASE_DIR,
       filter,
       screenshot: true,
     });
-  } finally {
-    removeWorktree(wtPath);
-  }
+  });
 
   // 3. Pixel-compare per story.
   const headSet = new Set(

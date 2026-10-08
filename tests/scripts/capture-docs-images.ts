@@ -21,9 +21,10 @@
  * (capture-core.ts), then screenshots the <svg>:
  *   1. Start a Vite dev server serving the stories-runner page
  *   2. Per story, open a FRESH browser context on that page (deviceScaleFactor
- *      2 → retina PNGs) with Playwright's fake clock installed and paused
- *   3. Render the story by its harness story id, hand it capture-core's fixed
- *      virtual time budget, screenshot, and close the context
+ *      2 → retina PNGs) with Playwright's fake clock installed
+ *   3. Render the story by its harness story id on the paused clock, hand it
+ *      capture-core's fixed virtual time budget, screenshot, and close the
+ *      context
  *
  * Both halves of step 2 matter for animated stories. The fake clock means an
  * animated story is pictured at the same frame on every build, and the
@@ -52,10 +53,12 @@ import { type Page } from "playwright";
 import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from "fs";
 import { join } from "path";
 import {
+  discoverStories,
   printLine,
   renderStoryOnFakeClock,
   withHarness,
   type OpenRunnerPage,
+  type StoryInfo,
 } from "./capture-core";
 
 // The docs package is `type: commonjs` while this one is `type: module`, so a
@@ -160,19 +163,17 @@ const dataUrl = (png: Buffer) =>
  */
 async function withStoryPage<T>(
   open: OpenRunnerPage,
+  stories: Map<string, StoryInfo>,
   storyId: string,
   shoot: (page: Page) => Promise<T>
 ): Promise<T> {
+  const story = stories.get(storyId);
+  if (!story) throw new Error(`Story not found: ${storyId}`);
   // deviceScaleFactor 2 → screenshots are 2× PNGs (retina-sharp at the CSS
   // w/h recorded in the manifest).
   const { context, page } = await open(printLine, { deviceScaleFactor: 2 });
   try {
-    const error = await renderStoryOnFakeClock(
-      page,
-      storyId,
-      storyId,
-      printLine
-    );
+    const error = await renderStoryOnFakeClock(page, story, storyId, printLine);
     if (error) throw new Error(error);
     return await shoot(page);
   } finally {
@@ -197,6 +198,9 @@ async function main() {
   const failed: string[] = [];
 
   await withHarness(HARNESS_DIR, VITE_PORT, async (open, browser) => {
+    const stories = new Map(
+      (await discoverStories(open)).map((story) => [story.id, story])
+    );
     // Fresh output dir each run so a removed gallery story doesn't leave a stale PNG.
     if (existsSync(PUBLIC_DIR)) rmSync(PUBLIC_DIR, { recursive: true });
     mkdirSync(PUBLIC_DIR, { recursive: true });
@@ -206,6 +210,7 @@ async function main() {
       try {
         const shot = await withStoryPage(
           open,
+          stories,
           ex.storyId,
           async (page): Promise<Shot> => {
             // Measure the svg in one evaluate and screenshot the page
@@ -271,6 +276,7 @@ async function main() {
       try {
         const shot = await withStoryPage(
           open,
+          stories,
           storyId,
           async (page): Promise<Shot> => {
             // Crop to the drawing, not the story's own canvas (its margins

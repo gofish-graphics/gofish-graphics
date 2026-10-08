@@ -33,10 +33,14 @@ jobs:
               - "packages/gofish-python/**"
               - "tests/**"
               - ".github/workflows/visual-tests.yml"
+              - ".github/actions/**"
 
   # Capturing every story is the expensive part of the visual tests.
-  # It runs once here and is uploaded as the `js-dom-capture` artifact, which
-  # two jobs consume in parallel: `visual-test` compares it against the
+  # It runs once per commit, split into shards that capture disjoint sets of
+  # stories on parallel runners (capture-js-dom.ts --shard i/N). Each shard
+  # uploads a `js-dom-capture-<i>` artifact, and the consumers download all of
+  # them into one `tests/tmp/js/`, the same tree an unsharded capture writes.
+  # Two jobs consume it in parallel: `visual-test` compares it against the
   # snapshot baselines, and `python-parity` compares the Python capture
   # against it. Accepting diffs on the review site re-runs only the cheap
   # `visual-test` compare job (#871), and parity no longer waits on the
@@ -47,69 +51,18 @@ jobs:
     # relevant files changed, otherwise skip (= success for required checks).
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.relevant == 'true' }}
     runs-on: ubuntu-latest
+    # A failed shard cancels the others: the capture is incomplete anyway, and
+    # the consumers fail on any result but success.
+    strategy:
+      matrix:
+        shard: [1, 2, 3, 4]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      # The PythonTutor stories (and several others) use Andale Mono, Verdana,
-      # and other MS-core fonts. ubuntu-latest doesn't ship those; without
-      # them Chromium falls through to fontconfig generic-monospace /
-      # generic-sans, and the JS storybook and Python harness end up
-      # measuring text against different fallback resolutions. Installing the
-      # MS core fonts pins both pipelines to the same actual font files.
-      #
-      # The .deb is a tiny installer stub — it downloads ~30MB of .ttf files
-      # from SourceForge during postinst (slow, ~50s). cache-apt-pkgs-action
-      # caches the installed files under /usr/share/fonts/..., so cache hits
-      # restore in ~3-5s and skip the SourceForge fetch.
-      # awalsh128/cache-apt-pkgs-action doesn't work for mscorefonts: the
-      # .deb is a tiny installer stub whose postinst downloads ~30MB of .ttf
-      # files from SourceForge *after* dpkg has recorded the package's
-      # file list. Those .ttf files aren't tracked by apt, so the cache
-      # restore (which only mirrors dpkg-tracked files) leaves
-      # /usr/share/fonts/truetype/msttcorefonts/ empty — cache hit then
-      # passes the verify? No: fc-match falls back to DejaVu and we're
-      # back to the fontconfig-fallback drift.
-      #
-      # So cache the .ttf files directly. First run pays the full ~50s
-      # install + SourceForge download; subsequent runs restore the .ttf
-      # files into /usr/share/fonts/ in ~3s.
-      - name: Restore mscorefonts .ttf cache
-        id: msfonts-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/msttcorefonts
-          key: msttcorefonts-v1
-
-      - name: Install MS TrueType core fonts
-        run: |
-          set -euo pipefail
-          DEST=/usr/share/fonts/truetype/msttcorefonts
-          CACHE="$HOME/.cache/msttcorefonts"
-          if [ -d "$CACHE" ] && ls "$CACHE"/*.ttf >/dev/null 2>&1; then
-            echo "Restoring fonts from cache: $CACHE"
-            sudo mkdir -p "$DEST"
-            sudo cp "$CACHE"/*.ttf "$DEST"/
-          else
-            echo "Cache miss; installing via apt (downloads from SourceForge)..."
-            echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
-            sudo apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer
-            mkdir -p "$CACHE"
-            cp "$DEST"/*.ttf "$CACHE"/
-          fi
-          sudo fc-cache -f
-
-      - name: Verify fonts resolve correctly
-        run: |
-          # fc-match always finds *something* (DejaVu is the ultimate
-          # fallback), so a non-zero exit doesn't catch a silently-broken
-          # install. Grep for the expected .ttf filename.
-          fc-match "Andale Mono" | grep -q "Andale_Mono.ttf" \
-            || { echo "FAIL: Andale Mono resolved to: $(fc-match 'Andale Mono')"; exit 1; }
-          fc-match "Verdana" | grep -q "Verdana.ttf" \
-            || { echo "FAIL: Verdana resolved to: $(fc-match 'Verdana')"; exit 1; }
+      - name: Set up MS core fonts
+        uses: ./.github/actions/setup-ms-fonts
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -126,41 +79,16 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install
 
-      - name: Restore Playwright browser cache
-        id: playwright-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
-
-      # Save cache immediately after a successful install rather than relying
-      # on the default end-of-job save. That way the cache is written even if
-      # a later step (e.g. the capture) fails, but NOT written if
-      # the install itself failed (the step is skipped on prior failure).
-      - name: Save Playwright browser cache
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      # On cache hit, browser binaries are restored but system libraries
-      # (installed via apt by --with-deps) are not. Install just those.
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
+      - name: Set up Playwright
+        uses: ./.github/actions/setup-playwright
 
       - name: Capture JS DOM snapshots
-        run: pnpm --filter @gofish/tests capture-js
+        run: pnpm --filter @gofish/tests capture-js --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Upload JS DOM capture
         uses: actions/upload-artifact@v5
         with:
-          name: js-dom-capture
+          name: js-dom-capture-${{ matrix.shard }}
           path: tests/tmp/js
           if-no-files-found: error
 
@@ -230,10 +158,14 @@ jobs:
 
       # Artifacts belong to the workflow run, not the attempt, so the re-run
       # the review site's accept action triggers still finds this capture.
+      # The shards merge into the full capture (see js-capture), so the
+      # removed-stories check in compare.ts and the snapshot update on main
+      # both see every story.
       - name: Download JS DOM capture
         uses: actions/download-artifact@v5
         with:
-          name: js-dom-capture
+          pattern: js-dom-capture-*
+          merge-multiple: true
           path: tests/tmp/js
 
       # On PRs: compare against baselines and fail if regressions are detected.
@@ -369,68 +301,22 @@ jobs:
               context: 'Visual Diff Review',
             });
 
-  # Compares the Python capture against the JS capture of the same commit,
-  # not against the snapshot baselines, so it runs in parallel with
-  # visual-test and does not wait on the visual review (#872).
-  python-parity:
+  # Captures the Python stories. It needs nothing from js-capture, so it runs
+  # alongside it; only python-parity, which compares the two, waits for both.
+  python-capture:
+    needs: changes
+    # Same condition as js-capture, so the two are skipped together.
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.relevant == 'true' }}
     runs-on: ubuntu-latest
-    needs: js-capture
-    # Same reasoning as visual-test: never let a failed js-capture turn this
-    # required check into a skipped (= passing) one.
-    if: ${{ !cancelled() && needs.js-capture.result != 'skipped' }}
-    permissions:
-      pull-requests: write
-      statuses: write # needed to publish parity-review-link commit status
 
     steps:
-      - name: Fail if the JS capture failed
-        if: needs.js-capture.result != 'success'
-        run: |
-          echo "::error::js-capture finished with '${{ needs.js-capture.result }}'; there is no capture to compare against."
-          exit 1
-
-      # fetch-depth 0: check-python-sync diffs against origin/main.
       - name: Checkout code
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
 
-      # Match the JS capture's font set so the Python harness measures text
-      # against the same actual fonts. See the js-capture job for the
-      # full explanation of why we cache .ttf files directly instead of
-      # using cache-apt-pkgs-action.
-      - name: Restore mscorefonts .ttf cache
-        id: msfonts-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/msttcorefonts
-          key: msttcorefonts-v1
-
-      - name: Install MS TrueType core fonts
-        run: |
-          set -euo pipefail
-          DEST=/usr/share/fonts/truetype/msttcorefonts
-          CACHE="$HOME/.cache/msttcorefonts"
-          if [ -d "$CACHE" ] && ls "$CACHE"/*.ttf >/dev/null 2>&1; then
-            echo "Restoring fonts from cache: $CACHE"
-            sudo mkdir -p "$DEST"
-            sudo cp "$CACHE"/*.ttf "$DEST"/
-          else
-            echo "Cache miss; installing via apt (downloads from SourceForge)..."
-            echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
-            sudo apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer
-            mkdir -p "$CACHE"
-            cp "$DEST"/*.ttf "$CACHE"/
-          fi
-          sudo fc-cache -f
-
-      - name: Verify fonts resolve correctly
-        run: |
-          fc-match "Andale Mono" | grep -q "Andale_Mono.ttf" \
-            || { echo "FAIL: Andale Mono resolved to: $(fc-match 'Andale Mono')"; exit 1; }
-          fc-match "Verdana" | grep -q "Verdana.ttf" \
-            || { echo "FAIL: Verdana resolved to: $(fc-match 'Verdana')"; exit 1; }
+      # Same fonts as js-capture, so both captures measure text against the
+      # same font files.
+      - name: Set up MS core fonts
+        uses: ./.github/actions/setup-ms-fonts
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -457,33 +343,79 @@ jobs:
       # No gofish-graphics build: the Python capture renders through the same
       # source-aliased Vite harness as js-capture (tests/harness/vite.config.ts).
 
-      - name: Restore Playwright browser cache
-        id: playwright-cache
-        uses: actions/cache/restore@v4
+      - name: Set up Playwright
+        uses: ./.github/actions/setup-playwright
+
+      - name: Capture Python DOM snapshots
+        run: pnpm test:visual:capture-python
+
+      # Uploaded even when stories failed to capture: capture-results.json
+      # records the failures, and the parity review site shows them.
+      # parity-summary.json carries the capture counts; python-parity's steps
+      # add theirs to it.
+      - name: Upload Python DOM capture
+        if: always()
+        uses: actions/upload-artifact@v5
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          name: python-dom-capture
+          path: |
+            tests/tmp/python
+            tests/tmp/parity-summary.json
 
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
+  # Compares the Python capture against the JS capture of the same commit,
+  # not against the snapshot baselines, so it runs in parallel with
+  # visual-test and does not wait on the visual review (#872).
+  python-parity:
+    runs-on: ubuntu-latest
+    needs: [js-capture, python-capture]
+    # Same reasoning as visual-test: never let a failed capture turn this
+    # required check into a skipped (= passing) one. python-capture is
+    # skipped exactly when js-capture is.
+    if: ${{ !cancelled() && needs.js-capture.result != 'skipped' }}
+    permissions:
+      pull-requests: write
+      statuses: write # needed to publish parity-review-link commit status
 
-      - name: Save Playwright browser cache
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+    steps:
+      - name: Fail if the JS capture failed
+        if: needs.js-capture.result != 'success'
+        run: |
+          echo "::error::js-capture finished with '${{ needs.js-capture.result }}'; there is no capture to compare against."
+          exit 1
+
+      # fetch-depth 0: check-python-sync diffs against origin/main.
+      - name: Checkout code
+        uses: actions/checkout@v5
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          fetch-depth: 0
 
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install
 
       - name: Download JS DOM capture
         uses: actions/download-artifact@v5
         with:
-          name: js-dom-capture
+          pattern: js-dom-capture-*
+          merge-multiple: true
           path: tests/tmp/js
+
+      # Before the sync checks: they add their counts to the
+      # parity-summary.json this brings.
+      - name: Download Python DOM capture
+        if: always()
+        uses: actions/download-artifact@v5
+        with:
+          name: python-dom-capture
+          path: tests/tmp
 
       - name: Check Python story sync (coverage + spec sync)
         id: sync-check
@@ -501,10 +433,14 @@ jobs:
         if: always()
         run: pnpm test:visual:check-python-sync-all
 
-      - name: Capture Python DOM snapshots
-        id: capture-python
-        if: always()
-        run: pnpm test:visual:capture-python
+      # A story that failed to capture fails this check, as it did when the
+      # capture ran in this job; the steps below still compare what was
+      # captured and publish the review site that lists the failures.
+      - name: Fail if the Python capture failed
+        if: always() && needs.python-capture.result != 'success'
+        run: |
+          echo "::error::python-capture finished with '${{ needs.python-capture.result }}'; see its log for the stories that failed."
+          exit 1
 
       - name: Compare Python DOM against the JS capture
         id: compare-python

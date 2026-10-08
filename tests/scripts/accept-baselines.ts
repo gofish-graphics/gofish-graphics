@@ -20,9 +20,10 @@
  *
  * The run must be a pull_request or push Visual Tests run of <branch> in
  * this repository (not a fork's branch of the same name). Accepted stories
- * must be in the run's capture; removed ones must not be. Files come from the run's
- * `js-dom-capture` artifact, never from a local capture, so baselines are
- * never rendered on a developer machine. The commit goes to
+ * must be in the run's capture; removed ones must not be. Files come from the
+ * run's `js-dom-capture-<i>` artifacts (one per capture shard), never from a
+ * local capture, so baselines are never rendered on a developer machine. The
+ * commit goes to
  * snapshots/<branch> through `commitToSnapshotBranch` (one commit; a new
  * branch inherits snapshots/main).
  *
@@ -34,8 +35,10 @@
 import { execFile, execFileSync } from "child_process";
 import {
   appendFileSync,
+  cpSync,
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
 } from "fs";
@@ -180,32 +183,40 @@ if (check) {
 const work = mkdtempSync(join(tmpdir(), "accept-baselines-"));
 // Also runs on fail(), which exits the process.
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));
+const shardsDir = join(work, "shards");
 const captureDir = join(work, "capture");
 const reportDir = join(work, "report");
-const download = (name: string, dir: string) =>
+/** `select` is `--name <artifact>` or `--pattern <glob>`. */
+const download = (select: string[], dir: string) =>
   promisify(execFile)("gh", [
     "run",
     "download",
     runId,
     "-R",
     repo,
-    "--name",
-    name,
+    ...select,
     "--dir",
     dir,
   ]);
 console.log(`Downloading artifacts of run ${runId}...`);
 const [capture, report] = await Promise.allSettled([
-  download("js-dom-capture", captureDir),
-  all ? download("visual-diff-report", reportDir) : Promise.resolve(),
+  download(["--pattern", "js-dom-capture-*"], shardsDir),
+  all
+    ? download(["--name", "visual-diff-report"], reportDir)
+    : Promise.resolve(),
 ]);
 if (capture.status === "rejected") {
-  fail(`cannot download js-dom-capture: ${String(capture.reason)}`);
+  fail(`cannot download js-dom-capture-*: ${String(capture.reason)}`);
 }
 if (report.status === "rejected") {
   fail(
     `run ${runId} has no visual-diff-report artifact (it reported no diffs, or the artifact expired)`
   );
+}
+// gh puts each shard's `js-dom-capture-<i>` artifact in a directory of its
+// own; merge them into the full capture (see js-capture in visual-tests.yml).
+for (const shard of readdirSync(shardsDir)) {
+  cpSync(join(shardsDir, shard), captureDir, { recursive: true });
 }
 // An empty capture means something went wrong upstream, not that every
 // story was deleted; never mass-remove baselines on it.
