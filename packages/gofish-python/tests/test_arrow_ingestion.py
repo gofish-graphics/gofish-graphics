@@ -78,6 +78,26 @@ class TestUnsupportedInput:
         with pytest.raises(TypeError):
             data_to_arrow_bytes(object())
 
+    def test_conflicting_column_types_raise_naming_the_column(self):
+        rows = [{"Title": "Up", "n": 1}, {"Title": 2012, "n": 2.5}]
+        with pytest.raises(TypeError) as excinfo:
+            to_arrow_table(rows)
+        message = str(excinfo.value)
+        assert 'column "Title"' in message
+        assert "(string, number)" in message
+        assert "coerce" in message
+
+    def test_nan_in_rows_is_missing_like_a_dataframe(self):
+        pd = pytest.importorskip("pandas")
+        df = pd.DataFrame({"x": [1.0, float("nan")]})
+        from_rows = to_arrow_table(df.to_dict("records"))
+        assert from_rows.column("x").to_pylist() == [1.0, None]
+        assert to_arrow_table(df).column("x").to_pylist() == [1.0, None]
+
+    def test_ints_and_floats_share_a_column(self):
+        table = to_arrow_table([{"n": 1}, {"n": 2.5}, {"n": None}])
+        assert table.column("n").to_pylist() == [1.0, 2.5, None]
+
 
 class TestNoneAndEmpty:
     def test_none_yields_placeholder(self):

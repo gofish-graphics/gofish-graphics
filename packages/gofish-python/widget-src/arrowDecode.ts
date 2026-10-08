@@ -12,7 +12,8 @@
  * values into epoch milliseconds, as it does for any time column, and a
  * `schema` entry the chart declares for the column wins.
  *
- * 64-bit and 32-bit integers become JS numbers.
+ * A list column decodes to plain JS arrays (nested lists to nested arrays),
+ * and 64-bit and 32-bit integers become JS numbers.
  */
 
 import * as Arrow from "apache-arrow";
@@ -21,6 +22,20 @@ import { Serialize } from "gofish-graphics";
 /** Decode Arrow IPC bytes into rows (see the module comment). */
 export function arrowBytesToRows(bytes: Uint8Array): Record<string, any>[] {
   return arrowTableToRows(Arrow.tableFromIPC(bytes));
+}
+
+const isList = (type: Arrow.DataType): boolean =>
+  Arrow.DataType.isList(type) || Arrow.DataType.isFixedSizeList(type);
+
+/** One value of a list column as a plain JS array, a nested list as nested
+ *  arrays, so a row reads `row.ring[0][1]` as it would in JS. A 64-bit
+ *  integer inside becomes a number. */
+function listToArray(value: any, type: Arrow.DataType): any {
+  if (value == null) return value;
+  const item = (type as Arrow.List).children[0].type;
+  return Array.from(value as Iterable<any>, (v) =>
+    isList(item) ? listToArray(v, item) : typeof v === "bigint" ? Number(v) : v
+  );
 }
 
 /** Decode an Arrow table into rows (see the module comment). */
@@ -42,6 +57,12 @@ export function arrowTableToRows(table: Arrow.Table): Record<string, any>[] {
         },
       };
     }
+    if (isList(type)) {
+      return {
+        name: field.name,
+        at: (row: number) => listToArray(column.get(row), type),
+      };
+    }
     const values = column.toArray();
     const typeStr = type ? type.toString() : "";
     const wideInt =
@@ -52,6 +73,10 @@ export function arrowTableToRows(table: Arrow.Table): Record<string, any>[] {
     return {
       name: field.name,
       at: (row: number) => {
+        // `toArray()` of a numeric column is its raw value buffer, which
+        // ignores the validity bitmap: a null slot holds whatever bytes are
+        // there (0, NaN), so read nulls off the column.
+        if (column.nullCount > 0 && !column.isValid(row)) return null;
         const v = values[row];
         if (typeof v === "bigint") return Number(v);
         return v !== null && v !== undefined && wideInt ? Number(v) : v;

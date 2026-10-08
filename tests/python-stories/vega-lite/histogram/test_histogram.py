@@ -5,7 +5,8 @@ from python_stories.vega_data_urls import read_json
 
 
 def story_default():
-    df = read_json("movies.json")
+    # A few titles are numbers (1776, 2012): give the column one type.
+    df = read_json("movies.json").astype({"Title": str})
     movies = df.to_dict("records")
     return (
         chart(movies, axes=True)

@@ -16,6 +16,7 @@ from typing import Any, List
 
 import narwhals as nw
 import pyarrow as pa
+import pyarrow.compute as pc
 
 _SUPPORTED_INPUTS_MSG = (
     "a list of dict rows, or a dataframe supported by narwhals "
@@ -32,7 +33,10 @@ def to_arrow_table(data: Any) -> pa.Table:
 
     Supported shapes:
         - A list of dict rows (including `[]`) — built directly with
-          `pa.Table.from_pylist`, no dataframe library involved.
+          `pa.Table.from_pylist`, no dataframe library involved. A float NaN
+          is a missing value (null), as pandas reads it and as
+          `pa.Table.from_pandas` converts it, so rows from
+          `df.to_dict("records")` cross like the DataFrame itself.
         - A `pyarrow.Table` — returned as-is.
         - Any dataframe/lazyframe narwhals recognizes (pandas, polars,
           pyarrow, DuckDB relation, cuDF, Modin, ...) — routed through
@@ -42,7 +46,10 @@ def to_arrow_table(data: Any) -> pa.Table:
 
     Anything else raises `TypeError` naming the actual type received and
     the supported inputs, rather than failing deep inside pandas/pyarrow
-    with an opaque message.
+    with an opaque message. So do dict rows whose column holds values of
+    conflicting types (a string in one row, a number in another): the error
+    names the column and the types (see `_conflicting_column`); the data is
+    never coerced silently.
 
     Args:
         data: List of dict rows, or a narwhals-supported dataframe.
@@ -56,7 +63,20 @@ def to_arrow_table(data: Any) -> pa.Table:
         >>> to_arrow_table(pl.DataFrame({"x": [1, 2]}))
     """
     if isinstance(data, (list, tuple)):
-        return pa.Table.from_pylist(list(data))
+        rows = list(data)
+        try:
+            return _nan_to_null(pa.Table.from_pylist(rows))
+        except (pa.ArrowTypeError, pa.ArrowInvalid):
+            conflict = _conflicting_column(rows)
+            if conflict is None:
+                raise
+            column, kinds = conflict
+            raise TypeError(
+                f'Chart data: column "{column}" has conflicting types across '
+                f"rows ({', '.join(kinds)}) — rows sharing a column must share "
+                f"a type; coerce the column to one type or drop it before "
+                f"passing the data to chart()."
+            ) from None
 
     if isinstance(data, pa.Table):
         return data
@@ -73,6 +93,58 @@ def to_arrow_table(data: Any) -> pa.Table:
         nwdata = nwdata.collect()
 
     return nwdata.to_arrow()
+
+
+def _nan_to_null(table: pa.Table) -> pa.Table:
+    """`table` with every NaN in its float columns replaced by null (see
+    `to_arrow_table`)."""
+    columns = []
+    changed = False
+    for column in table.columns:
+        if pa.types.is_floating(column.type):
+            nan = pc.is_nan(column)
+            if pc.any(nan).as_py():
+                column = pc.if_else(nan, pa.scalar(None, column.type), column)
+                changed = True
+        columns.append(column)
+    return pa.Table.from_arrays(columns, schema=table.schema) if changed else table
+
+
+def _value_kind(value: Any) -> str:
+    """The kind of one row value, as the JS transport names kinds
+    (`arrowTransport.ts`): ints and floats are both numbers."""
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, (list, tuple)):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return type(value).__name__
+
+
+def _conflicting_column(rows: List[Any]):
+    """The first column of dict `rows` whose non-null values have more than
+    one kind, with those kinds in the order they first appear; None if every
+    column has one kind."""
+    kinds: dict = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for column, value in row.items():
+            if value is None:
+                continue
+            seen = kinds.setdefault(column, [])
+            kind = _value_kind(value)
+            if kind not in seen:
+                seen.append(kind)
+    for column, seen in kinds.items():
+        if len(seen) > 1:
+            return column, seen
+    return None
 
 
 def _downcast_wide_ints(table: pa.Table) -> pa.Table:

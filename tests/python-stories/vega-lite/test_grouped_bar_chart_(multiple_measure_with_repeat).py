@@ -12,7 +12,8 @@ from python_stories.vega_data_urls import read_json
 
 
 def story_default():
-    movies = read_json("movies.json").to_dict("records")
+    # A few titles are numbers (1776, 2012): give the column one type.
+    movies = read_json("movies.json").astype({"Title": str}).to_dict("records")
     return (
         chart(
             movies,

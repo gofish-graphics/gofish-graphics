@@ -720,7 +720,11 @@ renders it. What differs between the hosts is only transport:
   wins over `tierRows`. A timestamp or date column crosses as an Arrow
   time, and the decode marks it as a time column (`HasCalendar` in its zone,
   attached with `Serialize.setColumnTypes`), so the chart's `applySchema`
-  converts it like any time column. The one exception is a chart that a
+  converts it like any time column. A list column decodes to plain arrays,
+  a null to `null`, and a float NaN in dict rows crosses as null (pandas'
+  missing value, as `pa.Table.from_pandas` reads it). A column whose rows
+  mix types (a string in one, a number in another) is a loud error in
+  `to_arrow_table`, never a silent coercion. The one exception is a chart that a
   mark function returns: it comes back over the derive RPC, so the derive
   server inlines its rows in the IR as `{type: "inline", rows}`.
 - **Render options.** These are the JS `.render(container, options)` options:

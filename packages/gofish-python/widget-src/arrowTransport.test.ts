@@ -238,6 +238,60 @@ function testPlainColumnsCarryNoTypes(): boolean {
   return ok;
 }
 
+/** The decode turns list columns, nested lists included, into plain JS
+ *  arrays (a polygon's `ring` of `[x, y]` points). */
+function testListColumnsDecodeAsArrays(): boolean {
+  console.log("Test: list columns decode as plain arrays");
+  const point = new Arrow.List(new Arrow.Field("item", new Arrow.Float64()));
+  const ring = new Arrow.List(new Arrow.Field("item", point));
+  const table = new Arrow.Table({
+    ring: Arrow.vectorFromArray(
+      [
+        [
+          [0, 1],
+          [2, 3],
+        ],
+        null,
+      ],
+      ring
+    ),
+    ids: Arrow.vectorFromArray(
+      [[1n, 2n], []],
+      new Arrow.List(new Arrow.Field("item", new Arrow.Int64()))
+    ),
+  });
+  const rows = arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table)));
+  const ok =
+    Array.isArray(rows[0].ring) &&
+    Array.isArray(rows[0].ring[1]) &&
+    JSON.stringify(rows[0].ring) === "[[0,1],[2,3]]" &&
+    rows[1].ring === null &&
+    JSON.stringify(rows[0].ids) === "[1,2]" &&
+    Array.isArray(rows[1].ids) &&
+    rows[1].ids.length === 0;
+  console.log(ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify(rows)}`);
+  return ok;
+}
+
+/** A null in a numeric column decodes to null, not to whatever its value
+ *  buffer holds (Python sends a pandas NaN as null). */
+function testNumericNullsDecodeAsNull(): boolean {
+  console.log("Test: numeric nulls decode as null");
+  const table = new Arrow.Table({
+    x: Arrow.vectorFromArray([1.5, null, 3], new Arrow.Float64()),
+    n: Arrow.vectorFromArray([null, 2], new Arrow.Int32()),
+  });
+  const rows = arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table)));
+  const ok =
+    rows[0].x === 1.5 &&
+    rows[1].x === null &&
+    rows[2].x === 3 &&
+    rows[0].n === null &&
+    rows[1].n === 2;
+  console.log(ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify(rows)}`);
+  return ok;
+}
+
 export function runArrowTransportTests(): boolean {
   console.log("Running Arrow transport tests...\n");
 
@@ -251,6 +305,8 @@ export function runArrowTransportTests(): boolean {
     testConflictingNestedTypesThrow(),
     testTimeColumnsDecodeAsTimes(),
     testPlainColumnsCarryNoTypes(),
+    testListColumnsDecodeAsArrays(),
+    testNumericNullsDecodeAsNull(),
   ];
 
   const allPassed = results.every((r) => r);
