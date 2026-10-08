@@ -3026,7 +3026,13 @@ def filter(
     if isinstance(predicate, FieldPredicate):
         return Operator("filter", predicate=dict(predicate))
     if callable(predicate):
-        return derive(lambda rows: [row for row in rows if predicate(row)])
+        # Data that is not a list (a single row) passes through unchanged,
+        # as in JS: there is nothing to filter.
+        return derive(
+            lambda rows: [row for row in rows if predicate(row)]
+            if isinstance(rows, list)
+            else rows
+        )
     raise TypeError(
         "filter(...) expects field(name).between(lo, hi) or a function of one "
         f"row, got {type(predicate).__name__}"

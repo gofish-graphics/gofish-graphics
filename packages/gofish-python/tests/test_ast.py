@@ -116,6 +116,13 @@ class TestOperators:
         assert op.to_dict()["type"] == "derive"
         assert op.fn([{"day": 1}, {"day": 2}]) == [{"day": 2}]
 
+    def test_filter_callable_passes_a_single_row_through(self):
+        """A single row is not a list of rows, so it passes through unchanged,
+        as JS filter does for data that is not an array."""
+        op = filter(lambda row: row["day"] > 1)
+        row = {"day": 1}
+        assert op.fn(row) is row
+
     def test_filter_rejects_other_values(self):
         with pytest.raises(TypeError, match="filter"):
             filter("day")
