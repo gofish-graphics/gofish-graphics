@@ -339,6 +339,15 @@ def test_a_callable_outside_a_channel_is_a_type_error():
     assert "__gofish_lambda" in spread(by="a", dir="x", w=lambda d: 1).to_dict()["w"]
 
 
+def test_wire_does_not_copy_options_without_accessors():
+    # A literal option with no callable inside reaches the IR as the same
+    # object, so a large table is not copied on every to_dict().
+    op = join([{"k": "a", "v": 1}, {"k": "b", "v": 2}], on="k")
+    assert op.to_dict()["right"] is op.kwargs["right"]
+    m = rect(dims={"theta": {"size": 0.9}})
+    assert m.to_dict()["dims"] is m.kwargs["dims"]
+
+
 def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():
     # Python kwargs are snake_case; the IR keeps the camelCase wire keys.
     assert text(text="hi", font_size=12, text_anchor="start").to_dict() == {

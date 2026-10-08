@@ -300,13 +300,17 @@ def _wire(v: Any) -> Any:
     """Replace every `_PendingAccessor` in an option value with its
     `{"__gofish_lambda": id}` sentinel, at any depth. The JS deserializer
     turns each sentinel back into an async `(d) => ...` accessor that RPCs
-    into Python, wherever it sits."""
+    into Python, wherever it sits. A container with no accessor comes back as
+    the same object, as in `_channel`, so large literal options (`join`'s
+    right-hand rows) are not copied."""
     if isinstance(v, _PendingAccessor):
         return {"__gofish_lambda": v.lambda_id}
     if type(v) is dict:
-        return {k: _wire(x) for k, x in v.items()}
+        out = {k: _wire(x) for k, x in v.items()}
+        return v if all(out[k] is v[k] for k in v) else out
     if type(v) in (list, tuple):
-        return [_wire(x) for x in v]
+        items = [_wire(x) for x in v]
+        return v if all(a is b for a, b in zip(items, v)) else items
     return v
 
 
