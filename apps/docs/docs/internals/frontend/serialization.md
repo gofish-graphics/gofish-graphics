@@ -417,7 +417,7 @@ prints as the Python type it stands for (`AxesOptions` is `bool | dict`). `CHART
 `ChartOptions`. The validator walks `ChartIR.options` against it, the JSON
 Schema emits it as the `ChartOptions` `$def`, the Python generator builds
 `_chart_opts` from it, and the docs build the `chart` options table from it
-(`::: gofish-ref chart`).
+(`::: gofish-ref ChartOptions`).
 
 **What's still authored, not in the table**: the envelope
 (`ChartIR`/`LayerIR`/`DataIR`/`MarkIR` union, `ChannelValue`,

@@ -36,7 +36,7 @@ shape, [Legend](#legend) for `legend`, [`palette()`](/js/api/color/palette) and
 [`gradient()`](/js/api/color/gradient) for `color`, and
 [`Schema`](/js/api/core/schema) for `schema`.
 
-::: gofish-ref chart
+::: gofish-ref ChartOptions
 :::
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.

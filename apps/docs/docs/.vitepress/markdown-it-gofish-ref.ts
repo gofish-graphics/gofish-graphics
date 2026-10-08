@@ -18,9 +18,9 @@
  * TS-ish type; Python pages (`docs/python/**`) show the snake_case kwarg names and a
  * Python type — the language is detected from `env.relativePath`.
  *
- * A name may also be an option group that is not a construct (`OPTION_GROUPS`
- * in descriptors.ts): `::: gofish-ref chart` renders the chart-level options
- * (`CHART_OPTIONS`) as one table.
+ * A name may also be an object option type (`OPTION_TYPES` in
+ * descriptors.ts): `::: gofish-ref ChartOptions` renders the chart-level
+ * options as one table.
  *
  * Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
  * their own open subsection ("Box dimensions", "Paint") below the table of the
@@ -45,7 +45,6 @@ import {
   COORDS,
   LEAF_MARKS,
   OPERATORS,
-  OPTION_GROUPS,
   OPTION_TYPES,
   SHARED_FIELD_GROUPS,
   pyKwarg,
@@ -330,11 +329,18 @@ function renderName(
   name: string,
   opts: { lang: Lang; md: { render(src: string): string }; titled: boolean }
 ): string {
-  const optionGroup = OPTION_GROUPS[name];
-  if (optionGroup !== undefined) {
+  const optionType = OPTION_TYPES[name];
+  if (optionType !== undefined) {
+    if (optionType.type.kind !== "object") {
+      throw new Error(
+        `gofish-ref ${name}: the option type is not an object, so it has no ` +
+          `options table.`
+      );
+    }
     const heading = opts.titled ? opts.md.render(`### \`${name}\``) : "";
     return (
-      heading + optionsTable(Object.entries(optionGroup), opts.lang, opts.md)
+      heading +
+      optionsTable(Object.entries(optionType.type.fields), opts.lang, opts.md)
     );
   }
   const found = lookupConstructs(name);
@@ -343,7 +349,7 @@ function renderName(
       `Unknown gofish-ref construct "${name}". It must be a construct in ` +
         `packages/gofish-ir/src/frontend/descriptors.ts (OPERATORS, LEAF_MARKS, ` +
         `COMBINATOR_MARKS or COORDS), named by its wire type or its pyName, ` +
-        `or an option group (${Object.keys(OPTION_GROUPS).join(", ")}).`
+        `or an object option type in OPTION_TYPES (e.g. ChartOptions).`
     );
   }
   const byFields = new Map<string, ConstructDescriptor[]>();

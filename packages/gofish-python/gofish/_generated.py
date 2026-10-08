@@ -27,6 +27,7 @@ _OPTION_TYPES: Dict[str, Any] = {
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
     "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
     "FieldPredicate": ("object", {"field": ("field", None), "between": ("between", None), "closed": ("closed", None)}),
+    "ChartOptions": ("object", {"w": ("w", None), "h": ("h", None), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
     "AxisDimsValue": ("ref", "AxisInterval"),
 }
 

@@ -16,8 +16,7 @@
  * `buildOperatorDefs()` / `buildLeafMarkDefs()` below, merged into the
  * authored `$defs` object, as are the named option types (`AxesOptions`,
  * `AxisOptions`, `AxisInterval`, `AxisDimsValue`) from `OPTION_TYPES`
- * (`buildOptionTypeDefs()`) and `ChartOptions` from `CHART_OPTIONS`
- * (`buildChartOptionsDef()`). Field-level coverage matches `validate.ts` (which
+ * (`buildOptionTypeDefs()`), `ChartOptions` among them. Field-level coverage matches `validate.ts` (which
  * interprets the same descriptor table); this file is the wire artifact
  * (consumed by external tooling, language servers, and the Python wrapper's
  * parity-test harness).
@@ -203,24 +202,10 @@ function buildOptionTypeDefs(): Record<string, unknown> {
   return fieldsToProperties(OPTION_TYPES).properties;
 }
 
-/** `ChartOptions`, the `$def` of `ChartIR.options`, from `CHART_OPTIONS`. It
- *  stays open (no `additionalProperties: false`), like the operator `$defs`:
- *  an unknown key is validate.ts's to reject. */
-function buildChartOptionsDef(): Record<string, unknown> {
-  return {
-    ChartOptions: {
-      description:
-        "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python.",
-      ...fieldTypeToSchema(t.object(CHART_OPTIONS)),
-    },
-  };
-}
-
 const GENERATED_DEFS: Record<string, unknown> = {
   ...buildOperatorDefs(),
   ...buildLeafMarkDefs(),
   ...buildOptionTypeDefs(),
-  ...buildChartOptionsDef(),
 };
 
 export const FRONTEND_IR_JSON_SCHEMA = {
@@ -367,7 +352,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
       },
     },
     // AxesOptions / AxisOptions / AxisInterval / AxisDimsValue are GENERATED
-    // from descriptors.ts's OPTION_TYPES, and ChartOptions from CHART_OPTIONS
+    // from descriptors.ts's OPTION_TYPES (ChartOptions among them)
     // — see GENERATED_DEFS below.
     FieldAccessor: {
       description:

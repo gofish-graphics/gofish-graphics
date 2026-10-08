@@ -31,7 +31,6 @@ import {
 } from "./schema.js";
 import { isNonFiniteNumberIR, isTaggedInfinity } from "./nonFinite.js";
 import {
-  CHART_OPTIONS,
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
@@ -39,9 +38,6 @@ import {
   type FieldSpec,
   type FieldType,
 } from "./descriptors.js";
-
-/** `ChartIR.options`: an object of the chart-level options. */
-const CHART_OPTIONS_TYPE: FieldType = t.object(CHART_OPTIONS);
 
 /**
  * Is `value` a number as the IR carries it: a JSON number, or the tagged
@@ -152,7 +148,7 @@ function walkChart(
   // Chart-level options (`CHART_OPTIONS`), checked like every declared
   // object: typed values, no unknown keys.
   optionalField(node, "options", path, ctx, (v, p) =>
-    walkFieldType(CHART_OPTIONS_TYPE, v, p, ctx, (q, message) =>
+    walkFieldType(t.ref("ChartOptions"), v, p, ctx, (q, message) =>
       ctx.errors.push({ path: q, message })
     )
   );

@@ -2777,19 +2777,7 @@ for the API.
       "required": ["field", "between"],
       "description": "A field predicate, as `field(name).between(lo, hi, { closed })` builds it: the field it reads and the interval it tests."
     },
-    "AxisDimsValue": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        {
-          "$ref": "#/$defs/AxisInterval"
-        }
-      ],
-      "description": "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval."
-    },
     "ChartOptions": {
-      "description": "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python.",
       "type": "object",
       "properties": {
         "w": {
@@ -2824,7 +2812,19 @@ for the API.
           "additionalProperties": {},
           "description": "Column types, keyed by column name, e.g. Schema.ordered(levels)."
         }
-      }
+      },
+      "description": "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python."
+    },
+    "AxisDimsValue": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        {
+          "$ref": "#/$defs/AxisInterval"
+        }
+      ],
+      "description": "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval."
     }
   }
 }

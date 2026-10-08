@@ -64,11 +64,10 @@ for (const [kind, table] of TABLES) {
     constructs.get(name).kinds.push(kind);
   }
 }
-// Option groups that are not constructs but have a generated table
-// (`OPTION_GROUPS` in descriptors.ts, which the docs plugin also reads).
-for (const name of Object.keys(ir.OPTION_GROUPS)) {
-  constructs.set(name, { kinds: ["option group"], wire: name });
-}
+// Named option types (`OPTION_TYPES`) may have a table too
+// (`::: gofish-ref ChartOptions`). They are not required, but one documented
+// in one language must be documented in the other.
+const optionTypes = new Set(Object.keys(ir.OPTION_TYPES));
 
 /** Every `::: gofish-ref a b c` name, per language, with the page it came from. */
 function collectRefs(lang) {
@@ -128,9 +127,16 @@ for (const [name, { kinds }] of rows) {
 
 for (const lang of LANGS) {
   for (const [name, page] of refs[lang]) {
-    if (!constructs.has(name)) {
+    if (optionTypes.has(name)) {
+      const other = LANGS.find((l) => l !== lang);
+      if (!refs[other].has(name)) {
+        failures.push(
+          `${page}: \`::: gofish-ref ${name}\` has no counterpart under docs/${other}/api/`
+        );
+      }
+    } else if (!constructs.has(name)) {
       failures.push(
-        `${page}: \`::: gofish-ref ${name}\` names no construct in the descriptor table`
+        `${page}: \`::: gofish-ref ${name}\` names no construct or option type in the descriptor table`
       );
     }
   }

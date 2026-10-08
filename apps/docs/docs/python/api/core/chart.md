@@ -36,7 +36,7 @@ The chart-level options are keyword arguments. Any other keyword raises a
 `TypeError`. See [Axes](#axes) for the full `axes` shape and
 [`Schema`](/python/api/core/schema) for `schema`.
 
-::: gofish-ref chart
+::: gofish-ref ChartOptions
 :::
 
 Chart-level options are passed as keyword arguments:

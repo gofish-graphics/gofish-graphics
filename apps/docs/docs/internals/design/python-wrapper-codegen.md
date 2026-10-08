@@ -448,7 +448,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   validator's generic union walk read such an object only as an interval.
   The validator walks `ChartIR.options` against `CHART_OPTIONS`, the JSON
   Schema emits a `ChartOptions` `$def` for it, and the `chart` reference
-  pages build their options table from it with `::: gofish-ref chart`
+  pages build their options table from it with `::: gofish-ref ChartOptions`
   instead of a hand-written copy. The JSON Schema now writes every
   descriptor union as `anyOf`, matching the validator's "any branch"
   reading (a `datum(...)` object fits both branches of `AxisDimsValue`).

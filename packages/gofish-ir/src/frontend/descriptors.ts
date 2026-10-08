@@ -372,6 +372,42 @@ const axisOptions: FieldSpec = {
   ),
 };
 
+/** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
+ *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
+ *  `gofish-graphics/src/ast/marks/chartBuilder.ts`. The Python generator
+ *  (`_chart_opts`) reads it; the IR validator, the JSON Schema, and the docs
+ *  options table (`::: gofish-ref ChartOptions`) read it as the named option
+ *  type `ChartOptions` (`OPTION_TYPES`). */
+export const CHART_OPTIONS: FieldGroup = group({
+  w: { type: t.number, doc: "Chart width in pixels." },
+  h: { type: t.number, doc: "Chart height in pixels." },
+  coord: {
+    type: t.any,
+    doc: "Coordinate transform for the whole chart: polar(), clock(), wavy(), ...",
+  },
+  color: {
+    type: t.any,
+    doc: "Color scale for every mark: palette(...) or gradient(...).",
+  },
+  axes: {
+    type: t.ref("AxesOptions"),
+    doc: "Draw axes: a boolean for both axes, or per-axis options {x?, y?}.",
+  },
+  legend: {
+    type: t.boolean,
+    default: true,
+    doc: "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
+  },
+  padding: {
+    type: t.number,
+    doc: "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).",
+  },
+  schema: {
+    type: t.record(t.any),
+    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels).",
+  },
+});
+
 /** Named option types: the nested option objects a field points at with
  *  `t.ref(name)`, declared in the same type DSL as the construct fields. Each
  *  consumer resolves a ref through this table: `jsonSchema.ts` emits one
@@ -427,53 +463,14 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
       },
     }),
   },
+  ChartOptions: {
+    doc: "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python.",
+    type: t.object(CHART_OPTIONS),
+  },
   AxisDimsValue: {
     doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
     type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
   },
-};
-
-/** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
- *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
- *  `gofish-graphics/src/ast/marks/chartBuilder.ts`. The Python generator
- *  (`_chart_opts`), the IR validator, the JSON Schema (`ChartOptions`), and
- *  the docs options table (`::: gofish-ref chart`) all read it. */
-export const CHART_OPTIONS: FieldGroup = group({
-  w: { type: t.number, doc: "Chart width in pixels." },
-  h: { type: t.number, doc: "Chart height in pixels." },
-  coord: {
-    type: t.any,
-    doc: "Coordinate transform for the whole chart: polar(), clock(), wavy(), ...",
-  },
-  color: {
-    type: t.any,
-    doc: "Color scale for every mark: palette(...) or gradient(...).",
-  },
-  axes: {
-    type: t.ref("AxesOptions"),
-    doc: "Draw axes: a boolean for both axes, or per-axis options {x?, y?}.",
-  },
-  legend: {
-    type: t.boolean,
-    default: true,
-    doc: "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
-  },
-  padding: {
-    type: t.number,
-    doc: "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).",
-  },
-  schema: {
-    type: t.record(t.any),
-    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels).",
-  },
-});
-
-/** Option groups that are not constructs but get a generated docs options
- *  table by name: `::: gofish-ref chart` is the options of
- *  `chart(data, options)`. The docs plugin renders them and
- *  `check-api-coverage` requires each on both language pages. */
-export const OPTION_GROUPS: Readonly<Record<string, FieldGroup>> = {
-  chart: CHART_OPTIONS,
 };
 
 // ---------------------------------------------------------------------------
