@@ -33,7 +33,8 @@
  *    `overlap.py`, `curve.py`), one factory per kind and per preset of the
  *    STRATEGIES table. Each builds `{"kind": ..., **params}` with snake_case
  *    keys, which `_to_wire` renames at the option the strategy is passed to
- *    (each family is an OPTION_TYPES entry).
+ *    (each family is an OPTION_TYPES entry). Each factory first checks its
+ *    params at the call, from their types (`pyParamChecks`).
  * `derive`/`resolve`/`join` (real logic: RPC bridge, ref-shape narrowing,
  * DataFrame conversion), `field`/`datum`/`normalize`/`repeat`/`ref`/
  * `selectAll`, and the Color and Coord family modules (`color.py`,
@@ -722,18 +723,131 @@ function pyLiteral(v: unknown): string {
   throw new Error(`no Python literal for preset value ${JSON.stringify(v)}`);
 }
 
+/** A Python f-string whose text is `text` taken literally, followed by the
+ *  f-string source `tail` (`{v!r}`). */
+function pyFStr(text: string, tail: string): string {
+  return `f${JSON.stringify(text)
+    .replace(/[{}]/g, (c) => c + c)
+    .slice(0, -1)}${tail}"`;
+}
+
+/** A param type in words, for the error messages: `a finite number >= 0`,
+ *  `one of "blue", "quasi", "uniform"`, `a number >= 0 or "silverman"`. */
+function describeType(type: FieldType): string {
+  switch (type.kind) {
+    case "number":
+      return `a${type.finite ? " finite" : ""} number${type.min !== undefined ? ` >= ${type.min}` : ""}`;
+    case "string":
+      return "a str";
+    case "boolean":
+      return "a bool";
+    case "enum":
+      return type.values.length === 1
+        ? JSON.stringify(type.values[0])
+        : `one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}`;
+    case "union":
+      return type.options.map(describeType).join(" or ");
+    default:
+      throw new Error(`no Python check for a ${type.kind} strategy param`);
+  }
+}
+
+/** The Python type test for one branch of a param type, by the Python type
+ *  its values have: number (an int or float, not a bool), str, or bool. */
+function pyTypeTest(type: FieldType, v: string): string {
+  switch (type.kind) {
+    case "number":
+      return `isinstance(${v}, (int, float)) and not isinstance(${v}, bool)`;
+    case "string":
+    case "enum":
+      return `isinstance(${v}, str)`;
+    case "boolean":
+      return `isinstance(${v}, bool)`;
+    default:
+      throw new Error(`no Python check for a ${type.kind} strategy param`);
+  }
+}
+
+/** The ValueError checks for a value already known to be of `type`'s Python
+ *  type: a number's bounds (NaN is never a number on the wire, as in JS),
+ *  an enum's values. `whole` is the param's full type, for the message. */
+function pyValueChecks(
+  type: FieldType,
+  whole: FieldType,
+  v: string,
+  label: string
+): string[] {
+  const fail = (cond: string, text: string) => [
+    `if ${cond}:`,
+    `    raise ValueError(${pyFStr(`${label} ${text}, got `, `{${v}!r}`)})`,
+  ];
+  switch (type.kind) {
+    case "number":
+      return [
+        ...(type.finite
+          ? fail(`not math.isfinite(${v})`, "must be finite")
+          : fail(`math.isnan(${v})`, "must not be NaN")),
+        ...(type.min !== undefined
+          ? fail(`${v} < ${type.min}`, `must be >= ${type.min}`)
+          : []),
+      ];
+    case "enum":
+      return fail(
+        `${v} not in (${type.values.map((s) => JSON.stringify(s)).join(", ")}${type.values.length === 1 ? "," : ""})`,
+        `must be ${describeType(whole)}`
+      );
+    default:
+      return [];
+  }
+}
+
+/** The eager checks a strategy factory runs on one param `v`, from the
+ *  param's descriptor type, so a bad value fails at the Python call: a
+ *  TypeError when its Python type is not one the param admits, a ValueError
+ *  when it is but the value is out of range. The same constraints as the JS
+ *  `checkStrategy`, which reads the same STRATEGIES table. The branches of a
+ *  union are told apart by Python type. */
+function pyParamChecks(type: FieldType, v: string, label: string): string[] {
+  const branches = type.kind === "union" ? [...type.options] : [type];
+  const tests = branches.map((b) => pyTypeTest(b, v));
+  if (new Set(tests).size !== tests.length)
+    throw new Error(
+      `${label}: two branches of a strategy param share a Python type`
+    );
+  const typeError = `raise TypeError(${pyFStr(`${label} must be ${describeType(type)}, got `, `{type(${v}).__name__}`)})`;
+  const indent = (lines: string[]) => lines.map((l) => `    ${l}`);
+  if (branches.length === 1)
+    return [
+      `if not ${tests[0].includes(" and ") ? `(${tests[0]})` : tests[0]}:`,
+      `    ${typeError}`,
+      ...pyValueChecks(type, type, v, label),
+    ];
+  return [
+    ...branches.flatMap((b, i) => {
+      const checks = pyValueChecks(b, type, v, label);
+      return [
+        `${i === 0 ? "if" : "elif"} ${tests[i]}:`,
+        ...indent(checks.length ? checks : ["pass"]),
+      ];
+    }),
+    `else:`,
+    `    ${typeError}`,
+  ];
+}
+
 /** One factory of a family: a function that builds the strategy dict. Its
  *  keys are the snake_case kwarg names; the option the dict is passed to
  *  renames them to wire keys (`_to_wire`, by the family's OPTION_TYPES
  *  entry), as for any nested option dict. */
 function renderStrategyFactory(opts: {
+  family: string;
   name: string;
   kind: string;
   params: FieldGroup;
   preset: Record<string, unknown>;
   doc: string;
 }): string {
-  const { name, kind, params, preset, doc } = opts;
+  const { family, name, kind, params, preset, doc } = opts;
   const ents = entries(params);
   // A preset value is this factory's default for that param.
   const docLines = ents
@@ -762,7 +876,14 @@ function renderStrategyFactory(opts: {
     ].join("\n");
   }
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
+  const checks = ents.flatMap(([py, , spec]) => [
+    `    if ${py} is not None:`,
+    ...pyParamChecks(spec.type, py, `${family}.${name}(${py}=...)`).map(
+      (l) => `        ${l}`
+    ),
+  ]);
   const body = [
+    ...checks,
     `    out: Dict[str, Any] = {${head}}`,
     `    for _k, _v in [`,
     ...ents.map(([py]) => `        (${pyStr(py)}, ${py}),`),
@@ -782,6 +903,7 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
   const module = family.toLowerCase();
   const factories = [
     ...Object.entries(spec.kinds).map(([kind, k]) => ({
+      family,
       name: pyKwarg(kind),
       kind,
       params: k.params,
@@ -789,6 +911,7 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
       doc: k.doc,
     })),
     ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
+      family,
       name: pyKwarg(name),
       kind: p.kind,
       params: spec.kinds[p.kind].params,

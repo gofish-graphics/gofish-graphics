@@ -10,6 +10,7 @@ is passed to renames them to the camelCase wire keys. Mirrors JS
 ``gofish-graphics/curve``.
 """
 
+import math
 from typing import Any, Dict, Optional, Union
 
 __all__ = ["linear", "step", "monotone", "smooth", "catmull_rom", "bezier", "orthogonal", "arc", "perfect_arrows"]
@@ -51,6 +52,11 @@ def orthogonal(*, bend: Optional[str] = None) -> Dict[str, Any]:
     Args:
         bend: Omitted, the elbow bends on the connector's `dir` axis; "auto" infers the bend axis from the endpoint geometry instead, for layouts with no single growth axis.
     """
+    if bend is not None:
+        if not isinstance(bend, str):
+            raise TypeError(f"Curve.orthogonal(bend=...) must be \"auto\", got {type(bend).__name__}")
+        if bend not in ("auto",):
+            raise ValueError(f"Curve.orthogonal(bend=...) must be \"auto\", got {bend!r}")
     out: Dict[str, Any] = {"kind": "orthogonal"}
     for _k, _v in [
         ("bend", bend),
@@ -66,6 +72,11 @@ def arc(*, direction: Optional[str] = None) -> Dict[str, Any]:
     Args:
         direction: Which side the arc bulges toward. Default "up".
     """
+    if direction is not None:
+        if not isinstance(direction, str):
+            raise TypeError(f"Curve.arc(direction=...) must be one of \"up\", \"down\", got {type(direction).__name__}")
+        if direction not in ("up", "down"):
+            raise ValueError(f"Curve.arc(direction=...) must be one of \"up\", \"down\", got {direction!r}")
     out: Dict[str, Any] = {"kind": "arc"}
     for _k, _v in [
         ("direction", direction),
@@ -88,6 +99,42 @@ def perfect_arrows(*, bow: Optional[float] = None, stretch: Optional[float] = No
         flip: Flip which side the arc bows toward. Default false.
         straights: Allow a straight line when the endpoints are axis-aligned, instead of forcing a slight bow. Default true.
     """
+    if bow is not None:
+        if not (isinstance(bow, (int, float)) and not isinstance(bow, bool)):
+            raise TypeError(f"Curve.perfect_arrows(bow=...) must be a number, got {type(bow).__name__}")
+        if math.isnan(bow):
+            raise ValueError(f"Curve.perfect_arrows(bow=...) must not be NaN, got {bow!r}")
+    if stretch is not None:
+        if not (isinstance(stretch, (int, float)) and not isinstance(stretch, bool)):
+            raise TypeError(f"Curve.perfect_arrows(stretch=...) must be a number, got {type(stretch).__name__}")
+        if math.isnan(stretch):
+            raise ValueError(f"Curve.perfect_arrows(stretch=...) must not be NaN, got {stretch!r}")
+    if stretch_min is not None:
+        if not (isinstance(stretch_min, (int, float)) and not isinstance(stretch_min, bool)):
+            raise TypeError(f"Curve.perfect_arrows(stretch_min=...) must be a number, got {type(stretch_min).__name__}")
+        if math.isnan(stretch_min):
+            raise ValueError(f"Curve.perfect_arrows(stretch_min=...) must not be NaN, got {stretch_min!r}")
+    if stretch_max is not None:
+        if not (isinstance(stretch_max, (int, float)) and not isinstance(stretch_max, bool)):
+            raise TypeError(f"Curve.perfect_arrows(stretch_max=...) must be a number, got {type(stretch_max).__name__}")
+        if math.isnan(stretch_max):
+            raise ValueError(f"Curve.perfect_arrows(stretch_max=...) must not be NaN, got {stretch_max!r}")
+    if pad_start is not None:
+        if not (isinstance(pad_start, (int, float)) and not isinstance(pad_start, bool)):
+            raise TypeError(f"Curve.perfect_arrows(pad_start=...) must be a number, got {type(pad_start).__name__}")
+        if math.isnan(pad_start):
+            raise ValueError(f"Curve.perfect_arrows(pad_start=...) must not be NaN, got {pad_start!r}")
+    if pad_end is not None:
+        if not (isinstance(pad_end, (int, float)) and not isinstance(pad_end, bool)):
+            raise TypeError(f"Curve.perfect_arrows(pad_end=...) must be a number, got {type(pad_end).__name__}")
+        if math.isnan(pad_end):
+            raise ValueError(f"Curve.perfect_arrows(pad_end=...) must not be NaN, got {pad_end!r}")
+    if flip is not None:
+        if not isinstance(flip, bool):
+            raise TypeError(f"Curve.perfect_arrows(flip=...) must be a bool, got {type(flip).__name__}")
+    if straights is not None:
+        if not isinstance(straights, bool):
+            raise TypeError(f"Curve.perfect_arrows(straights=...) must be a bool, got {type(straights).__name__}")
     out: Dict[str, Any] = {"kind": "perfectArrows"}
     for _k, _v in [
         ("bow", bow),

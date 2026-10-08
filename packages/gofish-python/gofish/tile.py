@@ -10,6 +10,7 @@ is passed to renames them to the camelCase wire keys. Mirrors JS
 ``gofish-graphics/tile``.
 """
 
+import math
 from typing import Any, Dict, Optional, Union
 
 __all__ = ["squarify", "slice", "dice", "binary", "slice_dice"]
@@ -21,6 +22,13 @@ def squarify(*, ratio: Optional[float] = None) -> Dict[str, Any]:
     Args:
         ratio: Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio. 1 aims for square tiles, which suits one circle per leaf.
     """
+    if ratio is not None:
+        if not (isinstance(ratio, (int, float)) and not isinstance(ratio, bool)):
+            raise TypeError(f"Tile.squarify(ratio=...) must be a number >= 1, got {type(ratio).__name__}")
+        if math.isnan(ratio):
+            raise ValueError(f"Tile.squarify(ratio=...) must not be NaN, got {ratio!r}")
+        if ratio < 1:
+            raise ValueError(f"Tile.squarify(ratio=...) must be >= 1, got {ratio!r}")
     out: Dict[str, Any] = {"kind": "squarify"}
     for _k, _v in [
         ("ratio", ratio),

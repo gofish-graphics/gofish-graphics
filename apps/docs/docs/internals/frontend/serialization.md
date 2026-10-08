@@ -671,9 +671,15 @@ It emits:
   option it is passed to renames them to wire keys through the family's
   `_OPTION_TYPES` entry, like any nested option dict, so
   `Curve.perfect_arrows(pad_end=4)` reaches the wire as
-  `{"kind": "perfectArrows", "padEnd": 4}`. The factories check nothing
-  themselves: a param's type and bounds are checked on the JS side by
-  `checkStrategy`.
+  `{"kind": "perfectArrows", "padEnd": 4}`. Each factory checks its params
+  at the call, with checks the generator writes from each param's type
+  (`pyParamChecks` in `generate.ts`): a value of the wrong Python type raises
+  a `TypeError`, and a value out of bounds or not in an enum raises a
+  `ValueError` that names the call and the kwarg
+  (`Overlap.separate(padding=...) must be >= 0, got -1`). An unknown kwarg is
+  a `TypeError` from the signature. These are the same constraints
+  `checkStrategy` checks on the JS side, read from the same table, so Python
+  users see the error at the line that made it.
 
 `derive`/`resolve`/`join` (real RPC-bridge/ref-shape/DataFrame logic) and
 `field`/`datum`/`normalize`/`repeat`/`ref`/`select_all`

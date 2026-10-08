@@ -116,9 +116,8 @@ def test_scatter_serializes_noise_overlap():
     with pytest.raises(TypeError):
         scatter(x="mass", overlap={"kind": "separate", "randomness": "blue"})
     assert Overlap.noise(smoothing=0) == {"kind": "noise", "smoothing": 0}
-    # The factories only build the dict. A param's type and bounds
-    # (randomness "pink", smoothing -1, padding -1, ...) are checked once, on
-    # the JS side, against the STRATEGIES table (gofish-ir `checkStrategy`).
+    # A param's type and bounds (randomness "pink", smoothing -1, ...) are
+    # checked at the factory call: see test_families.py.
 
 
 def test_sina_and_jitter_are_noise_with_other_defaults():

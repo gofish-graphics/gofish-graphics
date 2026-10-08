@@ -22,6 +22,13 @@ def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
     Args:
         padding: Pixels kept between neighboring dots. Default 0.
     """
+    if padding is not None:
+        if not (isinstance(padding, (int, float)) and not isinstance(padding, bool)):
+            raise TypeError(f"Overlap.separate(padding=...) must be a finite number >= 0, got {type(padding).__name__}")
+        if not math.isfinite(padding):
+            raise ValueError(f"Overlap.separate(padding=...) must be finite, got {padding!r}")
+        if padding < 0:
+            raise ValueError(f"Overlap.separate(padding=...) must be >= 0, got {padding!r}")
     out: Dict[str, Any] = {"kind": "separate"}
     for _k, _v in [
         ("padding", padding),
@@ -40,6 +47,34 @@ def noise(*, randomness: Optional[str] = None, smoothing: Optional[Union[float, 
         padding: Pixels added to each dot's width when the outline is sized and, for "blue" randomness, when distances are compared. Default 0.
         seed: Seed for "blue" and "uniform" randomness, so a render is the same every time. Default 0.
     """
+    if randomness is not None:
+        if not isinstance(randomness, str):
+            raise TypeError(f"Overlap.noise(randomness=...) must be one of \"blue\", \"quasi\", \"uniform\", got {type(randomness).__name__}")
+        if randomness not in ("blue", "quasi", "uniform"):
+            raise ValueError(f"Overlap.noise(randomness=...) must be one of \"blue\", \"quasi\", \"uniform\", got {randomness!r}")
+    if smoothing is not None:
+        if isinstance(smoothing, (int, float)) and not isinstance(smoothing, bool):
+            if math.isnan(smoothing):
+                raise ValueError(f"Overlap.noise(smoothing=...) must not be NaN, got {smoothing!r}")
+            if smoothing < 0:
+                raise ValueError(f"Overlap.noise(smoothing=...) must be >= 0, got {smoothing!r}")
+        elif isinstance(smoothing, str):
+            if smoothing not in ("silverman",):
+                raise ValueError(f"Overlap.noise(smoothing=...) must be a number >= 0 or \"silverman\", got {smoothing!r}")
+        else:
+            raise TypeError(f"Overlap.noise(smoothing=...) must be a number >= 0 or \"silverman\", got {type(smoothing).__name__}")
+    if padding is not None:
+        if not (isinstance(padding, (int, float)) and not isinstance(padding, bool)):
+            raise TypeError(f"Overlap.noise(padding=...) must be a finite number >= 0, got {type(padding).__name__}")
+        if not math.isfinite(padding):
+            raise ValueError(f"Overlap.noise(padding=...) must be finite, got {padding!r}")
+        if padding < 0:
+            raise ValueError(f"Overlap.noise(padding=...) must be >= 0, got {padding!r}")
+    if seed is not None:
+        if not (isinstance(seed, (int, float)) and not isinstance(seed, bool)):
+            raise TypeError(f"Overlap.noise(seed=...) must be a finite number, got {type(seed).__name__}")
+        if not math.isfinite(seed):
+            raise ValueError(f"Overlap.noise(seed=...) must be finite, got {seed!r}")
     out: Dict[str, Any] = {"kind": "noise"}
     for _k, _v in [
         ("randomness", randomness),
@@ -61,6 +96,34 @@ def sina(*, randomness: Optional[str] = None, smoothing: Optional[Union[float, s
         padding: Pixels added to each dot's width when the outline is sized and, for "blue" randomness, when distances are compared. Default 0.
         seed: Seed for "blue" and "uniform" randomness, so a render is the same every time. Default 0.
     """
+    if randomness is not None:
+        if not isinstance(randomness, str):
+            raise TypeError(f"Overlap.sina(randomness=...) must be one of \"blue\", \"quasi\", \"uniform\", got {type(randomness).__name__}")
+        if randomness not in ("blue", "quasi", "uniform"):
+            raise ValueError(f"Overlap.sina(randomness=...) must be one of \"blue\", \"quasi\", \"uniform\", got {randomness!r}")
+    if smoothing is not None:
+        if isinstance(smoothing, (int, float)) and not isinstance(smoothing, bool):
+            if math.isnan(smoothing):
+                raise ValueError(f"Overlap.sina(smoothing=...) must not be NaN, got {smoothing!r}")
+            if smoothing < 0:
+                raise ValueError(f"Overlap.sina(smoothing=...) must be >= 0, got {smoothing!r}")
+        elif isinstance(smoothing, str):
+            if smoothing not in ("silverman",):
+                raise ValueError(f"Overlap.sina(smoothing=...) must be a number >= 0 or \"silverman\", got {smoothing!r}")
+        else:
+            raise TypeError(f"Overlap.sina(smoothing=...) must be a number >= 0 or \"silverman\", got {type(smoothing).__name__}")
+    if padding is not None:
+        if not (isinstance(padding, (int, float)) and not isinstance(padding, bool)):
+            raise TypeError(f"Overlap.sina(padding=...) must be a finite number >= 0, got {type(padding).__name__}")
+        if not math.isfinite(padding):
+            raise ValueError(f"Overlap.sina(padding=...) must be finite, got {padding!r}")
+        if padding < 0:
+            raise ValueError(f"Overlap.sina(padding=...) must be >= 0, got {padding!r}")
+    if seed is not None:
+        if not (isinstance(seed, (int, float)) and not isinstance(seed, bool)):
+            raise TypeError(f"Overlap.sina(seed=...) must be a finite number, got {type(seed).__name__}")
+        if not math.isfinite(seed):
+            raise ValueError(f"Overlap.sina(seed=...) must be finite, got {seed!r}")
     out: Dict[str, Any] = {"kind": "noise", "smoothing": "silverman"}
     for _k, _v in [
         ("randomness", randomness),
@@ -82,6 +145,34 @@ def jitter(*, randomness: Optional[str] = None, smoothing: Optional[Union[float,
         padding: Pixels added to each dot's width when the outline is sized and, for "blue" randomness, when distances are compared. Default 0.
         seed: Seed for "blue" and "uniform" randomness, so a render is the same every time. Default 0.
     """
+    if randomness is not None:
+        if not isinstance(randomness, str):
+            raise TypeError(f"Overlap.jitter(randomness=...) must be one of \"blue\", \"quasi\", \"uniform\", got {type(randomness).__name__}")
+        if randomness not in ("blue", "quasi", "uniform"):
+            raise ValueError(f"Overlap.jitter(randomness=...) must be one of \"blue\", \"quasi\", \"uniform\", got {randomness!r}")
+    if smoothing is not None:
+        if isinstance(smoothing, (int, float)) and not isinstance(smoothing, bool):
+            if math.isnan(smoothing):
+                raise ValueError(f"Overlap.jitter(smoothing=...) must not be NaN, got {smoothing!r}")
+            if smoothing < 0:
+                raise ValueError(f"Overlap.jitter(smoothing=...) must be >= 0, got {smoothing!r}")
+        elif isinstance(smoothing, str):
+            if smoothing not in ("silverman",):
+                raise ValueError(f"Overlap.jitter(smoothing=...) must be a number >= 0 or \"silverman\", got {smoothing!r}")
+        else:
+            raise TypeError(f"Overlap.jitter(smoothing=...) must be a number >= 0 or \"silverman\", got {type(smoothing).__name__}")
+    if padding is not None:
+        if not (isinstance(padding, (int, float)) and not isinstance(padding, bool)):
+            raise TypeError(f"Overlap.jitter(padding=...) must be a finite number >= 0, got {type(padding).__name__}")
+        if not math.isfinite(padding):
+            raise ValueError(f"Overlap.jitter(padding=...) must be finite, got {padding!r}")
+        if padding < 0:
+            raise ValueError(f"Overlap.jitter(padding=...) must be >= 0, got {padding!r}")
+    if seed is not None:
+        if not (isinstance(seed, (int, float)) and not isinstance(seed, bool)):
+            raise TypeError(f"Overlap.jitter(seed=...) must be a finite number, got {type(seed).__name__}")
+        if not math.isfinite(seed):
+            raise ValueError(f"Overlap.jitter(seed=...) must be finite, got {seed!r}")
     out: Dict[str, Any] = {"kind": "noise", "randomness": "uniform", "smoothing": math.inf}
     for _k, _v in [
         ("randomness", randomness),
