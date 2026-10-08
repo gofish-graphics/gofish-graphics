@@ -31,6 +31,7 @@ export const Ellipse = ({
   stroke = fill,
   strokeWidth = 0,
   opacity = 1,
+  fillOpacity,
   aspectRatio,
   ...fancyDims
 }: {
@@ -38,6 +39,8 @@ export const Ellipse = ({
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
   opacity?: number;
+  /** Opacity of the fill alone, 0 to 1; the stroke keeps `opacity`. */
+  fillOpacity?: number;
   /** w/h ratio to enforce. When both dims are data-driven, the constraining axis is used. */
   aspectRatio?: number;
 } & FancyDims<MaybeValue<number>>) => {
@@ -138,6 +141,7 @@ export const Ellipse = ({
           stroke: resolvedStroke,
           strokeWidth: strokeWidth ?? 0,
           opacity,
+          fillOpacity,
         });
 
         // Build an EllipseItem from a display-space center; radii are unchanged
@@ -265,6 +269,7 @@ export const Ellipse = ({
               stroke: resolvedStroke,
               strokeWidth: strokeWidth ?? 0,
               opacity,
+              fillOpacity,
             }),
           },
         ];

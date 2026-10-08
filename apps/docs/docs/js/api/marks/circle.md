@@ -19,7 +19,7 @@ gf.chart([{ size: 40 }])
 ## Signature
 
 ```ts
-circle({ r?, fill?, stroke?, strokeWidth?, opacity?, debug? })
+circle({ r?, fill?, stroke?, strokeWidth?, opacity?, fillOpacity?, debug? })
 ```
 
 ## Parameters

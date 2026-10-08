@@ -614,7 +614,8 @@ It emits:
 
 - Closed-signature **leaf mark** factories (`rect`, `circle`, `ellipse`,
   `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
-  plus wire-key rename, with docstrings from each field's `doc`.
+  plus wire-key rename, with docstrings from each field's `doc`. An
+  undeclared kwarg is a `TypeError` on all of them; none takes `**kwargs`.
 - Compositing-quartet and other **combinator-only** marks — the
   Porter-Duff-style renames (`inside`→`intersect`, `xor`→`exclude`,
   `out`→`subtract`, `atop`→`paint`) come from the descriptor's `pyName`,

@@ -419,6 +419,20 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   behind the JS type and lacked `side` and `labelAngle`. See
   [§ Generating the Python factory layer](/internals/frontend/serialization#generating-the-python-factory-layer).
 
+- **Closed signatures on every leaf mark (#1007).** `circle`, `ellipse`,
+  `petal`, and `blank` used to end in an open `**kwargs` that sent any
+  unknown key to the wire unchanged. That let a camel case name through
+  (`circle(fillOpacity=0.6)`) and sent a snake case one unconverted, which
+  JS then ignored. The four now have closed signatures like every other
+  generated factory, so an unknown kwarg is a `TypeError`. The one key a
+  story used that the descriptors lacked, `fillOpacity`, is now a real
+  option: JS `Ellipse` paints it as `fill-opacity`, `circle` passes it
+  through, and both descriptors declare it (`fill_opacity` in Python). The
+  bar chart template stories had passed `circle` as the custom mark, and the
+  template calls it with `h` or `w`, which `circle` does not take, so their
+  circles never showed the value. They now pass `ellipse`. No escape hatch
+  was needed.
+
 **Deliberately deferred**, not follow-up bugs:
 
 - **The relate ref-walk** (`RelatableMark.relate`'s Python-side

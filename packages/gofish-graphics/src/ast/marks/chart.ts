@@ -288,6 +288,8 @@ export const circle = createMark(
     stroke?: MaybeValue<string>;
     strokeWidth?: number;
     opacity?: MaybeValue<number>;
+    /** Opacity of the fill alone, 0 to 1; the stroke keeps `opacity`. */
+    fillOpacity?: number;
   }) => {
     const size = typeof p.r === "number" ? p.r * 2 : p.r;
     return Ellipse({
@@ -300,6 +302,7 @@ export const circle = createMark(
       // `opacity` is a RAW channel, so a per-datum accessor has already been
       // evaluated against the row and wrapped; `Ellipse` paints a plain number.
       opacity: p.opacity === undefined ? undefined : getValue(p.opacity),
+      fillOpacity: p.fillOpacity,
     });
   },
   { r: "size", fill: "color", stroke: "color", opacity: "raw" },
