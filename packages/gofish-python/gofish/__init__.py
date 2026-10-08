@@ -71,6 +71,7 @@ from .ast import (
     field,
 )
 from .transforms import bin
+from .datum_projection import pluck
 from .charts import bar_chart
 
 __all__ = [
@@ -141,6 +142,7 @@ __all__ = [
     "datum",
     "field",
     "bin",
+    "pluck",
     "bar_chart",
 ]
 

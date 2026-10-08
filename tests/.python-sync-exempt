@@ -57,12 +57,6 @@ packages/gofish-graphics/stories/lowlevel/EncloseRefs.stories.tsx
 packages/gofish-graphics/stories/bench/Benchmarks.stories.tsx
 
 # Forward syntax stories needing unsupported features
-# BarWithLabels::Default is ported (#591 — ref/datum mark-fn bridge: each
-# `GoFishRef` a mark-fn receives crosses the RPC as an `{__inputRef, datum}`
-# sentinel and reconstructs Python-side as `_InputRef`, with `d[0]` itself
-# round-tripping back into a returned combinator mark). SpeciesCountPerLake
-# still needs `pluck()`, which has no Python wrapper yet.
-packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx::SpeciesCountPerLake
 # LabeledChart uses a JS-side function-mark that composes resolved node refs
 # with fresh text — the refs can't cross the Python derive RPC, so it can't be
 # expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
