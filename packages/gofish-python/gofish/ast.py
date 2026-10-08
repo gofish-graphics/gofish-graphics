@@ -1706,9 +1706,8 @@ def ref(target: Union[str, Token]) -> _RefProxy:
 # — pure kwargs-collection + the `pyName` rename table, imported above. Wire
 # `type` strings stay the OLD Porter-Duff spellings ("inside"/"xor"/"out"/
 # "atop") per the descriptor's `pyName` — the IR serializer never renamed them
-# (COMBINATOR_FACTORIES in tests/harness and
-# packages/gofish-graphics/src/serialize/registry.ts are still keyed by the
-# old wire types).
+# (FACTORIES in packages/gofish-graphics/src/serialize/registry.ts is still
+# keyed by the old wire types).
 
 
 def stack(

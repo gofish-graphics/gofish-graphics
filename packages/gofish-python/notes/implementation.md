@@ -302,14 +302,14 @@ export default {
 `mapOperator(opSpec, bridge)`
 
 - Maps IR operator spec to GoFish operator function
-- Uses lookup table `OPERATOR_MAP` for extensibility
+- Rebuilds it with `rebuild("operator", type, opts, { bridge })` (serialize/registry.ts)
 - Special handling for `derive` (creates an async operator that calls
   `bridge.request(lambdaId, arrowB64)`)
 
 `mapMark(markSpec)`
 
 - Maps IR mark spec to GoFish mark function
-- Simple lookup table `MARK_MAP`
+- Rebuilds it with `rebuild("leaf-mark" | "combinator-mark", type, opts)`
 
 `renderChart(model, container, bridge)`
 

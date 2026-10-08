@@ -376,26 +376,6 @@ export type NameableMark<T> = Mark<T> & {
 };
 
 /**
- * Mark-factory IR serialization config — passed as the optional third
- * argument to `createMark`. A string is shorthand for `{ type: <string> }`.
- *
- * The factory tags each produced mark with `__serialize: { type, opts }`
- * so the frontend-IR emitter (gofish-graphics/serialize/toJSON) can
- * reconstruct the mark on the wire.
- */
-export type MarkSerializeConfig<P = any> =
-  | string
-  | {
-      /** IR discriminator (lowercase to match the wire format), e.g. "rect". */
-      type: string;
-      /**
-       * Optional shape function. Default: copy `markOpts` verbatim. Use to
-       * strip non-serializable fields or rename keys.
-       */
-      shape?: (opts: P) => Record<string, unknown>;
-    };
-
-/**
  * Creates a high-level mark from a low-level shape function plus optional
  * channel annotations. Channel annotations describe how each prop encodes data:
  * - "size":  accepts `number | keyof T`, uses inferSize
@@ -418,6 +398,12 @@ export type MarkSerializeConfig<P = any> =
  * The returned mark supports `.name("layerName" | token)` so that when used
  * in a chart, each produced node is registered for `ref("layerName")` /
  * `selectAll("layerName")`.
+ *
+ * `serialize` is the mark's IR discriminator (lowercase, as on the wire), e.g.
+ * "rect". The factory tags each produced mark with `__serialize: { type, opts }`,
+ * the options exactly as the caller passed them, so the frontend-IR emitter
+ * (gofish-graphics/serialize/toJSON) can reconstruct the mark on the wire. The
+ * emitter keeps only the keys the mark's descriptor declares.
  */
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild
@@ -425,7 +411,7 @@ export function createMark<P extends Record<string, any>>(
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild,
   channels: undefined,
-  serialize: MarkSerializeConfig<P>
+  serialize: string
 ): (props: P) => NameableMark<P>;
 export function createMark<
   ShapeProps extends Record<string, any>,
@@ -440,7 +426,7 @@ export function createMark<
     | PromiseLike<GoFishNode>
     | PromiseLike<GoFishNode[]>,
   channels: C,
-  serialize?: MarkSerializeConfig,
+  serialize?: string,
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
@@ -448,20 +434,34 @@ export function createMark<
 export function createMark(
   shapeFn: any,
   channels: Record<string, any> = {},
-  serialize?: MarkSerializeConfig,
+  serialize?: string,
   cfg?: { kind?: MarkKind }
 ): any {
   const kind: MarkKind = cfg?.kind ?? "per-item";
-  const serializeConfig: { type: string; shape?: (o: any) => any } | undefined =
-    typeof serialize === "string" ? { type: serialize } : serialize;
   return (markOpts: Record<string, any>) =>
-    buildCreatedMark(shapeFn, channels, serializeConfig, kind, markOpts);
+    buildCreatedMark(shapeFn, channels, serialize, kind, markOpts);
+}
+
+/**
+ * Close a component's built node: stamp the datum it was built from (layout
+ * reads `node.datum` in some bbox / inferRaw passes), make it a scope root so
+ * the names inside it stay hygienic, and mark it a component, where string-name
+ * lookup and z-order flattening stop. `_isComponent` is separate from
+ * `_isScope` so an operator that scopes for token reasons does not also stop
+ * `ref("name")` lookups. Shared by `createMark` and the deserializer's
+ * `wrapWithScope` (the Python `@mark` decorator), so both build the same node.
+ */
+export function sealComponent(node: GoFishNode, datum: unknown): GoFishNode {
+  node.datum = datum;
+  node.scope();
+  node._isComponent = true;
+  return node;
 }
 
 function buildCreatedMark(
   shapeFn: any,
   channels: Record<string, any>,
-  serializeConfig: { type: string; shape?: (o: any) => any } | undefined,
+  serialize: string | undefined,
   kind: MarkKind,
   markOpts: Record<string, any>
 ): any {
@@ -546,26 +546,14 @@ function buildCreatedMark(
       return result as unknown as GoFishNode;
     }
     const node = result as GoFishNode;
-    node.datum = d;
     if (liveChannels) node.__gfLive = liveChannels;
-    node.scope();
-    // Mark as a component for string-name search bounding. Distinct from
-    // _isScope so future operators that scope (for token reasons) don't
-    // silently break ref("name") lookups across them.
-    node._isComponent = true;
-    return node;
+    return sealComponent(node, d);
   };
   withMarkKind(baseMark, kind);
 
   // Tag with IR-serialization metadata for the frontend-IR emitter.
-  if (serializeConfig) {
-    const payload = serializeConfig.shape
-      ? serializeConfig.shape(markOpts)
-      : markOpts;
-    (baseMark as any).__serialize = {
-      type: serializeConfig.type,
-      opts: payload,
-    };
+  if (serialize) {
+    (baseMark as any).__serialize = { type: serialize, opts: markOpts };
   }
 
   return nameableMark(baseMark);

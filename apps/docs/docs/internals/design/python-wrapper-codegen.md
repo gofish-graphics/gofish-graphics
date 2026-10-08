@@ -427,9 +427,12 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   (`resolveScopedName`, #819), and the walk is gone: Python passes one ref
   per callback parameter without a default and JS resolves and checks the names at layout.
 - **Generifying the deserializer registry** off the descriptor table
-  (option 5 in § Option A above). It remains hand-maintained; see step 2 of
-  the `add-cross-language-construct` skill. The parity harness no longer has
-  its own switch: it renders through the same deserializer as the widget
+  (option 5 in § Option A above). Since done (#691): the registry is one
+  wire-type-to-factory table looked up through the descriptor's kind, with
+  four hand-written operator builders, and the emitter filters each
+  construct's options through its descriptor. A test fails when the table
+  and the descriptors disagree. The parity harness no longer has its own
+  switch: it renders through the same deserializer as the widget
   (`Serialize.renderIR`).
 - **Closing the `spread`/`stack`/`scatter` operator-vs-combinator `w`/`h`
   schema drift** — the low-level combinator forms accept explicit `w`/`h`

@@ -33,12 +33,8 @@ import {
 import { isNonFiniteNumberIR, isTaggedInfinity } from "./nonFinite.js";
 import {
   LABEL_OPTIONS,
-  LEAF_MARKS,
-  MARK_BASE_FIELDS,
-  OPERATOR_BASE_FIELDS,
-  OPERATORS,
   OPTION_TYPES,
-  resolveFields,
+  acceptedFields,
   type FieldSpec,
   type FieldType,
 } from "./descriptors.js";
@@ -310,13 +306,17 @@ function walkData(node: unknown, path: string, ctx: Context): void {
  * contract is that accepted/rejected documents stay exactly as before) and,
  * with `asWarning: true`, leaf marks (warnings only — the gradual rollout the
  * python-wrapper-codegen design doc calls for).
+ *
+ * `callerKeys` are the keys the caller checks itself (`type`, and any field it
+ * walks with a structural check of its own): they are accepted here and not
+ * checked a second time, even when `fields` declares them.
  */
 function walkDescriptorFields(
   node: Record<string, unknown>,
   path: string,
   ctx: Context,
   fields: Record<string, FieldSpec>,
-  extraKnownKeys: readonly string[],
+  callerKeys: readonly string[],
   opts: { asWarning?: boolean; rejectUnknownInStrict?: boolean } = {}
 ): void {
   const push = (path: string, message: string) => {
@@ -324,6 +324,7 @@ function walkDescriptorFields(
     else ctx.errors.push({ path, message });
   };
   for (const [name, spec] of Object.entries(fields)) {
+    if (callerKeys.includes(name)) continue;
     const check = (v: unknown, p: string) =>
       walkFieldType(spec.type, v, p, ctx, push);
     if (spec.required) {
@@ -344,7 +345,7 @@ function walkDescriptorFields(
   // "unrecognized channel" signal from a permissive-mode caller.
   const shouldCheckUnknown = opts.asWarning ? true : ctx.strict;
   if (shouldCheckUnknown && (opts.rejectUnknownInStrict ?? true)) {
-    const known = [...extraKnownKeys, ...Object.keys(fields)];
+    const known = [...callerKeys, ...Object.keys(fields)];
     for (const k of Object.keys(node)) {
       // Double-underscore keys are Python-bridge wire extensions
       // (__combinator, __datum, __key, __gofish_lambda, ... — see the
@@ -615,24 +616,15 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     return;
   }
   walkBaseFields(node, path, ctx);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  const descriptor = OPERATORS[node.type];
-  // `debug`/`label` (OPERATOR_BASE_FIELDS) ride every operator: `debug` is a
-  // factory-only dev flag JS strips before layout; `label` is the
-  // `.label(accessor, options?)` chain available on dual-mode operators.
-  const fields = descriptor
-    ? {
-        ...resolveFields(descriptor),
-        label: OPERATOR_BASE_FIELDS.label,
-        debug: OPERATOR_BASE_FIELDS.debug,
-      }
-    : {};
-  walkDescriptorFields(node, path, ctx, fields, [
-    "type",
-    "translate",
-    "origin",
-    "meta",
-  ]);
+  // The operator's own fields and OPERATOR_BASE_FIELDS (`label`, `translate`,
+  // `debug`) all sit on the node.
+  walkDescriptorFields(
+    node,
+    path,
+    ctx,
+    acceptedFields("operator", node.type) ?? {},
+    ["type", "origin", "meta"]
+  );
 }
 
 function walkTranslate(node: unknown, path: string, ctx: Context): void {
@@ -1102,21 +1094,16 @@ function walkLeafMark(
   // as a warning turns that into a visible signal without breaking any
   // currently-valid document (see the gradual-rollout note in
   // ValidationWarning's docstring).
-  const descriptor = LEAF_MARKS[node.type as string];
-  if (descriptor) {
-    // `label` is deliberately excluded here: it's already validated above by
-    // `walkLabel` as the base LabelIR mechanism (`.label()`'s canonical
-    // object/string shorthand). Re-checking it here against the descriptor's
-    // own field type would risk a spurious warning divergence between the
-    // two walks.
-    const { label: _ownLabelFlag, ...fields } = resolveFields(descriptor);
+  const fields = acceptedFields("leaf-mark", node.type as string);
+  if (fields) {
+    // The base fields set by Mark methods were checked above, as errors; they
+    // are not checked again here as warnings. `debug` (MARK_BASE_FIELDS), a
+    // factory option, is checked here with the mark's own fields.
     walkDescriptorFields(
       node,
       path,
       ctx,
-      // `debug` (MARK_BASE_FIELDS) rides every leaf mark, declared or not —
-      // a factory-only dev flag the JS side strips before layout.
-      { ...fields, debug: MARK_BASE_FIELDS.debug },
+      fields,
       [
         "type",
         "name",
