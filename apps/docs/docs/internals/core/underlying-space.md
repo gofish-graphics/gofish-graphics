@@ -691,6 +691,24 @@ reach the same expressive ceiling as the spread pipeline, auto-fit included
 back to `unionChildSpaces`; the general algebra is sketched in
 [[constraints-as-core]].
 
+**Sharing sets.** A second plan reads the same inputs, the constraints and the
+child nodes: `planSharing` (`constraints/compose.ts`) splits a layer's children,
+per axis, into sharing sets. Two children in one set read their data values on
+that axis in one frame. Set 0 is the layer's own set, and a child in any other
+set is detached on that axis. A literal pixel `position` detaches its child, a
+spread's `distribute` detaches each part and nests it in its slot, a grid does
+both on both axes, and `align`, a stack's glued `distribute` and `nest` join
+their children. Detaches run first and joins second, so an `align` beats a
+`position` on the same axis. The `nested` half is `datumPlacedChildren` plus
+the spread slots and grid cells. Unlike `planConstraintComposition`, the plan
+exists for every layer, point positions included. Nothing reads it yet except
+the `GOFISH_DUMP_SHARING` dump. It is step 3 of the
+[measure-keyed domains design](/internals/design/measure-keyed-domains), which
+lists what each construct contributes. Two rows of that table are not built:
+a data-valued `w`/`h` on a layer (the layer keeps its size in a closure, so
+the plan cannot see it on the child node), and `treemap` and the `position`
+operator (each is its own node type with no constraints).
+
 `distribute`'s `anchor` option (`"edge" | "start" | "middle" | "end" |
 "baseline"`, default `"edge"`) picks which pair of anchors the chain relates
 between adjacent children: `"edge"` relates the facing edges
@@ -1259,6 +1277,15 @@ re-rooting σ on the angular axis):
 That the root and shared scopes on one axis print the same σ is Stage 6's
 invariant made visible: **one slope per σ-scope, by construction**, because the
 frame equation is solved once and the posScale is a derived view of that solve.
+
+Behind `GOFISH_DUMP_SHARING`, `dumpSharing` prints each layer's sharing sets
+instead, one line per layer, skipping chrome rings. A `*` marks a nested child.
+`tests/scripts/dump-scopes.ts "<filter>" --sharing` prints them for a story.
+The marginal histogram's layer prints as:
+
+```
+[sharing] layer __axisContent (3) [position×3,align×2] x: own{scatter,topHist} detached {rightHist} | y: own{scatter,rightHist} detached {topHist}
+```
 
 Stage 6c makes the registry the _sole_ producer of every slope, so that "by
 construction" holds everywhere the carrier flows. Two former exceptions closed:
