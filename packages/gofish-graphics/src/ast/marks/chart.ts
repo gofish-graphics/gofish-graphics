@@ -588,6 +588,29 @@ function resolveGroupFill<O extends RelationalMarkOptions>(
   return resolvedOpts;
 }
 
+declare const relationalMarkBrand: unique symbol;
+
+/**
+ * The mark a relational factory (`createRelationalMark`: `line`, `ribbon`,
+ * `time.transition`) returns. It is a `NameableMark` whose type remembers that
+ * it may fuse: `ChartBuilder.mark()` gives a relational mark a
+ * `ChartBuilder | LayerBuilder` result (it rewrites to a two-tier layer when
+ * the chart has its own flow), and every other mark a plain `ChartBuilder`.
+ * `.name()`, `.label()`, `.zOrder()` and `.transition()` carry the fusion tag
+ * forward, so they keep the brand; `.translate()` wraps the mark in a fresh
+ * one without the tag, so it returns a plain `NameableMark`.
+ */
+export type RelationalMark = Mark<any> &
+  Omit<NameableMark<any>, "name" | "label" | "zOrder" | "transition"> & {
+    readonly [relationalMarkBrand]: true;
+    name(...args: Parameters<NameableMark<any>["name"]>): RelationalMark;
+    label(...args: Parameters<NameableMark<any>["label"]>): RelationalMark;
+    zOrder(...args: Parameters<NameableMark<any>["zOrder"]>): RelationalMark;
+    transition(
+      ...args: Parameters<NameableMark<any>["transition"]>
+    ): RelationalMark;
+  };
+
 export function createRelationalMark<O extends Record<string, unknown>>(
   type: string,
   produce: (
@@ -607,7 +630,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     options: O | undefined,
     children: GoFishAST[]
   ): GoFishNode;
-  function relational(options?: O): Mark<any>;
+  function relational(options?: O): RelationalMark;
   function relational(
     options?: O,
     children?: GoFishAST[]

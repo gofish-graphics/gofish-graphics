@@ -28,6 +28,7 @@ import {
 } from "./terminals";
 import { expandComposedOperator } from "./compose";
 import { nameableMark } from "./createOperator";
+import type { RelationalMark } from "./chart";
 import {
   layerKey,
   resolveMarkResult,
@@ -697,6 +698,15 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   // `.layer(...)` chaining and the render/toSVG/... terminals, but not
   // `ChartBuilder`-only methods (`.name()` on the chart itself, further
   // `.mark()`/`.flow()`) or use as a nested `.layer(...)` tier.
+  //
+  // The overloads say this in the types: only a `RelationalMark` can fuse, so
+  // only it gets the `ChartBuilder | LayerBuilder` result (fusion also
+  // depends on `hasOwnFlow()`, which the types do not track). Every other
+  // mark returns this `ChartBuilder`, so `.name(...)` stays available on it.
+  mark(mark: RelationalMark): ChartBuilder<TInput, TOutput> | LayerBuilder;
+  mark(
+    mark: Mark<TOutput> | ChartBuilder<any, any>
+  ): ChartBuilder<TInput, TOutput>;
   mark(
     mark: Mark<TOutput> | ChartBuilder<any, any>
   ): ChartBuilder<TInput, TOutput> | LayerBuilder {
@@ -1081,11 +1091,15 @@ export function chart(
   data: GoFishRef & { multiplicity: "all" },
   options?: ChartOptions
 ): ChartBuilder<GoFishRef[], GoFishRef[]>;
-export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T>;
 // Empty scope: `Chart()` / `Chart(options)` (no data) inherits its data from the
 // enclosing context — the previous tier's marks inside `.layer(...)`, or the
 // incoming partition datum when used directly as a `.mark(...)` (issue #243).
+// Listed before the data overload so a lone options object types as options,
+// matching the runtime `isChartOptions` check below. Data does not match it:
+// an array shares no key with `ChartOptions`, and a ref's `color` is not a
+// `ColorConfig`.
 export function chart(options?: ChartOptions): ChartBuilder<any, any>;
+export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T>;
 export function chart<T>(
   dataOrOptions?: T | ChartOptions,
   options?: ChartOptions

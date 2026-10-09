@@ -39,6 +39,7 @@ export default defineConfig(({ command, mode }) => {
           "src/tests/**",
           "src/**/*.test.ts",
           "src/**/*.spec.ts",
+          "src/**/*.typetest.ts",
           "src/index.tsx",
         ],
         insertTypesEntry: true,
