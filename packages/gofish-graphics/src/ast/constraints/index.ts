@@ -7,7 +7,13 @@ import {
   type MaybeValue,
   type Measure,
 } from "../data";
-import { mergeMeasures } from "../underlyingSpace";
+import {
+  mergeCalendars,
+  mergeMeasures,
+  positionCalendar,
+} from "../underlyingSpace";
+import type { HasCalendar } from "../schema";
+import type { PositionDomains } from "./compose";
 import * as Interval from "../../util/interval";
 import { createAlignConstraint } from "./align";
 import { createDistributeConstraint } from "./distribute";
@@ -260,16 +266,28 @@ export function resolveConstraintOperands(
  * tag the scatter reduction dropped, without strict-unifying against a
  * self-scaling child's leaked unit.
  */
-export function collectPositionDomains(constraints: ConstraintSpec[]): {
-  x?: Interval.Interval;
-  y?: Interval.Interval;
-  xMeasure?: Measure;
-  yMeasure?: Measure;
-} {
+export function collectPositionDomains(
+  constraints: ConstraintSpec[]
+): PositionDomains {
   let x: Interval.Interval | undefined;
   let y: Interval.Interval | undefined;
   let xMeasure: Measure | undefined;
   let yMeasure: Measure | undefined;
+  // The calendar of time datums (`CONTINUOUS_TYPE.calendar`); literals carry
+  // none.
+  let xCalendar: HasCalendar | undefined;
+  let yCalendar: HasCalendar | undefined;
+  const coordCalendar = (
+    coord: PositionConstraint["x"] | undefined
+  ): HasCalendar | undefined =>
+    coord === undefined
+      ? undefined
+      : isPositionInterval(coord)
+        ? mergeCalendars([
+            positionCalendar(coord[0]),
+            positionCalendar(coord[1]),
+          ])
+        : positionCalendar(coord);
   const pointInterval = (
     coord: PositionConstraint["x"]
   ): Interval.Interval | undefined => {
@@ -315,8 +333,10 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
       axis: 1,
       where: "across position constraints",
     });
+    xCalendar = mergeCalendars([xCalendar, coordCalendar(c.x)]);
+    yCalendar = mergeCalendars([yCalendar, coordCalendar(c.y)]);
   }
-  return { x, y, xMeasure, yMeasure };
+  return { x, y, xMeasure, yMeasure, xCalendar, yCalendar };
 }
 
 /**

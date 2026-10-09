@@ -8,7 +8,6 @@ in Jupyter and marimo.
 """
 
 import base64
-import json
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -25,7 +24,9 @@ class GoFishChartWidget(anywidget.AnyWidget):
 
     # Spec + data: set once in __init__, read by JS on mount.
     spec = traitlets.Dict().tag(sync=True)
-    arrow_data = traitlets.Unicode().tag(sync=True)  # base64 Arrow IPC bytes
+    # Each chart tier's rows: base64 Arrow IPC bytes, one per tier (see
+    # `tiers_arrow_bytes` in ast.py).
+    tier_arrow = traitlets.List(traitlets.Unicode()).tag(sync=True)
     width = traitlets.Int(800).tag(sync=True)
     height = traitlets.Int(600).tag(sync=True)
     # The JS `.render(container, options)` options. None = the render call did
@@ -56,8 +57,7 @@ class GoFishChartWidget(anywidget.AnyWidget):
     def __init__(
         self,
         spec: Dict[str, Any],
-        arrow_data: Optional[bytes] = None,
-        arrow_dict: Optional[Dict[str, bytes]] = None,
+        tier_arrow: Optional[List[bytes]] = None,
         derive_functions: Optional[Dict[str, Callable]] = None,
         width: int = 800,
         height: int = 600,
@@ -78,31 +78,14 @@ class GoFishChartWidget(anywidget.AnyWidget):
             )
         esm_code = bundle_path.read_text(encoding="utf-8")
 
-        # The `arrow_data` trait carries one of two wire shapes, mirroring the
-        # two ways JS's `renderChart` (widget-src/index.ts) branches on
-        # `spec.type`: a single chart gets one base64-encoded Arrow IPC
-        # stream; a layer gets a JSON object mapping child index -> that same
-        # base64 encoding, one entry per tier (`renderLayer` does
-        # `JSON.parse` then looks up `arrowDict[String(i)]`). Exactly one of
-        # `arrow_data` (single chart) / `arrow_dict` (layer) must be passed —
-        # this constructor owns all base64/JSON encoding so callers only ever
-        # hand it raw bytes, never pre-formatted wire strings (see #683).
-        if (arrow_data is None) == (arrow_dict is None):
-            raise ValueError(
-                "GoFishChartWidget requires exactly one of `arrow_data` "
-                "(single chart) or `arrow_dict` (layer, keyed by child index)"
-            )
-        if arrow_dict is not None:
-            arrow_data_trait = json.dumps(
-                {key: base64.b64encode(value).decode("ascii") for key, value in arrow_dict.items()}
-            )
-        else:
-            arrow_data_trait = base64.b64encode(arrow_data).decode("utf-8")
-
         super().__init__(
             _esm=esm_code,
             spec=spec,
-            arrow_data=arrow_data_trait,
+            # This constructor owns the base64 wire encoding, so callers hand
+            # it raw bytes, never pre-formatted wire strings (see #683).
+            tier_arrow=[
+                base64.b64encode(b).decode("ascii") for b in tier_arrow or []
+            ],
             width=width,
             height=height,
             # Per-axis options are snake_case in Python and camelCase on the

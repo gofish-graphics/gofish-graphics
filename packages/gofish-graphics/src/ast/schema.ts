@@ -4,6 +4,7 @@
 
 import type { StackOrigin } from "./constraints/distribute";
 import { copyMeasureProvenance } from "./data";
+import { loadTemporal, temporal } from "./calendar";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -19,6 +20,11 @@ import { copyMeasureProvenance } from "./data";
  *    Declared with `.diverging()`, which exists only after `.ordered(...)`
  *    because a midpoint is a point along an order. A stack over the column
  *    puts its origin (its 0) at the midpoint.
+ *  - {@link HasCalendar}: the column's values are instants that read on a
+ *    calendar in a time zone. Declared with `Schema.time()`, or inferred from
+ *    JS `Date` values. The values become epoch milliseconds (UTC) when the
+ *    schema is applied, and an axis over them is a time axis whose ticks are
+ *    calendar cells (calendar.ts). A time has no zero.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
@@ -48,11 +54,52 @@ export type HasOrder = { levels: readonly Level[] };
  *  is even. It requires {@link HasOrder}, and `0 <= at <= n`. */
 export type HasMidpoint = { at: number };
 
+/** The class of a column whose values are instants (`Schema.time()`): epoch
+ *  milliseconds, UTC, read on the calendar of the IANA time zone `zone`
+ *  (`"UTC"` by default). The zone decides where calendar cells start (a day
+ *  starts at local midnight) and how labels read. An instant has no zero. */
+export type HasCalendar = { zone: string };
+
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
   HasOrder?: HasOrder;
   HasMidpoint?: HasMidpoint;
+  HasCalendar?: HasCalendar;
 };
+
+/** Whether `v` is a time column's value as the engine reads it: epoch
+ *  milliseconds, a finite number, or missing (null, undefined). */
+const isEpochMs = (v: unknown): boolean =>
+  v == null || (typeof v === "number" && Number.isFinite(v));
+
+/** Which values each class accepts as they stand, without reinterpreting
+ *  them. A missing value (null, undefined) fits every class.
+ *
+ *  - `HasCalendar`: an instant: epoch milliseconds (a finite number) or a
+ *    valid `Date`. A `Date` is an instant, so turning it into epoch
+ *    milliseconds reinterprets nothing; a string is not one, since reading
+ *    it needs a zone (only a `schema` annotation converts strings).
+ *  - `HasOrder`: text or numbers, the kinds its levels are. A value outside
+ *    the levels still fits, so the order stays and its stray-level error
+ *    fires where the order is used.
+ *  - `HasMidpoint`: anything; its values are its order's. */
+const ACCEPTS: { [K in keyof ColumnType]-?: (v: unknown) => boolean } = {
+  HasCalendar: (v) =>
+    isEpochMs(v) || (v instanceof Date && Number.isFinite(v.getTime())),
+  HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
+  HasMidpoint: () => true,
+};
+
+const CLASSES = Object.keys(ACCEPTS) as (keyof ColumnType)[];
+
+/** Whether one value fits a column type as it stands, as a predicate built
+ *  once per column: every class the type has accepts it ({@link ACCEPTS}). */
+function fitsType(type: ColumnType): (v: unknown) => boolean {
+  const accepts = CLASSES.filter((k) => type[k] !== undefined).map(
+    (k) => ACCEPTS[k]
+  );
+  return (v) => accepts.every((accept) => accept(v));
+}
 
 /** The column types of a dataset, keyed by column name. */
 export type ColumnTypes = Record<string, ColumnType>;
@@ -89,6 +136,16 @@ export const Schema = {
   /** A column whose values are `levels`, in this order (`HasOrder`). */
   ordered(levels: readonly Level[]): ColumnSchema<{ HasOrder: HasOrder }> {
     return new ColumnSchema({ HasOrder: { levels: [...levels] } });
+  },
+  /** A column whose values are instants (`HasCalendar`), read on the
+   *  calendar of `zone` (an IANA time zone, `"UTC"` by default). A value may
+   *  be an ISO 8601 string ("2024-03-05" is the start of that day in `zone`;
+   *  a string without an offset is a wall-clock time in `zone`), a `Date`,
+   *  or epoch milliseconds. */
+  time({ zone = "UTC" }: { zone?: string } = {}): ColumnSchema<{
+    HasCalendar: HasCalendar;
+  }> {
+    return new ColumnSchema({ HasCalendar: { zone } });
   },
 };
 
@@ -163,13 +220,17 @@ export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
   return data;
 };
 
-/** Copy `source`'s column types onto `target` (both arrays), if it has any. A
- *  split leaf or a derive's result is a fresh array, so it has to be told. */
+/** Copy `source`'s column types onto `target` (both arrays), for every
+ *  column `target` does not type itself. A split leaf or a derive's result is
+ *  a fresh array, so it has to be told. */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
   const types = getColumnTypes(source);
-  if (types !== undefined && getColumnTypes(target) === undefined)
-    setColumnTypes(target, types);
-  return target;
+  if (types === undefined) return target;
+  const own = getColumnTypes(target);
+  return setColumnTypes(
+    target,
+    own === undefined ? types : { ...types, ...own }
+  );
 };
 
 const showLevel = (level: unknown): string =>
@@ -183,29 +244,174 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
     `schema: column "${column}" has ${strays.length === 1 ? "a value" : "values"} ` +
       `outside its order: ${strays.map(showLevel).join(", ")}. HasOrder ` +
       `(declared with \`Schema.ordered(levels)\`) lists every level of the ` +
-      `column, so add ${strays.length === 1 ? "it" : "them"} to the levels or ` +
-      `filter those rows out.`
+      `column, so add ${strays.length === 1 ? "it" : "them"} to the levels, ` +
+      `filter those rows out, or, if a derive changed the values, annotate ` +
+      `the derive's result type with \`derive(fn, { schema })\`.`
   );
 }
 
 /**
  * Type `rows` with `schema`: a copy of the array carrying the column types
- * (merged over any the array already carries) and the measure provenance it
- * carries. The copy leaves the caller's array untagged, so one array can feed
- * charts with different schemas.
+ * and the measure provenance it carries. The types are, each winning over the
+ * one before:
  *
- * It does not check the values: a value outside an order is an error where the
- * order is used (`orderByLevels`), so a `filter` in the flow can drop it first.
+ *  1. `inherited` (an operator's input's, for its result), each kept only
+ *     when every value of its column fits it as it stands
+ *     ({@link ACCEPTS}). The inherited types never reinterpret or check the
+ *     values: a column that no longer fits (a date rewritten to "Mar") just
+ *     has no type. A column the rows do not hold fits (it has no values).
+ *     A time column of `Date`s fits its inherited time, zone and all, and
+ *     its Dates become epoch milliseconds below. Fitting reads values, not
+ *     meanings: a time recoded to plain numbers (years) still fits, since
+ *     any finite number is epoch milliseconds (#1089); `schema` fixes it.
+ *  2. The types the array already carries.
+ *  3. `schema`'s.
+ *
+ * A column none of these type is a time column (`HasCalendar`, UTC) when its
+ * first non-null value is a JS `Date` (a column is a key of the first row):
+ * inference is local, from the value alone, and a missing value says nothing
+ * about the column. Strings and numbers are never inferred as time; they need
+ * `Schema.time()`. Every time column's values become epoch milliseconds (see
+ * {@link toEpochMs}); the rows are copied only when some value is not one
+ * already. The copy leaves the caller's array untagged, so one array can
+ * feed charts with different schemas.
+ *
+ * It does not check the values against an order: a value outside an order is
+ * an error where the order is used (`orderByLevels`), so a `filter` in the
+ * flow can drop it first.
  */
-export function applySchema<T>(
+export async function applySchema<T>(
   rows: T[],
-  schema: Record<string, SchemaEntry>
-): T[] {
-  const types: ColumnTypes = { ...getColumnTypes(rows) };
+  schema: Record<string, SchemaEntry> = {},
+  inherited?: ColumnTypes
+): Promise<T[]> {
+  const own = getColumnTypes(rows);
+  const records = rows as unknown as (Record<string, unknown> | null)[];
+  const types: ColumnTypes = {};
+  for (const [column, type] of Object.entries(inherited ?? {})) {
+    const fits = fitsType(type);
+    if (
+      records.every(
+        (r) => r == null || typeof r !== "object" || fits(r[column])
+      )
+    )
+      types[column] = type;
+  }
+  Object.assign(types, own);
   for (const [column, entry] of Object.entries(schema)) {
     types[column] = columnTypeOf(column, entry);
   }
-  return setColumnTypes(copyMeasureProvenance([...rows], rows), types);
+  // Date inference, in one pass over the rows: each untyped column of the
+  // first row is resolved by its first non-null value.
+  const unresolved = new Set(
+    Object.keys(records.find((r) => r != null) ?? {}).filter(
+      (column) => types[column] === undefined
+    )
+  );
+  for (const r of records) {
+    if (unresolved.size === 0) break;
+    if (r == null) continue;
+    for (const column of unresolved) {
+      const v = r[column];
+      if (v == null) continue;
+      if (v instanceof Date) types[column] = { HasCalendar: { zone: "UTC" } };
+      unresolved.delete(column);
+    }
+  }
+  if (Object.keys(types).length === 0) return rows;
+  const timeColumns = Object.entries(types).filter(
+    ([, t]) => t.HasCalendar !== undefined
+  );
+  const isConverted = (row: T): boolean =>
+    row == null ||
+    typeof row !== "object" ||
+    timeColumns.every(([column]) =>
+      isEpochMs((row as Record<string, unknown>)[column])
+    );
+  let out: T[] = [...rows];
+  if (timeColumns.length > 0) {
+    await loadTemporal();
+    for (const [column, t] of timeColumns)
+      checkZone(column, t.HasCalendar!.zone);
+  }
+  if (!rows.every(isConverted)) {
+    // Long-format data repeats its dates, so each string is parsed once per
+    // zone (for this call only).
+    const parsed = new Map<string, unknown>();
+    const epochMs = (v: unknown, zone: string, column: string): unknown => {
+      if (typeof v !== "string") return toEpochMs(v, zone, column);
+      const key = `${zone}\n${v}`;
+      if (!parsed.has(key)) parsed.set(key, toEpochMs(v, zone, column));
+      return parsed.get(key);
+    };
+    out = rows.map((row) => {
+      if (row == null || typeof row !== "object") return row;
+      const copy = { ...(row as Record<string, unknown>) };
+      for (const [column, t] of timeColumns) {
+        if (column in copy) {
+          copy[column] = epochMs(copy[column], t.HasCalendar!.zone, column);
+        }
+      }
+      return copy as T;
+    });
+  }
+  return setColumnTypes(copyMeasureProvenance(out, rows), types);
+}
+
+/** The zones {@link checkZone} has found valid. */
+const knownZones = new Set<string>();
+
+/** The loud error for a time zone Temporal does not know. */
+function checkZone(column: string, zone: string): void {
+  if (knownZones.has(zone)) return;
+  try {
+    temporal().Now.zonedDateTimeISO(zone);
+    knownZones.add(zone);
+  } catch {
+    throw new Error(
+      `schema: column "${column}" has the time zone ${JSON.stringify(zone)}, ` +
+        `which is not an IANA time zone (e.g. "UTC", "America/New_York").`
+    );
+  }
+}
+
+const DATE_ONLY = /^[+-]?\d{4,6}-\d{2}-\d{2}$/;
+const HAS_OFFSET = /(?:[zZ]|[+-]\d{2}(?::?\d{2})?)(?:\[.*\])?$/;
+
+/**
+ * One value of a time column as epoch milliseconds (UTC). A number is already
+ * one; a `Date` is its time; a string is ISO 8601: a date alone is the start
+ * of that day in `zone`, a date-time with an offset (`Z`, `+05:00`) is that
+ * instant, and a date-time without one is that wall-clock time in `zone`.
+ * Missing values (null, undefined) stay missing. Anything else is a loud
+ * error naming the column.
+ */
+export function toEpochMs(v: unknown, zone: string, column: string): unknown {
+  if (isEpochMs(v)) return v;
+  if (v instanceof Date && Number.isFinite(v.getTime())) return v.getTime();
+  if (typeof v === "string") {
+    const T = temporal();
+    const s = v.trim();
+    try {
+      if (DATE_ONLY.test(s)) {
+        return T.PlainDate.from(s).toZonedDateTime({ timeZone: zone })
+          .epochMilliseconds;
+      }
+      if (HAS_OFFSET.test(s) && /\d[T ]\d/.test(s)) {
+        return T.Instant.from(s.replace(" ", "T")).epochMilliseconds;
+      }
+      return T.PlainDateTime.from(s.replace(" ", "T")).toZonedDateTime(zone)
+        .epochMilliseconds;
+    } catch {
+      // fall through to the error below
+    }
+  }
+  throw new Error(
+    `schema: column "${column}" is a time (Schema.time()), but has the value ` +
+      `${typeof v === "string" ? JSON.stringify(v) : String(v)}, which is not ` +
+      `an ISO 8601 date or date-time ("2024-03-05", "2024-03-05T14:30:00Z"), ` +
+      `a Date, or epoch milliseconds.`
+  );
 }
 
 /** Each level of `order`, mapped to its rank (its index in the order). */

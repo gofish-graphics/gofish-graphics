@@ -255,6 +255,14 @@ export const isField = (v: unknown): v is FieldAccessor =>
   (v as any).type === "field" &&
   typeof (v as any).name === "string";
 
+/** The field name a `by`-style selector names, or `undefined` when it names
+ *  none (a key function). The one reading of "which field did this group by",
+ *  shared by every site that needs it. */
+export function fieldNameOf(by: unknown): string | undefined {
+  if (typeof by === "string") return by;
+  return isField(by) ? by.name : undefined;
+}
+
 /**
  * `literal(x)` is an explicit constant wrapper. Channel inference passes
  * it through as-is — the value is not scaled, not data-derived. Use this

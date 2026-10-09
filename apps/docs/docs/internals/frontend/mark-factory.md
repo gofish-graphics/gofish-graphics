@@ -99,17 +99,23 @@ needs one.
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
 factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
 vs `meanBy`, imported through lodash's per-helper entrypoints so this path is
-safe under native ESM). Both take an optional third argument, a resolved `Measure`: a
-string/`field()` accessor's produced value is tagged with its unit-of-measure
-so the underlying-space layer can unify scales per measure (see
+safe under native ESM). Both take an optional third argument, the accessor's
+resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
+`Measure` and its type in the chart's `schema`. A string/`field()` accessor's
+produced value is tagged with its unit-of-measure so the underlying-space
+layer can unify scales per measure (see
 [Underlying Space](/internals/core/underlying-space)). When the caller doesn't
-pass one (e.g. `createMark`'s size channel), the inferer resolves it locally
-via `resolveMeasure(data, accessor)` — explicit `field(name, measure)`
-annotation, else transform provenance riding the data array (`bin()` tags its
-output), else the field name as a weak default; a contradictory
-annotation-vs-provenance pair throws at the channel. `createOperator` hoists
-`resolveMeasure` to once per channel and passes the result down, since the
-accessor and provenance are loop-invariant across split entries.
+pass a column (e.g. `createMark`'s size channel), the inferer resolves it
+locally from `data`. The measure comes from `resolveMeasure` — explicit
+`field(name, measure)` annotation, else transform provenance riding the data
+array (`bin()` tags its output), else the field name as a weak default; a
+contradictory annotation-vs-provenance pair throws at the channel.
+`createOperator` hoists `resolveColumn` to once per channel and passes the
+result down, since the accessor and what the data carries are loop-invariant
+across split entries. A value read from a column with a type also records
+that type (`DatumValueImpl.fieldType`) and the field it read, so a position
+over a `Schema.time()` column builds a space on that column's calendar (see
+[Underlying Space](/internals/core/underlying-space#column-types-the-chart-schema)).
 
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.
@@ -135,8 +141,11 @@ Walking `withGoFish.ts:431-477`:
      scale knows which field it maps; a function accessor records none. It
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
-     ordered column lists its domain in that order. (A `derive` keeps its
-     input's column types on its result, so they reach the mark.)
+     ordered column lists its domain in that order. (A `derive` types its
+     result with `applySchema`, like chart data: a column keeps its input's
+     type while its values still fit it, and `derive(fn, { schema })`
+     overrides that, so the types reach the mark. A `filter` carries its
+     input's types over as they are.)
    - `"dims"` channel → the axis-name-keyed `dims` option
      (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
      channel, and its kind comes from its structure, not its name: `size` is
@@ -535,7 +544,7 @@ so travel is x, and vice versa; else the innermost flow tier that positions
 anchors) and a path tier (the innermost tier positioning along the travel
 axis). `along`, when given, replaces this whole resolution: `findTierIndexByAlong`
 (chartBuilder.ts) scans the flow tiers for one whose `by` names the given
-field (`fieldNameOf` in datumProjection.ts matches a string `by` on itself, a
+field (`fieldNameOf` in data.ts matches a string `by` on itself, a
 `field(...)` accessor on `.name`, and never a function-form `by` — the design
 note's "Matching" clause), and throws, naming the field and the flow's available
 keys, if none match. The matched tier's travel axis mirrors

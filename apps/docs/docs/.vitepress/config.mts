@@ -522,6 +522,7 @@ export default defineConfig({
               items: [
                 { text: "chart", link: "/js/api/core/chart" },
                 { text: "Schema", link: "/js/api/core/schema" },
+                { text: "Calendar", link: "/js/api/core/calendar" },
                 { text: "flow", link: "/js/api/core/flow" },
                 { text: "mark", link: "/js/api/core/mark" },
                 { text: "layer", link: "/js/api/core/layer" },
@@ -628,6 +629,7 @@ export default defineConfig({
               items: [
                 { text: "chart", link: "/python/api/core/chart" },
                 { text: "Schema", link: "/python/api/core/schema" },
+                { text: "Calendar", link: "/python/api/core/calendar" },
                 { text: "flow", link: "/python/api/core/flow" },
                 { text: "mark", link: "/python/api/core/mark" },
                 { text: "layer", link: "/python/api/core/layer" },

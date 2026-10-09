@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "exports": {
+    "./arrowDecode": "./widget-src/arrowDecode.ts"
+  },
   "scripts": {
     "build:widget": "node build-widget.mjs",
     "gen": "pnpm --dir ../gofish-ir run build && tsx scripts/generate.ts",
@@ -10,10 +13,10 @@
     "test:arrow-transport": "tsx widget-src/arrowTransport.test.ts"
   },
   "dependencies": {
-    "apache-arrow": "^14.0.0",
-    "solid-js": "^1.9.5",
+    "apache-arrow": "^15.0.2",
     "gofish-graphics": "workspace:*",
-    "gofish-ir": "workspace:*"
+    "gofish-ir": "workspace:*",
+    "solid-js": "^1.9.5"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

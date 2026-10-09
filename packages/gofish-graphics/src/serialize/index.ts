@@ -13,6 +13,15 @@ export {
   type DeriveBridge,
 } from "./registry";
 
+// Column types (schema.ts) a host attaches to the rows it decodes, the way a
+// chart's `schema` attaches them: the Python widget's Arrow decode marks a
+// timestamp or date column as a time (`HasCalendar`) in the column's zone.
+export {
+  getColumnTypes,
+  setColumnTypes,
+  type ColumnTypes,
+} from "../ast/schema";
+
 export {
   buildChart,
   readIR,

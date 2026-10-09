@@ -2,7 +2,7 @@
  * GoFish Python Widget — self-contained ESM bundle entry point.
  *
  * Trait-based protocol (Altair / Plotly pattern):
- *   - JS reads `spec`, `arrow_data`, render options on mount and renders.
+ *   - JS reads `spec`, `tier_arrow`, render options on mount and renders.
  *   - For `derive` operators and lambda accessors, JS sets `derive_request`
  *     and awaits a `derive_response` change. Python's `@traitlets.observe`
  *     runs the callback. Sequential — at most one in-flight derive per widget.
@@ -11,14 +11,16 @@
  *
  * The deserializer (mapMark/mapOperator/buildChart and friends) lives in
  * `gofish-graphics/serialize`. This file retains only the widget-bridge
- * concerns: WidgetModel I/O, Arrow encoding for the bridge transport,
- * and the render entry points.
+ * concerns: WidgetModel I/O, the Arrow transport (encoding in
+ * `arrowTransport.ts`, decoding in `arrowDecode.ts`, which the parity
+ * harness shares), and the render entry points.
  */
 
 import * as Arrow from "apache-arrow";
 import { Serialize, serializeSVG, type View } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
+import { arrowB64ToRows, decodeTierRows } from "./arrowDecode";
 
 // Type aliases pointing at the canonical IR schema. Internal usages below
 // keep the legacy `…Spec` names for readability.
@@ -28,7 +30,7 @@ type RawMarkSpec = Frontend.RawMarkIR;
 
 interface WidgetModel {
   get(key: "spec"): ChartSpec | LayerSpec | RawMarkSpec;
-  get(key: "arrow_data"): string;
+  get(key: "tier_arrow"): string[];
   get(key: "width"): number;
   get(key: "height"): number;
   get(key: "axes"): Serialize.RenderIROptions["axes"] | null;
@@ -57,39 +59,6 @@ interface RawDeriveBridge {
 // ---------------------------------------------------------------------------
 // Arrow utilities (widget transport)
 // ---------------------------------------------------------------------------
-
-function arrowTableToArray(table: Arrow.Table): Record<string, any>[] {
-  const numRows = table.numRows;
-  const columns = table.schema.fields.map((field, i) => {
-    const column = table.getChildAt(i);
-    const values = column.toArray();
-    return { name: field.name, type: field.type, values };
-  });
-
-  const data: Record<string, any>[] = [];
-  for (let i = 0; i < numRows; i++) {
-    const row: Record<string, any> = {};
-    columns.forEach((col) => {
-      let value = col.values[i];
-      if (typeof value === "bigint") {
-        value = Number(value);
-      } else if (value !== null && value !== undefined) {
-        const typeStr = col.type ? col.type.toString() : "";
-        if (
-          typeStr.includes("Int64") ||
-          typeStr.includes("UInt64") ||
-          typeStr.includes("Int32") ||
-          typeStr.includes("UInt32")
-        ) {
-          value = Number(value);
-        }
-      }
-      row[col.name] = value;
-    });
-    data.push(row);
-  }
-  return data;
-}
 
 function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
   if (!rows || rows.length === 0) {
@@ -128,13 +97,6 @@ function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
   return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 }
 
-function decodeArrowB64(b64: string): Record<string, any>[] {
-  if (!b64) return [];
-  const arrowBuffer = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  const table = Arrow.tableFromIPC(arrowBuffer);
-  return arrowTableToArray(table);
-}
-
 // ---------------------------------------------------------------------------
 // Bridge: low-level RPC and the typed DeriveBridge the deserializer expects
 // ---------------------------------------------------------------------------
@@ -150,11 +112,7 @@ function makeDeriveBridgeFromRaw(raw: RawDeriveBridge): Serialize.DeriveBridge {
       if (rows.length === 0) return [];
       const arrowBuffer = arrayToArrow(rows);
       const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
-      const resultB64 = await raw.request(lambdaId, arrowB64);
-      const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
-        c.charCodeAt(0)
-      );
-      return arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
+      return arrowB64ToRows(await raw.request(lambdaId, arrowB64));
     },
   };
 }
@@ -271,30 +229,6 @@ function renderError(
   container.replaceChildren(panel);
 }
 
-/**
- * Decode the Arrow sidecar into the rows of each chart tier. A single chart
- * ships one base64 Arrow stream; a layer ships a JSON object mapping tier
- * index to that same encoding (see `GoFishChartWidget` in widget.py).
- */
-function decodeTierRows(
-  spec: ChartSpec | LayerSpec | RawMarkSpec,
-  arrowData: string
-): Record<string, any>[][] {
-  if (spec.type === "layer") {
-    let arrowDict: Record<string, string> = {};
-    try {
-      arrowDict = JSON.parse(arrowData);
-    } catch (e) {
-      throw new Error(`Failed to parse layer arrow_data JSON: ${e}`);
-    }
-    return spec.charts.map((_, i) =>
-      decodeArrowB64(arrowDict[String(i)] || "")
-    );
-  }
-  if (spec.type === "raw-mark") return [];
-  return [decodeArrowB64(arrowData)];
-}
-
 /** Render the widget's spec into `container` through the library's one IR
  *  renderer (`Serialize.renderIR`, which the parity harness uses too).
  *  Building the chart throws synchronously on a bad spec; the returned
@@ -310,7 +244,8 @@ function renderChart(
     ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
     : () => {};
   log("Decoding Arrow data...");
-  const tierRows = decodeTierRows(spec, model.get("arrow_data"));
+  // One base64 Arrow stream per chart tier (`tiers_arrow_bytes` in ast.py).
+  const tierRows = decodeTierRows(model.get("tier_arrow"));
   const renderOptions: Serialize.RenderIROptions = {
     w: model.get("width"),
     h: model.get("height"),
