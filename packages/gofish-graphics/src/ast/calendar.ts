@@ -379,6 +379,22 @@ export const Calendar = {
   year: new CalendarPartition("year"),
 };
 
+/** `value` as an error message shows it. A partition shows as its builder
+ *  spelling, and nothing calls `toJSON` (a partition with a format has no
+ *  wire form, and its `toJSON` throws). */
+function describe(value: unknown): string {
+  if (value instanceof CalendarPartition) return String(value);
+  if (Array.isArray(value)) return `[${value.map(describe).join(", ")}]`;
+  if (value !== null && typeof value === "object") {
+    const fields = Object.entries(value).map(
+      ([k, v]) => `${k}: ${describe(v)}`
+    );
+    return `{ ${fields.join(", ")} }`;
+  }
+  if (typeof value === "function") return "a function";
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
+}
+
 /** A Calendar value from a builder value or its wire form (Python sends the
  *  wire form). An unknown unit, or a `start` that is not "monday" or
  *  "sunday" or is given for a level other than weeks, is a loud error. */
@@ -395,7 +411,7 @@ export function calendarPartition(
   ) {
     throw new Error(
       `${where}: expected a Calendar value (Calendar.month, ` +
-        `Calendar.hour.every(6), ...), got ${JSON.stringify(value)}.`
+        `Calendar.hour.every(6), ...), got ${describe(value)}.`
     );
   }
   if (v.start !== undefined && v.unit !== "week") {
@@ -403,7 +419,7 @@ export function calendarPartition(
   }
   if (v.start !== undefined && v.start !== "monday" && v.start !== "sunday") {
     throw new Error(
-      `${where}: start must be "monday" or "sunday", not ${JSON.stringify(v.start)}.`
+      `${where}: start must be "monday" or "sunday", not ${describe(v.start)}.`
     );
   }
   return new CalendarPartition(v.unit as CalendarUnit, v.step ?? 1, v.start);

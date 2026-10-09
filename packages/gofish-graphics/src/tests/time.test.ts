@@ -616,6 +616,24 @@ async function main() {
     );
   }
 
+  console.log("\n# a row that is not a Calendar value");
+  {
+    const message = await errorOf(() =>
+      calendarPartition(
+        { unit: Calendar.quarter.format((c) => `Q${c.quarter}`) } as any,
+        "rows[0]"
+      )
+    );
+    check(
+      "the error describes the value without calling its toJSON",
+      message !== undefined &&
+        message.includes("expected a Calendar value") &&
+        message.includes("Calendar.quarter.format(...)") &&
+        !message.includes("no wire form"),
+      message
+    );
+  }
+
   console.log("\n# week starts are checked in the wire form");
   {
     const bad = await errorOf(() =>
