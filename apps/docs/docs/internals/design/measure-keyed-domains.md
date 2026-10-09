@@ -10,8 +10,8 @@ status: speculative
 This note is the design for
 [#1114](https://github.com/gofish-graphics/gofish-graphics/issues/1114) as the
 issue was revised after its first implementation attempt stopped at a wall. The
-maintainer signs off on this note before any code is written. It builds on three
-other pieces of work:
+maintainer signed off on this note on 2026-10-09, and section 8 records the
+decisions made then. It builds on three other pieces of work:
 
 - the measure design on the branch `worktree-measure-inference-955`
   (`measure-types-design.md`, sections 3b, 4 and 5), which treats a bare column
@@ -231,7 +231,8 @@ Two errors remain. Both are inherent and both are rare:
   Open question 4 asks whether this should forget instead.
 
 `MeasureClash` stops being the default outcome of two different units on one
-axis.
+axis once the per-key scale carrier (#528) lands. Until then, two declared units
+on one shared axis keep raising `MeasureClash` (question 2 in section 8).
 
 ### The one merge function and the one accessor
 
@@ -329,9 +330,9 @@ rings must not decide domains. This matters because each ring pins its content
 with a literal `position({ x: 0, y: 0, anchor: "baseline" })`, which under the
 table in section 3 would detach the content.
 
-One consequence of rule 5 needs a decision. One keyed domain can be mapped at
-several sizes, but a chart draws one axis with its own σ. The axis is correct
-only for content mapped at the same σ. Open question 5 covers this.
+One keyed domain can be mapped at several sizes, but a chart draws one axis
+with its own σ. The axis is correct only for content mapped at the same σ.
+Question 5 in section 8 records the decision.
 
 ### The scope dump
 
@@ -479,9 +480,8 @@ claim to the keyed domain and solves 1.1σ = 150.
 
 Expected result: 1.1 maps to 150 px in every group. Today each group fills
 150 px with its own maximum, and the y axis disappears. The chart's y axis is
-correct if the chart's own height is also 150 px. The chart's content claims a
-fixed 150 px, so this holds when a node whose content has a fixed size takes
-that size. Open question 5 asks for that decision.
+correct if the chart's own height is also 150 px. Every group has the same
+size, so the chart's axis lines up with them (question 5 in section 8).
 
 ### NestedCharts
 
@@ -592,6 +592,11 @@ would share the rows. The rows are a spread on y of charts with the same column,
 so their keys are equal, and the step column sits beside the others on the
 shared cross axis.
 
+The frame stays for now. It separates the rows by putting them in different
+spaces, not by saying that their units differ. A unit that comes from a key
+column, e.g. a `quantity` column that names what each `value` row measures, is
+[#1122](https://github.com/gofish-graphics/gofish-graphics/issues/1122).
+
 ### `chart(data, { w, h })`
 
 A literal size no longer detaches or self-scales anything. The chart is a sized
@@ -627,7 +632,10 @@ Expected result: the chart keeps its y axis.
 - **`mergeMeasures`, `mergeCalendars`, `forgetOnConflict`**, and the array forms
   `mergeAllMeasures` and `forgetAllMeasures`, replaced by `joinUnits`.
 
-## 8. Open questions
+## 8. Open questions and decisions
+
+The maintainer decided questions 2, 5 and 7 at sign-off, and the Gapminder case
+under question 1. Each decision is marked **Decided**. The others stay open.
 
 1. **Opting out of a shared domain.** Two charts with the same column now share
    a domain wherever they sit, e.g. two count histograms placed apart with
@@ -635,12 +643,24 @@ Expected result: the chart keeps its y axis.
    `coord: Coord.linear()` already does it, because it starts a new space, and
    the Gapminder kinematics rows rely on that. Is that the opt-out, or is a
    named one needed?
+
+   **Decided** for long-format data: the Gapminder kinematics rows plot one
+   `value` column for several quantities, and they keep the
+   `frame({ coord: Coord.linear() })` for now. A unit that comes from a key
+   column is
+   [#1122](https://github.com/gofish-graphics/gofish-graphics/issues/1122).
+
 2. **Which keyed domain an axis draws when a chart holds several.** Before #1115
    and #528, a chart's axis can show one key. For nested keys (the mosaic) this
    note proposes the outermost key, which is what the mosaic shows today. For
    two declared keys side by side on a shared axis (a count overlaid on
    millimeters), the options are to draw the first, to draw neither, or to keep
    that case an error until the dual axis lands.
+
+   **Decided:** two declared units on one shared axis keep raising
+   `MeasureClash` until the per-key scale carrier (#528) lands. This is the
+   declared shortcut of step 7 in section 9.
+
 3. **Strict mode.** Should there be a mode where two different declared units on
    a shared axis are an error, and unknowns do not unify? Where would it be set,
    per chart or per render?
@@ -655,6 +675,12 @@ Expected result: the chart keeps its y axis.
      grouped bar chart's axis matches its 150 px groups;
    - what the axis does when the sizes differ, e.g. draw one axis per sized
      node, or draw none.
+
+   **Decided:** equal sizes are fine, and the chart's axis lines up with them,
+   e.g. grouped bars with `h: 150` on every group. When one shared keyed domain
+   is mapped at unequal sizes, the layout is over-constrained, and it is handled
+   like any other over-constrained layout.
+
 6. **Operator `axes` options.** `spread({ axes })` and `scatter({ axes })` draw
    axes at nodes that are not charts. Twelve stories use them, including
    `FacetedScatterDriving` and the ridgeline. Rule 3 removes them. Until #1115
@@ -665,6 +691,10 @@ Expected result: the chart keeps its y axis.
    Unification can now make x and y one unit through a chain of overlays, e.g.
    one tier with `x: "a", y: "b"` and another with `x: "b", y: "c"`. Should the
    recentering fire only for declared units?
+
+   **Decided:** the recentering fires only when x and y have the same declared
+   unit. Unknowns unified through overlays never trigger it.
+
 8. **`field(name, measure)`.** The measure design suggests removing it in favor
    of `Schema.unit`. This note treats it as a declared unit and leaves that
    choice to #994.
@@ -672,6 +702,8 @@ Expected result: the chart keeps its y axis.
 ## 9. Implementation order and verification
 
 Each step lands on its own. Steps 1 to 3 must be pixel-equal on every story.
+Steps 1, 2 and 4 belong to the measure inference session (#994 and its
+"Sketch 3"). This work does steps 3 and 5, and step 6 through #1032.
 `capture-diff` against the previous step is the inner check, and the CI visual
 baselines are the outer check.
 
@@ -686,8 +718,9 @@ baselines are the outer check.
    changes.
 4. **Gradual units.** `joinUnits` follows the join table, and unknowns unify
    through the union-find. Expected render changes are none, except stories
-   where #582 recentering newly fires (open question 7). `capture-diff` must show
-   which, if any. Add stories or tests for the #955 cases that now pass: the
+   where #582 recentering newly fires. Since it fires only for declared equal
+   units (question 7 in section 8), unification alone moves none. `capture-diff`
+   must show which, if any. Add stories or tests for the #955 cases that now pass: the
    box plot from user code, the hexbin overlay, and the bullet chart.
 5. **Keyed domains and sized nodes.** Build the keyed domain table per space
    root, solve σ at sized nodes, and make the deletions in section 7. Expected
