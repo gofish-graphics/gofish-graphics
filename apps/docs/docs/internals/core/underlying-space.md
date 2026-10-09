@@ -704,10 +704,14 @@ the spread slots and grid cells. Unlike `planConstraintComposition`, the plan
 exists for every layer, point positions included. Nothing reads it yet except
 the `GOFISH_DUMP_SHARING` dump. It is step 3 of the
 [measure-keyed domains design](/internals/design/measure-keyed-domains), which
-lists what each construct contributes. Two rows of that table are not built:
-a data-valued `w`/`h` on a layer (the layer keeps its size in a closure, so
-the plan cannot see it on the child node), and `treemap` and the `position`
-operator (each is its own node type with no constraints).
+lists what each construct contributes. `planSharing` is the layer's sharing
+rule. Like the type hook, each node type has its own rule (`resolveSharing`,
+read through `GoFishNode.sharing()`), and a node without one lets every child
+share. Three rows of the table are node-level rules: a layer with a data-valued
+`w`/`h` nests its content on that axis, a `treemap` detaches each child and
+nests it in its tile on both axes, and the `position` operator detaches its
+child on an axis with a pixel offset and keeps it shared on an axis with a
+datum offset.
 
 `distribute`'s `anchor` option (`"edge" | "start" | "middle" | "end" |
 "baseline"`, default `"edge"`) picks which pair of anchors the chain relates

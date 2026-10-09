@@ -437,15 +437,15 @@ export function planConstraintComposition(
 // layer, a point `position` or a z-order included (the marginal histogram is
 // such a layer).
 //
-// Nothing reads the plan yet except the `GOFISH_DUMP_SHARING` dump
-// ({@link dumpSharing}). Two rows of the note's table are not built here,
-// because these two inputs cannot see their construct:
-//   - a data-valued `w`/`h` (the mosaic): a layer keeps its own size in a
-//     closure (`layer.tsx`), so a child layer's size is not on the child node;
-//   - `treemap` and the `position` operator: each is its own node type with
-//     no constraints (`treemap.tsx`, `positionNode.tsx`).
-// A discrete position (a scatter over a category field) is not in the table
-// either. It contributes nothing here, as in `datumPlacedChildren`.
+// This is a layer's sharing rule. Each node type has its own rule, next to its
+// type hook (`ResolveSharing` in `_node.ts`), and `GoFishNode.sharing()`
+// applies it. Three rows of the note's table are node-level rules rather than
+// constraints: a data-valued `w`/`h` (`layer.tsx`, which adds to this plan),
+// `treemap` (`treemap.tsx`) and the `position` operator (`positionNode.tsx`).
+// Nothing reads the plans yet except the `GOFISH_DUMP_SHARING` dump
+// ({@link dumpSharing}).
+// A discrete position (a scatter over a category field) is not in the table.
+// It contributes nothing here, as in `datumPlacedChildren`.
 
 /** One layer's sharing sets, per axis. Derived, never stored on a space. */
 export type SharingPlan = {
@@ -625,9 +625,9 @@ const printConstraintTypes = (constraints: ConstraintSpec[]): string => {
     .join(",");
 };
 
-/** Behind `GOFISH_DUMP_SHARING`, print the sharing plan of every layer under
- *  `root` that has more than one child or any constraint, one line per layer,
- *  indented by depth. A node's chrome rings (axes, titles) are skipped, and
+/** Behind `GOFISH_DUMP_SHARING`, print the sharing plan of every node under
+ *  `root` that has more than one child, any constraint, or a child that is
+ *  detached or nested, one line per node, indented by depth. A node's chrome rings (axes, titles) are skipped, and
  *  only its content is walked, since chrome must not decide domains. It only
  *  reads the tree. */
 export function dumpSharing(root: GoFishAST): void {
@@ -639,11 +639,12 @@ export function dumpSharing(root: GoFishAST): void {
       return;
     }
     const { children, constraints, type } = node;
-    if (
-      (type === "layer" || type === "box") &&
-      (children.length > 1 || constraints.length > 0)
-    ) {
-      const plan = planSharing(constraints, children);
+    const plan = node.sharing();
+    const moved = ([0, 1] as const).some(
+      (axis) =>
+        plan.nested[axis].size > 0 || plan.sets[axis].some((s) => s !== 0)
+    );
+    if (children.length > 1 || constraints.length > 0 || moved) {
       const name = childNameKey(node) ?? node.key ?? "";
       console.log(
         `[sharing] ${"  ".repeat(depth)}${type}${name ? ` ${name}` : ""}` +
