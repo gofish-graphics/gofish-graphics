@@ -66,7 +66,14 @@ import {
 } from "./distribute";
 import { type AlignConstraint } from "./align";
 import { isPositionInterval, type PositionConstraint } from "./position";
-import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
+import {
+  axisIndex,
+  buildNameIndex,
+  childNameKey,
+  type AlignAnchor,
+} from "./shared";
+import { GoFishNode } from "../_node";
+import { envFlag } from "../../util";
 
 /** A position constraint whose coordinates are *purely* interval form (at least
  *  one interval axis, no point axis). It size-sets its axis without blocking
@@ -403,6 +410,239 @@ export function planConstraintComposition(
   }
 
   return { segments, alignFolds, spanCover };
+}
+
+// ── Sharing sets (#1114 step 3) ──────────────────────────────────────────────
+//
+// For each axis, a layer's children fall into SHARING SETS: two children in
+// one set read their data values on that axis in one frame. Set 0 is the
+// layer's own set, the one it reports upward. A child in any other set is
+// DETACHED on that axis. See
+// apps/docs/docs/internals/design/measure-keyed-domains.md, section 3.
+//
+// Like `planConstraintComposition`, the plan reads only the constraints and the
+// child nodes, never a type or a claim. Unlike it, the plan exists for every
+// layer, a point `position` or a z-order included (the marginal histogram is
+// such a layer).
+//
+// Nothing reads the plan yet except the `GOFISH_DUMP_SHARING` dump
+// ({@link dumpSharing}). Two rows of the note's table are not built here,
+// because these two inputs cannot see their construct:
+//   - a data-valued `w`/`h` (the mosaic): a layer keeps its own size in a
+//     closure (`layer.tsx`), so a child layer's size is not on the child node;
+//   - `treemap` and the `position` operator: each is its own node type with
+//     no constraints (`treemap.tsx`, `positionNode.tsx`).
+// A discrete position (a scatter over a category field) is not in the table
+// either. It contributes nothing here, as in `datumPlacedChildren`.
+
+/** One layer's sharing sets, per axis. Derived, never stored on a space. */
+export type SharingPlan = {
+  /** Per axis: each child's set index. Set 0 is the node's own set. */
+  sets: [number[], number[]];
+  /** Per axis: children whose own extent sits in a frame of its own (a datum
+   *  placement, a spread slot, a grid cell). */
+  nested: [Set<number>, Set<number>];
+};
+
+/** Whether a `position` coordinate is a literal pixel value: a number point,
+ *  or an interval whose two endpoints are numbers. */
+const isPixelCoordinate = (coord: PositionConstraint["x"]): boolean =>
+  typeof coord === "number" ||
+  (isPositionInterval(coord) && !coord.some((e) => isValue(e)));
+
+/** Whether an align spec puts its children at point anchors on its axis.
+ *  `"span"` and `"size"` write an unbound target, so they share nothing. */
+const isPointAlign = (spec: AlignConstraint["x"]): boolean =>
+  spec !== undefined && spec !== "span" && spec !== "size";
+
+export function planSharing(
+  constraints: ConstraintSpec[],
+  childNodes: GoFishAST[]
+): SharingPlan {
+  const n = childNodes.length;
+  const index = buildNameIndex(childNodes);
+  // A ref that is not a direct child (a ref into a nested tier) has no slot
+  // here, so it takes no part.
+  const idxOf = (refs: readonly { name: string }[]): number[] =>
+    refs
+      .map((r) => index.get(r.name))
+      .filter((i): i is number => i !== undefined);
+
+  // A datum placement nests the child's own extent at its datum. That is the
+  // set `datumPlacedChildren` already computes for the layer's type.
+  const nested = datumPlacedChildren(constraints, childNodes);
+  const detached: [Set<number>, Set<number>] = [new Set(), new Set()];
+  const joins: [number[][], number[][]] = [[], []];
+  const detach = (axis: 0 | 1, idx: number[]) =>
+    idx.forEach((i) => detached[axis].add(i));
+  const nest = (axis: 0 | 1, idx: number[]) =>
+    idx.forEach((i) => nested[axis].add(i));
+
+  for (const c of constraints) {
+    switch (c.type) {
+      case "position": {
+        // A literal pixel value places the child elsewhere. A datum keeps it
+        // in the own set, and `datumPlacedChildren` nests it.
+        const idx = idxOf(c.children);
+        if (isPixelCoordinate(c.x)) detach(0, idx);
+        if (isPixelCoordinate(c.y)) detach(1, idx);
+        break;
+      }
+      case "align": {
+        const idx = idxOf(c.children);
+        if (isPointAlign(c.x)) joins[0].push(idx);
+        if (isPointAlign(c.y)) joins[1].push(idx);
+        break;
+      }
+      case "distribute": {
+        const axis = axisIndex(c.dir);
+        const idx = idxOf(c.children);
+        // A stack adds its parts on one axis, so they share it. A spread
+        // gives each part a slot of its own, and the layer's own type there
+        // is the ordinal of the keys.
+        if (c.glue) joins[axis].push(idx);
+        else {
+          detach(axis, idx);
+          nest(axis, idx);
+        }
+        break;
+      }
+      case "nest": {
+        // Outer and inner share. The padding is pixels.
+        const idx = idxOf(c.children);
+        if (c.x !== undefined) joins[0].push(idx);
+        if (c.y !== undefined) joins[1].push(idx);
+        break;
+      }
+      case "grid": {
+        // Both grid axes act as spread directions.
+        const idx = idxOf(c.children);
+        for (const axis of [0, 1] as const) {
+          detach(axis, idx);
+          nest(axis, idx);
+        }
+        break;
+      }
+      // z-order and overlap move no data, so they contribute nothing.
+    }
+  }
+
+  // Detaches first, then joins, so an align beats a position on one axis.
+  // Union-find over the children plus one more element, `own`, the own set.
+  const sets: [number[], number[]] = [[], []];
+  for (const axis of [0, 1] as const) {
+    const own = n;
+    const parent = Array.from({ length: n + 1 }, (_, i) => i);
+    const find = (i: number): number => {
+      while (parent[i] !== i) i = parent[i] = parent[parent[i]];
+      return i;
+    };
+    const union = (a: number, b: number) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra === rb) return;
+      // Keep `own` a root, so a merged set that holds it is the own set.
+      if (rb === own) parent[ra] = rb;
+      else parent[rb] = ra;
+    };
+    for (let i = 0; i < n; i++) if (!detached[axis].has(i)) union(own, i);
+    for (const idx of joins[axis])
+      for (let k = 1; k < idx.length; k++) union(idx[0], idx[k]);
+
+    // Number the other sets 1, 2, ... in order of their first child.
+    const label = new Map<number, number>([[find(own), 0]]);
+    sets[axis] = Array.from({ length: n }, (_, i) => {
+      const root = find(i);
+      let s = label.get(root);
+      if (s === undefined) label.set(root, (s = label.size));
+      return s;
+    });
+  }
+  return { sets, nested };
+}
+
+/** A short label for a child in the sharing dump. */
+const childLabel = (child: GoFishAST, i: number): string => {
+  const name = childNameKey(child);
+  if (name !== undefined) return name;
+  const node = child as { key?: unknown; type?: unknown };
+  if (typeof node.key === "string" && node.key !== "") return node.key;
+  return `${typeof node.type === "string" ? node.type : "child"}#${i}`;
+};
+
+/** One axis of a plan, printed: the own set, then the detached sets. A `*`
+ *  marks a nested child. Long lists are cut, since a spread of 300 bars has
+ *  300 sets. */
+export function printSharingAxis(
+  plan: SharingPlan,
+  axis: 0 | 1,
+  childNodes: GoFishAST[]
+): string {
+  const MAX = 6;
+  const groups = new Map<number, string[]>();
+  plan.sets[axis].forEach((s, i) => {
+    const label =
+      childLabel(childNodes[i], i) + (plan.nested[axis].has(i) ? "*" : "");
+    const g = groups.get(s);
+    if (g) g.push(label);
+    else groups.set(s, [label]);
+  });
+  const cut = (xs: string[], sep: string, unit = "") =>
+    xs.length <= MAX
+      ? xs.join(sep)
+      : `${xs.slice(0, MAX - 2).join(sep)}${sep}…+${xs.length - (MAX - 2)}${unit}`;
+  const own = cut(groups.get(0) ?? [], ",");
+  const others = [...groups.entries()]
+    .filter(([s]) => s !== 0)
+    .map(([, g]) => `{${cut(g, ",")}}`);
+  return others.length === 0
+    ? `own{${own}}`
+    : `own{${own}} detached ${cut(others, " ", " sets")}`;
+}
+
+/** Whether the sharing dump is on. Off (and near-zero-cost) in prod. */
+const DUMP_SHARING = envFlag("GOFISH_DUMP_SHARING");
+
+/** A layer's constraints, counted by type: `position×14,align`. */
+const printConstraintTypes = (constraints: ConstraintSpec[]): string => {
+  const counts = new Map<string, number>();
+  for (const c of constraints)
+    counts.set(c.type, (counts.get(c.type) ?? 0) + 1);
+  return [...counts]
+    .map(([type, k]) => (k === 1 ? type : `${type}×${k}`))
+    .join(",");
+};
+
+/** Behind `GOFISH_DUMP_SHARING`, print the sharing plan of every layer under
+ *  `root` that has more than one child or any constraint, one line per layer,
+ *  indented by depth. A node's chrome rings (axes, titles) are skipped, and
+ *  only its content is walked, since chrome must not decide domains. It only
+ *  reads the tree. */
+export function dumpSharing(root: GoFishAST): void {
+  if (!DUMP_SHARING) return;
+  const walk = (node: GoFishAST, depth: number) => {
+    if (!(node instanceof GoFishNode)) return;
+    if (node.chrome !== undefined && node.chrome.content !== node) {
+      walk(node.chrome.content, depth);
+      return;
+    }
+    const { children, constraints, type } = node;
+    if (
+      (type === "layer" || type === "box") &&
+      (children.length > 1 || constraints.length > 0)
+    ) {
+      const plan = planSharing(constraints, children);
+      const name = childNameKey(node) ?? node.key ?? "";
+      console.log(
+        `[sharing] ${"  ".repeat(depth)}${type}${name ? ` ${name}` : ""}` +
+          ` (${children.length}) [${printConstraintTypes(constraints)}]` +
+          ` x: ${printSharingAxis(plan, 0, children)}` +
+          ` | y: ${printSharingAxis(plan, 1, children)}`
+      );
+    }
+    children.forEach((c) => walk(c, depth + 1));
+  };
+  walk(root, 0);
 }
 
 const foldOptions = (s: Seg) => ({

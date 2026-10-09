@@ -53,6 +53,7 @@ import {
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import { timeRowsFromOption, type TimeRowOption } from "./axes/timeRows";
 import { axisName } from "./constraints/shared";
+import { dumpSharing } from "./constraints/compose";
 import {
   getScopeRegistry,
   scopeFrame,
@@ -608,6 +609,9 @@ export async function layout(
   // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
   // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
   scopes.dump();
+  // Sharing dump (#1114 step 3): every layer's sharing sets, from its
+  // constraints and children. No-op unless GOFISH_DUMP_SHARING is set.
+  dumpSharing(child);
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
   // canvas default when the content didn't report one. Read off the root's
