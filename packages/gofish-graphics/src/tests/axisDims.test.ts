@@ -368,9 +368,11 @@ async function main() {
     // The two ends of a span share one measure.
     const lo = field("lo", "span");
     const hi = field("hi", "span");
+    // Axes off: these checks are about slot inference, not axes.
+    // TODO(#1107): a constant datum position crashes layout with axes on.
     const dots = async (opts: any, coord?: any) =>
       (
-        await chart(rows, coord ? { coord } : {})
+        await chart(rows, coord ? { coord, axes: false } : { axes: false })
           .flow(scatter({ by: "k", ...opts }))
           .mark(circle({ r: 3 }))
           .toDisplayList(SIZE)

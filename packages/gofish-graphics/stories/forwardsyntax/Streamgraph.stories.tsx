@@ -32,7 +32,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
         stack({ by: "species", dir: "y" })

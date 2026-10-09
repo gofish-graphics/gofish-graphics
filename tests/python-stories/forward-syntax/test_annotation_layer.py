@@ -12,7 +12,7 @@ DATA = [
 
 def story_default():
     return (
-        chart(DATA, axes=True)
+        chart(DATA)
         .flow(spread(by="cat", dir="x"))
         .mark(rect(h="count", fill="#6b9bd1"))
         # Threshold rule: a bare rect tier; `datum(60)` is a data-space count value.

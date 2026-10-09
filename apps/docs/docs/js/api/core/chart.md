@@ -47,8 +47,8 @@ Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js
 `axes` accepts a boolean, a per-dimension object, or per-dimension title control:
 
 ```ts
-chart(data, { axes: true }); // both axes, titles inferred
-chart(data, { axes: false }); // no axes (the default)
+chart(data, { axes: true }); // both axes, titles inferred (the default)
+chart(data, { axes: false }); // no axes
 chart(data, { axes: { x: true, y: false } }); // x only
 chart(data, { axes: { x: { title: "Year" }, y: true } }); // custom x title, inferred y title
 chart(data, { axes: { x: { title: false }, y: true } }); // suppress the inferred x title

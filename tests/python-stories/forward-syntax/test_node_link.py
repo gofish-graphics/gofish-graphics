@@ -21,7 +21,7 @@ EDGES = [
 
 def story_basic():
     return (
-        chart(NODES)
+        chart(NODES, axes=False)
         .flow(scatter(by="id", x="grp", y="id"))
         .mark(circle(r=14, fill="#4e79a7").name("nodes"))
         .layer(

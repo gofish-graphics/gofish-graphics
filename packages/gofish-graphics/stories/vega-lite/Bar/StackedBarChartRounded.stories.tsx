@@ -43,7 +43,7 @@ export const Default: StoryObj<Args> = {
     // of each bar segment. GoFish's `rx`/`ry` applies the same radius to all four
     // corners of every bar.
     // arguably this should be done with some kind of clip path or something.
-    chart(context.loaded.weather as any[], { axes: true,
+    chart(context.loaded.weather as any[], {
       color: palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
     })
       .flow(

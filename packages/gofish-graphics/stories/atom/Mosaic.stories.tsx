@@ -53,7 +53,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(passengers, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
+    chart(passengers, { color: palette(["#2b8cbe", "#ff8408"]) })
       .flow(
         // columns by class — width ∝ each class's passenger count (marginal)
         stack({ by: "pclass", dir: "x", size: "count" }),

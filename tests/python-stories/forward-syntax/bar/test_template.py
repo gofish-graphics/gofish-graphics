@@ -21,21 +21,21 @@ _OPTIONS = {"w": 500, "h": 400}
 
 def story_vertical():
     return (
-        bar_chart(TEST_DATA, x="category", y="value", axes=True),
+        bar_chart(TEST_DATA, x="category", y="value"),
         _OPTIONS,
     )
 
 
 def story_horizontal():
     return (
-        bar_chart(TEST_DATA, x="value", y="category", orientation="x", axes=True),
+        bar_chart(TEST_DATA, x="value", y="category", orientation="x"),
         _OPTIONS,
     )
 
 
 def story_vertical_with_fill_color():
     return (
-        bar_chart(TEST_DATA, x="category", y="value", fill="#4ecdc4", axes=True),
+        bar_chart(TEST_DATA, x="category", y="value", fill="#4ecdc4"),
         _OPTIONS,
     )
 
@@ -48,7 +48,6 @@ def story_horizontal_with_fill_color():
             y="category",
             orientation="x",
             fill="#ff6b6b",
-            axes=True,
         ),
         _OPTIONS,
     )
@@ -56,7 +55,7 @@ def story_horizontal_with_fill_color():
 
 def story_vertical_with_fill_field():
     return (
-        bar_chart(TEST_DATA, x="category", y="value", fill="color", axes=True),
+        bar_chart(TEST_DATA, x="category", y="value", fill="color"),
         _OPTIONS,
     )
 
@@ -69,7 +68,6 @@ def story_horizontal_with_fill_field():
             y="category",
             orientation="x",
             fill="color",
-            axes=True,
         ),
         _OPTIONS,
     )
@@ -77,7 +75,7 @@ def story_horizontal_with_fill_field():
 
 def story_vertical_with_custom_mark():
     return (
-        bar_chart(TEST_DATA, x="category", y="value", mark=circle, axes=True),
+        bar_chart(TEST_DATA, x="category", y="value", mark=circle),
         _OPTIONS,
     )
 
@@ -90,7 +88,6 @@ def story_horizontal_with_custom_mark():
             y="category",
             orientation="x",
             mark=circle,
-            axes=True,
         ),
         _OPTIONS,
     )
@@ -104,7 +101,6 @@ def story_vertical_with_custom_mark_and_fill():
             y="value",
             fill="#45b7d1",
             mark=circle,
-            axes=True,
         ),
         _OPTIONS,
     )
@@ -119,7 +115,6 @@ def story_horizontal_with_custom_mark_and_fill():
             orientation="x",
             fill="#f9ca24",
             mark=circle,
-            axes=True,
         ),
         _OPTIONS,
     )

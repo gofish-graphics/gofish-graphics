@@ -60,7 +60,7 @@ and also a [`render`](/python/api/core/render) option.
 It accepts a bool, a per-dimension dict, or per-dimension title control:
 
 ```python
-chart(data, axes=True)                       # both axes, titles inferred
+chart(data, axes=True)                       # both axes, titles inferred (the default)
 chart(data, axes=False)                       # no axes
 chart(data, axes={"x": True, "y": False})     # x only
 chart(data, axes={"x": {"title": "Year"}, "y": True})   # custom x title

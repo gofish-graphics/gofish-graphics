@@ -33,7 +33,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(values, { color: palette("tableau10"), axes: true })
+    chart(values, { color: palette("tableau10") })
       .flow(
         spread({ by: "category",  dir: "x", spacing: 24 }),
         spread({ by: "group",  dir: "x", spacing: 0 })

@@ -38,7 +38,7 @@ export const Default: StoryObj<Args> = {
       { category: "E", value: 20 },
     ];
 
-    chart(testData, { axes: true })
+    chart(testData)
       .flow(spread({ by: "category", dir: "x" }))
       .mark(rect({ h: "value" }))
       .render(container, {
@@ -65,8 +65,7 @@ export const UnroundedMin: StoryObj<Args> = {
         { category: "D", value: -35 },
         { category: "E", value: 10 },
         { category: "F", value: -5 },
-      ],
-      { axes: true }
+      ]
     )
       .flow(spread({ by: "category", dir: "x" }))
       .mark(rect({ h: "value" }))
@@ -87,8 +86,7 @@ export const AllNegative: StoryObj<Args> = {
         { category: "B", value: -37 },
         { category: "C", value: -23 },
         { category: "D", value: -8 },
-      ],
-      { axes: true }
+      ]
     )
       .flow(spread({ by: "category", dir: "x" }))
       .mark(rect({ h: "value" }))
@@ -113,8 +111,7 @@ export const SignedGroup: StoryObj<Args> = {
         { quarter: "Q2", flow: "Outflow", amount: -46 },
         { quarter: "Q3", flow: "Inflow", amount: 48 },
         { quarter: "Q3", flow: "Outflow", amount: -52 },
-      ],
-      { axes: true }
+      ]
     )
       .flow(spread({ by: "quarter", dir: "y" }), group({ by: "flow" }))
       .mark(rect({ w: "amount", fill: "flow" }))
@@ -146,7 +143,7 @@ export const MixedSignStack: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(cashFlows, { axes: true })
+    chart(cashFlows)
       .flow(
         spread({ by: "quarter", dir: "x" }),
         stack({ by: "flow", dir: "y" })
@@ -164,8 +161,7 @@ export const AllNegativeStack: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(
-      cashFlows.filter((d) => d.direction === "Outflow"),
-      { axes: true }
+      cashFlows.filter((d) => d.direction === "Outflow")
     )
       .flow(
         spread({ by: "quarter", dir: "x" }),
@@ -184,7 +180,7 @@ export const DivergingStack: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(cashFlows, { axes: true })
+    chart(cashFlows)
       .flow(
         spread({ by: "quarter", dir: "x" }),
         group({ by: "direction" }),
@@ -209,8 +205,7 @@ export const WaterfallColumn: StoryObj<Args> = {
         { step: "Expansion", change: 20 },
         { step: "Contraction", change: -50 },
         { step: "New business", change: 10 },
-      ],
-      { axes: true }
+      ]
     )
       .flow(stack({ by: "step", dir: "y" }))
       .mark(rect({ w: 40, h: "change", fill: "step" }))

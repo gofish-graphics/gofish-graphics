@@ -13,7 +13,7 @@ def story_default():
     population = vega_data.population()
     year2000 = population[population["year"] == 2000]
     return (
-        chart(year2000, axes=True)
+        chart(year2000)
         .flow(spread(by="age", dir="y"))
         .mark(rect(w="people")),
         {"w": 500, "h": 300},

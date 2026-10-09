@@ -30,7 +30,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.population.filter((row) => row.year === 2000) as any[], { axes: true,
+    chart(context.loaded.population.filter((row) => row.year === 2000) as any[], {
       color: palette({ Female: "#675193", Male: "#ca8861" }),
     })
       .flow(

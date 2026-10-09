@@ -113,7 +113,7 @@ export const Animated: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    port(playing()).render(container, { w: args.w, h: args.h, axes: true });
+    port(playing()).render(container, { w: args.w, h: args.h });
     return container;
   },
 };
@@ -124,7 +124,7 @@ export const Paused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    port(paused()).render(container, { w: args.w, h: args.h, axes: true });
+    port(paused()).render(container, { w: args.w, h: args.h });
     return container;
   },
 };
@@ -145,7 +145,7 @@ export const WithDots: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    withDots(playing()).render(container, { w: args.w, h: args.h, axes: true });
+    withDots(playing()).render(container, { w: args.w, h: args.h });
     return container;
   },
 };
@@ -156,7 +156,7 @@ export const WithDotsPaused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    withDots(paused()).render(container, { w: args.w, h: args.h, axes: true });
+    withDots(paused()).render(container, { w: args.w, h: args.h });
     return container;
   },
 };
@@ -191,7 +191,6 @@ export const MovingDot: StoryObj<Args> = {
     movingDot(playing()).render(container, {
       w: args.w,
       h: args.h,
-      axes: true,
     });
     return container;
   },
@@ -206,7 +205,6 @@ export const MovingDotPaused1979: StoryObj<Args> = {
     movingDot(paused()).render(container, {
       w: args.w,
       h: args.h,
-      axes: true,
     });
     return container;
   },
@@ -223,7 +221,7 @@ export const Comet: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    comet(playing()).render(container, { w: args.w, h: args.h, axes: true });
+    comet(playing()).render(container, { w: args.w, h: args.h });
     return container;
   },
 };
@@ -234,7 +232,7 @@ export const CometPaused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    comet(paused()).render(container, { w: args.w, h: args.h, axes: true });
+    comet(paused()).render(container, { w: args.w, h: args.h });
     return container;
   },
 };

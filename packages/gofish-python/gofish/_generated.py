@@ -1127,7 +1127,7 @@ def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: 
         h: Chart height in pixels.
         coord: Coordinate transform for the whole chart: polar(), clock(), wavy(), ...
         color: Color scale for every mark: palette(...) or gradient(...).
-        axes: Draw axes: a boolean for both axes, or per-axis options {x?, y?}.
+        axes: Draw axes: a boolean for both axes, or per-axis options {x?, y?}. Default true.
         legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
         padding: Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).
         schema: Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().

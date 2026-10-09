@@ -36,7 +36,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     
-     chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
+     chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) })
         .flow(table({
                 by: {x: "pclass", y: "sex"},
                 // Content-sized tracks (σ-affine 6e) pack facets to their dot

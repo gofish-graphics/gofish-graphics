@@ -14,7 +14,7 @@ ROWS = [
 
 def story_data_driven_fill():
     return (
-        chart(ROWS, color=gradient(["#fff5eb", "#7f2704"])).mark(
+        chart(ROWS, color=gradient(["#fff5eb", "#7f2704"]), axes=False).mark(
             polygon(points="ring", fill="n")
         ),
         {"w": 200, "h": 200},

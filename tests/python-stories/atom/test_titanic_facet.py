@@ -20,7 +20,7 @@ def story_default():
         return [rows[i : i + size] for i in range(0, len(rows), size)]
 
     return (
-        chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]), axes=True)
+        chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]))
         .flow(
             table(
                 by={"x": "pclass", "y": "sex"},

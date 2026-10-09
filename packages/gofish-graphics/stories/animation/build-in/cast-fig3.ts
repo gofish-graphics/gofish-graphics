@@ -22,4 +22,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         enter: animation.wipe({ shape: "circle", duration: 500 }),
       })
     )
-    .render(container, { w: 420, h: 260, axes: true, ...clock });
+    .render(container, { w: 420, h: 260, ...clock });

@@ -67,7 +67,7 @@ export type ChartOptions = {
   coord?: CoordinateTransform;
   color?: ColorConfig;
   /**
-   * Whether to render axes for this chart.
+   * Whether to render axes for this chart. Default `true`.
    * - `true`  — auto-infer axes from underlying space (default inference rules apply).
    * - `false` — suppress all axis rendering for this chart.
    * - `{ x?, y? }` — control x and y independently.
@@ -919,7 +919,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
    *  inherits it. */
   renderMeta(): RenderMeta {
     return {
-      axes: this.state.options?.axes,
+      // A chart draws its axes unless told not to. A bare node rendered
+      // without a chart (`gofish(...)`, a combinator's `.render`) keeps the
+      // render default of no axes (see `layout` in gofish.tsx).
+      axes: this.state.options?.axes ?? true,
       legend: this.state.options?.legend,
       colorConfig: this.state.options?.color,
       coord: this.state.options?.coord,

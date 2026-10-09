@@ -41,7 +41,7 @@ export const SpacedSizeAxis: StoryObj<Args> = {
   args: { w: 520, h: 220 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(tasks, { axes: true })
+    chart(tasks)
       .flow(spread({ by: "task", dir: "x", spacing: 30 }))
       .mark(rect({ w: "hours", h: 80, fill: "task" }))
       .render(container, { w: args.w, h: args.h });

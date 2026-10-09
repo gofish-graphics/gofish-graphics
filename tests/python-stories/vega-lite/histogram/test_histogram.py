@@ -8,7 +8,7 @@ def story_default():
     # A few titles are numbers (1776, 2012): give the column one type.
     movies = read_json("movies.json").astype({"Title": str})
     return (
-        chart(movies, axes=True)
+        chart(movies)
         .flow(
             derive(bin("IMDB Rating")),
             scatter(x_min="start", x_max="end"),

@@ -67,7 +67,7 @@ export const Ladder: StoryObj = {
       container.appendChild(connected);
 
       const panel = (x: string, into: HTMLElement, w: number) =>
-        chart(drivingShifts, { axes: true })
+        chart(drivingShifts)
           .flow(scatter({ by: "year", x, y: "gas" }))
           .mark(
             circle({ r: 2.5, fill: "white", stroke: "black", strokeWidth: 1 })
@@ -167,7 +167,7 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
     chart(drivingShifts).flow(scatter({ by: "year", x: "miles", y: "gas" }));
   // The panel's frame and axes, with the ghost of the rung below, if any,
   // drawn first so everything else sits over it.
-  let panel = chart(drivingShifts, { axes: true })
+  let panel = chart(drivingShifts)
     .flow(scatter({ by: "year", x: "miles", y: "gas" }))
     .mark(circle({ r: 3.5, opacity: 0 }));
   if (below !== undefined) {

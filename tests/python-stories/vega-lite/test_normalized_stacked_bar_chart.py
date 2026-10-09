@@ -18,7 +18,6 @@ def story_default():
         chart(
             year2000,
             color=palette({"Female": "#675193", "Male": "#ca8861"}),
-            axes=True,
         )
         .flow(
             derive(_map_sex),

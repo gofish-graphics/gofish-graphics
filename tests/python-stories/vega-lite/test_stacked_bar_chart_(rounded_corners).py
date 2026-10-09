@@ -36,7 +36,6 @@ def story_default():
                 "rain": "#1f77b4",
                 "snow": "#9467bd",
             }),
-            axes=True,
         )
         .flow(
             derive(_with_month),

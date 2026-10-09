@@ -49,7 +49,7 @@ export const SpreadOptionY: StoryObj = {
     chart(data)
       .flow(spread({ by: "c", dir: "x", y: 50 }))
       .mark(rect({ h: "v" }))
-      .render(container, { w: 300, h: 200, axes: true });
+      .render(container, { w: 300, h: 200 });
     return container;
   },
 };
@@ -63,7 +63,7 @@ export const OperatorTranslateY: StoryObj = {
     chart(data)
       .flow(spread({ by: "c", dir: "x" }).translate({ y: 50 }))
       .mark(rect({ h: "v" }))
-      .render(container, { w: 300, h: 200, axes: true });
+      .render(container, { w: 300, h: 200 });
     return container;
   },
 };
@@ -77,7 +77,7 @@ export const OperatorTranslateX: StoryObj = {
     chart(data)
       .flow(spread({ by: "c", dir: "x" }).translate({ x: 50 }))
       .mark(rect({ h: "v" }))
-      .render(container, { w: 300, h: 200, axes: true });
+      .render(container, { w: 300, h: 200 });
     return container;
   },
 };

@@ -22,4 +22,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         .flow(time.stagger({ by: "month", lag: 300 }))
         .mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
     )
-    .render(container, { w: 560, h: 220, axes: true, ...clock });
+    .render(container, { w: 560, h: 220, ...clock });

@@ -420,6 +420,7 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   axes: {
     type: t.ref("AxesOptions"),
+    default: true,
     doc: "Draw axes: a boolean for both axes, or per-axis options {x?, y?}.",
   },
   legend: {

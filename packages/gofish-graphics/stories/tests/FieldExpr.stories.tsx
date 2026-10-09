@@ -31,7 +31,7 @@ export const SortByValue: StoryObj<Args> = {
     const container = initializeContainer();
     // field("x").sort("v") should order the bars ascending by `v`:
     // A (10), B (25), C (40) — left to right.
-    chart(sortData, { axes: true })
+    chart(sortData)
       .flow(spread({ by: field("x").sort("v"), dir: "x", spacing: 20 }))
       .mark(rect({ w: 40, h: "v", fill: "x" }))
       .render(container, { w: args.w, h: args.h });
@@ -49,7 +49,7 @@ export const BinnedSpread: StoryObj<Args> = {
     const container = initializeContainer();
     // field("age").bin() groups rows into ~10 numeric bins and spreads one
     // bar per bin, each sized by the bin's row count — a histogram.
-    chart(binData, { axes: true })
+    chart(binData)
       .flow(spread({ by: field("age").bin(), dir: "x", spacing: 4 }))
       .mark(rect({ w: 30, h: field("age").count() }))
       .render(container, { w: args.w, h: args.h });
@@ -71,7 +71,7 @@ export const MeanAggregate: StoryObj<Args> = {
     const container = initializeContainer();
     // field("weight").mean() overrides the default sum aggregate: Bass -> 3,
     // Trout -> 3 (both bars should render the SAME height, not 6 vs 9).
-    chart(meanData, { axes: true })
+    chart(meanData)
       .flow(spread({ by: "species", dir: "x", spacing: 20 }))
       .mark(rect({ w: 60, h: field("weight").mean(), fill: "species" }))
       .render(container, { w: args.w, h: args.h });
@@ -94,7 +94,7 @@ export const NormalizeSizeStack: StoryObj<Args> = {
     // entry's raw `n` with its SHARE of the column: category "a" is 1/4 x,
     // 3/4 y; category "b" is 1/2 x, 1/2 y. Every bar reaches the same
     // full-height 1 (a percent-bar), unlike the raw-count MosaicChart story.
-    chart(shareData, { axes: true })
+    chart(shareData)
       .flow(
         spread({ by: "category", dir: "x", spacing: 20 }),
         stack({ by: "part", dir: "y", size: field("n").normalize() })
@@ -121,7 +121,7 @@ export const SpreadSizeOrdinalAxis: StoryObj<Args> = {
     // per-bar identity (all three bars would render the SAME color instead
     // of Huron/Erie/Ontario each keeping their own). Bar widths are also
     // proportional to `fish` (12/30/18).
-    chart(spreadSizeData, { axes: true })
+    chart(spreadSizeData)
       .flow(spread({ by: "lake", dir: "x", spacing: 20, size: "fish" }))
       .mark(rect({ h: 40, fill: "lake" }))
       .render(container, { w: args.w, h: args.h });
@@ -148,7 +148,7 @@ export const SortByExplicitOrder: StoryObj<Args> = {
     // field("x").sort([...]) (#735) orders bars by an explicit list, not an
     // aggregate: sun, fog, drizzle, rain, snow — left to right. "extra"
     // isn't in the list, so it's appended after (natural sort order).
-    chart(explicitOrderData, { axes: true })
+    chart(explicitOrderData)
       .flow(
         spread({
           by: field("x").sort(["sun", "fog", "drizzle", "rain", "snow"]),
@@ -179,7 +179,7 @@ export const DropNulls: StoryObj<Args> = {
     // field("x").dropNulls() removes the null/undefined-`x` rows BEFORE
     // grouping: exactly 3 bars (A, B, C), each at its own `v` — no fourth
     // "null" bar and no distortion from the two 999-valued rows.
-    chart(dropNullsData, { axes: true })
+    chart(dropNullsData)
       .flow(spread({ by: field("x").dropNulls(), dir: "x", spacing: 20 }))
       .mark(rect({ w: 40, h: "v", fill: "x" }))
       .render(container, { w: args.w, h: args.h });
@@ -203,7 +203,7 @@ export const BinnedRibbonHistogram: StoryObj<Args> = {
     // between consecutive anchors' facing edges, so the spacing is what
     // gives the band its width. Bins with zero rows are dropped rather than
     // rendered as zero-height gaps, so the band visibly skips them — see #763.
-    chart(binData, { axes: true })
+    chart(binData)
       .flow(spread({ by: field("age").bin(), dir: "x", spacing: 40 }))
       .mark(ribbon({ h: field("age").count(), fill: "steelblue" }))
       .render(container, { w: args.w, h: args.h });

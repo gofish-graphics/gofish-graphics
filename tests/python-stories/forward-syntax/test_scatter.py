@@ -20,7 +20,7 @@ from python_stories.data import (
 
 def story_basic():
     return (
-        chart(CATCH_LOCATIONS_ARRAY, axes=True)
+        chart(CATCH_LOCATIONS_ARRAY)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(circle(r=5)),
         {"w": 400, "h": 400},
@@ -33,7 +33,7 @@ def story_with_pie_glyphs():
     # draws them as a polar pie — no `lambda data: chart(data, ...)` callback.
     # Mirrors JS storybook's `.mark(chart({coord: clock()}).flow(...))`.
     return (
-        chart(CATCH_LOCATIONS_ARRAY, axes=True)
+        chart(CATCH_LOCATIONS_ARRAY)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(
             chart(coord=clock())
@@ -50,7 +50,7 @@ def story_with_pie_glyphs_denormalized():
     # glyph's rows — the nested chart inherits them directly, no join. Mirrors
     # JS `Scatter.stories.tsx::WithPieGlyphsDenormalized`.
     return (
-        chart(CATCH_DATA_WITH_LOCATIONS, axes=True)
+        chart(CATCH_DATA_WITH_LOCATIONS)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(
             chart(coord=clock())
@@ -63,7 +63,7 @@ def story_with_pie_glyphs_denormalized():
 
 def story_connected():
     return (
-        chart(DRIVING_SHIFTS, axes=True)
+        chart(DRIVING_SHIFTS)
         .flow(scatter(by="year", x="miles", y="gas"))
         .mark(circle(r=4, fill="white", stroke="black", stroke_width=2))
         .layer(line(stroke="black", stroke_width=2)),
