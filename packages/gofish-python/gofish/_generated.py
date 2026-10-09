@@ -464,6 +464,30 @@ def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Op
             _kw[_k] = _v
     return Mark("blank", **_kw)
 
+def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None) -> Mark:
+    """Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. Today every region is a box, so it draws a rectangle.
+
+    Args:
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
+        fill: Fill color, or a field name for a color scale.
+        stroke: Stroke color. Defaults to `fill`.
+        stroke_width: Stroke width in pixels. Default 0.
+        opacity: Opacity, 0 to 1. Default 1.
+        filter: Raw SVG filter attribute.
+    """
+    _kw: Dict[str, Any] = {}
+    for _k, _v in [
+        ("debug", debug),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
+        ("filter", filter),
+    ]:
+        if _v is not None:
+            _kw[_k] = _v
+    return Mark("region", **_kw)
+
 
 # --- Combinator-only marks ---------------------------------------------------
 
@@ -836,13 +860,13 @@ def _pack_opts(*, by: Optional[str | FieldAccessor] = None, debug: Optional[bool
             opts[_k] = _v
     return opts
 
-def _partition_opts(*, by: FieldAccessor, dir: str, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Divide the space along `dir` into the cells of a binned key. Each group is placed across its cell's interval on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size along `dir` fills its cell.
+def _partition_opts(*, by: FieldAccessor | dict, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.
 
     Args:
-        by: A key that has a region: a binned field, field(x).bin(p), whose cells divide the space. A plain field has no region and is an error.
-        dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r).
-        alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Default "baseline".
+        by: A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y with alignment middle. A plain field has no region and is an error.
+        dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.
+        alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Not allowed with a key per axis, where each child is centered in its cell. Default "baseline".
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}

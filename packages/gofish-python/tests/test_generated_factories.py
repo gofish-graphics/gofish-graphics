@@ -32,6 +32,7 @@ from gofish import (
     petal,
     polygon,
     rect,
+    region,
     ribbon,
     spread,
     scatter,
@@ -120,6 +121,40 @@ def test_partition_requires_a_key_with_a_region():
     for by in ["rating", field("rating")]:
         with pytest.raises(ValueError, match=r'field\("rating"\)\.bin\('):
             partition(by=by, dir="x")
+
+
+def test_partition_serializes_a_key_per_axis():
+    a = field("a").bin(step=1)
+    b = field("b").bin(step=0.5)
+    d = partition(by={"x": a, "y": b}).to_dict()
+    assert d["type"] == "partition"
+    assert "dir" not in d
+    assert d["by"] == {
+        "x": {"type": "field", "name": "a", "ops": [{"op": "bin", "partition": {"step": 1}}]},
+        "y": {"type": "field", "name": "b", "ops": [{"op": "bin", "partition": {"step": 0.5}}]},
+    }
+
+
+def test_partition_key_per_axis_checks():
+    a = field("a").bin(step=1)
+    with pytest.raises(ValueError, match="exactly the keys x and y"):
+        partition(by={"x": a})
+    with pytest.raises(ValueError, match="divides both axes"):
+        partition(by={"x": a, "y": a}, dir="x")
+    with pytest.raises(ValueError, match="divides both axes"):
+        partition(by={"x": a, "y": a}, alignment="middle")
+    with pytest.raises(ValueError, match=r'field\("b"\)\.bin\('):
+        partition(by={"x": a, "y": field("b")})
+    with pytest.raises(ValueError, match="`dir` names the axis"):
+        partition(by=a)
+
+
+def test_region_takes_paint_only():
+    d = region(fill=field("a").count(), stroke="white", stroke_width=1).to_dict()
+    assert d["type"] == "region"
+    assert d["strokeWidth"] == 1
+    with pytest.raises(TypeError):
+        region(w=10)
 
 
 def test_rect_inset_is_a_kwarg():

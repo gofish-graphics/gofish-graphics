@@ -748,6 +748,7 @@ from ._generated import (  # noqa: E402
     image,
     polygon,
     blank,
+    region,
     over,
     intersect,
     exclude,
@@ -1912,43 +1913,89 @@ def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
     return Operator("group", **_group_opts(**options))
 
 
-def partition(*, by: "FieldAccessor", dir: str, **options: Any) -> Operator:
+def partition(
+    *,
+    by: Union["FieldAccessor", Dict[str, "FieldAccessor"]],
+    dir: Optional[str] = None,
+    **options: Any,
+) -> Operator:
     """
-    Partition operator: divide the space along ``dir`` into the cells of a
-    binned key, one group per cell, each placed across its cell's interval
-    on one continuous scale. A cell's width follows its width in data (a
-    29-day February is narrower than a 31-day March), and an empty cell
-    keeps its place. A mark with no size along ``dir`` fills its cell.
+    Partition operator: divide the space into the cells of a binned key, one
+    group per cell, and give each group its cell. Each cell sits at its true
+    place on one continuous scale, so a cell's width follows its width in data
+    (a 29-day February is narrower than a 31-day March), and an empty cell
+    keeps its place. A mark with no size of its own fills its cell, and a mark
+    with a size of its own is centered in it.
 
         chart(daily, schema={"date": Schema.time()}).flow(
             partition(by=field("date").bin(Calendar.month), dir="x")
         ).mark(rect(h=field("value").sum()))
 
+    With one binned key per axis it divides both axes into rectangles. This is
+    the partition on x, then the partition on y with ``alignment="middle"``:
+
+        chart(movies).flow(
+            partition(by={
+                "x": field("IMDB Rating").bin(step=0.5),
+                "y": field("Rotten Tomatoes Rating").bin(step=5),
+            })
+        ).mark(region(fill=field("IMDB Rating").count()))
+
     Args:
-        by: A key that has a region: a binned field, ``field(x).bin(...)``.
-            A plain field has no region and is an error.
+        by: A key that has a region: a binned field, ``field(x).bin(...)``,
+            or a dict of one per axis, ``{"x": ..., "y": ...}``. A plain
+            field has no region and is an error.
         dir: The axis to divide: ``"x"``, ``"y"``, or an axis name the
-            enclosing coordinate space declares.
+            enclosing coordinate space declares. Required with a single key,
+            and not allowed with a key per axis.
         **options: The generated ``_partition_opts`` core's options; see
             the docs options table.
 
     Returns:
         Operator object
     """
-    if not (
-        isinstance(by, FieldAccessor)
-        and any(op.get("op") == "bin" for op in by.get("ops", []))
-    ):
-        name = by["name"] if isinstance(by, FieldAccessor) else by
-        raise ValueError(
-            f"partition: `by` must be a key that has a region, such as "
-            f'field("{name}").bin(Calendar.month) or '
-            f'field("{name}").bin(step=1). Each group is placed across its '
-            f"cell's interval, so the key must say what the cells are. To "
-            f"give each value an equal slot instead, use spread(by=..., dir=...)."
-        )
+
+    def check_key(key: Any) -> None:
+        if not (
+            isinstance(key, FieldAccessor)
+            and any(op.get("op") == "bin" for op in key.get("ops", []))
+        ):
+            name = key["name"] if isinstance(key, FieldAccessor) else key
+            raise ValueError(
+                f"partition: `by` must be a key that has a region, such as "
+                f'field("{name}").bin(Calendar.month) or '
+                f'field("{name}").bin(step=1). Each group is placed in its '
+                f"cell, so the key must say what the cells are. To give each "
+                f"value an equal slot instead, use spread(by=..., dir=...)."
+            )
+
+    if isinstance(by, dict) and not isinstance(by, FieldAccessor):
+        if sorted(by) != ["x", "y"]:
+            raise ValueError(
+                f"partition: a `by` keyed by axis takes exactly the keys x "
+                f"and y, got {', '.join(by) or 'none'}. To divide one axis, "
+                f"pass partition(by=field(f).bin(...), dir=...)."
+            )
+        if dir is not None or "alignment" in options:
+            raise ValueError(
+                "partition: a `by` keyed by axis divides both axes, so `dir` "
+                "and `alignment` do not apply. Each child is centered in its "
+                "cell."
+            )
+        check_key(by["x"])
+        check_key(by["y"])
+        by = {"x": by["x"], "y": by["y"]}
+    else:
+        check_key(by)
+        if dir is None:
+            raise ValueError(
+                'partition: `dir` names the axis to divide, e.g. '
+                'partition(by=..., dir="x"). To divide both axes, key `by` '
+                'by axis: partition(by={"x": ..., "y": ...}).'
+            )
     options["by"] = by
-    options["dir"] = dir
+    if dir is not None:
+        options["dir"] = dir
     return Operator("partition", **_partition_opts(**options))
 
 
