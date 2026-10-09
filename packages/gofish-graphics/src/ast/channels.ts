@@ -20,7 +20,7 @@ import {
   type Measure,
 } from "./data";
 import { Frontend } from "gofish-ir";
-import { evalFieldValues, type FieldExpr } from "./fieldExpr";
+import { evalFieldValues, getFieldOps, type FieldExpr } from "./fieldExpr";
 import { columnType, type ColumnType } from "./schema";
 import {
   mapAxisDims,
@@ -319,7 +319,9 @@ export const inferPos = inferNumeric(meanBy);
 
 /**
  * Shared core of the non-aggregating channels ({@link inferColor} /
- * {@link inferRaw}): resolve an accessor against the FIRST row of `data`.
+ * {@link inferRaw}): resolve an accessor against the FIRST row of `data`,
+ * or, for a field expression with an aggregate (`field(x).count()`), against
+ * the fold of all of `data`.
  * - "literal": pass the accessor's value through unchanged — a `literal(...)`
  *   wrapper, or a string that names no field on the row (e.g. a CSS color).
  * - "row": the value read off the row, with the `field` it was read from when
@@ -335,6 +337,17 @@ function firstRowValue<T extends Record<string, any>>(
   | { kind: "row"; value: unknown; field?: string }
   | { kind: "none" } {
   if (isLiteral(accessor)) return { kind: "literal", value: accessor.value };
+  if (isField(accessor) && getFieldOps(accessor).length > 0) {
+    // An expression pipeline folds the group's rows itself, as for a size
+    // channel (`evalFieldValues`): `.count()` is the number of rows, even
+    // when there are none. The value is the fold's, not a value of the
+    // field, so it records no field. A fold over no rows that has no value
+    // (the mean of nothing) is no value here either.
+    const [folded] = evalFieldValues(accessor, data).values;
+    return folded == null || Number.isNaN(folded)
+      ? { kind: "none" }
+      : { kind: "row", value: folded };
+  }
   const row = data.length > 0 && data[0] != null ? data[0] : undefined;
   if (isField(accessor)) {
     return row === undefined
