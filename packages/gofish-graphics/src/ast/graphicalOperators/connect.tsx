@@ -418,7 +418,7 @@ export const connect = createNodeOperator(
                 : mode === "center"
                   ? linearCurve()
                   : bezier();
-          const resolvedCurveName = resolvedCurve.type;
+          const resolvedCurveName = resolvedCurve.kind;
           // Edge ("ribbon") mode: bezier = S-curve band (discrete regions),
           // monotone / catmullRom = smoothed band, else linear band.
           const edgeBezier = resolvedCurveName === "bezier";

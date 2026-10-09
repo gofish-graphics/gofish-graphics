@@ -53,7 +53,13 @@ export type LiteralValue = string | number | boolean;
 
 export type FieldType =
   | { kind: "string" }
-  | { kind: "number" }
+  | {
+      kind: "number";
+      /** The least value allowed (inclusive). NaN is never at least it. */
+      min?: number;
+      /** Reject Infinity and -Infinity (NaN is never finite). */
+      finite?: boolean;
+    }
   | { kind: "boolean" }
   | { kind: "any" }
   | { kind: "enum"; values: readonly string[] }
@@ -144,10 +150,15 @@ export function pyKwarg(fieldName: string): string {
 export const t = {
   string: { kind: "string" } as FieldType,
   number: { kind: "number" } as FieldType,
+  /** A number with bounds: at least `min`, and finite when `finite`
+   *  (`t.num({ min: 0, finite: true })` for a pixel padding). */
+  num: (bounds: { min?: number; finite?: boolean }): FieldType => ({
+    kind: "number",
+    ...bounds,
+  }),
   boolean: { kind: "boolean" } as FieldType,
   /** Escape hatch for JS-only shapes not worth modeling precisely yet
-   *  (perfect-arrows' `ArrowOptions`, a `Curve` factory-call value, an
-   *  `AnchorSpec`, a JS function accessor). */
+   *  (an `AnchorSpec`, a JS function accessor). */
   any: { kind: "any" } as FieldType,
   enum: (...values: string[]): FieldType => ({ kind: "enum", values }),
   /** Exactly one value, e.g. `t.literal(false)` for the `false` in JS's
@@ -385,6 +396,246 @@ const axisOptions: FieldSpec = {
   ),
 };
 
+// ---------------------------------------------------------------------------
+// Strategy families — one table of the strategy objects that cross the wire
+// ---------------------------------------------------------------------------
+
+/** One kind of strategy: its params, which sit beside `kind` in the strategy
+ *  object (`{ kind: "squarify", ratio: 1 }`). */
+export interface StrategyKind {
+  doc: string;
+  params: FieldGroup;
+}
+
+/** A factory that makes a kind with some of its params already set
+ *  (`Overlap.sina()` is `noise` with `smoothing: "silverman"`). An option the
+ *  caller passes overrides the preset value. */
+export interface StrategyPreset {
+  kind: string;
+  /** Param values, by field name, set before the caller's options. */
+  values: Record<string, unknown>;
+  doc: string;
+}
+
+/** A strategy family: an option's value is one choice from its kinds, made
+ *  by a call in the family's namespace (`Tile.squarify()`). */
+export interface StrategyFamily {
+  doc: string;
+  /** The kinds, by their wire `kind`. Each also has a factory of the same
+   *  name (`pyKwarg` spelling in Python: `sliceDice` → `slice_dice`). */
+  kinds: Record<string, StrategyKind>;
+  /** Further factories, each a kind with some params preset. */
+  presets?: Record<string, StrategyPreset>;
+}
+
+/** Pixels between neighboring dots, for both overlap kinds. */
+const overlapPadding: FieldSpec = {
+  type: t.num({ min: 0, finite: true }),
+  default: 0,
+  doc: "Pixels kept between neighboring dots.",
+};
+
+/**
+ * The strategy families whose values cross the Python↔JS wire, by family
+ * name. A strategy is a plain object `{ kind, ...params }`, the same in JS
+ * and on the wire; in Python its param keys are snake_case, renamed to the
+ * wire keys at the option it is passed to, like any nested option dict.
+ *
+ * Read by: the `OPTION_TYPES` entry each family derives (so a field takes a
+ * strategy with `t.ref("Tile")`, and the validator, the JSON Schema and the
+ * Python generator all see one shape), `checkStrategy` in validate.ts (the
+ * one check the JS layout runs on a strategy it is handed), and the Python
+ * generator, which writes `gofish/<family>.py` from it.
+ *
+ * `Coord` and `Color` are not strategy families in this sense: a coordinate
+ * transform is a JS object of functions, rebuilt on the JS side from a
+ * `type`-tagged config (`COORDS` above), and a color scale is tagged by
+ * `_tag` and takes its one argument by position.
+ */
+export const STRATEGIES = {
+  Tile: {
+    doc: "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods.",
+    kinds: {
+      squarify: {
+        doc: "Squarified tiling (d3's `treemapSquarify`): make tiles as close as possible to the aspect `ratio`. The default.",
+        params: {
+          ratio: {
+            type: t.num({ min: 1 }),
+            doc: "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio. 1 aims for square tiles, which suits one circle per leaf.",
+          },
+        },
+      },
+      slice: {
+        doc: "Lay the tiles out in one column, stacked along y (d3's `treemapSlice`).",
+        params: {},
+      },
+      dice: {
+        doc: "Lay the tiles out in one row, side by side along x (d3's `treemapDice`).",
+        params: {},
+      },
+      binary: {
+        doc: "Split the tiles into two halves of near-equal weight, recursively (d3's `treemapBinary`).",
+        params: {},
+      },
+      sliceDice: {
+        doc: "Alternate slice and dice by depth (d3's `treemapSliceDice`).",
+        params: {},
+      },
+    },
+  },
+  Overlap: {
+    doc: "How `scatter` keeps its children clear of each other on the axis no field places: the value of its `overlap` option. Both kinds grow from the `alignment` line and move only that free axis.",
+    kinds: {
+      separate: {
+        doc: "Keep dots apart: each dot keeps its position on the data axis and moves along the free axis to the free spot nearest the alignment line, in data order, so no two dots overlap. The result is a beeswarm (Observable Plot's `dodge`).",
+        params: { padding: overlapPadding },
+      },
+      noise: {
+        doc: "Spread the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. Dots may still touch.",
+        params: {
+          randomness: {
+            type: t.enum("blue", "quasi", "uniform"),
+            default: "blue",
+            doc: 'How offsets are drawn inside the outline: "blue" keeps each dot as far from its placed neighbors as it can, "quasi" spreads the dots by rank (fastest), "uniform" draws seeded uniform offsets.',
+          },
+          smoothing: {
+            type: t.union(t.num({ min: 0 }), t.enum("silverman")),
+            default: 0,
+            doc: "The bandwidth of each dot's bell, in data units of the data axis: 0 is no smoothing beyond the dots' own size, Infinity is a flat band, and \"silverman\" computes it from the data.",
+          },
+          padding: {
+            ...overlapPadding,
+            doc: 'Pixels added to each dot\'s width when the outline is sized and, for "blue" randomness, when distances are compared.',
+          },
+          seed: {
+            type: t.num({ finite: true }),
+            default: 0,
+            doc: 'Seed for "blue" and "uniform" randomness, so a render is the same every time.',
+          },
+        },
+      },
+    },
+    presets: {
+      sina: {
+        kind: "noise",
+        values: { smoothing: "silverman" },
+        doc: 'A sina plot: noise with smoothing "silverman", a bandwidth computed per scatter from the data (ggforce\'s `geom_sina`). The outline is the curve a violin plot draws. Any option overrides the preset.',
+      },
+      jitter: {
+        kind: "noise",
+        values: { randomness: "uniform", smoothing: Infinity },
+        doc: 'Classic jitter: noise with randomness "uniform" and smoothing Infinity, so the dots get uniform random offsets in a flat band. Any option overrides the preset.',
+      },
+    },
+  },
+  Curve: {
+    doc: "How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points.",
+    kinds: {
+      linear: {
+        doc: "Straight segments from each point to the next.",
+        params: {},
+      },
+      step: {
+        doc: "Hold every value that depends on the ordering field until the next point, then jump: a staircase when the ordering field is an axis.",
+        params: {},
+      },
+      monotone: {
+        doc: "Piecewise monotone cubic: between two neighboring points each coordinate only rises or only falls (d3 `curveMonotoneX`).",
+        params: {},
+      },
+      smooth: {
+        doc: "A rounder cubic over the same parameter as `monotone`; it can go a little past a point, but keeps a run of equal values flat.",
+        params: {},
+      },
+      catmullRom: {
+        doc: "A centripetal Catmull-Rom through the points on screen.",
+        params: {},
+      },
+      bezier: {
+        doc: "Cubic bezier between each pair of points (the d3 `linkVertical`/`linkHorizontal` convention).",
+        params: {},
+      },
+      orthogonal: {
+        doc: "Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal).",
+        params: {
+          bend: {
+            type: t.enum("auto"),
+            doc: 'Omitted, the elbow bends on the connector\'s `dir` axis; "auto" infers the bend axis from the endpoint geometry instead, for layouts with no single growth axis.',
+          },
+        },
+      },
+      arc: {
+        doc: "Semicircular arc through both endpoints (GoTree arccurve).",
+        params: {
+          direction: {
+            type: t.enum("up", "down"),
+            default: "up",
+            doc: "Which side the arc bulges toward.",
+          },
+        },
+      },
+      perfectArrows: {
+        doc: "Box-to-box arc from the perfect-arrows library.",
+        params: {
+          bow: {
+            type: t.number,
+            default: 0,
+            doc: "Baseline curvature. 0 is a straight line.",
+          },
+          stretch: {
+            type: t.number,
+            default: 0.25,
+            doc: "How much the bow grows as the endpoints get closer, and shrinks as they get farther apart.",
+          },
+          stretchMin: {
+            type: t.number,
+            default: 50,
+            doc: "Distance in pixels below which stretch has its full effect.",
+          },
+          stretchMax: {
+            type: t.number,
+            default: 420,
+            doc: "Distance in pixels above which stretch has no effect.",
+          },
+          padStart: {
+            type: t.number,
+            default: 0,
+            doc: "Gap in pixels between the source box and the start of the arc.",
+          },
+          padEnd: {
+            type: t.number,
+            default: 20,
+            doc: "Gap in pixels between the end of the arc and the target box.",
+          },
+          flip: {
+            type: t.boolean,
+            default: false,
+            doc: "Flip which side the arc bows toward.",
+          },
+          straights: {
+            type: t.boolean,
+            default: true,
+            doc: "Allow a straight line when the endpoints are axis-aligned, instead of forcing a slight bow.",
+          },
+        },
+      },
+    },
+  },
+} satisfies Record<string, StrategyFamily>;
+
+/** The name of a strategy family: `"Tile"`, `"Overlap"` or `"Curve"`. */
+export type StrategyFamilyName = keyof typeof STRATEGIES;
+
+/** The value type of a strategy family: a union of one object per kind, told
+ *  apart by its `kind`. */
+function strategyType(family: StrategyFamily): FieldType {
+  return t.union(
+    ...Object.entries(family.kinds).map(([kind, { params }]) =>
+      t.object({ kind: { type: t.literal(kind), required: true }, ...params })
+    )
+  );
+}
+
 /** A Calendar value's wire form: a partition of the time line into calendar
  *  cells (`CalendarPartition` in gofish-graphics/src/ast/calendar.ts). */
 const calendarPartition: FieldSpec = {
@@ -414,27 +665,6 @@ const calendarPartition: FieldSpec = {
     },
   }),
 };
-
-/** A curve, made by a call in the Curve family (`Curve.monotone()`,
- *  `Curve.arc({ direction: "down" })`): the name of the curve and the options
- *  it takes. Shared by `line` and `ribbon`. */
-const curveType = t.object({
-  type: {
-    type: t.enum(
-      "linear",
-      "step",
-      "monotone",
-      "smooth",
-      "catmullRom",
-      "bezier",
-      "orthogonal",
-      "arc",
-      "perfectArrows"
-    ),
-    required: true,
-  },
-  options: { type: t.record(t.any) },
-});
 
 /** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
  *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
@@ -537,6 +767,13 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
     doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
     type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
   },
+  // Each strategy family (`STRATEGIES`) is one entry, under its family name.
+  ...Object.fromEntries(
+    Object.entries(STRATEGIES).map(([name, family]) => [
+      name,
+      { doc: family.doc, type: strategyType(family) },
+    ])
+  ),
 };
 
 /** The refs a field may name that are not `OPTION_TYPES` entries: shapes
@@ -882,19 +1119,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Cross-axis alignment for the axis without an explicit position.",
       },
       overlap: {
-        type: t.union(
-          t.object({
-            kind: { type: t.enum("separate"), required: true },
-            padding: { type: t.number },
-          }),
-          t.object({
-            kind: { type: t.enum("noise"), required: true },
-            randomness: { type: t.enum("blue", "quasi", "uniform") },
-            smoothing: { type: t.union(t.number, t.enum("silverman")) },
-            padding: { type: t.number },
-            seed: { type: t.number },
-          })
-        ),
+        type: t.ref("Overlap"),
         doc: 'How children keep clear of each other on the axis no field places, made by a call in the Overlap family. Overlap.separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. Overlap.noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. Overlap.sina() is noise with smoothing "silverman" (a violin outline), and Overlap.jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.',
       },
       axes: { type: t.ref("AxesOptions") },
@@ -989,21 +1214,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Round pixel positions and sizes.",
       },
       tile: {
-        type: t.union(
-          t.object({
-            kind: { type: t.enum("squarify"), required: true },
-            ratio: {
-              type: t.number,
-              doc: "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio.",
-            },
-          }),
-          t.object({
-            kind: {
-              type: t.enum("slice", "dice", "binary", "sliceDice"),
-              required: true,
-            },
-          })
-        ),
+        type: t.ref("Tile"),
         default: { kind: "squarify" },
         doc: "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
       },
@@ -1285,7 +1496,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Blend mode where connectors overlap.",
       },
       curve: {
-        type: curveType,
+        type: t.ref("Curve"),
         doc: 'Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear().',
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
@@ -1347,7 +1558,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
-        type: curveType,
+        type: t.ref("Curve"),
         doc: 'Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band.',
       },
       from: { type: t.string },

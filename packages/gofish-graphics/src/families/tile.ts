@@ -3,15 +3,18 @@
  *
  * `lib.ts` binds this module as `Tile` (`Tile.squarify({ ratio: 1 })`), and
  * `gofish-graphics/tile` exports the same module. A strategy is a plain object
- * made by a function call, so it crosses the Python bridge as IR. `kind` names
- * the strategy; each maps to one of d3-hierarchy's tiling methods.
+ * made by a function call, `{ kind, ...params }`, and that object is also its
+ * wire form, so it crosses the Python bridge as IR. `kind` names the strategy;
+ * each maps to one of d3-hierarchy's tiling methods. The kinds and their
+ * params are declared once, in gofish-ir's `STRATEGIES` table, which checks a
+ * strategy where `treemap` reads it.
  */
 import type { Frontend } from "gofish-ir";
 
 /**
  * How `treemap` tiles its box: the value of its `tile` option.
  */
-export type Tile = Frontend.TreemapTileIR;
+export type Tile = Frontend.TileIR;
 
 /**
  * Squarified tiling (d3's `treemapSquarify`): makes tiles as close as it can to

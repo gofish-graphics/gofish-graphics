@@ -30,7 +30,11 @@ import {
   type Origin,
   type RefMarkIR,
 } from "./schema.js";
-import { isNonFiniteNumberIR, isTaggedInfinity } from "./nonFinite.js";
+import {
+  decodeNonFinite,
+  isNonFiniteNumberIR,
+  isTaggedInfinity,
+} from "./nonFinite.js";
 import {
   LABEL_OPTIONS,
   OPTION_TYPES,
@@ -40,6 +44,7 @@ import {
   type FieldGroup,
   type FieldSpec,
   type FieldType,
+  type StrategyFamilyName,
 } from "./descriptors.js";
 
 /**
@@ -317,9 +322,19 @@ function walkFieldType(
       if (typeof value !== "string")
         fail(`expected string, got ${typeNameOf(value)}`);
       return;
-    case "number":
-      if (!isIRNumber(value)) fail(notANumber(value));
+    case "number": {
+      if (!isIRNumber(value)) {
+        fail(notANumber(value));
+        return;
+      }
+      const n =
+        typeof value === "number" ? value : (decodeNonFinite(value) as number);
+      if (type.finite && !Number.isFinite(n))
+        fail(`expected a finite number, got ${n}`);
+      else if (type.min !== undefined && !(n >= type.min))
+        fail(`expected a number of at least ${type.min}, got ${n}`);
       return;
+    }
     case "boolean":
       if (typeof value !== "boolean")
         fail(`expected boolean, got ${typeNameOf(value)}`);
@@ -346,8 +361,29 @@ function walkFieldType(
       walkRefType(type.name, value, path, ctx);
       return;
     case "union": {
-      // Valid if ANY branch matches cleanly: each branch is checked into a
-      // probe context of its own.
+      // A tagged union (every branch an object whose `kind` is a literal):
+      // the value's `kind` picks the one branch to check it against, as the
+      // Python generator's `_to_wire` does, so an unknown kind and a bad
+      // param each get their own message.
+      const tags = taggedBranches(type.options);
+      if (tags !== null) {
+        if (!isObject(value)) {
+          fail(`expected object, got ${typeNameOf(value)}`);
+          return;
+        }
+        const branch = tags.get(value.kind as string);
+        if (branch === undefined) {
+          fail(
+            `unknown kind ${JSON.stringify(value.kind)}; expected one of ${[...tags.keys()].map((k) => JSON.stringify(k)).join(", ")}`,
+            `${path}.kind`
+          );
+          return;
+        }
+        walkFieldType(branch, value, path, ctx);
+        return;
+      }
+      // Otherwise valid if ANY branch matches cleanly: each branch is
+      // checked into a probe context of its own.
       for (const branch of type.options) {
         const probe: Context = { errors: [] };
         walkFieldType(branch, value, path, probe);
@@ -395,6 +431,52 @@ function walkFieldType(
       // than x/y, a misspelled axis option).
       walkDescriptorFields(value, path, ctx, type.fields, []);
       return;
+  }
+}
+
+/** The branches of a tagged union by their `kind`: every branch an object
+ *  whose required `kind` field is a string literal, no two alike. Null for
+ *  any other union. */
+function taggedBranches(
+  options: readonly FieldType[]
+): Map<string, FieldType> | null {
+  const byKind = new Map<string, FieldType>();
+  for (const branch of options) {
+    if (branch.kind !== "object") return null;
+    const tag = branch.fields.kind;
+    if (
+      tag === undefined ||
+      !tag.required ||
+      tag.type.kind !== "literal" ||
+      typeof tag.type.value !== "string" ||
+      byKind.has(tag.type.value)
+    )
+      return null;
+    byKind.set(tag.type.value, branch);
+  }
+  return byKind;
+}
+
+/**
+ * Check a strategy against its family in `STRATEGIES`: a known `kind`, and
+ * only that kind's params, each of its declared type. Throws the first
+ * problem, naming `where` the strategy was written
+ * (`"treemap({ tile })"`). This is the one check a strategy gets on the JS
+ * side, wherever it came from (a family factory, a hand-written object, or
+ * Python IR); the validator runs the same walk over a whole document.
+ */
+export function checkStrategy(
+  family: StrategyFamilyName,
+  value: unknown,
+  where: string
+): void {
+  const ctx: Context = { errors: [] };
+  walkFieldType(OPTION_TYPES[family].type, value, where, ctx);
+  if (ctx.errors.length > 0) {
+    const [{ path, message }] = ctx.errors;
+    throw new Error(
+      `[gofish] ${path}: ${message}. Make one with a call in the ${family} family.`
+    );
   }
 }
 

@@ -109,8 +109,6 @@ def test_scatter_serializes_separate_overlap():
     assert d["overlap"] == {"kind": "separate", "padding": 1}
     assert Overlap.separate() == {"kind": "separate"}
     assert "overlap" not in scatter(x="mass").to_dict()
-    with pytest.raises(ValueError):
-        Overlap.separate(padding=-1)
 
 
 def test_scatter_serializes_noise_overlap():
@@ -126,19 +124,9 @@ def test_scatter_serializes_noise_overlap():
         scatter(x="mass", overlap={"kind": "swarm"})
     with pytest.raises(TypeError):
         scatter(x="mass", overlap={"kind": "separate", "randomness": "blue"})
-    with pytest.raises(ValueError):
-        Overlap.noise(randomness="pink")
     assert Overlap.noise(smoothing=0) == {"kind": "noise", "smoothing": 0}
-    with pytest.raises(ValueError):
-        Overlap.noise(smoothing=-1)
-    with pytest.raises(ValueError):
-        Overlap.noise(smoothing=float("nan"))
-    with pytest.raises(ValueError):
-        Overlap.noise(smoothing="scott")
-    with pytest.raises(ValueError):
-        Overlap.noise(seed=float("inf"))
-    with pytest.raises(ValueError):
-        Overlap.noise(seed="1")
+    # A param's type and bounds (randomness "pink", smoothing -1, ...) are
+    # checked at the factory call: see test_families.py.
 
 
 def test_sina_and_jitter_are_noise_with_other_defaults():
@@ -150,8 +138,6 @@ def test_sina_and_jitter_are_noise_with_other_defaults():
     # Any option overrides the default.
     assert Overlap.sina(smoothing=50, padding=1) == {"kind": "noise", "smoothing": 50, "padding": 1}
     assert Overlap.jitter(randomness="blue")["randomness"] == "blue"
-    with pytest.raises(ValueError, match="sina: randomness"):
-        Overlap.sina(randomness="pink")
     d = scatter(x="mass", alignment="middle", overlap=Overlap.sina()).to_dict()
     assert d["overlap"] == {"kind": "noise", "smoothing": "silverman"}
 

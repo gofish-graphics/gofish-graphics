@@ -160,14 +160,6 @@ export { spread, stack } from "./ast/graphicalOperators/spread";
 export { scatter } from "./ast/graphicalOperators/scatter";
 export { spreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY } from "./ast/graphicalOperators/spreadY";
-export {
-  registerRoute,
-  getRoute,
-  hasRoute,
-  resolveCurve,
-  type Router,
-  type RouteContext,
-} from "./ast/graphicalOperators/routers";
 export * as Curve from "./families/curve";
 export { treemap } from "./ast/graphicalOperators/treemap";
 export * as Tile from "./families/tile";

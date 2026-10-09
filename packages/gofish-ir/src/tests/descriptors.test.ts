@@ -22,6 +22,7 @@ import {
   LABEL_OPTIONS,
   OPERATORS,
   OPTION_TYPES,
+  STRATEGIES,
   resolveFields,
   type FieldType,
 } from "../frontend/descriptors.js";
@@ -30,7 +31,10 @@ import type {
   AxisInterval,
   FieldPredicateIR,
   AxisOptions,
+  CurveIR,
   LabelSpecIR,
+  OverlapIR,
+  TileIR,
 } from "../frontend/schema.js";
 
 declare const process: { exit(code: number): never };
@@ -236,6 +240,98 @@ console.log("\n# LABEL_OPTIONS agree with schema.ts LabelSpecIR");
     JSON.stringify(schemaKeys) === JSON.stringify(descriptorKeys),
     JSON.stringify({ schemaKeys, descriptorKeys })
   );
+}
+
+/** Per kind of a strategy IR union, its param keys (all but `kind`). Typed
+ *  so that a type checker flags a kind or a param added to or removed from
+ *  the schema.ts type; the runtime check below compares them with
+ *  `STRATEGIES`. */
+type StrategyKeys<U extends { kind: string }> = {
+  [K in U["kind"]]: Record<
+    Exclude<keyof Extract<U, { kind: K }>, "kind">,
+    true
+  >;
+};
+
+const SCHEMA_STRATEGY_KEYS: Record<
+  keyof typeof STRATEGIES,
+  Record<string, Record<string, true>>
+> = {
+  Tile: {
+    squarify: { ratio: true },
+    slice: {},
+    dice: {},
+    binary: {},
+    sliceDice: {},
+  } satisfies StrategyKeys<TileIR>,
+  Overlap: {
+    separate: { padding: true },
+    noise: { randomness: true, smoothing: true, padding: true, seed: true },
+  } satisfies StrategyKeys<OverlapIR>,
+  Curve: {
+    linear: {},
+    step: {},
+    monotone: {},
+    smooth: {},
+    catmullRom: {},
+    bezier: {},
+    orthogonal: { bend: true },
+    arc: { direction: true },
+    perfectArrows: {
+      bow: true,
+      stretch: true,
+      stretchMin: true,
+      stretchMax: true,
+      padStart: true,
+      padEnd: true,
+      flip: true,
+      straights: true,
+    },
+  } satisfies StrategyKeys<CurveIR>,
+};
+
+console.log("\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR");
+for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
+  const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<
+    string,
+    { params: Record<string, unknown> }
+  >;
+  check(
+    `${family}: kinds === schema.ts kinds`,
+    JSON.stringify(Object.keys(kinds).sort()) ===
+      JSON.stringify(Object.keys(table).sort()),
+    JSON.stringify({ schema: Object.keys(kinds), table: Object.keys(table) })
+  );
+  for (const [kind, params] of Object.entries(kinds)) {
+    const declared = Object.keys(table[kind]?.params ?? {}).sort();
+    check(
+      `${family}.${kind}: params === schema.ts keys`,
+      JSON.stringify(Object.keys(params).sort()) === JSON.stringify(declared),
+      JSON.stringify({ schema: Object.keys(params), table: declared })
+    );
+  }
+}
+
+console.log(
+  "\n# Every strategy preset makes a kind of its family, with its params"
+);
+for (const [family, spec] of Object.entries(STRATEGIES)) {
+  const presets = ("presets" in spec ? spec.presets : {}) as Record<
+    string,
+    { kind: string; values: Record<string, unknown> }
+  >;
+  const kinds = spec.kinds as Record<
+    string,
+    { params: Record<string, unknown> }
+  >;
+  for (const [name, preset] of Object.entries(presets)) {
+    check(
+      `${family}.${name}: preset kind and values are declared`,
+      preset.kind in kinds &&
+        !(name in kinds) &&
+        Object.keys(preset.values).every((k) => k in kinds[preset.kind].params)
+    );
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -876,10 +876,9 @@ export type LineOptions = {
   strokeDasharray?: string;
   opacity?: number | LiveValue;
   mixBlendMode?: "normal" | "multiply";
-  // Screen-space path shape, as a factory call (`bezier()`, `orthogonal()`,
-  // `arc({ direction })`, `perfectArrows({ bow })`, …) or a bare name
-  // (`"linear"` | `"bezier"` | `"step"` | `"monotone"` | `"smooth"` |
-  // `"catmullRom"`). The single path-shaping key.
+  // Screen-space path shape, made by a call in the Curve family
+  // (`Curve.bezier()`, `Curve.orthogonal()`, `Curve.arc({ direction })`,
+  // `Curve.perfectArrows({ bow })`, …). The single path-shaping key.
   curve?: Curve;
   dir?: "x" | "y";
   // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
