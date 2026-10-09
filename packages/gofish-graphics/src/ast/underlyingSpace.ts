@@ -250,7 +250,8 @@ export const axisTickPartition = (
  *  renders the absolute axis of the scope that places its baseline
  *  ({@link placeBaseline}), so it nices as that axis does, about its own 0
  *  (which its interval contains), and stays free. An ordinal or undefined
- *  space is returned UNCHANGED. A coord
+ *  space is returned UNCHANGED, and so is an empty interval (min > max) or a
+ *  non-finite one, which has no ends to round. A coord
  *  scope must NOT nice (its domain maps into a fixed coordinate range), so the
  *  coord boundary never calls this. */
 export const niceContinuous = <T extends UnderlyingSpace | undefined>(
@@ -261,6 +262,10 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   if (axis === undefined) return space;
   const s = space as CONTINUOUS_TYPE;
   const iv = s.dataInterval;
+  // An empty interval (min > max: a column of nulls) or a non-finite one
+  // (NaN) has no ends to round, over numbers or instants alike.
+  if (!(Number.isFinite(iv.min) && Number.isFinite(iv.max) && iv.min <= iv.max))
+    return space;
   // An absolute axis nices its domain's ends: to round numbers, or, over
   // instants, to cell starts of its inner row. A delta axis has only a
   // width, which it nices from 0 so its steps are even (ticks 20, 40, …, 160

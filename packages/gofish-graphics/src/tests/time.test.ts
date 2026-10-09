@@ -696,6 +696,46 @@ async function main() {
     );
   }
 
+  console.log("\n# a time column with no values");
+  {
+    const empty = await errorOf(() =>
+      chart(
+        [
+          { t: null, v: 1 },
+          { t: null, v: 2 },
+        ],
+        { schema: { t: Schema.time() }, axes: true }
+      )
+        .flow(scatter({ x: "t", y: "v" }))
+        .mark(circle({ r: 2 }))
+        .toDisplayList({ w: 200, h: 100 })
+    );
+    check(
+      "a time column of all nulls renders without throwing",
+      empty === undefined,
+      empty
+    );
+    const nan = withCalendar(
+      CONTINUOUS(interval(NaN, NaN), "pinned"),
+      { zone: "UTC" }
+    );
+    check(
+      "a non-finite time domain is not niced",
+      Number.isNaN((niceContinuous(nan) as any).dataInterval.min)
+    );
+    const [hi, lo] = [Date.UTC(2024, 1, 2, 7), Date.UTC(2024, 1, 1, 7)];
+    const backwards = withCalendar(
+      CONTINUOUS({ min: hi, max: lo }, "pinned"),
+      { zone: "UTC" }
+    );
+    const kept = (niceContinuous(backwards) as any).dataInterval;
+    check(
+      "an empty time domain (min > max) is not niced",
+      kept.min === hi && kept.max === lo,
+      JSON.stringify(kept)
+    );
+  }
+
   console.log("\n# one instant");
   {
     const one = withCalendar(
