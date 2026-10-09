@@ -10,6 +10,7 @@ import {
   type PositionValue,
 } from "../data";
 import * as Interval from "../../util/interval";
+import type { Cell } from "../cells";
 import type { PlacementFactEmitter } from "./placementFacts";
 import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
 
@@ -24,8 +25,49 @@ export type PositionInterval = [MaybeValue<number>, MaybeValue<number>];
  *  its point form. Point coordinates (`number` / `Value` / `DiscretePosition`)
  *  are never arrays, so this test is exact. */
 export const isPositionInterval = (
-  coord: PositionValue | PositionInterval | undefined
+  coord: PositionValue | PositionInterval | PositionRegion | undefined
 ): coord is PositionInterval => Array.isArray(coord);
+
+/**
+ * The **region** form of a position coordinate (#1059): the space a parent
+ * gives a child on this axis, a cell of the key the parent grouped by (a
+ * `partition`). The target is laid out in the cell's length and its center
+ * sits on the cell's center. So a mark with no size of its own on this axis
+ * (a rect, a `region`) fills the cell, and a mark with a size of its own (a
+ * circle, a text) sits in the middle of it, at its own size. An interval
+ * instead pins both edges, and so sets the target's size.
+ *
+ * `edges` are the cell's start and end as datums of the column it bins, so
+ * they carry the column's measure and type (a time column's calendar) as any
+ * datum read from it does. The cell tells an axis over such regions that it
+ * places cells (`CONTINUOUS_TYPE.cells`).
+ */
+export class PositionRegion {
+  constructor(
+    readonly cell: Cell,
+    readonly edges: PositionInterval
+  ) {}
+}
+
+export const isPositionRegion = (coord: unknown): coord is PositionRegion =>
+  coord instanceof PositionRegion;
+
+/** Any position coordinate: a point, an interval, or a region. */
+export type PositionCoordinate =
+  | PositionValue
+  | PositionInterval
+  | PositionRegion;
+
+/** The two edges a coordinate spans on its axis: an interval's own, or a
+ *  region's cell edges. A point spans none. */
+export const coordinateSpan = (
+  coord: PositionCoordinate | undefined
+): PositionInterval | undefined =>
+  isPositionInterval(coord)
+    ? coord
+    : isPositionRegion(coord)
+      ? coord.edges
+      : undefined;
 
 /**
  * Options for a `position` constraint. Mirrors how you position a shape (or use
@@ -35,14 +77,16 @@ export const isPositionInterval = (
  *     through the layer's position scale; OR
  *   - an **interval** `[min, max]`: two edges that pin the target and DETERMINE
  *     its size (the size-setting range form; each endpoint is a pixel literal
- *     or a datum, never a discrete position).
+ *     or a datum, never a discrete position); OR
+ *   - a **region** ({@link PositionRegion}): a cell the target is laid out in
+ *     and centered in.
  * The layer derives its POSITION domain from the datum coordinates of its
  * `position` constraints (point values plus interval endpoints). At least one
  * of `x`/`y` is required.
  */
 export interface PositionOptions {
-  x?: PositionValue | PositionInterval;
-  y?: PositionValue | PositionInterval;
+  x?: PositionCoordinate;
+  y?: PositionCoordinate;
   /** Which anchor of the target lands on the coordinate. Defaults to "middle"
    *  (the target's center sits on the value), matching how `scatter`/`position`
    *  place marks at their center. `"baseline"` pins the target's origin.
@@ -64,8 +108,8 @@ export interface PositionOptions {
 
 export interface PositionConstraint {
   type: "position";
-  x?: PositionValue | PositionInterval;
-  y?: PositionValue | PositionInterval;
+  x?: PositionCoordinate;
+  y?: PositionCoordinate;
   anchor: AlignAnchor;
   override: boolean;
   children: ConstraintRef[];
@@ -91,15 +135,17 @@ export const createPositionConstraint = (
       "Constraint.position: at least one of `x` or `y` must be specified"
     );
   }
-  if (isPositionInterval(x)) validateInterval("x", x);
-  if (isPositionInterval(y)) validateInterval("y", y);
+  const spanX = coordinateSpan(x);
+  const spanY = coordinateSpan(y);
+  if (spanX !== undefined) validateInterval("x", spanX);
+  if (spanY !== undefined) validateInterval("y", spanY);
   // `override` is a point-form no-op-escape: it repositions a self-placed
-  // target. An interval already sets the target's extent, so the combination is
-  // meaningless — reject it rather than silently ignore.
-  if ((override ?? false) && (isPositionInterval(x) || isPositionInterval(y))) {
+  // target. An interval or a region already places the target outright, so
+  // the combination is meaningless — reject it rather than silently ignore.
+  if ((override ?? false) && (spanX !== undefined || spanY !== undefined)) {
     throw new Error(
       "Constraint.position: `override` applies to point coordinates only, " +
-        "not interval `[min, max]` coordinates"
+        "not interval `[min, max]` or region coordinates"
     );
   }
   return {
@@ -143,11 +189,26 @@ export function lowerPositionPlacement(
     ) => number | undefined;
   }
 ): void {
-  const emit = (
-    axis: Axis,
-    coordinate: PositionValue | PositionInterval | undefined
-  ) => {
+  const emit = (axis: Axis, coordinate: PositionCoordinate | undefined) => {
     if (coordinate === undefined) return;
+    // Region form: the target's center on the cell's center. Its size is its
+    // own, from a layout in the cell's length (`buildSpanProposalMap`). Not
+    // gated by `isInitiallyPlaced`: a region places the target outright.
+    if (isPositionRegion(coordinate)) {
+      const min = resolveCoordinate(axis, coordinate.edges[0]);
+      const max = resolveCoordinate(axis, coordinate.edges[1]);
+      if (min === undefined || max === undefined) return;
+      for (const child of constraint.children) {
+        if (!targets.get(child.name)) continue;
+        emitter.pin({
+          axis,
+          target: { name: child.name, anchor: "middle" },
+          value: (min + max) / 2,
+          owner,
+        });
+      }
+      return;
+    }
     // Interval form: pin BOTH edges (start=min, end=max) as strong anchor pins.
     // Two edges are rank 2, so cell closure determines the size — the extent
     // that a size-setting range needs, which a single point pin cannot express.

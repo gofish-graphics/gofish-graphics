@@ -1249,22 +1249,27 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   partition: operator("partition", {
-    doc: "Divide the space along `dir` into the cells of a binned key. Each group is placed across its cell's interval on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size along `dir` fills its cell.",
+    doc: "Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.",
     fields: {
       by: {
-        type: t.ref("FieldAccessor"),
+        type: t.union(
+          t.ref("FieldAccessor"),
+          t.object({
+            x: { type: t.ref("FieldAccessor"), required: true },
+            y: { type: t.ref("FieldAccessor"), required: true },
+          })
+        ),
         required: true,
-        doc: "A key that has a region: a binned field, field(x).bin(p), whose cells divide the space. A plain field has no region and is an error.",
+        doc: "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y with alignment middle. A plain field has no region and is an error.",
       },
       dir: {
         type: t.string,
-        required: true,
-        doc: "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r).",
+        doc: "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.",
       },
       alignment: {
         type: t.string,
         default: "baseline",
-        doc: 'Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline").',
+        doc: 'Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Not allowed with a key per axis, where each child is centered in its cell.',
       },
       axes: { type: t.ref("AxesOptions") },
     },
@@ -1497,6 +1502,17 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       fill: ch.color(
         "Fill color. A blank never paints; `fill` only seeds the shared color scale."
       ),
+      debug: {
+        type: t.boolean,
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
+      },
+    },
+  }),
+
+  region: leafMark("region", {
+    doc: "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. Today every region is a box, so it draws a rectangle.",
+    include: [paint],
+    fields: {
       debug: {
         type: t.boolean,
         doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",

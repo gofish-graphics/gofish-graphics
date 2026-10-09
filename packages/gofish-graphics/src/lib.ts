@@ -175,7 +175,11 @@ export type { TreemapOptions } from "./ast/graphicalOperators/treemap";
 export { pack } from "./ast/graphicalOperators/pack";
 export type { PackOptions } from "./ast/graphicalOperators/pack";
 export { partition } from "./ast/graphicalOperators/partition";
-export type { PartitionOptions } from "./ast/graphicalOperators/partition";
+export type {
+  PartitionOptions,
+  PartitionAxisOptions,
+  PartitionProductOptions,
+} from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
 export {
   enclose,
@@ -195,6 +199,7 @@ export { petal } from "./ast/shapes/petal";
 export { polygon } from "./ast/shapes/polygon";
 export { text } from "./ast/shapes/text";
 export { image } from "./ast/shapes/image";
+export { region } from "./ast/shapes/region";
 
 /* Chart Syntax */
 export {

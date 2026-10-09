@@ -71,19 +71,19 @@ import {
   type StackOrigin,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
-import { isPositionInterval, type PositionConstraint } from "./position";
+import { coordinateSpan, type PositionConstraint } from "./position";
 import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
 
-/** A position constraint whose coordinates are *purely* interval form (at least
- *  one interval axis, no point axis). It size-sets its axis without blocking
- *  composition. A position carrying any *point*
+/** A position constraint whose coordinates all span (intervals or regions: at
+ *  least one such axis, no point axis). It places its axis across a span
+ *  without blocking composition. A position carrying any *point*
  *  coordinate is conservatively NOT span-like — it bails composition to the
  *  layer's default union (the distribute-relative-to-a-pin solve is deferred). */
 const isPureIntervalPosition = (c: ConstraintSpec): c is PositionConstraint =>
   c.type === "position" &&
-  (c.x === undefined || isPositionInterval(c.x)) &&
-  (c.y === undefined || isPositionInterval(c.y)) &&
-  (isPositionInterval(c.x) || isPositionInterval(c.y));
+  (c.x === undefined || coordinateSpan(c.x) !== undefined) &&
+  (c.y === undefined || coordinateSpan(c.y) !== undefined) &&
+  (c.x !== undefined || c.y !== undefined);
 
 /** One distribute's slice of the layout budget: equal shares of the axis size
  *  among its covered children (consumed by `layer.tsx`'s `layout`). */
@@ -133,7 +133,10 @@ export function datumPlacedChildren(
     const coords = [c.x, c.y] as const;
     for (const axis of [0, 1] as const) {
       const coord = coords[axis];
-      if (coord === undefined || !(isValue(coord) || isPositionInterval(coord)))
+      if (
+        coord === undefined ||
+        !(isValue(coord) || coordinateSpan(coord) !== undefined)
+      )
         continue;
       for (const ref of c.children) {
         const i = index.get(ref.name);

@@ -5,7 +5,7 @@
 import { type Size } from "../dims";
 import { getValue, getValueOffset, isValue } from "../data";
 import { pxOf } from "../domain";
-import { isPositionInterval, type PositionInterval } from "./position";
+import { coordinateSpan, type PositionInterval } from "./position";
 import { type AxisTicks, type UnderlyingSpace } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
@@ -147,16 +147,19 @@ function spanPixels(
   return Math.abs(b - a);
 }
 
-/** Build per-child size proposals from interval position constraints.
+/** Build per-child size proposals from interval and region position
+ * constraints.
  *
  * An interval coordinate `[min, max]` pins both edges of its target, so it
  * DETERMINES the target's extent on that axis (`lowerPositionPlacement`).
  * This is the top-down side of that pin: the target is laid out in the span
- * it will be pinned across, so its content fills the span (a `partition`'s
- * cell, a scatter's range), rather than being laid out in the whole layer
- * and then stretched or shrunk by the pins. `posScales` are the scales the
- * layer resolves its position constraints against. Keyed by child name, one
- * entry per axis (undefined where no interval constrains the child). */
+ * it will be pinned across, so its content fills the span (a scatter's
+ * range), rather than being laid out in the whole layer and then stretched
+ * or shrunk by the pins. A region coordinate (a `partition`'s cell) is the
+ * same proposal and nothing more: the target is laid out in the cell, and
+ * then centered in it at the size that layout gave it. `posScales` are the
+ * scales the layer resolves its position constraints against. Keyed by child
+ * name, one entry per axis (undefined where no span constrains the child). */
 export function buildSpanProposalMap(
   constraints: readonly ConstraintSpec[],
   posScales: ConstraintPosScales
@@ -165,9 +168,9 @@ export function buildSpanProposalMap(
   for (const constraint of constraints) {
     if (constraint.type !== "position") continue;
     ([0, 1] as const).forEach((axis) => {
-      const coord = axis === 0 ? constraint.x : constraint.y;
-      if (!isPositionInterval(coord)) return;
-      const length = spanPixels(coord, posScales[axis]);
+      const span = coordinateSpan(axis === 0 ? constraint.x : constraint.y);
+      if (span === undefined) return;
+      const length = spanPixels(span, posScales[axis]);
       if (length === undefined) return;
       for (const ref of constraint.children) {
         if (!ref) continue;

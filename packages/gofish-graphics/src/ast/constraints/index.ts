@@ -3,7 +3,6 @@ import { GoFishNode, type Placeable } from "../_node";
 import {
   getMeasure,
   getValue,
-  getValueCell,
   isValue,
   type MaybeValue,
   type Measure,
@@ -27,7 +26,11 @@ import {
   isZOrderConstraint,
 } from "./zorder";
 import { createNestConstraint } from "./nest";
-import { isPositionInterval, spanDatumInterval } from "./position";
+import {
+  coordinateSpan,
+  isPositionRegion,
+  spanDatumInterval,
+} from "./position";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
@@ -64,10 +67,15 @@ export type { AlignConstraint, AlignOptions } from "./align";
 export type { DistributeConstraint, DistributeOptions } from "./distribute";
 export type {
   PositionConstraint,
+  PositionCoordinate,
   PositionInterval,
   PositionOptions,
 } from "./position";
-export { isPositionInterval } from "./position";
+export {
+  isPositionInterval,
+  isPositionRegion,
+  PositionRegion,
+} from "./position";
 export type {
   ZAboveConstraint,
   ZBelowConstraint,
@@ -280,17 +288,16 @@ export function collectPositionDomains(
   // none.
   let xCalendar: HasCalendar | undefined;
   let yCalendar: HasCalendar | undefined;
+  // An interval or a region reads as its two edges; a point as itself.
   const coordCalendar = (
     coord: PositionConstraint["x"] | undefined
-  ): HasCalendar | undefined =>
-    coord === undefined
-      ? undefined
-      : isPositionInterval(coord)
-        ? mergeCalendars([
-            positionCalendar(coord[0]),
-            positionCalendar(coord[1]),
-          ])
-        : positionCalendar(coord);
+  ): HasCalendar | undefined => {
+    if (coord === undefined) return undefined;
+    const span = coordinateSpan(coord);
+    return span !== undefined
+      ? mergeCalendars([positionCalendar(span[0]), positionCalendar(span[1])])
+      : positionCalendar(coord);
+  };
   const pointInterval = (
     coord: PositionConstraint["x"]
   ): Interval.Interval | undefined => {
@@ -309,8 +316,9 @@ export function collectPositionDomains(
     axis: 0 | 1
   ): Measure | undefined => {
     if (coord === undefined) return undefined;
-    return isPositionInterval(coord)
-      ? mergeMeasures(getMeasure(coord[0]), getMeasure(coord[1]), {
+    const span = coordinateSpan(coord);
+    return span !== undefined
+      ? mergeMeasures(getMeasure(span[0]), getMeasure(span[1]), {
           axis,
           where: "at the two ends of a position range",
         })
@@ -318,23 +326,17 @@ export function collectPositionDomains(
   };
   const coordInterval = (
     coord: PositionConstraint["x"] | undefined
-  ): Interval.Interval | undefined =>
-    coord === undefined
-      ? undefined
-      : isPositionInterval(coord)
-        ? spanDatumInterval(coord)
-        : pointInterval(coord);
-  // The cell a coordinate places across: a range whose two ends are edges of
-  // one cell (`getValueCell`). A point, or any other range, places none.
+  ): Interval.Interval | undefined => {
+    if (coord === undefined) return undefined;
+    const span = coordinateSpan(coord);
+    return span !== undefined ? spanDatumInterval(span) : pointInterval(coord);
+  };
+  // The cell a coordinate places in: a region's. A point or an interval
+  // places none.
   const coordCell = (
     coord: NonNullable<PositionConstraint["x"]>
-  ): readonly Cell[] | undefined => {
-    if (!isPositionInterval(coord)) return undefined;
-    const cell = getValueCell(coord[0]);
-    return cell !== undefined && getValueCell(coord[1]) === cell
-      ? [cell]
-      : undefined;
-  };
+  ): readonly Cell[] | undefined =>
+    isPositionRegion(coord) ? [coord.cell] : undefined;
   const xCells: (readonly Cell[] | undefined)[] = [];
   const yCells: (readonly Cell[] | undefined)[] = [];
   for (const c of constraints) {

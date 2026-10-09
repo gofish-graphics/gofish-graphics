@@ -486,9 +486,10 @@ export interface PackOperator
 
 /**
  * `partition({ by, dir })` — divide the space along `dir` into the cells of
- * a binned key (`field(x).bin(p)`): each group is placed across its cell's
- * interval on one continuous scale. Operator-only: its children are the
- * groups of its key. Mirrors JS's `PartitionOptions`
+ * a binned key (`field(x).bin(p)`), and give each group its cell on one
+ * continuous scale. `partition({ by: { x, y } })` divides both axes: it is
+ * the partition on x, then the partition on y. Operator-only: its children
+ * are the groups of its key. Mirrors JS's `PartitionOptions`
  * (`graphicalOperators/partition.tsx`).
  */
 export interface PartitionOperator
@@ -498,10 +499,11 @@ export interface PartitionOperator
   type: "partition";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  /** A key that has a region: a binned field accessor. */
-  by: FieldAccessor;
-  /** The axis to divide. */
-  dir: string;
+  /** A key that has a region: a binned field accessor, or one per axis. */
+  by: FieldAccessor | { x: FieldAccessor; y: FieldAccessor };
+  /** The axis to divide. Required with a single key; not allowed with a
+   *  key per axis. */
+  dir?: string;
   /** Alignment on the other axis. Default `"baseline"`. */
   alignment?: string;
   axes?: AxesOptions;
@@ -580,6 +582,7 @@ export type LeafMarkType =
   | "line"
   | "ribbon"
   | "blank"
+  | "region"
   | "ellipse"
   | "petal"
   | "text"
@@ -974,6 +977,7 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
   "line",
   "ribbon",
   "blank",
+  "region",
   "ellipse",
   "petal",
   "text",

@@ -20,7 +20,7 @@ import type { NestConstraint } from "./nest";
 import { lowerNestPlacement } from "./nest";
 import { PlacementProgramLowerer } from "./placementProgramLowerer";
 import type { PositionConstraint } from "./position";
-import { isPositionInterval, lowerPositionPlacement } from "./position";
+import { coordinateSpan, lowerPositionPlacement } from "./position";
 import {
   axisIndex,
   axisName,
@@ -135,16 +135,17 @@ class PlacementOwnershipPlan {
       const coordinate = constraint[axis];
       if (coordinate === undefined) continue;
       const idx = axisIndex(axis);
-      // An interval pins BOTH edges — mark its children pinned when the edges
-      // resolve (an align sources such a spanned target). A point pins one
-      // anchor.
-      if (isPositionInterval(coordinate)) {
-        const min = compilePlacementCoordinate(coordinate[0], posScales?.[idx]);
-        const max = compilePlacementCoordinate(coordinate[1], posScales?.[idx]);
+      // An interval pins BOTH edges, and a region the center between its
+      // edges — mark its children pinned when the edges resolve (an align
+      // sources such a target). A point pins one anchor.
+      const span = coordinateSpan(coordinate);
+      if (span !== undefined) {
+        const min = compilePlacementCoordinate(span[0], posScales?.[idx]);
+        const max = compilePlacementCoordinate(span[1], posScales?.[idx]);
         if (min === undefined || max === undefined) continue;
       } else {
         const value = compilePlacementCoordinate(
-          coordinate,
+          coordinate as PositionValue,
           posScales?.[idx],
           this.sizes[idx]
         );

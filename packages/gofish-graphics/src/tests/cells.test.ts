@@ -4,7 +4,8 @@
  * bins over (every group sees the chart's cells, empty ones included, #763),
  * the wire form, and the axis over cells (labels between boundary ticks, and
  * a year row over calendar months), and the `partition` operator, which
- * places each group across its cell on a continuous scale.
+ * gives each group its cell on a continuous scale: its 1D form, its product
+ * form (#1059), and the region each child gets.
  *
  * Run: `pnpm build && tsx src/tests/cells.test.ts` (wired as `pnpm
  * test:cells`). The rendering checks import from `dist`, like time.test.ts.
@@ -24,7 +25,8 @@ import {
   Schema as SrcSchema,
 } from "../ast/schema";
 
-const { chart, spread, stack, partition, rect, Schema } = GoFish as any;
+const { chart, spread, stack, partition, rect, region, text, circle, Schema } =
+  GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 const distField = (GoFish as any).field;
 
@@ -457,6 +459,140 @@ async function main() {
       `${xy.join(" ")}\n      vs ${yx.join(" ")}`
     );
 
+    // The product form (#1059) is the nested form: x, then y centering its
+    // children on x. Same cells, same marks, whatever the mark.
+    const itemsOf = (dl: any): any[] => {
+      const out: any[] = [];
+      const walk = (it: any) => {
+        if (it.kind !== "group")
+          out.push(
+            Object.fromEntries(
+              Object.entries(it).filter(
+                ([k, v]) =>
+                  k !== "id" &&
+                  (typeof v === "number" || typeof v === "string")
+              )
+            )
+          );
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return out;
+    };
+    const ab = {
+      x: distField("a").bin({ step: 1 }),
+      y: distField("b").bin({ step: 1 }),
+    };
+    const product = async (mark: any) =>
+      itemsOf(
+        await chart(pts, noAxes)
+          .flow(partition({ by: ab }))
+          .mark(mark)
+          .toDisplayList({ w: 300, h: 300 })
+      );
+    const nested = async (mark: any) =>
+      itemsOf(
+        await chart(pts, noAxes)
+          .flow(
+            partition({ by: ab.x, dir: "x" }),
+            partition({ by: ab.y, dir: "y", alignment: "middle" })
+          )
+          .mark(mark)
+          .toDisplayList({ w: 300, h: 300 })
+      );
+    for (const [name, mark] of [
+      ["region", () => region({ fill: "steelblue" })],
+      ["circle", () => circle({ r: 5 })],
+      ["text", () => text({ text: distField("a").count() })],
+    ] as const) {
+      const p = await product(mark());
+      const n = await nested(mark());
+      check(
+        `the product form draws what the nested form draws (${name})`,
+        p.length === 9 && same(p, n),
+        `${JSON.stringify(p)}\n      vs ${JSON.stringify(n)}`
+      );
+    }
+
+    // Each child gets its cell: a region fills it, and a mark with a size of
+    // its own sits at its center at that size. The cells are 100px squares.
+    const cellRegions = rectsOf(
+      await chart(pts, noAxes)
+        .flow(partition({ by: ab }))
+        .mark(region({ fill: "steelblue" }))
+        .toDisplayList({ w: 300, h: 300 })
+    );
+    const x0 = Math.min(...cellRegions.map((r) => r.x));
+    const y0 = Math.min(...cellRegions.map((r) => r.y));
+    check(
+      "a region fills its cell",
+      cellRegions.length === 9 &&
+        cellRegions.every(
+          (r) =>
+            Math.abs(r.w - 100) < 1e-6 &&
+            Math.abs(r.h - 100) < 1e-6 &&
+            Math.abs((r.x - x0) % 100) < 1e-6 &&
+            Math.abs((r.y - y0) % 100) < 1e-6
+        ),
+      JSON.stringify(cellRegions)
+    );
+    const circles = (await product(circle({ r: 5 }))).filter(
+      (c) => c.kind === "ellipse"
+    );
+    check(
+      "a circle keeps its size and sits at its cell's center",
+      circles.length === 9 &&
+        circles.every(
+          (c) =>
+            c.rx === 5 &&
+            c.ry === 5 &&
+            Math.abs((c.cx - x0 - 50) % 100) < 1e-6 &&
+            Math.abs((c.cy - y0 - 50) % 100) < 1e-6
+        ),
+      JSON.stringify(circles)
+    );
+    const fixed1D = rectsOf(
+      await chart(pts, noAxes)
+        .flow(partition({ by: ab.x, dir: "x" }))
+        .mark(rect({ w: 10, h: 10 }))
+        .toDisplayList({ w: 300, h: 300 })
+    );
+    check(
+      "in 1D, a mark with a width of its own is centered in its cell",
+      fixed1D.length === 3 &&
+        fixed1D.every(
+          (r, i) =>
+            r.w === 10 && Math.abs(r.x - fixed1D[0].x - 100 * i) < 1e-6
+        ) &&
+        Math.abs(fixed1D[1].x + 5 - (x0 + 150)) < 1e-6,
+      JSON.stringify(fixed1D)
+    );
+
+    // Empty cells are groups with no rows, as in 1D: each is still given its
+    // cell, and a count over it is 0.
+    const counts = (await product(text({ text: distField("a").count() })))
+      .map((t) => t.text)
+      .sort();
+    check(
+      "an empty cell keeps its place, and a count over it is 0",
+      same(counts, ["0", "0", "0", "0", "0", "1", "1", "1", "1"]),
+      JSON.stringify(counts)
+    );
+
+    const productErr = (opts: any) =>
+      errorOf(() => partition(opts)) ?? "no error";
+    check(
+      "a product key takes exactly x and y, and no dir",
+      productErr({ by: { x: ab.x } }).includes("exactly the keys x and y") &&
+        productErr({ by: ab, dir: "x" }).includes("divides both axes") &&
+        productErr({ by: ab.x }).includes("`dir` names the axis"),
+      [
+        productErr({ by: { x: ab.x } }),
+        productErr({ by: ab, dir: "x" }),
+        productErr({ by: ab.x }),
+      ].join(" | ")
+    );
+
     const noRegion = await chart(rows)
       .flow(partition({ by: { type: "field", name: "rating" }, dir: "x" }))
       .mark(rect({}))
@@ -487,6 +623,13 @@ export function partitionKeyTypes(): void {
   srcPartition({ by: field("rating").bin({ step: 1 }).count(), dir: "x" });
   srcPartition({ by: field("rating").bin({ step: 1 }), dir: "x" });
   srcPartition({ by: field("rating").bin({ step: 1 }).reverse(), dir: "x" });
+  srcPartition({
+    by: { x: field("a").bin({ step: 1 }), y: field("b").bin({ step: 1 }) },
+  });
+  // @ts-expect-error each axis's key needs a region too
+  srcPartition({ by: { x: field("a"), y: field("b").bin({ step: 1 }) } });
+  // @ts-expect-error a product divides both axes, so it takes no dir
+  srcPartition({ by: { x: field("a").bin(), y: field("b").bin() }, dir: "x" });
 }
 
 main().catch((e) => {

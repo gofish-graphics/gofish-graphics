@@ -504,6 +504,37 @@ for (const [name, partition] of [
   check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
 }
 
+// partition's `by`: one binned key with a `dir`, or one per axis (#1059).
+const binned = (name: string) => ({
+  type: "field",
+  name,
+  ops: [{ op: "bin", partition: { step: 1 } }],
+});
+for (const [name, op] of [
+  ["one key and a dir", { type: "partition", by: binned("a"), dir: "x" }],
+  [
+    "a key per axis",
+    { type: "partition", by: { x: binned("a"), y: binned("b") } },
+  ],
+] as const) {
+  const r = validate(chart([op]));
+  check(
+    `partition with ${name} accepts`,
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+}
+for (const [name, by] of [
+  ["a key for x only", { x: binned("a") }],
+  ["an unknown axis key", { x: binned("a"), y: binned("b"), z: binned("c") }],
+  ["a string per axis", { x: "a", y: "b" }],
+] as const) {
+  check(
+    `partition with ${name} rejected`,
+    !validate(chart([{ type: "partition", by }])).valid
+  );
+}
+
 check(
   "filter without a predicate rejected",
   !validate(chart([{ type: "filter" }])).valid

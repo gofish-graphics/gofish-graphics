@@ -46,6 +46,7 @@ import { petal } from "../ast/shapes/petal";
 import { polygon } from "../ast/shapes/polygon";
 import { text } from "../ast/shapes/text";
 import { image } from "../ast/shapes/image";
+import { region } from "../ast/shapes/region";
 import { spread, stack } from "../ast/graphicalOperators/spread";
 import { scatter } from "../ast/graphicalOperators/scatter";
 import { group } from "../ast/graphicalOperators/group";
@@ -141,6 +142,7 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   image,
   polygon,
   blank,
+  region,
   // Relational marks: a leaf in a chart's `.mark(...)`, a combinator over
   // explicit children.
   line,
