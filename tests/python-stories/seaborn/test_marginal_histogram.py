@@ -42,7 +42,7 @@ def story_default():
         .name("scatter")
     )
 
-    # bin()'s measure provenance now rides the derive operator's IR across the
+    # bin()'s column units ride the derive operator's IR `schema` across the
     # RPC bridge (#537), so the bin edges auto-tag with the source field's
     # measure — no explicit field(name, measure=...) needed. The bare "start"/
     # "end" channels unify on the source axis just like the JS story.
