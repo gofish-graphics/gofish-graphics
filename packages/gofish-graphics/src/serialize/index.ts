@@ -51,3 +51,5 @@ export {
 export { toJSON, toJSONLayer, toJSONRawMark } from "./toJSON";
 
 export { withWire, wireOf } from "../ast/wire";
+
+export { RESOLVE_ROWS } from "../ast/channels";
