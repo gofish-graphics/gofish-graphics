@@ -21,6 +21,9 @@ constraints (`align`, `distribute`, `position`), exactly the way the hand-drawn
 axes in `stories/lowlevel/Axes.stories.tsx` are written by hand. The layout
 engine has no axis-specific code at all.
 
+For the design ideas behind axes (an axis shows a datatype, chrome and size,
+and where domains are decided), see [How Axes Work](/internals/design/how-axes-work).
+
 ## The elaboration pass
 
 `elaborateChrome` (`src/ast/axes/elaborate.tsx`) runs inside `gofish.tsx`'s
