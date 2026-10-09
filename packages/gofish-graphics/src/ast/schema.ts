@@ -3,8 +3,8 @@
 // </gofish-wiki>
 
 import type { StackOrigin } from "./constraints/distribute";
-import { copyMeasureProvenance } from "./data";
 import { loadTemporal, temporal } from "./calendar";
+import type { Measure } from "./data";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -25,17 +25,19 @@ import { loadTemporal, temporal } from "./calendar";
  *    JS `Date` values. The values become epoch milliseconds (UTC) when the
  *    schema is applied, and an axis over them is a time axis whose ticks are
  *    calendar cells (calendar.ts). A time has no zero.
+ *  - {@link HasUnit}: the column's values are amounts in the unit `unit`, the
+ *    measure a channel over the column resolves to (`resolveMeasure` in
+ *    channels.ts). A transform writes it for the columns it makes: `bin()`
+ *    says its `start`/`end`/`size` are in the source field's unit and its
+ *    `count` is a count.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
  * `ColumnSchema#toJSON` writes it, and `chart` accepts it as is (that is what
  * arrives from Python).
  *
- * The types ride the chart's data ARRAY under {@link COLUMN_TYPES}, the way a
- * transform's measure provenance does (`MEASURE_PROVENANCE` in data.ts), so an
+ * The types ride the chart's data ARRAY under {@link COLUMN_TYPES}, so an
  * operator reads a column's type off the data it splits.
- * TODO(#994): measure provenance is the unit part of this record; merge the
- * two symbols.
  */
 
 /** One level of an ordered column. */
@@ -60,11 +62,17 @@ export type HasMidpoint = { at: number };
  *  starts at local midnight) and how labels read. An instant has no zero. */
 export type HasCalendar = { zone: string };
 
+/** The class of a column whose values are amounts in the unit `unit` (a
+ *  {@link Measure}), e.g. `bin()`'s `start` in its source field's unit. Two
+ *  channels share an axis only when their units agree. */
+export type HasUnit = { unit: Measure };
+
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
   HasOrder?: HasOrder;
   HasMidpoint?: HasMidpoint;
   HasCalendar?: HasCalendar;
+  HasUnit?: HasUnit;
 };
 
 /** Whether `v` is a time column's value as the engine reads it: epoch
@@ -82,12 +90,14 @@ const isEpochMs = (v: unknown): boolean =>
  *  - `HasOrder`: text or numbers, the kinds its levels are. A value outside
  *    the levels still fits, so the order stays and its stray-level error
  *    fires where the order is used.
- *  - `HasMidpoint`: anything; its values are its order's. */
+ *  - `HasMidpoint`: anything; its values are its order's.
+ *  - `HasUnit`: numbers, the amounts the unit measures. */
 const ACCEPTS: { [K in keyof ColumnType]-?: (v: unknown) => boolean } = {
   HasCalendar: (v) =>
     isEpochMs(v) || (v instanceof Date && Number.isFinite(v.getTime())),
   HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
   HasMidpoint: () => true,
+  HasUnit: (v) => v == null || typeof v === "number",
 };
 
 const CLASSES = Object.keys(ACCEPTS) as (keyof ColumnType)[];
@@ -191,8 +201,8 @@ function checkMidpointOnOrder(levels: readonly Level[], at: unknown): void {
 
 /**
  * Well-known symbol under which a data ARRAY carries its column types. It
- * rides the array, not each row, and is non-enumerable, like
- * `MEASURE_PROVENANCE`.
+ * rides the array, not each row, and is non-enumerable, so it never leaks
+ * into a `{...d}` spread.
  */
 export const COLUMN_TYPES: unique symbol = Symbol.for("gofish.columnTypes");
 
@@ -221,8 +231,10 @@ export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
 };
 
 /** Copy `source`'s column types onto `target` (both arrays), for every
- *  column `target` does not type itself. A split leaf or a derive's result is
- *  a fresh array, so it has to be told. */
+ *  column `target` does not type itself. A split leaf or a filter's result is
+ *  a fresh array, so it has to be told. Without it, a mark channel over a
+ *  split leaf would lose its column's order, time, and unit (a bin's `start`
+ *  would fall back to the measure "start", see `resolveMeasure`). */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
   const types = getColumnTypes(source);
   if (types === undefined) return target;
@@ -251,9 +263,8 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
 }
 
 /**
- * Type `rows` with `schema`: a copy of the array carrying the column types
- * and the measure provenance it carries. The types are, each winning over the
- * one before:
+ * Type `rows` with `schema`: a copy of the array carrying the column types.
+ * The types are, each winning over the one before:
  *
  *  1. `inherited` (an operator's input's, for its result), each kept only
  *     when every value of its column fits it as it stands
@@ -355,7 +366,7 @@ export async function applySchema<T>(
       return copy as T;
     });
   }
-  return setColumnTypes(copyMeasureProvenance(out, rows), types);
+  return setColumnTypes(out, types);
 }
 
 /** The zones {@link checkZone} has found valid. */

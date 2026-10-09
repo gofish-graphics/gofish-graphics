@@ -53,7 +53,7 @@ import type {
   ChannelSpec as MarkChannelSpec,
   ChannelType as MarkChannelType,
 } from "../channels";
-import { discretePosition, copyMeasureProvenance } from "../data";
+import { discretePosition } from "../data";
 import { copyColumnTypes } from "../schema";
 import { fieldNameOf } from "../data";
 import type { MaybeValue, Value } from "../data";
@@ -1126,18 +1126,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const splitLayoutOpts =
           splitResult instanceof Map ? undefined : splitResult.layoutOpts;
         // Split leaves are fresh sub-arrays (groupBy/filter/slice) that don't
-        // inherit `d`'s measure-provenance symbol. Re-tag each array leaf so a
+        // inherit `d`'s column types (schema.ts). Re-tag each array leaf so a
         // MARK channel applied per leaf (createMark → inferSize/inferPos with no
-        // precomputed measure) reads the source measure off its own data — e.g.
+        // precomputed measure) reads the column's unit off its own data — e.g.
         // a bin's `start`/`end`/`size` resolve to the source field's units, not
-        // the literal field name, matching the operator-channel path (#534).
-        // The column types (schema.ts) ride along the same way, so a nested
-        // split or a mark's color channel still sees an ordered column.
+        // the literal field name, matching the operator-channel path (#534) —
+        // and a nested split or a mark's color channel still sees an ordered
+        // column.
         for (const leaf of entries.values()) {
-          if (Array.isArray(leaf)) {
-            copyMeasureProvenance(leaf, d);
-            copyColumnTypes(leaf, d);
-          }
+          if (Array.isArray(leaf)) copyColumnTypes(leaf, d);
         }
         // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
         // can return arrays that we flatten across leaves. A per-item mark is
