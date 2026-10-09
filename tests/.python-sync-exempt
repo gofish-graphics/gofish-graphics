@@ -67,6 +67,10 @@ packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx::Sp
 # with fresh text — the refs can't cross the Python derive RPC, so it can't be
 # expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
 packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
+# FlowerChart puts a nested chart (the polar flower) in a `layer([...])` child
+# list in mark position. Python cannot serialize a chart as a combinator child
+# yet (#1112). The old low-level port was removed with the fluent rewrite.
+packages/gofish-graphics/stories/forwardsyntax/FlowerChart.stories.tsx
 
 
 # Forward syntax stories needing coord transforms other than clock

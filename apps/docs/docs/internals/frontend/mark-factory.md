@@ -494,6 +494,17 @@ a literal color; `resolveGroupFill` in chart.ts resolves it per group via
 `Connect`, reading a representative row off the group's ref bag (so the
 resolved paint carries its field the same way).
 
+The types follow the same split. A relational factory returns a
+`RelationalMark` (chart.ts): a `NameableMark` with a type-only brand that
+`.name()`/`.label()`/`.zOrder()`/`.transition()` keep, since they carry the
+tag, and `.translate()` drops, since it does not. `ChartBuilder.mark()` is
+overloaded on it. A `RelationalMark` gets `ChartBuilder | LayerBuilder`,
+because whether it fuses also depends on the chart's data, which the types do
+not track. Every other mark gets a plain `ChartBuilder`, so
+`chart(...).mark(petal(...)).name("flower")` typechecks. The pairwise form
+carries the brand too, so its type is the wider union even though it never
+fuses.
+
 ### Default grouping: a fused connector's split, and `along`
 
 A fused relational mark doesn't fall back to one connector through the whole
