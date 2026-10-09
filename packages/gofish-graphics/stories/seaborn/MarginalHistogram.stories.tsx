@@ -3,9 +3,9 @@ import { initializeContainer } from "../helper";
 import {
   chart,
   scatter,
+  partition,
   circle,
   rect,
-  derive,
   field,
   layer,
   Constraint,
@@ -30,23 +30,6 @@ const meta: Meta = {
 export default meta;
 
 type Args = { w: number; h: number };
-
-// The bins of `column`, `step` wide, as rows: each bin's edges and the number
-// of rows in it.
-// TODO(#1058): use `partition` with `field(column).bin({ step })` once it
-// lands. The marginal bars must sit on the scatter's continuous scale, and
-// `field(x).bin(p)` alone gives equal slots on an ordinal axis.
-const histogram =
-  (column: string, step: number) => (rows: Record<string, any>[]) => {
-    const counts = new Map<number, number>();
-    for (const r of rows) {
-      const start = Math.floor(r[column] / step) * step;
-      counts.set(start, (counts.get(start) ?? 0) + 1);
-    }
-    return [...counts]
-      .sort(([a], [b]) => a - b)
-      .map(([start, count]) => ({ start, end: start + step, count }));
-  };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
@@ -80,25 +63,23 @@ export const Default: StoryObj<Args> = {
 
       const topHist = await chart(data, { h: 80 })
         .flow(
-          derive(histogram("Beak Length (mm)", 2)),
-          scatter({
-            xMin: field("start", "Beak Length (mm)"),
-            xMax: field("end", "Beak Length (mm)"),
-          } as any)
+          partition({
+            by: field("Beak Length (mm)").bin({ step: 2 }),
+            dir: "x",
+          })
         )
-        .mark(rect({ h: "count", fill: "steelblue" } as any))
+        .mark(rect({ h: field("Beak Length (mm)").count(), fill: "steelblue" }))
         .resolve();
       topHist.name("topHist");
 
       const rightHist = await chart(data, { w: 80 })
         .flow(
-          derive(histogram("Beak Depth (mm)", 1)),
-          scatter({
-            yMin: field("start", "Beak Depth (mm)"),
-            yMax: field("end", "Beak Depth (mm)"),
-          } as any)
+          partition({
+            by: field("Beak Depth (mm)").bin({ step: 1 }),
+            dir: "y",
+          })
         )
-        .mark(rect({ w: "count", fill: "steelblue" } as any))
+        .mark(rect({ w: field("Beak Depth (mm)").count(), fill: "steelblue" }))
         .resolve();
       rightHist.name("rightHist");
 

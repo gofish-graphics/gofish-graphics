@@ -6,41 +6,17 @@ https://seaborn.pydata.org/generated/seaborn.jointplot.html
 (Our penguins export renames the fields to "Beak ..." rather than "bill ...".)
 """
 
-import math
-
 from gofish import (
     Constraint,
     layer,
     chart,
     circle,
-    derive,
     field,
+    partition,
     rect,
     scatter,
 )
 from python_stories.data import PENGUINS
-
-
-def _histogram(column, step):
-    """The bins of `column`, `step` wide, as rows: each bin's edges and the
-    number of rows in it.
-
-    TODO(#1058): use `partition` with `field(column).bin(step=...)` once it
-    lands. The marginal bars must sit on the scatter's continuous scale, and
-    `field(x).bin(...)` alone gives equal slots on an ordinal axis.
-    """
-
-    def bins(rows):
-        counts = {}
-        for r in rows:
-            start = math.floor(r[column] / step) * step
-            counts[start] = counts.get(start, 0) + 1
-        return [
-            {"start": start, "end": start + step, "count": count}
-            for start, count in sorted(counts.items())
-        ]
-
-    return bins
 
 
 def story_default():
@@ -68,27 +44,15 @@ def story_default():
 
     top_hist = (
         chart(data, h=80)
-        .flow(
-            derive(_histogram("Beak Length (mm)", 2)),
-            scatter(
-                x_min=field("start", measure="Beak Length (mm)"),
-                x_max=field("end", measure="Beak Length (mm)"),
-            ),
-        )
-        .mark(rect(h="count", fill="steelblue"))
+        .flow(partition(by=field("Beak Length (mm)").bin(step=2), dir="x"))
+        .mark(rect(h=field("Beak Length (mm)").count(), fill="steelblue"))
         .name("topHist")
     )
 
     right_hist = (
         chart(data, w=80)
-        .flow(
-            derive(_histogram("Beak Depth (mm)", 1)),
-            scatter(
-                y_min=field("start", measure="Beak Depth (mm)"),
-                y_max=field("end", measure="Beak Depth (mm)"),
-            ),
-        )
-        .mark(rect(w="count", fill="steelblue"))
+        .flow(partition(by=field("Beak Depth (mm)").bin(step=1), dir="y"))
+        .mark(rect(w=field("Beak Depth (mm)").count(), fill="steelblue"))
         .name("rightHist")
     )
 

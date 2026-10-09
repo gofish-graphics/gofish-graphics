@@ -209,6 +209,9 @@ over cells labels each cell (its edges, `"0.5–1"`, or the calendar label
 `"Jan"`) between two ticks at the edges of the cell's bar, and calendar cells
 get a second row of their parent level, e.g. years under months.
 
+`spread` gives each cell an equal slot. To place each cell at its true width
+on a continuous axis, use [`partition`](/python/api/operators/partition) with the same key.
+
 **Drop rows with a missing/null grouping field**, before grouping:
 
 ```python

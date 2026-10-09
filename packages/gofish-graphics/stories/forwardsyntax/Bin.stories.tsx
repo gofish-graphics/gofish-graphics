@@ -6,6 +6,7 @@ import {
   field,
   spread,
   stack,
+  partition,
   Schema,
   Calendar,
 } from "../../src/lib";
@@ -119,6 +120,92 @@ export const StackedMonthlyBars: StoryObj<Args> = {
       .flow(
         spread({ by: field("date").bin(Calendar.month), dir: "x" }),
         stack({ by: "region", dir: "y" })
+      )
+      .mark(rect({ h: field("value").sum(), fill: "region" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const RatingHistogramContinuous: StoryObj<Args> = {
+  args: { w: 560, h: 200 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Rating Histogram on a Continuous Axis",
+      description:
+        "A histogram of movie ratings in half-point bins placed on a continuous rating axis, where the empty bin from 2 to 2.5 keeps its gap.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(movies, { axes: true })
+      .flow(partition({ by: field("rating").bin({ step: 0.5 }), dir: "x" }))
+      .mark(rect({ h: field("rating").count(), fill: "steelblue", inset: 0.5 }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const MonthBarsTrueWidths: StoryObj<Args> = {
+  args: { w: 560, h: 200 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Monthly Sales on a Time Axis",
+      description:
+        "Daily sales binned into calendar months, each bar as wide as its month, so February is narrower than March.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(allDaily, { schema: { date: Schema.time() }, axes: true })
+      .flow(partition({ by: field("date").bin(Calendar.month), dir: "x" }))
+      .mark(rect({ h: field("value").sum(), fill: "steelblue", inset: 1 }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const StackedMonthBarsTrueWidths: StoryObj<Args> = {
+  args: { w: 560, h: 200 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Stacked Monthly Sales on a Time Axis",
+      description:
+        "Monthly sales stacked by region, each stack as wide as its month, with the closed month of April kept as a gap.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(daily, { schema: { date: Schema.time() }, axes: true })
+      .flow(
+        partition({ by: field("date").bin(Calendar.month), dir: "x" }),
+        stack({ by: "region", dir: "y" })
+      )
+      .mark(rect({ h: field("value").sum(), fill: "region", inset: 1 }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const GroupedMonthBarsTrueWidths: StoryObj<Args> = {
+  args: { w: 560, h: 200 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Grouped Monthly Sales on a Time Axis",
+      description:
+        "Monthly sales by region, grouped side by side inside each month, so February's group is narrower than March's.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(allDaily, { schema: { date: Schema.time() }, axes: true })
+      .flow(
+        partition({ by: field("date").bin(Calendar.month), dir: "x" }),
+        spread({ by: "region", dir: "x" })
       )
       .mark(rect({ h: field("value").sum(), fill: "region" }))
       .render(container, { w: args.w, h: args.h });

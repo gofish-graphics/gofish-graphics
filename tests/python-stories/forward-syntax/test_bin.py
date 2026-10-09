@@ -3,7 +3,7 @@
 import math
 from datetime import datetime, timedelta, timezone
 
-from gofish import chart, rect, field, spread, stack, Schema, Calendar
+from gofish import chart, rect, field, spread, stack, partition, Schema, Calendar
 
 # Seventy-two movie ratings from 1 to 9.5, none from 2 to 2.5: a hump around
 # 6.5 with a thin low tail.
@@ -73,6 +73,48 @@ def story_stacked_monthly_bars():
         .flow(
             spread(by=field("date").bin(Calendar.month), dir="x"),
             stack(by="region", dir="y"),
+        )
+        .mark(rect(h=field("value").sum(), fill="region")),
+        {"w": 560, "h": 200},
+    )
+
+
+def story_rating_histogram_continuous():
+    return (
+        chart(MOVIES, axes=True)
+        .flow(partition(by=field("rating").bin(step=0.5), dir="x"))
+        .mark(rect(h=field("rating").count(), fill="steelblue", inset=0.5)),
+        {"w": 560, "h": 200},
+    )
+
+
+def story_month_bars_true_widths():
+    return (
+        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
+        .flow(partition(by=field("date").bin(Calendar.month), dir="x"))
+        .mark(rect(h=field("value").sum(), fill="steelblue", inset=1)),
+        {"w": 560, "h": 200},
+    )
+
+
+def story_stacked_month_bars_true_widths():
+    return (
+        chart(DAILY, schema={"date": Schema.time()}, axes=True)
+        .flow(
+            partition(by=field("date").bin(Calendar.month), dir="x"),
+            stack(by="region", dir="y"),
+        )
+        .mark(rect(h=field("value").sum(), fill="region", inset=1)),
+        {"w": 560, "h": 200},
+    )
+
+
+def story_grouped_month_bars_true_widths():
+    return (
+        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
+        .flow(
+            partition(by=field("date").bin(Calendar.month), dir="x"),
+            spread(by="region", dir="x"),
         )
         .mark(rect(h=field("value").sum(), fill="region")),
         {"w": 560, "h": 200},
