@@ -50,6 +50,39 @@ interface SerializeTag {
   translate?: { x?: number; y?: number };
 }
 
+/**
+ * A construct's options as the wire carries them: only the keys gofish-ir's
+ * `acceptedFields` lists for its kind and type (its descriptor's fields plus
+ * the base fields that sit beside them). Factories tag their options as the
+ * caller passed them; this is the one place that decides what of them
+ * reaches the IR, so an unknown key never leaks onto the wire.
+ *
+ * A function value is dropped too, whatever the key: a callback or `live(...)`
+ * channel is a JS closure with no JSON form (the same reason a JS `derive(fn)`
+ * emits an opaque `{type: "derive"}`). A type the descriptor table does not
+ * declare has no wire form at all, so it throws.
+ */
+function wireOpts(
+  kind: Frontend.NodeKind,
+  type: string,
+  opts: AnyObject
+): AnyObject {
+  const accepted = Frontend.acceptedFields(kind, type);
+  if (accepted === undefined) {
+    throw new Error(
+      `toJSON: "${type}" has no ${kind} descriptor in gofish-ir's descriptor ` +
+        "table, so it has no IR form."
+    );
+  }
+  const out: AnyObject = {};
+  for (const [key, value] of Object.entries(opts)) {
+    if (Object.hasOwn(accepted, key) && typeof value !== "function") {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 function readTag(value: unknown): SerializeTag | undefined {
   const tag = (value as any)?.__serialize;
   if (!tag || typeof tag.type !== "string") return undefined;
@@ -229,7 +262,7 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   // `translateOperator`.
   return {
     type: tag.type,
-    ...tag.opts,
+    ...wireOpts("operator", tag.type, tag.opts),
     ...(tag.label !== undefined ? { label: tag.label } : {}),
     ...(tag.translate !== undefined ? { translate: tag.translate } : {}),
   } as Frontend.OperatorIR;
@@ -255,15 +288,20 @@ async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
     const childrenResolved = tag.children
       ? await Promise.resolve(tag.children)
       : [];
+    const options = wireOpts("combinator-mark", tag.type, tag.opts);
     const ir: Frontend.CombinatorMarkIR = {
       type: tag.type as Frontend.CombinatorMarkType,
       __combinator: true,
-      ...(Object.keys(tag.opts).length > 0 ? { options: tag.opts } : {}),
+      ...(Object.keys(options).length > 0 ? { options } : {}),
       children: await Promise.all(childrenResolved.map((c) => markToIR(c))),
       ...chained,
     };
     return ir;
   }
   // Leaf mark — spread opts plus any chained name/label at the top level.
-  return { type: tag.type, ...tag.opts, ...chained } as Frontend.LeafMarkIR;
+  return {
+    type: tag.type,
+    ...wireOpts("leaf-mark", tag.type, tag.opts),
+    ...chained,
+  } as Frontend.LeafMarkIR;
 }

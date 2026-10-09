@@ -5,7 +5,7 @@
 # its Pages Function (tests/scripts/cf-functions/api/commit.ts), which sends a
 # `visual-baselines-accept` repository_dispatch. The `accept` job runs
 # tests/scripts/accept-baselines.ts: it copies the accepted stories from the
-# run's `js-dom-capture` artifact onto `snapshots/<branch>` (a new branch
+# run's `js-dom-capture-<i>` artifacts onto `snapshots/<branch>` (a new branch
 # inherits snapshots/main) and pushes one commit. Once the request checks
 # out, it keeps the PR's `Visual Diff Review` status up to date: pending,
 # then success or failure. A request that fails the check touches no status.
@@ -63,7 +63,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
 
       # Only the tests package (tsx and the scripts' imports), not the whole

@@ -1,0 +1,46 @@
+name: Set up Playwright
+description: >-
+  Install Playwright's Chromium and its system libraries, with the browser
+  binaries cached by Playwright version. Run it after checkout and
+  `pnpm install`: it reads the version from the @gofish/tests install and
+  installs with that package's Playwright.
+
+runs:
+  using: composite
+  steps:
+    # The browser binaries depend only on the Playwright version, so key the
+    # cache on that. Keyed on pnpm-lock.yaml it missed on every lockfile
+    # change, which is most dependency PRs.
+    - name: Read the Playwright version
+      id: version
+      shell: bash
+      run: echo "version=$(node -p "require('./tests/node_modules/playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+    - name: Restore Playwright browser cache
+      id: cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.version.outputs.version }}
+
+    - name: Install Playwright browsers
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
+
+    # Save the cache right after a successful install rather than at the end
+    # of the job. That way it is written even if a later step fails, but not
+    # if the install itself failed (this step is skipped after a failure).
+    - name: Save Playwright browser cache
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.version.outputs.version }}
+
+    # A cache hit restores the browser binaries but not the system libraries
+    # that --with-deps installs through apt. Install just those.
+    - name: Install Playwright system deps
+      if: steps.cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: pnpm --filter @gofish/tests exec playwright install-deps chromium

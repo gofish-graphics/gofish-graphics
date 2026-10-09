@@ -2,14 +2,16 @@
  * capture-core.ts
  *
  * Shared headless-capture engine. `captureStories` is used by:
- *   - capture-js-dom.ts  (full corpus → baselines comparison)
+ *   - capture-js-dom.ts  (full corpus, or one CI shard of it → baselines
+ *                          comparison)
  *   - capture-diff.ts     (HEAD vs base-ref geometry/DOM diff)
  *   - capture-pixels.ts   (HEAD vs base-ref pixel diff)
  *   - capture-one.ts      (one story, for the iterate-example loop; also uses
  *                          `listStories`)
  * its per-story pieces (`withHarness`, a fresh runner page per story,
  * `renderStoryOnFakeClock`) by capture-docs-images.ts, and
- * `startViteServer`/`waitForVite` alone by capture-sweep.ts and dump-scopes.ts.
+ * `startViteServer`/`waitForVite` alone by capture-sweep.ts and dump-scopes.ts,
+ * and its worker pool (`runInOrder`) by capture-python-dom.ts.
  *
  * The capture loop: spin up a Vite dev server that serves the stories-runner
  * page, then render every (optionally filtered) story and extract + normalize
@@ -28,8 +30,10 @@
  * Every story is thus measured in an identical fresh environment, byte-
  * comparable across runs, between the batch capture and capture-one (the
  * same code path), and with the Python parity capture
- * (capture-python-dom.ts). With a warm Vite module cache a context + load
- * costs ~100-150ms/story, the same order as one story render.
+ * (capture-python-dom.ts). A runner page loads only the story module it
+ * renders (see tests/harness/stories-runner.ts), so a context + load costs a
+ * few hundred ms, the same order as one story render; loading the whole
+ * corpus there took about four times as long.
  *
  * Because every story already gets its own context, stories are captured
  * CONCURRENTLY: a small pool of workers (see `CaptureOptions.concurrency`)
@@ -37,9 +41,9 @@
  * log and the result arrays are still in story order (see `captureStories`).
  *
  * What varies between callers is ONLY which `harnessDir` the Vite server is
- * rooted in (so capture-diff can point a second server at a base-ref worktree),
- * which stories are selected, where output goes, and whether PNG screenshots
- * are written. DOM normalization always runs in
+ * rooted in (so capture-diff can point a second server at a base-ref worktree,
+ * see `withBaseRefHarness`), which stories are selected, where output goes, and
+ * whether PNG screenshots are written. DOM normalization always runs in
  * THIS process via the current `normalize-dom.ts`, so two captures driven from
  * the same invocation are normalized identically — which is what makes the
  * geometry diff platform-stable.
@@ -65,12 +69,13 @@ import {
   type BrowserContextOptions,
   type Page,
 } from "playwright";
-import { spawn, type ChildProcess } from "child_process";
+import { execSync, spawn, type ChildProcess } from "child_process";
 import { availableParallelism } from "os";
-import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs";
+import { writeFileSync, mkdirSync, rmSync, existsSync, cpSync } from "fs";
 import { join, dirname } from "path";
 import { normalizeDom } from "./normalize-dom.js";
 import { storyToPath } from "./path-mapping.js";
+import { git, removeWorktree } from "./snapshot-branch.js";
 
 export interface StoryInfo {
   id: string;
@@ -79,6 +84,9 @@ export interface StoryInfo {
   moduleKey: string;
   hasLoaders: boolean;
 }
+
+/** What the runner needs to load and render a story: its module and export. */
+export type StoryRef = Pick<StoryInfo, "moduleKey" | "name">;
 
 export interface CaptureOptions {
   /** Directory containing vite.config.ts + stories-runner.html (the Vite root). */
@@ -95,10 +103,43 @@ export interface CaptureOptions {
   cleanOutDir?: boolean;
   /**
    * How many stories to capture at once, each in its own browser context.
-   * Default: the `CAPTURE_CONCURRENCY` env var if set, else
-   * `min(4, os.availableParallelism())`. Output does not depend on it.
+   * Default: `defaultConcurrency()`. Output does not depend on it.
    */
   concurrency?: number;
+  /** Capture only this shard of the (filtered) stories (see `inShard`). */
+  shard?: Shard;
+}
+
+/**
+ * One of `total` disjoint slices of a story list, numbered from 1 and written
+ * `index/total` (e.g. `2/4`). CI's use of shards: the js-capture job in
+ * .github/workflows/visual-tests.yml.
+ */
+export interface Shard {
+  index: number;
+  total: number;
+}
+
+export function parseShard(spec: string): Shard {
+  const m = /^(\d+)\/(\d+)$/.exec(spec);
+  const index = Number(m?.[1]);
+  const total = Number(m?.[2]);
+  if (!m || total < 1 || index < 1 || index > total) {
+    throw new Error(`bad shard "${spec}": expected index/total, e.g. 2/4`);
+  }
+  return { index, total };
+}
+
+/**
+ * The items of `shard`: item i belongs to shard `i % total + 1`. Dealing
+ * round-robin rather than in contiguous chunks spreads neighbors (often the
+ * stories of one file, which cost about the same) across the shards, so the
+ * shards take about as long as each other. Every shard must be handed the
+ * items in the same order for the shards to be disjoint and complete.
+ */
+function inShard<T>(items: T[], shard: Shard | undefined): T[] {
+  if (!shard) return items;
+  return items.filter((_, i) => i % shard.total === shard.index - 1);
 }
 
 export interface CaptureResult {
@@ -113,9 +154,9 @@ export interface CaptureResult {
 /** Wall-clock instant the fake clock is installed at. Any fixed value works;
  *  what matters is that it is the same on every run and every machine. */
 const CLOCK_EPOCH = Date.UTC(2024, 0, 1, 0, 0, 0);
-/** Where the clock is parked once the page has loaded. The page loads with time
- *  running normally (a clock paused across module init can deadlock on a
- *  loader's own timer), then jumps here and stops. */
+/** Where the clock is parked once the page and the story's module have loaded.
+ *  They load with time running normally (a clock paused across module init
+ *  can deadlock on a loader's own timer), then it jumps here and stops. */
 const CLOCK_PAUSE_AT = CLOCK_EPOCH + 60_000;
 /** Virtual ms handed to EVERY story after it first paints, in full. It has to
  *  cover the runner's rAF + 100ms settle with room to spare; beyond that the
@@ -240,6 +281,59 @@ export async function withHarness<T>(
   }
 }
 
+/** This tree's harness: the Vite root for capturing the current worktree. */
+export const HARNESS_DIR = join(import.meta.dirname, "../harness");
+
+/**
+ * Run `fn` with a harness that renders the stories and library of commit
+ * `sha`: a throwaway git worktree at `sha`, torn down when `fn` settles.
+ *
+ * The worktree's own `tests/harness` is replaced by THIS tree's harness
+ * before anything runs. The harness is capture tooling, like this driver and
+ * `normalize-dom.ts`: it speaks the driver's protocol (`__listStories__`,
+ * `__loadStory__`, `__renderStory__`) and decides when a render is done. So
+ * both sides of a capture-diff or capture-pixels run use the same tooling,
+ * and only what the harness imports by relative path (`packages/`: the
+ * library and its stories) comes from `sha`. A harness from `sha` would speak
+ * that commit's protocol, which this driver need not understand, and a change
+ * to the tooling would show up as a diff in every story.
+ */
+export async function withBaseRefHarness<T>(
+  sha: string,
+  fn: (harnessDir: string) => Promise<T>
+): Promise<T> {
+  const wtPath = join("/tmp", `gofish-base-ref-${process.pid}`);
+  removeWorktree(wtPath);
+  try {
+    git(`git worktree add --detach "${wtPath}" ${sha}`);
+    const harnessDir = join(wtPath, "tests/harness");
+    rmSync(harnessDir, { recursive: true, force: true });
+    cpSync(HARNESS_DIR, harnessDir, { recursive: true });
+
+    // The worktree has no node_modules — install so its harness can run Vite.
+    // --ignore-scripts skips husky/postinstall (not needed for a headless
+    // render) and keeps the install fast; the pnpm store is shared so it's
+    // mostly links.
+    console.log(
+      `Installing dependencies in the temp worktree (this can take a minute)...`
+    );
+    execSync("pnpm install --ignore-scripts", {
+      cwd: wtPath,
+      stdio: "inherit",
+    });
+    // --ignore-scripts also skips gofish-ir's `prepare` build, which the
+    // harness needs to resolve the package. Build it explicitly.
+    execSync("pnpm --filter gofish-ir build", {
+      cwd: wtPath,
+      stdio: "inherit",
+    });
+
+    return await fn(harnessDir);
+  } finally {
+    removeWorktree(wtPath);
+  }
+}
+
 export type RunnerPage = { context: BrowserContext; page: Page };
 
 /**
@@ -264,8 +358,9 @@ async function openRunnerPage(
     ...contextOptions,
   });
   // Install the fake clock BEFORE the first navigation so nothing in the
-  // page ever sees the real one; it keeps running at real speed until the
-  // pause below, so page load is unaffected (see header comment).
+  // page ever sees the real one; it keeps running at real speed until
+  // `renderStoryOnFakeClock` pauses it, so page load is unaffected (see
+  // header comment).
   await context.clock.install({ time: CLOCK_EPOCH });
   const page = await context.newPage();
   page.on("console", (msg) => {
@@ -284,24 +379,19 @@ async function openRunnerPage(
     () => (window as any).__STORIES_RUNNER_READY__ === true,
     { timeout: 30_000 }
   );
-  const runnerError = await page.evaluate(
-    () => (window as any).__STORIES_RUNNER_ERROR__
-  );
-  if (runnerError) {
-    await context.close();
-    throw new Error(`Stories runner failed to initialize: ${runnerError}`);
-  }
   // Warm the webfonts while time still runs, so that a story's own
   // `await document.fonts.ready` resolves in a microtask rather than after
   // a real network fetch of unpredictable length.
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
-  // From here on time only moves when this process says so.
-  await page.clock.pauseAt(CLOCK_PAUSE_AT);
   return { context, page };
 }
 
-async function discoverStories(
-  open: (log: Log) => Promise<RunnerPage>
+/**
+ * List every story, in a runner page of its own: listing is the one thing
+ * that loads every story module (see tests/harness/stories-runner.ts).
+ */
+export async function discoverStories(
+  open: OpenRunnerPage
 ): Promise<StoryInfo[]> {
   const { context, page } = await open(printLine);
   try {
@@ -325,23 +415,31 @@ type StoryOutcome =
   | { kind: "skipped"; path: string };
 
 /**
- * Render one story into a page from `openRunnerPage` (its fake clock paused)
- * and hand it the fixed virtual budget, after which its DOM is ready to read:
- * a still story is fully drawn and an animated one sits on the same frame
- * every run. Resolves to the story's render error, or null. Throws on timeout.
+ * Render one story into a fresh page from `openRunnerPage` and hand it the
+ * fixed virtual budget, after which its DOM is ready to read: a still story
+ * is fully drawn and an animated one sits on the same frame every run.
+ * Resolves to the story's render error, or null. Throws on timeout, and when
+ * the story's module fails to load.
  */
 export async function renderStoryOnFakeClock(
   page: Page,
-  storyId: string,
+  story: StoryRef,
   label: string,
   log: Log
 ): Promise<string | null> {
+  // Load the story's module while time still runs, as a page load does: a
+  // module's init may wait on a timer of its own, which a paused clock
+  // would never fire.
+  await page.evaluate((s) => window.__loadStory__(s), story);
+  // From here on time only moves when this process says so.
+  await page.clock.pauseAt(CLOCK_PAUSE_AT);
+
   // Kick the render off but do NOT await it: the runner's tail (a rAF
   // plus a 100ms settle) can only complete once the paused clock is
   // given virtual time below, so awaiting here would deadlock.
-  await page.evaluate((id) => {
-    void window.__renderStory__(id);
-  }, storyId);
+  await page.evaluate((s) => {
+    void window.__renderStory__(s);
+  }, story);
 
   // Phase 1 — real time only. Loaders, dynamic imports, fonts and the
   // gofish render promise are real promises that resolve on their own.
@@ -401,7 +499,7 @@ async function captureStory(
 
   const renderError = await renderStoryOnFakeClock(
     page,
-    story.id,
+    story,
     `${story.title}/${story.name}`,
     log
   );
@@ -429,10 +527,45 @@ async function captureStory(
   return { kind: "ok", path, written: { html, png } };
 }
 
-function defaultConcurrency(): number {
+/** The `CAPTURE_CONCURRENCY` env var if set, else
+ *  `min(4, os.availableParallelism())`. */
+export function defaultConcurrency(): number {
   const env = Number(process.env.CAPTURE_CONCURRENCY);
   if (Number.isInteger(env) && env > 0) return env;
   return Math.max(1, Math.min(4, availableParallelism()));
+}
+
+/**
+ * Run `run` over `items` on a pool of `concurrency` workers and return the
+ * results in item order. Each item's log lines are buffered and printed in
+ * item order too, once every item before it has printed, so neither the log
+ * nor the results depend on which item finished first.
+ */
+export async function runInOrder<T, R>(
+  items: T[],
+  concurrency: number,
+  run: (item: T, index: number) => Promise<{ result: R; lines: LogLine[] }>
+): Promise<R[]> {
+  const done: { result: R; lines: LogLine[] }[] = [];
+  let printed = 0;
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      done[i] = await run(items[i], i);
+      while (printed < items.length && done[printed]) {
+        for (const line of done[printed].lines) printLine(line);
+        printed++;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.max(1, Math.min(concurrency, items.length)) },
+      worker
+    )
+  );
+  return done.map(({ result }) => result);
 }
 
 /**
@@ -441,13 +574,11 @@ function defaultConcurrency(): number {
  * Starts its own Vite server + Playwright browser, captures, then tears both
  * down before returning. Safe to call twice in one process with distinct ports.
  *
- * Stories run on a pool of `concurrency` workers. That is safe because nothing
- * is shared between two stories in flight: each gets its own browser context
- * (own renderer, so no font-metric state crosses over — see header comment)
- * and each context has its own fake clock, so one story's virtual budget is
- * never advanced by another's. Each story's log lines are buffered and
- * printed in story order, and the result arrays are in story order too, so
- * neither depends on which story finished first.
+ * Stories run on a pool of `concurrency` workers (`runInOrder`). That is safe
+ * because nothing is shared between two stories in flight: each gets its own
+ * browser context (own renderer, so no font-metric state crosses over — see
+ * header comment) and each context has its own fake clock, so one story's
+ * virtual budget is never advanced by another's.
  */
 export async function captureStories(
   opts: CaptureOptions
@@ -460,6 +591,7 @@ export async function captureStories(
     screenshot = false,
     cleanOutDir = false,
     concurrency = defaultConcurrency(),
+    shard,
   } = opts;
 
   return withHarness(harnessDir, port, async (open) => {
@@ -470,32 +602,26 @@ export async function captureStories(
 
     const allStories = await discoverStories(open);
     const needle = filter?.toLowerCase().trim();
-    const stories = needle
+    const matching = needle
       ? allStories.filter((s) => {
           const hay = `${s.title}/${s.name}`.toLowerCase();
           return hay.includes(needle) || s.id.includes(needle);
         })
       : allStories;
+    const stories = inShard(matching, shard);
 
     console.log(
-      `Found ${allStories.length} stories${needle ? `, ${stories.length} matching "${needle}"` : ""}\n`
+      `Found ${allStories.length} stories` +
+        (needle ? `, ${matching.length} matching "${needle}"` : "") +
+        (shard
+          ? `, ${stories.length} in shard ${shard.index}/${shard.total}`
+          : "") +
+        "\n"
     );
-
-    // Story i's outcome and log lines, filled in as it finishes; printed
-    // once every story before it has been printed.
-    const done: { outcome: StoryOutcome; lines: LogLine[] }[] = [];
-    let printed = 0;
-    const flush = () => {
-      while (printed < stories.length && done[printed]) {
-        const { lines } = done[printed];
-        for (const line of lines) printLine(line);
-        printed++;
-      }
-    };
 
     const run = async (
       story: StoryInfo
-    ): Promise<{ outcome: StoryOutcome; lines: LogLine[] }> => {
+    ): Promise<{ result: StoryOutcome; lines: LogLine[] }> => {
       const path = storyToPath(story.title, story.name);
       const lines: LogLine[] = [];
       const log: Log = (line) => lines.push(line);
@@ -524,23 +650,9 @@ export async function captureStories(
         err: false,
         text: `  ${story.title}/${story.name} ... ${status}`,
       });
-      return { outcome, lines };
+      return { result: outcome, lines };
     };
-
-    let next = 0;
-    const worker = async () => {
-      while (next < stories.length) {
-        const i = next++;
-        done[i] = await run(stories[i]);
-        flush();
-      }
-    };
-    await Promise.all(
-      Array.from(
-        { length: Math.max(1, Math.min(concurrency, stories.length)) },
-        worker
-      )
-    );
+    const outcomes = await runInOrder(stories, concurrency, run);
 
     const result: CaptureResult = {
       captured: [],
@@ -548,7 +660,7 @@ export async function captureStories(
       skipped: [],
       written: [],
     };
-    for (const { outcome } of done) {
+    for (const outcome of outcomes) {
       if (outcome.kind === "ok") {
         result.captured.push(`${outcome.path}.html`);
         result.written.push(outcome.written);

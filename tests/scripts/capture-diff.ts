@@ -7,7 +7,10 @@
  *
  * It captures the normalized DOM of every (optionally filtered) story twice —
  * once from the current worktree (HEAD) and once from a throwaway git worktree
- * checked out at <base-ref> — then diffs the two per story. Because the diff is
+ * checked out at <base-ref> — then diffs the two per story. Both captures use
+ * this tree's capture tooling (driver, harness, normalization; see
+ * `withBaseRefHarness`), so only the library and stories differ between them.
+ * Because the diff is
  * over normalized geometry/DOM (not rasterized pixels), it is platform-stable:
  * it does not suffer the text-metric drift that makes `update-baselines`
  * unusable on Mac, so it gives a real pass/fail layout signal locally.
@@ -29,15 +32,17 @@
  * (so it doubles as a pass/fail gate in an inner loop).
  */
 
-import { execSync } from "child_process";
 import { readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
-import { captureStories } from "./capture-core.js";
+import {
+  captureStories,
+  HARNESS_DIR,
+  withBaseRefHarness,
+} from "./capture-core.js";
 import { formatDomDiff, escapeHtml } from "./diff-utils.js";
-import { git, removeWorktree } from "./snapshot-branch.js";
+import { git } from "./snapshot-branch.js";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
-const HARNESS_DIR = join(TESTS_DIR, "harness");
 const OUT_DIR = join(TESTS_DIR, "tmp/capture-diff");
 const HEAD_DIR = join(OUT_DIR, "head");
 const BASE_DIR = join(OUT_DIR, "base");
@@ -157,44 +162,20 @@ async function main() {
     filter,
   });
 
-  // 2. Capture <base-ref> from a throwaway worktree.
-  const wtPath = join("/tmp", `gofish-capture-diff-${process.pid}`);
-  removeWorktree(wtPath);
-  let baseResult;
-  try {
-    console.log(
-      `\n=== Checking out ${baseRef} (${baseShort}) into a temp worktree ===`
-    );
-    git(`git worktree add --detach "${wtPath}" ${baseSha}`);
-
-    // The worktree has no node_modules — install so its harness can run Vite.
-    // --ignore-scripts skips husky/postinstall (not needed for a headless render)
-    // and keeps the install fast; the pnpm store is shared so it's mostly links.
-    console.log(
-      `Installing dependencies in the temp worktree (this can take a minute)...`
-    );
-    execSync("pnpm install --ignore-scripts", {
-      cwd: wtPath,
-      stdio: "inherit",
-    });
-
-    // --ignore-scripts also skips gofish-ir's `prepare` build, which the
-    // harness needs to resolve the package. Build it explicitly.
-    execSync("pnpm --filter gofish-ir build", {
-      cwd: wtPath,
-      stdio: "inherit",
-    });
-
+  // 2. Capture <base-ref>'s stories, with this tree's harness, from a
+  //    throwaway worktree.
+  console.log(
+    `\n=== Checking out ${baseRef} (${baseShort}) into a temp worktree ===`
+  );
+  const baseResult = await withBaseRefHarness(baseSha, (harnessDir) => {
     console.log(`\n=== Capturing ${baseRef} (${baseShort}) ===\n`);
-    baseResult = await captureStories({
-      harnessDir: join(wtPath, "tests/harness"),
+    return captureStories({
+      harnessDir,
       port: BASE_PORT,
       outDir: BASE_DIR,
       filter,
     });
-  } finally {
-    removeWorktree(wtPath);
-  }
+  });
 
   // 3. Diff per story.
   const headSet = new Set(headResult.captured);

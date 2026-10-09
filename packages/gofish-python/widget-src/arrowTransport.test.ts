@@ -457,9 +457,11 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
   const fromAccessor = await accessor({ x: 1 });
   const single = async (schema?: Record<string, unknown>) => {
     let seen: any;
-    const op = Serialize.OPERATOR_MAP.derive(
+    const op = Serialize.rebuild(
+      "operator",
+      "derive",
       { lambdaId: "g", ...(schema ? { schema } : {}) },
-      bridge
+      { bridge }
     ) as any;
     await (
       await op(async (d: any) => {

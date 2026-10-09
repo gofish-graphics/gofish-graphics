@@ -43,7 +43,7 @@ expansion and elaboration. Three consumers:
 | JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                |
 | JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                         |
 | JS-side deserializer (`Serialize.renderIR`, `buildChart`, `mapMark`, …)                                 | `packages/gofish-graphics/src/serialize/fromJSON.ts`                       |
-| Operator/mark factory registry                                                                          | `packages/gofish-graphics/src/serialize/registry.ts`                       |
+| Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                       |
 | Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`) |
 | Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                     |
 
@@ -426,7 +426,7 @@ The keys of `dims` are axis names that only mean something inside the enclosing
 coordinate space, so the wire keeps them open and carries them verbatim; the
 same goes for `spread`/`stack`'s `dir`, which is a plain string on the wire.
 
-Four consumers read the table:
+Six consumers read the table:
 
 - **`validate.ts`** interprets it generically — a single walk over each
   descriptor's resolved fields instead of a per-type imperative switch.
@@ -453,6 +453,27 @@ unknown`) even though they aren't really open on the JS side (a mark's
   `additionalProperties: true` so an external strict consumer of the
   published schema doesn't start rejecting documents our own validator
   only warns about.
+- **The JS emitter** (`toJSON`) filters what reaches the wire through it.
+  A factory tags its options as the caller passed them; `wireOpts` keeps
+  only the keys `acceptedFields(kind, type)` lists, and drops any function
+  value, since a callback has no JSON form. So a key the descriptor does not
+  know never reaches the IR, and a construct with no descriptor (such as
+  `time.transition`) has no IR form: `toJSON` throws.
+
+  `acceptedFields` (in `descriptors.ts`) is the one statement of which keys an
+  options object takes on the wire: the descriptor's fields plus the base fields
+  that sit in the same object. An operator's and a leaf mark's options are spread
+  onto the node, so all of `OPERATOR_BASE_FIELDS` or `MARK_BASE_FIELDS` sit
+  beside them. A combinator mark nests its options under `options`, where only
+  `COMBINATOR_OPTIONS_BASE_FIELDS` (`debug`) ride; its other base fields sit on
+  the node. The emitter keeps these keys, and the validator checks an operator
+  or leaf-mark node against them. On a leaf mark, the base fields that Mark
+  methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked as
+  errors by their own walkers, so the warning-level check of the mark's
+  channels skips them.
+
+- **The JS deserializer** (`registry.ts`) rebuilds a wire type through
+  the factory its descriptor names — see § Modularity below.
 - **`gofish-python/scripts/generate.ts`** emits the mechanical part of the
   Python wrapper from the same table — see
   [§ Generating the Python factory layer](#generating-the-python-factory-layer)
@@ -618,8 +639,7 @@ alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
 widget/RPC layer — see
 [Design space: generating the Python wrapper](/internals/design/python-wrapper-codegen)
 for the full hand-written-residue accounting and what's still deferred
-(generifying the deserializer registry, the
-`.layer()`/relate-ref-walk follow-ups).
+(the `.layer()`/relate-ref-walk follow-ups).
 
 Generating this layer fixed real drift along the way: the hand-written
 `rect()` had exposed phantom `rs=`/`ts=` kwargs (see the descriptor-table
@@ -641,7 +661,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread, {
   split: ({ by }, d) => /* ... */,
   channels: { w: "size", h: "size" },
   axisFields: ({ by, dir }) => /* ... */,
-  serialize: { type: "spread" },        // <-- new
+  serialize: "spread",                 // <-- new
 });
 
 // shapes/rect.tsx
@@ -652,7 +672,29 @@ export const rect = createMark(Rect, { w: "size", h: "size", /* ... */ }, "rect"
 Combinator-form marks (`spread([m1, m2])`, Porter-Duff, etc.) tag with
 `__combinator: true` and stash the child marks on the tag so the
 emitter can walk them. Untagged operators emit as opaque
-`{type: "derive"}`; untagged marks throw.
+`{type: "derive"}`; untagged marks throw. The tag holds the options as the
+caller passed them, and the emitter filters them through the descriptor (see
+the descriptor-table consumers above), so a factory never lists its own
+fields.
+
+The way back is one table. `FACTORIES` in `registry.ts` maps each wire
+type to the public factory that rebuilds it, and
+`rebuild(kind, type, opts, { children, bridge })` calls it: it returns
+`undefined` unless the descriptor table declares that type for that kind, and
+the kind decides the call. An operator or a leaf mark is `factory(opts)`; a
+combinator mark is `factory(opts, children)`. A dual-form construct such as
+`spread` or `line` therefore has one entry for both forms, and the compositing
+wire types map to their renamed factories (`inside` to `intersect`, and so on).
+Only an `OPERATOR_BUILDERS` entry sees the bridge.
+
+Four operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
+their IR is not their factory's options object: `derive` (it calls a Python
+lambda through the bridge and puts back the rows' measure provenance),
+`resolve` (the IR names a layer, the factory takes a selection), `join` and
+`log` (their factories take positional arguments). `mark-fn`, `cut`,
+`offset` and `ref` are rebuilt structurally in `fromJSON.ts`'s `mapMark`.
+The serialize test fails when a descriptor has no factory or a factory has no
+descriptor.
 
 User-defined custom marks via the no-channels `createMark((data, props) => …)`
 overload are an open question (deferred to v0.1+ — Olli treats them as

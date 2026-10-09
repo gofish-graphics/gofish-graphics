@@ -171,7 +171,10 @@ Walking `withGoFish.ts:431-477`:
    placement, `selectAll` projections) can find its row. The factory does not
    name the node after its data key: the key is data, and a name made from it
    could clash with a name the user wrote (see
-   [Name Resolution & Scoping](/internals/core/names-and-scoping)).
+   [Name Resolution & Scoping](/internals/core/names-and-scoping)). The same
+   step makes the node a scope root and a component, where string-name lookup
+   stops. It is one helper, `sealComponent`, which the deserializer also calls
+   for a Python `@mark` component, so both build the same node.
 
 ### `live()` channels
 
@@ -674,8 +677,10 @@ positions.
   in `src/ast/shapes/`.
 - The companion factory for layout operators:
   [The Operator Factory](/internals/frontend/operator-factory).
-- The factory's optional `serialize` config (third argument) tags the
-  produced mark with `__serialize` metadata that the frontend-IR emitter
-  reads — see [Frontend IR (Serialization)](/internals/frontend/serialization).
+- The factory's optional `serialize` config (third argument, the IR `type`)
+  tags the produced mark with `__serialize` metadata that the frontend-IR
+  emitter reads. The tag holds the options as the caller passed them; the
+  emitter keeps only the keys the mark's descriptor declares — see
+  [Frontend IR (Serialization)](/internals/frontend/serialization).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

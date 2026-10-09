@@ -93,12 +93,6 @@ async function main() {
       () => (window as any).__STORIES_RUNNER_READY__ === true,
       { timeout: 30_000 }
     );
-    const runnerError = await page.evaluate(
-      () => (window as any).__STORIES_RUNNER_ERROR__
-    );
-    if (runnerError)
-      throw new Error(`Stories runner failed to initialize: ${runnerError}`);
-
     const allStories = (await page.evaluate(() =>
       window.__listStories__()
     )) as StoryInfo[];
@@ -121,8 +115,8 @@ async function main() {
 
       try {
         const success = await page.evaluate(
-          async (id) => window.__renderStory__(id),
-          story.id
+          async (s) => window.__renderStory__(s),
+          story
         );
         if (!success) {
           const err = await page.evaluate(() => window.__STORY_RENDER_ERROR__);

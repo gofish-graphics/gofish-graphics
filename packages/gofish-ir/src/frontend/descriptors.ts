@@ -225,9 +225,8 @@ const coordTransform = makeDef("coord");
 
 // ---------------------------------------------------------------------------
 // Structural base fields — every node of a given family carries these.
-// Declared once here (informational — consumers hardcode the same list
-// rather than merge it into each entry, mirroring how `walkBaseFields` /
-// `LeafMarkIR`'s shared fields already work in schema.ts/validate.ts).
+// Declared once here rather than merged into each entry; `acceptedFields`
+// (at the end of this file) folds them into a construct's own fields.
 // ---------------------------------------------------------------------------
 
 /** Every leaf/combinator/ref/offset/cut mark carries these (LeafMarkIR /
@@ -279,6 +278,14 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
  *  Operator methods: `.label()`, `.translate()`). */
 export const PY_OPERATOR_BASE_KWARGS: FieldGroup = group({
   debug: OPERATOR_BASE_FIELDS.debug,
+});
+
+/** The base fields that ride inside a combinator mark's `options` on the
+ *  wire. The rest of MARK_BASE_FIELDS (`name`, `label`, `relate`, `zOrder`,
+ *  `translate`) sit beside `options` on the node, set by Mark methods; only
+ *  `debug` is a factory option (the Python combinator cores send it there). */
+export const COMBINATOR_OPTIONS_BASE_FIELDS: FieldGroup = group({
+  debug: MARK_BASE_FIELDS.debug,
 });
 
 /** The options of one `.label(accessor, options?)` call: every field of a
@@ -1538,3 +1545,60 @@ export const ALL_COMBINATOR_MARK_DESCRIPTORS: readonly ConstructDescriptor[] =
   Object.values(COMBINATOR_MARKS);
 export const ALL_COORD_DESCRIPTORS: readonly ConstructDescriptor[] =
   Object.values(COORDS);
+
+/** Every descriptor table, by the kind of construct it declares. */
+export const DESCRIPTOR_TABLES: Readonly<
+  Record<ConstructKind, Record<string, ConstructDescriptor>>
+> = {
+  operator: OPERATORS,
+  "leaf-mark": LEAF_MARKS,
+  "combinator-mark": COMBINATOR_MARKS,
+  coord: COORDS,
+};
+
+/** The kinds of construct whose options sit on a wire node of their own (a
+ *  coord transform is itself an option, of a chart or a combinator). */
+export type NodeKind = Exclude<ConstructKind, "coord">;
+
+/** The base fields that sit in the same object as a construct's own options
+ *  on the wire. An operator's and a leaf mark's options are spread onto the
+ *  node itself, so every base field of its family sits beside them. A
+ *  combinator mark nests its options under `options`, where only
+ *  COMBINATOR_OPTIONS_BASE_FIELDS ride. */
+const OPTIONS_BASE_FIELDS: Readonly<Record<NodeKind, FieldGroup>> = {
+  operator: OPERATOR_BASE_FIELDS,
+  "leaf-mark": MARK_BASE_FIELDS,
+  "combinator-mark": COMBINATOR_OPTIONS_BASE_FIELDS,
+};
+
+const acceptedFieldsCache = new Map<string, FieldGroup>();
+
+/**
+ * The fields the options object of a `kind` construct with wire type `type`
+ * accepts, keyed by wire key: its descriptor's fields plus the base fields
+ * that sit in the same object (see OPTIONS_BASE_FIELDS). `undefined` when the
+ * table declares no such construct (there is a combinator `layer` but no
+ * operator `layer`). The emitter keeps exactly these keys of a factory's
+ * options; the validator checks a node against them. Computed once per
+ * (kind, type).
+ */
+export function acceptedFields(
+  kind: NodeKind,
+  type: string
+): FieldGroup | undefined {
+  const cacheKey = `${kind}:${type}`;
+  const cached = acceptedFieldsCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const table = DESCRIPTOR_TABLES[kind];
+  if (!Object.hasOwn(table, type)) return undefined;
+  const declared = {
+    ...OPTIONS_BASE_FIELDS[kind],
+    ...resolveFields(table[type]),
+  };
+  const fields: FieldGroup = {};
+  for (const [name, spec] of Object.entries(declared)) {
+    fields[spec.wire ?? name] = spec;
+  }
+  acceptedFieldsCache.set(cacheKey, fields);
+  return fields;
+}

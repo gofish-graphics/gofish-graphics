@@ -131,7 +131,7 @@ const meta = {
   /** Workflow run id. Commit Accepted sends it, with the accepted paths, to
    *  the commit endpoint, which dispatches the accept-visual-baselines
    *  workflow. That workflow copies the accepted files from this run's
-   *  `js-dom-capture` artifact, commits them, and then re-runs the run's
+   *  `js-dom-capture-<i>` artifacts, commits them, and then re-runs the run's
    *  failed jobs, which re-runs only the cheap `visual-test` compare job
    *  against the new baselines. */
   runId: process.env.REVIEW_RUN_ID ?? "",

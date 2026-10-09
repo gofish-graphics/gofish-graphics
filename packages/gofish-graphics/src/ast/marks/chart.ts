@@ -361,18 +361,7 @@ export const circle = createMark(
     });
   },
   { r: "size", fill: "color", stroke: "color", opacity: "raw" },
-  {
-    type: "circle",
-    shape: (o) => ({
-      r: o.r,
-      fill: o.fill,
-      stroke: o.stroke,
-      strokeWidth: o.strokeWidth,
-      // A callback opacity is a live JS value with nothing to put on the wire,
-      // so only a literal one is serialized (the same reason `derive` is opaque).
-      ...(typeof o.opacity === "number" ? { opacity: o.opacity } : {}),
-    }),
-  }
+  "circle"
 );
 
 // `ref(name)` is the universal singular reference — usable inline in a layout

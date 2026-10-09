@@ -2,14 +2,14 @@
  * Frontend-IR deserializer for GoFish.
  *
  * @see {@link ./fromJSON.ts} for the deserializer functions.
- * @see {@link ./registry.ts} for the operator/mark factory registries and
+ * @see {@link ./registry.ts} for the factory table and
  *      the {@link DeriveBridge} contract.
  */
 
 export {
-  COMBINATOR_FACTORIES,
-  MARK_MAP,
-  OPERATOR_MAP,
+  FACTORIES,
+  OPERATOR_BUILDERS,
+  rebuild,
   type DeriveBridge,
 } from "./registry";
 

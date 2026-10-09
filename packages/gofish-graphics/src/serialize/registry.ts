@@ -3,14 +3,15 @@
 // </gofish-wiki>
 
 /**
- * Factory registries and the {@link DeriveBridge} contract used by the
+ * The factory table and the {@link DeriveBridge} contract used by the
  * frontend-IR deserializer.
  *
  * The deserializer turns a {@link Frontend.FrontendIRDocument} into a live
- * GoFish `ChartBuilder` / `Mark` graph. The standard library of operators,
- * marks, and combinators is dispatched via three string-keyed maps; the
- * `derive` operator and any `{__gofish_lambda}` sentinels invoke a
- * caller-supplied bridge (typically the Python anywidget bridge).
+ * GoFish `ChartBuilder` / `Mark` graph. Each construct the descriptor table
+ * declares is rebuilt by one factory, looked up by its wire `type`
+ * ({@link rebuild}); the `derive` operator and any `{__gofish_lambda}`
+ * sentinels invoke a caller-supplied bridge (typically the Python anywidget
+ * bridge).
  */
 
 // Source-module imports (not `../lib`) — `lib.ts` re-exports this module,
@@ -58,14 +59,14 @@ import { pack } from "../ast/graphicalOperators/pack";
 // between them by context: a `cut` IR node used as a chart `.mark(...)` →
 // `cutMark`, used as a combinator child → expanded into slices via `cut`.
 // `offset` is the public node operator a `{type:"offset"}` IR node maps to.
-// These need recursive `mapMark` of their `source`/`children`, so unlike the
-// string-keyed MARK_MAP/COMBINATOR_FACTORIES they're applied directly in
-// fromJSON.ts rather than via a flat factory map.
+// These need recursive `mapMark` of their `source`/`children`, and they are
+// not in the descriptor table, so they're applied directly in fromJSON.ts
+// rather than through `FACTORIES`.
 import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
 import { offset as offsetOp } from "../ast/graphicalOperators/offset";
 import { setMeasureProvenance, type MeasureProvenance } from "../ast/data";
 import { applySchema, type SchemaEntry } from "../ast/schema";
-import type { Frontend } from "gofish-ir";
+import { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
 export { cutSlices, cutMark, offsetOp };
@@ -124,72 +125,65 @@ export async function applyLambdaTyped(
 }
 
 /**
- * Combinator-form factories: operator-like factories that, when called with
- * marks as the second argument, return a combined mark. Keyed by the
- * lowercase `type` discriminator.
+ * The public factory that rebuilds each wire type, keyed by the descriptor
+ * table's `type` (gofish-ir's `OPERATORS`, `LEAF_MARKS`, `COMBINATOR_MARKS`).
+ * The descriptor's kind decides the call (see {@link rebuild}): an
+ * operator or a leaf mark is `factory(opts)`, a combinator mark is
+ * `factory(opts, children)`. So a dual-form construct (`spread`, `line`, …)
+ * has one entry for both of its forms.
+ *
+ * The serialize test fails when a descriptor has no entry here (or in
+ * {@link OPERATOR_BUILDERS}), or when an entry has no descriptor.
  */
-export const COMBINATOR_FACTORIES: Record<
-  string,
-  (opts: Record<string, any>, marks: Mark<any>[]) => Mark<any>
-> = {
-  // Casts mirror the widget-src pattern: the combinator factories' typed
-  // signatures are stricter than what a runtime deserializer can satisfy
-  // (e.g. tuple-of-two-marks for Porter-Duff), but the runtime accepts the
-  // looser shape. Casting once at the dispatch boundary keeps the rest of
-  // the deserializer typed.
-  spread: (opts, marks) => (spread as any)(opts, marks) as unknown as Mark<any>,
-  // stack/scatter/group/table are DualModeOperators built via
-  // `createOperator` (same as spread). Their `(opts, marks)` overload
-  // produces a combinator-form Mark that `toJSON` emits with
-  // `__combinator: true`, so the deserializer needs the matching
-  // factories — otherwise the IR round-trips fine through `toJSON` but
-  // fromJSON throws "Unknown combinator mark type".
-  stack: (opts, marks) => (stack as any)(opts, marks) as unknown as Mark<any>,
-  scatter: (opts, marks) =>
-    (scatter as any)(opts, marks) as unknown as Mark<any>,
-  group: (opts, marks) => (group as any)(opts, marks) as unknown as Mark<any>,
-  table: (opts, marks) => (table as any)(opts, marks) as unknown as Mark<any>,
-  layer: (opts, marks) => (layer as any)(opts, marks) as unknown as Mark<any>,
-  // A graphical wrapping operator (padding/rx/ry border) — combinator-only,
-  // like layer but with no `.relate`; opts ride in `options`.
-  enclose: (opts, marks) =>
-    (enclose as any)(opts, marks) as unknown as Mark<any>,
-  // Absolute-offset placement primitive — sets its single child's min-corner
-  // (x, y) in parent coordinates. Combinator-only, like `enclose`; opts ride
-  // in `options`.
-  position: (opts, marks) =>
-    (position as any)(opts, marks) as unknown as Mark<any>,
-  arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,
-  // `line`/`ribbon` are relational marks (createRelationalMark) whose
-  // `(opts, marks)` overload is the low-level combinator form. It builds the
-  // internal connect node.
-  line: (opts, marks) => (line as any)(opts, marks) as unknown as Mark<any>,
-  ribbon: (opts, marks) => (ribbon as any)(opts, marks) as unknown as Mark<any>,
-  treemap: (opts, marks) =>
-    (treemap as any)(opts, marks) as unknown as Mark<any>,
-  pack: (opts, marks) => (pack as any)(opts, marks) as unknown as Mark<any>,
-  // Keys are the IR wire types (unchanged); values are the renamed
-  // (Figma-inspired, #196/#202) combinator factories.
-  over: (opts, marks) => (over as any)(opts, marks) as unknown as Mark<any>,
-  inside: (opts, marks) =>
-    (intersect as any)(opts, marks) as unknown as Mark<any>,
-  xor: (opts, marks) => (exclude as any)(opts, marks) as unknown as Mark<any>,
-  out: (opts, marks) => (subtract as any)(opts, marks) as unknown as Mark<any>,
-  atop: (opts, marks) => (paint as any)(opts, marks) as unknown as Mark<any>,
-  mask: (opts, marks) => (mask as any)(opts, marks) as unknown as Mark<any>,
+export const FACTORIES: Record<string, (...args: any[]) => any> = {
+  // Leaf marks.
+  rect,
+  circle,
+  ellipse,
+  petal,
+  text,
+  image,
+  polygon,
+  blank,
+  // Relational marks: a leaf in a chart's `.mark(...)`, a combinator over
+  // explicit children.
+  line,
+  ribbon,
+  // Dual-form operators: an operator in `.flow(...)`, a combinator over
+  // explicit children.
+  spread,
+  stack,
+  scatter,
+  group,
+  table,
+  treemap,
+  pack,
+  // Combinator-only marks.
+  layer,
+  enclose,
+  position,
+  arrow,
+  // The compositing wire types keep their original names; the factories were
+  // renamed (#196/#202).
+  over,
+  inside: intersect,
+  xor: exclude,
+  out: subtract,
+  atop: paint,
+  mask,
 };
 
 /**
- * Operator factories. The `derive` factory needs the bridge; the rest take
- * only opts. Keyed by the lowercase `type` discriminator.
+ * Operators whose IR is not their factory's options object, so rebuilding
+ * one takes real work. These stay hand-written on purpose.
  */
-export const OPERATOR_MAP: Record<
+export const OPERATOR_BUILDERS: Record<
   string,
-  (
-    opts: Record<string, any>,
-    bridge?: DeriveBridge
-  ) => Operator<any, any> | null
+  (opts: Record<string, any>, bridge?: DeriveBridge) => Operator<any, any>
 > = {
+  // The IR names a Python lambda: the rebuilt operator calls it through the
+  // bridge, puts back the measure provenance the rows lose on the way, and
+  // types the returned rows by the operator's `schema`.
   derive: (opts, bridge) => {
     const lambdaId = opts.lambdaId;
     if (!lambdaId) {
@@ -233,6 +227,8 @@ export const OPERATOR_MAP: Record<
       { schema: opts.schema }
     );
   },
+  // The IR names the layer to resolve against as a string; the factory takes
+  // a selection.
   resolve: (opts) => {
     if (typeof opts.from !== "string") {
       throw new Error(
@@ -245,35 +241,37 @@ export const OPERATOR_MAP: Record<
       key: opts.key as string | undefined,
     });
   },
+  // The factory takes the right-hand table as its first argument.
   join: (opts) => joinOp(opts.right as any[], { on: opts.on as string }),
-  spread: (opts) => spread(opts as any),
-  stack: (opts) => stack(opts as any),
-  group: (opts) => group(opts as any),
-  scatter: (opts) => scatter(opts as any),
-  table: (opts) => table(opts as any),
-  treemap: (opts) => treemap(opts as any),
-  pack: (opts) => pack(opts as any),
+  // The factory takes the prefix as its only argument.
   log: (opts) => log(opts.prefix),
 };
 
 /**
- * Leaf-mark factories. Keyed by the lowercase `type` discriminator.
+ * Rebuild the construct of the given kind and wire `type` from its options,
+ * or return `undefined` when the descriptor table declares no construct of
+ * that kind and type (an operator `{type: "layer"}` has none, though the
+ * combinator `layer` does).
+ *
+ * The kind decides the call. An operator or a leaf mark is `factory(opts)`,
+ * and a combinator mark is `factory(opts, children)`: a dual-form factory
+ * reads a second argument as the combinator form's children, so an operator
+ * must not get one. Only an {@link OPERATOR_BUILDERS} entry sees the bridge.
  */
-export const MARK_MAP: Record<
-  string,
-  (opts: Record<string, any>) => Mark<any>
-> = {
-  rect: (opts) => rect(opts),
-  circle: (opts) => circle(opts),
-  line: (opts) => line(opts),
-  ribbon: (opts) => ribbon(opts),
-  blank: (opts) => blank(opts),
-  ellipse: (opts) => ellipse(opts),
-  petal: (opts) => petal(opts),
-  text: (opts) => (text as any)(opts),
-  image: (opts) => (image as any)(opts),
-  polygon: (opts) => polygon(opts as any),
-};
+export function rebuild(
+  kind: Frontend.NodeKind,
+  type: string,
+  opts: Record<string, any>,
+  { children, bridge }: { children?: unknown[]; bridge?: DeriveBridge } = {}
+): any {
+  if (!Object.hasOwn(Frontend.DESCRIPTOR_TABLES[kind], type)) return undefined;
+  if (kind === "operator" && Object.hasOwn(OPERATOR_BUILDERS, type)) {
+    return OPERATOR_BUILDERS[type](opts, bridge);
+  }
+  const factory = FACTORIES[type];
+  if (factory === undefined) return undefined;
+  return kind === "combinator-mark" ? factory(opts, children) : factory(opts);
+}
 
 // Re-export Frontend namespace for convenience.
 export type { Frontend };

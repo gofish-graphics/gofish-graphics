@@ -37,6 +37,9 @@ export {
   OPERATOR_BASE_FIELDS,
   PY_LEAF_BASE_KWARGS,
   PY_OPERATOR_BASE_KWARGS,
+  COMBINATOR_OPTIONS_BASE_FIELDS,
+  DESCRIPTOR_TABLES,
+  acceptedFields,
   LABEL_OPTIONS,
   boxDims,
   paint,
@@ -50,5 +53,6 @@ export {
   type FieldSpec,
   type FieldGroup,
   type ConstructKind,
+  type NodeKind,
   type ConstructDescriptor,
 } from "./descriptors.js";
