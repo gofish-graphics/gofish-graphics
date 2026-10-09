@@ -683,7 +683,13 @@ object whose `kind` field is a literal or enum, and no two branches share a
 ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
-branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
+branch does not declare (`ratio` on `slice`), is a `TypeError`. The other
+exception is a union where no branch renames anything: every dict branch is
+already in wire form, or an object whose keys are the same in Python and on
+the wire and whose values go as they are. Then any reading of the dict sends
+it unchanged, so there is nothing to guess and the field gets no shape.
+`partition`'s `by` is one: a field accessor, or `{x, y}` of field
+accessors. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
 few refs the generator lists as already in wire form (today only
 `FieldAccessor`, built by `field(...)`), or generation fails, so a new nested
 type has to be declared before Python can take it.

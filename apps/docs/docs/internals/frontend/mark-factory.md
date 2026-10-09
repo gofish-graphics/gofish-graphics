@@ -166,7 +166,11 @@ Walking `withGoFish.ts:431-477`:
      picks it up; otherwise treat the string as a literal color. A value
      read from a named field (a field-name string or `field(...)`) records
      that field as its provenance, `DatumValueImpl.field`, so the color
-     scale knows which field it maps; a function accessor records none. It
+     scale knows which field it maps; a function accessor records none. A
+     `field(...)` with an aggregate (`field("a").count()`) is the
+     exception: it folds all of `data` (`evalFieldValues`), as a size
+     channel does, and records no field, because the value is the fold's.
+     It
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
      ordered column lists its domain in that order. (A `derive` types its

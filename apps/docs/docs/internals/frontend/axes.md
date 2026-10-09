@@ -414,8 +414,8 @@ difference axis), never off the size claim:
   d3's time ticks, and like a numeric axis's ~10 ticks), and the outer row
   is that level's parent. Both choices read the domain only, never pixels.
   A time axis over calendar **cells** (`CONTINUOUS_TYPE.cells`, the months a
-  `partition` places its groups across; see
-  [Underlying Space](/internals/core/underlying-space#partition-each-group-across-its-cell))
+  `partition` gives its groups; see
+  [Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell))
   ticks at the cells' own partition instead (`cellPartition`, read by
   `axisTickPartition`, so the nicing and the drawing agree), with its parent
   as the outer row. A row whose partition is the cells' names cells, not

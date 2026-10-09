@@ -17,6 +17,7 @@ covers:
   - packages/gofish-graphics/src/ast/calendar.ts
   - packages/gofish-graphics/src/ast/cells.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
+  - packages/gofish-graphics/src/ast/shapes/region.tsx
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -245,7 +246,7 @@ type CONTINUOUS_TYPE = {
   measure?: Measure;
   mirrored?: true;
   calendar?: HasCalendar; // the data are instants on this calendar
-  cells?: readonly Cell[]; // every range placed along the axis is a cell
+  cells?: readonly Cell[]; // every region placed along the axis is a cell
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
@@ -655,7 +656,11 @@ composes its targets' spaces into the layer's claim on that axis:
   in the whole layer and then stretched. `scatter` uses both
   forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
   `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
-  has a bespoke layout). A categorical
+  has a bespoke layout). A third form, the **region** coordinate
+  (`PositionRegion`, #1059), is what `partition` uses: the same size
+  proposal, but only one pin, the target's center on the region's center, so
+  the target keeps the size its layout gave it (see
+  [Partition](#partition-each-group-in-its-cell)). A categorical
   scatter channel such as `x: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
@@ -1977,32 +1982,36 @@ The keys of a split may now be cells (`SplitKey`). Everything that reads a
 key as text or a number reads the cell's id (its start), so `.sort()` orders
 cells by start and `time.sequence` keys its frames at cell starts.
 
-### Partition: each group across its cell
+### Partition: each group in its cell
 
 `spread`, `stack` and `table` read a cell's id and order. Only the
 `partition` operator (`graphicalOperators/partition.tsx`) reads its region:
-it places each group across its cell's interval `[start, end)` on one
-continuous scale, so a 29-day February is narrower than a 31-day March and
-an empty cell keeps its place (it is a group with no rows, and it is still
-placed). Its key must have a region. Only `.bin(p)` makes one, so the type
+it gives each group its cell's interval `[start, end)` on one continuous
+scale, so a 29-day February is narrower than a 31-day March and an empty
+cell keeps its place (it is a group with no rows, and it is still placed).
+Its key must have a region. Only `.bin(p)` makes one, so the type
 of a field expression says whether it does (`FieldExpr<true>`, a phantom
 `hasRegion` flag that domain ops keep and aggregates drop), and the split
 checks the wire form from Python with an error that names the fix.
 
-It has no layout code of its own. It is `scatter`'s range form with the span
-read off the key: its split hands `Scatter` one `{ min, max }` span per cell
-on `dir`, and `Scatter` elaborates them into interval `position`
-constraints. So the interval form above does all the work: the span is the
-child's size proposal (a `rect` with no size there fills its cell, and a
-`stack` or `spread` inside a cell divides the cell), and the pins place it.
-On the other axis the children are aligned, as in a scatter.
+It has no layout code of its own. It is a layer with one region `position`
+constraint per child on `dir` (`Constraint.position({ [dir]: region })`,
+with a `PositionRegion` per cell) and one `align` on the other axis, as in
+a scatter. The region is how a parent hands a child its space: the cell's
+pixel length is the child's size proposal (`buildSpanProposalMap`, as for
+an interval), and one pin puts the child's center on the cell's center. So a
+`rect` or a `region` with no size there fills its cell, a `stack` or
+`spread` inside a cell divides the cell, and a circle or a text keeps its
+own size and sits in the middle of the cell. An interval would pin both
+edges instead, which sets the child's size and would stretch a circle into
+an ellipse.
 
-Each end of a span is a datum that carries what the column says about its
-values (its measure, and its schema type, so a time column gives a time
-axis), and the cell it is an edge of (`DatumValueImpl.cell`). A range whose
-two ends are edges of one cell is that cell, so `collectPositionDomains`
-collects the cells, and the layer's type on that axis holds them
-(`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
+The region holds its cell and the cell's two edges. Each edge is a datum
+that carries what the column says about its values (its measure, and its
+schema type, so a time column gives a time axis). `collectPositionDomains`
+reads a region's edges as it reads an interval's (the domain, the measure,
+the calendar), and collects its cell, so the layer's type on that axis holds
+the cells (`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
 (`mergeCells`), as an ordinal over cells does. The type is what tells the
 axis that it places cells: a time axis over calendar cells ticks at their
 partition and labels each cell between its two boundary ticks
@@ -2012,9 +2021,28 @@ its round-number ticks.
 The region a child gets is its cell's interval on `dir` and the whole space
 on the other axis. Two nested 1D partitions, one per axis, give each leaf
 the same rectangle in either order; only the order of the children
-differs. A 2D cell that is not a product of intervals (a hexagon) cannot be
-stated as two interval pins, so a 2D partition needs a region constraint of
-its own (#1059).
+differs.
+
+**The product form.** `partition({ by: { x, y } })` divides both axes. It is
+defined as the 1D partition on x, then the 1D partition on y with alignment
+`"middle"`, and it is built by that rewrite (`compose`), so it adds no
+layout of its own. On the wire, JS writes the two partitions, and the
+product form (which Python writes) rebuilds them. A leaf gets a rectangle:
+its y cell from the inner partition, and its x cell through the inner
+partition's box, which the outer partition centers in the x cell. The inner
+partition's box is as wide as its widest child, and the inner partition
+centers its children on one line, so each child is centered in its x cell.
+The outer partition keeps the default alignment, which leaves the inner
+partitions where their y cells put them; a `"middle"` alignment there would
+center their boxes instead. Empty cells are groups with no rows, as in 1D,
+so a count over one is 0 and is drawn.
+
+**Regions with an outline.** A region is a box today. A hexagon or a
+Voronoi cell (#1059 part B) is a box plus an outline, the same shape the
+`boundary` geometry query (#974) returns, but handed from parent to child.
+It is one region on both axes rather than one interval per axis, and the
+`region` mark has to draw its outline, so the outline has to reach the
+child's layout with its size proposal. That step is not built yet.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
@@ -2027,7 +2055,10 @@ channel's own sum/mean is the identity over that singleton, so
 `rect({ h: field("weight").mean() })` reports the mean, not
 `mean-of-a-1-element-array`-nonsense. A bare string or plain function accessor
 carries no ops, so this is a strict superset of the pre-#700 behavior, not a
-new code path for the common case.
+new code path for the common case. The color and raw channels, which read
+the first row, fold an aggregate the same way: `region({ fill:
+field("a").count() })` colors a cell by its count, and the count of a group
+with no rows is 0.
 
 **Measure implications.** `count`/`distinct` report values that are counts,
 not the source field's own units — `evalFieldValues` reports measure

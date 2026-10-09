@@ -1531,25 +1531,41 @@ for the API.
       }
     },
     "PartitionOperator": {
-      "description": "Divide the space along `dir` into the cells of a binned key. Each group is placed across its cell's interval on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size along `dir` fills its cell.",
+      "description": "Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.",
       "type": "object",
-      "required": ["type", "by", "dir"],
+      "required": ["type", "by"],
       "additionalProperties": true,
       "properties": {
         "type": {
           "const": "partition"
         },
         "by": {
-          "$ref": "#/$defs/FieldAccessor",
-          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the space. A plain field has no region and is an error."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "$ref": "#/$defs/FieldAccessor"
+                },
+                "y": {
+                  "$ref": "#/$defs/FieldAccessor"
+                }
+              },
+              "required": ["x", "y"]
+            }
+          ],
+          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y with alignment middle. A plain field has no region and is an error."
         },
         "dir": {
           "type": "string",
-          "description": "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r)."
+          "description": "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis."
         },
         "alignment": {
           "type": "string",
-          "description": "Alignment of the children on the other axis (\"start\" | \"middle\" | \"end\" | \"baseline\").",
+          "description": "Alignment of the children on the other axis (\"start\" | \"middle\" | \"end\" | \"baseline\"). Not allowed with a key per axis, where each child is centered in its cell.",
           "default": "baseline"
         },
         "axes": {
@@ -2416,6 +2432,60 @@ for the API.
         }
       }
     },
+    "RegionMark": {
+      "description": "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. Today every region is a box, so it draws a rectangle.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "region"
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale."
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color. Defaults to `fill`."
+        },
+        "strokeWidth": {
+          "$ref": "#/$defs/Number",
+          "description": "Stroke width in pixels.",
+          "default": 0
+        },
+        "opacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity, 0 to 1.",
+          "default": 1
+        },
+        "filter": {
+          "type": "string",
+          "description": "Raw SVG filter attribute."
+        },
+        "debug": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "relate": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateClauseIR"
+          }
+        },
+        "zOrder": {
+          "$ref": "#/$defs/Number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
     "LineMark": {
       "description": "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
       "type": "object",
@@ -2663,6 +2733,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/BlankMark"
+        },
+        {
+          "$ref": "#/$defs/RegionMark"
         },
         {
           "$ref": "#/$defs/LineMark"

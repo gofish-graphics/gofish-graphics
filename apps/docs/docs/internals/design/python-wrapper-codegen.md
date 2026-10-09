@@ -417,8 +417,9 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   unchanged. A union with several dict branches is allowed only when it is
   tagged: each branch is an object with a `kind` literal or enum, the
   `kind` values do not overlap, and `_to_wire` picks the branch by the
-  dict's `kind` (treemap's `tile` strategies); any other such union fails
-  generation. The JSON Schema and the validator read the same `OPTION_TYPES`
+  dict's `kind` (treemap's `tile` strategies), or when no branch renames
+  a key (partition's `by`, a field accessor or `{x, y}` of them, goes on the
+  wire as it is); any other such union fails generation. The JSON Schema and the validator read the same `OPTION_TYPES`
   entries, which replaced their hand-written axes shapes; those had fallen
   behind the JS type and lacked `side` and `labelAngle`. See
   [§ Generating the Python factory layer](/internals/frontend/serialization#generating-the-python-factory-layer).
