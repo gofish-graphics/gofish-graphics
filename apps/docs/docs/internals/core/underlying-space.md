@@ -1787,16 +1787,21 @@ same way a transform's measure provenance does: `ChartBuilder` copies the
 array and tags it (`applySchema`, which keeps the measure provenance the
 array already carries), `createOperator` copies the tag onto each
 split leaf, and a `derive` (any data-transform operator, `mapOperator` in
-`marks/chart.ts`) types its result with `applySchema` too. Its inherited
-types are only the input's types that still fit the result's values
-(`typesThatFit`: a time column holds epoch milliseconds, an ordered column
-holds text or numbers); they never convert or check values, so a date rewritten
+`marks/chart.ts`) types its result with `applySchema` too, passing the
+input's types as `applySchema`'s `inherited` types. It keeps only those that
+still fit the result's values: each class has one predicate for the values
+it accepts as they stand (`ACCEPTS` in `schema.ts`: a time holds epoch
+milliseconds, an order holds text or numbers), and a type fits a value when
+every class it has accepts it. A time column that fit is not checked for
+epoch milliseconds a second time. The inherited types never convert or check
+values, so a date rewritten
 to "Mar" is plain text, not an error. The result's own types override them
 column by column, inference types a column of `Date`s as a UTC time, and
 `derive(fn, { schema })` overrides all of that for the columns it names and
 converts their values like a chart's schema (a datetime column a Python
 callback returns arrives typed from the widget's decode). The operator never
-tags the array its function returned. A `filter` keeps its input's types,
+tags the array its function returned; one that returns its input array as is
+(`log`), with no `schema`, passes it on untouched, since it is typed already. A `filter` keeps its input's types,
 since its rows are the input's rows (a filter that keeps a value outside an
 order keeps the order, so the stray-level error fires where the order is
 used). `applySchema` copies

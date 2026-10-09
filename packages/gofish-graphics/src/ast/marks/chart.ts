@@ -71,12 +71,7 @@ import {
 } from "./chartBuilder";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
-import {
-  applySchema,
-  getColumnTypes,
-  typesThatFit,
-  type SchemaEntry,
-} from "../schema";
+import { applySchema, getColumnTypes, type SchemaEntry } from "../schema";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -91,7 +86,7 @@ export type { ChartOptions };
  * `applySchema`:
  *
  *  1. A column whose values still fit the type it had in the input keeps it
- *     (`typesThatFit`): a time column of untouched epoch milliseconds stays a
+ *     (`applySchema`'s `inherited` types): a time column of untouched epoch milliseconds stays a
  *     time, so a `filter`, or a `derive` that adds a column, leaves the other
  *     columns as they were. The input's types never convert or check values.
  *  2. A column of `Date`s is a time (UTC), inferred as for chart data.
@@ -104,6 +99,8 @@ export type { ChartOptions };
  * Types the result carries itself win over 1 and 2 (a datetime column a
  * Python callback returns arrives typed from the widget's decode). The
  * returned array itself is left as `fn` made it: `applySchema` types a copy.
+ * An operator that returns its input array as is (`log`), with no `schema`,
+ * passes it on as is: it is typed already.
  */
 function mapOperator<T, U>(
   fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
@@ -113,13 +110,10 @@ function mapOperator<T, U>(
   const op: Operator<T, U> = async (mark: Mark<U>) =>
     (async (d: T, key?: string | number, layerContext?: LayerContext) => {
       const out = await fn(d, layerContext);
-      const typed = Array.isArray(out)
-        ? ((await applySchema(
-            out,
-            schema,
-            typesThatFit(out, getColumnTypes(d))
-          )) as U)
-        : out;
+      const typed =
+        Array.isArray(out) && !(out === d && Object.keys(schema).length === 0)
+          ? ((await applySchema(out, schema, getColumnTypes(d))) as U)
+          : out;
       return mark(typed, key, layerContext);
     }) as Mark<T>;
   (op as any).__serialize = serialize;

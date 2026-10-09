@@ -67,6 +67,29 @@ export type ColumnType = {
   HasCalendar?: HasCalendar;
 };
 
+/** Which values each class accepts as they stand, without conversion. A
+ *  missing value (null, undefined) fits every class.
+ *
+ *  - `HasCalendar`: epoch milliseconds, a finite number.
+ *  - `HasOrder`: text or numbers, the kinds its levels are. A value outside
+ *    the levels still fits, so the order stays and its stray-level error
+ *    fires where the order is used.
+ *  - `HasMidpoint`: anything; its values are its order's. */
+const ACCEPTS: { [K in keyof ColumnType]-?: (v: unknown) => boolean } = {
+  HasCalendar: (v) =>
+    v == null || (typeof v === "number" && Number.isFinite(v)),
+  HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
+  HasMidpoint: () => true,
+};
+
+/** Whether one value fits a column type as it stands: every class the type
+ *  has accepts it ({@link ACCEPTS}). */
+function valueFits(type: ColumnType, v: unknown): boolean {
+  return (Object.keys(ACCEPTS) as (keyof ColumnType)[]).every(
+    (k) => type[k] === undefined || ACCEPTS[k](v)
+  );
+}
+
 /** The column types of a dataset, keyed by column name. */
 export type ColumnTypes = Record<string, ColumnType>;
 
@@ -217,19 +240,25 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
 
 /**
  * Type `rows` with `schema`: a copy of the array carrying the column types
- * and the measure provenance it carries. The types are `inherited` (an
- * operator's input's, for its result), then the ones the array already
- * carries, then `schema`'s, each winning over the one before. The copy leaves
- * the caller's array untagged, so one array can feed charts with different
- * schemas.
+ * and the measure provenance it carries. The types are, each winning over the
+ * one before:
  *
- * A column the schema does not name is a time column (`HasCalendar`, UTC)
- * when its first non-null value is a JS `Date` (a column is a key of the
- * first row): inference is local, from the value alone, and a missing value
- * says nothing about the column. Strings and numbers are never inferred as time; they need
+ *  1. `inherited` (an operator's input's, for its result), each kept only
+ *     when every value of its column fits it as it stands
+ *     ({@link valueFits}). The inherited types never convert or check the
+ *     values: a column that no longer fits (a date rewritten to "Mar") just
+ *     has no type. A column the rows do not hold fits (it has no values).
+ *  2. The types the array already carries.
+ *  3. `schema`'s.
+ *
+ * A column none of these type is a time column (`HasCalendar`, UTC) when its
+ * first non-null value is a JS `Date` (a column is a key of the first row):
+ * inference is local, from the value alone, and a missing value says nothing
+ * about the column. Strings and numbers are never inferred as time; they need
  * `Schema.time()`. Every time column's values become epoch milliseconds (see
  * {@link toEpochMs}); the rows are copied only when some value is not one
- * already.
+ * already. The copy leaves the caller's array untagged, so one array can
+ * feed charts with different schemas.
  *
  * It does not check the values against an order: a value outside an order is
  * an error where the order is used (`orderByLevels`), so a `filter` in the
@@ -240,33 +269,52 @@ export async function applySchema<T>(
   schema: Record<string, SchemaEntry> = {},
   inherited?: ColumnTypes
 ): Promise<T[]> {
-  const types: ColumnTypes = { ...inherited, ...getColumnTypes(rows) };
+  const own = getColumnTypes(rows);
+  const records = rows as unknown as (Record<string, unknown> | null)[];
+  const types: ColumnTypes = {};
+  // Time columns already known to hold epoch milliseconds: their values
+  // passed the HasCalendar test when they fit their inherited type.
+  const checked = new Set<string>();
+  for (const [column, type] of Object.entries(inherited ?? {})) {
+    const fits = records.every(
+      (r) => r == null || typeof r !== "object" || valueFits(type, r[column])
+    );
+    if (!fits) continue;
+    types[column] = type;
+    if (type.HasCalendar) checked.add(column);
+  }
+  Object.assign(types, own);
   for (const [column, entry] of Object.entries(schema)) {
     types[column] = columnTypeOf(column, entry);
   }
-  const first = rows.find((r) => r != null) as
-    | Record<string, unknown>
-    | undefined;
-  for (const column of Object.keys(first ?? {})) {
-    if (types[column] !== undefined) continue;
-    const v = rows.find(
-      (r) => r != null && (r as Record<string, unknown>)[column] != null
-    ) as Record<string, unknown> | undefined;
-    if (v?.[column] instanceof Date) {
-      types[column] = { HasCalendar: { zone: "UTC" } };
+  // Date inference, in one pass over the rows: each untyped column of the
+  // first row is resolved by its first non-null value.
+  const unresolved = new Set(
+    Object.keys(records.find((r) => r != null) ?? {}).filter(
+      (column) => types[column] === undefined
+    )
+  );
+  for (const r of records) {
+    if (unresolved.size === 0) break;
+    if (r == null) continue;
+    for (const column of unresolved) {
+      const v = r[column];
+      if (v == null) continue;
+      if (v instanceof Date) types[column] = { HasCalendar: { zone: "UTC" } };
+      unresolved.delete(column);
     }
   }
   if (Object.keys(types).length === 0) return rows;
   const timeColumns = Object.entries(types).filter(
     ([, t]) => t.HasCalendar !== undefined
   );
+  const unchecked = timeColumns.filter(([column]) => !checked.has(column));
   const isEpochMs = (row: T): boolean =>
     row == null ||
     typeof row !== "object" ||
-    timeColumns.every(([column]) => {
-      const v = (row as Record<string, unknown>)[column];
-      return v == null || (typeof v === "number" && Number.isFinite(v));
-    });
+    unchecked.every(([column]) =>
+      ACCEPTS.HasCalendar((row as Record<string, unknown>)[column])
+    );
   let out: T[] = [...rows];
   if (timeColumns.length > 0) {
     await loadTemporal();
@@ -295,47 +343,6 @@ export async function applySchema<T>(
     });
   }
   return setColumnTypes(copyMeasureProvenance(out, rows), types);
-}
-
-/** Whether one value fits a column type as it stands, without conversion: a
- *  time (`HasCalendar`) holds epoch milliseconds, and an order (`HasOrder`,
- *  and the midpoint along it) holds text or numbers, the kinds its levels
- *  are. A value outside the levels still fits, so the order stays and its
- *  stray-level error fires when the order is used, instead of a derive or
- *  filter silently dropping the order. A missing value fits any type. */
-function valueFits(type: ColumnType, v: unknown): boolean {
-  if (v === null || v === undefined) return true;
-  if (type.HasCalendar && !(typeof v === "number" && Number.isFinite(v)))
-    return false;
-  if (type.HasOrder && typeof v !== "string" && typeof v !== "number")
-    return false;
-  return true;
-}
-
-/**
- * The types of `inherited` (an operator's input's) that still fit the values
- * of `rows` (its result), column by column: a column keeps its type only when
- * every value fits it as it stands ({@link valueFits}). The types are never
- * used to convert or check the values: a column that no longer fits (a date
- * rewritten to "Mar") just has no type. A column the rows do not hold fits
- * (it has no values).
- */
-export function typesThatFit(
-  rows: readonly unknown[],
-  inherited: ColumnTypes | undefined
-): ColumnTypes | undefined {
-  if (inherited === undefined) return undefined;
-  const out: ColumnTypes = {};
-  for (const [column, type] of Object.entries(inherited)) {
-    const fits = rows.every(
-      (r) =>
-        r == null ||
-        typeof r !== "object" ||
-        valueFits(type, (r as Record<string, unknown>)[column])
-    );
-    if (fits) out[column] = type;
-  }
-  return out;
 }
 
 /** The zones {@link checkZone} has found valid. */
@@ -367,8 +374,7 @@ const HAS_OFFSET = /(?:[zZ]|[+-]\d{2}(?::?\d{2})?)(?:\[.*\])?$/;
  * error naming the column.
  */
 export function toEpochMs(v: unknown, zone: string, column: string): unknown {
-  if (v === null || v === undefined) return v;
-  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (ACCEPTS.HasCalendar(v)) return v;
   if (v instanceof Date && Number.isFinite(v.getTime())) return v.getTime();
   if (typeof v === "string") {
     const T = temporal();
