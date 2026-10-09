@@ -32,10 +32,14 @@ derive(fn, schema={...}) -> DeriveOperator
 
 ## Parameters
 
-| Parameter | Type                      | Description                                                                                                                                                                                        |
-| --------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fn`      | `Callable`                | **Required.** Receives the current group's rows and returns the new ones — a list of dicts, `None`, or a dataframe from any backend [narwhals](https://narwhals-dev.github.io/narwhals/) supports. |
-| `schema`  | `dict[str, ColumnSchema]` | Column types of the result, keyed by column name, as in [`chart`'s `schema`](/python/api/core/schema): `Schema.ordered(levels)` or `Schema.time(zone=...)`.                                        |
+`fn` (required, `Callable`) receives the current group's rows and returns the
+new ones: a list of dicts, `None`, or a dataframe from any backend
+[narwhals](https://narwhals-dev.github.io/narwhals/) supports. The options:
+
+::: gofish-ref derive
+:::
+
+`schema` takes the same column types as [`chart`'s `schema`](/python/api/core/schema).
 
 Returns a `DeriveOperator` for use inside [`.flow()`](/python/api/core/flow).
 
@@ -53,6 +57,12 @@ Each column of the returned rows is typed like chart data:
 - A `schema` entry overrides these for its column and converts the values
   as a chart's schema does: an ISO 8601 string in a `Schema.time()` column
   becomes an instant.
+
+Fitting reads the values, not what they mean: a `derive` that turns a time
+column into plain numbers, such as years, keeps the time type, because any
+number is a valid instant
+([#1089](https://github.com/gofish-graphics/gofish-graphics/issues/1089)).
+Give the column its type with `derive(fn, schema={...})`.
 
 ```python
 # Monthly highs, months in calendar order

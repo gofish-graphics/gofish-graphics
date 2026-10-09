@@ -839,7 +839,7 @@ for the API.
       ]
     },
     "DeriveOperator": {
-      "description": "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
+      "description": "Transforms the data with a function, `derive(fn)`. A function does not serialize: the IR carries a Python bridge handle in its place.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,

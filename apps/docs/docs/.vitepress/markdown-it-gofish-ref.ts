@@ -18,6 +18,9 @@
  * TS-ish type; Python pages (`docs/python/**`) show the snake_case kwarg names and a
  * Python type — the language is detected from `env.relativePath`.
  *
+ * A field marked `wireOnly` (a Python bridge handle such as `derive`'s
+ * `lambdaId`) is left out: it is on the wire, not an option a user passes.
+ *
  * Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
  * their own open subsection ("Box dimensions", "Paint") below the table of the
  * construct's own fields.
@@ -261,7 +264,10 @@ function renderDescriptor(
   }
 ): string {
   const { lang, md, heading } = opts;
-  const fields = Object.entries(resolveFields(d));
+  // A wire-only field (a Python bridge handle) is no option a user passes.
+  const fields = Object.entries(resolveFields(d)).filter(
+    ([, spec]) => !spec.wireOnly
+  );
 
   const own: Array<[string, FieldSpec]> = [];
   const groups = new Map<string, Array<[string, FieldSpec]>>();

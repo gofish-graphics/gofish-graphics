@@ -68,6 +68,11 @@ export interface FieldSpec {
   doc?: string;
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
+  /** On the wire only: a field the producer writes for the consumer (a
+   *  Python bridge handle), never an option a user passes. The docs options
+   *  tables (`::: gofish-ref`) leave it out; the wire schema and validator
+   *  keep it. Default: false. */
+  wireOnly?: boolean;
 }
 
 export type FieldGroup = Record<string, FieldSpec>;
@@ -515,14 +520,16 @@ const spreadBoxFields: FieldGroup = group({
 
 export const OPERATORS: Record<string, ConstructDescriptor> = {
   derive: operator("derive", {
-    doc: "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
+    doc: "Transforms the data with a function, `derive(fn)`. A function does not serialize: the IR carries a Python bridge handle in its place.",
     fields: {
       lambdaId: {
         type: t.string,
+        wireOnly: true,
         doc: "Python-bridge handle for the remote callable.",
       },
       provenance: {
         type: t.record(t.string),
+        wireOnly: true,
         doc: "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure.",
       },
       schema: {

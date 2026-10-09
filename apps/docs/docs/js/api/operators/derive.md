@@ -29,10 +29,14 @@ derive(fn, { schema });
 
 ## Parameters
 
-| Parameter | Type                           | Description                                                                                                                                                               |
-| --------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fn`      | `(d: T) => U \| Promise<U>`    | **Required.** Receives the data at this point in the flow (inside `.flow()`, the current group's rows) and returns what the rest of the pipeline sees. It may be `async`. |
-| `schema`  | `Record<string, ColumnSchema>` | Column types of the result, keyed by column name, as in [`chart`'s `schema`](/js/api/core/schema): `Schema.ordered(levels)` or `Schema.time({ zone })`.                   |
+`fn` (required, `(d: T) => U | Promise<U>`) receives the data at this point
+in the flow (inside `.flow()`, the current group's rows) and returns what the
+rest of the pipeline sees. It may be `async`. The options:
+
+::: gofish-ref derive
+:::
+
+`schema` takes the same column types as [`chart`'s `schema`](/js/api/core/schema).
 
 ## Column types of the result
 
@@ -49,8 +53,16 @@ Each column of the returned rows is typed like chart data:
   as a chart's schema does: an ISO 8601 string in a `Schema.time()` column
   becomes an instant.
 
-[`filter`](/js/api/operators/filter) keeps the input's types, since its rows
-are the input's rows.
+A result that is one object, not an array, is typed as one row the same way.
+A column of `Date` values that had a time type in the input keeps it, time
+zone included. Fitting reads the values, not what they mean: a `derive`
+that turns a time column into plain numbers, such as years, keeps the time
+type, because any number is a valid instant
+([#1089](https://github.com/gofish-graphics/gofish-graphics/issues/1089)).
+Give the column its type with `derive(fn, { schema })`.
+
+[`filter`](/js/api/operators/filter) carries the input's types over as they
+are, since its rows are the input's rows.
 
 ```ts
 // Monthly highs, months in calendar order
