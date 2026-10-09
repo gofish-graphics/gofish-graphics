@@ -141,6 +141,7 @@ export const Spread = createNodeOperator(
           if (child instanceof GoFishNode) {
             wrapped.setKey(child.key ?? "");
             wrapped._syntheticKey = child._syntheticKey;
+            wrapped.keyCell = child.keyCell;
             (wrapped as any).__splitBy = (child as any).__splitBy;
             wrapped.datum = child.datum;
           }

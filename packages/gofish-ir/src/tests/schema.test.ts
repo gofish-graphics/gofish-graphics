@@ -468,6 +468,42 @@ check(
   ).valid
 );
 
+const binBy = (partition: unknown) =>
+  chart([
+    {
+      type: "spread",
+      dir: "x",
+      by: {
+        type: "field",
+        name: "d",
+        ops: [{ op: "bin", ...(partition === undefined ? {} : { partition }) }],
+      },
+    },
+  ]);
+for (const [name, partition] of [
+  ["no partition", undefined],
+  ["a Calendar value", { unit: "month", step: 3 }],
+  ["a week start", { unit: "week", step: 1, start: "sunday" }],
+  ["a step", { step: 0.5 }],
+  ["a threshold count", { thresholds: 20 }],
+  ["threshold edges", { thresholds: [1, 2, 5] }],
+] as const) {
+  const r = validate(binBy(partition));
+  check(
+    `bin with ${name} accepts`,
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+}
+for (const [name, partition] of [
+  ["an unknown unit", { unit: "fortnight" }],
+  ["a step and thresholds", { step: 1, thresholds: 10 }],
+  ["a non-numeric step", { step: "1" }],
+  ["the old flat thresholds", 10],
+] as const) {
+  check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
+}
+
 check(
   "filter without a predicate rejected",
   !validate(chart([{ type: "filter" }])).valid

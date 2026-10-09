@@ -189,12 +189,6 @@ export interface DeriveOperator
     OperatorFlagsIR {
   type: "derive";
   lambdaId?: string;
-  /** Measure provenance a transform (e.g. `bin`) declares for its output
-   *  columns — a map from output field name to the measure it carries (the
-   *  source field's units). Travels in the IR because the JS-side array symbol
-   *  can't ride the data rows across the derive RPC; the deserializer re-applies
-   *  it via `setMeasureProvenance`. */
-  provenance?: Record<string, string>;
   /** The column types of the derive's result, keyed by column name, in the
    *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
    *  type the result over the types it keeps or infers, and convert values
@@ -747,6 +741,13 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
  *  (`sort`/`reverse`/`bin`); a value (size/pos) channel slot accepts the
  *  aggregate ops (`sum`/`mean`/`count`/`distinct`) and, only on an
  *  operator's entry-flagged `size` channel, `normalize`. */
+/** A partition's wire form (`field(x).bin(p)`): a Calendar value, cells
+ *  `step` wide, or `thresholds` (a cell count, or a list of edges). */
+export type PartitionIR =
+  | CalendarPartitionIR
+  | { step: number }
+  | { thresholds: number | number[] };
+
 export interface FieldAccessor {
   type: "field";
   name: string;
@@ -767,7 +768,12 @@ export type FieldOpIR =
       values?: (string | number)[];
     }
   | { op: "reverse" }
-  | { op: "bin"; thresholds?: number | number[] }
+  | {
+      op: "bin";
+      /** The partition each value is binned into: a Calendar value, `{ step }`
+       *  or `{ thresholds }`. Absent: about 10 cells. */
+      partition?: PartitionIR;
+    }
   | { op: "dropNulls" }
   | { op: "normalize" }
   | { op: "sum" }

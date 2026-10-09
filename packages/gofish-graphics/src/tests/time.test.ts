@@ -22,6 +22,7 @@ import {
 } from "../ast/calendar";
 import {
   applySchema,
+  domainRows,
   getColumnTypes,
   setColumnTypes,
   toEpochMs,
@@ -297,9 +298,13 @@ async function main() {
       (declared[0] as any).n === Date.UTC(2023, 11, 31, 15)
     );
     const untyped = [{ a: 1 }];
+    const copied = await applySchema(untyped);
     check(
-      "data with no types is returned as is",
-      (await applySchema(untyped)) === untyped
+      "data with no types keeps its rows, in a copy that is its own domain",
+      copied !== untyped &&
+        copied[0] === untyped[0] &&
+        domainRows(copied) === copied &&
+        domainRows(untyped) === untyped
     );
     const zoneErr = await errorOf(() =>
       applySchema([{ t: 1 }], { t: SrcSchema.time({ zone: "Mars/Olympus" }) })

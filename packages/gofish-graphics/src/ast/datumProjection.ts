@@ -28,8 +28,14 @@ import {
   normalizeNotSupportedError,
   type FieldOp,
 } from "./fieldExpr";
-import { binRows } from "./transforms";
-import { columnType, orderByLevels } from "./schema";
+import {
+  binCells,
+  checkPartition,
+  Cell,
+  DEFAULT_PARTITION,
+  type Cells,
+} from "./cells";
+import { columnType, domainRows, orderByLevels } from "./schema";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
@@ -136,6 +142,11 @@ export function projectByValues(obj: unknown, by: SplitBy): unknown[] {
  *  {@link splitEntries}). */
 export type SplitBy = string | ((r: any) => unknown) | FieldAccessor;
 
+/** The key of one group of a split: a value of the `by` field (text or a
+ *  number), or a {@link Cell} for a binned key (`field(x).bin(p)`), which
+ *  stands for its id (`String(cell)`). */
+export type SplitKey = string | number | Cell;
+
 /**
  * The mutable cell `ChartBuilder` writes the computed default split/travel
  * direction into (issue #752's default-grouping rule — see
@@ -218,26 +229,81 @@ export function splitKeyFn(by: SplitBy): (r: any) => string | number {
 
 /** Numeric-aware, lodash-`orderBy`-compatible-enough key comparator: compares
  *  as numbers when both keys coerce to finite numbers, else falls back to
- *  string comparison. Used by `field(...).sort()`'s no-arg (sort-by-key) form. */
-function compareKeys(a: string | number, b: string | number): number {
+ *  string comparison. Used by `field(...).sort()`'s no-arg (sort-by-key) form.
+ *  A cell compares by its start: its id is its start, as text. */
+function compareKeys(a: unknown, b: unknown): number {
   const na = typeof a === "number" ? a : Number(a);
   const nb = typeof b === "number" ? b : Number(b);
   if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
   return String(a).localeCompare(String(b));
 }
 
-/** Bin `d` by the numeric field `fieldName` (via {@link binRows}). REPLACES the
- *  base grouping — entries are keyed by each bin's start (ascending). Empty bins
- *  are dropped to match `Map.groupBy` semantics (a group with zero rows isn't
- *  represented as a key there either). */
+/** The cells of each domain, per partition and column, built once, so every
+ *  group of a split over one domain gets the same `Cell` objects in the same
+ *  order. Keyed by the partition value the `bin` op holds (the same object
+ *  each time the op runs). */
+const cellsCache = new WeakMap<object, WeakMap<object, Map<string, Cells>>>();
+
+/** The cells `field(name).bin(partition)` maps values to: the cells of the
+ *  partition over the column's values in `d`'s DOMAIN (`domainRows`,
+ *  schema.ts), the chart's data, not over `d` alone. */
+function domainCells(
+  name: string,
+  d: Record<string, any>[],
+  partitionOp: unknown
+): Cells {
+  const where = `field("${name}").bin(...)`;
+  const raw = (partitionOp ?? DEFAULT_PARTITION) as object;
+  const domain = domainRows(d) as Record<string, any>[];
+  let byPartition = cellsCache.get(domain);
+  if (byPartition === undefined) {
+    byPartition = new WeakMap();
+    cellsCache.set(domain, byPartition);
+  }
+  let byName = byPartition.get(raw);
+  if (byName === undefined) {
+    byName = new Map();
+    byPartition.set(raw, byName);
+  }
+  let cells = byName.get(name);
+  if (cells === undefined) {
+    cells = binCells(
+      checkPartition(raw, where),
+      domain.map((r) => r?.[name]),
+      columnType(d, name)?.HasCalendar?.zone,
+      where
+    );
+    byName.set(name, cells);
+  }
+  return cells;
+}
+
+/** Bin `d` by the field `fieldName` into the cells of `partitionOp` over the
+ *  column's domain (see {@link domainCells}). REPLACES the base grouping:
+ *  entries are keyed by {@link Cell}, in order, one per cell of the domain,
+ *  so a cell that none of `rows` (`d`, after any `dropNulls`) falls in is
+ *  kept, with no rows. Rows with a missing value are dropped. */
 function binEntries<T extends Record<string, any>>(
   fieldName: string,
   d: T[],
-  thresholds: number | number[] | undefined
-): Map<number, T[]> {
-  const entries = new Map<number, T[]>();
-  for (const b of binRows(fieldName, d, thresholds)) {
-    if (b.rows.length > 0) entries.set(b.start, b.rows);
+  rows: T[],
+  partitionOp: unknown
+): Map<Cell, T[]> {
+  const { cells, cellOf } = domainCells(fieldName, d, partitionOp);
+  const entries = new Map<Cell, T[]>(cells.map((c) => [c, []]));
+  for (const row of rows) {
+    const v = row?.[fieldName];
+    if (v == null) continue;
+    const cell = typeof v === "number" ? cellOf(v) : undefined;
+    if (cell === undefined) {
+      throw new Error(
+        `field("${fieldName}").bin(...): the value ${JSON.stringify(v)} is ` +
+          `outside the column's values in the chart's data, so it has no ` +
+          `cell. A derive that makes new values makes a new domain: bin ` +
+          `after it.`
+      );
+    }
+    entries.get(cell)!.push(row);
   }
   return entries;
 }
@@ -247,15 +313,18 @@ function binEntries<T extends Record<string, any>>(
  *  `by`, by the SUM of that field over each entry's rows; with neither, by
  *  the entry's own group key (numeric-aware). */
 function sortEntries<T>(
-  entries: Map<string | number, T[]>,
+  entries: Map<SplitKey, T[]>,
   op: Extract<FieldOp, { op: "sort" }>
-): Map<string | number, T[]> {
+): Map<SplitKey, T[]> {
   const pairs = [...entries.entries()];
   if (op.values !== undefined) {
-    const rank = new Map(op.values.map((v, i) => [v, i]));
+    const rank = new Map<unknown, number>(op.values.map((v, i) => [v, i]));
+    // A cell is listed by its start (or its id).
+    const rankOf = (k: SplitKey) =>
+      k instanceof Cell ? (rank.get(k.start) ?? rank.get(k.id)) : rank.get(k);
     pairs.sort(([ka], [kb]) => {
-      const ra = rank.get(ka);
-      const rb = rank.get(kb);
+      const ra = rankOf(ka);
+      const rb = rankOf(kb);
       if (ra !== undefined && rb !== undefined) return ra - rb;
       if (ra !== undefined) return -1;
       if (rb !== undefined) return 1;
@@ -275,9 +344,9 @@ function sortEntries<T>(
 
 /** `entries` reordered by one `sort` or `reverse` op. */
 function reorderEntries<T>(
-  entries: Map<string | number, T[]>,
+  entries: Map<SplitKey, T[]>,
   op: Extract<FieldOp, { op: "sort" | "reverse" }>
-): Map<string | number, T[]> {
+): Map<SplitKey, T[]> {
   return op.op === "sort"
     ? sortEntries(entries, op)
     : new Map([...entries.entries()].reverse());
@@ -290,8 +359,8 @@ function reorderEntries<T>(
  *  levels out in even when a row has only some of them. */
 export function orderEntries<T>(
   by: SplitBy,
-  entries: Map<string | number, T[]>
-): Map<string | number, T[]> {
+  entries: Map<SplitKey, T[]>
+): Map<SplitKey, T[]> {
   for (const op of getFieldOps(by)) {
     if (op.op === "sort" || op.op === "reverse")
       entries = reorderEntries(entries, op);
@@ -308,7 +377,9 @@ export function orderEntries<T>(
  *     `null`/`undefined`, BEFORE grouping — since grouping always happens
  *     first (`bin` re-derives its own grouping from the same filtered rows),
  *     this is equivalent regardless of where `dropNulls` sits in the chain.
- *   - `bin` REPLACES the base grouping (re-groups the raw `d` into bins).
+ *   - `bin` REPLACES the base grouping: it re-groups the rows into the
+ *     cells of its partition over the column's domain, keyed by `Cell`, one
+ *     entry per cell, empty cells included (see `binEntries`).
  *   - `sort` / `reverse` reorder the entries Map.
  *   - a value-slot op (`sum`/`mean`/`count`/`distinct`) in a `by` slot, or
  *     `normalize`, throws — those aren't domain ops.
@@ -319,7 +390,7 @@ export function orderEntries<T>(
 export function splitEntries<T extends Record<string, any>>(
   by: SplitBy,
   d: T[]
-): Map<string | number, T[]> {
+): Map<SplitKey, T[]> {
   const ops = getFieldOps(by);
   let rows = d;
   if (ops.some((op) => op.op === "dropNulls")) {
@@ -334,7 +405,7 @@ export function splitEntries<T extends Record<string, any>>(
       return v !== null && v !== undefined;
     });
   }
-  let entries: Map<string | number, T[]> = Map.groupBy(rows, splitKeyFn(by));
+  let entries: Map<SplitKey, T[]> = Map.groupBy(rows, splitKeyFn(by));
   // An ordered column (HasOrder, from the chart's `schema`) groups in the
   // order of its levels, not in order of first appearance. The ops below
   // reorder from there.
@@ -354,7 +425,7 @@ export function splitEntries<T extends Record<string, any>>(
             "field(...).bin() requires a field(name) accessor as `by`, not a function."
           );
         }
-        entries = binEntries(by.name, rows, op.thresholds);
+        entries = binEntries(by.name, d, rows, op.partition);
         break;
       }
       case "sort":

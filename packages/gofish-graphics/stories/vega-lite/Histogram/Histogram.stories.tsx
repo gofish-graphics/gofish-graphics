@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, bin, derive, rect, scatter } from "../../../src/lib";
+import { chart, field, rect, spread } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/histogram.html
@@ -32,10 +32,9 @@ export const Default: StoryObj<Args> = {
 
     chart(context.loaded.movies as any[], { axes: true })
       .flow(
-        derive(bin("IMDB Rating")),
-        scatter({ xMin: "start", xMax: "end" })
+        spread({ by: field("IMDB Rating").bin(), dir: "x", spacing: 1 })
       )
-      .mark(rect({ h: "count" }))
+      .mark(rect({ h: field("IMDB Rating").count() }))
       .render(container, { w: args.w, h: args.h });
 
     return container;

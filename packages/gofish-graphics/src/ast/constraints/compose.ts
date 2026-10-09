@@ -46,6 +46,7 @@ import {
   CONTINUOUS,
   withCalendar,
   mergeCalendars,
+  type OrdinalKey,
 } from "../underlyingSpace";
 import {
   resolveAlignmentExtent,
@@ -288,7 +289,7 @@ type Seg = DistributeSegment & {
   glue: boolean;
   measure?: string;
   origin: StackOrigin<number>;
-  keys: (string | undefined)[];
+  keys: (OrdinalKey | undefined)[];
   anonymous: boolean;
 };
 type Al = { axis: 0 | 1; anchor: AlignAnchor; idx: number[] };
@@ -339,11 +340,15 @@ export function planConstraintComposition(
   if (distributes.length === 0 && spans.length === 0) return undefined;
 
   const indexByName = buildNameIndex(childNodes);
-  const keyOf = (i: number): string | undefined => {
+  // A child's ordinal key: its cell, for a binned key, else its `key`.
+  const keyOf = (i: number): OrdinalKey | undefined => {
     const node = childNodes[i];
-    return typeof node === "object" && node !== null && "key" in node
-      ? (node.key as string | undefined)
-      : undefined;
+    if (typeof node !== "object" || node === null || !("key" in node))
+      return undefined;
+    return (
+      (node as { keyCell?: OrdinalKey }).keyCell ??
+      (node.key as string | undefined)
+    );
   };
   // A child whose `key` was assigned positionally (no `by` — see createOperator).
   // An ordinal folded entirely from synthetic-keyed children is `anonymous`.

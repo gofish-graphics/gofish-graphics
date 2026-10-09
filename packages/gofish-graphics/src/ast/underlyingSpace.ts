@@ -15,6 +15,7 @@ import {
 } from "./data";
 import { nice as d3Nice } from "d3-array";
 import type { HasCalendar } from "./schema";
+import { Cell } from "./cells";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
 
 // This module is the TYPE half of an axis: what the axis means, with no σ in
@@ -109,6 +110,13 @@ export type ORDINAL_TYPE = {
    *  `distributeSpaceFold`), never sniffed back from the domain. An
    *  explicitly-keyed or `by`-grouped ordinal leaves this false. */
   anonymous?: boolean;
+  /** Set when every key is a CELL (`field(x).bin(p)`, cells.ts): each key's
+   *  cell, by key. The axis then places cells, not points: each label names
+   *  a cell and sits between the cell's two boundary ticks, and calendar
+   *  cells get an outer row of their parent level (axes/elaborate.tsx). The
+   *  cells' regions (`[start, end)`) are what a `partition` layout would read
+   *  (#1058). */
+  cells?: Readonly<Record<string, Cell>>;
 };
 
 export type UNDEFINED_TYPE = {
@@ -323,13 +331,38 @@ export const anchorAt = (
 export const ORDINAL = (
   domain?: string[],
   measure?: Measure,
-  anonymous?: boolean
+  anonymous?: boolean,
+  cells?: Readonly<Record<string, Cell>>
 ): UnderlyingSpace => ({
   kind: "ordinal",
   domain,
   measure,
   anonymous,
+  ...(cells !== undefined ? { cells } : {}),
 });
+
+/** An ordinal axis's keys: plain text, or cells (`field(x).bin(p)`), which
+ *  stand for their ids. */
+export type OrdinalKey = string | Cell;
+
+/** The ORDINAL over `keys`, in order: over cells when every key is a cell
+ *  ({@link ORDINAL_TYPE.cells}). */
+export const ordinalOver = (
+  keys: readonly OrdinalKey[],
+  measure?: Measure,
+  anonymous?: boolean
+): UnderlyingSpace => {
+  const domain = keys.map(String);
+  const allCells = keys.length > 0 && keys.every((k) => k instanceof Cell);
+  return ORDINAL(
+    domain,
+    measure,
+    anonymous,
+    allCells
+      ? Object.fromEntries((keys as Cell[]).map((c) => [c.id, c]))
+      : undefined
+  );
+};
 export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
   space.kind === "ordinal";
 

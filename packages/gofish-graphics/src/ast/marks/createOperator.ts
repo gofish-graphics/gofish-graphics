@@ -55,6 +55,8 @@ import type {
 } from "../channels";
 import { discretePosition, copyMeasureProvenance } from "../data";
 import { copyColumnTypes } from "../schema";
+import { Cell } from "../cells";
+import type { SplitKey } from "../datumProjection";
 import { fieldNameOf } from "../data";
 import type { MaybeValue, Value } from "../data";
 import {
@@ -536,9 +538,9 @@ export function attachTransformModifiers<M extends object>(
  * `{entries, layoutOpts}` form instead of a bare Map.
  */
 export type SplitResult<Datum> =
-  | Map<string | number, Datum | Datum[]>
+  | Map<SplitKey, Datum | Datum[]>
   | {
-      entries: Map<string | number, Datum | Datum[]>;
+      entries: Map<SplitKey, Datum | Datum[]>;
       layoutOpts?: Record<string, unknown>;
     };
 
@@ -839,7 +841,7 @@ function applyChannels<Options extends Record<string, any>>(
   opts: Options,
   channels: ChannelAnnotations<Options> | undefined,
   d: any,
-  entries: Map<string | number, any> | undefined
+  entries: Map<SplitKey, any> | undefined
 ): Options {
   if (!channels) return opts;
   const wholeData = Array.isArray(d) ? d : [d];
@@ -924,7 +926,7 @@ function applyChannel(
   discrete: boolean,
   val: any,
   wholeData: any[],
-  entries: Map<string | number, any> | undefined,
+  entries: Map<SplitKey, any> | undefined,
   opts: Record<string, any>
 ): any {
   // User already supplied the final-form array — leave it alone. This is
@@ -999,7 +1001,7 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   channels: ChannelAnnotations<Options> | undefined,
   opts: Options,
   d: Datum | Datum[],
-  entries: Map<string | number, Datum | Datum[]> | undefined,
+  entries: Map<SplitKey, Datum | Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined
 ): Promise<Options> {
   const pending = resolveChannelAccessors(opts, channels, () => {
@@ -1150,7 +1152,11 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             // grouping level's axis names itself by its own keys. Uniqueness is
             // per-layer (each operator's children), which the constraint refs
             // (`ensureChildNames`) and ordinal domains rely on — never global.
-            const currentKey = i;
+            // A binned key (`field(x).bin(p)`) is a cell: the node's key is
+            // its id, and the node keeps the cell itself for the ordinal
+            // space it folds into (`ORDINAL_TYPE.cells`).
+            const cell = i instanceof Cell ? i : undefined;
+            const currentKey: string | number = i instanceof Cell ? i.id : i;
             const leafNodes = await applyMark(
               mark,
               leaf as Datum | Datum[],
@@ -1166,6 +1172,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             for (const node of leafNodes) {
               node.setKey(keyStr);
               node._syntheticKey = synthetic;
+              node.keyCell = cell;
             }
             // Record the (string) field this operator grouped by, so a later
             // `resolve(..., { from })` can match against it without the user

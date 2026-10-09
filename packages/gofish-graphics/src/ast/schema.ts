@@ -220,10 +220,49 @@ export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
   return data;
 };
 
+/**
+ * Well-known symbol under which a data ARRAY carries its DOMAIN: the rows of
+ * the data it came from where that data was typed, i.e. the chart's data, or
+ * a `derive`'s result ({@link applySchema} sets it). It rides the array like
+ * the column types, and a split leaf or a `filter`'s result inherits it with
+ * them ({@link copyColumnTypes}), so every group of a split can see the whole
+ * column. `field(x).bin(p)` reads it: a binned key's cells cover the column's
+ * values over the domain, not over one group's rows (cells.ts).
+ */
+export const DOMAIN_ROWS: unique symbol = Symbol.for("gofish.domainRows");
+
+/** The domain `data` belongs to (see {@link DOMAIN_ROWS}): the rows it was
+ *  typed with, or `data` itself when it carries none. */
+export const domainRows = (data: unknown): unknown[] => {
+  const own =
+    data != null
+      ? ((data as any)[DOMAIN_ROWS] as unknown[] | undefined)
+      : undefined;
+  return own ?? (Array.isArray(data) ? data : [data]);
+};
+
+const setDomainRows = <T>(data: T, rows: unknown[]): T => {
+  Object.defineProperty(data, DOMAIN_ROWS, {
+    value: rows,
+    enumerable: false,
+    configurable: true,
+    writable: true,
+  });
+  return data;
+};
+
 /** Copy `source`'s column types onto `target` (both arrays), for every
- *  column `target` does not type itself. A split leaf or a derive's result is
- *  a fresh array, so it has to be told. */
+ *  column `target` does not type itself, and its domain
+ *  ({@link DOMAIN_ROWS}) when `target` has none. A split leaf or a filter's
+ *  result is a fresh array, so it has to be told. */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
+  const domain = source != null ? (source as any)[DOMAIN_ROWS] : undefined;
+  if (
+    domain !== undefined &&
+    target != null &&
+    (target as any)[DOMAIN_ROWS] === undefined
+  )
+    setDomainRows(target, domain);
   const types = getColumnTypes(source);
   if (types === undefined) return target;
   const own = getColumnTypes(target);
@@ -318,7 +357,12 @@ export async function applySchema<T>(
       unresolved.delete(column);
     }
   }
-  if (Object.keys(types).length === 0) return rows;
+  // The typed copy is its own domain (DOMAIN_ROWS): the rows a binned key's
+  // cells cover, in every group a later split makes.
+  if (Object.keys(types).length === 0) {
+    const out = copyMeasureProvenance([...rows], rows);
+    return setDomainRows(out, out);
+  }
   const timeColumns = Object.entries(types).filter(
     ([, t]) => t.HasCalendar !== undefined
   );
@@ -355,7 +399,8 @@ export async function applySchema<T>(
       return copy as T;
     });
   }
-  return setColumnTypes(copyMeasureProvenance(out, rows), types);
+  const typed = setColumnTypes(copyMeasureProvenance(out, rows), types);
+  return setDomainRows(typed, typed);
 }
 
 /** The zones {@link checkZone} has found valid. */

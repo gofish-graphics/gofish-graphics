@@ -1,6 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, scatter, circle, rect, derive, bin, layer, Constraint } from "../../src/lib";
+import {
+  chart,
+  scatter,
+  circle,
+  rect,
+  derive,
+  field,
+  layer,
+  Constraint,
+} from "../../src/lib";
 import { penguins } from "../../src/data/penguins";
 
 // Mirrors seaborn's jointplot:
@@ -21,6 +30,23 @@ const meta: Meta = {
 export default meta;
 
 type Args = { w: number; h: number };
+
+// The bins of `column`, `step` wide, as rows: each bin's edges and the number
+// of rows in it.
+// TODO(#1058): use `partition` with `field(column).bin({ step })` once it
+// lands. The marginal bars must sit on the scatter's continuous scale, and
+// `field(x).bin(p)` alone gives equal slots on an ordinal axis.
+const histogram =
+  (column: string, step: number) => (rows: Record<string, any>[]) => {
+    const counts = new Map<number, number>();
+    for (const r of rows) {
+      const start = Math.floor(r[column] / step) * step;
+      counts.set(start, (counts.get(start) ?? 0) + 1);
+    }
+    return [...counts]
+      .sort(([a], [b]) => a - b)
+      .map(([start, count]) => ({ start, end: start + step, count }));
+  };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
@@ -54,8 +80,11 @@ export const Default: StoryObj<Args> = {
 
       const topHist = await chart(data, { h: 80 })
         .flow(
-          derive(bin("Beak Length (mm)")),
-          scatter({ xMin: "start", xMax: "end" } as any)
+          derive(histogram("Beak Length (mm)", 2)),
+          scatter({
+            xMin: field("start", "Beak Length (mm)"),
+            xMax: field("end", "Beak Length (mm)"),
+          } as any)
         )
         .mark(rect({ h: "count", fill: "steelblue" } as any))
         .resolve();
@@ -63,8 +92,11 @@ export const Default: StoryObj<Args> = {
 
       const rightHist = await chart(data, { w: 80 })
         .flow(
-          derive(bin("Beak Depth (mm)")),
-          scatter({ yMin: "start", yMax: "end" } as any)
+          derive(histogram("Beak Depth (mm)", 1)),
+          scatter({
+            yMin: field("start", "Beak Depth (mm)"),
+            yMax: field("end", "Beak Depth (mm)"),
+          } as any)
         )
         .mark(rect({ w: "count", fill: "steelblue" } as any))
         .resolve();

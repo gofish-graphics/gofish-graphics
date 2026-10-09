@@ -6,17 +6,41 @@ https://seaborn.pydata.org/generated/seaborn.jointplot.html
 (Our penguins export renames the fields to "Beak ..." rather than "bill ...".)
 """
 
+import math
+
 from gofish import (
     Constraint,
     layer,
-    bin,
     chart,
     circle,
     derive,
+    field,
     rect,
     scatter,
 )
 from python_stories.data import PENGUINS
+
+
+def _histogram(column, step):
+    """The bins of `column`, `step` wide, as rows: each bin's edges and the
+    number of rows in it.
+
+    TODO(#1058): use `partition` with `field(column).bin(step=...)` once it
+    lands. The marginal bars must sit on the scatter's continuous scale, and
+    `field(x).bin(...)` alone gives equal slots on an ordinal axis.
+    """
+
+    def bins(rows):
+        counts = {}
+        for r in rows:
+            start = math.floor(r[column] / step) * step
+            counts[start] = counts.get(start, 0) + 1
+        return [
+            {"start": start, "end": start + step, "count": count}
+            for start, count in sorted(counts.items())
+        ]
+
+    return bins
 
 
 def story_default():
@@ -42,15 +66,14 @@ def story_default():
         .name("scatter")
     )
 
-    # bin()'s measure provenance now rides the derive operator's IR across the
-    # RPC bridge (#537), so the bin edges auto-tag with the source field's
-    # measure — no explicit field(name, measure=...) needed. The bare "start"/
-    # "end" channels unify on the source axis just like the JS story.
     top_hist = (
         chart(data, h=80)
         .flow(
-            derive(bin("Beak Length (mm)")),
-            scatter(x_min="start", x_max="end"),
+            derive(_histogram("Beak Length (mm)", 2)),
+            scatter(
+                x_min=field("start", measure="Beak Length (mm)"),
+                x_max=field("end", measure="Beak Length (mm)"),
+            ),
         )
         .mark(rect(h="count", fill="steelblue"))
         .name("topHist")
@@ -59,8 +82,11 @@ def story_default():
     right_hist = (
         chart(data, w=80)
         .flow(
-            derive(bin("Beak Depth (mm)")),
-            scatter(y_min="start", y_max="end"),
+            derive(_histogram("Beak Depth (mm)", 1)),
+            scatter(
+                y_min=field("start", measure="Beak Depth (mm)"),
+                y_max=field("end", measure="Beak Depth (mm)"),
+            ),
         )
         .mark(rect(w="count", fill="steelblue"))
         .name("rightHist")

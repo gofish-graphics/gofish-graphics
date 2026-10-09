@@ -130,7 +130,33 @@ class TestOperators:
     def test_between_rejects_pipeline_ops(self):
         """A predicate is not a value slot: ops on the field are an error."""
         with pytest.raises(ValueError, match="does not apply the expression"):
-            field("x").bin(10).between(0, 1)
+            field("x").bin(step=10).between(0, 1)
+
+    def test_bin_partitions_wire(self):
+        """`.bin` takes a Calendar value, step= or thresholds=, and writes the
+        partition's wire form (camelCase keys, as JS reads them)."""
+        assert field("d").bin(Calendar.month.every(3))["ops"] == [
+            {"op": "bin", "partition": {"unit": "month", "step": 3}}
+        ]
+        assert field("d").bin(Calendar.week(start="sunday"))["ops"] == [
+            {
+                "op": "bin",
+                "partition": {"unit": "week", "step": 1, "start": "sunday"},
+            }
+        ]
+        assert field("x").bin(step=0.5)["ops"] == [
+            {"op": "bin", "partition": {"step": 0.5}}
+        ]
+        assert field("x").bin(thresholds=[1, 2, 5])["ops"] == [
+            {"op": "bin", "partition": {"thresholds": [1, 2, 5]}}
+        ]
+        assert field("x").bin()["ops"] == [{"op": "bin"}]
+
+    def test_bin_rejects_two_partitions(self):
+        with pytest.raises(TypeError, match="give one partition"):
+            field("x").bin(step=1, thresholds=10)
+        with pytest.raises(TypeError, match="Calendar value"):
+            field("x").bin({"step": 1})
 
     def test_filter_callable_is_derive(self):
         """A Python function predicate runs through the derive bridge."""

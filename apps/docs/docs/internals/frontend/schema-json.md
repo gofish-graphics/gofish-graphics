@@ -319,16 +319,63 @@ for the API.
             "op": {
               "const": "bin"
             },
-            "thresholds": {
+            "partition": {
+              "description": "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), { step }, or { thresholds } (a cell count or a list of edges). Absent: about 10 cells.",
               "oneOf": [
                 {
-                  "$ref": "#/$defs/Number"
+                  "type": "object",
+                  "required": ["unit"],
+                  "properties": {
+                    "unit": {
+                      "enum": [
+                        "second",
+                        "minute",
+                        "hour",
+                        "day",
+                        "week",
+                        "month",
+                        "quarter",
+                        "year"
+                      ]
+                    },
+                    "step": {
+                      "$ref": "#/$defs/Number"
+                    },
+                    "start": {
+                      "enum": ["monday", "sunday"]
+                    }
+                  },
+                  "additionalProperties": false
                 },
                 {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/Number"
-                  }
+                  "type": "object",
+                  "required": ["step"],
+                  "properties": {
+                    "step": {
+                      "$ref": "#/$defs/Number"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": ["thresholds"],
+                  "properties": {
+                    "thresholds": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/Number"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
                 }
               ]
             }
@@ -817,13 +864,6 @@ for the API.
         "lambdaId": {
           "type": "string",
           "description": "Python-bridge handle for the remote callable."
-        },
-        "provenance": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          },
-          "description": "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure."
         },
         "schema": {
           "type": "object",

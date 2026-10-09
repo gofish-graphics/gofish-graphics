@@ -58,7 +58,6 @@ from .ast import (
     datum,
     field,
 )
-from .transforms import bin
 from .datum_projection import pluck
 from .charts import bar_chart
 
@@ -126,7 +125,6 @@ __all__ = [
     "polygon",
     "datum",
     "field",
-    "bin",
     "pluck",
     "bar_chart",
     "Color",
