@@ -4,11 +4,11 @@
 </button><h2 style="font-size: 18px; margin: 28px 0px 8px; border-bottom: 1px solid rgb(221, 221, 221); padding-bottom: 4px;">1. All bars grow at once
 </h2><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 1. All bars grow at once (chained).
 import {
-animation,
 chart,
 rect,
 spread,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -16,7 +16,7 @@ chart(alphabet)
 .flow(spread({ by: "letter", dir: "x" }))
 .mark(
 rect({ h: "frequency" }).transition({
-enter: animation.grow({ duration: 600 }),
+enter: Animation.grow({ duration: 600 }),
 })
 )
 .render(container, { w: 480, h: 220, axes: true, ...clock });
@@ -67,13 +67,13 @@ enter: animation.grow({ duration: 600 }),
 </text><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="11" stroke-width="0" text-anchor="start" transform="rotate(-90 18.7344 177.5859)" x="18.7344" y="177.5859">frequency
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 1. All bars grow at once (selection form).
 import {
-animation,
 chart,
 rect,
 selectAll,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -82,7 +82,7 @@ chart(alphabet)
 .mark(rect({ h: "frequency" }).name("bars"))
 .layer(
 chart(selectAll("bars")).mark(
-time.transition({ enter: animation.grow({ duration: 600 }) })
+time.transition({ enter: Animation.grow({ duration: 600 }) })
 )
 )
 .render(container, { w: 480, h: 220, axes: true, ...clock });
@@ -134,12 +134,12 @@ time.transition({ enter: animation.grow({ duration: 600 }) })
 </text></svg></div></div></div></div><h2 style="font-size: 18px; margin: 28px 0px 8px; border-bottom: 1px solid rgb(221, 221, 221); padding-bottom: 4px;">2. The target: a staggered grow
 </h2><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 2. THE TARGET. Bars grow one after another, left to right, overlapping.
 import {
-animation,
 chart,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -151,7 +151,7 @@ enter: time.stagger({ lag: 60 }),
 )
 .mark(
 rect({ h: "frequency" }).transition({
-enter: animation.grow({ duration: 600 }),
+enter: Animation.grow({ duration: 600 }),
 })
 )
 .render(container, { w: 480, h: 220, axes: true, ...clock });
@@ -202,13 +202,13 @@ enter: animation.grow({ duration: 600 }),
 </text><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="11" stroke-width="0" text-anchor="start" transform="rotate(-90 18.7344 177.5859)" x="18.7344" y="177.5859">frequency
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 2. The target, selection form.
 import {
-animation,
 chart,
 rect,
 selectAll,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -218,7 +218,7 @@ chart(alphabet)
 .layer(
 chart(selectAll("bars"))
 .flow(time.stagger({ by: "letter", lag: 60 }))
-.mark(time.transition({ enter: animation.grow({ duration: 600 }) }))
+.mark(time.transition({ enter: Animation.grow({ duration: 600 }) }))
 )
 .render(container, { w: 480, h: 220, axes: true, ...clock });
 </pre><div><div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;"><strong style="font-size: 14px;">2 · selection form
@@ -269,13 +269,13 @@ chart(selectAll("bars"))
 </text></svg></div></div></div></div><h2 style="font-size: 18px; margin: 28px 0px 8px; border-bottom: 1px solid rgb(221, 221, 221); padding-bottom: 4px;">3. Variations: only the arrangement or the effect changes
 </h2><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 3a. Tallest bar first: the stagger takes its own `by`.
 import {
-animation,
 chart,
 field,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -290,7 +290,7 @@ lag: 60,
 )
 .mark(
 rect({ h: "frequency" }).transition({
-enter: animation.grow({ duration: 600 }),
+enter: Animation.grow({ duration: 600 }),
 })
 )
 .render(container, { w: 480, h: 220, axes: true, ...clock });
@@ -341,12 +341,12 @@ enter: animation.grow({ duration: 600 }),
 </text><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="11" stroke-width="0" text-anchor="start" transform="rotate(-90 18.7344 177.5859)" x="18.7344" y="177.5859">frequency
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 3b. From the middle outward.
 import {
-animation,
 chart,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -358,7 +358,7 @@ enter: time.stagger({ lag: 60, from: "center" }),
 )
 .mark(
 rect({ h: "frequency" }).transition({
-enter: animation.grow({ duration: 600 }),
+enter: Animation.grow({ duration: 600 }),
 })
 )
 .render(container, { w: 480, h: 220, axes: true, ...clock });
@@ -409,12 +409,12 @@ enter: animation.grow({ duration: 600 }),
 </text><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="11" stroke-width="0" text-anchor="start" transform="rotate(-90 18.7344 177.5859)" x="18.7344" y="177.5859">frequency
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 3c. Fix the shape instead of the lag: dwell 0.3.
 import {
-animation,
 chart,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -426,7 +426,7 @@ enter: time.stagger({ dwell: 0.3 }),
 )
 .mark(
 rect({ h: "frequency" }).transition({
-enter: animation.grow({ duration: 600 }),
+enter: Animation.grow({ duration: 600 }),
 })
 )
 .render(container, { w: 480, h: 220, axes: true, ...clock });
@@ -477,12 +477,12 @@ enter: animation.grow({ duration: 600 }),
 </text><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="11" stroke-width="0" text-anchor="start" transform="rotate(-90 18.7344 177.5859)" x="18.7344" y="177.5859">frequency
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 3d. Pop in one at a time, no motion (Keynote "Appear").
 import {
-animation,
 chart,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -492,7 +492,7 @@ spread({ by: "letter", dir: "x" }).transition({
 enter: time.stagger({ lag: 120 }),
 })
 )
-.mark(rect({ h: "frequency" }).transition({ enter: animation.appear() }))
+.mark(rect({ h: "frequency" }).transition({ enter: Animation.appear() }))
 .render(container, { w: 480, h: 220, axes: true, ...clock });
 </pre><div><div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;"><strong style="font-size: 14px;">3d · appear
 </strong><button style="font-size: 12px; padding: 2px 10px;">Replay
@@ -541,12 +541,12 @@ enter: time.stagger({ lag: 120 }),
 </text><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="11" stroke-width="0" text-anchor="start" transform="rotate(-90 18.7344 177.5859)" x="18.7344" y="177.5859">frequency
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 3e. Grow and fade together.
 import {
-animation,
 chart,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -559,8 +559,8 @@ enter: time.stagger({ lag: 60 }),
 .mark(
 rect({ h: "frequency" }).transition({
 enter: [
-animation.grow({ duration: 600 }),
-animation.fadeIn({ duration: 300 }),
+Animation.grow({ duration: 600 }),
+Animation.fadeIn({ duration: 300 }),
 ],
 })
 )
@@ -612,15 +612,15 @@ animation.fadeIn({ duration: 300 }),
 </text><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="11" stroke-width="0" text-anchor="start" transform="rotate(-90 18.7344 177.5859)" x="18.7344" y="177.5859">frequency
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 3f. Name the effect once and reuse it. Nothing new: it is a JS value.
 import {
-animation,
 chart,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
-const growIn = animation.grow({ duration: 600, ease: "cubicOut" });
+const growIn = Animation.grow({ duration: 600, ease: "cubicOut" });
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
 chart(alphabet)
 .flow(
@@ -678,12 +678,12 @@ enter: time.stagger({ lag: 60 }),
 </text></svg></div></div></div></div><h2 style="font-size: 18px; margin: 28px 0px 8px; border-bottom: 1px solid rgb(221, 221, 221); padding-bottom: 4px;">4. Grouped bars
 </h2><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 4a. One group at a time; the bars inside a group grow together.
 import {
-animation,
 chart,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { weather } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -696,7 +696,7 @@ spread({ by: "city", dir: "x", spacing: 0 })
 )
 .mark(
 rect({ h: "precipitation", fill: "city" }).transition({
-enter: animation.grow({ duration: 400 }),
+enter: Animation.grow({ duration: 400 }),
 })
 )
 .render(container, { w: 560, h: 220, axes: true, ...clock });
@@ -772,13 +772,13 @@ enter: animation.grow({ duration: 400 }),
 </text><rect fill="#a181c8" height="10" opacity="1" rx="0" ry="0" stroke="#a181c8" stroke-width="0" width="10" x="934.2116" y="73"></rect><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="10" stroke-width="0" text-anchor="start" x="949.2116" y="81.5">Chicago
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 4a, selection form: the same build, timed over the selected bars.
 import {
-animation,
 chart,
 rect,
 selectAll,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { weather } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -791,7 +791,7 @@ spread({ by: "city", dir: "x", spacing: 0 })
 .layer(
 chart(selectAll("bars"))
 .flow(time.stagger({ by: "month", lag: 300 }))
-.mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
+.mark(time.transition({ enter: Animation.grow({ duration: 400 }) }))
 )
 .render(container, { w: 560, h: 220, axes: true, ...clock });
 </pre><div><div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;"><strong style="font-size: 14px;">4a · selection form
@@ -866,12 +866,12 @@ chart(selectAll("bars"))
 </text><rect fill="#a181c8" height="10" opacity="1" rx="0" ry="0" stroke="#a181c8" stroke-width="0" width="10" x="934.2116" y="73"></rect><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="10" stroke-width="0" text-anchor="start" x="949.2116" y="81.5">Chicago
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 4b. One group at a time, and the bars inside each group staggered too.
 import {
-animation,
 chart,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { weather } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -886,7 +886,7 @@ enter: time.stagger({ lag: 50 }),
 )
 .mark(
 rect({ h: "precipitation", fill: "city" }).transition({
-enter: animation.grow({ duration: 400 }),
+enter: Animation.grow({ duration: 400 }),
 })
 )
 .render(container, { w: 560, h: 220, axes: true, ...clock });
@@ -962,13 +962,13 @@ enter: animation.grow({ duration: 400 }),
 </text><rect fill="#a181c8" height="10" opacity="1" rx="0" ry="0" stroke="#a181c8" stroke-width="0" width="10" x="934.2116" y="73"></rect><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="10" stroke-width="0" text-anchor="start" x="949.2116" y="81.5">Chicago
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 4c. One city at a time across all months. REGROUPS, so it is a selection.
 import {
-animation,
 chart,
 rect,
 selectAll,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { weather } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -981,7 +981,7 @@ spread({ by: "city", dir: "x", spacing: 0 })
 .layer(
 chart(selectAll("bars"))
 .flow(time.stagger({ by: "city", spacing: 0 }))
-.mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
+.mark(time.transition({ enter: Animation.grow({ duration: 400 }) }))
 )
 .render(container, { w: 560, h: 220, axes: true, ...clock });
 </pre><div><div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;"><strong style="font-size: 14px;">4c · one city at a time
@@ -1057,13 +1057,13 @@ chart(selectAll("bars"))
 </text></svg></div></div></div></div><h2 style="font-size: 18px; margin: 28px 0px 8px; border-bottom: 1px solid rgb(221, 221, 221); padding-bottom: 4px;">5. Stacked bars
 </h2><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 5a. Whole stacks, left to right. Segments grow in place from their own stack start.
 import {
-animation,
 chart,
 rect,
 spread,
 stack,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { seattle } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -1076,7 +1076,7 @@ stack({ by: "weather", dir: "y" })
 )
 .mark(
 rect({ h: "count", fill: "weather" }).transition({
-enter: animation.grow({ duration: 500 }),
+enter: Animation.grow({ duration: 500 }),
 })
 )
 .render(container, { w: 480, h: 240, axes: true, ...clock });
@@ -1118,13 +1118,13 @@ enter: animation.grow({ duration: 500 }),
 </text><rect fill="#4190c5" height="10" opacity="1" rx="0" ry="0" stroke="#4190c5" stroke-width="0" width="10" x="562" y="111"></rect><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="10" stroke-width="0" text-anchor="start" x="577" y="119.5">sun
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// 5b. Whole stacks left to right, and inside each stack the bottom segment first.
 import {
-animation,
 chart,
 rect,
 spread,
 stack,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { seattle } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -1139,7 +1139,7 @@ enter: time.stagger({ spacing: 0 }),
 )
 .mark(
 rect({ h: "count", fill: "weather" }).transition({
-enter: animation.grow({ duration: 200 }),
+enter: Animation.grow({ duration: 200 }),
 })
 )
 .render(container, { w: 480, h: 240, axes: true, ...clock });
@@ -1183,13 +1183,14 @@ enter: animation.grow({ duration: 200 }),
 </h2><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// The bar chart race, chained: the mark says how it moves between years.
 // Under a time.sequence this is `.layer(time.transition({ curve: "linear" }))`.
 import {
-animation,
 chart,
 field,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
+Curve,
 } from "../../../src/lib";
 import { brands } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -1207,9 +1208,9 @@ spacing: 2,
 rect({ w: "value", fill: "category" })
 .label("name", { position: "outset-right" })
 .transition({
-enter: animation.fadeIn(),
-update: animation.tween({ curve: "linear" }),
-exit: animation.fadeOut(),
+enter: Animation.fadeIn(),
+update: Animation.tween({ curve: Curve.linear() }),
+exit: Animation.fadeOut(),
 })
 )
 .render(container, { w: 600, h: 600, axes: { x: true, y: false } });
@@ -1271,13 +1272,14 @@ exit: animation.fadeOut(),
 // Between two years each bar starts its move 20 ms after the one ranked above
 // it, and the whole stagger fits inside the year.
 import {
-animation,
 chart,
 field,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
+Curve,
 } from "../../../src/lib";
 import { brands } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -1295,9 +1297,9 @@ spacing: 2,
 rect({ w: "value", fill: "category" })
 .label("name", { position: "outset-right" })
 .transition({
-enter: animation.fadeIn(),
-update: animation.tween({ curve: "linear" }),
-exit: animation.fadeOut(),
+enter: Animation.fadeIn(),
+update: Animation.tween({ curve: Curve.linear() }),
+exit: Animation.fadeOut(),
 })
 )
 .render(container, { w: 600, h: 600, axes: { x: true, y: false } });
@@ -1358,7 +1360,6 @@ exit: animation.fadeOut(),
 </text></svg></div></div></div></div><h2 style="font-size: 18px; margin: 28px 0px 8px; border-bottom: 1px solid rgb(221, 221, 221); padding-bottom: 4px;">Canis and CAST
 </h2><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// Canis Fig. 1b. One series after another; inside each, bars 100 ms apart. REGROUPS, so a selection.
 import {
-animation,
 chart,
 rect,
 selectAll,
@@ -1366,6 +1367,7 @@ spread,
 stack,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { sales } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -1381,7 +1383,7 @@ chart(selectAll("bars"))
 time.stagger({ by: "product", spacing: 0 }), // groupBy class, start after previous
 time.stagger({ by: "quarter", lag: 100 }) // groupBy id, delay 100
 )
-.mark(time.transition({ enter: animation.wipe({ from: "bottom" }) }))
+.mark(time.transition({ enter: Animation.wipe({ from: "bottom" }) }))
 )
 .render(container, { w: 400, h: 240, axes: true, ...clock });
 </pre><div><div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;"><strong style="font-size: 14px;">Canis Fig. 1b · selection form
@@ -1407,13 +1409,13 @@ time.stagger({ by: "quarter", lag: 100 }) // groupBy id, delay 100
 </text><rect fill="#4190c5" height="10" opacity="1" rx="0" ry="0" stroke="#4190c5" stroke-width="0" width="10" x="475" y="73"></rect><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="10" stroke-width="0" text-anchor="start" x="490" y="81.5">Alpha
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// Canis Fig. 1b's bars timed the way the chart is nested: whole stacks, bottom segment first.
 import {
-animation,
 chart,
 rect,
 spread,
 stack,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { sales } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -1428,7 +1430,7 @@ enter: time.stagger({ spacing: 0 }),
 )
 .mark(
 rect({ h: "revenue", fill: "product" }).transition({
-enter: animation.wipe({ from: "bottom" }),
+enter: Animation.wipe({ from: "bottom" }),
 })
 )
 .render(container, { w: 400, h: 240, axes: true, ...clock });
@@ -1455,13 +1457,13 @@ enter: animation.wipe({ from: "bottom" }),
 </text><rect fill="#4190c5" height="10" opacity="1" rx="0" ry="0" stroke="#4190c5" stroke-width="0" width="10" x="475" y="73"></rect><text dominant-baseline="auto" fill="gray" font-family="system-ui, sans-serif" font-size="10" stroke-width="0" text-anchor="start" x="490" y="81.5">Alpha
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// CAST Fig. 3. Dots appear one at a time, 100 ms apart, in order of a value.
 import {
-animation,
 chart,
 circle,
 field,
 scatter,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { chinstraps } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -1473,7 +1475,7 @@ enter: time.stagger({ by: field("mass").sort(), lag: 100 }),
 )
 .mark(
 circle({ r: 4, fill: "sex" }).transition({
-enter: animation.wipe({ shape: "circle", duration: 500 }),
+enter: Animation.wipe({ shape: "circle", duration: 500 }),
 })
 )
 .render(container, { w: 420, h: 260, axes: true, ...clock });
@@ -1508,13 +1510,13 @@ enter: animation.wipe({ shape: "circle", duration: 500 }),
 </text></svg></div></div></div></div><div style="display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 20px; align-items: start; margin: 0px 0px 24px;"><pre style="margin: 0px; padding: 10px 12px; background: rgb(246, 247, 249); border: 1px solid rgb(227, 229, 232); border-radius: 6px; font-size: 12px; line-height: 1.45; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">// CAST+ Gantt. Tasks wipe in from the left one after another, and each wipe
 // lasts in proportion to the task's length.
 import {
-animation,
 chart,
 field,
 rect,
 spread,
 time,
 type BuildClockOptions,
+Animation,
 } from "../../../src/lib";
 import { tasks } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =&gt;
@@ -1526,7 +1528,7 @@ enter: time.stagger({ spacing: 0 }),
 )
 .mark(
 rect({ x: "start", w: "days" }).transition({
-enter: animation.wipe({ from: "left", duration: "days" }),
+enter: Animation.wipe({ from: "left", duration: "days" }),
 })
 )
 .render(container, { w: 480, h: 220, axes: true, ...clock });
