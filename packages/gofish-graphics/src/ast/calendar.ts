@@ -316,21 +316,9 @@ export class CalendarPartition {
 export type WeekPartition = CalendarPartition &
   ((opts?: { start?: WeekStart }) => CalendarPartition);
 
-/** The loud error for a week start that is not "monday" or "sunday".
- *  `where` names the value (`Calendar.week`, or the option it came in). */
-function checkWeekStart(start: unknown, where: string): void {
-  if (start !== undefined && start !== "monday" && start !== "sunday") {
-    throw new Error(
-      `${where}: start must be "monday" or "sunday", not ${JSON.stringify(start)}.`
-    );
-  }
-}
-
 function weekPartition(): WeekPartition {
-  const make = ({ start }: { start?: WeekStart } = {}) => {
-    checkWeekStart(start, "Calendar.week");
-    return new CalendarPartition("week", 1, start);
-  };
+  const make = ({ start }: { start?: WeekStart } = {}) =>
+    calendarPartition({ unit: "week", step: 1, start }, "Calendar.week");
   // A function that is also the default partition: same prototype, same
   // fields, so `Calendar.week` works as a value and as a call.
   const fn = make as unknown as WeekPartition;
@@ -378,7 +366,11 @@ export function calendarPartition(
   if (v.start !== undefined && v.unit !== "week") {
     throw new Error(`${where}: only Calendar.week takes a start day.`);
   }
-  checkWeekStart(v.start, where);
+  if (v.start !== undefined && v.start !== "monday" && v.start !== "sunday") {
+    throw new Error(
+      `${where}: start must be "monday" or "sunday", not ${JSON.stringify(v.start)}.`
+    );
+  }
   return new CalendarPartition(v.unit as CalendarUnit, v.step ?? 1, v.start);
 }
 
