@@ -1,7 +1,9 @@
 // Render the stories matching a filter with GOFISH_DUMP_SCOPES on and print each
 // one's [scope] frame-equation lines — the single-story companion to the
 // whole-corpus capture-sweep, for inspecting a chart's σ-scope structure.
-// Usage: tsx scripts/dump-scopes.ts "<filter>"
+// With --sharing, GOFISH_DUMP_SHARING is on instead and each layer's [sharing]
+// plan is printed (planSharing in constraints/compose.ts, #1114).
+// Usage: tsx scripts/dump-scopes.ts "<filter>" [--sharing]
 import { chromium } from "playwright";
 import { join } from "path";
 import {
@@ -14,7 +16,13 @@ const HARNESS_DIR = join(import.meta.dirname, "..", "harness");
 const PORT = 3007;
 
 async function main() {
-  const filter = (process.argv[2] ?? "").toLowerCase().trim();
+  const args = process.argv.slice(2);
+  const sharing = args.includes("--sharing");
+  const filter = (args.find((a) => !a.startsWith("--")) ?? "")
+    .toLowerCase()
+    .trim();
+  const flag = sharing ? "GOFISH_DUMP_SHARING" : "GOFISH_DUMP_SCOPES";
+  const prefix = sharing ? "[sharing]" : "[scope]";
   const viteProc = startViteServer(HARNESS_DIR, PORT);
   viteProc.stderr?.on("data", (d) => process.stderr.write(d.toString()));
   const browser = await chromium.launch({ headless: true });
@@ -22,13 +30,13 @@ async function main() {
     await waitForVite(PORT);
     const context = await browser.newContext();
     const page = await context.newPage();
-    await page.addInitScript(() => {
-      (window as unknown as Record<string, unknown>).GOFISH_DUMP_SCOPES = 1;
-    });
+    await page.addInitScript((name) => {
+      (window as unknown as Record<string, unknown>)[name] = 1;
+    }, flag);
     let buffer: string[] = [];
     page.on("console", (msg) => {
       const t = msg.text();
-      if (t.startsWith("[scope]")) buffer.push(t);
+      if (t.startsWith(prefix)) buffer.push(t);
     });
     await page.goto(`http://localhost:${PORT}/stories-runner.html`, {
       waitUntil: "domcontentloaded",

@@ -535,6 +535,8 @@ maps stay undistorted); the binding axis fills, the other gets a recentered
 posScale. Stage 6c makes this a named `recenterEqualMeasure` operation _on_ the
 scope registry rather than an inline rewrite, so it is the one post-solve σ
 adjustment on the registry's books and `GOFISH_DUMP_SCOPES` records the final σ.
+(After the scope dump, `GOFISH_DUMP_SHARING` prints each layer's sharing sets,
+see [Underlying Space](/internals/core/underlying-space). It only reads the tree.)
 It is type equality, not a knob, and a single-coordinate-space coupling
 — it does not reach sizes solved in separate nested operator scopes. After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an

@@ -65,6 +65,7 @@ import {
   composePlanExtents,
   composePlanSpaces,
   planConstraintComposition,
+  planSharing,
   datumPlacedChildren,
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
@@ -370,6 +371,17 @@ export const layer = createNodeOperatorSequential(
         type: options.box === true ? "box" : "layer",
         key: options.key,
         shared: [false, false],
+        // The sharing sets come from the constraints (`planSharing`). A
+        // data-valued size (`w: "count"`, the mosaic's `size` wrapper) also
+        // nests the content on its axis: the layer's size is a magnitude in
+        // its parent's unit, and the content is a second frame inside it.
+        resolveSharing: (childNodes, constraints) => {
+          const plan = planSharing(constraints, childNodes);
+          for (const axis of [0, 1] as const)
+            if (isValue(dims[axis].size))
+              childNodes.forEach((_, i) => plan.nested[axis].add(i));
+          return plan;
+        },
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[],
