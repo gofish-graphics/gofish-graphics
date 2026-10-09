@@ -162,17 +162,21 @@ export type AxisOptions =
       /** The label rows of a time axis (an axis over a `Schema.time()`
        *  column), inner row first: each a Calendar value, e.g.
        *  `[Calendar.month, Calendar.year]` or `[Calendar.hour.every(6),
-       *  Calendar.day]`, or `{ unit, format }` with `format` a function of
-       *  the cell, `(cell) => string`, for custom labels. Each row is one
+       *  Calendar.day]`. A row's labels are its partition's: the level's
+       *  default, or a function of the cell given with `.format(fn)`
+       *  (`Calendar.quarter.format((cell) => ...)`). Each row is one
        *  partition of the time line: its ticks are its cells' starts, and
        *  each label is centered on its cell's start tick. The axis's domain
        *  is niced outward to the cells of the inner row. Rows need not nest.
        *  Omitted, the axis has two rows: the level-and-step the domain picks
-       *  for about 10 ticks, and its parent level. Only time axes read the
-       *  rows (in a faceted chart, the time axes inside the facets, not the
-       *  facets' category axis); a chart with rows and no time axis on the
-       *  dim is an error. `labelAngle` does not rotate a time axis's labels
-       *  yet. */
+       *  for about 10 ticks, and its parent level.
+       *
+       *  The rows reach every axis on the dim, but only a time axis reads
+       *  them: in a faceted chart, the time axes inside the facets read
+       *  them and the facets' category axis on the same dim does not. A
+       *  chart with rows and no time axis on the dim is an error, raised
+       *  once the whole chart is elaborated. `labelAngle` does not rotate
+       *  a time axis's labels yet. */
       rows?: TimeRowOption[];
     };
 

@@ -44,8 +44,8 @@ axes={"x": {"rows": [Calendar.month, Calendar.year]}}
 | `"rows"`  | `list[CalendarPartition]` | An axis's label rows, inner row first.                                                   |
 
 A Calendar value is a dict, its wire form: `Calendar.month.every(3)` is
-`{"unit": "month", "step": 3}`. A custom label function for a row (`format`
-in JS) is JS-only.
+`{"unit": "month", "step": 3}`. Custom row labels (`.format(fn)` in JS) are
+JS-only: a function has no wire form.
 
 ## Behavior
 

@@ -389,7 +389,10 @@ difference axis), never off the size claim:
   instead of to round numbers, so both ends of the axis are inner ticks. A
   row's ticks are where its labels sit (`rowLabels`): its cells' starts
   inside the domain, and each label is centered on its cell's start tick, as
-  a numeric axis centers its labels.
+  a numeric axis centers its labels. A row is just a `CalendarPartition`,
+  and its labels are the partition's (`label`): the function given with
+  `.format(fn)`, else the level's default. A partition with a format has no
+  wire form, so its `toJSON` throws.
   An outer row's first cell may start before the domain: its label is
   centered on the axis's first tick, under the inner row's first label
   ("2023" under "Nov"). A cell starting at the domain's end is labeled at

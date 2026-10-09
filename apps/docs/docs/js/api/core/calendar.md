@@ -23,9 +23,10 @@ Calendar.quarter;
 Calendar.year;
 
 Calendar.month.every(3); // cells of 3 months
+Calendar.quarter.format(fn); // custom labels, fn: (cell) => string
+Calendar.month.every(3).format(fn);
 
 chart(data, { axes: { x: { rows: [Calendar.month, Calendar.year] } } });
-chart(data, { axes: { x: { rows: [{ unit: Calendar.quarter, format }] } } }); // format: (cell) => string
 ```
 
 ## Parameters
@@ -34,9 +35,8 @@ chart(data, { axes: { x: { rows: [{ unit: Calendar.quarter, format }] } } }); //
 | --------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
 | `n`       | `number`                         | `.every(n)`: how many units one cell spans. A whole number, 1 or more. Default `1`.      |
 | `start`   | `"monday" \| "sunday"`           | `Calendar.week({ start })`: the first day of a week. Default `"monday"`, as in ISO 8601. |
-| `rows`    | `TimeRowOption[]`                | An axis's label rows, inner row first. Each is a Calendar value, or `{ unit, format }`.  |
-| `unit`    | `CalendarPartition`              | The partition of a row that has a custom `format`, e.g. `Calendar.week`.                 |
-| `format`  | `(cell: CalendarCell) => string` | The label of each cell of the row.                                                       |
+| `fn`      | `(cell: CalendarCell) => string` | `.format(fn)`: the label of each cell. Default: the level's label (see Behavior).        |
+| `rows`    | `TimeRowOption[]`                | An axis's label rows, inner row first. Each is a Calendar value.                         |
 
 A `CalendarCell` has these fields. The calendar fields are those of the
 cell's start in the zone of the axis's column, named like pandas' and
@@ -70,6 +70,11 @@ polars' `dt` fields.
   `Calendar.year.every(5)` starts on years divisible by 5. Weeks count from
   the week of 1970-01-01.
 - `Calendar.quarter` is months in steps of 3, labeled `Q1` to `Q4`.
+- `.format(fn)` returns the same partition with `fn` as its label. It keeps
+  the step, and `.every(n)` keeps the format, so `Calendar.month.every(3).format(fn)`
+  and `Calendar.month.format(fn).every(3)` are the same partition.
+- A partition with a `.format` is JS-only: a function has no wire form, so
+  serializing it (to Python or the IR) is an error that names the row.
 
 **Rows.**
 
@@ -113,11 +118,10 @@ chart(prices, {
   axes: {
     x: {
       rows: [
-        {
-          unit: Calendar.quarter,
-          format: (cell) =>
-            `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`,
-        },
+        Calendar.quarter.format(
+          (cell) =>
+            `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+        ),
       ],
     },
     y: true,

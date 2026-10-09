@@ -113,7 +113,10 @@ export const HourlyLine: StoryObj<Args> = {
 // milliseconds); the axis reads them in the schema's zone.
 const newYork = Array.from({ length: 72 }, (_, h) => {
   const t = Date.UTC(2024, 2, 9, 5) + h * 36e5; // Mar 9, midnight in New York
-  return { time: t, load: Math.round(50 + 30 * Math.sin((h / 24) * 2 * Math.PI)) };
+  return {
+    time: t,
+    load: Math.round(50 + 30 * Math.sin((h / 24) * 2 * Math.PI)),
+  };
 });
 
 export const DaylightSavingZone: StoryObj<Args> = {
@@ -213,11 +216,10 @@ export const QuarterlyBars: StoryObj<Args> = {
         x: {
           title: false,
           rows: [
-            {
-              unit: Calendar.quarter,
-              format: (cell) =>
-                `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`,
-            },
+            Calendar.quarter.format(
+              (cell) =>
+                `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+            ),
           ],
         },
         y: true,

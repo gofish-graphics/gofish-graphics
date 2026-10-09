@@ -14,7 +14,8 @@
  * 25 hours. All calendar math runs through Temporal ({@link temporal}).
  *
  * The interface is {@link CalendarPartition.cells} (the cells that meet an
- * interval) and {@link CalendarPartition.label} (a cell's default label). A
+ * interval) and {@link CalendarPartition.label} (a cell's label: the
+ * partition's own `.format(fn)`, else the level's default). A
  * time axis reads its rows off it (axes/timeRows.ts); the 1D `partition`
  * layout operator (#1058) is meant to read its cells off the same interface.
  *
@@ -152,7 +153,7 @@ function formatter(
  *  axis's zone, as plain numbers named like pandas' and polars' `dt.*`:
  *  `year`, `quarter` (1 to 4), `month` (1 to 12), `week` (the ISO week
  *  number), `day` (of the month), `hour`, `minute` and `second`. A custom
- *  row label (`format`) is a function of this. */
+ *  label (`.format(fn)`) is a function of this. */
 export type CalendarCell = {
   start: number;
   end: number;
@@ -167,12 +168,15 @@ export type CalendarCell = {
   second: number;
 };
 
+/** A custom label for a partition's cells (`Calendar.<unit>.format(fn)`). */
+export type CellFormat = (cell: CalendarCell) => string;
+
 const ISO_DOW: Record<WeekStart, number> = { monday: 1, sunday: 7 };
 
 // ── Partitions ────────────────────────────────────────────────────────────
 
 /** A partition of the time line into calendar cells: a level (`unit`) at a
- *  step. See the module comment. */
+ *  step, with an optional label `format`. See the module comment. */
 export class CalendarPartition {
   /** The first day of a week, for weeks only (Monday unless given). */
   readonly start: WeekStart | undefined;
@@ -180,7 +184,11 @@ export class CalendarPartition {
   constructor(
     readonly unit: CalendarUnit,
     readonly step: number = 1,
-    start?: WeekStart
+    start?: WeekStart,
+    /** The cells' custom label, if any (`.format(fn)`); else the level's
+     *  default label. A function, so a partition with one has no wire
+     *  form. */
+    readonly formatCell?: CellFormat
   ) {
     if (!Number.isInteger(step) || step < 1) {
       throw new Error(
@@ -193,7 +201,21 @@ export class CalendarPartition {
 
   /** The same level, `n` units per cell (`Calendar.month.every(3)`). */
   every(n: number): CalendarPartition {
-    return new CalendarPartition(this.unit, n, this.start);
+    return new CalendarPartition(this.unit, n, this.start, this.formatCell);
+  }
+
+  /** The same cells, labeled by `fn`, a function of the cell
+   *  ({@link CalendarCell}): `Calendar.month.every(3).format((c) =>
+   *  String(c.year))`. JS only: a function cannot cross to Python, so a
+   *  partition with a format has no wire form. */
+  format(fn: CellFormat): CalendarPartition {
+    if (typeof fn !== "function") {
+      throw new Error(
+        `${String(this)}.format: expected a function of the cell, ` +
+          `(cell) => string.`
+      );
+    }
+    return new CalendarPartition(this.unit, this.step, this.start, fn);
   }
 
   /** The level one up (the outer row of a time axis), or undefined for
@@ -285,16 +307,28 @@ export class CalendarPartition {
     return out;
   }
 
-  /** A cell's default label: its level's field in `zone` (the zone its
-   *  cells were read in), formatted by `Intl.DateTimeFormat` in en-US
-   *  ({@link LABEL_LOCALE}: "Jan", "12 AM", "Feb 29", "2024"), or "Q1" to
-   *  "Q4" for a quarter. */
+  /** A cell's label: the partition's `.format(fn)`, if it has one. Else
+   *  the default: its level's field in `zone` (the zone its cells were read
+   *  in), formatted by `Intl.DateTimeFormat` in en-US ({@link LABEL_LOCALE}:
+   *  "Jan", "12 AM", "Feb 29", "2024"), or "Q1" to "Q4" for a quarter. */
   label(cell: CalendarCell, zone: string): string {
+    if (this.formatCell !== undefined) return this.formatCell(cell);
     if (this.unit === "quarter") return `Q${cell.quarter}`;
     return formatter(this.unit, zone).format(cell.start);
   }
 
-  toJSON(): CalendarJSON {
+  /** The wire form. A partition with a `.format(fn)` has none (a loud
+   *  error): `key` is the index `JSON.stringify` passes for an entry of a
+   *  `rows` list. */
+  toJSON(key?: string): CalendarJSON {
+    if (this.formatCell !== undefined) {
+      const row = key !== undefined && key !== "" ? `rows[${key}]: ` : "";
+      throw new Error(
+        `${row}${String(this)} has no wire form: its format is a JS ` +
+          `function, which cannot be serialized (to Python or the IR). ` +
+          `Drop the .format(...) to use the default labels.`
+      );
+    }
     return {
       unit: this.unit,
       step: this.step,
@@ -307,7 +341,8 @@ export class CalendarPartition {
       this.start !== undefined
         ? `Calendar.week({ start: "${this.start}" })`
         : `Calendar.${this.unit}`;
-    return this.step === 1 ? base : `${base}.every(${this.step})`;
+    const stepped = this.step === 1 ? base : `${base}.every(${this.step})`;
+    return this.formatCell === undefined ? stepped : `${stepped}.format(...)`;
   }
 }
 

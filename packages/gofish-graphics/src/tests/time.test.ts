@@ -324,7 +324,10 @@ async function main() {
       data: any = input
     ) => {
       let seen: any;
-      const mark = await GoFish.derive(fn, opts)(async (d: any) => {
+      const mark = await GoFish.derive(
+        fn,
+        opts
+      )(async (d: any) => {
         seen = d;
         return undefined;
       });
@@ -372,8 +375,7 @@ async function main() {
     check(
       "derive(fn, { schema }) converts ISO strings to instants in its zone",
       annotated[0].at === Date.UTC(2024, 2, 5, 5) &&
-        getColumnTypes(annotated)?.at?.HasCalendar?.zone ===
-          "America/New_York",
+        getColumnTypes(annotated)?.at?.HasCalendar?.zone === "America/New_York",
       JSON.stringify([annotated[0], getColumnTypes(annotated)])
     );
     const months = await applySchema(
@@ -437,9 +439,7 @@ async function main() {
   console.log("\n# default rows and nicing");
   {
     const rowsOf = (lo: number, hi: number) =>
-      defaultTimeRows(tickPartition(lo, hi, 10)).map((r) =>
-        r.partition.toString()
-      );
+      defaultTimeRows(tickPartition(lo, hi, 10)).map((r) => r.toString());
     check(
       "daily over 14 months: month, year",
       same(rowsOf(Date.UTC(2023, 10, 1), Date.UTC(2024, 11, 31)), [
@@ -485,7 +485,7 @@ async function main() {
       same(
         nicedIso(timeSpace(Date.UTC(2024, 0, 24), Date.UTC(2024, 2, 31)), {
           count: 10,
-          rows: [{ partition: Calendar.week }],
+          rows: [Calendar.week],
         }),
         ["2024-01-22T00:00:00.000Z", "2024-04-01T00:00:00.000Z"]
       )
@@ -512,7 +512,7 @@ async function main() {
       )
     );
     const labels = rowLabels(
-      { partition: Calendar.year },
+      Calendar.year,
       Date.UTC(2023, 10, 1),
       Date.UTC(2025, 0, 1),
       "UTC"
@@ -535,19 +535,15 @@ async function main() {
   {
     const fmt = (c: any) => `Q${c.quarter}`;
     const rows = timeRowsFromOption(
-      [
-        Calendar.week,
-        { unit: "month" } as any,
-        { unit: Calendar.quarter, format: fmt },
-      ],
+      [Calendar.week, { unit: "month" } as any, Calendar.quarter.format(fmt)],
       "x"
     );
     check(
-      "rows read Calendar values, wire forms, and { unit, format }",
+      "rows read Calendar values, wire forms, and formatted partitions",
       rows.length === 3 &&
-        rows[0].partition.unit === "week" &&
-        rows[1].partition.unit === "month" &&
-        rows[2].format === fmt
+        rows[0].unit === "week" &&
+        rows[1].unit === "month" &&
+        rows[2].formatCell === fmt
     );
     const bad = await errorOf(() => timeRowsFromOption(["month"] as any, "x"));
     check(
@@ -555,27 +551,68 @@ async function main() {
       bad?.includes("axes.x.rows[0]") === true,
       bad
     );
-    const callable = timeRowsFromOption(
-      [
-        { unit: Calendar.week, format: fmt },
-        { unit: { unit: "month", step: 3 }, format: fmt } as any,
-      ],
-      "x"
+    const old = await errorOf(() =>
+      timeRowsFromOption([{ unit: Calendar.month, format: fmt }] as any, "x")
     );
     check(
-      "{ unit, format } takes the callable Calendar.week and a wire form",
-      callable[0].partition.unit === "week" &&
-        callable[0].format === fmt &&
-        callable[1].partition.toString() === "Calendar.month.every(3)" &&
-        callable[1].format === fmt
+      "the { unit, format } object form is gone: a loud error",
+      old?.includes("axes.x.rows[0]") === true,
+      old
     );
-    const named = await errorOf(() =>
-      timeRowsFromOption([{ unit: "month", format: fmt }] as any, "x")
+  }
+
+  console.log("\n# .format(fn) on a partition");
+  {
+    const lo = Date.UTC(2024, 0, 1);
+    const hi = Date.UTC(2024, 11, 31);
+    const fmt = (c: any) => `${c.month}/${c.year % 100}`;
+    const stepped = Calendar.month.every(3).format(fmt);
+    check(
+      "format on a stepped partition keeps the step and labels its cells",
+      stepped.step === 3 &&
+        stepped.toString() === "Calendar.month.every(3).format(...)" &&
+        same(
+          rowLabels(stepped, lo, hi, "UTC").map((l) => l.text),
+          ["1/24", "4/24", "7/24", "10/24"]
+        )
     );
     check(
-      "{ unit, format } with a level name is a loud error, not a dropped format",
-      named?.includes("axes.x.rows[0].unit") === true,
-      named
+      "format then every keeps the format",
+      Calendar.month.format(fmt).every(3).formatCell === fmt &&
+        Calendar.week({ start: "sunday" }).format(fmt).start === "sunday"
+    );
+    check(
+      "a bare partition still uses the default labels",
+      Calendar.month.formatCell === undefined &&
+        same(
+          rowLabels(Calendar.month.every(3), lo, hi, "UTC").map((l) => l.text),
+          ["Jan", "Apr", "Jul", "Oct"]
+        ) &&
+        same(
+          rowLabels(Calendar.quarter, lo, hi, "UTC").map((l) => l.text),
+          ["Q1", "Q2", "Q3", "Q4"]
+        )
+    );
+    const notFn = await errorOf(() => Calendar.month.format("MMM" as any));
+    check(
+      "format takes only a function",
+      notFn?.includes("Calendar.month.format") === true,
+      notFn
+    );
+    const wire = await errorOf(() =>
+      JSON.stringify({ rows: [Calendar.year, stepped] })
+    );
+    check(
+      "a partition with a format has no wire form: serializing it is a loud " +
+        "error naming the row",
+      wire?.includes("rows[1]: Calendar.month.every(3).format(...)") === true &&
+        wire.includes("has no wire form"),
+      wire
+    );
+    check(
+      "a bare partition still serializes",
+      JSON.stringify(Calendar.month.every(3)) ===
+        JSON.stringify({ unit: "month", step: 3 })
     );
   }
 
@@ -717,8 +754,7 @@ async function main() {
       );
       check(
         "month and day labels stay English",
-        labelOf(Calendar.month) === "Mar" &&
-          labelOf(Calendar.day) === "Mar 1",
+        labelOf(Calendar.month) === "Mar" && labelOf(Calendar.day) === "Mar 1",
         `${labelOf(Calendar.month)} ${labelOf(Calendar.day)}`
       );
     } finally {
@@ -785,11 +821,10 @@ async function main() {
         x: {
           title: false,
           rows: [
-            {
-              unit: DistCalendar.quarter,
-              format: (c: any) =>
-                `Q${c.quarter} '${String(c.year % 100).padStart(2, "0")}`,
-            },
+            DistCalendar.quarter.format(
+              (c: any) =>
+                `Q${c.quarter} '${String(c.year % 100).padStart(2, "0")}`
+            ),
           ],
         },
         y: false,

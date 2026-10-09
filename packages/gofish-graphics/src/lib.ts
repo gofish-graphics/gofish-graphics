@@ -117,9 +117,10 @@ export type {
   CalendarCell,
   CalendarUnit,
   CalendarJSON,
+  CellFormat,
   WeekStart,
 } from "./ast/calendar";
-export type { TimeRowOption, CellFormat } from "./ast/axes/timeRows";
+export type { TimeRowOption } from "./ast/axes/timeRows";
 
 // Constraints
 export { Constraint } from "./ast/constraints";

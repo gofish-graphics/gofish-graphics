@@ -70,8 +70,9 @@ type AxisOptions =
 ```
 
 `rows` sets the label rows of a time axis, an axis over a
-[`Schema.time()`](/js/api/core/schema) column. See
-[`Calendar`](/js/api/core/calendar).
+[`Schema.time()`](/js/api/core/schema) column. Each row is a Calendar value,
+such as `Calendar.month` or `Calendar.quarter.format(fn)` for custom labels.
+See [`Calendar`](/js/api/core/calendar).
 
 Each axis title defaults to the field that dimension encodes (e.g. `count` for
 `rect({ h: "count" })`). Pass `{ title: "…" }` to override it, or `{ title: false }`

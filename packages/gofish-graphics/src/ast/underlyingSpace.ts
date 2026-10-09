@@ -16,7 +16,6 @@ import {
 import { nice as d3Nice } from "d3-array";
 import type { HasCalendar } from "./schema";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
-import type { TimeRow } from "./axes/timeRows";
 
 // This module is the TYPE half of an axis: what the axis means, with no σ in
 // it. The SIZE CLAIM half (how much room the content needs, as functions of
@@ -212,7 +211,7 @@ export const dataWidth = (space: CONTINUOUS_TYPE): number =>
  *  inner row from its domain and `count` ({@link axisTickPartition}).
  *  `resolveAxes` stamps it on every node that draws an axis
  *  (`GoFishNode.axisDemand`), and the axis is drawn from the same stamp. */
-export type AxisTicks = { count: number; rows?: TimeRow[] };
+export type AxisTicks = { count: number; rows?: CalendarPartition[] };
 
 /** An axis's ticks when it asks for nothing else: about 10. */
 export const DEFAULT_AXIS_TICKS: AxisTicks = { count: 10 };
@@ -223,7 +222,7 @@ export const axisTickPartition = (
   space: CONTINUOUS_TYPE,
   ticks: AxisTicks
 ): CalendarPartition =>
-  ticks.rows?.[0].partition ??
+  ticks.rows?.[0] ??
   tickPartition(space.dataInterval.min, space.dataInterval.max, ticks.count);
 
 /** Nice the interval a space renders an axis over (issue #659): a pinned

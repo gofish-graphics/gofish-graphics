@@ -24,108 +24,62 @@
  * domain picks for about 10 ticks (`tickPartition` in calendar.ts, like d3's
  * time ticks), and the outer row is that level's parent (hours → days, days
  * → months, months → years). A level with no parent (years) gives one row.
- * `axes: { x: { rows: [...] } }` sets the rows, inner first.
+ * `axes: { x: { rows: [...] } }` sets the rows, inner first; a row's labels
+ * are its partition's (`Calendar.<unit>.format(fn)` for custom ones).
  *
  * This module is the pure half (which rows, which labels where). The shapes
  * and constraints are built in elaborate.tsx.
  */
 import {
-  CalendarPartition,
   calendarPartition,
-  type CalendarCell,
   type CalendarJSON,
+  type CalendarPartition,
 } from "../calendar";
 
-/** A custom label for a row's cells. */
-export type CellFormat = (cell: CalendarCell) => string;
-
-/** One entry of `axes.x.rows`: a Calendar value (default labels), or one
- *  with a `format` function for its labels, `{ unit, format }`, whose `unit`
- *  is a Calendar value. The wire form of a Calendar value
- *  (`{ unit: "month", step: 1 }`, what Python sends) is accepted in both
- *  places. */
-export type TimeRowOption =
-  | CalendarPartition
-  | CalendarJSON
-  | { unit: CalendarPartition | CalendarJSON; format?: CellFormat };
-
-/** A resolved row: a partition and how its cells are labeled. */
-export type TimeRow = { partition: CalendarPartition; format?: CellFormat };
+/** One entry of `axes.x.rows`: a Calendar value, or its wire form
+ *  (`{ unit: "month", step: 1 }`, what Python sends). */
+export type TimeRowOption = CalendarPartition | CalendarJSON;
 
 /** One label of a row: its text and the tick it is centered on (`at`, epoch
  *  ms: its cell's start, or the axis's first tick for a cell that starts
  *  before the domain). */
 export type TimeLabel = { at: number; text: string };
 
-/** Read `axes.<dim>.rows` (inner first) into rows. An entry is the row
- *  form `{ unit, format }` when it has a `format` key or its `unit` is not a
- *  level name (a wire form's `unit` is a string, like `"month"`); either way
- *  the Calendar value is read by `calendarPartition`. An entry that is not a
- *  Calendar value is a loud error. */
+/** Read `axes.<dim>.rows` (inner first) into partitions. An entry that is
+ *  not a Calendar value is a loud error. */
 export function timeRowsFromOption(
   rows: readonly TimeRowOption[],
   axis: string
-): TimeRow[] {
+): CalendarPartition[] {
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error(
       `axes.${axis}.rows: expected a list of Calendar values, inner row ` +
         `first, e.g. [Calendar.month, Calendar.year].`
     );
   }
-  return rows.map((r, i) => {
-    const where = `axes.${axis}.rows[${i}]`;
-    if (
-      r !== null &&
-      typeof r === "object" &&
-      !(r instanceof CalendarPartition) &&
-      ("format" in r || typeof (r as { unit?: unknown }).unit !== "string")
-    ) {
-      const { unit, format } = r as {
-        unit: CalendarPartition | CalendarJSON;
-        format?: unknown;
-      };
-      if (format !== undefined && typeof format !== "function") {
-        throw new Error(
-          `${where}.format: expected a function of the cell, ` +
-            `(cell) => string.`
-        );
-      }
-      return {
-        partition: calendarPartition(unit, `${where}.unit`),
-        format: format as CellFormat | undefined,
-      };
-    }
-    return {
-      partition: calendarPartition(
-        r as CalendarPartition | CalendarJSON,
-        where
-      ),
-    };
-  });
+  return rows.map((r, i) => calendarPartition(r, `axes.${axis}.rows[${i}]`));
 }
 
 /** The default rows of a time axis whose inner row is `inner`: `inner`,
  *  then its parent level, if it has one. */
-export function defaultTimeRows(inner: CalendarPartition): TimeRow[] {
+export function defaultTimeRows(inner: CalendarPartition): CalendarPartition[] {
   const parent = inner.parent;
-  return parent === undefined
-    ? [{ partition: inner }]
-    : [{ partition: inner }, { partition: parent }];
+  return parent === undefined ? [inner] : [inner, parent];
 }
 
 /** The labels of `row` over the domain `[lo, hi]`, one per cell that meets
- *  it. Each is centered on its cell's start, or on the axis's first tick
- *  (`lo`) for a cell that starts before it. A cell that starts at the
- *  domain's end is labeled at that last tick, as a numeric axis labels its
- *  last tick. The `at` values are the row's ticks. */
+ *  it, as `row.label` writes them. Each is centered on its cell's start, or
+ *  on the axis's first tick (`lo`) for a cell that starts before it. A cell
+ *  that starts at the domain's end is labeled at that last tick, as a
+ *  numeric axis labels its last tick. The `at` values are the row's ticks. */
 export function rowLabels(
-  row: TimeRow,
+  row: CalendarPartition,
   lo: number,
   hi: number,
   zone: string
 ): TimeLabel[] {
-  return row.partition.cells(lo, hi, zone).map((cell) => ({
+  return row.cells(lo, hi, zone).map((cell) => ({
     at: Math.max(cell.start, lo),
-    text: row.format ? row.format(cell) : row.partition.label(cell, zone),
+    text: row.label(cell, zone),
   }));
 }
