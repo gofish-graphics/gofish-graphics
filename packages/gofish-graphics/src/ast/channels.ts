@@ -144,9 +144,10 @@ export type DeriveMarkProps<
 } & { debug?: boolean };
 
 /**
- * The {@link Quantity} a channel reads, from its column: named by the column
- * (or by the source column a transform derived it from, `HasUnit.quantity`),
- * in the column's declared unit if it has one (`HasUnit.unit`, or an instant
+ * The {@link Quantity} a channel reads, from its column: named by the
+ * column's declared quantity (`HasQuantity`, which a transform also writes
+ * for a column it derives from another), else by the column, in the
+ * column's declared unit if it has one (`HasUnit`, or an instant
  * for a time column). A column with no declared unit has an unknown unit,
  * the unit variable its quantity names (`measure.ts`).
  *

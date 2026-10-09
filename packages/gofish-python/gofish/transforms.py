@@ -164,10 +164,11 @@ def bin(
         # The bin edges (`start`/`end`/`size`) are amounts of the SOURCE
         # field's quantity, not of the columns "start"/"end": they title the
         # axis as the source does and share its unit; `count` is a count.
-        # Mirror the JS bin's column types (`HasUnit`). They can't ride the
-        # data rows across the derive RPC bridge, so `derive` puts them in the
-        # operator's `schema` (see `derive` and serialize/registry.ts).
-        edge = {"HasUnit": {"quantity": field_name}}
+        # Mirror the JS bin's column types (`HasQuantity`, `HasUnit`). They
+        # can't ride the data rows across the derive RPC bridge, so `derive`
+        # puts them in the operator's `schema` (see `derive` and
+        # serialize/registry.ts).
+        edge = {"HasQuantity": {"name": field_name}}
         binner._gofish_column_types = {
             "start": edge,
             "end": edge,

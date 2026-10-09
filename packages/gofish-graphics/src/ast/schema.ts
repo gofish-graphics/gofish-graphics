@@ -27,10 +27,15 @@ import { loadTemporal, temporal } from "./calendar";
  *    instant, so two time columns may share an axis.
  *  - {@link HasUnit}: the column's values are amounts. Declared with
  *    `Schema.unit(unit)`, which says what unit they are in; without it a
- *    column's unit is unknown and unifies with any other (`measure.ts`). A
- *    transform writes it for the columns it makes: `bin()` says its
- *    `start`/`end`/`size` are amounts of its source column's quantity, in
- *    the source's unit, and its `count` is a count.
+ *    column's unit is unknown and unifies with any other (`measure.ts`).
+ *  - {@link HasQuantity}: what the column's values are amounts of, its
+ *    quantity, when that is not the column's name. Declared with
+ *    `Schema.quantity(name)` (or `.quantity(name)` after another builder).
+ *    The quantity titles the axis and names the unit variable.
+ *
+ * A transform writes these for the columns it makes: `bin()` says its
+ * `start`/`end`/`size` are amounts of its source column's quantity, in the
+ * source's unit, and its `count` is a count.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
@@ -63,16 +68,24 @@ export type HasMidpoint = { at: number };
  *  starts at local midnight) and how labels read. An instant has no zero. */
 export type HasCalendar = { zone: string };
 
-/** The class of a column whose values are amounts of a quantity:
+/** The class of a column whose values are amounts in a declared unit:
  *
- *  - `unit`: the declared unit (`Schema.unit("USD")`). Two declared units
- *    that differ never share an axis. Absent: the unit is unknown, a unit
- *    variable that unifies with any unit (`measure.ts`).
- *  - `quantity`: the name of the quantity, when it is not the column's own
- *    name: `bin()`'s `start` is an amount of its source column's quantity.
- *    The quantity names the axis title and the unit variable.
+ *  - `unit`: the unit's name (`Schema.unit("USD")`). Two units are the same
+ *    when their names are equal, and two different units never share an
+ *    axis. A column without this class has an unknown unit, a unit variable
+ *    that unifies with any unit (`measure.ts`).
+ *  - `symbol`: what an axis title appends to show the unit, "Pay (USD)".
+ *    `Schema.unit(u)` writes `u`. The engine's own units (the "count" of
+ *    `bin()`'s `count`) have none, so their axes add nothing.
  */
-export type HasUnit = { unit?: string; quantity?: string };
+export type HasUnit = { unit: string; symbol?: string };
+
+/** The class of a column whose values are amounts of the quantity `name`
+ *  (`Schema.quantity("Pay")`), when that is not the column's own name.
+ *  Columns of one quantity share one unit variable, and the quantity titles
+ *  the axis: `bin()`'s `start` is an amount of its source column's
+ *  quantity, and the five summary columns of a box plot can all be "Pay". */
+export type HasQuantity = { name: string };
 
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
@@ -80,6 +93,7 @@ export type ColumnType = {
   HasMidpoint?: HasMidpoint;
   HasCalendar?: HasCalendar;
   HasUnit?: HasUnit;
+  HasQuantity?: HasQuantity;
 };
 
 /** Whether `v` is a time column's value as the engine reads it: epoch
@@ -98,13 +112,15 @@ const isEpochMs = (v: unknown): boolean =>
  *    the levels still fits, so the order stays and its stray-level error
  *    fires where the order is used.
  *  - `HasMidpoint`: anything; its values are its order's.
- *  - `HasUnit`: numbers, the amounts the unit measures. */
+ *  - `HasUnit`: numbers, the amounts the unit measures.
+ *  - `HasQuantity`: anything; a name says nothing about the values. */
 const ACCEPTS: { [K in keyof ColumnType]-?: (v: unknown) => boolean } = {
   HasCalendar: (v) =>
     isEpochMs(v) || (v instanceof Date && Number.isFinite(v.getTime())),
   HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
   HasMidpoint: () => true,
   HasUnit: (v) => v == null || typeof v === "number",
+  HasQuantity: () => true,
 };
 
 const CLASSES = Object.keys(ACCEPTS) as (keyof ColumnType)[];
@@ -143,6 +159,12 @@ export class ColumnSchema<C extends ColumnType = ColumnType> {
     return new ColumnSchema({ ...this.type, HasMidpoint: { at } });
   }
 
+  /** Say what the column's values are amounts of (`HasQuantity`): the
+   *  quantity `name`, which titles the axis in place of the column's name. */
+  quantity(name: string): ColumnSchema<C & { HasQuantity: HasQuantity }> {
+    return new ColumnSchema({ ...this.type, HasQuantity: { name } });
+  }
+
   toJSON(): C {
     return this.type;
   }
@@ -169,7 +191,13 @@ export const Schema = {
    *  share an axis; two different units on one axis are an error. A column
    *  with no unit declared may share an axis with any other. */
   unit(unit: string): ColumnSchema<{ HasUnit: HasUnit }> {
-    return new ColumnSchema({ HasUnit: { unit } });
+    return new ColumnSchema({ HasUnit: { unit, symbol: unit } });
+  },
+  /** A column whose values are amounts of the quantity `name`
+   *  (`HasQuantity`), e.g. `"Pay"`. The quantity titles the axis in place of
+   *  the column's name, and columns of one quantity share one unit. */
+  quantity(name: string): ColumnSchema<{ HasQuantity: HasQuantity }> {
+    return new ColumnSchema({ HasQuantity: { name } });
   },
 };
 

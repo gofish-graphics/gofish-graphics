@@ -1580,14 +1580,17 @@ three things:
 type UnitRecord = {
   unit?: UnitVar; // a declared unit or an unknown, a term of the render's union-find
   calendar?: HasCalendar; // over instants: the calendar they read on
-  titles: string[]; // the column names on the axis: they title it
+  titles: string[]; // the quantities on the axis: they title it
 };
 export type CONTINUOUS_TYPE = { kind: "continuous"; dataInterval: Interval; origin: Origin; measure?: UnitRecord; ... };
 ```
 
 The **unit** decides which axes may share a scale. The **titles** name the
-axis. The two are kept apart: a column name is a good title and a bad unit,
-and a declared unit (`"USD"`) is never a title.
+axis. The two are kept apart, following the terms of metrology: a
+**quantity** is what is measured ("Production Budget"), and a **unit** is the
+scale it is measured in ("USD"). The titles are quantities, and a declared
+unit only adds its symbol after them, `Quantity (unit)` (see **Titles**
+below).
 
 **Gradual unit typing.** Units are checked the way F# infers units of measure,
 but gradually (unannotated code is allowed, in the style of gradual typing):
@@ -1595,7 +1598,7 @@ a column whose unit nobody declared has an _unknown_ unit, a **unit variable**,
 which unifies with anything. A declared unit is concrete. Two different
 concrete units on one axis are a type error. The concrete units are:
 
-- a column's `Schema.unit(u)` (`HasUnit.unit`, see
+- a column's `Schema.unit(u)` (`HasUnit`, see
   [column types](#column-types-the-chart-schema));
 - `"instant"`, for every time column (`HasCalendar`), so a start and an end
   time share an axis; the time zone stays in the calendar, a display
@@ -1604,10 +1607,20 @@ concrete units on one axis are a type error. The concrete units are:
 - `"<base> share by <by>"`, for `.normalize()` (`shareQuantity`), so a share
   axis never silently unions with its base's own axis.
 
-A unit variable is named by its **quantity**: the column's name, or, for a
-column a transform derived from another, the source column's
-(`HasUnit.quantity`: `bin(field)`'s `start`/`end`/`size` are amounts of
-`field`). The same name is the same variable across the whole figure. A
+Each declared unit is a `DeclaredUnit` (`measure.ts`): a name, which says
+which units are the same, and an optional **symbol**, which an axis title
+shows. `Schema.unit(u)` writes the symbol `u`. The engine's own units
+(`INSTANT`, `COUNT`, a share) are made without one where they are made: a
+count or a share is a plain number, and a time axis's ticks already read as
+dates.
+
+A unit variable is named by its **quantity**: the column's declared quantity
+(`HasQuantity`, from `Schema.quantity(name)`), or, for a column a transform
+derived from another, the source column's quantity (`bin(field)`'s
+`start`/`end`/`size` are amounts of `field`), or else the column's name. The
+column name is a weak default: it makes no claim, so two columns with
+different names are different quantities until a declaration or a meeting
+says otherwise. The same name is the same variable across the whole figure. A
 variable binds to another variable or to a concrete unit, and **the binding
 holds for the whole render**: a column bound to USD on one axis is USD
 everywhere, so meeting `"count"` on another axis is a clash. That is plain
@@ -1677,7 +1690,7 @@ Length"`) shows the mix-up. Declaring the units restores the check.
 
 **Where quantities come from.** `resolveQuantity` (`channels.ts`) reads a
 channel's quantity off its column's type (`columnQuantity`, `measure.ts`):
-named by `HasUnit.quantity` or else the column, in the unit `HasUnit.unit`
+named by `HasQuantity` or else the column, in the unit `HasUnit`
 (or `"instant"` for a time column), or else unknown. A function accessor or a
 literal has no column, so no quantity: its value makes no claim.
 `inferSize`/`inferPos` tag the `value(...)` they emit with it, and a pipeline
@@ -1764,10 +1777,17 @@ explicit pixel size so it absorbs its own axis (the [self-scaling
 region](#self-scaling-regions-an-explicit-or-data-valued-size-absorbs-an-axis)
 above) and never reaches the shared union at all.
 
-**Titles.** An axis is titled by its space's titles (`spaceTitle`), joined
-with `", "` in the order the merge met them: a histogram's edges title as
-their source column, an axis over `lo` and `hi` reads `"lo, hi"`. The `axes`
-option's `title` overrides it.
+**Titles.** An axis is titled by `spaceTitle`, the one place the title
+string is built, in the SI style `Quantity (unit)`: the space's titles (its
+quantities), joined with `", "` in the order the merge met them, then the
+symbol of the axis's unit in parentheses when that unit is declared and has
+a symbol. A histogram's edges title as their source column, an axis over
+`lo` and `hi` reads `"lo, hi"`, and the four summary columns of a box plot
+declared `Schema.unit("USD").quantity("Pay")` read `"Pay (USD)"`. A count, a
+share, a time, and an unknown unit add nothing. One declared heuristic: when
+every quantity name already ends with the suffix (a column named `"Flipper
+Length (mm)"` declared in `"mm"`), the names already show the unit, so it is
+not added twice. The `axes` option's `title` overrides all of this.
 
 **Stage 2.** This is Stage 1: one unit per axis, unified or refused. The
 sequel is a unit-keyed _family_ of underlying spaces per axis — true
@@ -1862,13 +1882,16 @@ reads only the classes, never the builder words. Four classes exist:
   times alike. Calendar cells
   (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
   on Temporal, native or the polyfill it loads when the runtime has none.
-- `HasUnit` (`{ unit?, quantity? }`, #994, #955): the values are amounts.
-  `unit` is their declared unit (`Schema.unit(u)`); absent, it is unknown,
-  a unit variable (see [measures](#measures-units-are-types)). `quantity` is
-  the name of the quantity when it is not the column's own: a transform
-  writes it for the columns it makes (`bin(field)`'s `start`/`end`/`size`
-  are amounts of `field`, in `field`'s declared unit if it has one; its
-  `count` is in `"count"`).
+- `HasUnit` (`{ unit, symbol? }`, #994, #955): the values are amounts in
+  the declared unit `unit` (`Schema.unit(u)`, which also writes the symbol
+  `u`). A column without it has an unknown unit, a unit variable (see
+  [measures](#measures-units-are-types)).
+- `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
+  `name` (`Schema.quantity(name)`, or `.quantity(name)` after another
+  builder), when it is not the column's own name. It titles the axis and
+  names the unit variable. A transform writes it for the columns it makes
+  (`bin(field)`'s `start`/`end`/`size` are amounts of `field`'s quantity, in
+  `field`'s declared unit if it has one; its `count` is in `"count"`).
 
 The types ride the chart's data array under the `COLUMN_TYPES` symbol:
 `ChartBuilder` copies the array and tags it (`applySchema`, which keeps the

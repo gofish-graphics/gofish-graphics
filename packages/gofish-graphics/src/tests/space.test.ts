@@ -36,7 +36,7 @@ import { value } from "../ast/data";
 import { quantityUnits, titleUnits } from "../ast/underlyingSpace";
 
 /** The measure of a column declared in unit `unit` (and named by it). */
-const u = (unit: string, name = unit) => quantityUnits({ name, unit });
+const u = (unit: string, name = unit) => quantityUnits({ name, unit: { name: unit, symbol: unit } });
 import {
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
