@@ -377,6 +377,113 @@ function testWideIntsAndStructs(): boolean {
   return ok;
 }
 
+/** Times inside lists and structs: no schema names them, so they decode to
+ *  epoch milliseconds (a naive timestamp or a date read in UTC), and a list
+ *  of structs is a list of rows that carries its own column types. */
+function testNestedTimesDecodeAsEpochMs(): boolean {
+  console.log("Test: nested times decode as epoch ms");
+  const ms = Date.UTC(2024, 2, 10, 5);
+  const day = Date.UTC(2024, 2, 1);
+  const point = new Arrow.Struct([
+    new Arrow.Field("naive", new Arrow.TimestampMillisecond()),
+    new Arrow.Field("ny", new Arrow.TimestampMillisecond("America/New_York")),
+    new Arrow.Field("d", new Arrow.DateDay()),
+    new Arrow.Field("v", new Arrow.Int32()),
+  ]);
+  const table = new Arrow.Table({
+    points: Arrow.vectorFromArray(
+      [[{ naive: ms, ny: ms, d: new Date(day), v: 1 }, null]],
+      new Arrow.List(new Arrow.Field("item", point))
+    ),
+    stamps: Arrow.vectorFromArray(
+      [[ms, null]],
+      new Arrow.List(new Arrow.Field("item", new Arrow.TimestampMillisecond()))
+    ),
+    at: Arrow.vectorFromArray(
+      [{ naive: ms, ny: ms, d: new Date(day), v: 2 }],
+      point
+    ),
+  });
+  const rows = arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table)));
+  const [inner] = rows[0].points;
+  const ok =
+    inner.naive === ms &&
+    inner.ny === ms &&
+    inner.d === day &&
+    inner.v === 1 &&
+    rows[0].points[1] === null &&
+    JSON.stringify(Serialize.getColumnTypes(rows[0].points)) ===
+      JSON.stringify({
+        naive: { HasCalendar: { zone: "UTC" } },
+        ny: { HasCalendar: { zone: "America/New_York" } },
+        d: { HasCalendar: { zone: "UTC" } },
+      }) &&
+    JSON.stringify(rows[0].stamps) === JSON.stringify([ms, null]) &&
+    rows[0].at.naive === ms &&
+    rows[0].at.d === day &&
+    // The top-level rows carry no types: no top-level column is a time.
+    Serialize.getColumnTypes(rows) === undefined;
+  console.log(
+    ok
+      ? "  ✓ PASSED"
+      : `  ✗ FAILED ${JSON.stringify({ rows, inner: Serialize.getColumnTypes(rows[0].points) })}`
+  );
+  return ok;
+}
+
+/** A callback's decoded rows are typed before anything reads them: a lambda
+ *  accessor's result and a derive's single-datum result hold epoch ms, not
+ *  the decode's wall-clock strings, and `derive(fn, { schema })` reads them
+ *  in its zone. */
+async function testCallbackResultsAreTyped(): Promise<boolean> {
+  console.log("Test: callback results are typed before they are read");
+  const feb28 = Date.UTC(2024, 1, 28, 13); // the wall clock, counted as UTC
+  const bridge: Serialize.DeriveBridge = {
+    async applyLambda(_id, rows) {
+      const table = new Arrow.Table({
+        t: Arrow.vectorFromArray(
+          rows.map(() => feb28),
+          new Arrow.TimestampMillisecond()
+        ),
+        n: Arrow.vectorFromArray(
+          rows.map((_, i) => i),
+          new Arrow.Int32()
+        ),
+      });
+      return arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table)));
+    },
+  };
+  const accessor = Serialize.unwrapMarkOpts({ __gofish_lambda: "f" }, bridge);
+  const fromAccessor = await accessor({ x: 1 });
+  const single = async (schema?: Record<string, unknown>) => {
+    let seen: any;
+    const op = Serialize.OPERATOR_MAP.derive(
+      { lambdaId: "g", ...(schema ? { schema } : {}) },
+      bridge
+    ) as any;
+    await (
+      await op(async (d: any) => {
+        seen = d;
+        return undefined;
+      })
+    )({ x: 1 });
+    return seen;
+  };
+  const utc = await single();
+  const ny = await single({ t: { HasCalendar: { zone: "America/New_York" } } });
+  const ok =
+    fromAccessor.t === feb28 &&
+    !Array.isArray(utc) &&
+    utc.t === feb28 &&
+    ny.t === Date.UTC(2024, 1, 28, 18);
+  console.log(
+    ok
+      ? "  ✓ PASSED"
+      : `  ✗ FAILED ${JSON.stringify({ fromAccessor, utc, ny })}`
+  );
+  return ok;
+}
+
 export async function runArrowTransportTests(): Promise<boolean> {
   console.log("Running Arrow transport tests...\n");
 
@@ -394,6 +501,8 @@ export async function runArrowTransportTests(): Promise<boolean> {
     testNumericNullsDecodeAsNull(),
     testWideIntsAndStructs(),
     await testNaiveTimesReadInTheChartZone(),
+    testNestedTimesDecodeAsEpochMs(),
+    await testCallbackResultsAreTyped(),
   ];
 
   const allPassed = results.every((r) => r);

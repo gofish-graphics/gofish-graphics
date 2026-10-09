@@ -728,9 +728,19 @@ renders it. What differs between the hosts is only transport:
   attached with `Serialize.setColumnTypes`); a naive timestamp or a date is
   a wall-clock value, so it becomes an ISO string without an offset and is
   marked `HasCalendar` in UTC, which `applySchema` reads in the zone the
-  chart declares for the column, as it reads the same string from JS data; a list becomes a plain array, a
-  struct a plain object, a 64-bit integer a JS number, and a null stays
-  `null`. A float NaN stays NaN: GoFish never reads NaN as missing. Only a
+  chart declares for the column, as it reads the same string from JS data.
+  The decode attaches types and converts no time to an instant itself:
+  every reader of decoded rows runs `applySchema` with its own schema
+  before it reads a value. A tier is chart data; a callback's rows go
+  through `applyLambdaTyped` (`registry.ts`), which a `derive` (with its
+  `schema`) and a lambda accessor both call, so a single-datum derive's
+  result and an accessor's result hold epoch milliseconds. A list becomes a
+  plain array, a struct a plain object, a 64-bit integer a JS number, and a
+  null stays `null`. No schema names a value inside a list or a struct, so
+  a time there decodes to epoch milliseconds (a naive timestamp or a date
+  read in UTC, as a chart with no zone reads it), and a list of structs, a
+  list of rows, carries its own column types (`HasCalendar` in the
+  timestamp's zone, or UTC). A float NaN stays NaN: GoFish never reads NaN as missing. Only a
   pandas DataFrame's NaN crosses as null, because pandas defines NaN as the
   missing value of its float columns and pyarrow's `from_pandas` follows
   that rule. A column whose rows mix types (a string in one, a number in
