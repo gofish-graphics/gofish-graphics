@@ -43,6 +43,7 @@ import { type ConstraintRef } from "./shared";
 import { sliceExtent } from "./folds";
 import {
   ORDINAL,
+  titleUnits,
   UNDEFINED,
   type UnderlyingSpace,
   originIs,
@@ -386,7 +387,7 @@ export function gridSpaces(
           keyAt(r * c.numCols)
         ).filter((k): k is string => k !== undefined);
   return [
-    colKeys.length > 0 ? ORDINAL(colKeys, c.colMeasure) : UNDEFINED,
-    rowKeys.length > 0 ? ORDINAL(rowKeys, c.rowMeasure) : UNDEFINED,
+    colKeys.length > 0 ? ORDINAL(colKeys, titleUnits(c.colMeasure)) : UNDEFINED,
+    rowKeys.length > 0 ? ORDINAL(rowKeys, titleUnits(c.rowMeasure)) : UNDEFINED,
   ];
 }

@@ -33,6 +33,10 @@ import {
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { value } from "../ast/data";
+import { titleUnits, type UnitRecord } from "../ast/underlyingSpace";
+
+/** The units of a column measured in `unit` (titled by it). */
+const u = (unit: string): UnitRecord => ({ unit, titles: [unit] });
 import {
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
@@ -68,8 +72,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   // units. Overlaying foreign units onto one axis must be REFUSED — this is the
   // marginal-histogram unit guard. (Two-state's `every(origin === 0)` wrongly
   // took these for magnitudes and silently forgot the clash.)
-  const dollars0 = CONTINUOUS(interval(0, 100), "pinned", "dollars");
-  const units0 = CONTINUOUS(interval(0, 50), "pinned", "units");
+  const dollars0 = CONTINUOUS(interval(0, 100), "pinned", u("dollars"));
+  const units0 = CONTINUOUS(interval(0, 50), "pinned", u("units"));
   const msg = throws(() => unionChildSpaces([onY(dollars0), onY(units0)], 1));
   ok(
     "overlay of two origin-0 data axes with clashing measures THROWS",
@@ -79,8 +83,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
 
   // Two baseline magnitudes in different fields on one axis are the same type
   // error: the measure policy does not depend on the origin.
-  const dollarsMag = CONTINUOUS(interval(0, 100), "free", "dollars");
-  const unitsMag = CONTINUOUS(interval(0, 50), "free", "units");
+  const dollarsMag = CONTINUOUS(interval(0, 100), "free", u("dollars"));
+  const unitsMag = CONTINUOUS(interval(0, 50), "free", u("units"));
   let composed: UnderlyingSpace | undefined;
   const magMsg = throws(() => {
     composed = unionChildSpaces([onY(dollarsMag), onY(unitsMag)], 1);
@@ -427,8 +431,8 @@ console.log("# space: a measure clash says what to do");
   const gross = throws(() =>
     unionChildSpaces(
       [
-        onY(CONTINUOUS(interval(0, 10), "free", "Worldwide Gross")),
-        onY(CONTINUOUS(interval(0, 5), "free", "US Gross")),
+        onY(CONTINUOUS(interval(0, 10), "free", u("Worldwide Gross"))),
+        onY(CONTINUOUS(interval(0, 5), "free", u("US Gross"))),
       ],
       1
     )
@@ -464,7 +468,7 @@ console.log("# space: a measure clash says what to do");
         type: "leaf",
         resolveUnderlyingSpace: () => [
           UNDEFINED,
-          CONTINUOUS(interval(0, 1), "free", m),
+          CONTINUOUS(interval(0, 1), "free", u(m)),
         ],
         layout,
       },
@@ -642,9 +646,9 @@ console.log("# space: one fold for every origin");
   // An ordinal's measure is its grouping field, not a unit: a datum position
   // in dollars beside a category spread by "genre" is no measure clash.
   const genreThenDollars = throws(() =>
-    resolveLayerBaseSpaces([[UNDEFINED, ORDINAL(["a", "b"], "genre")]], {
+    resolveLayerBaseSpaces([[UNDEFINED, ORDINAL(["a", "b"], titleUnits("genre"))]], {
       y: interval(0, 5),
-      yMeasure: "dollars",
+      yMeasure: u("dollars"),
     })
   );
   ok(
@@ -654,7 +658,7 @@ console.log("# space: one fold for every origin");
   );
   const stackOfGenre = throws(() =>
     distributeSpaceFold(
-      [ORDINAL(["a"], "genre"), CONTINUOUS(interval(0, 3), "free", "dollars")],
+      [ORDINAL(["a"], titleUnits("genre")), CONTINUOUS(interval(0, 3), "free", u("dollars"))],
       ["p", "q"],
       {
         axis: 1,

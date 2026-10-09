@@ -25,7 +25,7 @@ import type { Size } from "./dims";
 import {
   continuousInterval,
   isCONTINUOUS,
-  spaceMeasure,
+  spaceUnit,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
   type UnderlyingSpace,
@@ -508,8 +508,8 @@ export async function layout(
   // registry (Stage 6c: the ONE post-solve σ adjustment, so every slope stays
   // registry-sourced and the dump shows the FINAL σ). Silently skipped when an
   // axis has no solved scope to equate.
-  const measureX = spaceMeasure(niceUnderlyingSpaceX);
-  const measureY = spaceMeasure(niceUnderlyingSpaceY);
+  const measureX = spaceUnit(niceUnderlyingSpaceX)?.unit;
+  const measureY = spaceUnit(niceUnderlyingSpaceY)?.unit;
   if (measureX !== undefined && measureX === measureY) {
     const axisInfo = ([0, 1] as const).map(
       (axis): EqualMeasureAxis | undefined => {

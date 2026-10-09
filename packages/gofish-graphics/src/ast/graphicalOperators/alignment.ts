@@ -8,12 +8,9 @@ import {
   isCONTINUOUS,
   isORDINAL,
   isUNDEFINED,
-  mergeAllMeasures,
-  forgetAllMeasures,
+  joinAllUnits,
   dataWidth,
   allMirrored,
-  mergeCalendars,
-  withCalendar,
   mirrored,
   type CONTINUOUS_TYPE,
   type MeasureSite,
@@ -77,15 +74,13 @@ function overlay(
   origin: Origin,
   site: MeasureSite
 ): UnderlyingSpace {
-  const measure = mergeAllMeasures(
+  const measure = joinAllUnits(
     conts.map((s) => s.measure),
+    true,
     site
   );
   return mirrored(
-    withCalendar(
-      CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
-      mergeCalendars(conts.map((s) => s.calendar))
-    ),
+    CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
     origin !== "none" && allMirrored(conts)
   );
 }
@@ -114,10 +109,15 @@ export function unionChildSpaces(
     for (const ord of ordinals) {
       if (ord.domain) for (const k of ord.domain) keys.add(k);
     }
-    // Carry the grouping measure through the union (FORGET on a real clash, as
-    // the magnitude path does) so a category axis keeps naming itself off its
-    // own space — e.g. a `Frame` wrapping a `spread(lake)` preserves "lake".
-    const measure = forgetAllMeasures(ordinals.map((o) => o.measure));
+    // Carry the grouping field through the union so a category axis keeps
+    // naming itself off its own space — e.g. a `Frame` wrapping a
+    // `spread(lake)` preserves "lake". An ordinal's units are a title and no
+    // unit, so the join only unions the titles.
+    const measure = joinAllUnits(
+      ordinals.map((o) => o.measure),
+      true,
+      { axis, where: "where categories are drawn on top of each other" }
+    );
     // Anonymous only if EVERY unioned ordinal is anonymous — one semantically
     // keyed child makes the union a real category axis.
     const anonymous = ordinals.every((o) => o.anonymous);

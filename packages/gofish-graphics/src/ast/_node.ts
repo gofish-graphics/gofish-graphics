@@ -65,6 +65,7 @@ import {
   axisOver,
   placeBaseline,
   MeasureClash,
+  spaceUnit,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
 } from "./underlyingSpace";
@@ -395,7 +396,7 @@ function selfScaledAxisSignature(
     JSON.stringify({
       d: s.dataInterval,
       o: s.origin,
-      m: s.measure,
+      m: spaceUnit(s),
     })
   );
 }

@@ -240,9 +240,8 @@ type CONTINUOUS_TYPE = {
   kind: "continuous";
   dataInterval: Interval; // signed data extent about the local origin
   origin: Origin; // where that origin sits
-  measure?: Measure;
+  measure?: UnitRecord; // { unit?, calendar?, titles }
   mirrored?: true;
-  calendar?: HasCalendar; // the data are instants on this calendar
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
@@ -349,11 +348,12 @@ With every descent 0, all of this reduces to a single width.
 `ORDINAL` carries a `measure` too (the grouping field, e.g. `"lake"`) — the
 discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
 (`spread`'s `by`) when the ordinal space is built (`distributeSpaceFold` →
-`ORDINAL(keys, measure)`) and preserved through `unionChildSpaces`. So
-`spaceMeasure(space)` reads a measure off **both** continuous and ordinal kinds
-(only `UNDEFINED` is measureless), which is what lets an axis name itself off its
-own resolved space — a continuous axis by its unit, an ordinal axis by its
-grouping field (see [the layout passes](/internals/layout/passes)).
+`ORDINAL(keys, titleUnits(by))`, a record with a title and no unit) and
+joined through `unionChildSpaces`, which only unions an ordinal's titles. So
+`spaceUnit(space)` reads a record off **both** continuous and ordinal kinds
+(only `UNDEFINED` has none), and `spaceTitle(space)` titles the axis from it —
+a continuous axis by its unit, an ordinal axis by its grouping field (see [the
+layout passes](/internals/layout/passes)).
 
 A datum value can also carry a `field`: the data field it was read from, set
 by `inferColor` when a color channel names one. That is provenance, not a
@@ -1578,30 +1578,40 @@ measure**.
 
 ```ts
 // underlyingSpace.ts
-export type CONTINUOUS_TYPE = { kind: "continuous"; dataInterval: Interval; origin: Origin; measure?: Measure; ... };
+export type UnitRecord = { unit?: string; calendar?: HasCalendar; titles: string[] };
+export type CONTINUOUS_TYPE = { kind: "continuous"; dataInterval: Interval; origin: Origin; measure?: UnitRecord; ... };
 ```
 
-**Merging.** Two helpers in `underlyingSpace.ts` decide what happens when two
-measures meet. `undefined` is always permissive — it means "no claim", unifies
-with anything, and yields the other side (this is why `getMeasure` returns
-`undefined` rather than a `"unit"`/`"unknown"` sentinel: a measureless value
-must merge silently into a tagged one).
+A space's record holds its unit (today, the measure string), the calendar of
+its instants, and the titles that name its axis. It is read through one
+accessor, `spaceUnit(space)`.
 
-- `mergeMeasures(a, b, context)` — unify as **types**. Equal measures unify to
-  themselves; two _different_ defined measures are a type error and it
-  **throws**. This is the one policy for every continuous composition, and it
-  is decided by the measures alone, never by the origin state: overlays and
-  alignments (`alignment.ts`), spreads and stacks (`distributeSpaceFold`),
-  coords, and a layer's datum domain all use it. So overlaying a count axis
-  onto a millimeter axis fails loudly instead of corrupting the domain, and so
-  does stacking or overlaying two magnitudes in different units.
-- `forgetOnConflict(a, b)` — a conflict **forgets** (returns `undefined`)
-  rather than throwing. Used only for ORDINAL axes, whose measure is the
-  grouping field that names a category axis: categories set up no σ, so two
-  grouping fields on one axis lose the name, not the scale. A grouping field
-  is no unit, so it never enters `mergeMeasures`: a datum position in dollars
-  beside a category spread on the same axis, or a spread whose targets mix a
-  category spread with dollar bars, unifies only the continuous units.
+**Merging.** One function in `underlyingSpace.ts`, `joinUnits(a, b, shared,
+site)`, decides what happens when two records meet. `undefined` is always
+permissive — it means "no claim", unifies with anything, and yields the other
+side (this is why `getMeasure` returns `undefined` rather than a
+`"unit"`/`"unknown"` sentinel: a measureless value must merge silently into a
+tagged one). `shared` says whether the two sides share the axis.
+
+- Shared — unify as **types**. Equal units unify to themselves; two
+  _different_ units are a type error and it **throws**. The titles union and
+  the calendars must agree. This is the one policy for every continuous
+  composition, and it is decided by the units alone, never by the origin
+  state: overlays and alignments (`alignment.ts`), spreads and stacks
+  (`distributeSpaceFold`), coords, a rect's two ends, and a layer's datum
+  domain all use it. So overlaying a count axis onto a millimeter axis fails
+  loudly instead of corrupting the domain, and so does stacking or overlaying
+  two magnitudes in different units.
+- Not shared — the join **forgets**: it records nothing and raises nothing,
+  and the result keeps `a`'s record (with the calendars joined). The
+  `position` operator's offset uses it: the offset places the content, so the
+  content keeps its own units.
+
+An ORDINAL axis's record is a title (the grouping field) and no unit:
+categories set up no σ, so the same join only unions their titles. A grouping
+field is no unit: a datum position in dollars beside a category spread on the
+same axis, or a spread whose targets mix a category spread with dollar bars,
+unifies only the continuous units.
 
 Why one policy: the measures of an axis decide how many σ-scopes it needs,
 which is part of setting up the layout problem, not of solving it. One axis
@@ -1661,7 +1671,7 @@ size (a bubble's area) stays a flat point. See the embedding-resolution pass und
 
 **Constraint-domain measures.** A `position` constraint's datum coordinate
 carries the same resolved measure, and `collectPositionDomains` folds those per
-axis with `mergeMeasures` — so a layer's own positioning constraints in clashing
+axis with `joinUnits` — so a layer's own positioning constraints in clashing
 units (an interval coordinate with one endpoint in `mm` and the other in `inch`)
 throw at the source. The layer then unifies this constraint-domain measure with
 its children's, as types, like any other composition. A child that a datum
@@ -1678,7 +1688,7 @@ count axis is all baseline magnitudes (origin 0) at the children, and
 it is load-bearing, because it is exactly how the count axis acquires its
 `"count"` tag so a later overlay union can recognize it as foreign and refuse.
 
-**The error and its remedies.** A clash from `mergeMeasures` is a
+**The error and its remedies.** A clash from `joinUnits` is a
 `MeasureClash`, and it reads, for a grouped bar chart over two gross columns:
 
 > The y axis combines two different measures, "Worldwide Gross" and "US
@@ -1784,9 +1794,9 @@ reads only the classes, never the builder words. Four classes exist:
   class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
   for any typed column, with `createOperator` passing the column it resolved
   from the whole input, measure and type together, `resolveColumn`), and the point space it
-  builds carries it as `CONTINUOUS_TYPE.calendar` (`positionCalendar`,
-  `withCalendar`). The folds that build a continuous space from parts keep
-  it (`mergeCalendars`: the overlay fold, a layer's datum-position domain in
+  builds carries it in its unit record (`valueUnits`, read back with
+  `spaceCalendar`). The folds that build a continuous space from parts keep
+  it (`joinUnits`: the overlay fold, a layer's datum-position domain in
   `compose.ts`, a rect's two ends, the `position` operator's offset), and
   two parts on different zones are an error, like two measures. A time space
   is niced to the cells of its axis's inner row (`niceToCells`: the

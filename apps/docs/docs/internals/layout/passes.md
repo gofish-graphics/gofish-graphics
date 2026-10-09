@@ -527,7 +527,7 @@ omitted dimension is resolved per axis from the root's size claim on it:
 the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
 to `child.layout` (where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
-are built and before `child.layout`: when `spaceMeasure(x) === spaceMeasure(y)`
+are built and before `child.layout`: when `spaceUnit(x).unit === spaceUnit(y).unit`
 (the two axes are the same unit), each axis's pixels-per-data-unit — a POSITION
 domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
 `min(...)` so one data unit measures the same on both axes (circles stay circular,

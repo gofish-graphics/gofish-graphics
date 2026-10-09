@@ -48,8 +48,8 @@ import { mask as Mask } from "./porterDuff";
 import { offset as offsetOp } from "./offset";
 import { Rect } from "../shapes/rect";
 import { createMark } from "../withGoFish";
-import { datum, getValue, getMeasure, isValue, type Value } from "../data";
-import { mergeAllMeasures } from "../underlyingSpace";
+import { datum, getValue, isValue, type Value } from "../data";
+import { joinAllUnits, valueUnits } from "../underlyingSpace";
 
 /** User-facing options for the pure `cut(source, opts)` form. */
 export type CutOptions = {
@@ -142,7 +142,7 @@ async function buildSliceNode(
  *       for them to fill);
  *   (c) two datum entries carry different, both-defined measure tags
  *       (incompatible units). Untagged entries are permissive — they unify
- *       with anything. The comparison reuses {@link mergeAllMeasures}, the same
+ *       with anything. The comparison reuses {@link joinAllUnits}, the same
  *       undefined-permissive measure unification the underlying-space type
  *       system uses (#527).
  */
@@ -187,10 +187,11 @@ function resolveExtents(
   }
 
   // Incompatible-measures guard: datum entries with different, both-defined
-  // measure tags are a unit error. mergeAllMeasures is undefined-permissive
+  // measure tags are a unit error. joinAllUnits is undefined-permissive
   // (untagged entries unify with anything) and throws on a real conflict.
-  mergeAllMeasures(
-    datumEntries.map((v) => getMeasure(v)),
+  joinAllUnits(
+    datumEntries.map((v) => valueUnits(v)),
+    true,
     { where: "in the datum() weights of a cut's size" }
   );
 
