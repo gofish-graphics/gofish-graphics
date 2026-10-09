@@ -40,7 +40,8 @@ Each column of the returned rows is typed like chart data:
 
 - A column whose values still fit the type it had in the input keeps that
   type. A time column of unchanged instants stays a time, and an ordered
-  column whose values are all levels of its order keeps the order.
+  column whose values are still text or numbers keeps the order, so a
+  value outside its levels is an error where the order is used.
 - A column of `Date` values is a time in UTC.
 - Any other column has no type. A `derive` that rewrites a date to `"Mar"`
   makes the column plain text.

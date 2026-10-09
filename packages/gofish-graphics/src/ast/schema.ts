@@ -299,13 +299,16 @@ export async function applySchema<T>(
 
 /** Whether one value fits a column type as it stands, without conversion: a
  *  time (`HasCalendar`) holds epoch milliseconds, and an order (`HasOrder`,
- *  and the midpoint along it) holds one of its levels. A missing value fits
- *  any type. */
+ *  and the midpoint along it) holds text or numbers, the kinds its levels
+ *  are. A value outside the levels still fits, so the order stays and its
+ *  stray-level error fires when the order is used, instead of a derive or
+ *  filter silently dropping the order. A missing value fits any type. */
 function valueFits(type: ColumnType, v: unknown): boolean {
   if (v === null || v === undefined) return true;
   if (type.HasCalendar && !(typeof v === "number" && Number.isFinite(v)))
     return false;
-  if (type.HasOrder && !type.HasOrder.levels.includes(v as Level)) return false;
+  if (type.HasOrder && typeof v !== "string" && typeof v !== "number")
+    return false;
   return true;
 }
 

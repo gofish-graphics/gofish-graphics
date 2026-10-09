@@ -394,11 +394,21 @@ async function main() {
       { schema: { m: Schema.ordered(["Q1", "Q2"]) } },
       months
     );
+    const flags = await derived(
+      (rows) => rows.map((r) => ({ ...r, m: true })),
+      undefined,
+      months
+    );
     check(
-      "an ordered column keeps its order while its values are levels, and " +
-        "loses it when they are not",
+      "an ordered column keeps its order while its values are text or " +
+        "numbers, even outside the levels, and loses it otherwise",
       same(getColumnTypes(kept)?.m?.HasOrder?.levels, ["Jan", "Feb", "Mar"]) &&
-        getColumnTypes(quarters)?.m === undefined &&
+        same(getColumnTypes(quarters)?.m?.HasOrder?.levels, [
+          "Jan",
+          "Feb",
+          "Mar",
+        ]) &&
+        getColumnTypes(flags)?.m === undefined &&
         same(getColumnTypes(reordered)?.m?.HasOrder?.levels, ["Q1", "Q2"])
     );
     const filtered = await (async () => {

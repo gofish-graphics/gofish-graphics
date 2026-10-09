@@ -459,6 +459,20 @@ async function main() {
       filtered === undefined,
       filtered
     );
+    const kept = await errorOf(() =>
+      chart(rows, { schema: { r: Schema.ordered(LEVELS5) } })
+        .flow(
+          filter((row: any) => row.n > 0),
+          stack({ by: "r", dir: "x" })
+        )
+        .mark(rect({ w: "n" }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a filter that keeps a stray level keeps the order, so the error fires",
+      kept !== undefined && kept.includes(`"Refused"`),
+      kept
+    );
     const colored = await errorOf(() =>
       chart(rows, {
         schema: { r: Schema.ordered(LEVELS5) },
