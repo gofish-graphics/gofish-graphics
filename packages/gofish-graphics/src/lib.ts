@@ -174,6 +174,8 @@ export * as Tile from "./families/tile";
 export type { TreemapOptions } from "./ast/graphicalOperators/treemap";
 export { pack } from "./ast/graphicalOperators/pack";
 export type { PackOptions } from "./ast/graphicalOperators/pack";
+export { partition } from "./ast/graphicalOperators/partition";
+export type { PartitionOptions } from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
 export {
   enclose,

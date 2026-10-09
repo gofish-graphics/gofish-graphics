@@ -3,16 +3,19 @@ import { GoFishNode, type Placeable } from "../_node";
 import {
   getMeasure,
   getValue,
+  getValueCell,
   isValue,
   type MaybeValue,
   type Measure,
 } from "../data";
 import {
   mergeCalendars,
+  mergeCells,
   mergeMeasures,
   positionCalendar,
 } from "../underlyingSpace";
 import type { HasCalendar } from "../schema";
+import type { Cell } from "../cells";
 import type { PositionDomains } from "./compose";
 import * as Interval from "../../util/interval";
 import { createAlignConstraint } from "./align";
@@ -321,6 +324,19 @@ export function collectPositionDomains(
       : isPositionInterval(coord)
         ? spanDatumInterval(coord)
         : pointInterval(coord);
+  // The cell a coordinate places across: a range whose two ends are edges of
+  // one cell (`getValueCell`). A point, or any other range, places none.
+  const coordCell = (
+    coord: NonNullable<PositionConstraint["x"]>
+  ): readonly Cell[] | undefined => {
+    if (!isPositionInterval(coord)) return undefined;
+    const cell = getValueCell(coord[0]);
+    return cell !== undefined && getValueCell(coord[1]) === cell
+      ? [cell]
+      : undefined;
+  };
+  const xCells: (readonly Cell[] | undefined)[] = [];
+  const yCells: (readonly Cell[] | undefined)[] = [];
   for (const c of constraints) {
     if (c.type !== "position") continue;
     x = unionIv(x, coordInterval(c.x));
@@ -335,8 +351,19 @@ export function collectPositionDomains(
     });
     xCalendar = mergeCalendars([xCalendar, coordCalendar(c.x)]);
     yCalendar = mergeCalendars([yCalendar, coordCalendar(c.y)]);
+    if (c.x !== undefined) xCells.push(coordCell(c.x));
+    if (c.y !== undefined) yCells.push(coordCell(c.y));
   }
-  return { x, y, xMeasure, yMeasure, xCalendar, yCalendar };
+  return {
+    x,
+    y,
+    xMeasure,
+    yMeasure,
+    xCalendar,
+    yCalendar,
+    xCells: mergeCells(xCells),
+    yCells: mergeCells(yCells),
+  };
 }
 
 /**

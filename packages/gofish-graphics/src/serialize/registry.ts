@@ -55,6 +55,7 @@ import { enclose } from "../ast/graphicalOperators/enclose";
 import { position } from "../ast/graphicalOperators/position";
 import { treemap } from "../ast/graphicalOperators/treemap";
 import { pack } from "../ast/graphicalOperators/pack";
+import { partition } from "../ast/graphicalOperators/partition";
 // `cut` (the pure slice primitive, returns an array of slice node promises)
 // and `cutMark` (the expand-mark form) — the deserializer dispatches
 // between them by context: a `cut` IR node used as a chart `.mark(...)` →
@@ -153,6 +154,8 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   table,
   treemap,
   pack,
+  // Operator-only: its children come from the cells of its key.
+  partition,
   // Combinator-only marks.
   layer,
   enclose,

@@ -31,6 +31,7 @@ import {
   originIs,
   spaceMeasure,
   axisTickPartition,
+  cellPartition,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
 } from "../underlyingSpace";
@@ -604,15 +605,27 @@ function elaborateTimeAxis(
   const [lo, hi] = nice;
   const zone = space.calendar!.zone;
   const rows = ticks.rows ?? defaultTimeRows(axisTickPartition(space, ticks));
-  const labels = rows.map((row) => rowLabels(row, lo, hi, zone));
+  const starts = rows.map((row) => rowLabels(row, lo, hi, zone));
+  // A row whose partition is that of the cells the axis places names those
+  // cells: each label sits midway between its cell's two boundary ticks
+  // (#1058). Any other row names points: each label sits on its tick.
+  const cells = space.cells;
+  const cellsOf = cellPartition(space);
+  const labels = rows.map((row, k) =>
+    cells !== undefined && String(row) === String(cellsOf)
+      ? cells
+          .filter((c) => c.start >= lo && c.end <= hi)
+          .map((c) => ({ at: (c.start + c.end) / 2, text: c.label }))
+      : starts[k]
+  );
 
-  // Ticks: every row's label positions, each drawn once, inner row first. A
+  // Ticks: every row's cell starts, each drawn once, inner row first. A
   // tick the inner row has is short; only an outer-row tick that falls
   // between inner ticks is long, so it stands out from the inner ticks
   // around it. (An outer label at the first tick, for a cell that starts
   // before the domain, adds no tick: the domain starts on an inner tick.)
   const tickLen = new Map<number, number>();
-  labels.forEach((row, k) => {
+  starts.forEach((row, k) => {
     for (const l of row) {
       if (!tickLen.has(l.at))
         tickLen.set(l.at, k === 0 ? TICK_LEN : TIME_OUTER_TICK_LEN);

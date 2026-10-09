@@ -562,6 +562,8 @@ const DUAL_FORM_OPERATOR_CORES: Array<[string, string]> = [
   ["table", "_table_opts"],
   ["treemap", "_treemap_opts"],
   ["pack", "_pack_opts"],
+  // Operator-only, like group: the wrapper in ast.py takes `by` and `dir`.
+  ["partition", "_partition_opts"],
 ];
 for (const [opType, fnName] of DUAL_FORM_OPERATOR_CORES) {
   const d = OPERATORS[opType];

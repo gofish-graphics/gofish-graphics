@@ -767,6 +767,7 @@ from ._generated import (  # noqa: E402
     _spread_combinator_opts,
     _stack_combinator_opts,
     _pack_opts,
+    _partition_opts,
     _line_opts,
     _ribbon_opts,
     _layer_opts,
@@ -1909,6 +1910,46 @@ def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
     """
     options["by"] = by
     return Operator("group", **_group_opts(**options))
+
+
+def partition(*, by: "FieldAccessor", dir: str, **options: Any) -> Operator:
+    """
+    Partition operator: divide the space along ``dir`` into the cells of a
+    binned key, one group per cell, each placed across its cell's interval
+    on one continuous scale. A cell's width follows its width in data (a
+    29-day February is narrower than a 31-day March), and an empty cell
+    keeps its place. A mark with no size along ``dir`` fills its cell.
+
+        chart(daily, schema={"date": Schema.time()}).flow(
+            partition(by=field("date").bin(Calendar.month), dir="x")
+        ).mark(rect(h=field("value").sum()))
+
+    Args:
+        by: A key that has a region: a binned field, ``field(x).bin(...)``.
+            A plain field has no region and is an error.
+        dir: The axis to divide: ``"x"``, ``"y"``, or an axis name the
+            enclosing coordinate space declares.
+        **options: The generated ``_partition_opts`` core's options; see
+            the docs options table.
+
+    Returns:
+        Operator object
+    """
+    if not (
+        isinstance(by, FieldAccessor)
+        and any(op.get("op") == "bin" for op in by.get("ops", []))
+    ):
+        name = by["name"] if isinstance(by, FieldAccessor) else by
+        raise ValueError(
+            f"partition: `by` must be a key that has a region, such as "
+            f'field("{name}").bin(Calendar.month) or '
+            f'field("{name}").bin(step=1). Each group is placed across its '
+            f"cell's interval, so the key must say what the cells are. To "
+            f"give each value an equal slot instead, use spread(by=..., dir=...)."
+        )
+    options["by"] = by
+    options["dir"] = dir
+    return Operator("partition", **_partition_opts(**options))
 
 
 def resolve(cols: List[str], *, from_: Any, key: Optional[str] = None) -> Operator:

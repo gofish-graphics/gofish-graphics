@@ -1247,6 +1247,28 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
     },
   }),
+
+  partition: operator("partition", {
+    doc: "Divide the space along `dir` into the cells of a binned key. Each group is placed across its cell's interval on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size along `dir` fills its cell.",
+    fields: {
+      by: {
+        type: t.ref("FieldAccessor"),
+        required: true,
+        doc: "A key that has a region: a binned field, field(x).bin(p), whose cells divide the space. A plain field has no region and is an error.",
+      },
+      dir: {
+        type: t.string,
+        required: true,
+        doc: "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r).",
+      },
+      alignment: {
+        type: t.string,
+        default: "baseline",
+        doc: 'Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline").',
+      },
+      axes: { type: t.ref("AxesOptions") },
+    },
+  }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1265,6 +1287,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       aspectRatio: {
         type: t.number,
         doc: "w/h ratio to enforce; the constraining axis wins when both are data-driven.",
+      },
+      inset: {
+        type: t.number,
+        default: 0,
+        doc: "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given.",
       },
       // A fluent-factory-wide dev flag (`FACTORY_ONLY_KEYS` in
       // marks/createOperator.ts strips `by`/`debug` before layout, generically

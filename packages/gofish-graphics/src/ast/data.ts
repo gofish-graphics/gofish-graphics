@@ -5,6 +5,7 @@
 import { Interval } from "./dims";
 import { FieldExpr, type FieldOp } from "./fieldExpr";
 import type { ColumnType } from "./schema";
+import type { Cell } from "./cells";
 
 export type { FieldOp } from "./fieldExpr";
 export { FieldExpr } from "./fieldExpr";
@@ -154,7 +155,13 @@ export class DatumValueImpl {
     /** The type the chart's `schema` declares for {@link field}, when it
      *  declares one (schema.ts). A color scale over an ordered column lists
      *  its domain in the column's order. Read via {@link getValueFieldType}. */
-    public readonly fieldType?: ColumnType
+    public readonly fieldType?: ColumnType,
+    /** The cell this value is an edge of, when it is the start or end of a
+     *  cell a `partition` places a child across (cells.ts). A range whose
+     *  two ends are edges of one cell is that cell, so an axis over such
+     *  ranges places cells, not points (`CONTINUOUS_TYPE.cells`). Read via
+     *  {@link getValueCell}. */
+    public readonly cell?: Cell
   ) {}
 
   /** A new value at the same datum, shifted `px` pixels post-scale —
@@ -166,7 +173,8 @@ export class DatumValueImpl {
       (this._offset ?? 0) + px,
       this._colorOps,
       this.field,
-      this.fieldType
+      this.fieldType,
+      this.cell
     );
   }
 
@@ -191,7 +199,8 @@ export class DatumValueImpl {
       this._offset,
       [...(this._colorOps ?? []), op],
       this.field,
-      this.fieldType
+      this.fieldType,
+      this.cell
     );
   }
 
@@ -247,8 +256,8 @@ export type FieldAccessor = {
  * `bin()`'s {@link MEASURE_PROVENANCE}) is a hard claim that triggers a type
  * error if it contradicts inferred provenance.
  */
-export const field = (name: string, measure?: Measure): FieldExpr =>
-  new FieldExpr(name, measure);
+export const field = (name: string, measure?: Measure): FieldExpr<false> =>
+  new FieldExpr<false>(name, measure);
 export const isField = (v: unknown): v is FieldAccessor =>
   typeof v === "object" &&
   v !== null &&
@@ -352,6 +361,12 @@ export const getValueFieldType = <T>(
   value: MaybeValue<T>
 ): ColumnType | undefined =>
   value instanceof DatumValueImpl ? value.fieldType : undefined;
+
+/** The cell a value is an edge of (see {@link DatumValueImpl.cell}), if any
+ *  (only a live {@link DatumValueImpl} carries one; the wire shape does
+ *  not). */
+export const getValueCell = <T>(value: MaybeValue<T>): Cell | undefined =>
+  value instanceof DatumValueImpl ? value.cell : undefined;
 
 export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
   if (!isValue(value)) return [];

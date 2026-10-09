@@ -13,6 +13,8 @@ import {
   dataWidth,
   allMirrored,
   mergeCalendars,
+  mergeCells,
+  withCells,
   withCalendar,
   mirrored,
   type CONTINUOUS_TYPE,
@@ -82,9 +84,12 @@ function overlay(
     site
   );
   return mirrored(
-    withCalendar(
-      CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
-      mergeCalendars(conts.map((s) => s.calendar))
+    withCells(
+      withCalendar(
+        CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
+        mergeCalendars(conts.map((s) => s.calendar))
+      ),
+      mergeCells(conts.map((s) => s.cells))
     ),
     origin !== "none" && allMirrored(conts)
   );

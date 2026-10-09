@@ -176,7 +176,8 @@ export type OperatorIR =
   | TableOperator
   | LogOperator
   | TreemapOperator
-  | PackOperator;
+  | PackOperator
+  | PartitionOperator;
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
@@ -481,6 +482,29 @@ export interface PackOperator
   label?: LabelIR;
   /** Field to partition rows by. Without `by`, one child per row. */
   by?: string | FieldAccessor;
+}
+
+/**
+ * `partition({ by, dir })` — divide the space along `dir` into the cells of
+ * a binned key (`field(x).bin(p)`): each group is placed across its cell's
+ * interval on one continuous scale. Operator-only: its children are the
+ * groups of its key. Mirrors JS's `PartitionOptions`
+ * (`graphicalOperators/partition.tsx`).
+ */
+export interface PartitionOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "partition";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
+  /** A key that has a region: a binned field accessor. */
+  by: FieldAccessor;
+  /** The axis to divide. */
+  dir: string;
+  /** Alignment on the other axis. Default `"baseline"`. */
+  alignment?: string;
+  axes?: AxesOptions;
 }
 
 // ---------------------------------------------------------------------------
@@ -940,6 +964,7 @@ export const OPERATOR_TYPES = [
   "log",
   "treemap",
   "pack",
+  "partition",
 ] as const;
 
 /** The set of leaf-mark type discriminators recognized in v0. */

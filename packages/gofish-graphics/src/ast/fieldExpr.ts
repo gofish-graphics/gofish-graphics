@@ -80,8 +80,15 @@ export type FieldExprWire = {
  * `toJSON` writes the canonical {@link FieldExprWire} shape. Evaluation sites
  * read ops off either form via {@link getFieldOps}.
  */
-export class FieldExpr {
+export class FieldExpr<HasRegion extends boolean = boolean> {
   public readonly type = "field" as const;
+  /** Type-level only (no runtime field): whether this expression, used as a
+   *  grouping key, gives each group a REGION, the interval of a cell. Only
+   *  `.bin(p)` makes one (`FieldExpr<true>`), and `partition` requires one,
+   *  so `partition({ by: "date" })` or `partition({ by: field("date") })` is
+   *  a type error. Domain ops keep the flag; an aggregate folds it away.
+   *  Plain `FieldExpr` (`boolean`) accepts either. */
+  declare readonly hasRegion?: HasRegion;
   constructor(
     public readonly name: string,
     public readonly measure?: Measure,
@@ -89,8 +96,8 @@ export class FieldExpr {
     public readonly _ops: readonly FieldOp[] = []
   ) {}
 
-  private _withOp(op: FieldOp): FieldExpr {
-    return new FieldExpr(this.name, this.measure, [...this._ops, op]);
+  private _withOp<R extends boolean>(op: FieldOp): FieldExpr<R> {
+    return new FieldExpr<R>(this.name, this.measure, [...this._ops, op]);
   }
 
   /** Order groups by an explicit list of group keys — e.g.
@@ -98,15 +105,15 @@ export class FieldExpr {
    *  domain-specific order that no aggregate expresses. Groups whose key
    *  isn't in the list are appended after, in natural sort order. Valid only
    *  in a `by` (domain) slot. */
-  sort(values: (string | number)[]): FieldExpr;
+  sort(values: (string | number)[]): FieldExpr<HasRegion>;
   /** Order groups by the SUM of `by` over each group's rows (ascending unless
    *  `order: "desc"`), or by the group key itself when `by` is omitted. Valid
    *  only in a `by` (domain) slot. */
-  sort(by?: string, order?: "asc" | "desc"): FieldExpr;
+  sort(by?: string, order?: "asc" | "desc"): FieldExpr<HasRegion>;
   sort(
     byOrValues?: string | (string | number)[],
     order?: "asc" | "desc"
-  ): FieldExpr {
+  ): FieldExpr<HasRegion> {
     if (Array.isArray(byOrValues)) {
       return this._withOp({ op: "sort", values: byOrValues });
     }
@@ -118,7 +125,7 @@ export class FieldExpr {
   }
 
   /** Reverse the group order. Valid only in a `by` (domain) slot. */
-  reverse(): FieldExpr {
+  reverse(): FieldExpr<HasRegion> {
     return this._withOp({ op: "reverse" });
   }
 
@@ -130,7 +137,7 @@ export class FieldExpr {
    *  numeric partition takes a label `format: (cell) => string`, as a
    *  Calendar value takes `.format(fn)`. Valid only in a `by` (domain)
    *  slot. */
-  bin(partition?: Partition): FieldExpr {
+  bin(partition?: Partition): FieldExpr<true> {
     return this._withOp({
       op: "bin",
       ...(partition !== undefined
@@ -142,7 +149,7 @@ export class FieldExpr {
   /** Drop rows whose value at this field is `null`/`undefined`, BEFORE
    *  grouping — named after polars' `drop_nulls` (pandas `dropna`, tidyr
    *  `drop_na`). Valid only in a `by` (domain) slot. */
-  dropNulls(): FieldExpr {
+  dropNulls(): FieldExpr<HasRegion> {
     return this._withOp({ op: "dropNulls" });
   }
 
@@ -152,31 +159,31 @@ export class FieldExpr {
    *  axis into a space-filling spine — see `applyEntryNormalize` below. Valid
    *  only there; anywhere else (a plain value slot, or chained after another
    *  op) it throws a clear error. */
-  normalize(): FieldExpr {
+  normalize(): FieldExpr<false> {
     return this._withOp({ op: "normalize" });
   }
 
   /** Fold the group's rows to the sum of this field. Valid only in a value
    *  (size/pos) slot. */
-  sum(): FieldExpr {
+  sum(): FieldExpr<false> {
     return this._withOp({ op: "sum" });
   }
 
   /** Fold the group's rows to the mean of this field. Valid only in a value
    *  (size/pos) slot. */
-  mean(): FieldExpr {
+  mean(): FieldExpr<false> {
     return this._withOp({ op: "mean" });
   }
 
   /** Fold the group's rows to the row count (ignores the field's own values).
    *  Valid only in a value (size/pos) slot. */
-  count(): FieldExpr {
+  count(): FieldExpr<false> {
     return this._withOp({ op: "count" });
   }
 
   /** Fold the group's rows to the number of distinct values of this field.
    *  Valid only in a value (size/pos) slot. */
-  distinct(): FieldExpr {
+  distinct(): FieldExpr<false> {
     return this._withOp({ op: "distinct" });
   }
 

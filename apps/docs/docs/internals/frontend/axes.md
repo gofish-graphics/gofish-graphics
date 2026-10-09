@@ -413,6 +413,15 @@ difference axis), never off the size claim:
   length to a tenth of the domain (`tickPartition` in `calendar.ts`, like
   d3's time ticks, and like a numeric axis's ~10 ticks), and the outer row
   is that level's parent. Both choices read the domain only, never pixels.
+  A time axis over calendar **cells** (`CONTINUOUS_TYPE.cells`, the months a
+  `partition` places its groups across; see
+  [Underlying Space](/internals/core/underlying-space#partition-each-group-across-its-cell))
+  ticks at the cells' own partition instead (`cellPartition`, read by
+  `axisTickPartition`, so the nicing and the drawing agree), with its parent
+  as the outer row. A row whose partition is the cells' names cells, not
+  points: each label is the cell's label, centered between the cell's two
+  boundary ticks. Any other row, and every row of an axis over points, keeps
+  its labels on its ticks.
   The axis's ticks reach its scope's nicing through the axis demand
   (`AxisTicks`: the tick count, and a time axis's rows), and the axis is
   drawn from the same stamp, so nicing and drawing read one source (see

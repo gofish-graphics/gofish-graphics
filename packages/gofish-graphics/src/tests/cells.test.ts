@@ -3,7 +3,8 @@
  * cells of each kind of partition, where a value falls, the domain a split
  * bins over (every group sees the chart's cells, empty ones included, #763),
  * the wire form, and the axis over cells (labels between boundary ticks, and
- * a year row over calendar months).
+ * a year row over calendar months), and the `partition` operator, which
+ * places each group across its cell on a continuous scale.
  *
  * Run: `pnpm build && tsx src/tests/cells.test.ts` (wired as `pnpm
  * test:cells`). The rendering checks import from `dist`, like time.test.ts.
@@ -16,13 +17,14 @@ import { binCells, checkPartition, Cell } from "../ast/cells";
 import { Calendar, loadTemporal } from "../ast/calendar";
 import { splitEntries } from "../ast/datumProjection";
 import { field } from "../ast/data";
+import { partition as srcPartition } from "../lib";
 import {
   applySchema,
   copyColumnTypes,
   Schema as SrcSchema,
 } from "../ast/schema";
 
-const { chart, spread, rect, Schema } = GoFish as any;
+const { chart, spread, stack, partition, rect, Schema } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 const distField = (GoFish as any).field;
 
@@ -172,7 +174,7 @@ async function main() {
       )
     );
     const err = errorOf(() =>
-      binCells(Calendar.month, [1, 2], undefined, "field(\"n\").bin(...)")
+      binCells(Calendar.month, [1, 2], undefined, 'field("n").bin(...)')
     );
     check(
       "a Calendar partition over a column that is not a time is an error",
@@ -237,10 +239,8 @@ async function main() {
     const b = splitEntries(byCell, groups.get("B")!);
     check(
       "every group gets the same cells, in order, empty ones kept",
-      same(
-        [...a.keys()].map(String),
-        ["0", "2", "4", "6", "8"]
-      ) && same([...a.keys()], [...b.keys()]),
+      same([...a.keys()].map(String), ["0", "2", "4", "6", "8"]) &&
+        same([...a.keys()], [...b.keys()]),
       `${[...a.keys()].map(String)} / ${[...b.keys()].map(String)}`
     );
     check(
@@ -265,10 +265,7 @@ async function main() {
     );
     check(
       "ops after bin reorder the cells",
-      same(
-        [...sorted.keys()].map(String),
-        ["8", "6", "4", "2", "0"]
-      )
+      same([...sorted.keys()].map(String), ["8", "6", "4", "2", "0"])
     );
     const times = await applySchema(
       [{ d: "2024-01-05" }, { d: "2024-03-20" }],
@@ -298,9 +295,7 @@ async function main() {
     };
     const rows = [1.2, 1.4, 2.6, 2.7, 2.8].map((rating) => ({ rating }));
     const dl = await chart(rows, { axes: { x: { title: false }, y: false } })
-      .flow(
-        spread({ by: distField("rating").bin({ step: 0.5 }), dir: "x" })
-      )
+      .flow(spread({ by: distField("rating").bin({ step: 0.5 }), dir: "x" }))
       .mark(rect({ w: 20, h: distField("rating").count() }))
       .toDisplayList({ w: 300, h: 100 });
     const words = textsOf(dl).map((t) => t.text);
@@ -310,19 +305,14 @@ async function main() {
       words.join(" ")
     );
 
-    const daily = [
-      "2023-11-20",
-      "2023-12-05",
-      "2024-01-10",
-      "2024-03-02",
-    ].map((date) => ({ date, value: 1 }));
+    const daily = ["2023-11-20", "2023-12-05", "2024-01-10", "2024-03-02"].map(
+      (date) => ({ date, value: 1 })
+    );
     const monthDl = await chart(daily, {
       schema: { date: Schema.time() },
       axes: { x: { title: false }, y: false },
     })
-      .flow(
-        spread({ by: distField("date").bin(DistCalendar.month), dir: "x" })
-      )
+      .flow(spread({ by: distField("date").bin(DistCalendar.month), dir: "x" }))
       .mark(rect({ w: 30, h: distField("value").sum() }))
       .toDisplayList({ w: 400, h: 100 });
     const texts = textsOf(monthDl);
@@ -345,8 +335,158 @@ async function main() {
     );
   }
 
+  console.log("\n# partition");
+  {
+    const rectsOf = (
+      dl: any
+    ): { x: number; y: number; w: number; h: number }[] => {
+      const out: any[] = [];
+      const walk = (it: any) => {
+        if (it.kind === "rect") out.push(it);
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return out.map((r) => ({
+        x: +r.x.toFixed(3),
+        y: +r.y.toFixed(3),
+        w: +r.w.toFixed(3),
+        h: +r.h.toFixed(3),
+      }));
+    };
+    const noAxes = { axes: false };
+
+    // Ratings in [1, 1.5), [1.5, 2) and [2.5, 3): the cell [2, 2.5) is empty.
+    const rows = [1.2, 1.4, 1.6, 2.6, 2.7].map((rating) => ({ rating }));
+    const hist = rectsOf(
+      await chart(rows, noAxes)
+        .flow(
+          partition({ by: distField("rating").bin({ step: 0.5 }), dir: "x" })
+        )
+        .mark(rect({ h: distField("rating").count() }))
+        .toDisplayList({ w: 400, h: 100 })
+    ).filter((r) => r.h > 0);
+    const widths = hist.map((r) => r.w);
+    check(
+      "each bar fills its cell: equal cells give equal widths",
+      hist.length === 3 && widths.every((w) => Math.abs(w - widths[0]) < 1e-6),
+      JSON.stringify(hist)
+    );
+    check(
+      "the empty cell keeps its place: one cell's width between bars 2 and 3",
+      Math.abs(hist[2].x - (hist[1].x + 2 * widths[0])) < 1e-6,
+      JSON.stringify(hist)
+    );
+
+    const daily = ["2024-02-10", "2024-03-10"].map((date) => ({
+      date,
+      value: 1,
+    }));
+    const months = rectsOf(
+      await chart(daily, { schema: { date: Schema.time() }, ...noAxes })
+        .flow(
+          partition({ by: distField("date").bin(DistCalendar.month), dir: "x" })
+        )
+        .mark(rect({ h: distField("value").sum() }))
+        .toDisplayList({ w: 600, h: 100 })
+    );
+    check(
+      "a month is as wide as its days: February (29) to March (31)",
+      months.length === 2 &&
+        Math.abs(months[0].w / months[1].w - 29 / 31) < 1e-6 &&
+        Math.abs(months[0].x + months[0].w - months[1].x) < 1e-6,
+      JSON.stringify(months)
+    );
+
+    // A stack inside a partition fills its cell, and an empty cell keeps its
+    // place rather than collapsing (#1058).
+    const regions = [
+      { date: "2024-01-10", region: "N", value: 2 },
+      { date: "2024-01-10", region: "S", value: 1 },
+      { date: "2024-03-10", region: "N", value: 1 },
+      { date: "2024-03-10", region: "S", value: 3 },
+    ];
+    const stacked = rectsOf(
+      await chart(regions, { schema: { date: Schema.time() }, ...noAxes })
+        .flow(
+          partition({
+            by: distField("date").bin(DistCalendar.month),
+            dir: "x",
+          }),
+          stack({ by: "region", dir: "y" })
+        )
+        .mark(rect({ h: distField("value").sum() }))
+        .toDisplayList({ w: 910, h: 100 })
+    );
+    const xs = [...new Set(stacked.map((r) => r.x))].sort((a, b) => a - b);
+    const jan = stacked.filter((r) => r.x === xs[0]);
+    const mar = stacked.filter((r) => r.x === xs[1]);
+    check(
+      "a stack in a partition fills its month, and empty February keeps its width",
+      jan.length === 2 &&
+        mar.length === 2 &&
+        jan.every((r) => Math.abs(r.w - jan[0].w) < 1e-6) &&
+        Math.abs(jan[0].w / mar[0].w - 1) < 1e-6 &&
+        Math.abs(xs[1] - xs[0] - (jan[0].w * (31 + 29)) / 31) < 1e-6,
+      JSON.stringify(stacked)
+    );
+
+    // Nested 1D partitions give the same regions in either order.
+    const pts = [
+      { a: 0.5, b: 0.2 },
+      { a: 0.7, b: 1.7 },
+      { a: 2.2, b: 0.4 },
+      { a: 1.1, b: 2.9 },
+    ];
+    const grid = async (first: "x" | "y") => {
+      const px = partition({ by: distField("a").bin({ step: 1 }), dir: "x" });
+      const py = partition({ by: distField("b").bin({ step: 1 }), dir: "y" });
+      return rectsOf(
+        await chart(pts, noAxes)
+          .flow(...(first === "x" ? [px, py] : [py, px]))
+          .mark(rect({ fill: "steelblue" }))
+          .toDisplayList({ w: 300, h: 300 })
+      )
+        .map((r) => JSON.stringify(r))
+        .sort();
+    };
+    const xy = await grid("x");
+    const yx = await grid("y");
+    check(
+      "partition x then y and y then x place the same regions",
+      xy.length === 9 && same(xy, yx),
+      `${xy.join(" ")}\n      vs ${yx.join(" ")}`
+    );
+
+    const noRegion = await chart(rows)
+      .flow(partition({ by: { type: "field", name: "rating" }, dir: "x" }))
+      .mark(rect({}))
+      .toDisplayList({ w: 100, h: 100 })
+      .then(
+        () => undefined,
+        (e: Error) => e.message
+      );
+    check(
+      "a key with no region is an error that names .bin",
+      noRegion !== undefined && noRegion.includes('field("rating").bin('),
+      String(noRegion)
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
+}
+
+/** Type-level checks (never run): `partition` takes only a key that has a
+ *  region, which only `.bin(p)` makes. */
+export function partitionKeyTypes(): void {
+  // @ts-expect-error a plain field name has no region
+  srcPartition({ by: "rating", dir: "x" });
+  // @ts-expect-error a field with no `.bin(p)` has no region
+  srcPartition({ by: field("rating"), dir: "x" });
+  // @ts-expect-error an aggregate folds the region away
+  srcPartition({ by: field("rating").bin({ step: 1 }).count(), dir: "x" });
+  srcPartition({ by: field("rating").bin({ step: 1 }), dir: "x" });
+  srcPartition({ by: field("rating").bin({ step: 1 }).reverse(), dir: "x" });
 }
 
 main().catch((e) => {

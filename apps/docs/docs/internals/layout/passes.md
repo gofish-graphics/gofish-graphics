@@ -1004,7 +1004,11 @@ coordinate space lowers to a warped `path` item (its points mapped through both 
 coordinate transform and `toPixel`); text lowers to a `text` item; and so on. The
 "draw-rect vs draw-path" decision a rect used to make at render time is decided once,
 during lowering. Shared helpers live in `src/ast/displayList/lowerHelpers.ts`
-(`pathToPixelSVG`, `rectItemFromBox`, `lowerStyle`).
+(`pathToPixelSVG`, `rectItemFromBox`, `lowerStyle`). A rect's `inset` is applied
+here too: on an axis where the rect fills the space it was given (no size or
+span of its own), the drawn box moves in by `inset` pixels at each end. Layout
+never sees it, so the rect's box, which refs and constraints read, stays the
+space it was given.
 
 A single backend then paints each item. `paintSVG`
 (`src/ast/displayList/paintSVG.tsx`) emits SolidJS JSX for the live path; its

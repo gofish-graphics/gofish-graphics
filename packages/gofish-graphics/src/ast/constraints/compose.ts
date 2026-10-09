@@ -37,6 +37,7 @@
 
 import type { GoFishAST } from "../_ast";
 import type { HasCalendar } from "../schema";
+import type { Cell } from "../cells";
 import { Size } from "../dims";
 import {
   UNDEFINED,
@@ -46,6 +47,8 @@ import {
   CONTINUOUS,
   withCalendar,
   mergeCalendars,
+  withCells,
+  mergeCells,
   type OrdinalKey,
 } from "../underlyingSpace";
 import {
@@ -109,6 +112,10 @@ export type PositionDomains = {
    *  (see `CONTINUOUS_TYPE.calendar`). */
   xCalendar?: HasCalendar;
   yCalendar?: HasCalendar;
+  /** The cells the datum positions on each axis place, when every one is a
+   *  range across a cell (see `CONTINUOUS_TYPE.cells`). */
+  xCells?: readonly Cell[];
+  yCells?: readonly Cell[];
 };
 
 /** Per axis, the direct children a `position` constraint places by a datum
@@ -164,7 +171,8 @@ function resolveLayerAxisSpace(
   axis: 0 | 1,
   positionDomain: Interval.Interval | undefined,
   positionMeasure: Measure | undefined,
-  positionCalendar?: HasCalendar
+  positionCalendar?: HasCalendar,
+  positionCells?: readonly Cell[]
 ): UnderlyingSpace {
   if (positionDomain === undefined) return base;
   const merged = seatedUnion(
@@ -179,23 +187,29 @@ function resolveLayerAxisSpace(
   // unify as types (a clash is an error; an untagged side takes the other's
   // unit). An ordinal union's measure is its grouping field, which names a
   // category axis but is no unit, so it takes no part.
-  return withCalendar(
-    CONTINUOUS(
-      merged,
-      "pinned",
-      mergeMeasures(
-        positionMeasure,
-        isCONTINUOUS(base) ? base.measure : undefined,
-        {
-          axis,
-          where: "between a position constraint and the marks it sits among",
-        }
-      )
+  return withCells(
+    withCalendar(
+      CONTINUOUS(
+        merged,
+        "pinned",
+        mergeMeasures(
+          positionMeasure,
+          isCONTINUOUS(base) ? base.measure : undefined,
+          {
+            axis,
+            where: "between a position constraint and the marks it sits among",
+          }
+        )
+      ),
+      mergeCalendars([
+        positionCalendar,
+        isCONTINUOUS(base) ? base.calendar : undefined,
+      ])
     ),
-    mergeCalendars([
-      positionCalendar,
-      isCONTINUOUS(base) ? base.calendar : undefined,
-    ])
+    // Continuous children the datums do not place lie along the axis too.
+    mergeCells(
+      isCONTINUOUS(base) ? [positionCells, base.cells] : [positionCells]
+    )
   );
 }
 
@@ -218,6 +232,7 @@ export function resolveLayerBaseSpaces(
   const domains = [positionDomains.x, positionDomains.y];
   const measures = [positionDomains.xMeasure, positionDomains.yMeasure];
   const calendars = [positionDomains.xCalendar, positionDomains.yCalendar];
+  const cells = [positionDomains.xCells, positionDomains.yCells];
   for (const axis of [0, 1] as const) {
     union[axis] = unionChildSpaces(
       withoutPlaced(childSpaces, axis, placed[axis], UNDEFINED),
@@ -228,7 +243,8 @@ export function resolveLayerBaseSpaces(
       axis,
       domains[axis],
       measures[axis],
-      calendars[axis]
+      calendars[axis],
+      cells[axis]
     );
   }
   return { union, spaces };

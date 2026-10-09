@@ -16,6 +16,7 @@ covers:
   - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/calendar.ts
   - packages/gofish-graphics/src/ast/cells.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -244,6 +245,7 @@ type CONTINUOUS_TYPE = {
   measure?: Measure;
   mirrored?: true;
   calendar?: HasCalendar; // the data are instants on this calendar
+  cells?: readonly Cell[]; // every range placed along the axis is a cell
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
@@ -640,8 +642,17 @@ composes its targets' spaces into the layer's claim on that axis:
   cross-axis `align` fold still runs — a histogram is an interval position on x
   plus an `align` on y, and it is that align fold (SIZE→POSITION) that makes the
   count axis. The solved `(min, size)` is bridged into GoFish's
-  `(local box, translate)` split by stamping `[0, size]` into the local box and
-  deriving the absolute `min` through the placement ledger. `scatter` uses both
+  `(local box, translate)` split by keeping the local box's own `min` (where
+  the target's layout put it), stamping the solved `size`, and deriving the
+  translate as the absolute `min` less that local `min` through the placement
+  ledger. The local `min` must stay: a container's children are placed in its
+  local frame, so moving its `min` to 0 would draw them away from its box by
+  the old `min` (on an upward y, a spread pinned across a cell drew its bars
+  one cell away). The interval also sizes the target before its layout: the
+  layer proposes the span's pixel length as the child's size on that axis
+  (`buildSpanProposalMap`, `constraints/proposalPlan.ts`), so the child's
+  content fills the span it will be pinned across rather than being laid out
+  in the whole layer and then stretched. `scatter` uses both
   forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
   `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
   has a bespoke layout). A categorical
@@ -773,7 +784,9 @@ whatever its origin. A `transform.scale` is a pixel-space operation, like
 translate, so it scales the claim and never the data interval.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
 the cell's own track extent (grid), else distribute slice for that named child,
-else the full layer box.
+else the full layer box; then, on an axis an interval `position` spans, the
+span's pixel length (the pins set the child's extent there, whatever else
+proposed one).
 `buildLayerConstraintLayoutPlan` packages the per-layer execution plan — which
 children skip baseline placement, nest source-before-derived order, and
 datum-position target axes — so the layer executes deterministic artifacts
@@ -1962,9 +1975,46 @@ when it sits on an edge, as in numpy's `histogram` and d3's `bin`.
 
 The keys of a split may now be cells (`SplitKey`). Everything that reads a
 key as text or a number reads the cell's id (its start), so `.sort()` orders
-cells by start and `time.sequence` keys its frames at cell starts. A
-partition is the shape a `partition` layout would read: the region of each
-key is its cell's interval.
+cells by start and `time.sequence` keys its frames at cell starts.
+
+### Partition: each group across its cell
+
+`spread`, `stack` and `table` read a cell's id and order. Only the
+`partition` operator (`graphicalOperators/partition.tsx`) reads its region:
+it places each group across its cell's interval `[start, end)` on one
+continuous scale, so a 29-day February is narrower than a 31-day March and
+an empty cell keeps its place (it is a group with no rows, and it is still
+placed). Its key must have a region. Only `.bin(p)` makes one, so the type
+of a field expression says whether it does (`FieldExpr<true>`, a phantom
+`hasRegion` flag that domain ops keep and aggregates drop), and the split
+checks the wire form from Python with an error that names the fix.
+
+It has no layout code of its own. It is `scatter`'s range form with the span
+read off the key: its split hands `Scatter` one `{ min, max }` span per cell
+on `dir`, and `Scatter` elaborates them into interval `position`
+constraints. So the interval form above does all the work: the span is the
+child's size proposal (a `rect` with no size there fills its cell, and a
+`stack` or `spread` inside a cell divides the cell), and the pins place it.
+On the other axis the children are aligned, as in a scatter.
+
+Each end of a span is a datum that carries what the column says about its
+values (its measure, and its schema type, so a time column gives a time
+axis), and the cell it is an edge of (`DatumValueImpl.cell`). A range whose
+two ends are edges of one cell is that cell, so `collectPositionDomains`
+collects the cells, and the layer's type on that axis holds them
+(`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
+(`mergeCells`), as an ordinal over cells does. The type is what tells the
+axis that it places cells: a time axis over calendar cells ticks at their
+partition and labels each cell between its two boundary ticks
+([Axes](/internals/frontend/axes)). A numeric axis over numeric cells keeps
+its round-number ticks.
+
+The region a child gets is its cell's interval on `dir` and the whole space
+on the other axis. Two nested 1D partitions, one per axis, give each leaf
+the same rectangle in either order; only the order of the children
+differs. A 2D cell that is not a product of intervals (a hexagon) cannot be
+stated as two interval pins, so a 2D partition needs a region constraint of
+its own (#1059).
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
