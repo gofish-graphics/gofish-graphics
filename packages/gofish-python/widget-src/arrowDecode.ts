@@ -56,7 +56,7 @@ function fromArrow(type: Arrow.DataType): Convert | undefined {
     return type.timezone ? undefined : (ms: number) => wallClock(ms);
   }
   if (Arrow.DataType.isDate(type)) {
-    return (v: Date | number) => wallClock(+v).split("T")[0];
+    return (v: Date | number) => new Date(+v).toISOString().slice(0, 10);
   }
   if (Arrow.DataType.isInt(type) && type.bitWidth === 64) return Number;
   if (Arrow.DataType.isList(type) || Arrow.DataType.isFixedSizeList(type)) {

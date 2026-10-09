@@ -143,7 +143,7 @@ class DeriveOperator(Operator):
         if self.provenance:
             out["provenance"] = self.provenance
         if self.schema is not None:
-            out["schema"] = {k: dict(v) for k, v in self.schema.items()}
+            out["schema"] = self.schema
         if self._translate:
             out["translate"] = self._translate
         return out
