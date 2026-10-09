@@ -28,7 +28,8 @@ if TYPE_CHECKING:
 # ("tuple", (shape, ...)), ("record", value_shape),
 # ("tagged", tag_key, {tag_value: shape}); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
-    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None)}),
+    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None), "rows": ("rows", ("array", ("ref", "Calendar")))}),
+    "Calendar": ("object", {"unit": ("unit", None), "step": ("step", None), "start": ("start", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
     "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
     "FieldPredicate": ("object", {"field": ("field", None), "between": ("between", None), "closed": ("closed", None)}),
@@ -714,7 +715,7 @@ def _scatter_opts(*, by: Optional[str | FieldAccessor] = None, x: Optional[int |
         y_max: Range form: right/top edge, y.
         dims: Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span.
         alignment: Cross-axis alignment for the axis without an explicit position. Default "baseline".
-        overlap: How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. sina() is noise with smoothing "silverman" (a violin outline), and jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.
+        overlap: How children keep clear of each other on the axis no field places, made by a call in the Overlap family. Overlap.separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. Overlap.noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. Overlap.sina() is noise with smoothing "silverman" (a violin outline), and Overlap.jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.
         w: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
         h: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -789,7 +790,7 @@ def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | fl
         spacing: Gap between sibling tiles, in pixels. Default 0.
         padding: Inset around the outer edge of the treemap, in pixels. Default 0.
         round: Round pixel positions and sizes. Default true.
-        tile: The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
+        tile: The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -814,18 +815,16 @@ def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | fl
             opts[_k] = _v
     return opts
 
-def _pack_opts(*, by: Optional[str | FieldAccessor] = None, method: Optional[dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).
+def _pack_opts(*, by: Optional[str | FieldAccessor] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).
 
     Args:
         by: Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.
-        method: The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm. Default {"kind":"circles"}.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
-        ("method", _to_wire(("object", {"kind": ("kind", None)}), method, "method")),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -845,7 +844,7 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
         spacing: Gap between sibling tiles, in pixels. Default 0.
         padding: Inset around the outer edge of the treemap, in pixels. Default 0.
         round: Round pixel positions and sizes. Default true.
-        tile: The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
+        tile: The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
         key: Internal per-node key override.
@@ -1014,7 +1013,7 @@ def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = 
             opts[_k] = _v
     return opts
 
-def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, curve: Optional[dict] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
@@ -1024,7 +1023,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         stroke_dasharray: Raw SVG stroke-dasharray (e.g. "12") for a dashed line.
         opacity: Opacity, 0 to 1.
         mix_blend_mode: Blend mode where connectors overlap.
-        curve: Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name ("linear"/"bezier"/"step"/"monotone"/"smooth"/"catmullRom"). "step", "linear", "monotone" and "smooth" are read over the parameter of the run, from the least to the most smooth. "step" holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). "monotone" is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". "smooth" rounds a peak a little past its point, but keeps a run of equal values flat. "catmullRom" is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted = "auto" (monotone on a homogeneous continuous connection axis, else linear).
+        curve: Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear().
         dir: Connection axis.
         source: Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword.
         target: Anchor-mode end point; see `source`.
@@ -1045,7 +1044,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         ("strokeDasharray", stroke_dasharray),
         ("opacity", opacity),
         ("mixBlendMode", mix_blend_mode),
-        ("curve", curve),
+        ("curve", _to_wire(("object", {"type": ("type", None), "options": ("options", None)}), curve, "curve")),
         ("dir", dir),
         ("source", source),
         ("target", target),
@@ -1062,7 +1061,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
             opts[_k] = _v
     return opts
 
-def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
     Args:
@@ -1072,7 +1071,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         opacity: Opacity, 0 to 1.
         mix_blend_mode: Blend mode where bands overlap. Default "normal".
         dir: Connection axis.
-        curve: Screen-space band-edge shape ("linear" | bezier() | "step" | "monotone" | "smooth" | "catmullRom"). "step" steps both edges, as a stepped area does. "monotone" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); "smooth" is a rounder reading over the same parameter, and can go a little past a point; "catmullRom" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = "auto" (monotone on a homogeneous continuous connection axis, else a bezier band).
+        curve: Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band.
         along: Names a flow tier by its `by` field: that tier becomes the path tier (threading its groups in order) and every OTHER grouping tier splits. Omitted: the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` where the mark doesn't fuse over this chart's own flow (a refs bag, or the pairwise from/to form), is an error.
         em_x: Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself.
         em_y: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
@@ -1088,7 +1087,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         ("opacity", opacity),
         ("mixBlendMode", mix_blend_mode),
         ("dir", dir),
-        ("curve", curve),
+        ("curve", _to_wire(("object", {"type": ("type", None), "options": ("options", None)}), curve, "curve")),
         ("from", from_),
         ("to", to),
         ("along", along),
@@ -1118,7 +1117,7 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         key: Internal per-node key override.
-        coord: Coordinate transform (`polar()`, `clock()`, `wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.
+        coord: Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.
         axes: Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.
         transform: Non-affine-foldable scale applied to the composed children.
         box: True renders this as a coordinate-space transparent "box" boundary rather than a plain layer.
@@ -1152,12 +1151,12 @@ def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: 
     Args:
         w: Chart width in pixels.
         h: Chart height in pixels.
-        coord: Coordinate transform for the whole chart: polar(), clock(), wavy(), ...
-        color: Color scale for every mark: palette(...) or gradient(...).
+        coord: Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...
+        color: Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...).
         axes: Draw axes: a boolean for both axes, or per-axis options {x?, y?}.
         legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
         padding: Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).
-        schema: Column types, keyed by column name, e.g. Schema.ordered(levels).
+        schema: Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [

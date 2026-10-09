@@ -2,7 +2,7 @@
 order: 40
 ---
 
-# bipolar
+# Coord.bipolar
 
 Bipolar coordinates: the plane described by two foci rather than one center.
 Positions bend around both poles, which suits paired or two-source geometry.
@@ -10,7 +10,7 @@ Positions bend around both poles, which suits paired or two-source geometry.
 ::: gofish
 
 ```js
-gf.chart(seafood, { coord: gf.bipolar(120) })
+gf.chart(seafood, { coord: gf.Coord.bipolar(120) })
   .flow(gf.stack({ by: "species", dir: "x" }))
   .mark(gf.rect({ w: "count", fill: "species" }))
   .render(root, {
@@ -25,11 +25,11 @@ gf.chart(seafood, { coord: gf.bipolar(120) })
 ## Signature
 
 ```ts
-bipolar(fociDistance?: number);
+Coord.bipolar(fociDistance?: number);
 ```
 
 `fociDistance` is positional, not an options object — unlike
-[`polar()`](/js/api/coords/polar), which takes an options bag.
+[`Coord.polar()`](/js/api/coords/polar), which takes an options bag.
 
 ## Parameters
 

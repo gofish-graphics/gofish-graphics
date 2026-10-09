@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 
-import { chart, palette, rect, stack, field } from "../../src/lib";
+import { chart, rect, stack, field, Color } from "../../src/lib";
 import { titanicPassengers } from "../../src/data/titanicPassengers";
 
 /**
@@ -53,7 +53,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(passengers, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
+    chart(passengers, { color: Color.palette(["#2b8cbe", "#ff8408"]), axes: true })
       .flow(
         // columns by class — width ∝ each class's passenger count (marginal)
         stack({ by: "pclass", dir: "x", size: "count" }),

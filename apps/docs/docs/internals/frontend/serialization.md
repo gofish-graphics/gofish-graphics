@@ -131,11 +131,16 @@ auto-minted layer name never appears in the IR (mirroring how a relational
 mark's zBelow-by-default paint order stays a resolve-time constraint rather
 than a serialized field). Operators are a flat list (`derive`, `resolve`,
 `join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
-`pack`). `pack`'s `method` is a strategy object made by a function call
-(`circles()` in both languages), so on the wire it is plain data,
-`{ "kind": "circles" }`, and the JS layout dispatches on `kind`. `treemap`'s
-`tile` works the same way (`squarify({ ratio })`, `slice()`, `dice()`,
-`binary()`, `sliceDice()`; e.g. `{ "kind": "squarify", "ratio": 1 }`). Note `join`
+`pack`). `treemap`'s `tile` is a strategy object made by a call in the `Tile`
+family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
+`Tile.binary()`, `Tile.sliceDice()` in both languages), so on the wire it is
+plain data, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
+dispatches on `kind`. `scatter`'s `overlap` works the same way (the `Overlap`
+family). A `line` or `ribbon` `curve` is a call in the `Curve` family, and on
+the wire it is `{ "type": "monotone" }`, with an `options` object for the
+curves that take some (`{ "type": "arc", "options": { "direction": "down" } }`);
+a bare curve name is not a curve. The families are namespaces in the two
+surfaces only; the wire carries the plain objects. Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. `filter` round-trips the same way when its predicate is a
 field predicate: `field(name).between(lo, hi, { closed })` returns a row
@@ -143,7 +148,10 @@ predicate that also carries its description, so the operator goes on the wire
 as `{ "type": "filter", "predicate": { "field": "day", "between": [100, 120],
 "closed": "right" } }`. The predicate is its own value, not an op in the field
 expression's `ops`. A `filter` over a hand-written JS predicate has no wire
-form and emits the opaque `derive`. Marks are a tree — leaves
+form and emits the opaque `derive`. A `derive`'s `schema` (`derive(fn, { schema })`, Python
+`derive(fn, schema={...})`) is plain data, the wire form of a chart's
+`schema`, and the registry passes it to the rebuilt `derive`, which applies
+it to the rows the Python callback returns. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
@@ -228,7 +236,7 @@ serialized as a field, so it composes with any explicit `.zOrder(...)` or
 A chart's **coordinate transform** rides the IR as a small spec the deserializer
 maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
 centralAngle, startAngle, direction, center }`. `fromJSON.ts` reconstructs it by
-calling `polar(coordSpec)` / `clock(coordSpec)` and passing the whole spec
+calling `Coord.polar(coordSpec)` / `Coord.clock(coordSpec)` and passing the whole spec
 through (the factory ignores the `type` key), so a parameterized polar/clock —
 donut hole, partial fan, start angle — round-trips without per-option plumbing.
 
@@ -618,7 +626,7 @@ as in `chart()`.
 The conversion is driven by the declared type, never by the dict itself, so
 dicts whose keys are data keep them: a `record` type's keys (a `schema` keyed
 by column name, the axis names of `dims`) are never renamed, and a field
-typed `any` (`color=palette({...})` keyed by category, `coord`) passes
+typed `any` (`color=Color.palette({...})` keyed by category, `coord`) passes
 through whole. A channel value built by `field(...)` or `datum(...)` is a
 dict already in wire form, so `_to_wire` passes it through by its class
 wherever it appears. That is how a `dims` entry works: `field("x")` passes
@@ -809,10 +817,41 @@ renders it. What differs between the hosts is only transport:
 - **Callbacks.** The widget's `DeriveBridge` sends rows as Arrow over
   anywidget traitlets; the harness's sends them as JSON in an HTTP POST to
   `tests/scripts/derive-server.py` (`/derive/<id>`).
-- **Rows.** The widget ships each chart tier's rows in an Arrow sidecar and
-  passes them as `tierRows`; the derive server inlines them in the IR as
-  `{type: "inline", rows}`. Otherwise the derive server returns the builder's
-  own `to_ir()` untouched. Data in the IR wins over `tierRows`.
+- **Rows.** Both hosts ship each chart tier's rows the same way: Python's
+  `tiers_arrow_bytes` (`gofish/ast.py`) gives one Arrow IPC stream per tier
+  (one for a chart, one per child for a layer, none for a bare mark), and
+  each crosses as a list of base64 strings. The widget sends the list in its
+  `tier_arrow` trait; the derive server returns it as `tierArrow` beside the
+  builder's own `to_ir()`, which it returns untouched. Both decode it with
+  `decodeTierRows` (`widget-src/arrowDecode.ts`, which the harness imports
+  as the `gofish-python/arrowDecode` package export) and pass the result as
+  `tierRows`. Data in the IR wins over `tierRows`. The decode converts each
+  column once by its Arrow type: a tz-aware timestamp becomes epoch
+  milliseconds and marks the column as a time (`HasCalendar` in its zone,
+  attached with `Serialize.setColumnTypes`); a naive timestamp or a date is
+  a wall-clock value, so it becomes an ISO string without an offset and is
+  marked `HasCalendar` in UTC, which `applySchema` reads in the zone the
+  chart declares for the column, as it reads the same string from JS data.
+  The decode attaches types and converts no time to an instant itself:
+  every reader of decoded rows runs `applySchema` with its own schema
+  before it reads a value. A tier is chart data; a callback's rows go
+  through `applyLambdaTyped` (`registry.ts`), which a `derive` (with its
+  `schema`) and a lambda accessor both call, so a single-datum derive's
+  result and an accessor's result hold epoch milliseconds. A list becomes a
+  plain array, a struct a plain object, a 64-bit integer a JS number, and a
+  null stays `null`. No schema names a value inside a list or a struct, so
+  a time there decodes to epoch milliseconds (a naive timestamp or a date
+  read in UTC, as a chart with no zone reads it), and a list of structs, a
+  list of rows, carries its own column types (`HasCalendar` in the
+  timestamp's zone, or UTC). A float NaN stays NaN: GoFish never reads NaN as missing. Only a
+  pandas DataFrame's NaN crosses as null, because pandas defines NaN as the
+  missing value of its float columns and pyarrow's `from_pandas` follows
+  that rule. A column whose rows mix types (a string in one, a number in
+  another) is a loud error in `to_arrow_table`, never a silent coercion.
+  [The one exception](https://github.com/gofish-graphics/gofish-graphics/issues/1088)
+  is a chart that a mark function returns: it comes back over the derive
+  RPC, so the derive server inlines its rows in the IR as
+  `{type: "inline", rows}`.
 - **Render options.** These are the JS `.render(container, options)` options:
   `w`, `h`, `axes`, `padding`, `debug`. The widget reads them from its traits,
   which the Python `.render(...)` call sets; the harness reads the story's

@@ -21,8 +21,8 @@ import {
   assignGradientColor,
 } from "gofish";
 
-const warmGradient = gradient(["#ffe0b2", "#e65100"]);
-const coldGradient = gradient(["#bbdefb", "#0d47a1"]);
+const warmGradient = Color.gradient(["#ffe0b2", "#e65100"]);
+const coldGradient = Color.gradient(["#bbdefb", "#0d47a1"]);
 
 chart(pairedBars)
   .flow(

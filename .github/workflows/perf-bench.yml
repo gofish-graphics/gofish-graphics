@@ -63,7 +63,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
 
       # Python is only exercised by the ecological examples-py leg, which runs on

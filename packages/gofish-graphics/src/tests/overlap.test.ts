@@ -13,24 +13,12 @@
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
-import {
-  separateOffsets,
-  separate,
-  noise,
-  sina,
-  jitter,
-  noiseOffsets,
-  noiseOutline,
-  silvermanBandwidth,
-  resolveOverlap,
-  sideSign,
-  type OverlapItem,
-  type OverlapSide,
-} from "../ast/graphicalOperators/overlap";
+import { separateOffsets, noiseOffsets, noiseOutline, silvermanBandwidth, resolveOverlap, sideSign, type OverlapItem, type OverlapSide } from "../ast/graphicalOperators/overlap";
+import { separate, noise, sina, jitter } from "../families/overlap";
 import { lcg } from "../util/lcg";
 
-const { chart, scatter, spread, circle, polar } = GoFish as any;
-const noiseDist = (GoFish as any).noise;
+const { chart, scatter, spread, circle, Coord } = GoFish as any;
+const noiseDist = (GoFish as any).Overlap.noise;
 
 declare const process: { exit(code: number): never };
 
@@ -315,7 +303,7 @@ console.log("# scatter overlap: rendered");
     neither
   );
   const inPolar = await errorOf(() =>
-    chart(rows, { coord: polar() })
+    chart(rows, { coord: Coord.polar() })
       .flow(scatter({ x: "v", overlap: separate() }))
       .mark(circle({ r: 3 }))
       .toDisplayList({ w: 400, h: 400 })

@@ -78,7 +78,7 @@ with the very same paint-order rule the root bake uses (`orderChildrenForPaint` 
 `paintOrder.ts`). This is what makes `zOrder(-1)` (and z constraints) take effect
 **inside** a coordinate transform. It was left out for a long time — the coord-local
 flatten walked children in array order, so a gotree link's `.zOrder(-1)`
-(links-under-nodes) was silently a no-op under `coord: polar()`
+(links-under-nodes) was silently a no-op under `coord: Coord.polar()`
 ([#676](https://github.com/gofish-graphics/gofish-graphics/issues/676)). Ordering is
 LOCAL to each layer, exactly as in the root bake (below); only the leaf/boundary rules
 differ between the two flatteners.
@@ -328,7 +328,7 @@ instead — a geo graticule is its own piece of work.
 `flattenLayout` is still evolving. The source carries TODOs, and the surrounding
 `coord` layout still carries some polar-specific assumptions. The angular extent is no
 longer the bare `2π` literal it once was: `coord.layout` reads the **angular budget**
-from the transform's `domain[0].size` (so `polar({ centralAngle })` gives a partial fan)
+from the transform's `domain[0].size` (so `Coord.polar({ centralAngle })` gives a partial fan)
 and insets the radial range by the transform's **`innerRadius`** (a donut hole as a
 fraction of the outer radius), building an `effectiveTransform` that shifts `r` by the
 inner radius; the axis/grid renderers read the same budget instead of `2π`. What remains

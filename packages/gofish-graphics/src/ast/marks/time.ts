@@ -43,11 +43,8 @@ import {
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
-import {
-  assertOneRowPerKnot,
-  resolveMethod,
-  type InterpolationMethod,
-} from "../../interpolate";
+import { assertOneRowPerKnot, resolveMethod } from "../../interpolate";
+import type { Curve } from "../../families/curve";
 import {
   historiesIn,
   historyOf,
@@ -344,18 +341,19 @@ export type TransitionOptions = {
    *  Read at PAINT time: a moving value patches the mark's attributes rather
    *  than re-resolving the chart. A plain number holds it still. */
   at?: (() => number) | number;
-  /** How the run is read between keyframes. `"auto"` is `"monotone"`: a
-   *  numeric time field is smoothed with a monotone cubic through the whole
-   *  run — the temporal reading of `connect`'s auto rule, with the time
-   *  values as its knots, which is the curve a smooth `line` threaded through
-   *  the same keyframes draws. Between two keyframes each channel only rises
-   *  or only falls, so the mark never goes past either of them. `"smooth"`
-   *  reads the run with the curve of the same name, which can round a turn
-   *  past its keyframe. `"linear"` moves straight from each keyframe to the next. `"step"` does not move
-   *  between them at all: the mark holds one keyframe's value until the next
-   *  keyframe's own time arrives, and then jumps — the same picture the
+  /** How the run is read between keyframes. Omitted, it is
+   *  `Curve.monotone()`: a numeric time field is smoothed with a monotone
+   *  cubic through the whole run — the temporal reading of `connect`'s auto
+   *  rule, with the time values as its knots, which is the curve a smooth
+   *  `line` threaded through the same keyframes draws. Between two keyframes
+   *  each channel only rises or only falls, so the mark never goes past
+   *  either of them. `Curve.smooth()` reads the run with the curve of the
+   *  same name, which can round a turn past its keyframe. `Curve.linear()`
+   *  moves straight from each keyframe to the next. `Curve.step()` does not
+   *  move between them at all: the mark holds one keyframe's value until the
+   *  next keyframe's own time arrives, and then jumps — the same picture the
    *  keyframes alone draw. */
-  curve?: "auto" | InterpolationMethod;
+  curve?: Curve;
   /** Time warp inside one keyframe interval, `u -> u'` on `[0, 1]`. */
   ease?: (u: number) => number;
   fill?: MaybeValue<string>;
@@ -365,12 +363,12 @@ export type TransitionOptions = {
   /** How the marks enter. With no `time.sequence` (and no `along`/`at`) this
    *  is a BUILD-IN: the marks enter once, from the empty chart, with these
    *  effects (`src/animation/`). Under a sequence it can only be the default
-   *  fade, `animation.fadeIn()`. */
+   *  fade, `Animation.fadeIn()`. */
   enter?: Effect | Effect[];
-  /** How the marks leave; under a sequence only `animation.fadeOut()`. */
+  /** How the marks leave; under a sequence only `Animation.fadeOut()`. */
   exit?: Effect | Effect[];
   /** The tween whose `.transition({ update })` marks this transition moves.
-   *  Set by `animation.tween()` for the chained spelling, where the chart
+   *  Set by `Animation.tween()` for the chained spelling, where the chart
    *  builder draws one transition per tween (`ChartBuilder.resolve`); not
    *  written by hand. */
   moves?: TweenEffect;

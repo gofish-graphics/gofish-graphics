@@ -334,7 +334,7 @@ pass-through"); 3–4 are where the checklist itself starts shrinking.
 ## Hand-written residue (permanent, by design)
 
 Callback/lambda bridge (`derive`, mark-fn, accessor sentinels), widget +
-RPC + save/display, DataFrame⇄Arrow (incl. the Int64 downcast), `DatumValue`
+RPC + save/display, DataFrame⇄Arrow, `DatumValue`
 arithmetic, `_RefProxy`, the builder chain itself (`.flow/.mark/.layer/…` —
 thin methods over generated factories), and the d3 `bin` port (until/unless
 binning becomes a declarative operator resolved JS-side, which would delete

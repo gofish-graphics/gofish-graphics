@@ -138,8 +138,8 @@ async function loadStoryIR(story: PythonStory): Promise<any> {
   return await resp.json();
 }
 
-/** Wrap the IR in the /load response (the builder's own `to_ir()`, rows
- *  inlined) into a FrontendIRDocument. */
+/** Wrap the IR in the /load response (the builder's own `to_ir()`) into a
+ *  FrontendIRDocument. */
 function wrap(serverIR: {
   ir: Frontend.FrontendIR;
 }): Frontend.FrontendIRDocument {

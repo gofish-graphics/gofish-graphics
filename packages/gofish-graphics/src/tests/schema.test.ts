@@ -42,7 +42,7 @@ import {
   CONTINUOUS,
 } from "../ast/underlyingSpace";
 
-const { chart, spread, stack, rect, filter, palette, Schema } = GoFish as any;
+const { chart, spread, stack, rect, filter, derive, Schema, Color } = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -305,6 +305,27 @@ async function main() {
       rendered !== undefined && rendered.includes("Don't know"),
       rendered
     );
+    // A derive that renames levels keeps the order (its values are still
+    // text), so the error names the annotation that fixes it.
+    const renamed = await errorOf(() =>
+      chart(
+        LEVELS5.map((r) => ({ r, n: 1 })),
+        { schema: { r: Schema.ordered(LEVELS5) } }
+      )
+        .flow(
+          derive((d: any[]) => d.map((row) => ({ ...row, r: `${row.r}!` }))),
+          stack({ by: "r", dir: "x" })
+        )
+        .mark(rect({ w: "n" }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "the stray-level error names derive(fn, { schema }) as a fix",
+      renamed !== undefined &&
+        renamed.includes("filter those rows out") &&
+        renamed.includes("derive(fn, { schema })"),
+      renamed
+    );
   }
 
   console.log("\n# HasMidpoint needs HasOrder and a midpoint on the order");
@@ -426,7 +447,7 @@ async function main() {
   console.log("\n# a schema keeps what the data array already carries");
   {
     const binned = bin([{ x: 1 }, { x: 2 }, { x: 7 }], "x");
-    const typed = applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
+    const typed = await applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
     check(
       "bin()'s measure provenance survives a schema",
       getMeasureProvenance(typed)?.start === "x",
@@ -459,10 +480,24 @@ async function main() {
       filtered === undefined,
       filtered
     );
+    const kept = await errorOf(() =>
+      chart(rows, { schema: { r: Schema.ordered(LEVELS5) } })
+        .flow(
+          filter((row: any) => row.n > 0),
+          stack({ by: "r", dir: "x" })
+        )
+        .mark(rect({ w: "n" }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a filter that keeps a stray level keeps the order, so the error fires",
+      kept !== undefined && kept.includes(`"Refused"`),
+      kept
+    );
     const colored = await errorOf(() =>
       chart(rows, {
         schema: { r: Schema.ordered(LEVELS5) },
-        color: palette(["red", "green", "blue", "cyan", "magenta"]),
+        color: Color.palette(["red", "green", "blue", "cyan", "magenta"]),
       })
         .flow(spread({ by: "q", dir: "x" }))
         .mark(rect({ h: "n", fill: "r" }))

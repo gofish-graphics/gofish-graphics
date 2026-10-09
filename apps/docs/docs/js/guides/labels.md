@@ -125,7 +125,10 @@ const heatData = ["Mon", "Tue", "Wed", "Thu", "Fri"].flatMap((day, di) =>
   }))
 );
 
-gf.chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]), axes: true })
+gf.chart(heatData, {
+  color: gf.Color.gradient(["#e0f3ff", "#08519c"]),
+  axes: true,
+})
   .flow(gf.table("hour", "day", { spacing: 4 }))
   .mark(
     gf

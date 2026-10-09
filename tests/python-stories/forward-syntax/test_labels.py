@@ -12,12 +12,11 @@ from gofish import (
     chart,
     derive,
     field,
-    gradient,
-    palette,
     rect,
     spread,
     stack,
     table,
+    Color,
 )
 from python_stories.data import SEAFOOD
 from python_stories.vega_data_urls import read_json
@@ -167,7 +166,7 @@ _HEAT_DATA = [
 
 def story_heatmap_with_labels():
     return (
-        chart(_HEAT_DATA, color=gradient(["#e0f3ff", "#08519c"]), axes=True)
+        chart(_HEAT_DATA, color=Color.gradient(["#e0f3ff", "#08519c"]), axes=True)
         .flow(table(by={"x": "hour", "y": "day"}, spacing=4))
         .mark(
             rect(fill="value").label(
@@ -256,7 +255,7 @@ def story_normalized_stacked_bar_with_labels():
     return (
         chart(
             year2000,
-            color=palette({"Female": "#675193", "Male": "#ca8861"}),
+            color=Color.palette({"Female": "#675193", "Male": "#ca8861"}),
             axes={"x": {"side": "end", "title": "proportion"}, "y": True},
         )
         .flow(

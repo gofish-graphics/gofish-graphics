@@ -4,7 +4,7 @@ import math
 
 import pandas as pd
 
-from gofish import chart, circle, derive, field, palette, spread
+from gofish import chart, circle, derive, field, spread, Color
 
 
 def _age_decade(age):
@@ -47,7 +47,7 @@ def story_default():
     return (
         chart(
             aged_passengers,
-            color=palette(["#2b8cbe", "#ff8408"]),
+            color=Color.palette(["#2b8cbe", "#ff8408"]),
             # x = pclass (the panels) at the bottom (y-end); y is the
             # dot-row index, so suppress it.
             axes={"x": {"side": "end"}, "y": False},

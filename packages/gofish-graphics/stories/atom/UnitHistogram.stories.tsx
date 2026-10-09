@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { chunk, orderBy } from "lodash";
 import { initializeContainer } from "../helper";
 
-import { chart, circle, derive, field, palette, spread } from "../../src/lib";
+import { chart, circle, derive, field, spread, Color } from "../../src/lib";
 import { titanicPassengers } from "../../src/data/titanicPassengers";
 
 /**
@@ -56,7 +56,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(agedPassengers, {
-      color: palette(["#2b8cbe", "#ff8408"]),
+      color: Color.palette(["#2b8cbe", "#ff8408"]),
       // x = pclass (the panels) at the bottom (y-end); y is the dot-row index,
       // so suppress it.
       axes: { x: { side: "end" }, y: false },

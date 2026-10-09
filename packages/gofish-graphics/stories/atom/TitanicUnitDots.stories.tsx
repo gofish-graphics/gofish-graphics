@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { treemap, squarify, circle, chart, palette } from "../../src/lib";
+import { treemap, circle, chart, Tile, Color } from "../../src/lib";
 import {
   titanicPassengers,
   type TitanicPassenger,
@@ -30,8 +30,8 @@ export const Default: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) }).facet({by: "pclass", dir: "x"})
-      .flow(treemap({ h: "fare", size: "fare", spacing: args.spacing, tile: squarify({ ratio: 1 }), sort: "desc" }))
+    chart(titanicPassengers, { color: Color.palette(["#2b8cbe", "#ff8408"]) }).facet({by: "pclass", dir: "x"})
+      .flow(treemap({ h: "fare", size: "fare", spacing: args.spacing, tile: Tile.squarify({ ratio: 1 }), sort: "desc" }))
       .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
       .render(container, { w: args.w, h: args.h });
     return container;

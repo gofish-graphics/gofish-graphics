@@ -2,7 +2,8 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import { sumBy, type Curve } from "../../lib";
+import { sumBy } from "../../lib";
+import type { Curve } from "../../families/curve";
 import {
   connect as Connect,
   type AnchorSpec,
@@ -81,7 +82,12 @@ import {
 } from "./chartBuilder";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectByValues, projectPath, rowsReached } from "../datumProjection";
-import { copyColumnTypes } from "../schema";
+import {
+  applySchema,
+  copyColumnTypes,
+  getColumnTypes,
+  type SchemaEntry,
+} from "../schema";
 import { withWire } from "../wire";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
@@ -90,34 +96,76 @@ export type { ChartOptions };
 
 /**
  * The shape every data-transformation operator shares: map the incoming data
- * with `fn`, hand the result to the mark, and carry an IR-serialization tag.
- * `fn` receives the layer context so it can resolve refs (see `resolve`).
- *
- * The result keeps the input's column types (the chart's `schema`, see
- * schema.ts) unless it declares its own: a `filter` or a `derive` that adds a
- * column leaves the other columns' types as they were.
+ * with `fn`, type the result with the operator's own typing rule
+ * (`typeResult`, given the result and the input), hand it to the mark, and
+ * carry an IR-serialization tag. `fn` receives the layer context so it can
+ * resolve refs (see `resolve`).
  */
 function mapOperator<T, U>(
   fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
-  serialize: { type: string; opts: Record<string, unknown> }
+  serialize: { type: string; opts: Record<string, unknown> },
+  typeResult: (out: U, input: T) => U | Promise<U>
 ): Operator<T, U> {
   const op: Operator<T, U> = async (mark: Mark<U>) =>
     (async (d: T, key?: string | number, layerContext?: LayerContext) => {
       const out = await fn(d, layerContext);
-      if (Array.isArray(out) && Object.isExtensible(out))
-        copyColumnTypes(out, d);
-      return mark(out, key, layerContext);
+      return mark(await typeResult(out, d), key, layerContext);
     }) as Mark<T>;
   withWire(op, serialize);
   return op;
 }
 
-export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
+/**
+ * `derive`'s typing rule: its result is typed like chart data, column by
+ * column, through `applySchema`:
+ *
+ *  1. A column whose values still fit the type it had in the input keeps it
+ *     (`applySchema`'s `inherited` types): a time column of instants (epoch
+ *     milliseconds or `Date`s) stays a time in its zone, so a `derive` that
+ *     adds a column leaves the other columns as they were. The input's types
+ *     never reinterpret values: a `Date` is an instant, so it only becomes
+ *     epoch milliseconds.
+ *  2. A column of `Date`s is a time (UTC), inferred as for chart data.
+ *  3. Any other column has no type: a `derive` that rewrites a date to
+ *     "Mar" makes it plain text.
+ *  4. `schema` (the `derive(fn, { schema })` annotation) types the columns it
+ *     names over all of that, and converts their values as a chart's schema
+ *     does (an ISO string in a time column becomes epoch milliseconds).
+ *
+ * Types the result carries itself win over 1 and 2 (a datetime column a
+ * Python callback returns arrives typed from the widget's decode). The
+ * returned array itself is left as `fn` made it: `applySchema` types a copy.
+ * A result that is one object, not an array (a derive over a single datum),
+ * is typed as one row and converted the same way; it is returned as an
+ * object, which carries no column types.
+ */
+const typeLikeChartData =
+  (schema: Record<string, SchemaEntry> = {}) =>
+  async <U>(out: U, input: unknown): Promise<U> => {
+    const inherited = getColumnTypes(input);
+    if (Array.isArray(out))
+      return (await applySchema(out, schema, inherited)) as U;
+    if (out !== null && typeof out === "object")
+      return (await applySchema([out], schema, inherited))[0];
+    return out;
+  };
+
+/** What `derive` takes besides its function: `schema`, the column types of
+ *  its result, as a chart's `schema` takes them (see `typeLikeChartData`). */
+export type DeriveOptions = { schema?: Record<string, SchemaEntry> };
+
+export function derive<T, U>(
+  fn: (d: T) => U | Promise<U>,
+  { schema }: DeriveOptions = {}
+): Operator<T, U> {
   // The function body is not serializable; the frontend-IR emitter sees
-  // an opaque `{ type: "derive" }`. The Python-bridge widget emits its own
-  // `{ type: "derive", lambdaId }` shape; pure-JS callers leave the
-  // payload empty.
-  return mapOperator(fn, { type: "derive", opts: {} });
+  // an opaque `{ type: "derive" }` (with its `schema`, if any). The
+  // Python-bridge widget emits its own `{ type: "derive", lambdaId }` shape.
+  return mapOperator(
+    fn,
+    { type: "derive", opts: schema !== undefined ? { schema } : {} },
+    typeLikeChartData(schema)
+  );
 }
 
 /**
@@ -134,18 +182,25 @@ export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
  * a single row (or a ref) has nothing to filter, and throwing there would make
  * the operator unusable in a nested pipeline.
  *
+ * Typing: `filter` returns a subset of its input's row objects, so its
+ * result carries the input's column types as they are, with no check of the
+ * values. A predicate that changes the rows it tests is not supported.
+ *
  * Serialization: a field predicate carries its own description, so the
  * operator goes on the wire as `{ type: "filter", predicate: { field,
  * between: [lo, hi], closed? } }` and the deserializer rebuilds it. A
  * hand-written predicate is a live JS callback with no JSON form, so that
- * filter is a `derive` and carries `derive`'s opaque `{ type: "derive" }` tag.
+ * filter carries `derive`'s opaque `{ type: "derive" }` tag.
  */
 export function filter<T>(pred: (row: T) => boolean): Operator<T[], T[]> {
-  const keep = (d: T[]) => (Array.isArray(d) ? d.filter(pred) : d);
   const predicate = predicateWire(pred);
-  return predicate !== undefined
-    ? mapOperator(keep, { type: "filter", opts: { predicate } })
-    : derive(keep);
+  return mapOperator<T[], T[]>(
+    (d) => (Array.isArray(d) ? d.filter(pred) : d),
+    predicate !== undefined
+      ? { type: "filter", opts: { predicate } }
+      : { type: "derive", opts: {} },
+    (out, input) => (out === input ? out : copyColumnTypes(out, input))
+  );
 }
 
 // return an array of copies of `d` repeated `d.field` times
@@ -179,7 +234,9 @@ export function log<T>(prefix?: string): Operator<T, T> {
       }
       return d;
     },
-    { type: "log", opts: prefix !== undefined ? { prefix } : {} }
+    { type: "log", opts: prefix !== undefined ? { prefix } : {} },
+    // The result is the input, types and all.
+    (out) => out
   );
 }
 
@@ -244,7 +301,8 @@ export function resolve(
           : {}),
         ...(opts.key !== undefined ? { key: opts.key } : {}),
       },
-    }
+    },
+    typeLikeChartData()
   );
 }
 
@@ -287,7 +345,8 @@ export function join<
       }
       return joined;
     },
-    { type: "join", opts: { on: opts.on, right } }
+    { type: "join", opts: { on: opts.on, right } },
+    typeLikeChartData()
   );
 }
 

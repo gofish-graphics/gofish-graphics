@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { chart, clock, rect, spread } from "../../src/lib";
+import { chart, Coord, rect, spread } from "../../src/lib";
 
 // Accessor functions in size channels (#1080, #937). The Python ports pass
 // lambdas, which reach JS as async accessors that call back into Python; the
@@ -35,7 +35,7 @@ export const RoseRadius: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(seafood, { coord: clock() })
+    chart(seafood, { coord: Coord.clock() })
       .flow(spread({ by: "lake", dir: "x", spacing: 0 }))
       .mark(
         rect({

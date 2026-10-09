@@ -24,7 +24,7 @@ instead of JSON descriptors.
 
 ```ts
 import { tree, spread } from "gofish-gotree";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 
 const data = {
   name: "root",
@@ -38,7 +38,7 @@ const data = {
 const chart = tree(
   {
     node: (d) => circle({ r: 10, fill: "steelblue" }),
-    link: { curve: "linear", stroke: "#888" },
+    link: { curve: Curve.linear(), stroke: "#888" },
     parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
     sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
   },
@@ -118,11 +118,11 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
 - A function `(source, target) => LinkOptions` — per-edge styling.
 
 ```ts no-check
-link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 }
+link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 }
 ```
 
-`curve` accepts `"linear"` (default), `"bezier"`, `"orthogonal"` (right-angle
-elbows), and `"arc"`. The `orthogonal` and `bezier` links fold along the tree's
+`curve` accepts `Curve.linear()` (default), `Curve.bezier()`, `Curve.orthogonal()` (right-angle
+elbows), and `Curve.arc()`. The `orthogonal` and `bezier` links fold along the tree's
 growth axis — the direction its `parentChild` combiner distributes — so a
 vertical tree's elbows bend downward and a horizontal tree's bend sideways. When
 the growth axis is ambiguous (a cascade that distributes on both axes), the
@@ -266,14 +266,14 @@ performed in the user's `node` factory via the existing `value()` channel.
 
 ### `coord` — coordinate transform
 
-Pass any GoFish `CoordTransform` (e.g. `polar()` for a radial layout). Defaults to
+Pass any GoFish `CoordTransform` (e.g. `Coord.polar()` for a radial layout). Defaults to
 linear cartesian.
 
 ```ts
-coord: polar(); // radial node-link
+coord: Coord.polar(); // radial node-link
 ```
 
-**Polar authoring rule**: under `coord: polar()`, nodes render as _points_
+**Polar authoring rule**: under `coord: Coord.polar()`, nodes render as _points_
 in the transform — only their center sweeps through, their bbox does not.
 Set `anchor: "middle"` on the sibling spread (and typically the parentChild
 spread too). `anchor: "middle"` lays out child centers `spacing` apart
@@ -284,7 +284,7 @@ span and overflow polar's `[0, 2π]` theta domain — making the tree spiral.
 ```ts no-check
 parentChild: spread({ dir: "y", spacing: 40,         anchor: "middle" }), // r units
 sibling:     spread({ dir: "x", spacing: Math.PI/3,  anchor: "middle" }), // radians
-coord:       polar(),
+coord:       Coord.polar(),
 ```
 
 Sibling `spacing` is in **radians** (~`π / N` for N siblings per level);
@@ -297,7 +297,7 @@ filled wedges, ribbons, polar bars — reach for `Value`-typed dims +
 
 ### The 2π budget — content must fit polar's theta domain
 
-Under `coord: polar()`, the inner cartesian content's total x-extent must
+Under `coord: Coord.polar()`, the inner cartesian content's total x-extent must
 be ≤ 2π radians. Overflows wrap around the disc (theta = 2π + ε is rendered
 at theta = ε), producing self-intersecting wedges and slivers protruding
 past the disc edge.
@@ -344,7 +344,7 @@ conventions and switch from JSON descriptors to callable helpers.
 | Paper                             | GoTree-in-GoFish                                   |
 | --------------------------------- | -------------------------------------------------- |
 | `Element.Node: "rectangle"`       | `node: (d) => rect({...})`                         |
-| `Element.Link: "straight"`        | `link: { curve: "linear" }`                        |
+| `Element.Link: "straight"`        | `link: { curve: Curve.linear() }`                  |
 | `Element.Color: "depth"`          | inside `node`: `fill: byDepth(d.depth)`            |
 | `Element.Width/Height`            | inside `node`: `w` / `h` on the mark               |
 | `Element.LinkWidth`               | `link.strokeWidth`                                 |
@@ -359,7 +359,7 @@ conventions and switch from JSON descriptors to callable helpers.
 | `Alignment: bottom / right`       | `alignment: "end"`                                 |
 | `SortingCriteria`                 | `sortBy: (d) => ...`                               |
 | `SubtreeWidth`/`Height`           | inside `node`: `value(d.value, "key")`             |
-| `CoordinateSystem.Category`       | `coord: linear()` or `coord: polar()`              |
+| `CoordinateSystem.Category`       | `coord: Coord.linear()` or `coord: Coord.polar()`  |
 
 ## Milestone status
 

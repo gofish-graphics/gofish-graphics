@@ -39,17 +39,21 @@ export { setMeasureProvenance } from "./ast/data";
 export type { MeasureProvenance } from "./ast/data";
 export { map } from "./ast/iterators/map";
 
-// Coordinate Transforms
+// Strategy families (#1013): an option whose value is one choice from a set
+// of named strategies gets one namespace, with a capitalized name. Each is a
+// module (`src/families/<name>.ts`, also published as the subpath
+// `gofish-graphics/<name>`), so `Curve.monotone` here and
+// `import { monotone } from "gofish-graphics/curve"` are the same function.
+// The family's type is inside its namespace under the family's name
+// (`Curve.Curve`). Strategies are not also exported at the top level. Each
+// family is exported where its members used to be, which keeps the order the
+// modules run in (lib.ts's imports reach some modules that import lib.ts
+// back, so moving them changes which class is defined first).
+export * as Coord from "./families/coord";
+
+// The low-level coordinate combinator `coord({ transform }, children)`; the
+// transforms themselves are the `Coord` family.
 export { coord } from "./ast/coordinateTransforms/coord";
-export { linear } from "./ast/coordinateTransforms/linear";
-export { polar } from "./ast/coordinateTransforms/polar";
-export { clock } from "./ast/coordinateTransforms/clock";
-export { polar_DEPRECATED } from "./ast/coordinateTransforms/polar_DEPRECATED";
-export { arcLengthPolar } from "./ast/coordinateTransforms/arcLengthPolar";
-export { bipolar } from "./ast/coordinateTransforms/bipolar";
-export { wavy } from "./ast/coordinateTransforms/wavy";
-export { geo } from "./ast/coordinateTransforms/geo";
-export type { Projection, GeoOptions } from "./ast/coordinateTransforms/geo";
 
 // Main API
 export { gofish } from "./ast/gofish";
@@ -110,9 +114,22 @@ export type {
   ColumnType,
   HasOrder,
   HasMidpoint,
+  HasCalendar,
   Level,
   SchemaEntry,
 } from "./ast/schema";
+// Calendar partitions (#1057): the cells a time axis's rows are made of
+// (`axes: { x: { rows: [Calendar.month, Calendar.year] } }`). Capitalized
+// like `Schema`: a namespace of values.
+export { Calendar, CalendarPartition } from "./ast/calendar";
+export type {
+  CalendarCell,
+  CalendarUnit,
+  CalendarJSON,
+  CellFormat,
+  WeekStart,
+} from "./ast/calendar";
+export type { TimeRowOption } from "./ast/axes/timeRows";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -148,43 +165,16 @@ export {
   getRoute,
   hasRoute,
   resolveCurve,
-  bezier,
-  orthogonal,
-  arc,
-  perfectArrows,
   type Router,
   type RouteContext,
-  type Curve,
-  type CurveSpec,
 } from "./ast/graphicalOperators/routers";
-export {
-  treemap,
-  squarify,
-  slice,
-  dice,
-  binary,
-  sliceDice,
-} from "./ast/graphicalOperators/treemap";
-export type {
-  TreemapTile,
-  TreemapOptions,
-} from "./ast/graphicalOperators/treemap";
-export { pack, circles } from "./ast/graphicalOperators/pack";
-export {
-  separate,
-  noise,
-  sina,
-  jitter,
-} from "./ast/graphicalOperators/overlap";
-export type {
-  OverlapStrategy,
-  SeparateStrategy,
-  NoiseStrategy,
-  NoiseOptions,
-  NoiseRandomness,
-  NoiseSmoothing,
-} from "./ast/graphicalOperators/overlap";
-export type { PackMethod, PackOptions } from "./ast/graphicalOperators/pack";
+export * as Curve from "./families/curve";
+export { treemap } from "./ast/graphicalOperators/treemap";
+export * as Tile from "./families/tile";
+export type { TreemapOptions } from "./ast/graphicalOperators/treemap";
+export { pack } from "./ast/graphicalOperators/pack";
+export type { PackOptions } from "./ast/graphicalOperators/pack";
+export * as Overlap from "./families/overlap";
 export {
   enclose,
   enclose as background,
@@ -228,7 +218,7 @@ export {
   subtract,
   mask,
 } from "./ast/marks/chart";
-export type { RelatableMark } from "./ast/marks/chart";
+export type { RelatableMark, DeriveOptions } from "./ast/marks/chart";
 export { compose } from "./ast/marks/compose";
 // Animation (JS-only, like the rest of the reactive layer: a sequence owns a
 // clock, which is a live signal and does not cross the Python bridge).
@@ -241,24 +231,22 @@ export type {
   HistoryOptions,
   TransitionOptions,
 } from "./ast/marks/time";
-// `animation.*` — WHAT changes as a mark enters (grow, fadeIn, wipe, …), the
-// partner of `time.*` (WHEN: stagger, parallel, sequence, transition). The
-// build-in prototype (draft PR #901); JS-only like the rest of `time`.
-export { animation } from "./animation";
+// The effects of `.transition({ enter, exit, update })`: WHAT changes as a
+// mark enters (grow, fadeIn, wipe, …), the partner of `time.*` (WHEN).
+// JS-only like the rest of `time`. The types below belong to `.transition()`
+// and `time.*`.
+export * as Animation from "./families/animation";
+export type { Ease } from "./animation/effects";
 export type {
-  Effect,
-  EffectOptions,
-  WipeOptions,
-  Ease,
   MarkTransition,
   OperatorTransition,
-  StaggerOptions,
-  BuildClockOptions,
-} from "./animation";
+} from "./animation/transition";
+export type { StaggerOptions } from "./animation/timeArrangements";
+export type { BuildClockOptions } from "./animation/install";
 // The data-space reading of a transition: read a table of keyframes at one
 // moment and hand the result to an ordinary chart. See `src/interpolate.ts`.
 export { interpolate } from "./interpolate";
-export type { InterpolateOptions, InterpolationMethod } from "./interpolate";
+export type { InterpolateOptions } from "./interpolate";
 export type {
   Mark,
   Operator,
@@ -272,13 +260,9 @@ import "./ast/marks/builderMixins";
 // Frontend-IR deserializer — re-exported as a namespace so the symbol set
 // stays scoped (`Serialize.renderIR`, etc.).
 export * as Serialize from "./serialize";
-export { palette, gradient, assignGradientColor } from "./ast/colorSchemes";
+export * as Color from "./families/color";
+export { assignGradientColor } from "./ast/colorSchemes";
 export { barChart } from "./charts/bar";
-export type {
-  ColorConfig,
-  PaletteScale,
-  GradientScale,
-} from "./ast/colorSchemes";
 export type { NameableMark } from "./ast/withGoFish";
 export type {
   LabelSpec,

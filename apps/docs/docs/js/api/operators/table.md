@@ -26,7 +26,7 @@ const data = days.flatMap((day) =>
 );
 
 gf.chart(data, {
-  color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
+  color: gf.Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
   axes: true,
 })
   .flow(gf.table({ by: { x: "hour", y: "day" }, spacing: 4 }))
@@ -51,7 +51,7 @@ table({ by: { x, y }, spacing?, numCols? })
 
 ```ts
 // Heatmap: hour on x, day on y, colored by value
-chart(data, { color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
+chart(data, { color: Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
   .flow(table({ by: { x: "hour", y: "day" }, spacing: 4 }))
   .mark(rect({ fill: "value" }))
   .render(container, { w: 600, h: 400 });
@@ -64,7 +64,7 @@ chart(data, { color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
 
 - Data insertion order determines column and row ordering. Sort your data first if you need a specific order.
 - Unlike nested `spread` calls, `table` correctly exposes ordinal axes on both dimensions so axis labels render on both x and y.
-- Pair with `gradient()` on the chart color option and `fill: "fieldName"` on the mark for heatmap coloring.
+- Pair with `Color.gradient()` on the chart color option and `fill: "fieldName"` on the mark for heatmap coloring.
 
 ### Cell sizing
 

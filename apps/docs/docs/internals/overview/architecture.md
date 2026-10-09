@@ -68,7 +68,7 @@ a chart can update without a full rebuild. The
 [`coord` operator](/internals/layout/coord-flattening) is the notable special case: it
 flattens its subtree into a flat, absolutely-positioned list before applying its
 coordinate transform. A coordinate transform is parameterized
-(`polar()`/`clock()` take `innerRadius`/`centralAngle`/`startAngle`/…) and may declare
+(`Coord.polar()`/`Coord.clock()` take `innerRadius`/`centralAngle`/`startAngle`/…) and may declare
 **names for its axes** (polar `theta`/`r`, geo `lon`/`lat`), which marks use as keys of a
 `dims` option and operators as a `dir`; a small top-down pass before layout gives those
 names their meaning in the scope of the enclosing coord (see

@@ -1,4 +1,4 @@
-import type { Mark } from "gofish-graphics";
+import type { Curve, Mark } from "gofish-graphics";
 import type { HierarchyNode } from "d3-hierarchy";
 
 export type Alignment = "start" | "middle" | "end" | "baseline";
@@ -43,10 +43,10 @@ export type HierarchyDatum = {
 export type NodeFactory = (datum: HierarchyDatum) => Mark<any>;
 
 export type LinkOptions = {
-  // Screen-space path shape for the link (GoTree's `Link` element). Maps to a
-  // GoFish `curve` of the same name (GoTree's "straight" link → `linear`,
-  // "curve" → `bezier`).
-  curve?: "linear" | "bezier" | "orthogonal" | "arc";
+  // Screen-space path shape for the link (GoTree's `Link` element): a GoFish
+  // curve, `Curve.linear()`, `Curve.bezier()`, `Curve.orthogonal()` or
+  // `Curve.arc()` (GoTree's "straight" link → `linear`, "curve" → `bezier`).
+  curve?: Curve.Curve;
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;

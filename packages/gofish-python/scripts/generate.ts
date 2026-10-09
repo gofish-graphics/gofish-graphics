@@ -129,7 +129,7 @@ function acceptsDict(type: FieldType): boolean {
 
 /** The field that tells the branches of a tagged union apart: a dict value's
  *  `kind` names the branch it means. It is the convention the strategy
- *  objects (treemap `tile`, pack strategies) already follow. */
+ *  objects (treemap `tile`, scatter `overlap`) already follow. */
 const DISCRIMINATOR = "kind";
 
 /** The `kind` values that select an object branch of a tagged union, or null

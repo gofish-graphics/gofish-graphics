@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — arc-tree.
@@ -22,7 +22,7 @@ export const ArcTree: StoryObj = {
   render: () =>
     mount({
       node,
-      link: { curve: "arc", stroke: "#90a4ae", strokeWidth: 1.5 },
+      link: { curve: Curve.arc(), stroke: "#90a4ae", strokeWidth: 1.5 },
       parentChild: combine({
         x: { kind: "distribute", spacing: 14 },
         y: { kind: "align", alignment: "middle" },

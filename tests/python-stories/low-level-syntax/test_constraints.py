@@ -16,7 +16,7 @@ multi-panel reason, but now captured + IR-validated) — the first Python
 coverage of `anchor="middle"` (#748).
 """
 
-from gofish import Constraint, datum, layer, rect, spread, wavy
+from gofish import Constraint, datum, layer, rect, spread, Coord
 
 
 # ─── partial placement ───────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ def story_spread_end_under_coord_transform():
                 rect(w=40, h=datum(80), fill="#457b9d"),
                 rect(w=40, h=datum(50), fill="#2a9d8f"),
             ], dir="x", alignment="end", spacing=8),
-        ], coord=wavy(), x=0, y=0),
+        ], coord=Coord.wavy(), x=0, y=0),
         {"w": 300, "h": 300},
     )
 

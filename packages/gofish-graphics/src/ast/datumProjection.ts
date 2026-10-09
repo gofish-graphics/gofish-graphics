@@ -22,7 +22,7 @@
 import toPath from "lodash/toPath";
 import sumBy from "lodash/sumBy";
 import { GoFishRef } from "./_ref";
-import { isField, type FieldAccessor } from "./data";
+import { fieldNameOf, isField, type FieldAccessor } from "./data";
 import {
   getFieldOps,
   normalizeNotSupportedError,
@@ -135,14 +135,6 @@ export function projectByValues(obj: unknown, by: SplitBy): unknown[] {
  *  accessor (possibly carrying a pipeline of domain ops — see
  *  {@link splitEntries}). */
 export type SplitBy = string | ((r: any) => unknown) | FieldAccessor;
-
-/** The field name a `by`-style selector names, or `undefined` when it names
- *  none (a key function). The one reading of "which field did this group by",
- *  shared by every site that needs it. */
-export function fieldNameOf(by: unknown): string | undefined {
-  if (typeof by === "string") return by;
-  return isField(by) ? by.name : undefined;
-}
 
 /**
  * The mutable cell `ChartBuilder` writes the computed default split/travel

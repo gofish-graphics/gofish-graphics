@@ -67,5 +67,8 @@ export function* breadthFirst(root: GoFishNode): Generator<GoFishNode> {
 }
 
 /** Stringify a tick value without floating-point noise (0.1 + 0.2 → "0.3").
- *  Shared by the axis and legend (colorbar) tick-label builders. */
+ *  Shared by the axis and legend (colorbar) tick-label builders. It ignores
+ *  the runtime's locale (no digit grouping, a period as the decimal point),
+ *  as time labels use en-US (`LABEL_LOCALE` in calendar.ts); a chart-level
+ *  locale option is #1098. */
 export const fmtNum = (n: number): string => String(+n.toPrecision(12));

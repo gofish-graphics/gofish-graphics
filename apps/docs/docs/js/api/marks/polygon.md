@@ -104,7 +104,7 @@ That is how a basemap is drawn — one row per country ring, each ring a list of
 
 ```ts
 chart(world110m, {
-  coord: geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+  coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
 }).mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }));
 ```
 
@@ -119,7 +119,7 @@ that field off each row and sends it through the chart's color scale. Any other
 string is a literal color. When `stroke` is omitted it follows the fill.
 
 ```ts
-chart(counties, { color: gradient(["#fff5eb", "#7f2704"]) }).mark(
+chart(counties, { color: Color.gradient(["#fff5eb", "#7f2704"]) }).mark(
   polygon({ points: "ring", fill: "rate" })
 );
 ```

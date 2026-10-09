@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, stack, rect, derive, field, palette } from "../../../src/lib";
+import { chart, spread, stack, rect, derive, field, Color } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/stacked_bar_normalize.html
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(context.loaded.population.filter((row) => row.year === 2000) as any[], { axes: true,
-      color: palette({ Female: "#675193", Male: "#ca8861" }),
+      color: Color.palette({ Female: "#675193", Male: "#ca8861" }),
     })
       .flow(
         derive((d) =>

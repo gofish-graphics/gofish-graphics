@@ -40,6 +40,7 @@ const {
   scatter,
   selectAll,
   time,
+  Curve,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -189,7 +190,7 @@ async function sequenceAlone(rows: any[], at: number) {
 /** The sugar with the step curve: the moving mark holds the previous
  *  keyframe's geometry instead of interpolating toward the next. */
 async function stepTransition(rows: any[], at: number) {
-  return sequenceChart(rows, at, time.transition({ curve: "step" }));
+  return sequenceChart(rows, at, time.transition({ curve: Curve.step() }));
 }
 
 /** The step reading of an animated sequence, checked where it has something to

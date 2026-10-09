@@ -21,6 +21,8 @@
  * A name may also be an object option type (`OPTION_TYPES` in
  * descriptors.ts): `::: gofish-ref ChartOptions` renders the chart-level
  * options as one table.
+ * A field marked `wireOnly` (a Python bridge handle such as `derive`'s
+ * `lambdaId`) is left out: it is on the wire, not an option a user passes.
  *
  * Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
  * their own open subsection ("Box dimensions", "Paint") below the table of the
@@ -228,7 +230,10 @@ function renderDescriptor(
   }
 ): string {
   const { lang, md, heading } = opts;
-  const fields = Object.entries(resolveFields(d));
+  // A wire-only field (a Python bridge handle) is no option a user passes.
+  const fields = Object.entries(resolveFields(d)).filter(
+    ([, spec]) => !spec.wireOnly
+  );
 
   const own: Array<[string, FieldSpec]> = [];
   const groups = new Map<string, Array<[string, FieldSpec]>>();

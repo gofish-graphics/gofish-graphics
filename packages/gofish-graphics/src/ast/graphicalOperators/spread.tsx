@@ -1,14 +1,9 @@
 import { GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { MaybeValue } from "../data";
+import { fieldNameOf, MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
-import {
-  SplitBy,
-  fieldNameOf,
-  orderEntries,
-  splitEntries,
-} from "../datumProjection";
+import { SplitBy, orderEntries, splitEntries } from "../datumProjection";
 import { isField } from "../data";
 import { columnType, stackOrigin } from "../schema";
 import type { StackOrigin } from "../constraints/distribute";

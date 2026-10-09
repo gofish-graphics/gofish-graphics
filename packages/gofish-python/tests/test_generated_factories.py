@@ -15,39 +15,31 @@ import json
 import pytest
 
 from gofish import (
-    binary,
-    blank,
     Schema,
+    blank,
     chart,
     circle,
-    circles,
     datum,
-    dice,
     ellipse,
     field,
     group,
-    jitter,
     join,
-    noise,
     layer,
     line,
     pack,
     petal,
-    palette,
     polygon,
-    slice,
-    slice_dice,
     rect,
     ribbon,
     spread,
     scatter,
-    squarify,
     stack,
-    separate,
-    sina,
     table,
     text,
     treemap,
+    Color,
+    Overlap,
+    Tile,
 )
 
 
@@ -101,32 +93,33 @@ def test_stack_operator_accepts_spread_parity_options():
     assert d["spacing"] == 2
 
 
-def test_pack_serializes_by_and_method():
-    d = pack(by="lake", method=circles()).to_dict()
+def test_pack_serializes_by():
+    d = pack(by="lake").to_dict()
     assert d["type"] == "pack"
     assert d["by"] == "lake"
-    assert d["method"] == {"kind": "circles"}
     assert pack().to_dict()["type"] == "pack"
-    assert "method" not in pack().to_dict()
+    # One packing strategy, so no option to choose one (#1013).
+    with pytest.raises(TypeError):
+        pack(by="lake", method={"kind": "circles"})
 
 
 def test_scatter_serializes_separate_overlap():
-    d = scatter(x="mass", alignment="middle", overlap=separate(padding=1)).to_dict()
+    d = scatter(x="mass", alignment="middle", overlap=Overlap.separate(padding=1)).to_dict()
     assert d["type"] == "scatter"
     assert d["overlap"] == {"kind": "separate", "padding": 1}
-    assert separate() == {"kind": "separate"}
+    assert Overlap.separate() == {"kind": "separate"}
     assert "overlap" not in scatter(x="mass").to_dict()
     with pytest.raises(ValueError):
-        separate(padding=-1)
+        Overlap.separate(padding=-1)
 
 
 def test_scatter_serializes_noise_overlap():
     d = scatter(
-        x="mass", alignment="middle", overlap=noise(randomness="quasi", smoothing=100)
+        x="mass", alignment="middle", overlap=Overlap.noise(randomness="quasi", smoothing=100)
     ).to_dict()
     assert d["overlap"] == {"kind": "noise", "randomness": "quasi", "smoothing": 100}
-    assert noise() == {"kind": "noise"}
-    assert noise(padding=1, seed=3) == {"kind": "noise", "padding": 1, "seed": 3}
+    assert Overlap.noise() == {"kind": "noise"}
+    assert Overlap.noise(padding=1, seed=3) == {"kind": "noise", "padding": 1, "seed": 3}
     # `overlap` is a tagged union: the `kind` picks the branch whose keys are
     # checked, as for any nested option dict.
     with pytest.raises(TypeError):
@@ -134,32 +127,32 @@ def test_scatter_serializes_noise_overlap():
     with pytest.raises(TypeError):
         scatter(x="mass", overlap={"kind": "separate", "randomness": "blue"})
     with pytest.raises(ValueError):
-        noise(randomness="pink")
-    assert noise(smoothing=0) == {"kind": "noise", "smoothing": 0}
+        Overlap.noise(randomness="pink")
+    assert Overlap.noise(smoothing=0) == {"kind": "noise", "smoothing": 0}
     with pytest.raises(ValueError):
-        noise(smoothing=-1)
+        Overlap.noise(smoothing=-1)
     with pytest.raises(ValueError):
-        noise(smoothing=float("nan"))
+        Overlap.noise(smoothing=float("nan"))
     with pytest.raises(ValueError):
-        noise(smoothing="scott")
+        Overlap.noise(smoothing="scott")
     with pytest.raises(ValueError):
-        noise(seed=float("inf"))
+        Overlap.noise(seed=float("inf"))
     with pytest.raises(ValueError):
-        noise(seed="1")
+        Overlap.noise(seed="1")
 
 
 def test_sina_and_jitter_are_noise_with_other_defaults():
     import math
 
-    assert sina() == {"kind": "noise", "smoothing": "silverman"}
-    assert noise(smoothing="silverman") == sina()
-    assert jitter() == {"kind": "noise", "randomness": "uniform", "smoothing": math.inf}
+    assert Overlap.sina() == {"kind": "noise", "smoothing": "silverman"}
+    assert Overlap.noise(smoothing="silverman") == Overlap.sina()
+    assert Overlap.jitter() == {"kind": "noise", "randomness": "uniform", "smoothing": math.inf}
     # Any option overrides the default.
-    assert sina(smoothing=50, padding=1) == {"kind": "noise", "smoothing": 50, "padding": 1}
-    assert jitter(randomness="blue")["randomness"] == "blue"
+    assert Overlap.sina(smoothing=50, padding=1) == {"kind": "noise", "smoothing": 50, "padding": 1}
+    assert Overlap.jitter(randomness="blue")["randomness"] == "blue"
     with pytest.raises(ValueError, match="sina: randomness"):
-        sina(randomness="pink")
-    d = scatter(x="mass", alignment="middle", overlap=sina()).to_dict()
+        Overlap.sina(randomness="pink")
+    d = scatter(x="mass", alignment="middle", overlap=Overlap.sina()).to_dict()
     assert d["overlap"] == {"kind": "noise", "smoothing": "silverman"}
 
 
@@ -171,7 +164,7 @@ def test_non_finite_numbers_are_tagged_in_the_ir():
 
     ir = (
         chart([{"v": 1.0}, {"v": math.inf}])
-        .flow(scatter(x="v", overlap=jitter(smoothing=math.inf)))
+        .flow(scatter(x="v", overlap=Overlap.jitter(smoothing=math.inf)))
         .mark(circle(r=3))
         .to_ir()
     )
@@ -196,10 +189,10 @@ def test_non_finite_numbers_are_tagged_in_the_ir():
 
 
 def test_pack_combinator_form():
-    d = pack([circle(r=10), pack([circle(r=4)])], method=circles()).to_dict()
+    d = pack([circle(r=10), pack([circle(r=4)])]).to_dict()
     assert d["type"] == "pack"
     assert d["__combinator"] is True
-    assert d["options"] == {"method": {"kind": "circles"}}
+    assert d["options"] == {}
     assert [c["type"] for c in d["children"]] == ["circle", "pack"]
     assert d["children"][1]["__combinator"] is True
     assert pack([circle(r=1)]).to_dict()["options"] == {}
@@ -208,12 +201,12 @@ def test_pack_combinator_form():
 
 
 def test_treemap_serializes_tile_strategy_and_gaps():
-    d = treemap(by="g", tile=squarify(ratio=1), spacing=2, padding=3).to_dict()
+    d = treemap(by="g", tile=Tile.squarify(ratio=1), spacing=2, padding=3).to_dict()
     assert d["tile"] == {"kind": "squarify", "ratio": 1}
     assert d["spacing"] == 2
     assert d["padding"] == 3
-    assert squarify() == {"kind": "squarify"}
-    assert [f()["kind"] for f in (slice, dice, binary, slice_dice)] == [
+    assert Tile.squarify() == {"kind": "squarify"}
+    assert [f()["kind"] for f in (Tile.slice, Tile.dice, Tile.binary, Tile.slice_dice)] == [
         "slice",
         "dice",
         "binary",
@@ -225,11 +218,11 @@ def test_treemap_serializes_tile_strategy_and_gaps():
 def test_treemap_tile_is_a_tagged_union():
     # `tile` is a union of dict shapes told apart by `kind`; `_to_wire` picks
     # the branch by the dict's `kind` and checks its keys against that branch.
-    assert treemap(by="g", tile=squarify(ratio=1)).to_dict()["tile"] == {
+    assert treemap(by="g", tile=Tile.squarify(ratio=1)).to_dict()["tile"] == {
         "kind": "squarify",
         "ratio": 1,
     }
-    assert treemap(by="g", tile=slice_dice()).to_dict()["tile"] == {
+    assert treemap(by="g", tile=Tile.slice_dice()).to_dict()["tile"] == {
         "kind": "sliceDice"
     }
     with pytest.raises(TypeError, match="ratio"):
@@ -451,7 +444,7 @@ def test_data_keyed_dicts_are_untouched():
     ir = (
         chart(
             [{"myCategory": "fooBar", "v": 1}],
-            color=palette(colors),
+            color=Color.palette(colors),
             schema={"myCategory": Schema.ordered(["fooBar", "baz_qux"])},
         )
         .flow(

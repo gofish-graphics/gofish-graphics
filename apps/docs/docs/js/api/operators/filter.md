@@ -49,6 +49,10 @@ form, so a `filter` over one serializes as an opaque
 
 Returns an `Operator` for use inside [`.flow()`](/js/api/core/flow).
 
+The result carries the input's [column types](/js/api/core/schema) over as
+they are, since its rows are the input's rows. A predicate that changes the
+rows it tests is not supported.
+
 ## Examples
 
 ```ts

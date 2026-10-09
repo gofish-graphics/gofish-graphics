@@ -2,7 +2,7 @@
 order: 20
 ---
 
-# clock
+# Coord.clock
 
 A polar coordinate system oriented like a clock face. 0° is at 12 o'clock (top) and angles increase clockwise. Ideal for pie charts, donut charts, and radial visualizations.
 
@@ -10,9 +10,9 @@ A polar coordinate system oriented like a clock face. 0° is at 12 o'clock (top)
 :::
 
 ```python
-from gofish import chart, stack, rect, clock
+from gofish import chart, stack, rect, Coord
 
-chart(seafood, coord=clock()) \
+chart(seafood, coord=Coord.clock()) \
     .flow(stack(by="species", dir="x")) \
     .mark(rect(w="count", fill="species")) \
     .render(w=400, h=300)
@@ -21,7 +21,7 @@ chart(seafood, coord=clock()) \
 ## Signature
 
 ```python
-clock(
+Coord.clock(
     inner_radius: float | None = None,
     central_angle: float | None = None,
     start_angle: float | None = None,
@@ -35,7 +35,7 @@ clock(
 ::: gofish-ref clock
 :::
 
-`clock()` is a [`polar()`](/python/api/coords/polar) preset and accepts the same
+`Coord.clock()` is a [`Coord.polar()`](/python/api/coords/polar) preset and accepts the same
 options — `inner_radius`, `central_angle`, `start_angle`, `direction`, `center` —
 but with clock-face defaults (0° at 12 o'clock, clockwise). See
 [polar's Parameters](/python/api/coords/polar#parameters).
@@ -46,7 +46,7 @@ Pass the coordinate transform to [`chart`](/python/api/core/chart) via the
 `coord` keyword:
 
 ```python
-chart(data, coord=clock()) \
+chart(data, coord=Coord.clock()) \
     .flow(...) \
     .mark(...) \
     .render(w=400, h=300)
@@ -65,17 +65,17 @@ chart(data, coord=clock()) \
 import math
 
 # Pie chart
-chart(data, coord=clock()) \
+chart(data, coord=Coord.clock()) \
     .flow(stack(by="category", dir="x")) \
     .mark(rect(w="value", fill="category"))
 
 # Donut chart (hollow center via inner radius)
-chart(data, coord=clock(inner_radius=0.6)) \
+chart(data, coord=Coord.clock(inner_radius=0.6)) \
     .flow(stack(by="category", dir="x")) \
     .mark(rect(w="value", fill="category"))
 
 # Rose chart (radial bar chart)
-chart(data, coord=clock()) \
+chart(data, coord=Coord.clock()) \
     .flow(stack(by="month", dir="x")) \
     .mark(rect(w=(math.pi * 2) / 12, em_x=True, h="value"))
 ```

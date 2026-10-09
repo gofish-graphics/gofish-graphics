@@ -26,13 +26,14 @@ import { polar } from "../ast/coordinateTransforms/polar";
 import { wavy } from "../ast/coordinateTransforms/wavy";
 import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
-import { palette, gradient } from "../ast/colorSchemes";
+import { palette, gradient } from "../families/color";
 import { ref } from "../ast/shapes/ref";
 import { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";
 import { Frontend } from "gofish-ir";
 import { RESOLVE_ROWS } from "../ast/channels";
 import {
+  applyLambdaTyped,
   rebuild,
   cutSlices,
   cutMark,
@@ -112,8 +113,9 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
  * Build the accessor for a `{ __gofish_lambda: id }` sentinel. It has only a
  * batch form ({@link RESOLVE_ROWS}): the mark and operator factories resolve
  * it before channel inference (`resolveChannelAccessors` in channels.ts) with
- * one `applyLambda(id, rows)` call for all of its rows. That call is the one
- * place a Python accessor crosses the bridge. Called per row, it throws: a
+ * one `applyLambdaTyped(bridge, id, rows)` call for all of its rows, typed
+ * like any other callback result (a time comes back as epoch milliseconds).
+ * That call is the one place a Python accessor crosses the bridge. Called per row, it throws: a
  * Python accessor works only in a channel.
  */
 function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
@@ -124,7 +126,7 @@ function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
   };
   return Object.assign(accessor, {
     [RESOLVE_ROWS]: (rows: readonly unknown[]) =>
-      bridge.applyLambda(lambdaId, [...rows]),
+      applyLambdaTyped(bridge, lambdaId, [...rows]),
   });
 }
 
@@ -695,7 +697,7 @@ function chartFromIR(
   //                                        does the auto-naming/selectAll
   //                                        wiring (see chartBuilder.ts)
   //   - null / undefined                 — data was shipped via the bridge's
-  //                                        arrow_data sidecar; use the
+  //                                        tier_arrow sidecar; use the
   //                                        `data` argument the caller passed
   // Data in the IR (inline rows, a selection, the previous tier) wins over
   // rows the host shipped beside it.
@@ -773,7 +775,8 @@ export interface IRHost {
   /** Rows shipped beside the IR instead of inline in it (the widget's Arrow
    *  sidecar), one array per chart tier; a lone chart is tier 0. A chart
    *  whose `data` is inline, a selection, or the previous tier ignores its
-   *  entry. */
+   *  entry. An array may carry column types (`setColumnTypes`), which the
+   *  chart reads as it reads its own `schema`'s, and its `schema` wins. */
   tierRows?: Record<string, any>[][];
 }
 
@@ -788,7 +791,8 @@ function definedFields<T extends Record<string, unknown>>(o: T): Partial<T> {
 /**
  * Render a whole frontend-IR root (a chart, a layer, or a bare mark) into
  * `container`. This is the one entry point both hosts use: the Python widget
- * (Arrow sidecar, anywidget RPC) and the parity harness (inline rows, HTTP).
+ * (Arrow sidecar, anywidget RPC) and the parity harness (the same Arrow
+ * sidecar, HTTP RPC).
  * Building throws synchronously on a bad spec; the returned promise settles
  * with the {@link View} once the chart has rendered.
  */

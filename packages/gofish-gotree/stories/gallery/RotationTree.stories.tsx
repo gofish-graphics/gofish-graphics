@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, line, layer, frame, polar } from "gofish-graphics";
+import { ellipse, line, layer, frame, Coord, Curve } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -170,7 +170,7 @@ const links = placed
       return [
         line(
           {
-            curve: "linear",
+            curve: Curve.linear(),
             fill: "none",
             stroke: LINK_STROKE,
             strokeWidth: LINK_WIDTH,
@@ -185,7 +185,7 @@ const links = placed
     return [
       line(
         {
-          curve: "linear",
+          curve: Curve.linear(),
           fill: "none",
           stroke: LINK_STROKE,
           strokeWidth: LINK_WIDTH,
@@ -205,10 +205,9 @@ export const RotationTree: StoryObj = {
     // Inside a coord, paint order = array order (coord's flattenLayout ignores
     // zOrder). Links FIRST (under the nodes); the root node is last within
     // `nodes` so its dark disc caps the center.
-    frame({ coord: polar() as any }, [layer([...links, ...nodes])]).render(
-      container,
-      { w: 520, h: 520 }
-    );
+    frame({ coord: Coord.polar() as any }, [
+      layer([...links, ...nodes]),
+    ]).render(container, { w: 520, h: 520 });
     return container;
   },
 };

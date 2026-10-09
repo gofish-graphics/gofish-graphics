@@ -1,6 +1,5 @@
 // Canis Fig. 1b. One series after another; inside each, bars 100 ms apart. REGROUPS, so a selection.
 import {
-  animation,
   chart,
   rect,
   selectAll,
@@ -8,6 +7,7 @@ import {
   stack,
   time,
   type BuildClockOptions,
+  Animation,
 } from "../../../src/lib";
 import { sales } from "./data";
 
@@ -24,6 +24,6 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
           time.stagger({ by: "product", spacing: 0 }), // groupBy class, start after previous
           time.stagger({ by: "quarter", lag: 100 }) // groupBy id, delay 100
         )
-        .mark(time.transition({ enter: animation.wipe({ from: "bottom" }) }))
+        .mark(time.transition({ enter: Animation.wipe({ from: "bottom" }) }))
     )
     .render(container, { w: 400, h: 240, axes: true, ...clock });

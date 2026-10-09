@@ -37,7 +37,7 @@ gf.chart(catchLocationsArray)
   .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
   .mark(
     gf
-      .chart({ coord: gf.clock() }) // no data → inherits this lake's partition
+      .chart({ coord: gf.Coord.clock() }) // no data → inherits this lake's partition
       .flow(
         gf.join(seafood, { on: "lake" }),
         gf.stack({ by: "species", dir: "x", h: 20 })

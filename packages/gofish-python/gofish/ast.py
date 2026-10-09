@@ -97,10 +97,19 @@ class Operator:
 class DeriveOperator(Operator):
     """Operator for deriving new data via Python function."""
 
-    def __init__(self, fn: Callable, provenance: Optional[dict] = None):
+    def __init__(
+        self,
+        fn: Callable,
+        provenance: Optional[dict] = None,
+        schema: Optional[dict] = None,
+    ):
         super().__init__("derive")
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
+        # The column types of the result (``derive(fn, schema={...})``), in
+        # the wire form of a chart's ``schema``; JS applies them to the rows
+        # the callback returns.
+        self.schema = schema
         # Measure provenance a data transform (e.g. `bin`) declares for its
         # output columns. It can't ride the data rows across the derive RPC
         # bridge, so it travels in the operator IR and is re-applied JS-side via
@@ -115,7 +124,7 @@ class DeriveOperator(Operator):
         y: Optional[float] = None,
     ) -> "DeriveOperator":
         """Translate a derived operator while preserving its lambda handle."""
-        new_op = DeriveOperator(self.fn, self.provenance)
+        new_op = DeriveOperator(self.fn, self.provenance, self.schema)
         new_op.lambda_id = self.lambda_id
         new_op._labels = list(self._labels)
         new_op._translate = {
@@ -140,6 +149,8 @@ class DeriveOperator(Operator):
         out = {"type": "derive", "lambdaId": self.lambda_id}
         if self.provenance:
             out["provenance"] = self.provenance
+        if self.schema is not None:
+            out["schema"] = self.schema
         if self._translate:
             out["translate"] = self._translate
         return out
@@ -643,13 +654,10 @@ class Mark:
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
         from .widget import GoFishChartWidget
-        from .arrow_utils import empty_placeholder_arrow_bytes
-
-        arrow_data = empty_placeholder_arrow_bytes()
 
         widget = GoFishChartWidget(
             spec=self.to_ir(),
-            arrow_data=arrow_data,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions={},
             width=w,
             height=h,
@@ -773,7 +781,6 @@ from ._generated import (  # noqa: E402
     _layer_opts,
     _chart_opts,
     _label_opts,
-    _polar_config,
 )
 
 
@@ -1520,14 +1527,6 @@ class ChartBuilder:
 
         # Import here to avoid circular dependencies
         from .widget import GoFishChartWidget
-        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
-
-        # Ref-data charts (`ref(name)` / `select_all(name)`) have no data of
-        # their own — they borrow nodes from a sibling chart.
-        if isinstance(self.data, _RefProxy):
-            arrow_data = empty_placeholder_arrow_bytes()
-        else:
-            arrow_data = data_to_arrow_bytes(self.data)
 
         # Get the IR spec
         spec = self.to_ir()
@@ -1540,7 +1539,7 @@ class ChartBuilder:
 
         widget = GoFishChartWidget(
             spec=spec,
-            arrow_data=arrow_data,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions=derive_functions,
             width=w,
             height=h,
@@ -1673,7 +1672,7 @@ def layer(
 
     Either way the options are the JS ``layer(options, children)`` options
     (box dims, ``coord``, ``axes``, ``transform``, ``box``, ``key``), as keyword
-    arguments: ``layer([chart1, chart2], coord=clock())``. Render options such
+    arguments: ``layer([chart1, chart2], coord=Coord.clock())``. Render options such
     as ``padding`` go to ``.render(...)``, as in JS.
 
     Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
@@ -1886,12 +1885,19 @@ def stack(
     return Operator("stack", **_stack_opts(**options))
 
 
-def derive(fn: Callable) -> DeriveOperator:
+def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     """
     Derive operator - apply a Python function to transform data.
 
     Args:
         fn: Function that takes data and returns transformed data
+        schema: Column types of the result, keyed by column name, as in
+            ``chart(data, schema={...})``: ``Schema.ordered(levels)`` or
+            ``Schema.time(zone=...)``. Without it, a result column keeps the
+            type it had in the input while its values still fit it, a
+            datetime column is a time, and any other column has no type. A
+            ``schema`` entry overrides those and converts the column's
+            values, as a chart's schema does.
 
     Returns:
         DeriveOperator object
@@ -1903,7 +1909,7 @@ def derive(fn: Callable) -> DeriveOperator:
     unify on X's axis without an explicit `field(name, measure=...)`.
     """
     provenance = getattr(fn, "_gofish_measure_provenance", None)
-    return DeriveOperator(fn, provenance)
+    return DeriveOperator(fn, provenance, schema)
 
 
 def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
@@ -1973,7 +1979,7 @@ def join(right: Any, *, on: str) -> Operator:
     Pairs with a nested chart that inherits its parent partition::
 
         chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
-            lambda data: chart(data, coord=clock())
+            lambda data: chart(data, coord=Coord.clock())
             .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
             .mark(rect(w="count", fill="species"))
         )
@@ -2055,9 +2061,9 @@ def treemap(
         **options: The generated ``_treemap_opts`` core's options (the
             combinator form's: ``_treemap_combinator_opts``); see the docs
             options table. ``size`` sizes each leaf's tile area, one value
-            per split entry. ``tile`` takes a strategy: ``squarify()`` (the
-            default), ``slice()``, ``dice()``, ``binary()``, or
-            ``slice_dice()``.
+            per split entry. ``tile`` takes a strategy from the ``Tile``
+            family: ``Tile.squarify()`` (the default), ``Tile.slice()``,
+            ``Tile.dice()``, ``Tile.binary()``, or ``Tile.slice_dice()``.
 
     The largest tile (under the default sort) lands at the top left.
 
@@ -2081,231 +2087,6 @@ def treemap(
     if by is not None:
         options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))
-
-
-def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
-    """
-    The ``separate()`` overlap strategy for :func:`scatter`: it keeps dots
-    apart, so no two overlap, and the result is a beeswarm. Each dot keeps its
-    position on the data axis and moves along the axis no field places, to the
-    free spot nearest the ``alignment`` line (Observable Plot's ``dodge``).
-
-        chart(penguins).flow(
-            scatter(x="Body Mass (g)", alignment="middle", overlap=separate(padding=1))
-        ).mark(circle(r=3))
-
-    Mirrors JS ``separate({ padding })``; the strategy is a plain object on the
-    wire, ``{"kind": "separate", "padding": ...}``.
-
-    Args:
-        padding: Pixels kept between neighboring dots. Default 0.
-    """
-    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
-        raise ValueError(f"separate: padding must be a finite non-negative number, got {padding}")
-    return {"kind": "separate"} if padding is None else {"kind": "separate", "padding": padding}
-
-
-def _is_real(v: Any) -> bool:
-    """A real number: an int or float, not a bool."""
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
-
-
-def _make_noise(
-    name: str,
-    randomness: Optional[str],
-    smoothing: Optional[Union[float, str]],
-    padding: Optional[float],
-    seed: Optional[float],
-) -> Dict[str, Any]:
-    """Check the options and build the ``{"kind": "noise", ...}`` object;
-    ``name`` is the function the user called, for the error messages."""
-    if randomness is not None and randomness not in ("blue", "quasi", "uniform"):
-        raise ValueError(
-            f'{name}: randomness must be "blue", "quasi" or "uniform", got {randomness!r}'
-        )
-    if smoothing is not None and smoothing != "silverman" and not (
-        _is_real(smoothing) and smoothing >= 0
-    ):
-        raise ValueError(
-            f'{name}: smoothing must be a non-negative number of data units, math.inf, '
-            f'or "silverman", got {smoothing!r}'
-        )
-    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
-        raise ValueError(f"{name}: padding must be a finite non-negative number, got {padding}")
-    if seed is not None and not (_is_real(seed) and math.isfinite(seed)):
-        raise ValueError(f"{name}: seed must be a number, got {seed}")
-    out: Dict[str, Any] = {"kind": "noise"}
-    for key, value in (
-        ("randomness", randomness),
-        ("smoothing", smoothing),
-        ("padding", padding),
-        ("seed", seed),
-    ):
-        if value is not None:
-            out[key] = value
-    return out
-
-
-def noise(
-    *,
-    randomness: Optional[str] = None,
-    smoothing: Optional[Union[float, str]] = None,
-    padding: Optional[float] = None,
-    seed: Optional[float] = None,
-) -> Dict[str, Any]:
-    """
-    The ``noise()`` overlap strategy for :func:`scatter`. Each dot keeps its
-    position on the data axis and gets an offset on the axis no field places,
-    inside an outline that follows how many dots share that part of the data
-    axis. Each dot adds a small bell-shaped bump, and the outline is the sum
-    of the bumps. :func:`sina` and :func:`jitter` are this strategy with other
-    defaults.
-
-        chart(penguins).flow(
-            scatter(x="Body Mass (g)", alignment="middle",
-                    overlap=noise(randomness="quasi", smoothing=100))
-        ).mark(circle(r=3))
-
-    Mirrors JS ``noise({ randomness, smoothing, padding, seed })``; the
-    strategy is a plain object on the wire, ``{"kind": "noise", ...}``.
-
-    Args:
-        randomness: ``"blue"`` (default) keeps each dot far from its
-            neighbors, ``"quasi"`` spreads dots by rank (fastest),
-            ``"uniform"`` draws seeded uniform offsets.
-        smoothing: The bandwidth of each dot's bell, in data units of the
-            data axis. Default 0: no smoothing beyond the dots' own size.
-            ``math.inf`` gives a flat outline (classic fixed-band jitter).
-            ``"silverman"`` computes it from the data, as :func:`sina` does.
-        padding: Pixels added to each dot's width. Default 0.
-        seed: Seed for ``"blue"`` and ``"uniform"``. Default 0.
-    """
-    return _make_noise("noise", randomness, smoothing, padding, seed)
-
-
-def sina(
-    *,
-    randomness: Optional[str] = None,
-    smoothing: Optional[Union[float, str]] = None,
-    padding: Optional[float] = None,
-    seed: Optional[float] = None,
-) -> Dict[str, Any]:
-    """
-    A sina plot: :func:`noise` with ``smoothing="silverman"``, a bandwidth
-    computed per group from the data by Silverman's rule of thumb, as
-    ggforce's ``geom_sina`` does. The outline is the smooth curve a violin
-    plot draws, filled with dots. Any option overrides the default.
-
-        chart(penguins).flow(
-            spread(by="Species", dir="y"),
-            scatter(x="Body Mass (g)", alignment="middle", overlap=sina()),
-        ).mark(circle(r=3))
-
-    Mirrors JS ``sina({ ... })``; on the wire it is
-    ``{"kind": "noise", "smoothing": "silverman", ...}``.
-
-    Args: as :func:`noise`.
-    """
-    return _make_noise(
-        "sina",
-        randomness,
-        "silverman" if smoothing is None else smoothing,
-        padding,
-        seed,
-    )
-
-
-def jitter(
-    *,
-    randomness: Optional[str] = None,
-    smoothing: Optional[Union[float, str]] = None,
-    padding: Optional[float] = None,
-    seed: Optional[float] = None,
-) -> Dict[str, Any]:
-    """
-    Classic jitter: :func:`noise` with ``randomness="uniform"`` and
-    ``smoothing=math.inf``, so the dots get uniform random offsets in a flat
-    band. Any option overrides the default.
-
-        chart(penguins).flow(
-            scatter(x="Body Mass (g)", alignment="middle", overlap=jitter())
-        ).mark(circle(r=3))
-
-    Mirrors JS ``jitter({ ... })``; on the wire it is
-    ``{"kind": "noise", "randomness": "uniform", "smoothing": Infinity, ...}``.
-
-    Args: as :func:`noise`.
-    """
-    return _make_noise(
-        "jitter",
-        "uniform" if randomness is None else randomness,
-        math.inf if smoothing is None else smoothing,
-        padding,
-        seed,
-    )
-
-
-def squarify(*, ratio: Optional[Union[int, float]] = None) -> Dict[str, Any]:
-    """
-    The ``squarify()`` tiling strategy for :func:`treemap` (the default):
-    make tiles as close as possible to the aspect ``ratio``: the longer side
-    over the shorter side, so at least 1, with no orientation chosen. Omitted, ``ratio`` is d3's default, the golden ratio.
-    ``squarify(ratio=1)`` aims for square tiles, which suits one circle per
-    leaf.
-
-    Mirrors JS ``squarify({ ratio })``; on the wire it is the plain object
-    ``{"kind": "squarify", "ratio": ...}``.
-    """
-    if ratio is None:
-        return {"kind": "squarify"}
-    return {"kind": "squarify", "ratio": ratio}
-
-
-def slice() -> Dict[str, Any]:
-    """
-    The ``slice()`` tiling strategy for :func:`treemap`: lay the tiles out in
-    one column, stacked along y. Mirrors JS ``slice()``; on the wire it is
-    ``{"kind": "slice"}``.
-    """
-    return {"kind": "slice"}
-
-
-def dice() -> Dict[str, Any]:
-    """
-    The ``dice()`` tiling strategy for :func:`treemap`: lay the tiles out in
-    one row, side by side along x. Mirrors JS ``dice()``; on the wire it is
-    ``{"kind": "dice"}``.
-    """
-    return {"kind": "dice"}
-
-
-def binary() -> Dict[str, Any]:
-    """
-    The ``binary()`` tiling strategy for :func:`treemap`: split the tiles into
-    two halves of near-equal weight, recursively. Mirrors JS ``binary()``; on
-    the wire it is ``{"kind": "binary"}``.
-    """
-    return {"kind": "binary"}
-
-
-def slice_dice() -> Dict[str, Any]:
-    """
-    The ``slice_dice()`` tiling strategy for :func:`treemap`: alternate slice
-    and dice by depth. Mirrors JS ``sliceDice()``; on the wire it is
-    ``{"kind": "sliceDice"}``.
-    """
-    return {"kind": "sliceDice"}
-
-
-def circles() -> Dict[str, Any]:
-    """
-    The ``circles()`` strategy for :func:`pack`: pack each child's enclosing
-    circle with d3's front-chain algorithm. Takes no options yet.
-
-    Mirrors JS ``circles()``; the strategy is a plain object on the wire,
-    ``{"kind": "circles"}``.
-    """
-    return {"kind": "circles"}
 
 
 def pack(
@@ -2337,8 +2118,8 @@ def pack(
             Marks to pack.
         by: Field name to group by, or a ``field(...)`` accessor (operator
             form only). Omit for one child per row.
-        **options:
-            method: The packing strategy, e.g. ``circles()`` (the default).
+        **options: The generated ``_pack_opts`` core's options; see the docs
+            options table.
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -2480,34 +2261,103 @@ class Schema:
         """
         return ColumnSchema({"HasOrder": {"levels": list(levels)}})
 
+    @staticmethod
+    def time(zone: str = "UTC") -> ColumnSchema:
+        """A column whose values are instants (``HasCalendar``), read on the
+        calendar of ``zone``, an IANA time zone (``"UTC"`` by default).
 
-# Color configuration
+        A value may be an ISO 8601 string (``"2024-03-05"`` is the start of
+        that day in ``zone``; a string without an offset is a wall-clock time
+        in ``zone``), a datetime, or epoch milliseconds. A pandas or polars
+        datetime column is a time without a schema entry. An axis over the
+        column labels its ticks with calendar cells (see ``Calendar``).
+        """
+        if not isinstance(zone, str):
+            raise TypeError(
+                f"Schema.time: zone must be an IANA time zone name, got {zone!r}"
+            )
+        return ColumnSchema({"HasCalendar": {"zone": zone}})
 
 
-def palette(values: Any) -> dict:
+# Calendar partitions
+
+_CALENDAR_UNITS = (
+    "second",
+    "minute",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "quarter",
+    "year",
+)
+
+
+class CalendarPartition(dict):
+    """A partition of the time line into calendar cells: a level (``unit``)
+    at a step. The dict is the wire form JS reads (``{"unit": "month",
+    "step": 3}``). Mirrors JS ``CalendarPartition``; build one from
+    ``Calendar``. Used in ``axes={"x": {"rows": [...]}}``.
     """
-    Create a palette color configuration.
 
-    Args:
-        values: Palette name (e.g. "tableau10") or list of color strings
+    def __init__(self, unit: str, step: int = 1, start: Optional[str] = None):
+        if unit not in _CALENDAR_UNITS:
+            raise ValueError(
+                f"Calendar: unknown unit {unit!r}; expected one of "
+                + ", ".join(_CALENDAR_UNITS)
+            )
+        if isinstance(step, bool) or not isinstance(step, int) or step < 1:
+            raise ValueError(
+                f"Calendar.{unit}.every({step!r}): the step must be a whole "
+                f"number of {unit}s, 1 or more."
+            )
+        wire: dict = {"unit": unit, "step": step}
+        if start is not None:
+            wire["start"] = start
+        super().__init__(wire)
 
-    Returns:
-        Color config dict for use in chart options
+    def every(self, n: int) -> "CalendarPartition":
+        """The same level, ``n`` units per cell (``Calendar.month.every(3)``).
+        Steps align to the level above: months in steps of 3 start in
+        January, April, July and October."""
+        return CalendarPartition(self["unit"], n, self.get("start"))
+
+
+class _WeekPartition(CalendarPartition):
+    """``Calendar.week``: Monday-start weeks, also callable as
+    ``Calendar.week(start="sunday")``."""
+
+    def __call__(self, start: str = "monday") -> CalendarPartition:
+        if start not in ("monday", "sunday"):
+            raise ValueError(
+                f'Calendar.week: start must be "monday" or "sunday", not {start!r}.'
+            )
+        return CalendarPartition("week", 1, start)
+
+
+class Calendar:
+    """The calendar partitions, used in ``axes={"x": {"rows": [...]}}``.
+
+    Mirrors JS ``Calendar``::
+
+        chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})
+        Calendar.hour.every(6)
+        Calendar.week(start="sunday")
+
+    A custom ``format`` for a row's labels is JS-only for now.
     """
-    return {"_tag": "palette", "values": values}
+
+    second = CalendarPartition("second")
+    minute = CalendarPartition("minute")
+    hour = CalendarPartition("hour")
+    day = CalendarPartition("day")
+    week = _WeekPartition("week", 1, "monday")
+    month = CalendarPartition("month")
+    quarter = CalendarPartition("quarter")
+    year = CalendarPartition("year")
 
 
-def gradient(stops: Union[str, List[str]]) -> dict:
-    """
-    Create a gradient color configuration.
-
-    Args:
-        stops: Color stop(s) - a single color string or list of color strings
-
-    Returns:
-        Color config dict for use in chart options
-    """
-    return {"_tag": "gradient", "stops": stops}
+# Color helpers (the scales themselves are the `Color` family, color.py)
 
 
 # Named gradient schemes, mirrored from packages/gofish-graphics/src/ast/colorSchemes.ts.
@@ -2628,12 +2478,12 @@ def assign_gradient_color(gradient_config: dict, t: float) -> str:
     Python-side counterpart of `assignGradientColor` (colorSchemes.ts). Meant for
     use inside a `derive()` callback that needs to precompute a literal hex fill
     (a raw `fill` channel) rather than going through the JS-side `color:
-    gradient(...)` chart option. Gives the same hex as the JS function: evenly
+    Color.gradient(...)` chart option. Gives the same hex as the JS function: evenly
     spaced stops mixed linearly in CIE Lab (D65 white point, CSS Color 4
     conversions), clipped to the sRGB gamut and rounded to 8 bits per channel.
 
     Args:
-        gradient_config: A `gradient(...)` config dict (`{"_tag": "gradient",
+        gradient_config: A `Color.gradient(...)` config dict (`{"_tag": "gradient",
             "stops": ...}`). Stops are hex colors.
         t: Interpolation position in [0, 1] (values outside are clamped; NaN
             gives `#cccccc`).
@@ -2668,95 +2518,6 @@ def assign_gradient_color(gradient_config: dict, t: float) -> str:
             local_t = (tt - p0) / (p1 - p0)
             return _lab_mix_hex(colors[i], colors[i + 1], local_t)
     return _rgb_to_hex(*_hex_to_rgb(colors[n]))
-
-
-# Coordinate transforms
-
-
-# `clock()`/`polar()` are hand-written because the `clock`-vs-`polar` type
-# tag isn't part of the descriptor; both call the generated `_polar_config`.
-
-
-def clock(
-    inner_radius: float | None = None,
-    central_angle: float | None = None,
-    start_angle: float | None = None,
-    direction: int | None = None,
-    center: tuple[float, float] | list[float] | None = None,
-) -> dict:
-    """
-    Clock coordinate transform — a ``polar()`` preset with 0° at 12 o'clock,
-    increasing clockwise (its defaults). Accepts the same options. Use as:
-    ``chart(data, coord=clock())``.
-
-    Args:
-        inner_radius: donut hole as a fraction [0,1) of the outer radius (e.g. a
-            clock rim). Default 0 (filled disc).
-        central_angle: total angular sweep in radians. Default 2π (full circle).
-        start_angle: angle (radians) of θ=0. Default π/2 (12 o'clock).
-        direction: +1 counter-clockwise, -1 clockwise. Default -1.
-        center: screen-space center offset [x, y]. Default [0, 0].
-
-    Returns:
-        Coord config dict for use in chart options
-    """
-    return _polar_config(
-        "clock",
-        inner_radius=inner_radius,
-        central_angle=central_angle,
-        start_angle=start_angle,
-        direction=direction,
-        center=center,
-    )
-
-
-def polar(
-    inner_radius: float | None = None,
-    central_angle: float | None = None,
-    start_angle: float | None = None,
-    direction: int | None = None,
-    center: tuple[float, float] | list[float] | None = None,
-) -> dict:
-    """
-    Polar coordinate transform — angle θ on the x-axis, radius r on the y-axis,
-    with 0 at 12 o'clock. Use as: ``chart(data, coord=polar())``.
-
-    The actual transform/domain is reconstructed on the JS side from this tag
-    (the function body can't cross the IR bridge), mirroring ``clock()``.
-
-    Args:
-        inner_radius: donut hole as a fraction [0,1) of the outer radius.
-            Default 0 (filled disc).
-        central_angle: total angular sweep in radians. Default 2π (full circle).
-        start_angle: angle (radians) of θ=0. Default π/2 (12 o'clock).
-        direction: +1 counter-clockwise, -1 clockwise. Default -1 (clockwise).
-        center: screen-space center offset [x, y]. Default [0, 0].
-
-    Returns:
-        Coord config dict for use in chart/layer options
-    """
-    return _polar_config(
-        "polar",
-        inner_radius=inner_radius,
-        central_angle=central_angle,
-        start_angle=start_angle,
-        direction=direction,
-        center=center,
-    )
-
-
-def wavy() -> dict:
-    """
-    Wavy coordinate transform — adds a sinusoidal ripple to both axes. Use as:
-    `layer([...], coord=wavy())`.
-
-    The actual transform/domain is reconstructed on the JS side from this tag
-    (the function body can't cross the IR bridge), mirroring `clock()`.
-
-    Returns:
-        Coord config dict for use in chart/layer options
-    """
-    return {"type": "wavy"}
 
 
 # Layer selection
@@ -3317,8 +3078,8 @@ def chart(
     Chart-level options are keyword arguments (the JS options object
     ``chart(data, { axes, coord, ... })`` becomes kwargs):
 
-        chart(data, color=palette("tableau10"))
-        chart(data, color=gradient("blues"), coord=clock())
+        chart(data, color=Color.palette("tableau10"))
+        chart(data, color=Color.gradient("blues"), coord=Coord.clock())
 
     Axes are a chart option (``.render(axes=...)`` can also set them, as in
     JS). ``axes`` accepts:
@@ -3331,7 +3092,7 @@ def chart(
 
         chart(data, axes=True)
         chart(data, axes={"x": {"title": "Year"}, "y": True})
-        chart(data, coord=clock(), axes=True, padding=80)   # polar chart
+        chart(data, coord=Coord.clock(), axes=True, padding=80)   # polar chart
 
     Per-operator overrides use the same shape on spread()/scatter():
 
@@ -3356,6 +3117,33 @@ def chart(
         ChartBuilder instance
     """
     return ChartBuilder(data, _chart_opts(**options) or None)
+
+
+def tiers_arrow_bytes(root: Any) -> List[bytes]:
+    """The Arrow IPC bytes of each chart tier's own rows, as the widget ships
+    them beside the IR (the ``tier_arrow`` trait) and the parity harness's
+    derive server ships them too: one tier for a chart, one per child for a
+    layer, none for a bare mark. Timestamp and date columns cross as Arrow
+    times, and the widget's decode reads them as times. A tier with no rows
+    of its own ships the empty placeholder: a mark child, a chart whose data
+    is a ``ref`` / ``select_all`` (it borrows a sibling's nodes), and an
+    empty ``chart()`` scope (it takes the previous tier's marks)."""
+    from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
+
+    def tier(t: Any) -> bytes:
+        if (
+            not isinstance(t, ChartBuilder)
+            or isinstance(t.data, _RefProxy)
+            or t._uses_previous_marks()
+        ):
+            return empty_placeholder_arrow_bytes()
+        return data_to_arrow_bytes(t.data)
+
+    if isinstance(root, LayerBuilder):
+        return [tier(child) for child in root.children]
+    if isinstance(root, ChartBuilder):
+        return [tier(root)]
+    return []
 
 
 class LayerBuilder:
@@ -3467,27 +3255,10 @@ class LayerBuilder:
             GoFishChartWidget instance that will display in Jupyter
         """
         from .widget import GoFishChartWidget
-        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
 
-        def _serialize_child_data(child: ChartBuilder) -> bytes:
-            """Serialize a child chart's data to raw Arrow IPC bytes.
-
-            ``GoFishChartWidget`` owns the base64/JSON wire encoding (see
-            ``arrow_dict`` there) — this only ever hands it plain bytes.
-            """
-            # Ref-data tiers borrow nodes from a sibling; empty `chart()`
-            # scopes (previous-tier) inherit the preceding tier's marks
-            # JS-side — neither ships rows of its own.
-            if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
-                return empty_placeholder_arrow_bytes()
-
-            return data_to_arrow_bytes(child.data)
-
-        # Serialize each child's data and collect derive functions
-        arrow_dict: dict = {}
+        # Collect derive functions
         derive_functions: dict = {}
-        for i, child in enumerate(self.children):
-            arrow_dict[str(i)] = _serialize_child_data(child)
+        for child in self.children:
             for op in _collect_derive_operators(child.operators):
                 derive_functions[op.lambda_id] = op.fn
 
@@ -3495,7 +3266,7 @@ class LayerBuilder:
 
         widget = GoFishChartWidget(
             spec=spec,
-            arrow_dict=arrow_dict,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions=derive_functions,
             width=w,
             height=h,

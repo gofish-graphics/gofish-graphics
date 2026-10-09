@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar, datum } from "gofish-graphics";
+import { rect, datum, Coord } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -155,7 +155,7 @@ export const TyreTree: StoryObj = {
           y: { kind: "align", alignment: "start" },
         }),
         // InnerRadius:0.25 — the donut hole (tyre hub). Now expressible.
-        coord: polar({ innerRadius: 0.25 }),
+        coord: Coord.polar({ innerRadius: 0.25 }),
       },
       sampleTree
     ).render(container, { w: 560, h: 560 });

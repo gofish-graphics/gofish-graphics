@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, polar } from "gofish-graphics";
+import { circle, Coord, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — deep-tree (a deep radial node-link, sunburst family).
@@ -75,7 +75,7 @@ export const DeepTree: StoryObj = {
       {
         node,
         // NOTE: dsl wants curve links (LinkWidth=depth); falling back to linear.
-        link: { curve: "linear", stroke: "#5f6b7a", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#5f6b7a", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: nest centers the parent circle over its subtree's angular span.
           x: { kind: "nest", pad: 0 },
@@ -98,7 +98,7 @@ export const DeepTree: StoryObj = {
           // r: all siblings share a radius (same ring).
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 560, h: 560 },
       deepTree

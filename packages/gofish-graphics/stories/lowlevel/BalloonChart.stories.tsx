@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood, catchLocations } from "../../src/data/catch";
-import { layer, ellipse, rect, wavy } from "../../src/lib";
+import { layer, ellipse, rect, Coord } from "../../src/lib";
 import { color, color6 } from "../../src/color";
 import { mix } from "spectral.js";
 import _ from "lodash";
@@ -94,7 +94,7 @@ export const Default: StoryObj<Args> = {
       );
 
     layer(
-      { coord: wavy(), x: 0, y: 0 },
+      { coord: Coord.wavy(), x: 0, y: 0 },
       scatterData.map((data, i) =>
         layer({ x: data.x }, [
           rect({

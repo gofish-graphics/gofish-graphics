@@ -5,12 +5,9 @@ import { denseMasses as dense } from "../../src/data/denseMasses";
 import {
   chart,
   circle,
-  jitter,
-  noise,
   scatter,
-  sina,
   spread,
-  type OverlapStrategy,
+  Overlap,
 } from "../../src/lib";
 
 // Noise: `scatter`'s `overlap: noise()` spreads each dot along the axis no
@@ -42,7 +39,7 @@ export const PenguinMass: StoryObj = {
         scatter({
           x: "Body Mass (g)",
           alignment: "middle",
-          overlap: noise(),
+          overlap: Overlap.noise(),
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
@@ -70,7 +67,7 @@ export const PenguinMassSina: StoryObj = {
         scatter({
           x: "Body Mass (g)",
           alignment: "middle",
-          overlap: sina(),
+          overlap: Overlap.sina(),
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
@@ -91,7 +88,7 @@ export const PenguinMassJitter: StoryObj = {
         scatter({
           x: "Body Mass (g)",
           alignment: "middle",
-          overlap: jitter(),
+          overlap: Overlap.jitter(),
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
@@ -101,7 +98,7 @@ export const PenguinMassJitter: StoryObj = {
   },
 };
 
-const denseStory = (overlap: OverlapStrategy): StoryObj => ({
+const denseStory = (overlap: Overlap.Overlap): StoryObj => ({
   render: () => {
     const container = initializeContainer();
     chart(dense, { axes: true })
@@ -116,16 +113,16 @@ const denseStory = (overlap: OverlapStrategy): StoryObj => ({
 });
 
 // The default: blue noise, smoothing 0 (no smoothing beyond the dots' size).
-export const DenseDefault = denseStory(noise({ padding: 0.5 }));
+export const DenseDefault = denseStory(Overlap.noise({ padding: 0.5 }));
 // A smoother outline: bells with a bandwidth of 100 g.
 export const DenseSmoothing = denseStory(
-  noise({ padding: 0.5, smoothing: 100 })
+  Overlap.noise({ padding: 0.5, smoothing: 100 })
 );
 // Quasirandom spreading, the fastest.
 export const DenseQuasi = denseStory(
-  noise({ padding: 0.5, randomness: "quasi" })
+  Overlap.noise({ padding: 0.5, randomness: "quasi" })
 );
 // Sina: the bandwidth from Silverman's rule, per group.
-export const DenseSina = denseStory(sina({ padding: 0.5 }));
+export const DenseSina = denseStory(Overlap.sina({ padding: 0.5 }));
 // Classic jitter: uniform offsets in a flat band.
-export const DenseJitter = denseStory(jitter({ padding: 0.5 }));
+export const DenseJitter = denseStory(Overlap.jitter({ padding: 0.5 }));

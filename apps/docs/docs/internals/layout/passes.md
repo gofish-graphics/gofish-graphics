@@ -88,6 +88,13 @@ Three per-run session contexts are initialized:
 
 These are attached to the render session and propagated to the node tree, rather than stored as module-global mutable state. This establishes clean state for the rendering process and ensures no interference between multiple chart renders.
 
+Calendar math (a time axis's cells) runs synchronously during elaboration,
+on the Temporal API that `applySchema` (`schema.ts`) loads when the chart's
+data has a time column (`loadTemporal()` in `calendar.ts`): the native API
+where the runtime has one, else `temporal-polyfill`, imported only then. A
+time axis needs a time column, so `layout` itself loads nothing, and a chart
+without one never loads the polyfill.
+
 ### Pass 2: Color Scale Resolution
 
 **Location**: `src/ast/gofish.tsx:172`
@@ -169,7 +176,7 @@ The `computeIntrinsicSize()` function returns a `Monotonic` function that maps f
 
 `x`/`y`/`w`/`h` mean axis 0 and axis 1 in every coordinate space. A coordinate
 transform may also declare **names** for its two axes in its `aliases` field:
-`polar()`/`clock()` declare `{ x: "theta", y: "r" }` and `geo()` declares
+`Coord.polar()`/`Coord.clock()` declare `{ x: "theta", y: "r" }` and `Coord.geo()` declares
 `{ x: "lon", y: "lat" }`. That declaration is the only source of the names. They are
 used in two places, and in both the meaning of a name depends on where the node sits,
 which a factory does not know when it runs:
@@ -312,8 +319,9 @@ under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
 level). So a grouped or faceted chart renders one ordinal axis per grouping
 level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
 `lake` axis and a per-lake `species` axis. Wherever it sets an owning flag,
-`resolveAxes` also leaves a persistent `axisDemand` stamp — the demand bit that
-later gates per-scope domain nicing at the σ-scope solves (issue #659), since
+`resolveAxes` also leaves a persistent `axisDemand` stamp — the axis's ticks
+(`AxisTicks`: a count, and a time axis's rows), which later gate and
+shape per-scope domain nicing at the σ-scope solves (issue #659), since
 `resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
 driven at each scope's own solve (below). Then
 `elaborateChrome` **rewrites the tree**. Each node that owns chrome (axes,
@@ -638,8 +646,8 @@ That is why `pack` keeps its children at their pixel size and does not fit
 itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
 
-The second consumer is `scatter`'s `overlap` option, `separate()` (#969) or
-`noise()` (#970, #1014). `sina()` and `jitter()` are `noise()` with other
+The second consumer is `scatter`'s `overlap` option, `Overlap.separate()` (#969) or
+`Overlap.noise()` (#970, #1014). `Overlap.sina()` and `Overlap.jitter()` are `Overlap.noise()` with other
 defaults filled in, so they reach layout as the same `{kind: "noise"}` object.
 `scatter` elaborates to a layer with a `position` constraint per child on each
 axis a field places, and an `align` on every other ("free") axis. With an

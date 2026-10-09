@@ -36,6 +36,9 @@ import {
   UnderlyingSpace,
   mergeMeasures,
   CONTINUOUS,
+  mergeCalendars,
+  positionCalendar,
+  withCalendar,
   magnitude,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
@@ -107,13 +110,16 @@ export const Rect = ({
           const center = centerOf(d);
           if (center !== undefined) return glyphAxis(center, d.size);
           if (isValue(d.min) && isValue(d.max)) {
-            return CONTINUOUS(
-              interval(getValue(d.min)!, getValue(d.max)!),
-              "pinned",
-              mergeMeasures(getMeasure(d.min), getMeasure(d.max), {
-                axis,
-                where: "between a rect's two ends",
-              })
+            return withCalendar(
+              CONTINUOUS(
+                interval(getValue(d.min)!, getValue(d.max)!),
+                "pinned",
+                mergeMeasures(getMeasure(d.min), getMeasure(d.max), {
+                  axis,
+                  where: "between a rect's two ends",
+                })
+              ),
+              mergeCalendars([positionCalendar(d.min), positionCalendar(d.max)])
             );
           }
           if (!isValue(d.min) && !isValue(d.size)) {
@@ -133,10 +139,9 @@ export const Rect = ({
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
           const size = isValue(d.size) ? getValue(d.size)! : 0;
-          return CONTINUOUS(
-            interval(min, min + size),
-            "pinned",
-            getMeasure(d.min)
+          return withCalendar(
+            CONTINUOUS(interval(min, min + size), "pinned", getMeasure(d.min)),
+            positionCalendar(d.min)
           );
         };
 

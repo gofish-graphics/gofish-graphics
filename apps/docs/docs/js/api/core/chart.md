@@ -32,8 +32,8 @@ never mistaken for data.
 `data` (`T`) is the dataset to visualize.
 
 `options` holds the chart-level options. See [Axes](#axes) for the full `axes`
-shape, [Legend](#legend) for `legend`, [`palette()`](/js/api/color/palette) and
-[`gradient()`](/js/api/color/gradient) for `color`, and
+shape, [Legend](#legend) for `legend`, [`Color.palette()`](/js/api/color/palette) and
+[`Color.gradient()`](/js/api/color/gradient) for `color`, and
 [`Schema`](/js/api/core/schema) for `schema`.
 
 ::: gofish-ref ChartOptions
@@ -51,14 +51,27 @@ chart(data, { axes: false }); // no axes (the default)
 chart(data, { axes: { x: true, y: false } }); // x only
 chart(data, { axes: { x: { title: "Year" }, y: true } }); // custom x title, inferred y title
 chart(data, { axes: { x: { title: false }, y: true } }); // suppress the inferred x title
+chart(data, { axes: { x: { rows: [Calendar.month, Calendar.year] } } }); // rows of a time axis
 ```
 
 The full type is:
 
 ```ts
 type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-type AxisOptions = boolean | { title?: string | false };
+type AxisOptions =
+  | boolean
+  | {
+      title?: string | false;
+      side?: "start" | "end";
+      labelAngle?: number | number[] | "auto";
+      rows?: TimeRowOption[];
+    };
 ```
+
+`rows` sets the label rows of a time axis, an axis over a
+[`Schema.time()`](/js/api/core/schema) column. Each row is a Calendar value,
+such as `Calendar.month` or `Calendar.quarter.format(fn)` for custom labels.
+See [`Calendar`](/js/api/core/calendar).
 
 Each axis title defaults to the field that dimension encodes (e.g. `count` for
 `rect({ h: "count" })`). Pass `{ title: "…" }` to override it, or `{ title: false }`
@@ -166,7 +179,7 @@ align its center onto the stem's top:
 ```ts
 layer([
   rect({ w: 4, h: "total", fill: "green" }).name("stem"),
-  chart(species, { coord: polar() })
+  chart(species, { coord: Coord.polar() })
     .flow(stack({ by: "species", dir: "x" }))
     .mark(petal({ w: "count", fill: "species" }))
     .name("flower"),

@@ -27,17 +27,47 @@ chart(data).flow(
 
 ```python
 derive(fn) -> DeriveOperator
+derive(fn, schema={...}) -> DeriveOperator
 ```
 
 ## Parameters
 
-`derive` takes one positional argument and no options.
+`fn` (required, `Callable`) receives the current group's rows and returns the
+new ones: a list of dicts, `None`, or a dataframe from any backend
+[narwhals](https://narwhals-dev.github.io/narwhals/) supports. The options:
 
-| Parameter | Type       | Description                                                                                                                                                                                        |
-| --------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fn`      | `Callable` | **Required.** Receives the current group's rows and returns the new ones — a list of dicts, `None`, or a dataframe from any backend [narwhals](https://narwhals-dev.github.io/narwhals/) supports. |
+::: gofish-ref derive
+:::
+
+`schema` takes the same column types as [`chart`'s `schema`](/python/api/core/schema).
 
 Returns a `DeriveOperator` for use inside [`.flow()`](/python/api/core/flow).
+
+## Column types of the result
+
+Each column of the returned rows is typed like chart data:
+
+- A column whose values still fit the type it had in the input keeps that
+  type. A time column of unchanged instants stays a time, and an ordered
+  column whose values are still text or numbers keeps the order, so a
+  value outside its levels is an error where the order is used.
+- A datetime column is a time.
+- Any other column has no type. A `derive` that rewrites a date to `"Mar"`
+  makes the column plain text.
+- A `schema` entry overrides these for its column and converts the values
+  as a chart's schema does: an ISO 8601 string in a `Schema.time()` column
+  becomes an instant.
+
+Fitting reads the values, not what they mean: a `derive` that turns a time
+column into plain numbers, such as years, keeps the time type, because any
+number is a valid instant
+([#1089](https://github.com/gofish-graphics/gofish-graphics/issues/1089)).
+Give the column its type with `derive(fn, schema={...})`.
+
+```python
+# Monthly highs, months in calendar order
+derive(monthly_highs, schema={"month": Schema.ordered(MONTHS)})
+```
 
 ## How it works
 

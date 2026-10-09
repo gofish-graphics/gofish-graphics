@@ -12,6 +12,8 @@ Declares the types of a chart's columns. Pass a record of column types as the
 Schema.ordered(levels); // HasOrder
 Schema.ordered(levels).diverging(); // HasOrder and HasMidpoint
 Schema.ordered(levels).diverging({ midpoint }); // HasOrder and HasMidpoint
+Schema.time(); // HasCalendar, in UTC
+Schema.time({ zone }); // HasCalendar, in the time zone `zone`
 ```
 
 A column type is a set of classes. Each builder method adds one class, and
@@ -22,6 +24,7 @@ point along an order.
 | ------------------------ | ------------- | ------------------------------------------------------ |
 | `Schema.ordered(levels)` | `HasOrder`    | The column's values are `levels`, in this order.       |
 | `.diverging()`           | `HasMidpoint` | The order has a midpoint, a point along it. See below. |
+| `Schema.time()`          | `HasCalendar` | The column's values are instants, read on a calendar.  |
 
 ## Parameters
 
@@ -29,6 +32,7 @@ point along an order.
 | ---------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `levels`   | `(string \| number)[]` | Every value the column takes, first to last.                                                                       |
 | `midpoint` | `number`               | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`. |
+| `zone`     | `string`               | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                  |
 
 ## Behavior
 
@@ -41,7 +45,8 @@ point along an order.
 - A categorical color scale whose values all come from the column lists its
   legend in the same order.
 - A value that is not in `levels` is an error that names the column and the
-  value. Add it to the levels, or filter those rows out.
+  value. Add it to the levels, filter those rows out, or, if a `derive`
+  changed the values, give the column its type with `derive(fn, { schema })`.
 
 **`HasMidpoint`.**
 
@@ -69,6 +74,24 @@ point along an order.
   midpoint (`60 40 20 0 20 40 60`).
 - The parts must follow the column's order, or its reverse. Reordering them
   some other way is an error.
+
+**`HasCalendar`.**
+
+- Each value becomes epoch milliseconds (UTC) when the chart applies its
+  schema. A value may be an ISO 8601 string, a `Date`, or epoch milliseconds.
+- A date alone (`"2024-03-05"`) is the start of that day in `zone`. A
+  date-time with an offset (`"2024-03-05T14:30:00Z"`) is that instant. A
+  date-time without one (`"2024-03-05T14:30"`) is that wall-clock time in
+  `zone`. Any other value is an error that names the column and the value.
+- A column whose values are JS `Date` objects is a time column in UTC
+  without a schema entry. Strings and numbers are never taken as times.
+- An instant has no zero.
+- An axis over the column is a time axis. Its ticks and labels are
+  calendar cells in rows: by default the level that gives about 10 ticks,
+  and below it that level's parent. Its domain is rounded outward to the
+  cells of its first row. See [`Calendar`](/js/api/core/calendar) for the rows.
+- An unknown `zone` is an error. Two time columns on one axis must have the
+  same zone.
 
 ## Example
 
@@ -108,4 +131,16 @@ chart(population, {
 ```
 
 ::: gofish example:population-pyramid hidden
+:::
+
+A column of date strings is a time with `Schema.time()`:
+
+```ts
+chart(prices, { schema: { date: Schema.time() }, axes: true })
+  .flow(scatter({ by: "date", x: "date", y: "price" }))
+  .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
+  .render(container, { w: 560, h: 200 });
+```
+
+::: gofish example:daily-price-line hidden
 :::

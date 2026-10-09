@@ -144,7 +144,7 @@ export interface RawMarkIR extends BaseIRNode {
  *   The `select()` factory no longer exists in either frontend; `mode: "one"`
  *   (or absent) corresponds to `ref(name)`.
  * - **External**: `{type: "external", id?: "..."}` indicates data ships over a
- *   sidecar transport (anywidget's `arrow_data` trait) and the id keys into it.
+ *   sidecar transport (anywidget's `tier_arrow` trait) and the id keys into it.
  * - **Previous tier**: `{type: "previous-tier"}` marks an empty `chart()` /
  *   `Chart()` scope inside a `.layer(...)` chain — "inherit the immediately
  *   preceding tier's marks". The deserializer maps this to the JS
@@ -195,6 +195,11 @@ export interface DeriveOperator
    *  can't ride the data rows across the derive RPC; the deserializer re-applies
    *  it via `setMeasureProvenance`. */
   provenance?: Record<string, string>;
+  /** The column types of the derive's result, keyed by column name, in the
+   *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
+   *  type the result over the types it keeps or infers, and convert values
+   *  as a chart's schema does. */
+  schema?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -363,10 +368,10 @@ export interface ScatterOperator
   h?: ChannelValue;
 }
 
-/** A `scatter` overlap strategy, made by a function call (`separate()`,
- *  `noise()`; `sina()` and `jitter()` make kind `"noise"` with other
- *  defaults). Mirrors JS's `OverlapStrategy`
- *  (`graphicalOperators/overlap.ts`). */
+/** A `scatter` overlap strategy, made by a call in the `Overlap` family
+ *  (`Overlap.separate()`, `Overlap.noise()`; `Overlap.sina()` and
+ *  `Overlap.jitter()` make kind `"noise"` with other defaults). Mirrors JS's
+ *  `Overlap.Overlap` (`families/overlap.ts`). */
 export type OverlapStrategyIR =
   | { kind: "separate"; padding?: number }
   | {
@@ -388,7 +393,8 @@ export type OverlapStrategyIR =
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
  * object: `title` (string for a custom title, `false` to suppress), `side`
- * (the frame edge), and `labelAngle` (label rotation in degrees).
+ * (the frame edge), `labelAngle` (label rotation in degrees), and `rows` (the
+ * label rows of a time axis, inner row first).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions =
@@ -397,7 +403,24 @@ export type AxisOptions =
       title?: string | false;
       side?: "start" | "end";
       labelAngle?: number | number[] | "auto";
+      rows?: CalendarPartitionIR[];
     };
+
+/** A Calendar value's wire form (`Calendar.month.every(3)`): a calendar level
+ *  at a step. `start` is the first day of a week, for weeks only. */
+export type CalendarPartitionIR = {
+  unit:
+    | "second"
+    | "minute"
+    | "hour"
+    | "day"
+    | "week"
+    | "month"
+    | "quarter"
+    | "year";
+  step?: number;
+  start?: "monday" | "sunday";
+};
 
 export interface TableOperator
   extends BaseIRNode,
@@ -422,8 +445,9 @@ export interface LogOperator
   prefix?: string;
 }
 
-/** A `treemap` tiling strategy, made by a function call (`squarify()`,
- *  `slice()`, `dice()`, `binary()`, `sliceDice()`). */
+/** A `treemap` tiling strategy, made by a call in the `Tile` family
+ *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
+ *  `Tile.sliceDice()`). */
 export type TreemapTileIR =
   | { kind: "squarify"; ratio?: number }
   | { kind: "slice" }
@@ -472,9 +496,6 @@ export interface TreemapOperator
   dims?: AxisDims;
 }
 
-/** A `pack` strategy, made by a function call (`circles()`). */
-export type PackMethodIR = { kind: "circles" };
-
 /**
  * `pack({...})` — circle packing: children are placed so their enclosing
  * circles touch without overlapping. Dual-form like `treemap`: also a
@@ -490,8 +511,6 @@ export interface PackOperator
   label?: LabelIR;
   /** Field to partition rows by. Without `by`, one child per row. */
   by?: string | FieldAccessor;
-  /** The packing strategy. Default `{ kind: "circles" }`. */
-  method?: PackMethodIR;
 }
 
 // ---------------------------------------------------------------------------

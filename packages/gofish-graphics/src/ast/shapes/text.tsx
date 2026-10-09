@@ -13,6 +13,7 @@ import {
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
+import { FALLBACK_FONT_FAMILY } from "./fontUtils";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import type { DisplayList } from "gofish-ir";
@@ -41,7 +42,7 @@ const getMeasureContext = (): CanvasRenderingContext2D | null => {
   return _measureCtx ?? null;
 };
 
-const estimateTextDimensions = (
+export const estimateTextDimensions = (
   text: string,
   fontSize: number,
   fontFamily: string,
@@ -172,7 +173,7 @@ export const Text = ({
   strokeWidth = 0,
   filter,
   fontSize = 12,
-  fontFamily = "system-ui, sans-serif",
+  fontFamily = FALLBACK_FONT_FAMILY,
   fontStyle,
   fontWeight,
   debugBoundingBox = false,

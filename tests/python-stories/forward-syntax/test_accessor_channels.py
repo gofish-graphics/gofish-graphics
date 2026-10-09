@@ -7,7 +7,7 @@ story's plain accessors.
 
 import math
 
-from gofish import chart, clock, rect, spread
+from gofish import Coord, chart, rect, spread
 from python_stories.data import SEAFOOD
 
 
@@ -22,7 +22,7 @@ def story_bar_height():
 
 def story_rose_radius():
     return (
-        chart(SEAFOOD, coord=clock())
+        chart(SEAFOOD, coord=Coord.clock())
         .flow(spread(by="lake", dir="x", spacing=0))
         .mark(
             rect(
