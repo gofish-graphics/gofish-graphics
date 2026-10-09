@@ -6,7 +6,7 @@ from python_stories.data import MOSAIC_DATA
 
 def story_default():
     return (
-        chart(MOSAIC_DATA, axes=True)
+        chart(MOSAIC_DATA)
         .flow(
             # Column widths ∝ each region's total (marginal): `size="count"`
             # sizes each column by its raw Σcount. Stacked segments fill the

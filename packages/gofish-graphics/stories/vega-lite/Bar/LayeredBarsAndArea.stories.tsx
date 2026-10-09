@@ -118,7 +118,6 @@ export const HoistedVarietySpread: StoryObj<Args> = {
       // it renders ONE global yield (y) axis plus the variety (x) axis — not a
       // per-cell y axis. Set it here on the topmost chart, not in `.render(...)`:
       // the render-level form doesn't thread through the nested facets yet (#646).
-      axes: true,
     })
       .flow(spread({ by: "variety", dir: "x", spacing: 20 }))
       .mark(

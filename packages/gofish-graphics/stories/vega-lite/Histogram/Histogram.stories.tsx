@@ -30,7 +30,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.movies as any[], { axes: true })
+    chart(context.loaded.movies as any[])
       .flow(
         derive(bin("IMDB Rating")),
         scatter({ xMin: "start", xMax: "end" })

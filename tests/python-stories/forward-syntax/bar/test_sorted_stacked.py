@@ -6,7 +6,7 @@ from python_stories.data import SEAFOOD
 
 def story_default():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(
             spread(by="lake", dir="x"),
             stack(by=field("species").sort("count"), dir="y"),

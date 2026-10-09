@@ -36,7 +36,7 @@ export const Basic: StoryObj<Args> = {
     // six lakes are spread to span `args.w` (five gaps between them) instead of
     // a fixed pixel spacing, which would leave the canvas partly empty.
     const lakes = 6;
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(spread({ by: "lake", dir: "x", spacing: args.w / (lakes - 1) }))
       .mark(ribbon({ h: "count", opacity: 0.8 }))
       .render(container, {
@@ -60,7 +60,7 @@ export const Stacked: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64 }),
         stack({ by: "species", dir: "y" })
@@ -86,7 +86,7 @@ export const Layered: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(streamgraphData, { axes: true })
+    chart(streamgraphData)
       .flow(spread({ by: "x", dir: "x", spacing: 50 }), group({ by: "c" }))
       .mark(ribbon({ h: "y", fill: "c", opacity: 0.7 }))
       .render(container, {

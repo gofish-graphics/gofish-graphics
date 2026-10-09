@@ -52,7 +52,6 @@ export const Default: StoryObj<Args> = {
 
     chart(heatmapData, {
       color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
-      axes: true,
     })
       .flow(table({ by: { x: "hour", y: "day" },  spacing: 4 }))
       .mark(rect({ fill: "value" }))

@@ -58,6 +58,7 @@ const rectsOf = (dl: any): Box[] => {
   return out;
 };
 
+// Axes are off throughout: these checks measure the marks alone.
 async function main() {
   console.log("\n# a shrink-to-fit root does not count its descent twice");
   {
@@ -69,7 +70,7 @@ async function main() {
       { k: 3, v: 20 },
     ];
     const bars = (size: { w: number; h?: number }) =>
-      chart(signed)
+      chart(signed, { axes: false })
         .flow(scatter({ by: "k", x: "k" }))
         .mark(rect({ h: "v", w: 10 }))
         .toDisplayList(size);
@@ -250,7 +251,7 @@ async function main() {
       { k: "d", v: -50 },
     ];
     const render = (op: unknown) =>
-      chart(parts)
+      chart(parts, { axes: false })
         .flow(op)
         .mark(rect({ w: 10, h: "v" }))
         .toDisplayList({ w: 100, h: 130 });
@@ -309,7 +310,7 @@ async function main() {
       { c: "a", v: 10 },
       { c: "b", v: 20 },
       { c: "c", v: 30 },
-    ])
+    ], { axes: false })
       .flow(spread({ by: "c", dir: "x", w: 300 }))
       .mark(rect({ w: "v", h: 20 }))
       .toDisplayList({ w: 500, h: 100 });

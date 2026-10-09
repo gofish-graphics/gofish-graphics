@@ -23,4 +23,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         enter: animation.wipe({ from: "left", duration: "days" }),
       })
     )
-    .render(container, { w: 480, h: 220, axes: true, ...clock });
+    .render(container, { w: 480, h: 220, ...clock });

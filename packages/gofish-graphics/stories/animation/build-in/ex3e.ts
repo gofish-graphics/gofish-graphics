@@ -24,4 +24,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         ],
       })
     )
-    .render(container, { w: 480, h: 220, axes: true, ...clock });
+    .render(container, { w: 480, h: 220, ...clock });

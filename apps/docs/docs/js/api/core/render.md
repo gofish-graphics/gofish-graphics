@@ -104,8 +104,8 @@ The `axes` option controls per-axis visibility and titles. It accepts a boolean,
 per-dimension object, or per-dimension title control:
 
 ```ts
-axes: true                                     // both axes, titles inferred
-axes: false                                    // no axes (the default)
+axes: true                                     // both axes, titles inferred (the chart() default)
+axes: false                                    // no axes (the default for a bare node)
 axes: { x: true, y: false }                    // x only
 axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
 axes: { x: { title: false }, y: true }         // suppress the inferred x title

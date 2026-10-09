@@ -26,4 +26,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         )
         .mark(time.transition({ enter: animation.wipe({ from: "bottom" }) }))
     )
-    .render(container, { w: 400, h: 240, axes: true, ...clock });
+    .render(container, { w: 400, h: 240, ...clock });

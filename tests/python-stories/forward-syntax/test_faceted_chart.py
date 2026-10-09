@@ -6,7 +6,7 @@ from python_stories.data import DRIVING_SHIFTS, SEAFOOD
 
 def story_default():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(
             spread(by="lake", dir="x", spacing=15),
             spread(by="species", dir="x", spacing=2, axes={"x": True, "y": False}),
@@ -18,7 +18,7 @@ def story_default():
 
 def story_faceted_scatter_driving():
     return (
-        chart(DRIVING_SHIFTS, axes=True)
+        chart(DRIVING_SHIFTS)
         .flow(
             spread(by="side", dir="x", spacing=50),
             scatter(x="year", y="miles", axes={"x": True, "y": False}),
@@ -30,7 +30,7 @@ def story_faceted_scatter_driving():
 
 def story_faceted_scatter_y():
     return (
-        chart(DRIVING_SHIFTS, axes=True)
+        chart(DRIVING_SHIFTS)
         .flow(
             spread(by="side", dir="y", spacing=50),
             scatter(x="year", y="gas", axes={"x": False, "y": True}),

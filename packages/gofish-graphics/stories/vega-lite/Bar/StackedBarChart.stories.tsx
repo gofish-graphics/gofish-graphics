@@ -50,7 +50,7 @@ export const Default: StoryObj<Args> = {
     // GoFish equivalent: use derive() to extract month from date, then group and count.
 
     // TODO: need a better way of aggregating by count or whatever.
-    chart(context.loaded.weather as any[], { axes: true,
+    chart(context.loaded.weather as any[], {
       color: palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
     })
       .flow(

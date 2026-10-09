@@ -9,7 +9,7 @@ def story_default():
         "species", position="center", color="white", font_size=12
     )
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="y"),

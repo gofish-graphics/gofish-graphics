@@ -30,7 +30,7 @@ export const Default: StoryObj<Args> = {
 
     const p = pointer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
       // regime 0: the pointer read lives inside live() → paint patch only.
       .mark(

@@ -6,7 +6,7 @@ from python_stories.data import SEAFOOD
 
 def story_default():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .facet(by="lake", dir="x")
         .stack(by="species", dir="y")
         .mark(rect(h="count", fill="species")),

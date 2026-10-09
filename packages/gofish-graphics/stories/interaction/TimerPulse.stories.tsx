@@ -53,7 +53,7 @@ export const PaintOnly: StoryObj<Args> = {
     // Two states, 400ms each: the clock emits 0, 1, 0, 1, …
     const t = timer({ domain: [0, 1], step: 1, duration: 800 });
 
-    chart(base, { axes: true })
+    chart(base)
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(
         rect({
@@ -88,7 +88,7 @@ export const GrowingData: StoryObj<Args> = {
       duration: SERIES.length * 500,
     });
 
-    chart(SERIES, { axes: true })
+    chart(SERIES)
       .flow(
         // regime 2: reading head() in derive() makes it a pipeline dependency.
         // Each new index slides a rolling window over the real series and

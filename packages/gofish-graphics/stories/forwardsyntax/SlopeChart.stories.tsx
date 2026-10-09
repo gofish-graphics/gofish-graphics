@@ -40,7 +40,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
     const barley = context.loaded.barley as any[];
 
-    chart(barley, { axes: true })
+    chart(barley)
       .flow(
         spread({ by: "site", dir: "x", spacing: 110 }),
         spread({ by: "year", dir: "x", spacing: 36 }),

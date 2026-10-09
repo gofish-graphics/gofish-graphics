@@ -43,7 +43,7 @@ export const PaletteNamedScheme: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { color: palette("tableau10"), axes: true })
+    chart(seafood, { color: palette("tableau10") })
       .flow(spread({ by: "species",  dir: "x" }))
       .mark(rect({ h: "count", fill: "species" }))
       .render(container, { w: args.w, h: args.h });
@@ -59,7 +59,7 @@ export const PaletteStringArray: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { color: palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]), axes: true })
+    chart(seafood, { color: palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]) })
       .flow(spread({ by: "species",  dir: "x" }))
       .mark(rect({ h: "count", fill: "species" }))
       .render(container, { w: args.w, h: args.h });
@@ -82,7 +82,7 @@ export const GradientNamedScheme: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(scores, { color: gradient("blues"), axes: true })
+    chart(scores, { color: gradient("blues") })
       .flow(spread({ by: "label",  dir: "x" }))
       .mark(rect({ h: "value", fill: "value" }))
       .render(container, { w: args.w, h: args.h });
@@ -98,7 +98,7 @@ export const GradientStringArray: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(scores, { color: gradient(["#f7fbff", "#42c663", "#6b0808"]), axes: true })
+    chart(scores, { color: gradient(["#f7fbff", "#42c663", "#6b0808"]) })
       .flow(spread({ by: "label",  dir: "x" }))
       .mark(rect({ h: "value", fill: "value" }))
       .render(container, { w: args.w, h: args.h });
@@ -128,7 +128,7 @@ export const PairedPalettes: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(pairedBars, { axes: true })
+    chart(pairedBars)
       .flow(
         derive((d) => {
           const values = d.map((item) => item.value);
@@ -164,7 +164,6 @@ export const NestedDerive: StoryObj<Args> = {
         "salmon-highlight": "#e15759",
         "first-half": "#4e79a7",
       }),
-      axes: true,
     })
       .flow(
         derive((d) =>
@@ -199,7 +198,7 @@ export const SelectiveDerive: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { color: palette({ highlighted: "#e15759" }), axes: true })
+    chart(seafood, { color: palette({ highlighted: "#e15759" }) })
       .flow(
         derive((d) =>
           d.map((item) => ({
@@ -231,7 +230,7 @@ export const SelectiveGroup: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { color: palette({ Salmon: "#e15759" }), axes: true })
+    chart(seafood, { color: palette({ Salmon: "#e15759" }) })
       .flow(
         spread({ by: "lake",  dir: "x" }),
         stack({ by: "species",  dir: "x" })
@@ -257,7 +256,7 @@ export const RibbonHighlight: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { color: palette({ Salmon: "#e15759", Trout: "#4e79a7" }), axes: true })
+    chart(seafood, { color: palette({ Salmon: "#e15759", Trout: "#4e79a7" }) })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64 }),
         stack({ by: field("species").sort("count"), dir: "y" })

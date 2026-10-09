@@ -39,7 +39,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" }))
       // `.layer()`'s empty scope yields one ref per lake; each ref's datum is
@@ -78,7 +78,7 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" }))
       .layer(

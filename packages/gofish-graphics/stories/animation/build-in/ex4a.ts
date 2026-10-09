@@ -22,4 +22,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         enter: animation.grow({ duration: 400 }),
       })
     )
-    .render(container, { w: 560, h: 220, axes: true, ...clock });
+    .render(container, { w: 560, h: 220, ...clock });
