@@ -120,7 +120,9 @@ Three pieces:
    [Field expressions](/internals/core/underlying-space#field-expressions-a-pipeline-orthogonal-to-channel-aggregation)
    for the domain-op (`sort`/`reverse`/`bin`) semantics. `by`-string/function
    callers are unaffected — they carry no ops, so `splitEntries` reduces to
-   the old `Map.groupBy` behavior.
+   the old `Map.groupBy` behavior. A key is a `SplitKey`: a value of the
+   field, or a `Cell` for a binned key (`field(x).bin(p)`), which stands for
+   its id.
 3. **`channels`** (optional) — per-opt data-aware encodings. Same idea as
    `createMark`'s channels: `w: "size"` means the user can pass a field name,
    and the factory will apply `inferSize` before handing opts to `Spread`.
@@ -141,12 +143,16 @@ Walking `createOperator.ts:391-415`:
    array leaf is then re-tagged with `d`'s measure provenance
    (`copyMeasureProvenance`): a leaf is a fresh sub-array that wouldn't
    otherwise inherit the `MEASURE_PROVENANCE` symbol, so without this a _mark_
-   channel applied per leaf would lose a transform's measure (e.g. a bin's
-   `start`/`end`/`size`) and fall back to the literal field name — see
+   channel applied per leaf would lose a transform's measure (e.g. a
+   histogram's `start`/`end`) and fall back to the literal field name — see
    [underlying space](/internals/core/underlying-space) and #534. The chart's
    column types ride along the same way (`copyColumnTypes`, see [Column
    types](/internals/core/underlying-space#column-types-the-chart-schema)), so
-   a nested split or a color channel still sees an ordered column.
+   a nested split or a color channel still sees an ordered column, and so
+   does the data's domain, so a nested binned key sees the chart's cells. A
+   cell key becomes its id for the mark and the node (`setKey`), and the node
+   keeps the cell itself as `keyCell`, which the distribute fold reads to
+   build an ordinal over cells.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream

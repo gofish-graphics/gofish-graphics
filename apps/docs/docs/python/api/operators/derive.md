@@ -116,23 +116,7 @@ have the _same_ measure merges their domains, while mixing _different_ measures
 silently corrupting the shared domain.
 
 By default the measure is just the field name, which is usually right. A
-built-in transform like `bin()` declares the measure of its output columns —
-the bin edges `start`/`end` are still in the source field's units, not the
-literal column names — and that **provenance now travels in the operator's IR
-across the bridge**, so a binned histogram's edges auto-unify on the source
-axis with no annotation:
-
-```python
-from gofish import bin, chart, derive, rect, scatter
-
-# bin edges auto-tag as "Beak Length (mm)" — no field(..., measure=...) needed:
-chart(penguins, h=80).flow(
-    derive(bin("Beak Length (mm)")),
-    scatter(x_min="start", x_max="end"),
-).mark(rect(h="count"))
-```
-
-Your **own** `derive` lambda is opaque to GoFish — once it returns new columns,
+`derive` lambda is opaque to GoFish — once it returns new columns,
 GoFish only knows their names, not their units. When such a derived column is
 really in some existing unit and its axis should share with that unit's axis,
 annotate the channel with `field(name, measure=...)`:

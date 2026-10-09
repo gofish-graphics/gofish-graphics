@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 /**
  * Cells (#1058, #48): what `field(x).bin(p)` turns a value into.
  *

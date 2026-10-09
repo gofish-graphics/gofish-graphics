@@ -30,7 +30,7 @@ filter(predicate) -> Operator
 A field predicate comes from
 [`field(name).between(lo, hi, closed=None)`](/python/api/operators/spread#field-expression-pipeline).
 Its bounds are plain numbers, and it raises if the expression carries pipeline
-ops (`field("x").bin(10).between(...)`), which would otherwise test the raw
+ops (`field("x").bin(step=10).between(...)`), which would otherwise test the raw
 field: a predicate is not a value slot. It is data, so it crosses to JavaScript
 as these fields:
 

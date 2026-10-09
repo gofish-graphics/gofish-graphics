@@ -338,7 +338,7 @@ RPC + save/display, DataFrame⇄Arrow, `DatumValue`
 arithmetic, `_RefProxy`, the builder chain itself (`.flow/.mark/.layer/…` —
 thin methods over generated factories), and the d3 `bin` port (until/unless
 binning becomes a declarative operator resolved JS-side, which would delete
-it).
+it; #1058 did, with `field(x).bin(p)`).
 
 ## What shipped
 

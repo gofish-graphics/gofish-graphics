@@ -121,8 +121,9 @@ chart(select_all("bars")) \
 appends one op to an ordered pipeline. It works in two disjoint places:
 
 - As `by` (a **domain** slot): `.sort(by=None, order=None)`, `.sort(values)`
-  (an explicit order list), `.reverse()`, `.bin(thresholds=None)`, and
-  `.drop_nulls()` decide **which groups exist and in what order**.
+  (an explicit order list), `.reverse()`, `.bin(partition=None, step=None,
+thresholds=None)`, and `.drop_nulls()` decide **which groups exist and in
+  what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
@@ -170,18 +171,43 @@ chart(data).flow(
 Groups whose key isn't in the list are appended after, in natural sort
 order.
 
-**Bin a numeric field into groups** — a histogram, with no precomputed bins:
+**Bin a field into cells** — a histogram, with no precomputed bins:
 
 ```python
-# One bar per ~10 auto-computed bins of `age`, height = row count per bin
+# One bar per half-point cell of `rating`, height = row count per cell
 chart(data).flow(
-    spread(by=field("age").bin(), dir="x")
-).mark(rect(h=field("age").count()))
+    spread(by=field("rating").bin(step=0.5), dir="x")
+).mark(rect(h=field("rating").count()))
+
+# One bar per calendar month of a time column
+chart(sales, schema={"date": Schema.time()}).flow(
+    spread(by=field("date").bin(Calendar.month), dir="x")
+).mark(rect(h=field("value").sum()))
 ```
 
-Empty bins are dropped, like an ordinary group-by. Pass
-`field("age").bin(5)` (a count) or explicit thresholds (a list) to control
-the binning.
+`.bin(...)` maps each value to its **cell**: an interval `[start, end)` that
+holds its start and not its end. Give one partition:
+
+| Argument                                      | Cells                                                                                                                                   |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| a [Calendar](/python/api/core/calendar) value | The calendar cells of a time column, in the column's zone: `Calendar.month`, `Calendar.hour.every(6)`, `Calendar.week(start="sunday")`. |
+| `step=`                                       | Cells `step` wide, starting at multiples of `step`.                                                                                     |
+| `thresholds=n`                                | About `n` cells, with the step a numeric axis with `n` ticks uses. The default, with no argument, is `thresholds=10`.                   |
+| `thresholds=[t1, ...]`                        | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                  |
+
+A thresholds partition includes its top edge, so the largest value falls in
+the last cell. Custom cell labels (`format`) are JS-only for now.
+
+The groups are the cells over the column's values in the **chart's data**
+(or the result of the last `derive`), not over the rows of one group. So
+every group of a nested split has the same cells in the same order, a cell
+with no rows is kept as an empty group, and a count picks its step from the
+chart's values. Ops after `.bin` reorder the cells.
+
+Each group's key is its cell. Its id is the cell's start, as text. An axis
+over cells labels each cell (its edges, `"0.5–1"`, or the calendar label
+`"Jan"`) between two ticks at the edges of the cell's bar, and calendar cells
+get a second row of their parent level, e.g. years under months.
 
 **Drop rows with a missing/null grouping field**, before grouping:
 

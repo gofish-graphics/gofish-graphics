@@ -440,6 +440,25 @@ difference axis), never off the size claim:
   that. Key discovery uses `_ordinalKeyMap` (set by operators such as `table`)
   or a subtree walk by `node.key`.
 
+  An ordinal over **cells** (`ORDINAL_TYPE.cells`, from a binned key
+  `field(x).bin(p)`; see
+  [Underlying Space](/internals/core/underlying-space#cells-a-binned-key))
+  places cells, not points, so its labels name cells. Placement follows what
+  the space places, read off the space type, never a tick setting on the
+  column's datatype: points get labels centered on their ticks (the numeric and
+  time axes above), and cells get labels centered between their boundary
+  ticks. Each label's text is the cell's label (the partition's `format`, or
+  `"0.5–1"`, or `"Jan"`), still centered on its key node, and
+  `cellAxisRows` adds a tick at each edge of each key node (`align` of the
+  tick's middle with the node's `start` or `end`), seated in the gutter like
+  the labels. Neighboring cells with no space between them share a tick. For
+  calendar cells it also adds an outer row of the cells' parent level (a
+  year row under months): one label per run of cells in the same parent cell,
+  start-aligned with the run's first cell (the first visible point of the
+  parent cell, as a time axis's outer row puts it), with a long tick where
+  the run starts. The outer row sits past the inner labels by the inner
+  labels' depth, as rotated.
+
 ## Unifying duplicate axes across self-scaled siblings
 
 `resolveAxes` (`_node.ts`) is a top-down walk: a `claimed` map threads DOWN each
