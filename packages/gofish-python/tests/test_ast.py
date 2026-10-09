@@ -8,6 +8,9 @@ from gofish import (
     spread,
     stack,
     derive,
+    compose,
+    field,
+    filter,
     log,
     ref,
     select_all,
@@ -108,12 +111,86 @@ class TestOperators:
         assert d["type"] == "log"
         assert "prefix" not in d
 
+    def test_filter_field_predicate(self):
+        """A field predicate filter serializes as {type: filter, predicate}."""
+        op = filter(field("day").between(100, 120, closed="right"))
+        assert op.to_dict() == {
+            "type": "filter",
+            "predicate": {"field": "day", "between": [100, 120], "closed": "right"},
+        }
+
+    def test_filter_field_predicate_default_closed(self):
+        """An unset `closed` stays off the wire (JS defaults it to "both")."""
+        op = filter(field("day").between(1, 2))
+        assert op.to_dict() == {
+            "type": "filter",
+            "predicate": {"field": "day", "between": [1, 2]},
+        }
+
+    def test_between_rejects_pipeline_ops(self):
+        """A predicate is not a value slot: ops on the field are an error."""
+        with pytest.raises(ValueError, match="does not apply the expression"):
+            field("x").bin(10).between(0, 1)
+
+    def test_filter_callable_is_derive(self):
+        """A Python function predicate runs through the derive bridge."""
+        op = filter(lambda row: row["day"] > 1)
+        assert op.to_dict()["type"] == "derive"
+        assert op.fn([{"day": 1}, {"day": 2}]) == [{"day": 2}]
+
+    def test_filter_callable_passes_a_single_row_through(self):
+        """A single row is not a list of rows, so it passes through unchanged,
+        as JS filter does for data that is not an array."""
+        op = filter(lambda row: row["day"] > 1)
+        row = {"day": 1}
+        assert op.fn(row) is row
+
+    def test_filter_rejects_other_values(self):
+        with pytest.raises(TypeError, match="filter"):
+            filter("day")
+
     def test_log_operator_with_prefix(self):
         """Test log operator with prefix."""
         op = log("my label")
         d = op.to_dict()
         assert d["type"] == "log"
         assert d["prefix"] == "my label"
+
+
+class TestCompose:
+    """Test compose() flow fragments."""
+
+    def test_flow_expands_fragment_in_order(self):
+        """A fragment in .flow() becomes its operators, left to right."""
+        ir = (
+            chart([{"category": "A"}])
+            .flow(compose(spread(by="category", dir="x"), stack(dir="y")))
+            .mark(rect(w=1, h=1))
+            .to_ir()
+        )
+        ops = ir["operators"]
+        assert [op["type"] for op in ops] == ["spread", "stack"]
+        assert ops[0]["by"] == "category"
+
+    def test_nested_fragments_flatten(self):
+        """Nested fragments flatten and keep their order."""
+        a, b, c = spread(dir="x"), stack(dir="y"), log("c")
+        fragment = compose(a, compose(b, compose(c)))
+        assert fragment.operators == (a, b, c)
+        builder = chart([]).flow(fragment)
+        assert builder.operators == [a, b, c]
+
+    def test_empty_compose_is_identity(self):
+        """compose() adds no operators."""
+        op = spread(dir="x")
+        assert chart([]).flow(compose(), op, compose()).operators == [op]
+
+    def test_fragment_keeps_derive_lambdas(self):
+        """A derive inside a fragment is still registered with the bridge."""
+        d = derive(lambda rows: rows)
+        builder = chart([{"a": 1}]).flow(compose(d, spread(dir="x")))
+        ops = builder.mark(rect(w=1, h=1)).to_ir()["operators"]
+        assert ops[0] == {"type": "derive", "lambdaId": d.lambda_id}
 
 
 class TestMarkName:

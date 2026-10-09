@@ -884,7 +884,11 @@ cannot resize something another child already laid out.
 
 The placement-coordinate compiler preserves the literal/datum distinction until
 facts are emitted: literals are pixels, while datum coordinates elaborate
-through the already-solved data→pixel scale plus any post-scale offset. This
+through the already-solved data→pixel scale plus any post-scale offset. A
+box placed by a data center (`circle({ cy: "value", r: 5 })`, a `rect` with
+`cx`) is a glyph like a text or an image: its axis space is `glyphAxis` of the
+center, and its layout puts the center through the scale and takes half its
+pixel size off (`centerOf` / `startAtCenter` in `dims.ts`). This
 keeps the unified constraint semantics without a generic dense linear solver:
 strong facts win, relation cycles are checked for contradiction, and components
 without an absolute pin are normalized so the minimum solved coordinate in that
@@ -1892,6 +1896,12 @@ window `frame`). The bounds are plain numbers; a window that follows a `timer()`
 is a lambda around the bare-value form, exported as
 `between(v, lo, hi, { closed })` — which is also the loose-ends spelling of
 `contains` in `util/interval.ts`.
+
+The predicate still serializes. It carries its description
+`{ field, between: [lo, hi], closed? }` beside the function (`fieldPredicate`
+builds both from that description), and `filter` puts it on the wire as
+`{ type: "filter", predicate }`. The description travels with the operator,
+never in the expression's `ops`, so the three slots stay as they are.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always

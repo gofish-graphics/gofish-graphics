@@ -188,11 +188,6 @@ pluck(ref, "species"); // → ["Bass", "Trout", ...] (distinct across the bag)
 its values rather than group by it — the case where `by: "field"` would
 resolve to `undefined`.
 
-::: info JavaScript only
-`pluck` is exported from the JS package (`gofish-graphics`). The Python wrapper
-does not expose it yet.
-:::
-
 ## `project(source, path)` — the single value at a path {#project}
 
 `project` is the **collapsing** counterpart to `pluck`: it returns the one value

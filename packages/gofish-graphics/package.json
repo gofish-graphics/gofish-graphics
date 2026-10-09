@@ -63,10 +63,12 @@
     "fetch-titanic-passengers": "node scripts/fetch-titanic-passengers.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test": "pnpm run test:path && pnpm run test:interpolate && pnpm run test:spline && pnpm run test:time-window && pnpm run test:font && pnpm run test:bbox && pnpm run test:solver && pnpm run test:space && pnpm run test:measure && pnpm run test:geometry && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:compose && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion && pnpm run test:default-split && pnpm run test:gapminder-tower && pnpm run test:connected-scatterplot && pnpm run test:build-schedule && pnpm run test:build-in-tower && pnpm run test:name-scope && pnpm run test:axis-dims && pnpm run test:relate-schedule && pnpm run test:auto-label-angle && pnpm run test:signed-extent && pnpm run test:schema && pnpm run test:time && pnpm run test:stack-origin && pnpm run test:overlap && pnpm run test:families",
+    "test": "pnpm run test:path && pnpm run test:interpolate && pnpm run test:spline && pnpm run test:time-window && pnpm run test:font && pnpm run test:bbox && pnpm run test:solver && pnpm run test:space && pnpm run test:measure && pnpm run test:geometry && pnpm run test:circle && pnpm run test:resolve-accessors && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:compose && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion && pnpm run test:default-split && pnpm run test:gapminder-tower && pnpm run test:connected-scatterplot && pnpm run test:build-schedule && pnpm run test:build-in-tower && pnpm run test:name-scope && pnpm run test:axis-dims && pnpm run test:relate-schedule && pnpm run test:auto-label-angle && pnpm run test:signed-extent && pnpm run test:schema && pnpm run test:time && pnpm run test:stack-origin && pnpm run test:overlap && pnpm run test:families",
     "test:space": "tsx src/tests/space.test.ts",
     "test:measure": "tsx src/tests/measure.test.ts",
     "test:geometry": "tsx src/tests/geometry.test.ts",
+    "test:resolve-accessors": "tsx src/tests/resolveAccessors.test.ts",
+    "test:circle": "pnpm run build && tsx src/tests/circle.test.ts",
     "test:embedding": "tsx src/tests/embedding.test.ts",
     "test:solver": "tsx src/tests/solver.test.ts",
     "test:confluence": "tsx src/tests/constraintConfluence.test.ts",
@@ -98,7 +100,8 @@
     "test:overlap": "pnpm run build && tsx src/tests/overlap.test.ts",
     "test:families": "pnpm run build && tsx src/tests/families.test.ts",
     "test:auto-label-angle": "tsx src/tests/autoLabelAngle.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen": "pnpm --dir ../gofish-ir run build && tsx scripts/generate-mark-channels.ts && prettier --write src/ast/markChannels.generated.ts"
   },
   "devDependencies": {
     "@storybook/addon-docs": "^9.1.6",

@@ -36,6 +36,9 @@ const {
   line,
   circle,
   selectAll,
+  resolve,
+  layer,
+  rect,
   Curve,
 } = GoFish as any;
 
@@ -389,8 +392,8 @@ async function main() {
       { w: 200, h: 200 }
     );
     check(
-      "fusing a no-along connector leaves __serialize.opts.along undefined",
-      (conn as any).__serialize?.opts?.along === undefined
+      "fusing a no-along connector leaves its wire opts.along undefined",
+      (GoFish as any).Serialize.wireOf(conn)?.opts?.along === undefined
     );
     check(
       "...while the computed default split still happened (2 connectors)",
@@ -497,6 +500,158 @@ async function main() {
       "a literal color string passes through unchanged",
       paths[0]?.style?.fill === "steelblue",
       String(paths[0]?.style?.fill)
+    );
+  }
+
+  console.log("\n# A function fill is a field-name fill (#1097)");
+
+  // -- 9d. A field name is shorthand for an accessor, so `fill: (d) => d.g`
+  //    draws exactly what `fill: "g"` draws: one color per connector,
+  //    through the same per-group collapse and color scale. ---------------
+  {
+    const data = [
+      { g: "a", x: 1, y: 1 },
+      { g: "a", x: 2, y: 3 },
+      { g: "b", x: 1, y: 2 },
+      { g: "b", x: 2, y: 1 },
+    ];
+    const lines = (fill: unknown) =>
+      renderDisplayList(
+        chart(data, { w: 200, h: 200 })
+          .flow(group({ by: "g" }), scatter({ by: "x", x: "x", y: "y" }))
+          .mark(line({ fill } as any)),
+        { w: 200, h: 200 }
+      );
+    const paint = (doc: any) =>
+      JSON.stringify(
+        doc.items
+          .filter((it: any) => it.kind === "path")
+          .map((it: any) => [it.d, it.style])
+      );
+    const byField = await lines("g");
+    const byFn = await lines((d: { g: string }) => d.g);
+    check(
+      "a function fill draws the same connectors as the field-name fill",
+      paint(byFn) === paint(byField) && paint(byField) !== "[]",
+      `${paint(byFn)} vs ${paint(byField)}`
+    );
+
+    // A Python lambda arrives as a batch accessor and is resolved in one
+    // bridge call per connector group, before the per-group collapse.
+    const calls: string[] = [];
+    const bridge = {
+      applyLambda: async (id: string, rows: any[]) => {
+        calls.push(id);
+        return rows.map((r) => r.g);
+      },
+    };
+    const ir = {
+      type: "chart",
+      operators: [
+        { type: "group", by: "g" },
+        { type: "scatter", by: "x", x: "x", y: "y" },
+      ],
+      mark: { type: "line", fill: { __gofish_lambda: "fg" } },
+    } as any;
+    const byPython = await renderDisplayList(
+      (GoFish as any).Serialize.buildChart(
+        ir,
+        data,
+        bridge,
+        (GoFish as any).Serialize.makeTokenResolver()
+      ),
+      { w: 200, h: 200 }
+    );
+    check(
+      "a bridged (Python) fill draws the same connectors, one call per group",
+      paint(byPython) === paint(byField) && calls.length === 2,
+      `${paint(byPython)} / calls ${calls.length}`
+    );
+
+    // The pairwise `{ from, to }` form reads each edge's paint off its row.
+    const nodes = [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 1, y: 1 },
+      { id: "c", x: 2, y: 0 },
+    ];
+    const edges = [
+      { source: "a", target: "b", kind: "p" },
+      { source: "b", target: "c", kind: "q" },
+    ];
+    const edgesWith = (stroke: unknown) =>
+      renderDisplayList(
+        chart(nodes)
+          .flow(scatter({ by: "id", x: "x", y: "y" }))
+          .mark(circle({ r: 3 }).name("nodes"))
+          .layer(
+            chart(edges)
+              .flow(
+                resolve(["source", "target"], { from: selectAll("nodes") })
+              )
+              .mark(line({ from: "source", to: "target", stroke } as any))
+          ),
+        { w: 200, h: 200 }
+      );
+    const edgeField = await edgesWith("kind");
+    const edgeFn = await edgesWith((d: { kind: string }) => d.kind);
+    const strokes = (doc: any) =>
+      doc.items
+        .filter((it: any) => it.kind === "path")
+        .map((it: any) => it.style?.stroke);
+    check(
+      "a pairwise function stroke draws the same edges as the field name",
+      paint(edgeFn) === paint(edgeField) &&
+        new Set(strokes(edgeField)).size === 2 &&
+        !strokes(edgeField).includes("kind"),
+      JSON.stringify(strokes(edgeField))
+    );
+  }
+
+  // -- 9f. A function paint with no rows to read (the low-level combinator
+  //    form over nodes that carry no data) never reaches Connect raw: the
+  //    connector keeps its default color, as a literal field name would
+  //    pass through. -----------------------------------------------------
+  {
+    const node = await layer([
+      rect({ x: 0, y: 0, w: 10, h: 10 }).name("a"),
+      rect({ x: 50, y: 50, w: 10, h: 10 }).name("b"),
+    ]).relate(({ a, b }: any) => [
+      line({ fill: (d: any) => d.g } as any, [a, b]),
+    ])(undefined);
+    const doc = await node.toDisplayList({ w: 100, h: 100 });
+    const pathsIn = (it: any): any[] => [
+      ...(it.kind === "path" ? [it] : []),
+      ...(it.children ?? []).flatMap(pathsIn),
+    ];
+    const path = doc.items.flatMap(pathsIn)[0];
+    check(
+      "a function fill with no rows to read keeps the default color",
+      path !== undefined &&
+        typeof path.style?.stroke === "string" &&
+        typeof path.style?.fill !== "function",
+      JSON.stringify(path?.style)
+    );
+  }
+
+  // -- 9e. A function fill that differs within a connected group throws the
+  //    same homogeneity error a field name does. -------------------------
+  {
+    const data = [
+      { lake: "L1", count: 3 },
+      { lake: "L2", count: 5 },
+    ];
+    const err = await expectThrows(() =>
+      renderDisplayList(
+        chart(data, { w: 200, h: 200 })
+          .flow(spread({ by: "lake", dir: "x", spacing: 50 }))
+          .mark(ribbon({ h: "count", fill: (d: any) => d.lake } as any)),
+        { w: 200, h: 200 }
+      )
+    );
+    check(
+      "a heterogeneous function fill on a connector throws",
+      err instanceof Error && /not constant/.test((err as Error).message),
+      err instanceof Error ? err.message : String(err)
     );
   }
 

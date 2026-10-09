@@ -26,7 +26,12 @@ export type { FieldAccessor, LiteralValue } from "./ast/data";
 // its serialized `ops` pipeline. Exported so consumers can type against the
 // value the operator docs describe.
 export { FieldExpr, between } from "./ast/fieldExpr";
-export type { FieldOp, BetweenOptions } from "./ast/fieldExpr";
+export type {
+  FieldOp,
+  BetweenOptions,
+  FieldPredicate,
+  FieldPredicateWire,
+} from "./ast/fieldExpr";
 // Measure-provenance tagging: how a data transform (e.g. `bin`) declares that
 // its output columns are in a source field's units. The deserializer re-applies
 // it to RPC-returned rows (the array symbol can't cross the bridge).

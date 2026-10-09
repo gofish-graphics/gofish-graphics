@@ -10,18 +10,27 @@ chain (there is no leaf-mark `label` kwarg — the legacy boolean/string
 shorthand kwarg was removed).
 """
 
+import json
+
 import pytest
 
 from gofish import (
     Schema,
+    blank,
     chart,
     circle,
+    datum,
+    ellipse,
+    field,
     group,
     join,
     layer,
+    line,
     pack,
+    petal,
     polygon,
     rect,
+    ribbon,
     spread,
     scatter,
     stack,
@@ -224,13 +233,120 @@ def test_polygon_requires_points():
     assert d["points"] == [[0, 0], [1, 1], [0, 1]]
 
 
-def test_open_kwargs_channels_wrap_callables():
-    # circle's cx is undeclared (reaches the wire via **kwargs); a callable
-    # there must bridge through the derive RPC sentinel like any declared
-    # channel, not serialize as a raw function object.
-    d = circle(r=3, cx=lambda row: row["x"]).to_dict()
-    assert isinstance(d["cx"], dict)
-    assert "__gofish_lambda" in d["cx"]
+def test_circle_ellipse_petal_blank_signatures_are_closed():
+    # These four used to take open **kwargs that reached the wire unchecked
+    # (#1007). Now an undeclared or camelCase kwarg is a TypeError, as on
+    # every other generated factory.
+    with pytest.raises(TypeError):
+        circle(r=3, rx=10)
+    with pytest.raises(TypeError):
+        circle(r=3, fillOpacity=0.6)
+    with pytest.raises(TypeError):
+        ellipse(w=4, h=4, stroke_dasharray="2 2")
+    with pytest.raises(TypeError):
+        petal(w=4, h=4, opacity=0.5)
+    with pytest.raises(TypeError):
+        blank(w=4, stroke="red")
+
+
+def test_circle_takes_box_dims():
+    # circle takes ellipse's box dimensions (#851): w or h sets the diameter,
+    # and the positions and dims pass through.
+    assert circle(h="value", fill="red").to_dict() == {
+        "type": "circle",
+        "h": "value",
+        "fill": "red",
+    }
+    assert circle(w=8, cx=10, em_x=True).to_dict() == {
+        "type": "circle",
+        "w": 8,
+        "cx": 10,
+        "emX": True,
+    }
+    assert circle(dims={"r": {"size": "v"}}).to_dict()["dims"] == {
+        "r": {"size": "v"}
+    }
+
+
+def test_fill_opacity_serializes_to_camel_case():
+    assert circle(r=3, fill_opacity=0.6).to_dict() == {
+        "type": "circle",
+        "r": 3,
+        "fillOpacity": 0.6,
+    }
+    assert ellipse(w=4, h=4, fill_opacity=0.5).to_dict()["fillOpacity"] == 0.5
+
+
+def test_callables_nested_in_options_bridge_at_any_depth():
+    # A callable inside an option's dicts/lists (here `dims`) gets the same
+    # derive-RPC sentinel as a top-level channel, and the collector that
+    # registers callbacks finds it under the same id (#937).
+    from gofish.ast import _collect_mark_lambdas, _collect_operator_lambdas
+
+    m = rect(dims={"theta": {"size": 0.9}, "r": {"size": lambda d: d["v"] * 2}})
+    d = m.to_dict()
+    assert d["dims"]["theta"] == {"size": 0.9}
+    sentinel = d["dims"]["r"]["size"]
+    pairs = dict(_collect_mark_lambdas(m))
+    assert list(pairs) == [sentinel["__gofish_lambda"]]
+    assert pairs[sentinel["__gofish_lambda"]]([{"v": 1}, {"v": 3}]) == [2, 6]
+    json.dumps(d)  # no raw function object left on the wire
+
+    op = scatter(dims={"theta": lambda d: d["a"], "r": "dist"})
+    od = op.to_dict()
+    assert od["dims"]["r"] == "dist"
+    op_pairs = dict(_collect_operator_lambdas([op]))
+    assert list(op_pairs) == [od["dims"]["theta"]["__gofish_lambda"]]
+    # Copies made by `.translate()` / `.label()` keep the same callback id.
+    assert op.translate(x=5).to_dict()["dims"] == od["dims"]
+    json.dumps(od)
+
+
+def test_a_callable_outside_a_channel_is_a_type_error():
+    # Only channel options become accessors the JS side resolves. A callable
+    # anywhere else (a grouping key, a direction) has no meaning on the wire,
+    # so it fails at construction rather than grouping one row per group.
+    for make in (
+        lambda: spread(by=lambda d: d["a"], dir="x"),
+        lambda: stack(by=lambda d: d["a"], dir="y"),
+        lambda: group(by=lambda d: d["a"]),
+        lambda: treemap(by=lambda d: d["a"]),
+        lambda: rect(h="v", rx=lambda d: 2),
+    ):
+        with pytest.raises(TypeError, match="only channel options take a function"):
+            make()
+    # Channel options still take one, including circle's raw opacity channel.
+    assert "__gofish_lambda" in rect(h=lambda d: d["v"]).to_dict()["h"]
+    assert "__gofish_lambda" in circle(r=3, opacity=lambda d: 0.5).to_dict()["opacity"]
+    assert "__gofish_lambda" in ellipse(w=4, h=4, stroke=lambda d: "red").to_dict()["stroke"]
+    assert "__gofish_lambda" in spread(by="a", dir="x", w=lambda d: 1).to_dict()["w"]
+
+
+def test_line_and_ribbon_fill_take_a_function():
+    # A field name is shorthand for an accessor, so the connector paint takes
+    # a lambda wherever it takes a field name (#1097). It crosses as a
+    # sentinel the derive server registers.
+    from gofish.ast import _collect_mark_lambdas
+
+    for m in (line(fill=lambda d: d["g"]), ribbon(fill=lambda d: d["g"])):
+        sentinel = m.to_dict()["fill"]
+        pairs = dict(_collect_mark_lambdas(m))
+        assert list(pairs) == [sentinel["__gofish_lambda"]]
+        assert pairs[sentinel["__gofish_lambda"]]([{"g": "a"}]) == ["a"]
+    # stroke is a color channel too, as in JS.
+    assert "__gofish_lambda" in line(stroke=lambda d: d["g"]).to_dict()["stroke"]
+    # A non-channel option still rejects a function.
+    with pytest.raises(TypeError, match="only channel options take a function"):
+        line(stroke_width=lambda d: 2)
+
+
+def test_wire_does_not_copy_options_without_accessors():
+    # A literal option with no callable inside reaches the IR as the same
+    # object, so a large table is not copied on every to_dict().
+    op = join([{"k": "a", "v": 1}, {"k": "b", "v": 2}], on="k")
+    assert op.to_dict()["right"] is op.kwargs["right"]
+    m = rect(dims={"theta": {"size": 0.9}})
+    assert m.to_dict()["dims"] is m.kwargs["dims"]
 
 
 def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():
@@ -343,6 +459,53 @@ def test_layer_of_charts_takes_js_layer_options():
         layer([c1, c2], labelAngle=45)
     with pytest.raises(TypeError):
         layer([c1, c2], padding=80)
+
+
+def test_render_axes_convert_on_every_render_path():
+    # `.render(axes=...)` on a chart, a mark, and a layer takes the same typed
+    # conversion as `chart(axes=...)`: snake_case keys become wire keys, and
+    # an unknown key raises TypeError.
+    c = chart([{"v": 1}]).mark(rect(h="v"))
+    for renderable in [c, rect(w=10, h=10), layer([c])]:
+        widget = renderable.render(axes={"x": {"label_angle": 45}, "y": False})
+        assert widget.axes == {"x": {"labelAngle": 45}, "y": False}
+        assert renderable.render(axes=True).axes is True
+        assert renderable.render().axes is None
+        with pytest.raises(TypeError, match="did you mean 'label_angle'"):
+            renderable.render(axes={"x": {"labelAngle": 45}})
+
+
+# --- Axis-name dims -----------------------------------------------------------
+# A `dims` entry (AxisDimsValue) is a channel value or an interval. field(...)
+# and datum(...) values are already in wire form and pass through; any other
+# dict is an interval, whose keys are checked.
+
+
+def test_dims_values_pass_channel_values_and_check_intervals():
+    d = rect(
+        dims={
+            "theta": {"size": datum(1), "embedded": True},
+            "r": field("v").sort(),
+            "lon": "a",
+            "lat": {"min": "a", "max": datum(2) + 3},
+        }
+    ).to_dict()
+    assert d["dims"] == {
+        "theta": {"size": {"type": "datum", "datum": 1}, "embedded": True},
+        "r": {"type": "field", "name": "v", "ops": [{"op": "sort"}]},
+        "lon": "a",
+        "lat": {"min": "a", "max": {"type": "datum", "datum": 2, "offset": 3}},
+    }
+    assert scatter(dims={"lon": field("x")}).to_dict()["dims"] == {
+        "lon": {"type": "field", "name": "x"}
+    }
+
+
+def test_dims_interval_with_unknown_key_is_rejected():
+    with pytest.raises(TypeError, match="unexpected key 'width'"):
+        rect(dims={"theta": {"width": 2}})
+    with pytest.raises(TypeError, match="unexpected key 'start'"):
+        scatter(dims={"lon": {"start": "a"}})
 
 
 # --- Combinator box dims ------------------------------------------------------

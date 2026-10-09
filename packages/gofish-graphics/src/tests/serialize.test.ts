@@ -32,6 +32,7 @@ const {
   pack,
   derive,
   join,
+  filter,
   log,
   v,
   field,
@@ -56,10 +57,10 @@ function check(name: string, ok: boolean, detail?: string): void {
   }
 }
 
-function validateDoc(doc: unknown, label: string, strict = true) {
-  const r = Frontend.validate(doc, { strict });
+function validateDoc(doc: unknown, label: string) {
+  const r = Frontend.validate(doc);
   check(
-    `${label} validates (${strict ? "strict" : "permissive"})`,
+    `${label} validates`,
     r.valid,
     r.valid ? undefined : JSON.stringify(r.errors).slice(0, 200)
   );
@@ -195,6 +196,71 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // Filter: a field predicate is data, so the operator gets its own wire type
+  // and round-trips; a hand-written predicate is a live callback, so that
+  // filter stays an opaque derive (#853).
+  // -------------------------------------------------------------------------
+  {
+    const rows = [{ day: 99 }, { day: 100 }, { day: 110 }, { day: 120 }];
+    const c = chart(rows)
+      .flow(filter(field("day").between(100, 120, { closed: "right" })))
+      .mark(circle({ r: 3 }));
+    const doc = await c.toJSON();
+    validateDoc(doc, "filter chart");
+    const ops = (doc.root as Frontend.ChartIR).operators!;
+    check(
+      "field-predicate filter emits { type: filter, predicate }",
+      JSON.stringify(ops[0]) ===
+        JSON.stringify({
+          type: "filter",
+          predicate: { field: "day", between: [100, 120], closed: "right" },
+        }),
+      JSON.stringify(ops[0])
+    );
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      rows,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    check(
+      "round-trip preserves filter op",
+      JSON.stringify((doc2.root as Frontend.ChartIR).operators![0]) ===
+        JSON.stringify(ops[0])
+    );
+    // The rebuilt operator runs the same predicate: (100, 120] keeps 110, 120.
+    const op = Serialize.rebuild("operator", "filter", ops[0]);
+    const kept = await (await op(async (d: any) => d))(rows);
+    check(
+      "rebuilt filter keeps the rows the predicate accepts",
+      JSON.stringify(kept) === JSON.stringify([{ day: 110 }, { day: 120 }]),
+      JSON.stringify(kept)
+    );
+    const { type: _t, ...noClosed } = (
+      await chart(rows)
+        .flow(filter(field("day").between(1, 2)))
+        .mark(circle({ r: 3 }))
+        .toJSON()
+    ).root.operators[0];
+    check(
+      "an unset closed stays off the wire",
+      JSON.stringify(noClosed) ===
+        JSON.stringify({ predicate: { field: "day", between: [1, 2] } })
+    );
+    const opaque = (
+      await chart(rows)
+        .flow(filter((d: any) => d.day > 100))
+        .mark(circle({ r: 3 }))
+        .toJSON()
+    ).root.operators[0];
+    check(
+      "hand-written predicate filter stays an opaque derive",
+      JSON.stringify(opaque) === JSON.stringify({ type: "derive" })
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // Layer combinator-form mark.
   // -------------------------------------------------------------------------
   {
@@ -284,13 +350,11 @@ async function main() {
           ...root,
           mark: { type: "rect", dims: { theta: { width: 2 } } },
         },
-      },
-      { strict: true }
+      }
     );
-    // Leaf marks only warn during the descriptor rollout (validate.ts).
     check(
-      "an interval with a non-anchor key is flagged",
-      bad.warnings.some((w: any) => w.message.includes('"width"'))
+      "an interval with a non-anchor key is rejected",
+      !bad.valid && bad.errors.some((e: any) => e.message.includes('"width"'))
     );
   }
 
@@ -388,7 +452,7 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // Per-operator `axes` override propagates and validates strict.
+  // Per-operator `axes` override propagates and validates.
   // -------------------------------------------------------------------------
   {
     const c = chart([
@@ -451,7 +515,7 @@ async function main() {
     const c = chart(data)
       .mark(rect({ h: field("count"), fill: literal("steelblue") }));
     const doc = await c.toJSON();
-    validateDoc(doc, "field/literal explicit chart", false);
+    validateDoc(doc, "field/literal explicit chart");
     const mark = (doc.root as Frontend.ChartIR).mark as any;
     check(
       "field('count') survives on the wire",
@@ -997,8 +1061,8 @@ async function main() {
   {
     const rib = ribbon({ along: "g", opacity: 0.8 });
     check(
-      "ribbon({ along }) carries along in __serialize.opts",
-      (rib as any).__serialize?.opts?.along === "g"
+      "ribbon({ along }) carries along in its wire opts",
+      Serialize.wireOf(rib)?.opts?.along === "g"
     );
   }
 
@@ -1135,8 +1199,9 @@ async function main() {
       .mark(
         circle({
           r: 3,
-          w: "v",
-          fillOpacity: 0.5,
+          rx: "v",
+          bogus: 0.5,
+          fillOpacity: 0.6,
           debug: false,
           opacity: (d: any) => d.v,
         } as any)
@@ -1151,11 +1216,14 @@ async function main() {
     );
     check(
       "unknown leaf-mark keys are dropped",
-      !("w" in mark) && !("fillOpacity" in mark)
+      !("rx" in mark) && !("bogus" in mark)
     );
     check("leaf-mark base field `debug` is kept", mark.debug === false);
     check("a callback channel is dropped", !("opacity" in mark));
-    check("declared leaf-mark keys are kept", mark.r === 3);
+    check(
+      "declared leaf-mark keys are kept",
+      mark.r === 3 && mark.fillOpacity === 0.6
+    );
 
     const combDoc = await chart(rows)
       .mark(spread({ dir: "x", spacing: 4, bogus: 1 } as any, [rect({ w: 4, h: 4 })]))
@@ -1166,8 +1234,10 @@ async function main() {
       comb.options.spacing === 4 && !("bogus" in comb.options)
     );
 
-    const undeclared: any = async () => undefined;
-    undeclared.__serialize = { type: "not-a-construct", opts: {} };
+    const undeclared: any = Serialize.withWire(async () => undefined, {
+      type: "not-a-construct",
+      opts: {},
+    });
     let message = "";
     try {
       await chart(rows).mark(undeclared).toJSON();
@@ -1178,6 +1248,153 @@ async function main() {
       "a mark type with no descriptor has no IR form",
       message.includes("no leaf-mark descriptor"),
       message || "did not throw"
+    );
+  }
+
+  console.log("\n# Python lambda sentinels nested in operator options (#937)");
+  {
+    // Python emits `{__gofish_lambda: id}` wherever a callable sat in an
+    // option, e.g. inside scatter's `dims`. The deserializer turns it into an
+    // accessor that calls the bridge, in operator options as in mark options.
+    const spec = { type: "scatter", dims: { x: { __gofish_lambda: "px" } } };
+    let message = "";
+    try {
+      Serialize.mapOperator(spec);
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+    check(
+      "a nested operator sentinel needs a bridge",
+      message.includes("no DeriveBridge"),
+      message || "did not throw"
+    );
+    const calls: string[] = [];
+    const bridge = {
+      applyLambda: async (id: string, rows: any[]) => {
+        calls.push(id);
+        return rows.map((r) => r.a);
+      },
+    };
+    const op = Serialize.mapOperator(spec, bridge);
+    await chart([{ a: 1 }, { a: 2 }])
+      .flow(op)
+      .mark(circle({ r: 2 }))
+      .toDisplayList({ w: 100, h: 100 });
+    check(
+      "a nested operator sentinel becomes an accessor that calls the bridge",
+      calls.length > 0 && calls.every((id) => id === "px"),
+      JSON.stringify(calls)
+    );
+  }
+
+  console.log("\n# Python accessors in size and position channels (#1080)");
+  {
+    // A Python lambda reaches JS as an accessor with a batch form. The mark
+    // and operator factories resolve it over the rows before inference, one
+    // bridge call per accessor, so size and position channels read numbers.
+    const rows = [
+      { k: "a", v: 1 },
+      { k: "b", v: 3 },
+    ];
+    const rectsOf = (dl: any): { w: number; h: number }[] => {
+      const out: { w: number; h: number }[] = [];
+      const walk = (it: any) => {
+        if (it.kind === "rect") out.push({ w: it.w, h: it.h });
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return out;
+    };
+    const bars = (h: unknown) =>
+      chart(rows)
+        .flow(spread({ by: "k", dir: "x" }))
+        .mark(rect({ w: 10, h } as any))
+        .toDisplayList({ w: 100, h: 100 });
+    const expected = rectsOf(await bars("v"));
+    const sameAs = (got: { w: number; h: number }[]) =>
+      got.length === expected.length &&
+      got.every(
+        (r, i) =>
+          Math.abs(r.w - expected[i].w) < 1e-9 &&
+          Math.abs(r.h - expected[i].h) < 1e-9
+      );
+    const calls: string[] = [];
+    const bridge = {
+      applyLambda: async (id: string, batch: any[]) => {
+        calls.push(id);
+        return batch.map((r) => r.v);
+      },
+    };
+    const ir = {
+      type: "chart",
+      operators: [{ type: "spread", by: "k", dir: "x" }],
+      mark: { type: "rect", w: 10, h: { __gofish_lambda: "hv" } },
+    } as any;
+    const fromPython = rectsOf(
+      await Serialize.buildChart(
+        ir,
+        rows,
+        bridge,
+        Serialize.makeTokenResolver()
+      ).toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a bridged h accessor (a Python lambda) draws the same bars as a field",
+      sameAs(fromPython) && calls.length > 0,
+      JSON.stringify({ fromPython, expected, calls })
+    );
+
+    const dimsIR = {
+      type: "chart",
+      operators: [{ type: "spread", by: "k", dir: "x" }],
+      mark: {
+        type: "rect",
+        w: 10,
+        dims: { y: { size: { __gofish_lambda: "hv" } } },
+      },
+    } as any;
+    const fromDims = rectsOf(
+      await Serialize.buildChart(
+        dimsIR,
+        rows,
+        bridge,
+        Serialize.makeTokenResolver()
+      ).toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a bridged accessor nested in dims draws the same bars as a field",
+      sameAs(fromDims),
+      JSON.stringify({ fromDims, expected })
+    );
+
+    const scatterIR = {
+      type: "chart",
+      operators: [
+        {
+          type: "scatter",
+          by: "k",
+          x: { __gofish_lambda: "hv" },
+          y: "v",
+        },
+      ],
+      mark: { type: "circle", r: 2 },
+    } as any;
+    const dl = await Serialize.buildChart(
+      scatterIR,
+      rows,
+      bridge,
+      Serialize.makeTokenResolver()
+    ).toDisplayList({ w: 100, h: 100 });
+    const cxs: number[] = [];
+    const walk = (it: any) => {
+      if (it.kind === "ellipse") cxs.push(it.cx);
+      for (const c of it.children ?? []) walk(c);
+    };
+    dl.items.forEach(walk);
+    check(
+      "a bridged operator position accessor places the points",
+      cxs.length === 2 && cxs.every(Number.isFinite) && cxs[0] < cxs[1],
+      JSON.stringify(cxs)
     );
   }
 

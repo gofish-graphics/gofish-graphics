@@ -32,7 +32,7 @@ export {
   mapOperator,
   resolveNameField,
   resolveRefSelection,
-  unwrapMarkOpts,
+  unwrapOpts,
   unwrapValues,
   wrapWithScope,
   type ChartSpec,
@@ -49,3 +49,7 @@ export {
 } from "./fromJSON";
 
 export { toJSON, toJSONLayer, toJSONRawMark } from "./toJSON";
+
+export { withWire, wireOf } from "../ast/wire";
+
+export { RESOLVE_ROWS } from "../ast/channels";

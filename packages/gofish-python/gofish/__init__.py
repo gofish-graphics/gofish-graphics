@@ -31,8 +31,10 @@ from .ast import (
     spread,
     stack,
     derive,
+    compose,
     resolve,
     join,
+    filter,
     group,
     scatter,
     treemap,
@@ -57,6 +59,7 @@ from .ast import (
     field,
 )
 from .transforms import bin
+from .datum_projection import pluck
 from .charts import bar_chart
 
 # Strategy families (#1013): one module per family, with a lowercase file
@@ -97,8 +100,10 @@ __all__ = [
     "spread",
     "stack",
     "derive",
+    "compose",
     "resolve",
     "join",
+    "filter",
     "group",
     "scatter",
     "treemap",
@@ -122,6 +127,7 @@ __all__ = [
     "datum",
     "field",
     "bin",
+    "pluck",
     "bar_chart",
     "Color",
     "Coord",

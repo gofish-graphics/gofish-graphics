@@ -155,7 +155,7 @@ for the API.
           "$ref": "#/$defs/MarkIR"
         },
         "options": {
-          "type": "object"
+          "$ref": "#/$defs/ChartOptions"
         },
         "zOrder": {
           "$ref": "#/$defs/Number"
@@ -676,7 +676,7 @@ for the API.
                 "description": "Font family of the label's text node. Omitted, the elaborator's own font family."
               },
               "fontWeight": {
-                "oneOf": [
+                "anyOf": [
                   {
                     "$ref": "#/$defs/Number"
                   },
@@ -805,39 +805,6 @@ for the API.
         }
       ]
     },
-    "AxisInterval": {
-      "description": "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "min": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "center": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "max": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "size": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "embedded": {
-          "type": "boolean"
-        }
-      }
-    },
-    "AxisDimsValue": {
-      "description": "A `dims` entry: a bare channel value (a position) or an AxisInterval.",
-      "oneOf": [
-        {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        {
-          "$ref": "#/$defs/AxisInterval"
-        }
-      ]
-    },
     "DeriveOperator": {
       "description": "Transforms the data with a function, `derive(fn)`. A function does not serialize: the IR carries a Python bridge handle in its place.",
       "type": "object",
@@ -959,6 +926,36 @@ for the API.
         }
       }
     },
+    "FilterOperator": {
+      "description": "Keep the rows a field predicate accepts (`filter(field(name).between(lo, hi, { closed }))`). A filter over a hand-written predicate has no wire form and serializes as an opaque `derive`.",
+      "type": "object",
+      "required": ["type", "predicate"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "filter"
+        },
+        "predicate": {
+          "$ref": "#/$defs/FieldPredicate",
+          "description": "The field predicate `field(name).between(lo, hi, { closed })` builds: `{ field, between: [lo, hi], closed? }`."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
     "SpreadOperator": {
       "description": "Arrange children along `dir` with spacing, aligning them on the cross axis.",
       "type": "object",
@@ -969,7 +966,7 @@ for the API.
           "const": "spread"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1063,7 +1060,7 @@ for the API.
           "const": "stack"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1155,7 +1152,7 @@ for the API.
           "const": "group"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1192,7 +1189,7 @@ for the API.
           "const": "scatter"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1293,7 +1290,7 @@ for the API.
           "description": "Grouping fields for the column/row keys — the table operator can't run without both."
         },
         "spacing": {
-          "oneOf": [
+          "anyOf": [
             {
               "$ref": "#/$defs/Number"
             },
@@ -1398,7 +1395,7 @@ for the API.
           "description": "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1466,7 +1463,7 @@ for the API.
           "const": "pack"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
@@ -1504,6 +1501,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/JoinOperator"
+        },
+        {
+          "$ref": "#/$defs/FilterOperator"
         },
         {
           "$ref": "#/$defs/SpreadOperator"
@@ -1651,7 +1651,7 @@ for the API.
       }
     },
     "CircleMark": {
-      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity) — position it via `spread`/`scatter`.",
+      "description": "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1659,9 +1659,56 @@ for the API.
         "type": {
           "const": "circle"
         },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge position."
+        },
+        "cx": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center x."
+        },
+        "x2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Right edge position."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center y."
+        },
+        "y2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Other y edge position."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
+        },
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        },
         "r": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Radius; becomes w=h=2r on the underlying ellipse."
+          "description": "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -1677,9 +1724,13 @@ for the API.
           "default": 0
         },
         "opacity": {
-          "$ref": "#/$defs/Number",
-          "description": "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Opacity, 0 to 1, applied to fill and stroke: a number, a field name, or a per-datum accessor (in JS also a `live(...)` value, which does not cross the wire).",
           "default": 1
+        },
+        "fillOpacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`."
         },
         "debug": {
           "type": "boolean"
@@ -1705,7 +1756,7 @@ for the API.
       }
     },
     "EllipseMark": {
-      "description": "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).",
+      "description": "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1777,6 +1828,10 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1.",
           "default": 1
+        },
+        "fillOpacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`."
         },
         "aspectRatio": {
           "$ref": "#/$defs/Number",
@@ -1994,7 +2049,7 @@ for the API.
           "description": "Raw CSS font-style (e.g. \"italic\")."
         },
         "fontWeight": {
-          "oneOf": [
+          "anyOf": [
             {
               "$ref": "#/$defs/Number"
             },
@@ -2152,7 +2207,7 @@ for the API.
           "const": "polygon"
         },
         "points": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -2282,11 +2337,11 @@ for the API.
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "A line's path is never filled. `fill` is the channel the shared color scale reads, so a field name colors each line by group, and it is the line color when `stroke` is omitted."
+          "description": "A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted."
         },
         "stroke": {
-          "type": "string",
-          "description": "Line color."
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Line color, or a field name or accessor for a color scale (constant within the line). Defaults to `fill`."
         },
         "strokeWidth": {
           "$ref": "#/$defs/Number",
@@ -2381,11 +2436,11 @@ for the API.
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Fill color of the band, or a field name for a color scale. Omitted, the band takes the color of the marks it connects."
+          "description": "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
         },
         "stroke": {
-          "type": "string",
-          "description": "Stroke color."
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color of the band's outline, or a field name or accessor for a color scale (constant within the band)."
         },
         "strokeWidth": {
           "$ref": "#/$defs/Number",
@@ -2531,7 +2586,7 @@ for the API.
       ]
     },
     "AxisOptions": {
-      "oneOf": [
+      "anyOf": [
         {
           "type": "boolean"
         },
@@ -2539,7 +2594,7 @@ for the API.
           "type": "object",
           "properties": {
             "title": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "string"
                 },
@@ -2554,7 +2609,7 @@ for the API.
               "description": "Which frame edge the axis sits on: \"start\" is the near (origin) edge, \"end\" the far edge. Omitted, a continuous x-axis sits at the visual bottom."
             },
             "labelAngle": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "$ref": "#/$defs/Number"
                 },
@@ -2611,7 +2666,7 @@ for the API.
       "description": "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3)."
     },
     "AxesOptions": {
-      "oneOf": [
+      "anyOf": [
         {
           "type": "boolean"
         },
@@ -2631,8 +2686,113 @@ for the API.
       ],
       "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own."
     },
+    "AxisInterval": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Start edge position."
+        },
+        "center": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center position."
+        },
+        "max": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "End edge position."
+        },
+        "size": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Size along the axis."
+        },
+        "embedded": {
+          "type": "boolean",
+          "description": "Embed this axis in the parent's space."
+        }
+      },
+      "description": "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels."
+    },
+    "FieldPredicate": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "The field whose value is tested."
+        },
+        "between": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Number"
+            }
+          ],
+          "description": "The interval's ends, `[lo, hi]`, compared by value."
+        },
+        "closed": {
+          "enum": ["both", "left", "right", "none"],
+          "description": "Which ends of the interval are inclusive, as in polars' `is_between`.",
+          "default": "both"
+        }
+      },
+      "required": ["field", "between"],
+      "description": "A field predicate, as `field(name).between(lo, hi, { closed })` builds it: the field it reads and the interval it tests."
+    },
+    "ChartOptions": {
+      "type": "object",
+      "properties": {
+        "w": {
+          "$ref": "#/$defs/Number",
+          "description": "Chart width in pixels."
+        },
+        "h": {
+          "$ref": "#/$defs/Number",
+          "description": "Chart height in pixels."
+        },
+        "coord": {
+          "description": "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ..."
+        },
+        "color": {
+          "description": "Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...)."
+        },
+        "axes": {
+          "$ref": "#/$defs/AxesOptions",
+          "description": "Draw axes: a boolean for both axes, or per-axis options {x?, y?}."
+        },
+        "legend": {
+          "type": "boolean",
+          "description": "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
+          "default": true
+        },
+        "padding": {
+          "$ref": "#/$defs/Number",
+          "description": "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels)."
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time()."
+        }
+      },
+      "description": "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python."
+    },
+    "AxisDimsValue": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        {
+          "$ref": "#/$defs/AxisInterval"
+        }
+      ],
+      "description": "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval."
+    },
     "Tile": {
-      "oneOf": [
+      "anyOf": [
         {
           "type": "object",
           "properties": {
@@ -2687,7 +2847,7 @@ for the API.
       "description": "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods."
     },
     "Overlap": {
-      "oneOf": [
+      "anyOf": [
         {
           "type": "object",
           "properties": {
@@ -2715,7 +2875,7 @@ for the API.
               "default": "blue"
             },
             "smoothing": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "$ref": "#/$defs/Number",
                   "minimum": 0
@@ -2745,7 +2905,7 @@ for the API.
       "description": "How `scatter` keeps its children clear of each other on the axis no field places: the value of its `overlap` option. Both kinds grow from the `alignment` line and move only that free axis."
     },
     "Curve": {
-      "oneOf": [
+      "anyOf": [
         {
           "type": "object",
           "properties": {

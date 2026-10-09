@@ -10,8 +10,10 @@ is passed to renames them to the camelCase wire keys. Mirrors JS
 ``gofish-graphics/overlap``.
 """
 
+from __future__ import annotations
+
 import math
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Literal, Optional
 
 __all__ = ["separate", "noise", "sina", "jitter"]
 
@@ -38,7 +40,7 @@ def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
     return out
 
 
-def noise(*, randomness: Optional[str] = None, smoothing: Optional[Union[float, str]] = None, padding: Optional[float] = None, seed: Optional[float] = None) -> Dict[str, Any]:
+def noise(*, randomness: Optional[str] = None, smoothing: Optional[float | str] = None, padding: Optional[float] = None, seed: Optional[float] = None) -> Dict[str, Any]:
     """Spread the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. Dots may still touch.
 
     Args:
@@ -87,7 +89,7 @@ def noise(*, randomness: Optional[str] = None, smoothing: Optional[Union[float, 
     return out
 
 
-def sina(*, randomness: Optional[str] = None, smoothing: Optional[Union[float, str]] = None, padding: Optional[float] = None, seed: Optional[float] = None) -> Dict[str, Any]:
+def sina(*, randomness: Optional[str] = None, smoothing: Optional[float | str] = None, padding: Optional[float] = None, seed: Optional[float] = None) -> Dict[str, Any]:
     """A sina plot: noise with smoothing "silverman", a bandwidth computed per scatter from the data (ggforce's `geom_sina`). The outline is the curve a violin plot draws. Any option overrides the preset.
 
     Args:
@@ -136,7 +138,7 @@ def sina(*, randomness: Optional[str] = None, smoothing: Optional[Union[float, s
     return out
 
 
-def jitter(*, randomness: Optional[str] = None, smoothing: Optional[Union[float, str]] = None, padding: Optional[float] = None, seed: Optional[float] = None) -> Dict[str, Any]:
+def jitter(*, randomness: Optional[str] = None, smoothing: Optional[float | str] = None, padding: Optional[float] = None, seed: Optional[float] = None) -> Dict[str, Any]:
     """Classic jitter: noise with randomness "uniform" and smoothing Infinity, so the dots get uniform random offsets in a flat band. Any option overrides the preset.
 
     Args:

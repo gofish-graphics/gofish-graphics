@@ -30,6 +30,7 @@
 import sumBy from "lodash/sumBy";
 import meanBy from "lodash/meanBy";
 import type { Measure, MaybeValue } from "./data";
+import { withWire, wireOf } from "./wire";
 
 export type FieldOp =
   | {
@@ -173,6 +174,11 @@ export class FieldExpr {
    * count (Vega's window `frame`), and `closed` spells which ends are inclusive
    * exactly as polars does. A moving window is written as a plain lambda around
    * the bare `between(v, lo, hi)` below, which is where a `timer()` read belongs.
+   *
+   * The predicate carries its own description (`{ field, between, closed }`,
+   * see {@link fieldPredicate}), so a `filter` over it serializes as
+   * `{ type: "filter", predicate }`. The description is data beside the
+   * function, not an op, so the pipeline stays the three value slots.
    */
   between(
     lo: number,
@@ -181,7 +187,7 @@ export class FieldExpr {
     // `any` row, not `unknown`: the predicate is handed to `filter(...)`, whose
     // row type comes from the chart's data, and an `unknown` parameter would
     // fight every concrete row type at the call site.
-  ): (row: any) => boolean {
+  ): FieldPredicate {
     // The predicate is outside the op pipeline, so an expression carrying ops
     // would silently drop them (`field("x").bin(10).between(...)` would test the
     // RAW x). Say so instead of ignoring them.
@@ -193,13 +199,11 @@ export class FieldExpr {
           `sorted column first.`
       );
     }
-    return (row: unknown) =>
-      between(
-        (row as Record<string, unknown> | undefined)?.[this.name] as number,
-        lo,
-        hi,
-        options
-      );
+    return fieldPredicate({
+      field: this.name,
+      between: [lo, hi],
+      ...(options?.closed !== undefined ? { closed: options.closed } : {}),
+    });
   }
 
   toJSON(): FieldExprWire {
@@ -217,6 +221,46 @@ export type BetweenOptions = {
    *  `is_between`'s `closed` verbatim. */
   closed?: "both" | "left" | "right" | "none";
 };
+
+/**
+ * A field predicate as data: the field it reads and the interval it tests,
+ * exactly what `field(name).between(lo, hi, { closed })` was called with. It is
+ * the `predicate` of a `filter` operator on the wire
+ * (`{ type: "filter", predicate }`).
+ */
+export type FieldPredicateWire = {
+  field: string;
+  between: [number, number];
+  closed?: BetweenOptions["closed"];
+};
+
+/** A row predicate that also carries its own description as data (its wire
+ *  form, `withWire`), so `filter` can put it on the wire. */
+export type FieldPredicate = (row: any) => boolean;
+
+/**
+ * Build the row predicate a {@link FieldPredicateWire} describes. Both
+ * `field(name).between(...)` and the IR deserializer go through here, so the
+ * predicate a chart runs and the one it serializes are the same value.
+ */
+export function fieldPredicate(wire: FieldPredicateWire): FieldPredicate {
+  const [lo, hi] = wire.between;
+  const options = wire.closed !== undefined ? { closed: wire.closed } : {};
+  const pred = (row: unknown) =>
+    between(
+      (row as Record<string, unknown> | undefined)?.[wire.field] as number,
+      lo,
+      hi,
+      options
+    );
+  return withWire(pred, wire);
+}
+
+/** The wire description a predicate carries, if it is a field predicate. A
+ *  hand-written `(row) => boolean` has none. */
+export function predicateWire(pred: unknown): FieldPredicateWire | undefined {
+  return wireOf<FieldPredicateWire>(pred);
+}
 
 /**
  * `between(v, lo, hi, { closed })` — is `v` inside the interval? `closed`

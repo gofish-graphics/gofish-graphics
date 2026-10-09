@@ -131,6 +131,20 @@ appends one op to an ordered pipeline. It works in two disjoint places:
 Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
 raises.
 
+One method is neither: `.between(lo, hi, closed=None)` returns a **field
+predicate** for [`filter`](/python/api/operators/filter) rather than appending
+an op, because a predicate never takes part in grouping, folding or scaling.
+For the same reason it raises if the expression already carries ops.
+
+```python
+# Keep the rows whose day falls in (100, 120]
+.flow(filter(field("day").between(100, 120, closed="right")))
+```
+
+`closed` is polars' `is_between` argument: `"both"` (the default), `"left"`,
+`"right"` or `"none"`, choosing which ends of the interval are inclusive. The
+comparison is by **value**, not by row count. `lo` and `hi` are plain numbers.
+
 **Sort a stack's groups by another field's total**, instead of data order:
 
 ```python

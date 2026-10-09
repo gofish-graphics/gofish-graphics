@@ -15,6 +15,7 @@ import type { LayerContext } from "./marks/chart";
 import { resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
+  resolveChannelAccessors,
   ChannelAnnotations,
   ChannelType,
   DeriveMarkProps,
@@ -35,6 +36,8 @@ import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
 import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
+import { withWire } from "./wire";
+import { isThenable } from "../util";
 
 export interface RenderOptions {
   w?: number;
@@ -491,17 +494,19 @@ function buildCreatedMark(
     // single value. The object form `{type, entry: true}` produces a
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
-    // `CHANNEL_INFER.raw` is async so a callable accessor may return a Promise
-    // — the Python wrapper bridges `text(text=lambda d: ...)` that way.
+    // A Python accessor is resolved over the rows first, in one batch call,
+    // so inference below is synchronous (`resolveChannelAccessors`, #1080).
     const shapeProps: Record<string, any> = {};
     // `live(...)` channels: the pipeline renders (and measures) the accessor's
     // resolve-time value; the paint layer re-evaluates it reactively per frame
     // via the datum-bound thunk baked at lower time. One split, shared with
     // every other mark factory — see `splitLiveChannels`.
-    const { static: resolvedOpts, live: liveChannels } = splitLiveChannels(
+    const { static: staticOpts, live: liveChannels } = splitLiveChannels(
       markOpts,
       d
     );
+    const pending = resolveChannelAccessors(staticOpts, channels, () => data);
+    const resolvedOpts = isThenable(pending) ? await pending : pending;
     for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
@@ -518,10 +523,7 @@ function buildCreatedMark(
       } else if (isEntry && channelType === "size") {
         shapeProps[propName] = inferEntrySize(markValue, data);
       } else if (channelType !== undefined) {
-        shapeProps[propName] = await CHANNEL_INFER[channelType](
-          markValue,
-          data
-        );
+        shapeProps[propName] = CHANNEL_INFER[channelType](markValue, data);
       } else {
         shapeProps[propName] = markValue;
       }
@@ -553,7 +555,7 @@ function buildCreatedMark(
 
   // Tag with IR-serialization metadata for the frontend-IR emitter.
   if (serialize) {
-    (baseMark as any).__serialize = { type: serialize, opts: markOpts };
+    withWire(baseMark, { type: serialize, opts: markOpts });
   }
 
   return nameableMark(baseMark);

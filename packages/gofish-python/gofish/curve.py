@@ -10,8 +10,10 @@ is passed to renames them to the camelCase wire keys. Mirrors JS
 ``gofish-graphics/curve``.
 """
 
+from __future__ import annotations
+
 import math
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Literal, Optional
 
 __all__ = ["linear", "step", "monotone", "smooth", "catmull_rom", "bezier", "orthogonal", "arc", "perfect_arrows"]
 

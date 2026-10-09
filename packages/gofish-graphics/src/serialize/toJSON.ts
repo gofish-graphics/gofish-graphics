@@ -22,6 +22,7 @@
 import { Frontend } from "gofish-ir";
 import type { ChartBuilder, Mark, Operator } from "./registry";
 import { GoFishRef } from "../ast/_ref";
+import { wireOf } from "../ast/wire";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -84,7 +85,7 @@ function wireOpts(
 }
 
 function readTag(value: unknown): SerializeTag | undefined {
-  const tag = (value as any)?.__serialize;
+  const tag = wireOf<SerializeTag>(value);
   if (!tag || typeof tag.type !== "string") return undefined;
   return tag as SerializeTag;
 }
@@ -107,13 +108,14 @@ export async function toJSON(
 }
 
 /**
- * Wrap a root in the IR document envelope, with every non-finite number
- * (`Infinity`, `-Infinity`, `NaN`) in its tagged form, since JSON has no
- * spelling for them (see gofish-ir's `nonFinite.ts`). A reader decodes them
- * with `Serialize.readIR` before rebuilding the chart.
+ * Wrap a root in the IR document envelope, encoded as the wire carries it
+ * (gofish-ir's `encodeIR`): a `field(...)` or `datum(...)` instance in its
+ * plain form, and every non-finite number (`Infinity`, `-Infinity`, `NaN`)
+ * in its tagged form, since JSON has no spelling for them. A reader decodes
+ * them with `Serialize.readIR` before rebuilding the chart.
  */
 function document(root: Frontend.FrontendIRDocument["root"]) {
-  return Frontend.encodeNonFinite<Frontend.FrontendIRDocument>({
+  return Frontend.encodeIR<Frontend.FrontendIRDocument>({
     irVersion: 0,
     ir: "gofish-frontend",
     root,
@@ -273,7 +275,7 @@ async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
   if (!tag) {
     throw new Error(
       "encountered an untagged mark in toJSON; either add a serialize " +
-        "config to its factory or attach an explicit __serialize metadata " +
+        "config to its factory or attach its IR form with withWire " +
         "field at the construction site"
     );
   }

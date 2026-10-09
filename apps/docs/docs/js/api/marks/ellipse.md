@@ -20,7 +20,7 @@ gf.ellipse({ w: 100, h: 60, fill: "mediumseagreen" }).render(root, {
 ## Signature
 
 ```ts
-ellipse({ w?, h?, fill?, stroke?, strokeWidth?, opacity = 1 })
+ellipse({ w?, h?, fill?, stroke?, strokeWidth?, opacity = 1, fillOpacity? })
 ```
 
 ## Parameters

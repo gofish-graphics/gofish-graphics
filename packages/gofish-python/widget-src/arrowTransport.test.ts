@@ -453,8 +453,9 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
       return arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table)));
     },
   };
-  const accessor = Serialize.unwrapMarkOpts({ __gofish_lambda: "f" }, bridge);
-  const fromAccessor = await accessor({ x: 1 });
+  // A Python accessor is resolved over its rows in one batch call.
+  const accessor = Serialize.unwrapOpts({ __gofish_lambda: "f" }, bridge);
+  const [fromAccessor] = await accessor[Serialize.RESOLVE_ROWS]([{ x: 1 }]);
   const single = async (schema?: Record<string, unknown>) => {
     let seen: any;
     const op = Serialize.rebuild(

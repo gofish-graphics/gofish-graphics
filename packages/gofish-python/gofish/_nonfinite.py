@@ -17,7 +17,7 @@ there.
 """
 
 import math
-from typing import Any
+from typing import Any, Callable
 
 NON_FINITE_KEY = "$numberDouble"
 
@@ -31,28 +31,49 @@ def encode_number(x: float) -> Any:
     return {NON_FINITE_KEY: "Infinity" if x > 0 else "-Infinity"}
 
 
-def encode_non_finite(value: Any) -> Any:
-    """Encode every non-finite float in a JSON-shaped value (dicts, lists,
-    tuples, primitives). Returns ``value`` itself when nothing in it changed,
-    and shares every unchanged part otherwise."""
-    if isinstance(value, float):
-        return encode_number(value)
+KEEP = object()
+"""Returned by a `walk` swap to mean "not this one, look inside"."""
+
+
+def walk(value: Any, swap: Callable[[Any], Any]) -> Any:
+    """Rebuild `value` bottom-up, replacing each part `swap` answers for.
+
+    `swap(v)` returns `KEEP` to leave `v` to the walk, which then looks inside
+    a dict, list or tuple; anything else replaces `v` (return `v` itself to
+    keep it as a leaf). Returns `value` itself when nothing in it changed and
+    shares every unchanged part otherwise; a changed list or tuple keeps its
+    type, and a changed dict is a plain dict.
+    """
+    swapped = swap(value)
+    if swapped is not KEEP:
+        return swapped
     if isinstance(value, dict):
         out = None
         for k, v in value.items():
-            nv = encode_non_finite(v)
+            nv = walk(v, swap)
             if nv is not v:
                 if out is None:
                     out = dict(value)
                 out[k] = nv
         return value if out is None else out
     if isinstance(value, (list, tuple)):
-        out_list = None
+        items = None
         for i, v in enumerate(value):
-            nv = encode_non_finite(v)
+            nv = walk(v, swap)
             if nv is not v:
-                if out_list is None:
-                    out_list = list(value)
-                out_list[i] = nv
-        return value if out_list is None else out_list
+                if items is None:
+                    items = list(value)
+                items[i] = nv
+        if items is None:
+            return value
+        return items if isinstance(value, list) else type(value)(items)
     return value
+
+
+def encode_non_finite(value: Any) -> Any:
+    """Encode every non-finite float in a JSON-shaped value (dicts, lists,
+    tuples, primitives). Returns ``value`` itself when nothing in it changed,
+    and shares every unchanged part otherwise."""
+    return walk(
+        value, lambda v: encode_number(v) if isinstance(v, float) else KEEP
+    )

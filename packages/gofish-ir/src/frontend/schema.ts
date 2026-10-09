@@ -168,6 +168,7 @@ export type OperatorIR =
   | DeriveOperator
   | ResolveOperator
   | JoinOperator
+  | FilterOperator
   | SpreadOperator
   | StackOperator
   | GroupOperator
@@ -239,6 +240,29 @@ export interface JoinOperator
   on: string;
   /** The right-hand table, inlined as JSON rows. */
   right: Record<string, unknown>[];
+}
+
+/**
+ * `filter(field(name).between(lo, hi, { closed }))` — keep the rows whose
+ * `field` value lies in `[lo, hi]`, compared by value; `closed` picks the
+ * inclusive ends (default `"both"`, as in polars' `is_between`). Only a field
+ * predicate has this form: a hand-written JS predicate is a live callback, so
+ * that filter serializes as an opaque `derive`. The predicate is its own
+ * value, not a field-expression op (`FieldExprWire.ops`).
+ */
+export interface FilterOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "filter";
+  predicate: FieldPredicateIR;
+}
+
+/** A field predicate: the field it reads and the interval it tests. */
+export interface FieldPredicateIR {
+  field: string;
+  between: [number, number];
+  closed?: "both" | "left" | "right" | "none";
 }
 
 export interface SpreadOperator
@@ -577,7 +601,19 @@ export type CombinatorMarkType =
  * cannot precisely express the union of channel values per shape, so the
  * index signature is permissive — mirrors the existing widget interface.
  */
-export interface LeafMarkIR extends BaseIRNode {
+/** Fields the Python wrapper writes on a mark and the renderer reads (the
+ *  serialization essay's "Bridge extensions"). Declared in
+ *  `MARK_BASE_FIELDS`, so the validator checks them like any other field. */
+export interface MarkBridgeFieldsIR {
+  /** The mark is a component (the `@mark` decorator's output). */
+  __scope?: true;
+  /** `bind_data()`: the datum the mark is pre-bound to. */
+  __datum?: unknown;
+  /** `bind_data()`: the key the mark is pre-bound to. */
+  __key?: string | number;
+}
+
+export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   type: LeafMarkType;
   name?: string;
   label?: LabelIR;
@@ -592,7 +628,7 @@ export interface LeafMarkIR extends BaseIRNode {
  * Distinguished from the operator-form by the `__combinator: true` flag
  * and the presence of `children`.
  */
-export interface CombinatorMarkIR extends BaseIRNode {
+export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   type: CombinatorMarkType;
   __combinator: true;
   options?: Record<string, unknown>;
@@ -889,6 +925,7 @@ export const OPERATOR_TYPES = [
   "derive",
   "resolve",
   "join",
+  "filter",
   "spread",
   "stack",
   "group",

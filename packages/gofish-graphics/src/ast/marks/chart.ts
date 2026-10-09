@@ -10,15 +10,24 @@ import {
 } from "../graphicalOperators/connect";
 import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
-import { getValue, type MaybeValue, type Value } from "../data";
-import type { FieldExpr } from "../fieldExpr";
+import {
+  getMeasure,
+  getValue,
+  isValue,
+  value,
+  type MaybeValue,
+  type Value,
+} from "../data";
+import { predicateWire, type FieldExpr } from "../fieldExpr";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
 import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
-import { inferColor } from "../channels";
+import { colorValue, resolveChannelAccessors } from "../channels";
+import { isThenable } from "../../util";
+import { MARK_CHANNELS } from "../markChannels.generated";
 import {
   liveChannelsOf,
   withLiveStatics,
@@ -27,6 +36,7 @@ import {
 } from "../../interaction/live";
 import { rect as generatedRect, baseBlank } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
+import type { XYWHDims } from "../dims";
 import { Mark, MarkChild, Operator } from "../types";
 import { addRenderMethod, createMark, type NameableMark } from "../withGoFish";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -71,13 +81,14 @@ import {
   PREVIOUS_LAYER_MARKS,
 } from "./chartBuilder";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
-import { projectPath } from "../datumProjection";
+import { projectByValues, projectPath, rowsReached } from "../datumProjection";
 import {
   applySchema,
   copyColumnTypes,
   getColumnTypes,
   type SchemaEntry,
 } from "../schema";
+import { withWire } from "../wire";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -100,7 +111,7 @@ function mapOperator<T, U>(
       const out = await fn(d, layerContext);
       return mark(await typeResult(out, d), key, layerContext);
     }) as Mark<T>;
-  (op as any).__serialize = serialize;
+  withWire(op, serialize);
   return op;
 }
 
@@ -175,13 +186,19 @@ export function derive<T, U>(
  * result carries the input's column types as they are, with no check of the
  * values. A predicate that changes the rows it tests is not supported.
  *
- * Serialization: the predicate is a live JS callback, so on the wire this
- * operator is a `derive`: it carries `derive`'s `{ type: "derive" }` tag.
+ * Serialization: a field predicate carries its own description, so the
+ * operator goes on the wire as `{ type: "filter", predicate: { field,
+ * between: [lo, hi], closed? } }` and the deserializer rebuilds it. A
+ * hand-written predicate is a live JS callback with no JSON form, so that
+ * filter carries `derive`'s opaque `{ type: "derive" }` tag.
  */
 export function filter<T>(pred: (row: T) => boolean): Operator<T[], T[]> {
+  const predicate = predicateWire(pred);
   return mapOperator<T[], T[]>(
     (d) => (Array.isArray(d) ? d.filter(pred) : d),
-    { type: "derive", opts: {} },
+    predicate !== undefined
+      ? { type: "filter", opts: { predicate } }
+      : { type: "derive", opts: {} },
     (out, input) => (out === input ? out : copyColumnTypes(out, input))
   );
 }
@@ -335,33 +352,65 @@ export function join<
 
 /* END Data Transformation Operators */
 
+type CircleProps = XYWHDims<MaybeValue<number>> & {
+  /** Radius. The diameter is `2r`, whether `r` is a number, a field, or an
+   *  accessor. */
+  r?: MaybeValue<number>;
+  fill?: MaybeValue<string>;
+  stroke?: MaybeValue<string>;
+  strokeWidth?: number;
+  opacity?: MaybeValue<number>;
+  /** Opacity of the fill alone, 0 to 1; the stroke keeps `opacity`. */
+  fillOpacity?: number;
+};
+
+/** Twice a size channel's value, in the same measure: a radius as a diameter. */
+const twice = (r: MaybeValue<number>): MaybeValue<number> =>
+  isValue(r) ? value(2 * getValue(r), getMeasure(r)) : 2 * r;
+
 /**
- * A circle: an ellipse with a 1:1 aspect ratio, sized by RADIUS. A numeric `r`
- * is a pixel radius (so the ellipse is `2r` across); a data-driven `r` is a
- * size channel, and its aggregated value is the ellipse's extent directly.
+ * A circle: an ellipse locked to a 1:1 aspect ratio. It takes the same box
+ * dimensions as `ellipse`. Its one size is the diameter, set by at most one of
+ * `r`, `w`, or `h`. All three are size channels: a number is pixels, and a
+ * field name, `field(...)`, or accessor is data.
+ *
+ * - `r` is the radius, so the diameter is `2r` for every kind of value. It has
+ *   no axis, so it sizes both axes, and a data `r` claims the same data size
+ *   on both (a circle in data space).
+ * - `w` or `h` is the diameter along that axis. A data `w` or `h` claims only
+ *   its own axis; the other axis follows it through the aspect lock, in
+ *   pixels. So `circle({ h: "value" })` in a bar chart reads against the value
+ *   axis and takes no data space along the category axis.
+ *
+ * With none of them, the circle fills the space it is given.
  */
 export const circle = createMark(
-  (p: {
-    r?: MaybeValue<number>;
-    fill?: MaybeValue<string>;
-    stroke?: MaybeValue<string>;
-    strokeWidth?: number;
-    opacity?: MaybeValue<number>;
-  }) => {
-    const size = typeof p.r === "number" ? p.r * 2 : p.r;
+  ({ r, w, h, opacity, ...rest }: CircleProps) => {
+    const given = [r, w, h].filter((v) => v !== undefined).length;
+    if (given > 1) {
+      throw new Error(
+        "circle: pass one of r, w, or h. Each one sets the diameter."
+      );
+    }
+    // The other axis copies a pixel diameter and follows a data one.
+    const follow = (d: MaybeValue<number> | undefined) =>
+      d !== undefined && isValue(d) ? undefined : d;
+    const diameter =
+      r !== undefined
+        ? { w: twice(r), h: twice(r) }
+        : w !== undefined
+          ? { w, h: follow(w) }
+          : { w: follow(h), h };
     return Ellipse({
-      w: size,
-      h: size,
+      ...rest,
+      ...diameter,
       aspectRatio: 1,
-      fill: p.fill,
-      stroke: p.stroke,
-      strokeWidth: p.strokeWidth,
       // `opacity` is a RAW channel, so a per-datum accessor has already been
       // evaluated against the row and wrapped; `Ellipse` paints a plain number.
-      opacity: p.opacity === undefined ? undefined : getValue(p.opacity),
+      opacity: opacity === undefined ? undefined : getValue(opacity),
     });
   },
-  { r: "size", fill: "color", stroke: "color", opacity: "raw" },
+  MARK_CHANNELS.circle,
   "circle"
 );
 
@@ -520,72 +569,73 @@ function tagRelationalFusable(
 }
 
 /**
- * A connector's `fill` or `stroke` may be a shared field name (e.g.
- * `ribbon({ fill: "species" })` fused over a flow that splits by `species`,
- * or the refs-bag idiom `ribbon({ fill: "variety" })` over
- * `flow(group({ by: "variety" }))`) rather than a literal color — resolve
- * each once per group into a concrete `Value`, the same way a per-item
- * mark's color channel would (`inferColor`), instead of leaking the bare
- * field name through to `Connect` as a literal (invalid) CSS color. `fill`
- * colors a ribbon's band; `stroke` colors a line's (or a ribbon's outline's)
- * path — both are the same "field name instead of a literal color" shape, so
- * both go through the same resolution.
- *
- * Runs on BOTH the split and unsplit branches of the bag form (see
- * `createRelationalMark`). On the split branch each group is homogeneous in
- * the field by construction whenever it names the split field itself (or
- * another field the split happens to agree on). On the unsplit branch — a
- * connector with no split at all, drawn through the whole bag as one group —
- * that homogeneity isn't guaranteed, so this THROWS a loud, specific error
- * when the field disagrees across the bag instead of silently painting with
- * whatever the first row happens to have (mirrors the homogeneity-collapse
- * error `resolveLabelText` throws for `.label(field)` — see
- * `labels/labelPlacement.ts`).
- *
- * A no-op for literal colors, `Value`s, and undefined — `inferColor` itself
- * tells a field name from a literal (falls through unchanged when the string
- * isn't a key of the sampled row).
+ * The paint channels of a relational mark (`fill`, `stroke`): the color
+ * channels of its channel map, generated from its descriptor. They are the
+ * keys the connector reads per group, so the only ones resolved.
  */
-const PAINT_KEYS = ["fill", "stroke"] as const;
+const paintChannelsOf = (type: string): Record<string, "color"> =>
+  Object.fromEntries(
+    Object.entries(
+      (MARK_CHANNELS as Record<string, Record<string, string>>)[type] ?? {}
+    ).filter(([, kind]) => kind === "color")
+  ) as Record<string, "color">;
 
-function resolveGroupFill<O extends RelationalMarkOptions>(
+/**
+ * Resolve a connector's paint over the `group` it threads (its refs, an edge
+ * row, or its operands' data): one color per connector, the way a mark's
+ * color channel gives one color per mark.
+ *
+ * A field name is shorthand for an accessor (`"species"` is
+ * `(d) => d.species`), so both read a value off each row of the group with
+ * `projectByValues`, the projection `by` uses. One distinct value is the
+ * connector's color, through the shared color scale (`colorValue`). Several
+ * is a loud error, never a silent first-row pick (mirrors the
+ * homogeneity-collapse error `resolveLabelText` throws for `.label(field)`).
+ * None passes a string through unchanged (it names no field, so it is a
+ * literal color) and drops an accessor (a group with no rows has nothing for
+ * it to read), so a raw function never reaches `Connect`. A `Value` or
+ * undefined is left as is.
+ *
+ * Python accessors are resolved first, over exactly the rows that walk reads
+ * (`rowsReached`), in one batch call each (`resolveChannelAccessors`).
+ */
+async function resolveGroupPaint<O extends Record<string, unknown>>(
   type: string,
   opts: O,
-  groupRefs: GoFishRef[]
-): O {
-  const rows = groupRefs.flatMap((r) =>
-    Array.isArray(r.datum) ? r.datum : [r.datum]
+  group: unknown
+): Promise<O> {
+  const paint = paintChannelsOf(type);
+  const pending = resolveChannelAccessors(opts, paint, () =>
+    rowsReached(group)
   );
-  let resolvedOpts = opts;
-  for (const key of PAINT_KEYS) {
-    const raw = (opts as any)[key];
-    if (typeof raw !== "string") continue;
-    if (rows.length === 0 || rows[0] == null || !(raw in rows[0])) {
-      // Not a field name on this data (e.g. a literal color like
-      // "steelblue") — inferColor's own fallthrough passes it through
-      // unchanged.
+  let resolved = isThenable(pending) ? await pending : pending;
+  for (const key of Object.keys(paint)) {
+    const raw = (resolved as any)[key];
+    if (typeof raw !== "string" && typeof raw !== "function") continue;
+    const values = projectByValues(group, raw);
+    if (values.length === 0) {
+      // No row has a value: a string is then a literal color, and an
+      // accessor has nothing to read, so the connector keeps its default.
+      if (typeof raw === "function")
+        resolved = { ...resolved, [key]: undefined };
       continue;
     }
-    // `raw` names a field on the data: reuse `projectPath`'s projection +
-    // homogeneity collapse (same rule `by` uses elsewhere in this file) —
-    // the common value iff the group agrees on it, `undefined` if not.
-    // `groupRefs` (not the flattened `rows`) so it walks each ref's `.datum`
-    // bag itself, same as any other `projectPath` caller.
-    if (projectPath(groupRefs, raw) === undefined) {
+    if (values.length > 1) {
+      const what =
+        typeof raw === "string" ? `"${raw}"` : "the accessor's value";
       throw new Error(
-        `[gofish] ${type}({ ${key}: "${raw}" }): "${raw}" is not constant ` +
-          `across the connected group; make sure the flow this ${type} fuses ` +
-          `over groups by "${raw}" (or a field it agrees with) — or, over a ` +
-          `refs bag, add \`flow(group({ by: "${raw}" }))\` — or pass an ` +
-          `explicit color.`
+        `[gofish] ${type}({ ${key} }): ${what} is not constant across the ` +
+          `connected group; make sure the flow this ${type} fuses over ` +
+          `groups by that value (or one it agrees with) — or, over a refs ` +
+          `bag, add \`flow(group({ by }))\` — or pass an explicit color.`
       );
     }
-    const resolved = inferColor(raw, rows);
-    if (resolved !== undefined) {
-      resolvedOpts = { ...resolvedOpts, [key]: resolved } as O;
-    }
+    resolved = {
+      ...resolved,
+      [key]: colorValue(values[0], typeof raw === "string" ? raw : undefined),
+    } as O;
   }
-  return resolvedOpts;
+  return resolved;
 }
 
 export function createRelationalMark<O extends Record<string, unknown>>(
@@ -683,9 +733,15 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         (async () => {
           const operands = await children;
           const datum = groupDatumOf(operands);
+          // The connector's paint is read off its operands' data.
+          const paintOpts = await resolveGroupPaint(
+            type,
+            opts,
+            operands.map((o) => (o as any).datum).filter((v) => v !== undefined)
+          );
           return finish(
             (await produce(
-              resolveLive(opts, datum),
+              resolveLive(paintOpts, datum),
               operands,
               inferred
             )) as GoFishNode,
@@ -724,9 +780,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
                   `{ from: selectAll(...) }) in the flow first.`
               );
             }
+            // An edge's paint is read off its own row.
+            const rowOpts = await resolveGroupPaint(type, opts, row);
             return finish(
               (await produce(
-                resolveLive(opts, row),
+                resolveLive(rowOpts, row),
                 [a, b],
                 inferred
               )) as GoFishNode,
@@ -737,8 +795,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         );
         return Layer({}, segments);
       };
-      const result = nameableMark(mark);
-      (result as any).__serialize = { type, opts };
+      const result = withWire(nameableMark(mark), { type, opts });
       return result;
     }
 
@@ -771,7 +828,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
             const groupRefs = (
               Array.isArray(group) ? group : [group]
             ) as GoFishRef[];
-            const groupOpts = resolveGroupFill(type, baseOpts, groupRefs);
+            const groupOpts = await resolveGroupPaint(
+              type,
+              baseOpts,
+              groupRefs
+            );
             const datum = groupDatumOf(groupRefs);
             return finish(
               (await produce(
@@ -788,8 +849,8 @@ export function createRelationalMark<O extends Record<string, unknown>>(
       }
 
       // Unsplit: one connector through the whole bag, treated as a single
-      // group for `resolveGroupFill` (see its doc comment for the paint fix).
-      const groupOpts = resolveGroupFill(type, baseOpts, d);
+      // group for `resolveGroupPaint`.
+      const groupOpts = await resolveGroupPaint(type, baseOpts, d);
       const datum = groupDatumOf(d);
       return finish(
         (await produce(
@@ -801,8 +862,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         datum
       );
     };
-    const result = nameableMark(mark);
-    (result as any).__serialize = { type, opts };
+    const result = withWire(nameableMark(mark), { type, opts });
     tagRelationalFusable(result, type, opts, inferred, config.temporal);
     return result;
   }

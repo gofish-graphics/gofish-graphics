@@ -119,10 +119,8 @@ sum(row["count"] for row in bars[0].datum)  # total count across the bar's rows
 Operators read this same bag when you re-encode a selection by a field, e.g.
 `group(by="species")`, but with **homogeneity collapse** applied: the field
 resolves to a scalar only if every row in the bag agrees on it — see
-[path-aware `by`](/python/api/operators/spread#path-aware-by). Enumerating
-_every_ distinct value at a path instead is the JS-only `pluck`; see the
-[note on `pluck`](/python/api/selection/ref#path-aware-by-after-a-selection) on
-the selection page.
+[path-aware `by`](/python/api/operators/spread#path-aware-by). To get
+_every_ distinct value at a path instead, use [`pluck`](/python/api/selection/ref#pluck).
 
 ## Notes
 

@@ -28,6 +28,8 @@ import {
 } from "../frontend/descriptors.js";
 import type {
   AxesOptions,
+  AxisInterval,
+  FieldPredicateIR,
   AxisOptions,
   CurveIR,
   LabelSpecIR,
@@ -66,6 +68,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   derive: ["lambdaId", "provenance", "schema"],
   resolve: ["cols", "from", "key"],
   join: ["on", "right"],
+  filter: ["predicate"],
   spread: [
     "by",
     "dir",
@@ -184,6 +187,18 @@ const SCHEMA_OPTION_TYPE_KEYS: Record<string, Record<string, true>> = {
     x: true,
     y: true,
   } satisfies Record<keyof Exclude<AxesOptions, boolean>, true>,
+  AxisInterval: {
+    min: true,
+    center: true,
+    max: true,
+    size: true,
+    embedded: true,
+  } satisfies Record<keyof AxisInterval, true>,
+  FieldPredicate: {
+    field: true,
+    between: true,
+    closed: true,
+  } satisfies Record<keyof FieldPredicateIR, true>,
 };
 
 /** The fields of the one object branch of a named option type. */
@@ -193,7 +208,7 @@ function optionTypeObjectKeys(type: FieldType): string[] {
   return [];
 }
 
-console.log("\n# OPTION_TYPES agree with schema.ts AxisOptions / AxesOptions");
+console.log("\n# OPTION_TYPES agree with schema.ts option types");
 for (const [name, keys] of Object.entries(SCHEMA_OPTION_TYPE_KEYS)) {
   const spec = OPTION_TYPES[name];
   check(`OPTION_TYPES["${name}"] exists`, spec !== undefined);

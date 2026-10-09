@@ -1,4 +1,6 @@
 import { Frontend } from "gofish-ir";
+import { isValue, type MaybeValue } from "./data";
+import { computeAesthetic } from "../util";
 
 export type Interval<T = number> = {
   min?: T;
@@ -276,10 +278,34 @@ export const applyAxisDims = (
   }
 };
 
-/** `min` from `center` and `size`: the one derivation `elaborateDims` (for
- *  `cx` with `w`) and {@link applyAxisDims} share. */
-const deriveMin = <T>(center: T, size: T): T =>
-  ((center as number) - (size as number) / 2) as T;
+/**
+ * `min` from `center` and `size` when both are pixels: the one derivation
+ * `elaborateDims` (for `cx` with `w`) and {@link applyAxisDims} share. A data
+ * center stays a center: the shape places the box by it ({@link centerOf},
+ * {@link startAtCenter}), so the center goes through the scale and half the
+ * size comes off in pixels.
+ */
+const deriveMin = <T>(center: T, size: T): T | undefined =>
+  typeof center === "number" && typeof size === "number"
+    ? ((center - size / 2) as T)
+    : undefined;
+
+/** The center a box axis is placed by: its `center` when it has no `min`
+ *  (`cx`/`cy` with a data value, or with no size to derive a `min` from). */
+export const centerOf = <T>(d: Interval<T>): T | undefined =>
+  d.min === undefined ? d.center : undefined;
+
+/** The pixel start of a box axis placed by its center: the center through
+ *  the axis's scale, less half the box's pixel size. A data center on an axis
+ *  with no position scale gives no start, so the parent places the box. */
+export const startAtCenter = (
+  center: MaybeValue<number>,
+  scale: ((x: number) => number) | undefined,
+  sizePx: number
+): number | undefined => {
+  if (scale === undefined && isValue(center)) return undefined;
+  return computeAesthetic(center, scale!, undefined)! - sizePx / 2;
+};
 
 export type IndexedDims<T = number> = {
   0?: Interval<T>;

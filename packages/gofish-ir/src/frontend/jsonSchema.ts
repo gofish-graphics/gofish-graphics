@@ -15,18 +15,21 @@
  * don't-reject rollout stance) are GENERATED from `descriptors.ts` by
  * `buildOperatorDefs()` / `buildLeafMarkDefs()` below, merged into the
  * authored `$defs` object, as are the named option types (`AxesOptions`,
- * `AxisOptions`) from `OPTION_TYPES` (`buildOptionTypeDefs()`). Field-level coverage matches `validate.ts` (which
+ * `AxisOptions`, `AxisInterval`, `AxisDimsValue`) from `OPTION_TYPES`
+ * (`buildOptionTypeDefs()`), `ChartOptions` among them. Field-level coverage matches `validate.ts` (which
  * interprets the same descriptor table); this file is the wire artifact
  * (consumed by external tooling, language servers, and the Python wrapper's
  * parity-test harness).
  */
 
 import {
+  CHART_OPTIONS,
   LABEL_OPTIONS,
   LEAF_MARKS,
   OPERATORS,
   OPTION_TYPES,
   resolveFields,
+  t,
   type FieldGroup,
   type FieldType,
 } from "./descriptors.js";
@@ -60,7 +63,10 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
     case "ref":
       return { $ref: `#/$defs/${type.name}` };
     case "union":
-      return { oneOf: type.options.map(fieldTypeToSchema) };
+      // `anyOf`, as validate.ts reads a union: a value is valid when some
+      // branch accepts it. Branches may overlap (a tagged `datum(...)` object
+      // is a channel value and also fits an open interval object).
+      return { anyOf: type.options.map(fieldTypeToSchema) };
     case "array":
       return { type: "array", items: fieldTypeToSchema(type.items) };
     case "tuple":
@@ -115,9 +121,8 @@ const pascalCase = (s: string): string =>
  * `meta`/`debug` always present as properties. `additionalProperties` stays
  * `true`: the published schema keeps the permissive wire contract (the JS
  * low-level factories accept passthrough options the fluent operators' IR doesn't model,
- * e.g. spread/stack `FancyDims` — real producers emit them); strict
- * unknown-field rejection is validate.ts strict mode's job, not the wire
- * artifact's.
+ * e.g. spread/stack `FancyDims` — real producers emit them); rejecting an
+ * unknown field is validate.ts's job, not the wire artifact's.
  */
 function buildOperatorDefs(): Record<string, unknown> {
   const defs: Record<string, unknown> = {};
@@ -156,12 +161,11 @@ function buildOperatorDefs(): Record<string, unknown> {
 
 /**
  * Build one `$def` per leaf-mark type (`RectMark`, `TextMark`, ...) plus the
- * `LeafMarkIR` union referencing them. Unlike operators, `additionalProperties`
- * stays `true` (leaf marks are open-world for now — the gradual-rollout
- * stance `validate.ts`'s leaf-mark warnings implement) and `required` is
- * just `["type"]` regardless of the descriptor's own required fields, so an
- * external strict consumer of this schema doesn't start rejecting documents
- * our own validator only warns about.
+ * `LeafMarkIR` union referencing them. Like the operator `$defs`,
+ * `additionalProperties` stays `true`, and `required` is just `["type"]`
+ * regardless of the descriptor's own required fields: the published schema
+ * keeps the open wire contract, and rejecting an unknown or missing field is
+ * validate.ts's job.
  */
 function buildLeafMarkDefs(): Record<string, unknown> {
   const defs: Record<string, unknown> = {};
@@ -290,7 +294,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         data: { oneOf: [{ $ref: "#/$defs/DataIR" }, { type: "null" }] },
         operators: { type: "array", items: { $ref: "#/$defs/OperatorIR" } },
         mark: { $ref: "#/$defs/MarkIR" },
-        options: { type: "object" },
+        options: { $ref: "#/$defs/ChartOptions" },
         zOrder: { $ref: "#/$defs/Number" },
         name: {
           type: "string",
@@ -352,8 +356,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         y: { $ref: "#/$defs/Number" },
       },
     },
-    // AxesOptions / AxisOptions are GENERATED from descriptors.ts's
-    // OPTION_TYPES — see GENERATED_DEFS below.
+    // AxesOptions / AxisOptions / AxisInterval / AxisDimsValue are GENERATED
+    // from descriptors.ts's OPTION_TYPES (ChartOptions among them)
+    // — see GENERATED_DEFS below.
     FieldAccessor: {
       description:
         'Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field("site").sort("yield") or field("count").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator\'s entry-flagged size channel, normalize.',
@@ -681,27 +686,6 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           required: ["__gofish_lambda"],
           properties: { __gofish_lambda: { type: "string" } },
         },
-      ],
-    },
-    AxisInterval: {
-      description:
-        "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        min: { $ref: "#/$defs/ChannelValue" },
-        center: { $ref: "#/$defs/ChannelValue" },
-        max: { $ref: "#/$defs/ChannelValue" },
-        size: { $ref: "#/$defs/ChannelValue" },
-        embedded: { type: "boolean" },
-      },
-    },
-    AxisDimsValue: {
-      description:
-        "A `dims` entry: a bare channel value (a position) or an AxisInterval.",
-      oneOf: [
-        { $ref: "#/$defs/ChannelValue" },
-        { $ref: "#/$defs/AxisInterval" },
       ],
     },
     ...GENERATED_DEFS,

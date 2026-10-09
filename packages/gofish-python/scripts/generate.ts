@@ -61,6 +61,10 @@ import {
   type FieldGroup,
   type FieldSpec,
   type FieldType,
+  carriesChannel,
+  pyType,
+  refPyClass,
+  AUTHORED_REFS,
 } from "gofish-ir/frontend";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -69,54 +73,6 @@ const OUT_FILE = join(HERE, "..", "gofish", "_generated.py");
 // ---------------------------------------------------------------------------
 // small helpers
 // ---------------------------------------------------------------------------
-
-function literalPyType(value: string | number | boolean): string {
-  if (typeof value === "string") return "str";
-  if (typeof value === "number") return "float";
-  return "bool";
-}
-
-function pyType(f: FieldType): string {
-  switch (f.kind) {
-    case "string":
-      return "str";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "channel":
-      return f.inner === "number" ? "Union[int, float, str]" : "str";
-    case "enum":
-      return "str";
-    case "literal":
-      // Annotated by the literal's base type, like `enum` → str; the IR
-      // validator checks the exact value.
-      return literalPyType(f.value);
-    case "array":
-      return "List[Any]";
-    case "union": {
-      // A union of primitive kinds renders as a real Union; anything richer
-      // falls back to Any.
-      const prims = f.options.map((o) => {
-        if (o.kind === "string") return "str";
-        if (o.kind === "number") return "float";
-        if (o.kind === "boolean") return "bool";
-        if (o.kind === "literal") return literalPyType(o.value);
-        if (o.kind === "enum") return "str";
-        return null;
-      });
-      if (prims.every(Boolean)) return `Union[${prims.join(", ")}]`;
-      return "Any";
-    }
-    case "any":
-    case "ref":
-    case "tuple":
-    case "object":
-    case "record":
-    default:
-      return "Any";
-  }
-}
 
 function pySig(name: string, f: FieldSpec): string {
   // Descriptor-required wire fields are required keyword arguments: missing
@@ -161,26 +117,15 @@ function pyStr(s: string): string {
 // nested option dicts
 // ---------------------------------------------------------------------------
 
-/** Refs outside `OPTION_TYPES` that a generated kwarg may carry. Their values
- *  pass through unchanged, so each entry says why that is right. A ref in
- *  neither table fails generation, so a new nested type has to be declared
- *  before Python can take it. */
-const PASSTHROUGH_REFS: Record<string, string> = {
-  FieldAccessor:
-    "built by field(...), whose dict already carries the wire keys (type, name, measure, ops)",
-  AxisDimsValue:
-    "a `dims` entry: a channel value or an interval {min, center, max, size, embedded}; " +
-    "a channel value can itself be a dict (field(...), datum(...)), so a plain dict here " +
-    "cannot be routed to the interval shape, and the interval keys are single words",
-};
-
-/** Whether a value of this type may be a Python dict. */
+/** Whether a value of this type may be a Python dict that `_to_wire` has to
+ *  route. A channel value may be a dict too (field(...), datum(...)), but
+ *  `_to_wire` passes those through by their class, so a channel branch never
+ *  competes with a union's dict-shaped branch. */
 function acceptsDict(type: FieldType): boolean {
   switch (type.kind) {
     case "object":
     case "record":
     case "any":
-    case "channel": // field(...) / datum(...) are dicts
       return true;
     case "ref":
       return type.name in OPTION_TYPES
@@ -258,11 +203,13 @@ function wireShape(type: FieldType, where: string): string | null {
           ? null
           : `("ref", ${pyStr(type.name)})`;
       }
-      if (type.name in PASSTHROUGH_REFS) return null;
+      // A value of a type with a Python class (`field(...)` builds a
+      // FieldAccessor) already carries the wire keys, so it passes through.
+      if (refPyClass(type.name) !== undefined) return null;
       throw new Error(
         `${where}: t.ref("${type.name}") is neither a named option type ` +
           `(OPTION_TYPES in descriptors.ts) nor a known pass-through ref ` +
-          `(PASSTHROUGH_REFS in generate.ts). Declare it before Python takes it.`
+          `(a pyClass in AUTHORED_REFS). Declare it before Python takes it.`
       );
     }
     case "union": {
@@ -305,7 +252,8 @@ function wireShape(type: FieldType, where: string): string | null {
  *  keys renamed by `_to_wire`. */
 function wireValue(py: string, spec: FieldSpec): string {
   const shape = wireShape(spec.type, py);
-  return shape === null ? py : `_to_wire(${shape}, ${py}, ${pyStr(py)})`;
+  const wired = shape === null ? py : `_to_wire(${shape}, ${py}, ${pyStr(py)})`;
+  return carriesChannel(spec.type) ? `_channel(${wired})` : wired;
 }
 
 /** The `(wireKey, value)` pair lines a generated function loops over to
@@ -409,9 +357,24 @@ operator-vs-combinator, ref-shape narrowing, DataFrame conversion, the
 lambda/RPC bridge) stays hand-written there.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+
+from . import ast as _ast
 from .ast import Mark, _channel
+
+if TYPE_CHECKING:
+    from .ast import ${[
+      ...new Set(
+        [
+          ...Object.values(OPTION_TYPES).map((s) => s.pyClass),
+          ...Object.values(AUTHORED_REFS).map((r) => r.pyClass),
+        ].filter((c): c is string => c !== undefined)
+      ),
+    ]
+      .sort()
+      .join(", ")}
 `);
 
 // --- Nested option dicts ------------------------------------------------------
@@ -446,9 +409,13 @@ parts.push(
       `    raises TypeError, as an unknown kwarg does. Record keys (column names,`,
       `    axis names) and values of any other type pass through unchanged. A`,
       `    tagged union picks its branch by the dict's tag key (\`kind\`); a missing`,
-      `    or unknown tag raises TypeError.`,
+      `    or unknown tag raises TypeError. A channel value built by field(...) or`,
+      `    datum(...) is a dict already in wire form, so it passes through too:`,
+      `    that is how a \`dims\` entry tells a channel value from an interval.`,
       `    """`,
       `    if shape is None or value is None:`,
+      `        return value`,
+      `    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue)):`,
       `        return value`,
       `    kind = shape[0]`,
       `    if kind == "ref":`,
@@ -507,7 +474,6 @@ parts.push(
 }
 
 // --- Leaf marks -------------------------------------------------------------
-const OPEN_KWARGS_MARKS = new Set(["circle", "ellipse", "petal", "blank"]);
 const GENERATED_LEAF_MARKS = [
   "rect",
   "circle",
@@ -528,13 +494,9 @@ for (const name of GENERATED_LEAF_MARKS) {
   // declared field of the same name wins. Labeling is done exclusively via
   // the `.label(accessor, options?)` chain — no leaf-mark `label` kwarg.
   const fields = { ...PY_LEAF_BASE_KWARGS, ...resolveFields(d) };
-  const openKwargs = OPEN_KWARGS_MARKS.has(name);
-  // Render manually (not via renderLeafFactory's half-baked openKwargs path)
-  // for full control over the **kwargs merge.
+  // The signature is closed: an undeclared kwarg is a TypeError (#1007).
   const ents = entries(fields);
-  const sigParts = ents.map(([py, , spec]) => pySig(py, spec));
-  if (openKwargs) sigParts.push("**kwargs: Any");
-  const sig = sigParts.join(", ");
+  const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const docLines = ents
     .map(([py, , spec]) => docLine(py, spec))
     .filter(Boolean);
@@ -550,16 +512,8 @@ for (const name of GENERATED_LEAF_MARKS) {
     pairs,
     `    ]:`,
     `        if _v is not None:`,
-    `            _kw[_k] = _channel(_v)`,
+    `            _kw[_k] = _v`,
   ];
-  if (openKwargs) {
-    // Extras route through _channel too, so a callable accessor on an
-    // undeclared channel (e.g. circle(cx=lambda d: ...)) bridges via the
-    // derive RPC exactly like a declared one.
-    bodyLines.push(`    for _k, _v in kwargs.items():`);
-    bodyLines.push(`        if _v is not None:`);
-    bodyLines.push(`            _kw[_k] = _channel(_v)`);
-  }
   bodyLines.push(`    return Mark(${pyStr(d.type)}, **_kw)`);
   parts.push(
     [`def ${name}(*, ${sig}) -> Mark:`, docstring, bodyLines.join("\n")].join(
@@ -935,8 +889,10 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
     `\`\`gofish-graphics/${module}\`\`.`,
     `"""`,
     ``,
+    `from __future__ import annotations`,
+    ``,
     ...(usesMath ? [`import math`] : []),
-    `from typing import Any, Dict, Optional, Union`,
+    `from typing import Any, Dict, Literal, Optional`,
     ``,
     `__all__ = [${factories.map((f) => pyStr(f.name)).join(", ")}]`,
     ``,

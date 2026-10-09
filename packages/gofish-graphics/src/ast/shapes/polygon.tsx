@@ -18,6 +18,8 @@ import {
   pathToPixelSVG,
   roleFor,
 } from "../displayList/lowerHelpers";
+import { withWire } from "../wire";
+import { MARK_CHANNELS } from "../markChannels.generated";
 
 export type Ring = [number, number][];
 
@@ -208,9 +210,7 @@ export const Polygon = ({
 /** `fill`/`stroke` are color channels, as on `rect`: a field name (or
  *  `field(...)`) reads the row's value and goes through the chart's color
  *  scale; any other string is a literal color. */
-const POLYGON_CHANNELS = { fill: "color", stroke: "color" } as const;
-
-const basePolygon = createMark(Polygon, POLYGON_CHANNELS, "polygon");
+const basePolygon = createMark(Polygon, MARK_CHANNELS.polygon, "polygon");
 
 export type PolygonMarkProps = Omit<
   Parameters<typeof basePolygon>[0],
@@ -263,6 +263,6 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
     return group;
   };
   const result = nameableMark(mark);
-  (result as any).__serialize = { type: "polygon", opts };
+  withWire(result, { type: "polygon", opts });
   return result;
 };

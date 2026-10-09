@@ -8,7 +8,8 @@ import math
 import re
 import uuid
 
-from ._nonfinite import encode_non_finite
+from . import _nonfinite
+from ._nonfinite import KEEP, encode_non_finite
 
 T = TypeVar("T")
 
@@ -18,6 +19,9 @@ class Operator:
 
     def __init__(self, op_type: str, **kwargs):
         self.op_type = op_type
+        # A callable in a channel option was wrapped as an accessor by the
+        # factory (`_channel`); one anywhere else has no meaning on the wire.
+        self._accessors = _scan_options(op_type, kwargs)
         self.kwargs = kwargs
         self._translate: Optional[dict] = None
         # One entry per `.label(accessor, options?)` call, in call order —
@@ -79,7 +83,10 @@ class Operator:
 
     def to_dict(self) -> dict:
         """Convert operator to dictionary for JSON IR."""
-        d = {"type": self.op_type, **self.kwargs}
+        d = {
+            "type": self.op_type,
+            **_wire_options(self.kwargs, self._accessors),
+        }
         if self._translate:
             d["translate"] = self._translate
         if self._labels:
@@ -153,6 +160,38 @@ def _collect_derive_operators(ops: List[Operator]) -> List[DeriveOperator]:
     return [op for op in ops if isinstance(op, DeriveOperator)]
 
 
+class Composed:
+    """A reusable flow fragment: a left-to-right sequence of operators.
+
+    Built by :func:`compose`. It holds its operators already flattened, and
+    ``ChartBuilder.flow()`` expands it into them, so the IR carries the
+    constituent operators and has no compose node. Mirrors JS
+    ``compose(...ops)`` (ast/marks/compose.ts).
+    """
+
+    def __init__(self, operators: List[Operator]):
+        self.operators: tuple = tuple(operators)
+
+
+def _expand_composed(op: Union[Operator, Composed]) -> tuple:
+    return op.operators if isinstance(op, Composed) else (op,)
+
+
+def compose(*ops: Union[Operator, Composed]) -> Composed:
+    """Package a left-to-right sequence of operators as one flow fragment.
+
+    Nested fragments are flattened, and ``compose()`` with no arguments is
+    the identity fragment. Pass the result to ``.flow()`` like an operator;
+    it expands into its constituent operators.
+
+    Example::
+
+        grid = compose(spread(dir="y"), spread(dir="x"))
+        chart(data).flow(spread(by="lake", dir="x"), grid).mark(rect(w=8, h=8))
+    """
+    return Composed([o for op in ops for o in _expand_composed(op)])
+
+
 class _MarkFn:
     """Sentinel wrapping a Python callable used as a *whole* mark.
 
@@ -173,13 +212,14 @@ class _MarkFn:
 
 
 class _PendingAccessor:
-    """Sentinel wrapping a Python callable used as a mark kwarg accessor.
+    """Sentinel wrapping a Python callable used as an accessor in a mark or
+    operator option (top-level, or nested as in `dims={"r": {"size": fn}}`).
 
     JS's `createMark` accepts a callable for encoding channels like
     `text({text: (d) => `${d.amount}%`})`. The harness can't ship a Python
     callable to JS, so the factory wraps it here with a fresh `lambda_id`
     (same UUID shape as `DeriveOperator`, sharing one registry).
-    `Mark.to_dict()` serializes it as `{"__gofish_lambda": id}`; the
+    `_wire` serializes it as `{"__gofish_lambda": id}`; the
     harness/widget swaps that sentinel for an `async (d) => fetch
     /derive/<id>(d)` arrow at render time, so JS sees a real accessor
     function whose body happens to RPC into Python.
@@ -190,35 +230,106 @@ class _PendingAccessor:
         self.lambda_id = str(uuid.uuid4())
 
 
-def _channel(v: Any) -> Any:
-    """Wrap a bare callable channel value in `_PendingAccessor`.
+def _is_tagged(v: Any) -> bool:
+    """A `field(...)` or `datum(...)` value: a dict subclass that already holds
+    wire data, so the option walks treat it as a leaf."""
+    return isinstance(v, (FieldAccessor, DatumValue))
 
-    Generalizes what `text()` already did for its `text=` kwarg (the only
-    channel that supported an accessor lambda) to any generated leaf-mark
-    channel kwarg — a plain literal/field-name/`datum()` passes through
-    unchanged, a callable `(row) -> value` gets wrapped so
-    `_collect_mark_lambdas` can register it with the derive RPC bridge.
+
+def _channel(v: Any) -> Any:
+    """Wrap every callable in a channel option's value in `_PendingAccessor`.
+
+    A channel value is a literal, a field name, a tagged value (`datum()`,
+    `field(...)`), or a plain dict/list/tuple of those
+    (`dims={"r": {"size": ...}}`). A callable `(row) -> value` may sit at any
+    depth, so this wraps each one; the `Mark` or `Operator` built from the
+    options records the accessors (`_scan_options`). The generated factories
+    call it only on options the descriptor declares as channels. A value with
+    no callable comes back as the same object.
     """
-    if v is not None and not isinstance(v, (str, int, float, bool)) and callable(v):
-        return _PendingAccessor(v)
-    return v
+    return _nonfinite.walk(
+        v,
+        lambda x: x
+        if _is_tagged(x)
+        else _PendingAccessor(x)
+        if callable(x) and not isinstance(x, _PendingAccessor)
+        else KEEP,
+    )
+
+
+def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_PendingAccessor"]]:
+    """The accessors in a construct's options, by option key, in one walk.
+
+    A Python callable crosses to JS only as a channel accessor, which the
+    generated factories wrap with `_channel` for the options the descriptor
+    declares as channels. A raw callable anywhere else (a `by`, a `dir`, ...)
+    would reach JS as an RPC handle it never resolves, so it fails loudly
+    here. The `Mark` / `Operator` keeps the result, so serializing and
+    registering its accessors never walks large options (`join`'s rows) again.
+    """
+    found: Dict[str, List[_PendingAccessor]] = {}
+    for key, value in options.items():
+        accessors: List[_PendingAccessor] = []
+
+        def visit(x: Any, key: str = key, accessors: list = accessors) -> Any:
+            if isinstance(x, _PendingAccessor):
+                accessors.append(x)
+                return x
+            if _is_tagged(x):
+                return x
+            if callable(x):
+                raise TypeError(
+                    f"{construct}: {key} holds a function, but only channel "
+                    f"options take a function. Pass a field name or a "
+                    f"field(...) accessor."
+                )
+            return KEEP
+
+        _nonfinite.walk(value, visit)
+        if accessors:
+            found[key] = accessors
+    return found
+
+
+def _wire_options(options: Dict[str, Any], accessors: Dict[str, list]) -> Dict[str, Any]:
+    """The options as the wire carries them: each `_PendingAccessor` becomes
+    its `{"__gofish_lambda": id}` sentinel, at any depth. Only the options
+    `_scan_options` found accessors in are walked; the rest are the same
+    objects. The JS deserializer turns each sentinel back into an accessor
+    that calls into Python."""
+    return {
+        k: _nonfinite.walk(
+            v,
+            lambda x: {"__gofish_lambda": x.lambda_id}
+            if isinstance(x, _PendingAccessor)
+            else x
+            if _is_tagged(x)
+            else KEEP,
+        )
+        if k in accessors
+        else v
+        for k, v in options.items()
+    }
+
+
+def _lambda_pairs(accessors: Dict[str, list]) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every accessor a construct recorded.
+    `rows_fn` adapts the user's `(row) -> value` callable to the rows-in /
+    rows-out shape the `/derive/<id>` endpoint expects, so accessors and
+    `derive()` operators share one registry and one endpoint."""
+    return [
+        (acc.lambda_id, lambda rows, _fn=acc.fn: [_fn(r) for r in rows])
+        for accs in accessors.values()
+        for acc in accs
+    ]
 
 
 def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
     """Walk a Mark tree, yielding `(lambda_id, rows_fn)` pairs for every
-    `_PendingAccessor` in mark kwargs (and recursively in combinator
-    `_children` and in the marks of `.relate(...)` clauses). `rows_fn`
-    adapts the user's `(row) -> value` callable to the rows-in / rows-out
-    shape the existing `/derive/<id>` endpoint expects, so mark accessors
-    and `derive()` operators share one registry and one endpoint.
+    `_PendingAccessor` in mark kwargs, at any depth (and recursively in
+    combinator `_children` and in the marks of `.relate(...)` clauses).
     """
-    pairs: List[tuple] = []
-    for val in mark.kwargs.values():
-        if isinstance(val, _PendingAccessor):
-            fn = val.fn
-            pairs.append(
-                (val.lambda_id, lambda rows, _fn=fn: [_fn(r) for r in rows])
-            )
+    pairs = _lambda_pairs(mark._accessors)
     if mark._children is not None:
         for child in mark._children:
             pairs.extend(_collect_mark_lambdas(child))
@@ -227,6 +338,12 @@ def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
         if isinstance(clause, Mark):
             pairs.extend(_collect_mark_lambdas(clause))
     return pairs
+
+
+def _collect_operator_lambdas(ops: List["Operator"]) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every accessor in the options of a chart's
+    operators (e.g. `scatter(dims={"r": lambda d: ...})`)."""
+    return [pair for op in ops for pair in _lambda_pairs(op._accessors)]
 
 
 class Token:
@@ -291,6 +408,8 @@ class Mark:
         **kwargs,
     ):
         self.mark_type = mark_type
+        # As on Operator: only channel options may hold a callable.
+        self._accessors = _scan_options(mark_type, kwargs)
         self.kwargs = kwargs
         self._name: Optional[Union[str, "Token"]] = None
         # One entry per `.label(accessor, options?)` call, in call order —
@@ -451,17 +570,12 @@ class Mark:
 
     def to_dict(self) -> dict:
         """Convert mark to dictionary for JSON IR."""
-        # Replace `_PendingAccessor` kwarg values with their lambda-id
+        # Replace each `_PendingAccessor` (at any depth) with its lambda-id
         # sentinel. The derive-server walks the Mark tree separately to
         # register the underlying callable in the shared registry; the JS
         # harness/widget substitutes the sentinel for a real `(d) => ...`
         # arrow function whose body RPCs into Python.
-        def _wire(v):
-            if isinstance(v, _PendingAccessor):
-                return {"__gofish_lambda": v.lambda_id}
-            return v
-
-        serialized_kwargs = {k: _wire(v) for k, v in self.kwargs.items()}
+        serialized_kwargs = _wire_options(self.kwargs, self._accessors)
         if self._children is not None:
             # Combinator form: emit a nested payload the JS side reconstructs
             # via the operator's `(opts, marks)` overload.
@@ -1157,12 +1271,13 @@ class ChartBuilder:
         self._z_order = z_order
         self._name: Optional[Union[str, "Token"]] = None
 
-    def flow(self, *ops: Operator) -> "ChartBuilder":
+    def flow(self, *ops: Union[Operator, Composed]) -> "ChartBuilder":
         """
         Add operators to the flow pipeline.
 
         Args:
-            *ops: One or more operators (spread, stack, derive, etc.)
+            *ops: One or more operators (spread, stack, derive, etc.) or
+                ``compose(...)`` fragments, which expand into their operators
 
         Returns:
             New ChartBuilder with operators added
@@ -1170,7 +1285,10 @@ class ChartBuilder:
         return ChartBuilder(
             self.data,
             self.options,
-            operators=[*self.operators, *ops],
+            operators=[
+                *self.operators,
+                *(o for op in ops for o in _expand_composed(op)),
+            ],
             z_order=self._z_order,
         )
 
@@ -2608,6 +2726,70 @@ class FieldAccessor(dict):
         """Fold the group's rows to the number of distinct values of this
         field. Valid only in a value (size/pos) slot."""
         return self._with_op({"op": "distinct"})
+
+    def between(
+        self, lo: float, hi: float, *, closed: Optional[str] = None
+    ) -> "FieldPredicate":
+        """A row predicate for :func:`filter`: is this field's value in
+        ``[lo, hi]``? ``closed`` picks which ends are inclusive (``"both"``,
+        the default, ``"left"``, ``"right"`` or ``"none"``), as in polars'
+        ``is_between``.
+
+        Not a pipeline op. Mirrors JS ``field(name).between(lo, hi,
+        { closed })``, which returns a predicate rather than appending to
+        ``ops``, so it raises when the expression already carries ops: the
+        predicate would test the raw field and silently drop them.
+        """
+        ops = self.get("ops", [])
+        if ops:
+            names = ", ".join(op["op"] for op in ops)
+            raise ValueError(
+                f'field("{self["name"]}").between(...) does not apply the '
+                f"expression pipeline ({names}): a predicate is not a value "
+                "slot. Filter on the raw field, or derive the binned/sorted "
+                "column first."
+            )
+        pred = FieldPredicate(field=self["name"], between=[lo, hi])
+        if closed is not None:
+            pred["closed"] = closed
+        return pred
+
+
+class FieldPredicate(dict):
+    """The ``{field, between: [lo, hi], closed?}`` wire shape of a field
+    predicate, built by ``field(name).between(lo, hi, closed=...)`` and
+    consumed by :func:`filter`. It is data, so a filter over it crosses to JS
+    with no callback."""
+
+
+def filter(
+    predicate: Union[FieldPredicate, Callable[[dict], bool]],
+) -> Operator:
+    """Keep the rows a predicate accepts, and drop the rest.
+
+    Mirrors JS ``filter(pred)``. A field predicate,
+    ``field("day").between(100, 120, closed="right")``, goes on the wire as
+    ``{type: "filter", predicate}``. A plain Python function of one row is a
+    callback, so that filter is a :func:`derive` and runs in Python, like
+    JS's ``filter`` over a hand-written predicate.
+
+    Returns:
+        Operator object for use inside ``.flow()``.
+    """
+    if isinstance(predicate, FieldPredicate):
+        return Operator("filter", predicate=dict(predicate))
+    if callable(predicate):
+        # Data that is not a list (a single row) passes through unchanged,
+        # as in JS: there is nothing to filter.
+        return derive(
+            lambda rows: [row for row in rows if predicate(row)]
+            if isinstance(rows, list)
+            else rows
+        )
+    raise TypeError(
+        "filter(...) expects field(name).between(lo, hi) or a function of one "
+        f"row, got {type(predicate).__name__}"
+    )
 
 
 def field(name: str, measure: Optional[str] = None) -> FieldAccessor:

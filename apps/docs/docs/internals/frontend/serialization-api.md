@@ -124,17 +124,16 @@ the Python wrapper emits.
 ```ts
 import { Frontend } from "gofish-ir";
 
-const result = Frontend.validate(doc, { strict: true });
+const result = Frontend.validate(doc);
 if (!result.valid) {
   console.error(result.errors);
   // [{ path: "$.root.mark.label.accessor", message: "expected string, got null" }, ...]
 }
 ```
 
-- **Strict mode** rejects unknown fields. Use this in tests and CI.
-- **Permissive mode** (the default) ignores unknown fields. Use this
-  for forward-compatible reading — consumers should not break when the
-  schema grows.
+The validator has one mode: an unknown field is an error, wherever it sits.
+The JSON Schema artifact stays open (`additionalProperties: true`), so an
+external validator that reads it accepts fields it does not know.
 
 The JSON Schema artifact is at `packages/gofish-ir/dist/frontend/v0.json`
 (emitted during build); use it with any external validator (Python
@@ -200,5 +199,5 @@ in #gofish before relying on the shape — it's likely to change.
   in the Frontend IR essay's "Bridge extensions" section.
 - Source: `packages/gofish-ir/src/frontend/{schema,validate,jsonSchema,descriptors,examples}.ts`,
   `packages/gofish-graphics/src/serialize/{toJSON,fromJSON,registry}.ts`.
-- Validator at runtime: `Frontend.validate(doc, { strict?: boolean })`.
+- Validator at runtime: `Frontend.validate(doc)`.
 - JSON Schema artifact: `packages/gofish-ir/dist/frontend/v0.json` (build output).

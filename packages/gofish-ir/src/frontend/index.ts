@@ -6,7 +6,6 @@ export {
   isAxisInterval,
   type ValidationResult,
   type ValidationError,
-  type ValidationWarning,
 } from "./validate.js";
 export {
   exampleBarChart,
@@ -18,8 +17,9 @@ export {
 } from "./examples.js";
 export { FRONTEND_IR_JSON_SCHEMA } from "./jsonSchema.js";
 export {
-  encodeNonFinite,
+  encodeIR,
   decodeNonFinite,
+  isPlainObject,
   type NonFiniteNumberIR,
 } from "./nonFinite.js";
 export {
@@ -42,6 +42,10 @@ export {
   COMBINATOR_OPTIONS_BASE_FIELDS,
   DESCRIPTOR_TABLES,
   acceptedFields,
+  carriesChannel,
+  pyType,
+  refPyClass,
+  AUTHORED_REFS,
   LABEL_OPTIONS,
   boxDims,
   paint,

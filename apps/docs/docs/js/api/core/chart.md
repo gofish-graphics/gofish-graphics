@@ -29,16 +29,15 @@ never mistaken for data.
 
 ## Parameters
 
-| Parameter        | Type                           | Description                                                                                                                                                                              |
-| ---------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`           | `T`                            | The dataset to visualize                                                                                                                                                                 |
-| `options.w`      | `number`                       | Width hint for the chart frame                                                                                                                                                           |
-| `options.h`      | `number`                       | Height hint for the chart frame                                                                                                                                                          |
-| `options.coord`  | `Coord.Coord`                  | Coordinate transform (e.g. `Coord.polar()`)                                                                                                                                              |
-| `options.color`  | `Color.Color`                  | Color scale applied to all marks in this chart. Use [`Color.palette()`](/js/api/color/palette) for categorical data or [`Color.gradient()`](/js/api/color/gradient) for continuous data. |
-| `options.axes`   | `AxesOptions`                  | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                                        |
-| `options.legend` | `boolean`                      | Whether to draw the color-scale legend. Default `true`. See [Legend](#legend) below.                                                                                                     |
-| `options.schema` | `Record<string, ColumnSchema>` | Column types, keyed by column name, e.g. `{ response: Schema.ordered(LEVELS).diverging() }` or `{ date: Schema.time() }`. See [`Schema`](/js/api/core/schema).                           |
+`data` (`T`) is the dataset to visualize.
+
+`options` holds the chart-level options. See [Axes](#axes) for the full `axes`
+shape, [Legend](#legend) for `legend`, [`Color.palette()`](/js/api/color/palette) and
+[`Color.gradient()`](/js/api/color/gradient) for `color`, and
+[`Schema`](/js/api/core/schema) for `schema`.
+
+::: gofish-ref ChartOptions
+:::
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 

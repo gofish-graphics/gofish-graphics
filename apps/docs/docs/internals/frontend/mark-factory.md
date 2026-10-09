@@ -117,8 +117,36 @@ that type (`DatumValueImpl.fieldType`) and the field it read, so a position
 over a `Schema.time()` column builds a space on that column's calendar (see
 [Underlying Space](/internals/core/underlying-space#column-types-the-chart-schema)).
 
+Inference is synchronous. A Python lambda reaches JS as an accessor with a
+batch form (`RESOLVE_ROWS`), and it is resolved over the mark's rows before
+inference: `resolveChannelAccessors` (`channels.ts`) calls each one once with
+all the rows and hands inference a synchronous accessor that reads each row's
+value back. It also walks a `dims` bag, so a nested accessor is resolved the
+same way. With no Python accessor in any channel it returns the options as
+they are, without awaiting. The operator factory uses the same helper before
+its own channel inference. A JS `async (d) => ...` accessor is not
+supported.
+
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.
+
+A built-in mark's annotations map is generated from its descriptor in
+gofish-ir: `markChannels.generated.ts` (`MARK_CHANNELS`, written by
+`pnpm --filter gofish-graphics gen`, checked for freshness in CI) lists each
+field that can hold a channel (`carriesChannel`) with its inference kind
+(`ch.size`, `ch.pos`, `ch.color`, `ch.raw`, or `dims` for a `dims` bag), and
+the mark passes it to `createMark`. It is generated as a literal, not built at
+run time, so `DeriveMarkProps` still types each key. The Python factories wrap
+a callable as an accessor at exactly the same fields, so a Python lambda works
+exactly where a JS per-datum accessor does.
+
+A shape function may also work on the inferred values before it builds the
+node. `circle` (in `chart.ts`) is `createMark` over `Ellipse` with
+`aspectRatio: 1`. Its `r`, `w`, and `h` are all size channels, and the body
+turns whichever one was given into the ellipse's diameter. For `r` it doubles
+the inferred value, keeping its measure (`value(2 * v, measure)`), so the
+diameter is `2r` for a number, a field, and an accessor alike. A data `w` or
+`h` stays on its own axis, and the aspect lock derives the other.
 
 ## What happens at render time
 
@@ -282,7 +310,7 @@ methods:
   (defined in `markResult.ts`, called by every `.name()` implementation, and
   carried forward by every modifier chained after it), so `.layer()`'s
   producer-tier auto-naming and a sequenced tier's naming can detect a
-  user-chained name without parsing the `__serialize` tag. A `createName`
+  user-chained name without parsing the wire tag (`wireOf`). A `createName`
   token is filed in the layer context under its own symbol (`layerKey`), so
   those tiers find a token-named mark's nodes too, while no string
   `selectAll` or `ref` can reach them. (An earlier `ChartBuilder.connect()`
@@ -329,7 +357,7 @@ which is one application of the shared **modifier factory** in
 mutates each produced node (once per node — every slice for an expand mark like
 `cut`) and receives the per-instance datum, so a modifier like `.zOrder` can
 derive a value from the data; `tag` stamps metadata on the
-wrapped mark function once (propagating the `__serialize` tag and stashing the
+wrapped mark function once (propagating the wire tag, `wireOf`, and stashing the
 layer name — a mark no longer carries an axis-field tag, since axis titles now
 derive from each node's resolved space `measure`).
 `attachModifiers` wires the set onto the base and
@@ -488,11 +516,16 @@ bag (`chart(selectAll("bars")).mark(ribbon(opts))`, or an empty-scope
 unfused, since there's nothing to anchor; `along` on either of those, or on
 the pairwise form, is a builder-time error rather than a silent no-op
 (`rejectAlongWithoutFlow` in chartBuilder.ts, and the pairwise branch in
-chart.ts). A split connector's `fill` may be a shared field name rather than
-a literal color; `resolveGroupFill` in chart.ts resolves it per group via
-`inferColor` (same channel helper `createMark` uses) before it reaches
-`Connect`, reading a representative row off the group's ref bag (so the
-resolved paint carries its field the same way).
+chart.ts). A connector's paint (`fill`, `stroke`: the color channels of
+its generated channel map) may be a field name, or an accessor (a field name
+is shorthand for one), rather than a literal color. Every call form (split
+bag, plain bag, pairwise edge row, low-level children) runs the same step,
+`resolveGroupPaint` in chart.ts, once per connector: Python accessors are
+resolved over exactly the rows the group's walk reaches (`rowsReached`,
+`resolveChannelAccessors`), then `projectByValues` (the projection `by`
+uses) reads the value. One value is the connector's color (`colorValue`, the
+helper `inferColor` uses); several throw; none passes a literal color string
+through and drops an accessor, so a raw function never reaches `Connect`.
 
 ### Default grouping: a fused connector's split, and `along`
 
@@ -528,7 +561,7 @@ either throws instead (see the previous section).
 Crucially, the computed default is written into a **separate mutable cell**,
 `inferred`, not into `opts` — `tagRelationalFusable` stamps `{ type, opts,
 inferred, anchorKeys, makeAnchor }`, and `opts` stays the untouched record of
-what the user wrote (the same object `__serialize.opts` reads, so mutating it
+what the user wrote (the same object the wire tag's `opts` reads, so mutating it
 would corrupt the emitted IR and make an inferred split look
 user-specified). The connector's mark closure reads the split off `inferred`
 only — there's no `opts.by` to check anymore — and resolves `dir = opts.dir
@@ -636,7 +669,7 @@ inside the bag branch), since every call form now passes it to `produce`.
 
 The paint fix from the same design note rides along for free: split and
 plain-bag now share one code path in `createRelationalMark`'s bag-form mark,
-so `resolveGroupFill` runs on both — per group on the split branch (where
+so the paint step (now `resolveGroupPaint`) runs on both — per group on the split branch (where
 it's a no-op safety net, since each group is homogeneous by construction),
 and over the _whole bag as one group_ on the plain-bag branch, where it now
 throws a loud, specific error if a field-valued `fill` disagrees across the
@@ -678,7 +711,7 @@ positions.
 - The companion factory for layout operators:
   [The Operator Factory](/internals/frontend/operator-factory).
 - The factory's optional `serialize` config (third argument, the IR `type`)
-  tags the produced mark with `__serialize` metadata that the frontend-IR
+  attaches the produced mark's wire tag (`withWire`) that the frontend-IR
   emitter reads. The tag holds the options as the caller passed them; the
   emitter keeps only the keys the mark's descriptor declares — see
   [Frontend IR (Serialization)](/internals/frontend/serialization).
