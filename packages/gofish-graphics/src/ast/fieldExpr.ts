@@ -368,7 +368,7 @@ export function evalFieldValues<T>(
 }
 
 /** What `.count()` and `.distinct()` report: counts. */
-const COUNT_QUANTITY: Quantity = { name: COUNT, unit: COUNT };
+const COUNT_QUANTITY: Quantity = { name: COUNT.name, unit: COUNT };
 
 /** The "not yet supported" error for `normalize()` outside its one valid
  *  slot (an operator's entry-flagged `size` channel), shared so every other
@@ -447,14 +447,15 @@ const datumQuantity = (v: MaybeValue<number>): Quantity | undefined =>
  * `byName`, when present, further qualifies by the grouping field the shares
  * were computed over, so a per-`origin` share and a per-`cylinders` share
  * (two nesting levels of the same mosaic) stay distinct units even though
- * both are "count share". The name doubles as the axis title.
+ * both are "count share". The name doubles as the axis title. The unit has
+ * no symbol: a share is a plain number, so the title adds no "(unit)".
  */
 export const shareQuantity = (
   base: Quantity | undefined,
   byName?: string
 ): Quantity => {
   const name = `${base?.name ?? "value"} share${byName ? ` by ${byName}` : ""}`;
-  return { name, unit: name };
+  return { name, unit: { name } };
 };
 
 /**

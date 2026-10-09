@@ -398,8 +398,8 @@ export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
  *    declared units that differ on one shared axis are a type error
  *    ({@link joinUnits}).
  *  - `calendar`: over instants, the calendar they read on (`HasCalendar`).
- *  - `titles`: the column names that title the axis, in the order they met.
- *    Never a declared unit.
+ *  - `titles`: the quantities that title the axis, in the order they met:
+ *    each column's declared quantity (`HasQuantity`), else its name.
  *
  * An ordinal axis has titles (its grouping field) and no unit: categories
  * set up no scale.
@@ -539,12 +539,27 @@ export const spaceCalendar = (
   space: UnderlyingSpace | undefined
 ): HasCalendar | undefined => spaceUnit(space)?.calendar;
 
-/** The title a space gives its axis: its titles (column names), joined. */
+/**
+ * THE title a space gives its axis, in the SI style `Quantity (unit)`: its
+ * quantities, joined with ", ", then the symbol of its unit in parentheses
+ * when the unit is declared and has a symbol ("Pay (USD)"). A unit with no
+ * symbol (a count, a share, an instant) adds nothing, and neither does an
+ * unknown unit.
+ *
+ * A declared heuristic: when every quantity name already ends with the
+ * suffix (a column named "Flipper Length (mm)" declared in "mm"), the names
+ * already show the unit, so the suffix is not added again.
+ */
 export const spaceTitle = (
   space: UnderlyingSpace | undefined
 ): string | undefined => {
-  const titles = spaceUnit(space)?.titles;
-  return titles === undefined || titles.length === 0
-    ? undefined
-    : titles.join(", ");
+  const r = spaceUnit(space);
+  if (r === undefined || r.titles.length === 0) return undefined;
+  const quantities = r.titles.join(", ");
+  const symbol = r.unit?.kind === "declared" ? r.unit.symbol : undefined;
+  if (symbol === undefined) return quantities;
+  const suffix = ` (${symbol})`;
+  return r.titles.every((t) => t.endsWith(suffix))
+    ? quantities
+    : quantities + suffix;
 };

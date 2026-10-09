@@ -111,6 +111,7 @@ export type {
   HasMidpoint,
   HasCalendar,
   HasUnit,
+  HasQuantity,
   Level,
   SchemaEntry,
 } from "./ast/schema";
