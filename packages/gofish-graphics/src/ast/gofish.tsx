@@ -336,9 +336,10 @@ export async function layout(
   // other); only `false` suppresses. Each enabled dim carries what its axis
   // ticks at: about 10 ticks, or the rows of a time axis (`rows`, parsed
   // here, once), whose inner row its scope's domain is niced to. The axis is
-  // drawn from the same stamp.
+  // drawn from the same stamp. A dim with rows is always enabled: a disabled
+  // dim (`false`) has no options to hold them.
+  const rows = perDimAxisOption(axes, "rows");
   if (axes) {
-    const rows = perDimAxisOption(axes, "rows");
     const ticksOf = (dim: 0 | 1): AxisTicks => {
       const r = rows[dim];
       return r === undefined
@@ -382,11 +383,9 @@ export async function layout(
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
   });
-  // `rows` reach every axis on their dim, but only a time axis reads them
-  // (a faceted chart's ordinal axis shares the dim with the time axes inside
-  // it). Rows that no time axis read are an error.
-  perDimAxisOption(axes, "rows").forEach((rows, dim) => {
-    if (rows !== undefined && !elaborated.timeAxes[dim]) {
+  // Rows that no time axis read are an error (see `AxisOptions.rows`).
+  rows.forEach((r, dim) => {
+    if (r !== undefined && !elaborated.timeAxes[dim]) {
       throw new Error(
         `axes.${axisName(dim as 0 | 1)}.rows: rows of calendar cells need a ` +
           `time axis, but no ${axisName(dim as 0 | 1)} axis of this chart is ` +

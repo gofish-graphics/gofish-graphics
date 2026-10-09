@@ -814,13 +814,16 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  * ordinal axis — is the innermost tier); see `elaborateChrome` for how it's
  * bubbled up. The returned `tierCounts` adds one per dim this node claimed an
  * ordinal axis on, so an ancestor owning the same dim's outer tier reads the
- * right index for a per-tier `labelAngle` array.
+ * right index for a per-tier `labelAngle` array. `timeAxes` folds the same
+ * way: whether a time axis was drawn below this node, per dim, and the
+ * returned one adds the dims this node draws a time axis on.
  */
 function elaborationsFor(
   node: GoFishNode,
   sides: AxisSides,
   labelSettings: LabelRowSettings = () => undefined,
-  tierCounts: [number, number] = [0, 0]
+  tierCounts: [number, number] = [0, 0],
+  timeAxes: [boolean, boolean] = [false, false]
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -836,7 +839,8 @@ function elaborationsFor(
   /** Per-dim ordinal-tier count, incremented for each dim this node claimed
    *  an ordinal axis on (see the doc comment above). */
   tierCounts: [number, number];
-  /** Per-dim [x, y]: did this node draw a time axis on that dim. */
+  /** Per-dim [x, y]: did this node, or a node below it, draw a time axis on
+   *  that dim. */
   timeAxes: [boolean, boolean];
 } {
   const space = node._underlyingSpace;
@@ -848,7 +852,7 @@ function elaborationsFor(
       owned: [false, false],
       sides: [undefined, undefined],
       tierCounts,
-      timeAxes: [false, false],
+      timeAxes,
     };
   // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
   // `_underlyingSpace` is the UNDEFINED sentinel — self-scaled children
@@ -917,17 +921,13 @@ function elaborationsFor(
     return resolveLabelRotation(setting);
   };
   const outTierCounts: [number, number] = [...tierCounts];
-  const timeAxes: [boolean, boolean] = [false, false];
+  const outTimeAxes: [boolean, boolean] = [...timeAxes];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
-    // The chart's `rows` reach every axis on the dim, but only a time axis
-    // reads them: in a faceted chart the facets' ordinal axis shares the dim
-    // with the time axes inside it. A chart with rows and no time axis on the
-    // dim is an error, raised once the whole chart is elaborated (`layout`).
     const ticks = ticksFor(dim);
     if (kind === "absolute" && isCONTINUOUS(s) && s.calendar) {
       const e = elaborateTimeAxis(
@@ -941,7 +941,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
-      timeAxes[dim] = true;
+      outTimeAxes[dim] = true;
     } else if (kind === "absolute" && isCONTINUOUS(s)) {
       const e = elaborateContinuousAxis(
         dim,
@@ -1004,7 +1004,7 @@ function elaborationsFor(
       owned[1] ? axisSide(1) : undefined,
     ],
     tierCounts: outTierCounts,
-    timeAxes,
+    timeAxes: outTimeAxes,
   };
 }
 
@@ -1056,8 +1056,8 @@ export type ChromeOptions = {
  * interfere: each call only sees counts folded from ITS OWN children.
  *
  * It also reports, per dim, whether any node in the subtree drew a time axis
- * (`timeAxes`), so `layout` can reject `axes.<dim>.rows` on a chart with no
- * time axis on that dim.
+ * (`timeAxes`), folded the same way, so `layout` can reject `axes.<dim>.rows`
+ * on a chart with no time axis on that dim (see `AxisOptions.rows`).
  */
 export async function elaborateChrome(
   node: GoFishNode,
@@ -1070,7 +1070,7 @@ export async function elaborateChrome(
 }> {
   let changed = false;
   const tierCounts: [number, number] = [0, 0];
-  const timeAxes: [boolean, boolean] = [false, false];
+  const childTimeAxes: [boolean, boolean] = [false, false];
   // Bottom-up: replace each child with its elaborated form.
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
@@ -1079,7 +1079,7 @@ export async function elaborateChrome(
       if (res.changed) changed = true;
       for (const dim of [0, 1] as (0 | 1)[]) {
         tierCounts[dim] = Math.max(tierCounts[dim], res.tierCounts[dim]);
-        timeAxes[dim] ||= res.timeAxes[dim];
+        childTimeAxes[dim] ||= res.timeAxes[dim];
       }
       if (res.node !== child) {
         node.children[i] = res.node;
@@ -1095,14 +1095,14 @@ export async function elaborateChrome(
     owned,
     sides,
     tierCounts: nextTierCounts,
-    timeAxes: ownTimeAxes,
+    timeAxes,
   } = elaborationsFor(
     node,
     options.sides ?? [undefined, undefined],
     options.labelSettings,
-    tierCounts
+    tierCounts,
+    childTimeAxes
   );
-  for (const dim of [0, 1] as (0 | 1)[]) timeAxes[dim] ||= ownTimeAxes[dim];
   // A title names an axis this node draws. The measure is read off the
   // node's own space, which elaboration has not re-resolved yet.
   const request = node._chromeRequest;

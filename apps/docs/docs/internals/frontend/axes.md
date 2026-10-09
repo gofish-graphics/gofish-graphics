@@ -401,10 +401,11 @@ difference axis), never off the size claim:
   partitions, so they need not nest. A tick both rows share is drawn once,
   short; an outer-row tick between inner ticks is longer. `axes.x.rows` sets the rows
   (parsed once, by `layout`, into the axis demand below). The demand
-  reaches every axis on the dim, but only a time axis reads the rows: in a
-  faceted chart the facets' ordinal axis shares the dim with the time axes
-  inside the facets. `elaborateChrome` reports which dims drew a time axis
-  (`timeAxes`), and `layout` rejects rows on a dim that drew none. Without
+  reaches every axis on the dim, but only a time axis reads the rows (the
+  rule is stated once, on `AxisOptions.rows` in `gofish.tsx`).
+  `elaborateChrome` folds which dims drew a time axis (`timeAxes`) bottom-up
+  with the ordinal tier counts, and `layout` rejects rows on a dim that drew
+  none. Without
   them the inner row is the level and step whose cells are nearest in
   length to a tenth of the domain (`tickPartition` in `calendar.ts`, like
   d3's time ticks, and like a numeric axis's ~10 ticks), and the outer row
