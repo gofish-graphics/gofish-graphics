@@ -53,9 +53,10 @@ import {
   isValue,
   MaybeValue,
   baseEmbedded,
-  getMeasure,
+  sameValueUnit,
 } from "./data";
 import { color6 } from "../color";
+import { hasUnits, Units, withUnits } from "./measure";
 import { orderByLevels, type HasOrder } from "./schema";
 import {
   isCONTINUOUS,
@@ -122,6 +123,11 @@ import {
 export type RenderSession = {
   tokenContext: TokenContext;
   scaleContext: ScaleContext;
+  /** The render's union-find of unknown units (measure.ts): the unit
+   *  variable of each quantity and what it is bound to, for the whole
+   *  figure. Created on first use by the type walk
+   *  (`resolveUnderlyingSpace`). */
+  units?: Units;
   /** Set by the lower emit driver (`lowerToDisplayList`) for the duration of a
    *  lowering walk: the map from layout pixels to canvas pixels (the gutter
    *  offset) every `lower` body uses. */
@@ -886,6 +892,13 @@ export class GoFishNode {
     if (this._underlyingSpace) {
       return this._underlyingSpace;
     }
+    // The type walk runs inside the render's union-find of unknown units
+    // (measure.ts), so a binding made anywhere in the figure holds everywhere
+    // in it. The outermost call installs it; one per render, on the session.
+    if (!hasUnits()) {
+      const units = this.renderUnits();
+      return withUnits(units, () => this.resolveUnderlyingSpace());
+    }
     const childSpaces = this.children.map((child) =>
       child.resolveUnderlyingSpace()
     );
@@ -1104,6 +1117,7 @@ export class GoFishNode {
    */
   public resolveEmbedding(insideCoord: boolean = false): void {
     const within = insideCoord || this.type === "coord";
+    const units = this.renderUnits();
 
     const dims = this.args?.dims as Dimensions | undefined;
     if (dims) {
@@ -1112,13 +1126,12 @@ export class GoFishNode {
         if (dim === undefined) continue;
         // Explicit emX/emY (or connect's embed()) is a hard claim — leave it.
         if (dim.embedded === true) continue;
-        let embedded = baseEmbedded(dim);
-        // Route B gate (coord-scoped): a value-sized dim positioned in a measure
-        // FOREIGN to its size's measure is a foreign extent (a bubble) → ink.
+        let embedded = baseEmbedded(dim, units);
+        // Route B gate (coord-scoped): a value-sized dim positioned in a unit
+        // FOREIGN to its size's unit is a foreign extent (a bubble) → ink.
         if (embedded && within) {
-          const sizeMeasure = getMeasure(dim.size);
           for (const pos of [dim.min, dim.center, dim.max]) {
-            if (isValue(pos) && getMeasure(pos) !== sizeMeasure) {
+            if (isValue(pos) && !sameValueUnit(pos, dim.size, units)) {
               embedded = false;
               break;
             }
@@ -2011,6 +2024,13 @@ export class GoFishNode {
         child.setRenderSession(session);
       }
     });
+  }
+
+  /** The render's union-find of unknown units (`RenderSession.units`), or a
+   *  fresh one when this node has no session (nothing is then shared). */
+  private renderUnits(): Units {
+    const session = this.tryGetRenderSession();
+    return session ? (session.units ??= new Units()) : new Units();
   }
 
   public getRenderSession(): RenderSession {

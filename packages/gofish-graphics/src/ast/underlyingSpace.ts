@@ -5,13 +5,24 @@
 import { interval, Interval, width as intervalWidth } from "../util/interval";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
 import {
-  getMeasure,
+  getQuantity,
   getValue,
-  getValueFieldType,
   isAesthetic,
   isValue,
   type MaybeValue,
 } from "./data";
+import {
+  currentUnits,
+  MeasureClash,
+  resolveUnit,
+  unify,
+  type MeasureSite,
+  type Quantity,
+  type Unit,
+  type UnitVar,
+} from "./measure";
+
+export { MeasureClash, type MeasureSite } from "./measure";
 import { nice as d3Nice } from "d3-array";
 import type { HasCalendar } from "./schema";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
@@ -382,33 +393,41 @@ export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
 /**
  * What the values along one axis measure:
  *
- *  - `unit`: their unit. Two different units on one shared axis are a type
- *    error ({@link joinUnits}).
+ *  - `unit`: their unit, a term of the render's union-find (`measure.ts`):
+ *    a declared unit, or an unknown that unifies with anything. Two
+ *    declared units that differ on one shared axis are a type error
+ *    ({@link joinUnits}).
  *  - `calendar`: over instants, the calendar they read on (`HasCalendar`).
- *  - `titles`: the names that title the axis, in the order they met.
+ *  - `titles`: the column names that title the axis, in the order they met.
+ *    Never a declared unit.
  *
  * An ordinal axis has titles (its grouping field) and no unit: categories
  * set up no scale.
  */
 export type UnitRecord = {
-  unit?: string;
+  unit?: UnitVar;
   calendar?: HasCalendar;
   titles: string[];
 };
 
-/** The units of a datum value: its measure as its unit and title, and the
- *  calendar of the time column it was read from; undefined for a value that
- *  carries neither (a literal). */
-export const valueUnits = (v: MaybeValue<unknown>): UnitRecord | undefined => {
-  const unit = getMeasure(v);
-  const calendar = getValueFieldType(v)?.HasCalendar;
-  if (unit === undefined && calendar === undefined) return undefined;
-  return {
-    ...(unit !== undefined ? { unit } : {}),
-    ...(calendar !== undefined ? { calendar } : {}),
-    titles: unit !== undefined ? [unit] : [],
-  };
-};
+/** The units of values of quantity `q`: its unit variable (bound to its
+ *  declared unit, if any) from the render's union-find, its calendar, and
+ *  its name as the title. */
+export const quantityUnits = (
+  q: Quantity | undefined
+): UnitRecord | undefined =>
+  q === undefined
+    ? undefined
+    : {
+        unit: currentUnits().of(q),
+        ...(q.calendar ? { calendar: q.calendar } : {}),
+        titles: [q.name],
+      };
+
+/** The units of a datum value: of the quantity it was read from; undefined
+ *  for a literal, which makes no claim. */
+export const valueUnits = (v: MaybeValue<unknown>): UnitRecord | undefined =>
+  quantityUnits(getQuantity(v));
 
 /** The units of an ordinal axis grouped by `field`: a title, no unit. */
 export const titleUnits = (
@@ -420,13 +439,21 @@ export const titleUnits = (
  * THE join of two unit records that meet on one axis, in every composition
  * (overlays, alignments, spreads, stacks, coords, a layer's datum domain, a
  * rect's two ends, a `position` offset). An absent record makes no claim and
- * yields the other side.
+ * yields the other side. `shared` says whether the two sides share the axis:
  *
- * `shared` says whether the two sides share the axis. When they do, two
- * different units are a {@link MeasureClash}; when they do not, the join
- * forgets: it records nothing and raises nothing, and the result keeps `a`'s
- * unit and titles. Either way the calendars must agree (one axis reads one
- * calendar) and a shared join unions the titles.
+ * | Meeting              | shared                         | not shared        |
+ * | -------------------- | ------------------------------ | ----------------- |
+ * | declared A, A        | one unit A                     | one unit A        |
+ * | declared A, B        | {@link MeasureClash} (to #528) | two units, forget |
+ * | declared A, unknown x| x is bound to A                | forget            |
+ * | unknown x, x         | one unit                       | one unit          |
+ * | unknown x, y         | x and y unify                  | forget            |
+ *
+ * A binding holds for the whole render, so an unknown bound to two
+ * different declared units is a {@link MeasureClash} too. "Forget" records
+ * nothing and raises nothing: the result keeps `a`'s record. A shared join
+ * unions the titles. Either way the calendars must agree: one axis reads one
+ * calendar.
  */
 export const joinUnits = (
   a: UnitRecord | undefined,
@@ -442,9 +469,8 @@ export const joinUnits = (
     return calendar === undefined ? rest : { ...rest, calendar };
   };
   if (!shared) return withCalendar(a);
-  if (a.unit !== undefined && b.unit !== undefined && a.unit !== b.unit)
-    throw new MeasureClash(a.unit, b.unit, site);
-  const unit = a.unit ?? b.unit;
+  const unit =
+    a.unit && b.unit ? unify(a.unit, b.unit, site) : (a.unit ?? b.unit);
   const titles = [...a.titles];
   for (const t of b.titles) if (!titles.includes(t)) titles.push(t);
   return withCalendar({ ...(unit !== undefined ? { unit } : {}), titles });
@@ -480,24 +506,40 @@ const joinCalendars = (
   return a;
 };
 
+/** A space's {@link UnitRecord} as {@link spaceUnit} reads it: the unit
+ *  replaced by its representative in the render's union-find. */
+export type SpaceUnits = {
+  unit?: Unit;
+  calendar?: HasCalendar;
+  titles: string[];
+};
+
 /**
- * THE accessor for a space's units: its {@link UnitRecord}, or undefined for
- * a space with none (an UNDEFINED space, or one over literals). Anything that
- * asks which unit, calendar, or title a space has reads it here.
+ * THE accessor for a space's units: its record with the unit replaced by its
+ * union-find representative (a declared unit, or the unknown its class
+ * stands for), or undefined for a space with none (an UNDEFINED space, or
+ * one over literals). Anything that asks which domain a space is in, which
+ * calendar it reads, or what titles it, reads it here. Read it after the
+ * type walk, when every binding is made.
  */
 export const spaceUnit = (
   space: UnderlyingSpace | undefined
-): UnitRecord | undefined =>
-  space && (isCONTINUOUS(space) || isORDINAL(space))
-    ? space.measure
-    : undefined;
+): SpaceUnits | undefined => {
+  const r =
+    space && (isCONTINUOUS(space) || isORDINAL(space))
+      ? space.measure
+      : undefined;
+  if (r === undefined) return undefined;
+  const { unit, ...rest } = r;
+  return unit === undefined ? rest : { ...rest, unit: resolveUnit(unit) };
+};
 
 /** The calendar of a space's axis, when its data are instants. */
 export const spaceCalendar = (
   space: UnderlyingSpace | undefined
 ): HasCalendar | undefined => spaceUnit(space)?.calendar;
 
-/** The title a space gives its axis: its titles, joined. */
+/** The title a space gives its axis: its titles (column names), joined. */
 export const spaceTitle = (
   space: UnderlyingSpace | undefined
 ): string | undefined => {
@@ -506,57 +548,3 @@ export const spaceTitle = (
     ? undefined
     : titles.join(", ");
 };
-
-/** Where two units meet: the axis (0 or 1) when the clash is on an axis,
- *  and a plain phrase for the composition, read as "(... )" in the message,
- *  e.g. "where marks are lined up". */
-export type MeasureSite = { axis?: 0 | 1; where: string };
-
-/**
- * The error for two different units on one shared axis. It is raised where
- * the units meet, which knows the axis index but not the axis's name (`x`,
- * `y`, or a coordinate space's own name such as `r`). The node whose type
- * hook raised it names the axis from where it sits in the tree
- * ({@link MeasureClash.named}) before it reaches the user.
- */
-export class MeasureClash extends Error {
-  constructor(
-    readonly a: string,
-    readonly b: string,
-    readonly site: MeasureSite,
-    readonly axisName?: string
-  ) {
-    super(MeasureClash.message(a, b, site, axisName));
-    this.name = "MeasureClash";
-  }
-
-  /** This clash with its axis named, or itself when it has no axis or is
-   *  already named. */
-  named(name: (axis: 0 | 1) => string): MeasureClash {
-    return this.site.axis === undefined || this.axisName !== undefined
-      ? this
-      : new MeasureClash(this.a, this.b, this.site, name(this.site.axis));
-  }
-
-  static message(
-    a: string,
-    b: string,
-    site: MeasureSite,
-    axisName: string | undefined
-  ): string {
-    const subject =
-      site.axis === undefined
-        ? "This chart combines"
-        : `The ${axisName ?? (site.axis === 0 ? "x" : "y")} axis combines`;
-    return (
-      `${subject} two different measures, "${a}" and "${b}" (${site.where}). ` +
-      `One axis can show only one measure.\n` +
-      `If both are the same kind of quantity, give them the same measure, ` +
-      `e.g. if both are dollars, field("${a}", "dollars") and ` +
-      `field("${b}", "dollars"). To title the axis, use the axes option ` +
-      `(its title).\n` +
-      `If they are different kinds of quantity, each needs its own axis: ` +
-      `give the inner chart its own w and h so it scales on its own.`
-    );
-  }
-}

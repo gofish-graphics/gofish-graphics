@@ -92,7 +92,7 @@ The field is the value's provenance, `DatumValueImpl.field`: `inferColor` sets
 it when a color channel named a field (`fill: "product"`,
 `fill: field("product")`), and `offset`/`lighten`/`darken` keep it. A function
 accessor, a literal, or a hand-made `datum(...)` has none, so the scale knows
-no field for it. It is not a measure and plays no part in unit checking. A legend draws the
+no field for it. It is not a quantity and plays no part in unit checking. A legend draws the
 scale, so `layout()` reports the fields a rendered legend shows as
 `LayoutData.legendFields` (empty when the legend is suppressed). No legend
 title reads it yet; `labelAngle: "auto"` uses it to decide whether a hidden

@@ -50,10 +50,10 @@ import {
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
 import { discretePosition, value } from "../ast/data";
-import type { UnitRecord } from "../ast/underlyingSpace";
+import { quantityUnits } from "../ast/underlyingSpace";
 
-/** The units of a column measured in `unit` (titled by it). */
-const u = (unit: string): UnitRecord => ({ unit, titles: [unit] });
+/** The measure of a column declared in unit `unit` (and named by it). */
+const u = (unit: string) => quantityUnits({ name: unit, unit });
 import { pxOf, type AxisMap } from "../ast/domain";
 import {
   UNDEFINED,
@@ -658,7 +658,7 @@ console.log("# constraint confluence: nest size dependency planning");
     pinned !== undefined &&
       pinned.min === 0 &&
       pinned.max === 20 &&
-      spaceUnit(resolved[1])?.unit === "pin"
+      spaceUnit(resolved[1])?.titles.join() === "pin"
   );
   let clash: string | undefined;
   try {
@@ -671,7 +671,7 @@ console.log("# constraint confluence: nest size dependency planning");
   }
   ok(
     "an unplaced child in another unit than the datum domain is a type error",
-    clash !== undefined && /different measures/.test(clash)
+    clash !== undefined && /different units/.test(clash)
   );
 }
 

@@ -39,7 +39,7 @@ import {
 } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
-/** `space` over instants read on `calendar`: a time column's units. */
+/** `space` over instants read on `calendar`: a time column's measure. */
 const withCalendar = (
   space: CONTINUOUS_TYPE,
   calendar: { zone: string }

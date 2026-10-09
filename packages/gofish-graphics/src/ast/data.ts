@@ -5,13 +5,10 @@
 import { Interval } from "./dims";
 import { FieldExpr, type FieldOp } from "./fieldExpr";
 import type { ColumnType } from "./schema";
+import { resolveUnit, sameUnit, Units, type Quantity } from "./measure";
 
 export type { FieldOp } from "./fieldExpr";
 export { FieldExpr } from "./fieldExpr";
-
-export type Measure = string;
-
-export const measure = (unit: string): Measure => unit;
 
 export type Value<T> = T | DatumValue | DatumValueImpl;
 export type MaybeValue<T> = T | Value<T>;
@@ -55,14 +52,16 @@ export type PositionValue = MaybeValue<number> | DiscretePosition;
 export type ColorOp = { op: "lighten" | "darken"; amount: number };
 
 /** The datum wrapper's WIRE shape — what the Python bridge emits and what the
- *  {@link getValue} / {@link getMeasure} casts read. `offset` is a pixel
+ *  {@link getValue} / {@link getQuantity} casts read. `offset` is a pixel
  *  offset added AFTER the datum maps through its scale ("a fixed standoff
  *  from a data position"); set via `datum(v).offset(px)` in JS or
  *  `datum(v) + px` in Python, read with {@link getValueOffset}. */
 type DatumValue = {
   type: "datum";
   datum: any;
-  measure?: Measure;
+  /** What the value is an amount of, when a channel read it from a column
+   *  (set by channel inference, never by the user; see `measure.ts`). */
+  quantity?: Quantity;
   offset?: number;
   colorOps?: ColorOp[];
   field?: string;
@@ -80,14 +79,16 @@ export class DatumValueImpl {
   public readonly type = "datum" as const;
   constructor(
     public readonly datum: any,
-    public readonly measure?: Measure,
+    /** What the value is an amount of, when a channel read it from a column
+     *  (see `measure.ts`). Read via {@link getQuantity}. */
+    public readonly quantity?: Quantity,
     /** @internal accumulated pixel offset; read via {@link getValueOffset} */
     public readonly _offset?: number,
     /** @internal accumulated color transforms; read via {@link getValueColorOps} */
     public readonly _colorOps?: ColorOp[],
     /** The data field this datum was read from, when a channel named one
-     *  (`fill: "product"` reads `row.product`). Provenance only: it is not a
-     *  measure and plays no part in unit checking. Read via
+     *  (`fill: "product"` reads `row.product`). Provenance only: it plays no
+     *  part in unit checking ({@link quantity} does). Read via
      *  {@link getValueField}. */
     public readonly field?: string,
     /** The type the chart's `schema` declares for {@link field}, when it
@@ -101,7 +102,7 @@ export class DatumValueImpl {
   offset(px: number): DatumValueImpl {
     return new DatumValueImpl(
       this.datum,
-      this.measure,
+      this.quantity,
       (this._offset ?? 0) + px,
       this._colorOps,
       this.field,
@@ -126,7 +127,7 @@ export class DatumValueImpl {
   private _withColorOp(op: ColorOp): DatumValueImpl {
     return new DatumValueImpl(
       this.datum,
-      this.measure,
+      this.quantity,
       this._offset,
       [...(this._colorOps ?? []), op],
       this.field,
@@ -138,7 +139,7 @@ export class DatumValueImpl {
     return {
       type: this.type,
       datum: this.datum,
-      ...(this.measure !== undefined ? { measure: this.measure } : {}),
+      ...(this.quantity !== undefined ? { quantity: this.quantity } : {}),
       ...(this._offset ? { offset: this._offset } : {}),
       ...(this._colorOps?.length ? { colorOps: this._colorOps } : {}),
       ...(this.field !== undefined ? { field: this.field } : {}),
@@ -146,8 +147,7 @@ export class DatumValueImpl {
   }
 }
 
-export const value = <T>(datum: T, measure?: Measure): DatumValueImpl =>
-  new DatumValueImpl(datum, measure);
+export const value = <T>(datum: T): DatumValueImpl => new DatumValueImpl(datum);
 
 /**
  * `datum(x)` is the recommended name for the data-driven value wrapper
@@ -168,27 +168,18 @@ export const datum = value;
 export type FieldAccessor = {
   type: "field";
   name: string;
-  measure?: Measure;
   ops?: FieldOp[];
 };
 
 /**
- * `field(name, measure?)` is an explicit field-accessor wrapper. The channel
+ * `field(name)` is an explicit field-accessor wrapper. The channel
  * inference functions (`inferSize` / `inferPos` / `inferColor` / `inferRaw`)
  * recognize the tag and resolve it to a per-row value, identical to passing a
  * bare string. Use this when the field name could be confused with a literal
- * (e.g. `field("0.5")`).
- *
- * The optional `measure` is an *explicit unit annotation* — a real type claim
- * about the channel's underlying space (see {@link Measure}). It is one of the
- * three measure sources `resolveMeasure` (channels.ts) checks: a bare string
- * accessor's field-name is only a *weak default*, whereas this annotation (and
- * the unit a column's type carries, `HasUnit` in schema.ts, which `bin()`
- * writes) is a hard claim that triggers a type error if it contradicts the
- * column's unit.
+ * (e.g. `field("0.5")`), or to chain a pipeline (`field("v").mean()`). A
+ * column's unit is declared in the chart's schema (`Schema.unit`), not here.
  */
-export const field = (name: string, measure?: Measure): FieldExpr =>
-  new FieldExpr(name, measure);
+export const field = (name: string): FieldExpr => new FieldExpr(name);
 export const isField = (v: unknown): v is FieldAccessor =>
   typeof v === "object" &&
   v !== null &&
@@ -245,19 +236,27 @@ export const getValue = <T>(value: MaybeValue<T>): T => {
 };
 
 /**
- * The {@link Measure} carried by a datum value, or `undefined` when it carries
- * none (a measureless datum) or is a raw aesthetic (not a datum at all).
- *
- * Returns `undefined` rather than a sentinel string ("unit"/"unknown") so that
- * a measureless value unifies *permissively* with a tagged one — see
- * `mergeMeasures` in underlyingSpace.ts, whose undefined-permissive rule is the
- * whole point of distinguishing "no claim" from "a specific unit".
+ * The {@link Quantity} a datum value is an amount of, or `undefined` when it
+ * was not read from a column (a literal datum) or is a raw aesthetic (not a
+ * datum at all). A value with no quantity makes no claim: its space's
+ * units are undefined, which join with anything (`joinUnits`).
  */
-export const getMeasure = <T>(value: MaybeValue<T>): Measure | undefined => {
-  if (isValue(value)) {
-    return (value as DatumValue).measure;
-  }
-  return undefined;
+export const getQuantity = <T>(value: MaybeValue<T>): Quantity | undefined =>
+  isValue(value) ? (value as DatumValue).quantity : undefined;
+
+/** Whether two values are in the same unit, read through the render's
+ *  union-find `units` (the representative `spaceUnit` reads): one declared
+ *  unit, or one class of unknowns. Two values with no quantity (literals)
+ *  are; a literal and a column's value are not. */
+export const sameValueUnit = <T>(
+  a: MaybeValue<T>,
+  b: MaybeValue<T>,
+  units: Units
+): boolean => {
+  const qa = getQuantity(a);
+  const qb = getQuantity(b);
+  if (qa === undefined || qb === undefined) return qa === qb;
+  return sameUnit(resolveUnit(units.of(qa)), resolveUnit(units.of(qb)));
 };
 
 /**
@@ -303,14 +302,19 @@ export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
 /**
  * The intrinsic-embedding predicate: a dim's *own* extent is a coordinate-space
  * extent (so a coord warps it) iff its size is a data {@link Value} (or unsized —
- * the nest-growth case) AND its `min` doesn't contradict the size's measure. This
- * is the measure-free half; the {@link GoFishNode.resolveEmbedding} pass layers
- * the Route-B measure gate on top (a size denominated in a *foreign* measure to
- * the axis stays ink, not a coord extent). Extracted so the pass is the sole
- * author of `embedded` and the rule lives in one place. See #534.
+ * the nest-growth case) AND its `min` is in the same unit as its size
+ * ({@link sameValueUnit}, read through the render's union-find `units`; a
+ * fresh one when there is no render). This is the coord-free half; the
+ * {@link GoFishNode.resolveEmbedding} pass layers the Route-B unit gate on
+ * top (a size in a unit *foreign* to the axis stays ink, not a coord extent).
+ * Extracted so the pass is the sole author of `embedded` and the rule lives
+ * in one place. See #534.
  */
-export const baseEmbedded = <T>(interval: Interval<T>): boolean =>
+export const baseEmbedded = <T>(
+  interval: Interval<T>,
+  units: Units = new Units()
+): boolean =>
   (isValue(interval.size) || interval.size === undefined) &&
   (interval.min === undefined ||
     !isValue(interval.min) ||
-    getMeasure(interval.min) === getMeasure(interval.size));
+    sameValueUnit(interval.min, interval.size, units));

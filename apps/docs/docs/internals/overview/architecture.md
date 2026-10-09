@@ -76,7 +76,7 @@ names their meaning in the scope of the enclosing coord (see
 A second top-down pass, `resolveEmbedding` (a `GoFishNode` method wired into the
 pipeline before layout), authors each dim's `embedded` flag — whether a coord
 warps that axis's extent into an arc/wedge (point/line/area) — gating a mark's
-own size on whether its measure matches the axis it sits in (see
+own size on whether it is the same quantity as the position it sits at (see
 [Pass 8.5](/internals/layout/passes#pass-8-5-embedding-resolution)).
 
 The placement pass treats every real node as a `Placeable`: it can expose its
@@ -95,8 +95,9 @@ resolved underlying-space type as an axis, so a nested grouping (a grouped or
 faceted chart) renders one ordinal axis per level — an outer `lake` axis and a
 per-facet `species` axis — each living at its own tree node, the way faceting
 already nests. Each axis names itself off its own space's **measure** (a
-continuous axis by its unit, an ordinal axis by its grouping field), so an axis
-title is derived from the data model, not a syntactic hint. The orchestrator
+continuous axis by its quantity names, never its unit; an ordinal axis by its
+grouping field), so an axis title is derived from the data model, not a
+syntactic hint. The orchestrator
 (`gofish.tsx`) then sizes the SVG off the
 laid-out tree's **measured extent on all four sides** — the legend's overhang
 past the content, the axis/title gutters past the origin, and any content a

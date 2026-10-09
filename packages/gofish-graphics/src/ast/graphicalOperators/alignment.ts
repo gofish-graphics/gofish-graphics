@@ -65,7 +65,7 @@ export const seatedUnion = (
  * The one overlay fold: the union of the children's seated intervals, with
  * the origin the operator gives the result and the children's measures
  * unified as types, whatever their origin (a clash is an error; see
- * {@link mergeMeasures}). Children that all hold amounts on both sides of 0
+ * {@link joinUnits}). Children that all hold amounts on both sides of 0
  * still do together, when the result has a 0.
  */
 function overlay(

@@ -14,6 +14,7 @@ Schema.ordered(levels).diverging(); // HasOrder and HasMidpoint
 Schema.ordered(levels).diverging({ midpoint }); // HasOrder and HasMidpoint
 Schema.time(); // HasCalendar, in UTC
 Schema.time({ zone }); // HasCalendar, in the time zone `zone`
+Schema.unit(unit); // HasUnit, in the unit `unit`
 ```
 
 A column type is a set of classes. Each builder method adds one class, and
@@ -25,6 +26,7 @@ point along an order.
 | `Schema.ordered(levels)` | `HasOrder`    | The column's values are `levels`, in this order.       |
 | `.diverging()`           | `HasMidpoint` | The order has a midpoint, a point along it. See below. |
 | `Schema.time()`          | `HasCalendar` | The column's values are instants, read on a calendar.  |
+| `Schema.unit(unit)`      | `HasUnit`     | The column's values are amounts in the unit `unit`.    |
 
 ## Parameters
 
@@ -33,6 +35,7 @@ point along an order.
 | `levels`   | `(string \| number)[]` | Every value the column takes, first to last.                                                                       |
 | `midpoint` | `number`               | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`. |
 | `zone`     | `string`               | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                  |
+| `unit`     | `string`               | The name of the unit, e.g. `"USD"` or `"mm"`. Two units are the same when their names are equal.                   |
 
 ## Behavior
 
@@ -92,6 +95,27 @@ point along an order.
   cells of its first row. See [`Calendar`](/js/api/core/calendar) for the rows.
 - An unknown `zone` is an error. Two time columns on one axis must have the
   same zone.
+- The unit of a time column is an instant, so two time columns (a start and
+  an end) share an axis.
+
+**`HasUnit`.**
+
+- Columns in the same unit share an axis and its scale. Two columns in
+  different units on one axis are an error that names the axis, both units,
+  and the columns in each.
+- A column with no declared unit has an unknown unit. It shares an axis with
+  any column. When it meets a column in a declared unit, it takes that unit
+  for the whole chart, so meeting another unit anywhere else is an error.
+- A column's unit is the same everywhere in a chart: columns with the same
+  name have the same unit.
+- When x and y have the same unit, they get one scale: one data unit is the
+  same length on both axes.
+- The unit never titles an axis. An axis is titled by the names of its
+  columns, joined with commas.
+- `.count()` and `.distinct()` are in the unit `"count"`. The edges of
+  `bin(field)` (`start`, `end`, `size`) are amounts of `field`: they title
+  their axis as `field` does and take its unit. Its `count` is in the unit
+  `"count"`.
 
 ## Example
 
@@ -131,6 +155,20 @@ chart(population, {
 ```
 
 ::: gofish example:population-pyramid hidden
+:::
+
+Two columns in the same unit share one scale on x and y, so a circle in the
+data stays a circle:
+
+```ts
+chart(sunflower, {
+  schema: { x: Schema.unit("plane"), y: Schema.unit("plane") },
+})
+  .flow(scatter({ x: "x", y: "y" }))
+  .mark(circle({ r: 4, fill: "i" }));
+```
+
+::: gofish example:sunflower-equal-scale hidden
 :::
 
 A column of date strings is a time with `Schema.time()`:

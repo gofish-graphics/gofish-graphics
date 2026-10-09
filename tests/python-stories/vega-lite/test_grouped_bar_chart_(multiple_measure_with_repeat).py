@@ -7,7 +7,7 @@ fill reads the per-row value directly instead of going through a
 categorical color encoding.
 """
 
-from gofish import chart, rect, spread, datum, field
+from gofish import chart, rect, spread, datum
 from python_stories.vega_data_urls import read_json
 
 
@@ -24,9 +24,9 @@ def story_default():
         .mark(
             spread(
                 [
-                    # Both columns are dollars, so they share one measure and one value axis.
-                    rect(h=field("Worldwide Gross", "dollars"), fill=datum("Worldwide Gross")),
-                    rect(h=field("US Gross", "dollars"), fill=datum("US Gross")),
+                    # Neither column declares a unit, so they share one value axis.
+                    rect(h="Worldwide Gross", fill=datum("Worldwide Gross")),
+                    rect(h="US Gross", fill=datum("US Gross")),
                 ],
                 dir="x",
                 spacing=0,

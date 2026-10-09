@@ -91,7 +91,7 @@ around them as noted; these are candidates for new operators.
    now exists, **driven by measure** rather than a knob (**issue #582**; see
    [chart › Equal scale](../../../../apps/docs/docs/js/api/core/chart.md) and the
    *Forward Syntax / Equal Scale* sunflower demo). When the x and y channels
-   carry the same measure (`field(name, measure)` on both), their **data→pixel
+   carry the same unit (`Schema.unit(u)` on both columns), their **data→pixel
    position scales** are equated, so circles stay circular and maps stay
    undistorted. That is the POSITION case; it does **not** by itself give the
    packed **unit** mosaic ([`UnitMosaic`](./UnitMosaic.stories.tsx)) uniform

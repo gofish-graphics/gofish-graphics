@@ -173,11 +173,12 @@ Walking `createOperator.ts:391-415`:
    needs its field to name the ORDINAL axis it builds. So the resolved per-axis
    grouping field (`cfg.axisFields?.(opts)`, e.g. `{ x: "lake" }`) is passed
    through to the low-level layout in opts as `axisMeasures`, where the node
-   builder stamps it onto the ORDINAL space's `measure` — the discrete analogue
-   of a continuous channel's field becoming its space's measure. That measure is
-   the sole source for the axis title (a continuous space's unit or an ordinal
-   space's grouping field); there is no longer any field-name title _hint_ or
-   fallback (the former `__axisFields` tag is gone).
+   builder stamps it onto the ORDINAL space's `measure` as its title — the
+   discrete analogue of a continuous channel's column becoming its space's
+   title. A space's titles are the sole source for the axis title (a
+   continuous space's quantity names or an ordinal space's grouping field);
+   there is no longer any field-name title _hint_ or fallback (the former
+   `__axisFields` tag is gone).
 6. **Combine** — call the low-level `layout` with the encoded opts and the
    array of child nodes.
 
@@ -234,7 +235,7 @@ so a slot infers exactly as its counterpart: scatter's bare value and
 slot as given (treemap's `min` stands for its unannotated `x`), and the
 counterparts on the two axes must share one spec.
 
-A `size` or `pos` channel resolves its column (`resolveColumn`: its measure
+A `size` or `pos` channel resolves its column (`resolveColumn`: its quantity
 and its type from the chart's `schema`) off the whole input once, and passes
 it to every entry's inference, since a split entry's slice may not carry
 the column types. The value then records the type (`fieldType`), which is
@@ -368,7 +369,7 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   checked in order string → field-expression → function): a string accessor
   becomes `tag.label = {accessor, ...options}`; a `field(...)` accessor
   serializes via its own `.toJSON()` (the `FieldExprWire` shape) into
-  `tag.label = {accessor: {type: "field", name, measure?, ops?}, ...options}`;
+  `tag.label = {accessor: {type: "field", name, ops?}, ...options}`;
   a function accessor warns and is dropped from the emitted IR (functions
   aren't serializable). `.translate()`'s wrapper has no tag of its own by
   default (the wrapped function is new), so `translateOperator` copies the

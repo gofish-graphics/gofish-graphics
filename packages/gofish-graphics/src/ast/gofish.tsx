@@ -508,9 +508,17 @@ export async function layout(
   // registry (Stage 6c: the ONE post-solve σ adjustment, so every slope stays
   // registry-sourced and the dump shows the FINAL σ). Silently skipped when an
   // axis has no solved scope to equate.
-  const measureX = spaceUnit(niceUnderlyingSpaceX)?.unit;
-  const measureY = spaceUnit(niceUnderlyingSpaceY)?.unit;
-  if (measureX !== undefined && measureX === measureY) {
+  //
+  // Only a DECLARED unit counts: two unknowns that unify through overlays
+  // are one domain, not a claim that a data unit is the same length on x
+  // and y.
+  const unitX = spaceUnit(niceUnderlyingSpaceX)?.unit;
+  const unitY = spaceUnit(niceUnderlyingSpaceY)?.unit;
+  if (
+    unitX?.kind === "declared" &&
+    unitY?.kind === "declared" &&
+    unitX.name === unitY.name
+  ) {
     const axisInfo = ([0, 1] as const).map(
       (axis): EqualMeasureAxis | undefined => {
         const space = rootSpaces[axis];

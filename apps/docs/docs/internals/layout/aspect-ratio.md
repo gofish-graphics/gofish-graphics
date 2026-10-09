@@ -24,13 +24,13 @@ Two distinct mechanisms sit nearby and must not be confused — only the first i
   **same unit of
   measure**, their _data→pixel scales_ are equated so one data unit measures the
   same on both axes — circles stay circular, a 45° line looks 45°. This is **not**
-  an `aspectRatio` knob: it follows from measure equality
-  (`field(name, measure)` on both axes), the same type rule the circle mark uses.
+  an `aspectRatio` knob: it follows from unit equality
+  (`Schema.unit(u)` on both columns), the same type rule the circle mark uses.
   It is the "scale-level coupling" of
   [design: what may set a size](/internals/design/size-claims#aspect-ratio-three-candidate-homes-open)
   (option 3), implemented at the root scope in `gofish.tsx` (see
-  [the layout passes](/internals/layout/passes)): `spaceUnit(x).unit ===
-spaceUnit(y).unit` triggers `min(...)` + centering of the slack axis. It is a
+  [the layout passes](/internals/layout/passes)): the same declared unit
+  on x and y (`spaceUnit(x).unit`, `spaceUnit(y).unit`) triggers `min(...)` + centering of the slack axis. It is a
   single-coordinate-space coupling and does not reach sizes solved in separate
   nested operator scopes (e.g. a packed unit mosaic).
 

@@ -33,10 +33,10 @@ import {
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { value } from "../ast/data";
-import { titleUnits, type UnitRecord } from "../ast/underlyingSpace";
+import { quantityUnits, titleUnits } from "../ast/underlyingSpace";
 
-/** The units of a column measured in `unit` (titled by it). */
-const u = (unit: string): UnitRecord => ({ unit, titles: [unit] });
+/** The measure of a column declared in unit `unit` (and named by it). */
+const u = (unit: string, name = unit) => quantityUnits({ name, unit });
 import {
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
@@ -76,8 +76,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   const units0 = CONTINUOUS(interval(0, 50), "pinned", u("units"));
   const msg = throws(() => unionChildSpaces([onY(dollars0), onY(units0)], 1));
   ok(
-    "overlay of two origin-0 data axes with clashing measures THROWS",
-    msg !== null && /different measures/.test(msg),
+    "overlay of two origin-0 data axes with clashing units THROWS",
+    msg !== null && /different units/.test(msg),
     msg ?? "did not throw"
   );
 
@@ -90,8 +90,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
     composed = unionChildSpaces([onY(dollarsMag), onY(unitsMag)], 1);
   });
   ok(
-    "overlay of two baseline magnitudes with clashing measures THROWS too",
-    magMsg !== null && /different measures/.test(magMsg),
+    "overlay of two baseline magnitudes with clashing units THROWS too",
+    magMsg !== null && /different units/.test(magMsg),
     magMsg ?? "did not throw"
   );
   ok("...and nothing was composed", composed === undefined);
@@ -431,29 +431,26 @@ console.log("# space: a measure clash says what to do");
   const gross = throws(() =>
     unionChildSpaces(
       [
-        onY(CONTINUOUS(interval(0, 10), "free", u("Worldwide Gross"))),
-        onY(CONTINUOUS(interval(0, 5), "free", u("US Gross"))),
+        onY(CONTINUOUS(interval(0, 10), "free", u("USD", "Worldwide Gross"))),
+        onY(CONTINUOUS(interval(0, 5), "free", u("EUR", "Revenue"))),
       ],
       1
     )
   );
   ok(
-    "the message names the axis, both measures, and the composition",
+    "the message names the axis, both units and their columns, and the composition",
     gross !== null &&
       gross.startsWith(
-        'The y axis combines two different measures, "Worldwide Gross" and ' +
-          '"US Gross" (where marks are drawn on top of each other). One axis ' +
-          "can show only one measure."
+        'The y axis combines two different units, "USD" ("Worldwide Gross") ' +
+          'and "EUR" ("Revenue") (where marks are drawn on top of each ' +
+          "other). One axis can show only one unit."
       ),
     gross ?? "did not throw"
   );
   ok(
-    "and suggests a shared unit-style measure and the axes option",
+    "and suggests one declared unit or a chart of its own",
     gross !== null &&
-      gross.includes(
-        'field("Worldwide Gross", "dollars") and field("US Gross", "dollars")'
-      ) &&
-      gross.includes("use the axes option") &&
+      gross.includes('schema: { "Worldwide Gross": Schema.unit("USD") }') &&
       gross.includes("give the inner chart its own w and h")
   );
   // A node names the axis from where it sits: inside a polar coord, the y
@@ -646,10 +643,10 @@ console.log("# space: one fold for every origin");
   // An ordinal's measure is its grouping field, not a unit: a datum position
   // in dollars beside a category spread by "genre" is no measure clash.
   const genreThenDollars = throws(() =>
-    resolveLayerBaseSpaces([[UNDEFINED, ORDINAL(["a", "b"], titleUnits("genre"))]], {
-      y: interval(0, 5),
-      yMeasure: u("dollars"),
-    })
+    resolveLayerBaseSpaces(
+      [[UNDEFINED, ORDINAL(["a", "b"], titleUnits("genre"))]],
+      { y: interval(0, 5), yMeasure: u("dollars") }
+    )
   );
   ok(
     "a datum measure does not clash with an ordinal's grouping field",
@@ -658,7 +655,10 @@ console.log("# space: one fold for every origin");
   );
   const stackOfGenre = throws(() =>
     distributeSpaceFold(
-      [ORDINAL(["a"], titleUnits("genre")), CONTINUOUS(interval(0, 3), "free", u("dollars"))],
+      [
+        ORDINAL(["a"], titleUnits("genre")),
+        CONTINUOUS(interval(0, 3), "free", u("dollars")),
+      ],
       ["p", "q"],
       {
         axis: 1,

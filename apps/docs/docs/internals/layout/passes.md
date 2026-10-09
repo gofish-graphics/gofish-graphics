@@ -345,10 +345,11 @@ The chart's options describe the chrome of the chart root. `layout()` passes
 
 - **Axis titles.** The root titles each axis it owns that the `axes` option
   turns on. The title text is the option's `title`, or else the axis's
-  `measure` (a continuous axis names itself by its unit, an ordinal axis by its
-  grouping field). A space with no measure has no title. The measure is read
-  off the root's space before elaboration re-resolves it, so the title names
-  the OUTERMOST grouping (`lake`, not the inner `species`).
+  title (`spaceTitle`: a continuous axis names itself by its quantity names,
+  joined with `", "`, never by its unit; an ordinal axis by its grouping
+  field). A space with no measure has no title. The title is read off the
+  root's space before elaboration re-resolves it, so it names the OUTERMOST
+  grouping (`lake`, not the inner `species`).
 - **The legend.** The color scale is resolved once, from the root, so the root
   carries the legend whenever the scale has something to show and the `legend`
   option is not `false`.
@@ -393,13 +394,15 @@ captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
 `embed()`) lock the flag to `true` and are never recomputed.
 
 A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
-AND — the **Route B** measure gate, only inside a coordinate space — its size's
-measure matches the dim's own _position_ measure (`min`/`center`/`max`). A size
-in a measure _foreign_ to where the mark sits (a scatter bubble's area ≠ its
-position units) stays ink: a flat point at the mapped center, not a swept wedge.
-The discriminator is mark-local because a polar coord forgets its axis measure;
-a positioned mark's own position measure is the axis measure it sits on. This
-consumes the measure provenance #534 carried to mark channels. The revocation is
+AND — the **Route B** unit gate, only inside a coordinate space — its size
+is in the same unit as the dim's own _position_ (`min`/`center`/`max`;
+`sameValueUnit` reads both through the render's union-find, so two unknowns
+are one unit only when they are one column or met on a shared axis). A size
+in a unit _foreign_ to where the mark sits (a scatter bubble's area ≠ its
+position) stays ink: a flat point at the mapped center, not a swept wedge.
+The discriminator is mark-local because a polar coord forgets its axis
+measure; a positioned mark's own position unit is the axis unit it sits on. This consumes the quantity provenance #534
+carried to mark channels. The revocation is
 coord-scoped, so Cartesian behavior matches the former construction-time
 inference. (Route A — relational, measure-free embedding — is not yet
 implemented; tracked under #618.)
@@ -527,8 +530,9 @@ omitted dimension is resolved per axis from the root's size claim on it:
 the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
 to `child.layout` (where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
-are built and before `child.layout`: when `spaceUnit(x).unit === spaceUnit(y).unit`
-(the two axes are the same unit), each axis's pixels-per-data-unit — a POSITION
+are built and before `child.layout`: when `spaceUnit(x).unit` and
+`spaceUnit(y).unit` are the same DECLARED unit (two unknowns that unified
+through overlays do not count), each axis's pixels-per-data-unit — a POSITION
 domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
 `min(...)` so one data unit measures the same on both axes (circles stay circular,
 maps stay undistorted); the binding axis fills, the other gets a recentered

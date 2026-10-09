@@ -681,7 +681,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
 }
 
 /**
- * Explicit field-accessor form (`field(name, measure?)`), optionally with a
+ * Explicit field-accessor form (`field(name)`), optionally with a
  * chained `ops` pipeline (`field("site").sort("yield")` /
  * `field("count").normalize()` — #700). Shared by `walkChannelValue`'s
  * `type: "field"` branch and `walkRefType`'s `FieldAccessor` case (the `by`
@@ -696,13 +696,6 @@ function walkFieldAccessor(
     ctx.errors.push({
       path: `${path}.name`,
       message: 'field accessor must have a string "name"',
-    });
-  }
-  // Optional unit annotation (field(name, measure)); a string when present.
-  if (obj.measure !== undefined && typeof obj.measure !== "string") {
-    ctx.errors.push({
-      path: `${path}.measure`,
-      message: 'field "measure" must be a string when present',
     });
   }
   if (obj.ops !== undefined) {

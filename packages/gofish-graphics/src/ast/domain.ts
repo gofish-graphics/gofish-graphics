@@ -1,11 +1,11 @@
-import { Measure } from "./data";
+import type { UnitRecord } from "./underlyingSpace";
 
 export type Domain = ContinuousDomain | AestheticDomain;
 
 export type ContinuousDomain = {
   type: "continuous";
   value: [number, number];
-  measure: Measure;
+  measure: UnitRecord;
 };
 
 export const continuous = ({
@@ -13,7 +13,7 @@ export const continuous = ({
   measure,
 }: {
   value: [number, number];
-  measure: Measure;
+  measure: UnitRecord;
 }): ContinuousDomain => ({
   type: "continuous",
   value,
