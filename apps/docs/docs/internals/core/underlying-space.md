@@ -1765,7 +1765,14 @@ reads only the classes, never the builder words. Three classes exist:
   is a wall-clock value: it decodes to an ISO string without an offset,
   typed UTC, so `applySchema` reads it in the zone of a declared `schema`
   entry (which wins over the decoded type) exactly as it reads the same
-  string from JS data, or in UTC without one. An instant has no zero. A position read from the column carries the
+  string from JS data, or in UTC without one. The decode only attaches
+  types: whoever reads the rows converts them first with its own schema (a
+  chart tier is chart data, and a callback's result goes through
+  `applyLambdaTyped` in `serialize/registry.ts`, so a lambda accessor's or a
+  single-datum `derive`'s result holds epoch milliseconds). No schema names
+  a value inside a list or a struct, so a time there decodes to epoch
+  milliseconds (a naive one read in UTC), and a list of structs, a list of
+  rows, carries its own column types. An instant has no zero. A position read from the column carries the
   class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
   for any typed column, with `createOperator` passing the column it resolved
   from the whole input, measure and type together, `resolveColumn`), and the point space it
@@ -1778,7 +1785,9 @@ reads only the classes, never the builder words. Three classes exist:
   smallest run of whole cells that covers the domain, so a domain of one
   instant, which `tickPartition` ticks at days, spans the day that holds
   it), and its axis is a time axis
-  ([Axes](/internals/frontend/axes#the-three-kinds)). Calendar cells
+  ([Axes](/internals/frontend/axes#the-three-kinds)). An empty domain (a
+  column of nulls) or a non-finite one is not niced at all, for numbers and
+  times alike. Calendar cells
   (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
   on Temporal, native or the polyfill it loads when the runtime has none.
 
@@ -1786,25 +1795,36 @@ The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
 same way a transform's measure provenance does: `ChartBuilder` copies the
 array and tags it (`applySchema`, which keeps the measure provenance the
 array already carries), `createOperator` copies the tag onto each
-split leaf, and a `derive` (any data-transform operator, `mapOperator` in
-`marks/chart.ts`) types its result with `applySchema` too, passing the
-input's types as `applySchema`'s `inherited` types. It keeps only those that
-still fit the result's values: each class has one predicate for the values
-it accepts as they stand (`ACCEPTS` in `schema.ts`: a time holds epoch
-milliseconds, an order holds text or numbers), and a type fits a value when
-every class it has accepts it. A time column that fit is not checked for
-epoch milliseconds a second time. The inherited types never convert or check
-values, so a date rewritten
-to "Mar" is plain text, not an error. The result's own types override them
-column by column, inference types a column of `Date`s as a UTC time, and
-`derive(fn, { schema })` overrides all of that for the columns it names and
-converts their values like a chart's schema (a datetime column a Python
-callback returns arrives typed from the widget's decode). The operator never
-tags the array its function returned; one that returns its input array as is
-(`log`), with no `schema`, passes it on untouched, since it is typed already. A `filter` keeps its input's types,
-since its rows are the input's rows (a filter that keeps a value outside an
+split leaf, and each data-transform operator (`mapOperator` in
+`marks/chart.ts`) types its result by its own typing rule. A `derive`
+(`typeLikeChartData`, also `resolve` and `join`) types its result with
+`applySchema` too, passing the input's types as `applySchema`'s `inherited`
+types, whether or not the function returned its input array. It keeps only
+those that still fit the result's values: each class has one predicate for
+the values it accepts as they stand (`ACCEPTS` in `schema.ts`: a time holds
+instants, epoch milliseconds or `Date`s, and an order holds text or
+numbers), and a type fits a value when every class it has accepts it, the
+predicates built once per column. A `Date` is an instant, so a time column
+of `Date`s keeps its inherited type, zone included, and its Dates become
+epoch milliseconds; a string needs a zone to read, so it does not fit. The
+inherited types never reinterpret or check values, so a date rewritten to
+"Mar" is plain text, not an error. Fitting reads values, not meanings: a
+derive that recodes a time to plain numbers (years) keeps `HasCalendar`,
+since any finite number is epoch milliseconds (#1089), and
+`derive(fn, { schema })` is the fix. The result's own types override the
+inherited ones column by column, inference types a column of `Date`s as a
+UTC time, and `derive(fn, { schema })` overrides all of that for the columns
+it names and converts their values like a chart's schema (a datetime column
+a Python callback returns arrives typed from the widget's decode). A result
+that is one object, not an array (a derive over a single datum), is typed
+as one row and converted the same way. The operator never tags the array its
+function returned. `log` returns its input, types and all. A `filter`
+returns a subset of its input's row objects, so its typing rule carries the
+input's types over as they are, with no fit check (a predicate that changes
+the rows it tests is not supported); a filter that keeps a value outside an
 order keeps the order, so the stray-level error fires where the order is
-used). `applySchema` copies
+used, and that error names `derive(fn, { schema })` as a fix for an order a
+derive's renamed values inherited. `applySchema` copies
 the rows only when some time value is not epoch milliseconds already;
 otherwise it tags a shallow copy of the array. So the stack's split reads
 its `by` column's type off the data it splits, and a color channel's

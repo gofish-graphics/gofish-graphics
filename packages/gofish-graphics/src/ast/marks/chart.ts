@@ -71,7 +71,12 @@ import {
 } from "./chartBuilder";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
-import { applySchema, getColumnTypes, type SchemaEntry } from "../schema";
+import {
+  applySchema,
+  copyColumnTypes,
+  getColumnTypes,
+  type SchemaEntry,
+} from "../schema";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -79,16 +84,35 @@ export type { ChartOptions };
 
 /**
  * The shape every data-transformation operator shares: map the incoming data
- * with `fn`, hand the result to the mark, and carry an IR-serialization tag.
- * `fn` receives the layer context so it can resolve refs (see `resolve`).
- *
- * The result is typed like chart data, column by column, through
- * `applySchema`:
+ * with `fn`, type the result with the operator's own typing rule
+ * (`typeResult`, given the result and the input), hand it to the mark, and
+ * carry an IR-serialization tag. `fn` receives the layer context so it can
+ * resolve refs (see `resolve`).
+ */
+function mapOperator<T, U>(
+  fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
+  serialize: { type: string; opts: Record<string, unknown> },
+  typeResult: (out: U, input: T) => U | Promise<U>
+): Operator<T, U> {
+  const op: Operator<T, U> = async (mark: Mark<U>) =>
+    (async (d: T, key?: string | number, layerContext?: LayerContext) => {
+      const out = await fn(d, layerContext);
+      return mark(await typeResult(out, d), key, layerContext);
+    }) as Mark<T>;
+  (op as any).__serialize = serialize;
+  return op;
+}
+
+/**
+ * `derive`'s typing rule: its result is typed like chart data, column by
+ * column, through `applySchema`:
  *
  *  1. A column whose values still fit the type it had in the input keeps it
- *     (`applySchema`'s `inherited` types): a time column of untouched epoch milliseconds stays a
- *     time, so a `filter`, or a `derive` that adds a column, leaves the other
- *     columns as they were. The input's types never convert or check values.
+ *     (`applySchema`'s `inherited` types): a time column of instants (epoch
+ *     milliseconds or `Date`s) stays a time in its zone, so a `derive` that
+ *     adds a column leaves the other columns as they were. The input's types
+ *     never reinterpret values: a `Date` is an instant, so it only becomes
+ *     epoch milliseconds.
  *  2. A column of `Date`s is a time (UTC), inferred as for chart data.
  *  3. Any other column has no type: a `derive` that rewrites a date to
  *     "Mar" makes it plain text.
@@ -99,29 +123,23 @@ export type { ChartOptions };
  * Types the result carries itself win over 1 and 2 (a datetime column a
  * Python callback returns arrives typed from the widget's decode). The
  * returned array itself is left as `fn` made it: `applySchema` types a copy.
- * An operator that returns its input array as is (`log`), with no `schema`,
- * passes it on as is: it is typed already.
+ * A result that is one object, not an array (a derive over a single datum),
+ * is typed as one row and converted the same way; it is returned as an
+ * object, which carries no column types.
  */
-function mapOperator<T, U>(
-  fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
-  serialize: { type: string; opts: Record<string, unknown> },
-  schema: Record<string, SchemaEntry> = {}
-): Operator<T, U> {
-  const op: Operator<T, U> = async (mark: Mark<U>) =>
-    (async (d: T, key?: string | number, layerContext?: LayerContext) => {
-      const out = await fn(d, layerContext);
-      const typed =
-        Array.isArray(out) && !(out === d && Object.keys(schema).length === 0)
-          ? ((await applySchema(out, schema, getColumnTypes(d))) as U)
-          : out;
-      return mark(typed, key, layerContext);
-    }) as Mark<T>;
-  (op as any).__serialize = serialize;
-  return op;
-}
+const typeLikeChartData =
+  (schema: Record<string, SchemaEntry> = {}) =>
+  async <U>(out: U, input: unknown): Promise<U> => {
+    const inherited = getColumnTypes(input);
+    if (Array.isArray(out))
+      return (await applySchema(out, schema, inherited)) as U;
+    if (out !== null && typeof out === "object")
+      return (await applySchema([out], schema, inherited))[0];
+    return out;
+  };
 
 /** What `derive` takes besides its function: `schema`, the column types of
- *  its result, as a chart's `schema` takes them (see `mapOperator`). */
+ *  its result, as a chart's `schema` takes them (see `typeLikeChartData`). */
 export type DeriveOptions = { schema?: Record<string, SchemaEntry> };
 
 export function derive<T, U>(
@@ -134,7 +152,7 @@ export function derive<T, U>(
   return mapOperator(
     fn,
     { type: "derive", opts: schema !== undefined ? { schema } : {} },
-    schema
+    typeLikeChartData(schema)
   );
 }
 
@@ -152,12 +170,19 @@ export function derive<T, U>(
  * a single row (or a ref) has nothing to filter, and throwing there would make
  * the operator unusable in a nested pipeline.
  *
- * Serialization: the predicate is a live JS callback, so this operator IS a
- * `derive` — it is defined as one below, and so carries `derive`'s
- * `{ type: "derive" }` tag on the wire.
+ * Typing: `filter` returns a subset of its input's row objects, so its
+ * result carries the input's column types as they are, with no check of the
+ * values. A predicate that changes the rows it tests is not supported.
+ *
+ * Serialization: the predicate is a live JS callback, so on the wire this
+ * operator is a `derive`: it carries `derive`'s `{ type: "derive" }` tag.
  */
 export function filter<T>(pred: (row: T) => boolean): Operator<T[], T[]> {
-  return derive<T[], T[]>((d) => (Array.isArray(d) ? d.filter(pred) : d));
+  return mapOperator<T[], T[]>(
+    (d) => (Array.isArray(d) ? d.filter(pred) : d),
+    { type: "derive", opts: {} },
+    (out, input) => (out === input ? out : copyColumnTypes(out, input))
+  );
 }
 
 // return an array of copies of `d` repeated `d.field` times
@@ -191,7 +216,9 @@ export function log<T>(prefix?: string): Operator<T, T> {
       }
       return d;
     },
-    { type: "log", opts: prefix !== undefined ? { prefix } : {} }
+    { type: "log", opts: prefix !== undefined ? { prefix } : {} },
+    // The result is the input, types and all.
+    (out) => out
   );
 }
 
@@ -256,7 +283,8 @@ export function resolve(
           : {}),
         ...(opts.key !== undefined ? { key: opts.key } : {}),
       },
-    }
+    },
+    typeLikeChartData()
   );
 }
 
@@ -299,7 +327,8 @@ export function join<
       }
       return joined;
     },
-    { type: "join", opts: { on: opts.on, right } }
+    { type: "join", opts: { on: opts.on, right } },
+    typeLikeChartData()
   );
 }
 

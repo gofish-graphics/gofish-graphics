@@ -60,7 +60,8 @@ is a point along an order.
 - A categorical color scale whose values all come from the column lists its
   legend in the same order.
 - A value that is not in `levels` is an error that names the column and the
-  value. Add it to the levels, or filter those rows out.
+  value. Add it to the levels, filter those rows out, or, if a `derive`
+  changed the values, give the column its type with `derive(fn, schema={...})`.
 
 **`HasMidpoint`.**
 

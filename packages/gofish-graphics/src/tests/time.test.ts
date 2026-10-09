@@ -434,6 +434,82 @@ async function main() {
           "America/New_York" &&
         getColumnTypes(fromPython)?.day?.HasCalendar?.zone === "UTC"
     );
+
+    // A Date is an instant: a derive that turns a New York time's epoch ms
+    // into Dates keeps the column's type, zone included.
+    const ny = await applySchema([{ t: "2024-03-05T09:00", n: 1 }], {
+      t: SrcSchema.time({ zone: "America/New_York" }),
+    });
+    const nyAt = Date.UTC(2024, 2, 5, 14);
+    const asDates = await derived(
+      (rows) => rows.map((r) => ({ ...r, t: new Date(r.t) })),
+      undefined,
+      ny
+    );
+    check(
+      "a derive returning Dates keeps the inherited zone, in epoch ms",
+      asDates[0].t === nyAt &&
+        getColumnTypes(asDates)?.t?.HasCalendar?.zone === "America/New_York",
+      JSON.stringify([asDates[0], getColumnTypes(asDates)])
+    );
+    const asStrings = await derived(
+      (rows) => rows.map((r) => ({ ...r, t: "2024-03-05T09:00" })),
+      undefined,
+      ny
+    );
+    check(
+      "a derive returning ISO strings does not fit the inherited time",
+      asStrings[0].t === "2024-03-05T09:00" &&
+        getColumnTypes(asStrings)?.t === undefined,
+      JSON.stringify([asStrings[0], getColumnTypes(asStrings)])
+    );
+    // A derive that changes its input's rows in place and returns them is
+    // typed like any other result.
+    const inPlace = await derived(
+      (rows) => {
+        for (const r of rows) r.at = new Date(at);
+        return rows;
+      },
+      undefined,
+      await applySchema([{ n: 1 }])
+    );
+    check(
+      "a derive that mutates and returns its input is typed",
+      inPlace[0].at === at &&
+        getColumnTypes(inPlace)?.at?.HasCalendar?.zone === "UTC",
+      JSON.stringify([inPlace[0], getColumnTypes(inPlace)])
+    );
+    // A derive over one datum that returns one object: the schema converts
+    // it as one row.
+    const single = await derived(
+      (d: any) => ({ ...d, at: "2024-03-05" }),
+      { schema: { at: Schema.time({ zone: "America/New_York" }) } },
+      { n: 1 }
+    );
+    check(
+      "derive(fn, { schema }) converts a single-object result",
+      !Array.isArray(single) &&
+        single.n === 1 &&
+        single.at === Date.UTC(2024, 2, 5, 5),
+      JSON.stringify(single)
+    );
+    // filter's rows are its input's, so it carries the input's types as
+    // they are, with no fit check (a derive would drop this one).
+    const unfit = setColumnTypes([{ day: "not a time", n: 1 }], {
+      day: { HasCalendar: { zone: "UTC" } },
+    });
+    let filteredUnfit: any;
+    await (
+      await GoFish.filter((r: any) => r.n > 0)(async (d: any) => {
+        filteredUnfit = d;
+        return undefined;
+      })
+    )(unfit);
+    check(
+      "filter carries its input's types over without checking values",
+      filteredUnfit !== unfit &&
+        getColumnTypes(filteredUnfit) === getColumnTypes(unfit)
+    );
   }
 
   console.log("\n# default rows and nicing");

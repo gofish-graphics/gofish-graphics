@@ -67,27 +67,38 @@ export type ColumnType = {
   HasCalendar?: HasCalendar;
 };
 
-/** Which values each class accepts as they stand, without conversion. A
- *  missing value (null, undefined) fits every class.
+/** Whether `v` is a time column's value as the engine reads it: epoch
+ *  milliseconds, a finite number, or missing (null, undefined). */
+const isEpochMs = (v: unknown): boolean =>
+  v == null || (typeof v === "number" && Number.isFinite(v));
+
+/** Which values each class accepts as they stand, without reinterpreting
+ *  them. A missing value (null, undefined) fits every class.
  *
- *  - `HasCalendar`: epoch milliseconds, a finite number.
+ *  - `HasCalendar`: an instant: epoch milliseconds (a finite number) or a
+ *    valid `Date`. A `Date` is an instant, so turning it into epoch
+ *    milliseconds reinterprets nothing; a string is not one, since reading
+ *    it needs a zone (only a `schema` annotation converts strings).
  *  - `HasOrder`: text or numbers, the kinds its levels are. A value outside
  *    the levels still fits, so the order stays and its stray-level error
  *    fires where the order is used.
  *  - `HasMidpoint`: anything; its values are its order's. */
 const ACCEPTS: { [K in keyof ColumnType]-?: (v: unknown) => boolean } = {
   HasCalendar: (v) =>
-    v == null || (typeof v === "number" && Number.isFinite(v)),
+    isEpochMs(v) || (v instanceof Date && Number.isFinite(v.getTime())),
   HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
   HasMidpoint: () => true,
 };
 
-/** Whether one value fits a column type as it stands: every class the type
- *  has accepts it ({@link ACCEPTS}). */
-function valueFits(type: ColumnType, v: unknown): boolean {
-  return (Object.keys(ACCEPTS) as (keyof ColumnType)[]).every(
-    (k) => type[k] === undefined || ACCEPTS[k](v)
+const CLASSES = Object.keys(ACCEPTS) as (keyof ColumnType)[];
+
+/** Whether one value fits a column type as it stands, as a predicate built
+ *  once per column: every class the type has accepts it ({@link ACCEPTS}). */
+function fitsType(type: ColumnType): (v: unknown) => boolean {
+  const accepts = CLASSES.filter((k) => type[k] !== undefined).map(
+    (k) => ACCEPTS[k]
   );
+  return (v) => accepts.every((accept) => accept(v));
 }
 
 /** The column types of a dataset, keyed by column name. */
@@ -233,8 +244,9 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
     `schema: column "${column}" has ${strays.length === 1 ? "a value" : "values"} ` +
       `outside its order: ${strays.map(showLevel).join(", ")}. HasOrder ` +
       `(declared with \`Schema.ordered(levels)\`) lists every level of the ` +
-      `column, so add ${strays.length === 1 ? "it" : "them"} to the levels or ` +
-      `filter those rows out.`
+      `column, so add ${strays.length === 1 ? "it" : "them"} to the levels, ` +
+      `filter those rows out, or, if a derive changed the values, annotate ` +
+      `the derive's result type with \`derive(fn, { schema })\`.`
   );
 }
 
@@ -245,9 +257,13 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
  *
  *  1. `inherited` (an operator's input's, for its result), each kept only
  *     when every value of its column fits it as it stands
- *     ({@link valueFits}). The inherited types never convert or check the
+ *     ({@link ACCEPTS}). The inherited types never reinterpret or check the
  *     values: a column that no longer fits (a date rewritten to "Mar") just
  *     has no type. A column the rows do not hold fits (it has no values).
+ *     A time column of `Date`s fits its inherited time, zone and all, and
+ *     its Dates become epoch milliseconds below. Fitting reads values, not
+ *     meanings: a time recoded to plain numbers (years) still fits, since
+ *     any finite number is epoch milliseconds (#1089); `schema` fixes it.
  *  2. The types the array already carries.
  *  3. `schema`'s.
  *
@@ -272,16 +288,14 @@ export async function applySchema<T>(
   const own = getColumnTypes(rows);
   const records = rows as unknown as (Record<string, unknown> | null)[];
   const types: ColumnTypes = {};
-  // Time columns already known to hold epoch milliseconds: their values
-  // passed the HasCalendar test when they fit their inherited type.
-  const checked = new Set<string>();
   for (const [column, type] of Object.entries(inherited ?? {})) {
-    const fits = records.every(
-      (r) => r == null || typeof r !== "object" || valueFits(type, r[column])
-    );
-    if (!fits) continue;
-    types[column] = type;
-    if (type.HasCalendar) checked.add(column);
+    const fits = fitsType(type);
+    if (
+      records.every(
+        (r) => r == null || typeof r !== "object" || fits(r[column])
+      )
+    )
+      types[column] = type;
   }
   Object.assign(types, own);
   for (const [column, entry] of Object.entries(schema)) {
@@ -308,12 +322,11 @@ export async function applySchema<T>(
   const timeColumns = Object.entries(types).filter(
     ([, t]) => t.HasCalendar !== undefined
   );
-  const unchecked = timeColumns.filter(([column]) => !checked.has(column));
-  const isEpochMs = (row: T): boolean =>
+  const isConverted = (row: T): boolean =>
     row == null ||
     typeof row !== "object" ||
-    unchecked.every(([column]) =>
-      ACCEPTS.HasCalendar((row as Record<string, unknown>)[column])
+    timeColumns.every(([column]) =>
+      isEpochMs((row as Record<string, unknown>)[column])
     );
   let out: T[] = [...rows];
   if (timeColumns.length > 0) {
@@ -321,7 +334,7 @@ export async function applySchema<T>(
     for (const [column, t] of timeColumns)
       checkZone(column, t.HasCalendar!.zone);
   }
-  if (!rows.every(isEpochMs)) {
+  if (!rows.every(isConverted)) {
     // Long-format data repeats its dates, so each string is parsed once per
     // zone (for this call only).
     const parsed = new Map<string, unknown>();
@@ -374,7 +387,7 @@ const HAS_OFFSET = /(?:[zZ]|[+-]\d{2}(?::?\d{2})?)(?:\[.*\])?$/;
  * error naming the column.
  */
 export function toEpochMs(v: unknown, zone: string, column: string): unknown {
-  if (ACCEPTS.HasCalendar(v)) return v;
+  if (isEpochMs(v)) return v;
   if (v instanceof Date && Number.isFinite(v.getTime())) return v.getTime();
   if (typeof v === "string") {
     const T = temporal();
