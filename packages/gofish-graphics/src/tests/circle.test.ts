@@ -190,14 +190,14 @@ console.log("# circle: rendered");
 
 console.log("# a data center (cx/cy) positions the circle (#1099)");
 {
-  // A data center with a pixel size becomes the box's min: the same data
-  // position, shifted back half the size in pixels after the scale.
+  // A data center stays a center: the ellipse places itself by it, so the
+  // center goes through the scale and half the size comes off in pixels.
   const node = await circle({ r: 5, cy: "v" })(rows);
-  const min = node.args.dims[1].min;
+  const dy = node.args.dims[1];
   check(
-    "cy: \"v\" with r: 5 sets min to the mean of v, minus 5 px",
-    min?.datum === 3.5 && (min?._offset ?? min?.offset) === -5,
-    JSON.stringify(min)
+    "cy: \"v\" keeps the mean of v as the center, with no derived min",
+    dy.center?.datum === 3.5 && dy.min === undefined,
+    JSON.stringify(dy)
   );
 
   const data = [

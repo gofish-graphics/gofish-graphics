@@ -25,7 +25,10 @@ import {
   FancySize,
   Size,
   Transform,
+  centerOf,
+  startAtCenter,
 } from "../dims";
+import { glyphAxis } from "../underlyingSpace";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
 import {
@@ -100,6 +103,9 @@ export const Rect = ({
       ) => {
         const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
+          // A box placed by its center is a glyph, as a text or an image is.
+          const center = centerOf(d);
+          if (center !== undefined) return glyphAxis(center, d.size);
           if (isValue(d.min) && isValue(d.max)) {
             return CONTINUOUS(
               interval(getValue(d.min)!, getValue(d.max)!),
@@ -247,6 +253,14 @@ export const Rect = ({
             h = containedW / aspectRatio;
           }
         }
+
+        // A box placed by its center starts half its pixel size before it.
+        const c0 = centerOf(dims[0]);
+        if (c0 !== undefined)
+          x = startAtCenter(c0, posFn(scales?.[0]?.map)!, w);
+        const c1 = centerOf(dims[1]);
+        if (c1 !== undefined)
+          y = startAtCenter(c1, posFn(scales?.[1]?.map)!, h);
 
         return {
           intrinsicDims: {

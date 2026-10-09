@@ -13,10 +13,16 @@ import {
   FancyDims,
   FancySize,
   Size,
+  centerOf,
+  startAtCenter,
   Transform,
 } from "../dims";
 import { aesthetic, continuous, posFn } from "../domain";
-import { UnderlyingSpace, pointOrMagnitude } from "../underlyingSpace";
+import {
+  UnderlyingSpace,
+  glyphAxis,
+  pointOrMagnitude,
+} from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { boxOfDims } from "../geometry";
@@ -59,10 +65,14 @@ export const Ellipse = ({
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
       ) => {
-        return [
-          pointOrMagnitude(dims[0].min, dims[0].size),
-          pointOrMagnitude(dims[1].min, dims[1].size),
-        ];
+        // A box placed by its center is a glyph, as a text or an image is.
+        const axisSpace = (axis: 0 | 1) => {
+          const center = centerOf(dims[axis]);
+          return center !== undefined
+            ? glyphAxis(center, dims[axis].size)
+            : pointOrMagnitude(dims[axis].min, dims[axis].size);
+        };
+        return [axisSpace(0), axisSpace(1)];
       },
       layout: (shared, size, scales, children) => {
         let w = isValue(dims[0].size)
@@ -87,16 +97,15 @@ export const Ellipse = ({
           }
         }
 
-        const x = computeAesthetic(
-          dims[0].min,
-          posFn(scales[0]?.map)!,
-          undefined
-        );
-        const y = computeAesthetic(
-          dims[1].min,
-          posFn(scales[1]?.map)!,
-          undefined
-        );
+        const start = (axis: 0 | 1, sizePx: number) => {
+          const center = centerOf(dims[axis]);
+          const scale = posFn(scales[axis]?.map)!;
+          return center !== undefined
+            ? startAtCenter(center, scale, sizePx)
+            : computeAesthetic(dims[axis].min, scale, undefined);
+        };
+        const x = start(0, w);
+        const y = start(1, h);
 
         return {
           intrinsicDims: [
