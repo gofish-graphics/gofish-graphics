@@ -344,7 +344,7 @@ def test_a_callable_outside_a_channel_is_a_type_error():
 
 
 def test_line_and_ribbon_fill_take_a_function():
-    # A field name is shorthand for an accessor, so the connector fill takes
+    # A field name is shorthand for an accessor, so the connector paint takes
     # a lambda wherever it takes a field name (#1097). It crosses as a
     # sentinel the derive server registers.
     from gofish.ast import _collect_mark_lambdas
@@ -354,9 +354,11 @@ def test_line_and_ribbon_fill_take_a_function():
         pairs = dict(_collect_mark_lambdas(m))
         assert list(pairs) == [sentinel["__gofish_lambda"]]
         assert pairs[sentinel["__gofish_lambda"]]([{"g": "a"}]) == ["a"]
-    # stroke is a plain color, so a function there is still a TypeError.
+    # stroke is a color channel too, as in JS.
+    assert "__gofish_lambda" in line(stroke=lambda d: d["g"]).to_dict()["stroke"]
+    # A non-channel option still rejects a function.
     with pytest.raises(TypeError, match="only channel options take a function"):
-        line(stroke=lambda d: "red")
+        line(stroke_width=lambda d: 2)
 
 
 def test_wire_does_not_copy_options_without_accessors():

@@ -2412,8 +2412,8 @@ for the API.
           "description": "A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted."
         },
         "stroke": {
-          "type": "string",
-          "description": "Line color."
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Line color, or a field name or accessor for a color scale (constant within the line). Defaults to `fill`."
         },
         "strokeWidth": {
           "$ref": "#/$defs/Number",
@@ -2510,8 +2510,8 @@ for the API.
           "description": "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
         },
         "stroke": {
-          "type": "string",
-          "description": "Stroke color."
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color of the band's outline, or a field name or accessor for a color scale (constant within the band)."
         },
         "strokeWidth": {
           "$ref": "#/$defs/Number",

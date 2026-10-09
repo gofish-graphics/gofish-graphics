@@ -1207,7 +1207,9 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       fill: ch.color(
         "A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted."
       ),
-      stroke: { type: t.string, doc: "Line color." },
+      stroke: ch.color(
+        "Line color, or a field name or accessor for a color scale (constant within the line). Defaults to `fill`."
+      ),
       strokeWidth: {
         type: t.number,
         default: 1,
@@ -1269,7 +1271,9 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       fill: ch.color(
         "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
       ),
-      stroke: { type: t.string, doc: "Stroke color." },
+      stroke: ch.color(
+        "Stroke color of the band's outline, or a field name or accessor for a color scale (constant within the band)."
+      ),
       strokeWidth: {
         type: t.number,
         default: 0,

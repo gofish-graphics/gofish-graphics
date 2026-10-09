@@ -93,11 +93,13 @@ export const MARK_CHANNELS = {
   },
   line: {
     fill: "color",
+    stroke: "color",
     w: "size",
     h: "size",
   },
   ribbon: {
     fill: "color",
+    stroke: "color",
     w: "size",
     h: "size",
   },

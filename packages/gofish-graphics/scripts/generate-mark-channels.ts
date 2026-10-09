@@ -1,7 +1,8 @@
 /**
- * Generates `src/ast/markChannels.generated.ts`: each leaf mark's channel map
- * (the options its `createMark` call infers from data), from the descriptor
- * table in gofish-ir (`packages/gofish-ir/src/frontend/descriptors.ts`).
+ * Generates `src/ast/markChannels.generated.ts`: the channel map of each leaf
+ * mark that has one (the options its `createMark` call, or a relational mark's
+ * paint step, infers from data), from the descriptor table in gofish-ir
+ * (`packages/gofish-ir/src/frontend/descriptors.ts`).
  *
  * A field is a channel when its type can hold one (`carriesChannel`): a bare
  * channel infers by its descriptor kind (`ch.size`, `ch.pos`, `ch.color`,
@@ -28,22 +29,6 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_FILE = join(HERE, "..", "src", "ast", "markChannels.generated.ts");
 
-/** The leaf marks built with `createMark`, and the relational marks
- *  (`line`, `ribbon`, built with `createRelationalMark`), which resolve their
- *  Python accessors by the same map. */
-const CREATE_MARK_TYPES = [
-  "rect",
-  "circle",
-  "ellipse",
-  "petal",
-  "text",
-  "image",
-  "polygon",
-  "blank",
-  "line",
-  "ribbon",
-];
-
 function channelKind(type: FieldType, where: string): string {
   if (type.kind === "channel") return type.infer;
   if (type.kind === "record" && carriesChannel(type.valueType)) return "dims";
@@ -60,16 +45,19 @@ const lines: string[] = [
   "/** Each leaf mark's channel map, from its descriptor (`LEAF_MARKS`). */",
   "export const MARK_CHANNELS = {",
 ];
-for (const type of CREATE_MARK_TYPES) {
-  if (!(type in LEAF_MARKS))
-    throw new Error(`no leaf-mark descriptor: ${type}`);
+// Every leaf mark that has a channel: the `createMark` marks, and the
+// relational marks (`line`, `ribbon`), which resolve their paint by the same
+// map.
+for (const type of Object.keys(LEAF_MARKS)) {
   const fields = acceptedFields("leaf-mark", type)!;
-  const entries = Object.entries(fields)
-    .filter(([, spec]) => carriesChannel(spec.type))
-    .map(
-      ([key, spec]) =>
-        `    ${key}: ${JSON.stringify(channelKind(spec.type, `${type}.${key}`))},`
-    );
+  const channelFields = Object.entries(fields).filter(([, spec]) =>
+    carriesChannel(spec.type)
+  );
+  if (channelFields.length === 0) continue;
+  const entries = channelFields.map(
+    ([key, spec]) =>
+      `    ${key}: ${JSON.stringify(channelKind(spec.type, `${type}.${key}`))},`
+  );
   lines.push(`  ${type}: {`, ...entries, "  },");
 }
 lines.push("} as const;", "");

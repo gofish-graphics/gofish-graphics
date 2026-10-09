@@ -36,6 +36,9 @@ const {
   line,
   circle,
   selectAll,
+  resolve,
+  layer,
+  rect,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -533,7 +536,7 @@ async function main() {
     );
 
     // A Python lambda arrives as a batch accessor and is resolved in one
-    // bridge call before the per-group collapse.
+    // bridge call per connector group, before the per-group collapse.
     const calls: string[] = [];
     const bridge = {
       applyLambda: async (id: string, rows: any[]) => {
@@ -559,9 +562,73 @@ async function main() {
       { w: 200, h: 200 }
     );
     check(
-      "a bridged (Python) fill draws the same connectors, in one call",
-      paint(byPython) === paint(byField) && calls.length === 1,
+      "a bridged (Python) fill draws the same connectors, one call per group",
+      paint(byPython) === paint(byField) && calls.length === 2,
       `${paint(byPython)} / calls ${calls.length}`
+    );
+
+    // The pairwise `{ from, to }` form reads each edge's paint off its row.
+    const nodes = [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 1, y: 1 },
+      { id: "c", x: 2, y: 0 },
+    ];
+    const edges = [
+      { source: "a", target: "b", kind: "p" },
+      { source: "b", target: "c", kind: "q" },
+    ];
+    const edgesWith = (stroke: unknown) =>
+      renderDisplayList(
+        chart(nodes)
+          .flow(scatter({ by: "id", x: "x", y: "y" }))
+          .mark(circle({ r: 3 }).name("nodes"))
+          .layer(
+            chart(edges)
+              .flow(
+                resolve(["source", "target"], { from: selectAll("nodes") })
+              )
+              .mark(line({ from: "source", to: "target", stroke } as any))
+          ),
+        { w: 200, h: 200 }
+      );
+    const edgeField = await edgesWith("kind");
+    const edgeFn = await edgesWith((d: { kind: string }) => d.kind);
+    const strokes = (doc: any) =>
+      doc.items
+        .filter((it: any) => it.kind === "path")
+        .map((it: any) => it.style?.stroke);
+    check(
+      "a pairwise function stroke draws the same edges as the field name",
+      paint(edgeFn) === paint(edgeField) &&
+        new Set(strokes(edgeField)).size === 2 &&
+        !strokes(edgeField).includes("kind"),
+      JSON.stringify(strokes(edgeField))
+    );
+  }
+
+  // -- 9f. A function paint with no rows to read (the low-level combinator
+  //    form over nodes that carry no data) never reaches Connect raw: the
+  //    connector keeps its default color, as a literal field name would
+  //    pass through. -----------------------------------------------------
+  {
+    const node = await layer([
+      rect({ x: 0, y: 0, w: 10, h: 10 }).name("a"),
+      rect({ x: 50, y: 50, w: 10, h: 10 }).name("b"),
+    ]).relate(({ a, b }: any) => [
+      line({ fill: (d: any) => d.g } as any, [a, b]),
+    ])(undefined);
+    const doc = await node.toDisplayList({ w: 100, h: 100 });
+    const pathsIn = (it: any): any[] => [
+      ...(it.kind === "path" ? [it] : []),
+      ...(it.children ?? []).flatMap(pathsIn),
+    ];
+    const path = doc.items.flatMap(pathsIn)[0];
+    check(
+      "a function fill with no rows to read keeps the default color",
+      path !== undefined &&
+        typeof path.style?.stroke === "string" &&
+        typeof path.style?.fill !== "function",
+      JSON.stringify(path?.style)
     );
   }
 

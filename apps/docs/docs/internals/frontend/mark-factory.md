@@ -507,14 +507,16 @@ bag (`chart(selectAll("bars")).mark(ribbon(opts))`, or an empty-scope
 unfused, since there's nothing to anchor; `along` on either of those, or on
 the pairwise form, is a builder-time error rather than a silent no-op
 (`rejectAlongWithoutFlow` in chartBuilder.ts, and the pairwise branch in
-chart.ts). A split connector's `fill` may be a shared field name, or an
-accessor (a field name is shorthand for one), rather than a literal color;
-`resolveGroupFill` in chart.ts reads it off each row with `projectBy` (the
-same collapse `by` uses) and resolves it per group via `inferColor` (same
-channel helper `createMark` uses) before it reaches `Connect`. A Python
-accessor there is resolved first, over the bag's rows, in one batch call
-(`resolveChannelAccessors`, with the channel map generated for `line` and
-`ribbon`).
+chart.ts). A connector's paint (`fill`, `stroke`: the color channels of
+its generated channel map) may be a field name, or an accessor (a field name
+is shorthand for one), rather than a literal color. Every call form (split
+bag, plain bag, pairwise edge row, low-level children) runs the same step,
+`resolveGroupPaint` in chart.ts, once per connector: Python accessors are
+resolved over exactly the rows the group's walk reaches (`rowsReached`,
+`resolveChannelAccessors`), then `projectByValues` (the projection `by`
+uses) reads the value. One value is the connector's color (`colorValue`, the
+helper `inferColor` uses); several throw; none passes a literal color string
+through and drops an accessor, so a raw function never reaches `Connect`.
 
 ### Default grouping: a fused connector's split, and `along`
 
@@ -658,7 +660,7 @@ inside the bag branch), since every call form now passes it to `produce`.
 
 The paint fix from the same design note rides along for free: split and
 plain-bag now share one code path in `createRelationalMark`'s bag-form mark,
-so `resolveGroupFill` runs on both — per group on the split branch (where
+so the paint step (now `resolveGroupPaint`) runs on both — per group on the split branch (where
 it's a no-op safety net, since each group is homogeneous by construction),
 and over the _whole bag as one group_ on the plain-bag branch, where it now
 throws a loud, specific error if a field-valued `fill` disagrees across the

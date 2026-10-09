@@ -340,15 +340,26 @@ export const inferColor = <T extends Record<string, any>>(
   if (resolved.kind === "none") return undefined;
   return resolved.kind === "literal"
     ? (resolved.value as string)
-    : new DatumValueImpl(
-        resolved.value as string,
-        undefined,
-        undefined,
-        undefined,
-        resolved.field,
-        columnType(data, resolved.field)
-      );
+    : colorValue(resolved.value, resolved.field, data);
 };
+
+/** A value read off a row for a color channel, with the `field` it was read
+ *  from (for a field name) as its provenance and that column's schema type
+ *  from `data`. Shared by {@link inferColor} and the connector paint, which
+ *  reads its value through `projectBy`. */
+export const colorValue = (
+  read: unknown,
+  field?: string,
+  data?: unknown
+): DatumValueImpl =>
+  new DatumValueImpl(
+    read as string,
+    undefined,
+    undefined,
+    undefined,
+    field,
+    columnType(data, field)
+  );
 
 /**
  * Infer a raw scalar value from a field name, function accessor, or literal.

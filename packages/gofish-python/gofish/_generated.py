@@ -1019,7 +1019,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
 
     Args:
         fill: A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted.
-        stroke: Line color.
+        stroke: Line color, or a field name or accessor for a color scale (constant within the line). Defaults to `fill`.
         stroke_width: Line thickness in pixels. Default 1.
         stroke_dasharray: Raw SVG stroke-dasharray (e.g. "12") for a dashed line.
         opacity: Opacity, 0 to 1.
@@ -1040,7 +1040,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("fill", _channel(fill)),
-        ("stroke", stroke),
+        ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
         ("strokeDasharray", stroke_dasharray),
         ("opacity", opacity),
@@ -1067,7 +1067,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
 
     Args:
         fill: Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects.
-        stroke: Stroke color.
+        stroke: Stroke color of the band's outline, or a field name or accessor for a color scale (constant within the band).
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1.
         mix_blend_mode: Blend mode where bands overlap. Default "normal".
@@ -1083,7 +1083,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("fill", _channel(fill)),
-        ("stroke", stroke),
+        ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
         ("mixBlendMode", mix_blend_mode),

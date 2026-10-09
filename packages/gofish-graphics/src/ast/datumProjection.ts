@@ -48,14 +48,33 @@ function projectValues(
 ): unknown[] {
   const out: unknown[] = [];
   const seen = new Set<string>();
-  const push = (v: unknown) => {
+  walkRows(obj, segments, (current) => {
+    const v = read === undefined ? current : read(current);
     const k = eqKey(v);
     if (!seen.has(k)) {
       seen.add(k);
       out.push(v);
     }
-  };
+  });
+  return out;
+}
 
+/** The rows a key function reads when it is projected over `obj` (see
+ *  {@link projectBy}): every row the walk reaches through refs and bags,
+ *  nested ones included. */
+export function rowsReached(obj: unknown): unknown[] {
+  const rows: unknown[] = [];
+  walkRows(obj, [], (row) => rows.push(row));
+  return rows;
+}
+
+/** Walk `segments` from `obj`, projecting over any array encountered and
+ *  through any ref's `.datum`, and `visit` each value the walk reaches. */
+function walkRows(
+  obj: unknown,
+  segments: string[],
+  visit: (value: unknown) => void
+): void {
   const walk = (current: unknown, i: number): void => {
     if (current == null) return; // a missing hop contributes no value
     if (current instanceof GoFishRef) {
@@ -71,14 +90,13 @@ function projectValues(
       return;
     }
     if (i === segments.length) {
-      push(read === undefined ? current : read(current));
+      visit(current);
       return;
     }
     walk((current as Record<string, unknown>)[segments[i]], i + 1);
   };
 
   walk(obj, 0);
-  return out;
 }
 
 /** Resolve `path` against `obj` with projection + homogeneity collapse.
@@ -99,11 +117,17 @@ export function projectPath(obj: unknown, path: string): unknown {
  *  the walk reaches, never to the ref or the bag, so it reads the same data
  *  it grouped the rows by. */
 export function projectBy(obj: unknown, by: SplitBy): unknown {
-  const values =
-    typeof by === "function"
-      ? projectValues(obj, [], by)
-      : projectValues(obj, toPath(fieldNameOf(by)!));
+  const values = projectByValues(obj, by);
   return values.length === 1 ? values[0] : undefined;
+}
+
+/** The distinct values `by` reads off `obj`, before {@link projectBy}'s
+ *  collapse: none when no row has the field (or there are no rows), one when
+ *  they agree, several when they don't. */
+export function projectByValues(obj: unknown, by: SplitBy): unknown[] {
+  return typeof by === "function"
+    ? projectValues(obj, [], by)
+    : projectValues(obj, toPath(fieldNameOf(by)!));
 }
 
 /** The `by` selector accepted by the split operators (group/spread/scatter):
