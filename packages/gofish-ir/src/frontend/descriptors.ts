@@ -68,6 +68,11 @@ export interface FieldSpec {
   doc?: string;
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
+  /** On the wire only: a field the producer writes for the consumer (a
+   *  Python bridge handle), never an option a user passes. The docs options
+   *  tables (`::: gofish-ref`) leave it out; the wire schema and validator
+   *  keep it. Default: false. */
+  wireOnly?: boolean;
 }
 
 export type FieldGroup = Record<string, FieldSpec>;
@@ -318,7 +323,7 @@ export const LABEL_OPTIONS: FieldGroup = group({
  *  object of named options. Mirrors the JS `AxisOptions` in
  *  `gofish-graphics/src/ast/gofish.tsx`. */
 const axisOptions: FieldSpec = {
-  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle.",
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and the rows of a time axis.",
   type: t.union(
     t.boolean,
     t.object({
@@ -334,8 +339,42 @@ const axisOptions: FieldSpec = {
         type: t.union(t.number, t.array(t.number), t.enum("auto")),
         doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; "auto" picks 0, 45, or 90 degrees per label row so labels do not collide.',
       },
+      rows: {
+        type: t.array(t.ref("Calendar")),
+        doc: "The label rows of a time axis, inner row first, e.g. [Calendar.month, Calendar.year]. Each row is one calendar partition: its ticks are its cells' starts, and each label is centered on its cell's start tick. The domain is niced outward to the inner row's cells. Default: the level and step the domain picks for about 10 ticks, then its parent level. In JS a row's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell. A row with a format is JS-only (it has no wire form).",
+      },
     })
   ),
+};
+
+/** A Calendar value's wire form: a partition of the time line into calendar
+ *  cells (`CalendarPartition` in gofish-graphics/src/ast/calendar.ts). */
+const calendarPartition: FieldSpec = {
+  doc: "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3).",
+  type: t.object({
+    unit: {
+      type: t.enum(
+        "second",
+        "minute",
+        "hour",
+        "day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ),
+      doc: "The calendar level of each cell.",
+    },
+    step: {
+      type: t.number,
+      default: 1,
+      doc: "How many units one cell spans; steps align to the level above.",
+    },
+    start: {
+      type: t.enum("monday", "sunday"),
+      doc: "The first day of a week (weeks only).",
+    },
+  }),
 };
 
 /** Named option types: the nested option objects a field points at with
@@ -350,6 +389,7 @@ const axisOptions: FieldSpec = {
  *  (LabelIR, TranslateIR, FieldAccessor, AxisDimsValue, ...). */
 export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   AxisOptions: axisOptions,
+  Calendar: calendarPartition,
   AxesOptions: {
     doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
     type: t.union(
@@ -393,7 +433,7 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   schema: {
     type: t.record(t.any),
-    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels).",
+    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().",
   },
 });
 
@@ -487,15 +527,21 @@ const spreadBoxFields: FieldGroup = group({
 
 export const OPERATORS: Record<string, ConstructDescriptor> = {
   derive: operator("derive", {
-    doc: "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
+    doc: "Transforms the data with a function, `derive(fn)`. A function does not serialize: the IR carries a Python bridge handle in its place.",
     fields: {
       lambdaId: {
         type: t.string,
+        wireOnly: true,
         doc: "Python-bridge handle for the remote callable.",
       },
       provenance: {
         type: t.record(t.string),
+        wireOnly: true,
         doc: "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure.",
+      },
+      schema: {
+        type: t.record(t.any),
+        doc: "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Schema.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant).",
       },
     },
   }),

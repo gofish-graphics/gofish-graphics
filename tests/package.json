@@ -37,7 +37,8 @@
     "build:review-site": "tsx scripts/build-review-site.ts"
   },
   "dependencies": {
-    "gofish-ir": "workspace:*"
+    "gofish-ir": "workspace:*",
+    "gofish-python": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

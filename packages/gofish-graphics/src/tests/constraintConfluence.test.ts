@@ -58,6 +58,7 @@ import {
   spaceMeasure,
   CONTINUOUS,
   originIs,
+  DEFAULT_AXIS_TICKS,
 } from "../ast/underlyingSpace";
 import { Extent, impliedExtent } from "../ast/extent";
 import { ScopeRegistry } from "../ast/solver/scopes";
@@ -883,7 +884,7 @@ console.log("# constraint confluence: child posScale forwarding");
     [impliedExtent(positionSpace), impliedExtent(positionSpace)],
     [100, 200],
     [undefined, undefined],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -899,7 +900,7 @@ console.log("# constraint confluence: child posScale forwarding");
     [impliedExtent(positionSpace), impliedExtent(positionSpace)],
     [100, 200],
     [baseX, undefined],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1301,7 +1302,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     [false, false],
     [false, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1336,7 +1337,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     [true, true],
     [false, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1362,7 +1363,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     [true, true],
     [false, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1387,7 +1388,7 @@ console.log("# constraint confluence: child scale factor planning");
     [undefined, undefined],
     [true, false],
     [true, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1413,7 +1414,7 @@ console.log("# constraint confluence: child scale factor planning");
       [inheritedX, inheritedY],
       [false, true],
       [false, false],
-      () => true,
+      () => DEFAULT_AXIS_TICKS,
       new ScopeRegistry(),
       "test"
     );
@@ -1436,7 +1437,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     [false, false],
     [true, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );

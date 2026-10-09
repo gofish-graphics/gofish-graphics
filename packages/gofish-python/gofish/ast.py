@@ -90,10 +90,19 @@ class Operator:
 class DeriveOperator(Operator):
     """Operator for deriving new data via Python function."""
 
-    def __init__(self, fn: Callable, provenance: Optional[dict] = None):
+    def __init__(
+        self,
+        fn: Callable,
+        provenance: Optional[dict] = None,
+        schema: Optional[dict] = None,
+    ):
         super().__init__("derive")
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
+        # The column types of the result (``derive(fn, schema={...})``), in
+        # the wire form of a chart's ``schema``; JS applies them to the rows
+        # the callback returns.
+        self.schema = schema
         # Measure provenance a data transform (e.g. `bin`) declares for its
         # output columns. It can't ride the data rows across the derive RPC
         # bridge, so it travels in the operator IR and is re-applied JS-side via
@@ -108,7 +117,7 @@ class DeriveOperator(Operator):
         y: Optional[float] = None,
     ) -> "DeriveOperator":
         """Translate a derived operator while preserving its lambda handle."""
-        new_op = DeriveOperator(self.fn, self.provenance)
+        new_op = DeriveOperator(self.fn, self.provenance, self.schema)
         new_op.lambda_id = self.lambda_id
         new_op._labels = list(self._labels)
         new_op._translate = {
@@ -133,6 +142,8 @@ class DeriveOperator(Operator):
         out = {"type": "derive", "lambdaId": self.lambda_id}
         if self.provenance:
             out["provenance"] = self.provenance
+        if self.schema is not None:
+            out["schema"] = self.schema
         if self._translate:
             out["translate"] = self._translate
         return out
@@ -529,13 +540,10 @@ class Mark:
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
         from .widget import GoFishChartWidget
-        from .arrow_utils import empty_placeholder_arrow_bytes
-
-        arrow_data = empty_placeholder_arrow_bytes()
 
         widget = GoFishChartWidget(
             spec=self.to_ir(),
-            arrow_data=arrow_data,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions={},
             width=w,
             height=h,
@@ -1402,14 +1410,6 @@ class ChartBuilder:
 
         # Import here to avoid circular dependencies
         from .widget import GoFishChartWidget
-        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
-
-        # Ref-data charts (`ref(name)` / `select_all(name)`) have no data of
-        # their own — they borrow nodes from a sibling chart.
-        if isinstance(self.data, _RefProxy):
-            arrow_data = empty_placeholder_arrow_bytes()
-        else:
-            arrow_data = data_to_arrow_bytes(self.data)
 
         # Get the IR spec
         spec = self.to_ir()
@@ -1422,7 +1422,7 @@ class ChartBuilder:
 
         widget = GoFishChartWidget(
             spec=spec,
-            arrow_data=arrow_data,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions=derive_functions,
             width=w,
             height=h,
@@ -1768,12 +1768,19 @@ def stack(
     return Operator("stack", **_stack_opts(**options))
 
 
-def derive(fn: Callable) -> DeriveOperator:
+def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     """
     Derive operator - apply a Python function to transform data.
 
     Args:
         fn: Function that takes data and returns transformed data
+        schema: Column types of the result, keyed by column name, as in
+            ``chart(data, schema={...})``: ``Schema.ordered(levels)`` or
+            ``Schema.time(zone=...)``. Without it, a result column keeps the
+            type it had in the input while its values still fit it, a
+            datetime column is a time, and any other column has no type. A
+            ``schema`` entry overrides those and converts the column's
+            values, as a chart's schema does.
 
     Returns:
         DeriveOperator object
@@ -1785,7 +1792,7 @@ def derive(fn: Callable) -> DeriveOperator:
     unify on X's axis without an explicit `field(name, measure=...)`.
     """
     provenance = getattr(fn, "_gofish_measure_provenance", None)
-    return DeriveOperator(fn, provenance)
+    return DeriveOperator(fn, provenance, schema)
 
 
 def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
@@ -2361,6 +2368,101 @@ class Schema:
         and a value outside the levels is an error.
         """
         return ColumnSchema({"HasOrder": {"levels": list(levels)}})
+
+    @staticmethod
+    def time(zone: str = "UTC") -> ColumnSchema:
+        """A column whose values are instants (``HasCalendar``), read on the
+        calendar of ``zone``, an IANA time zone (``"UTC"`` by default).
+
+        A value may be an ISO 8601 string (``"2024-03-05"`` is the start of
+        that day in ``zone``; a string without an offset is a wall-clock time
+        in ``zone``), a datetime, or epoch milliseconds. A pandas or polars
+        datetime column is a time without a schema entry. An axis over the
+        column labels its ticks with calendar cells (see ``Calendar``).
+        """
+        if not isinstance(zone, str):
+            raise TypeError(
+                f"Schema.time: zone must be an IANA time zone name, got {zone!r}"
+            )
+        return ColumnSchema({"HasCalendar": {"zone": zone}})
+
+
+# Calendar partitions
+
+_CALENDAR_UNITS = (
+    "second",
+    "minute",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "quarter",
+    "year",
+)
+
+
+class CalendarPartition(dict):
+    """A partition of the time line into calendar cells: a level (``unit``)
+    at a step. The dict is the wire form JS reads (``{"unit": "month",
+    "step": 3}``). Mirrors JS ``CalendarPartition``; build one from
+    ``Calendar``. Used in ``axes={"x": {"rows": [...]}}``.
+    """
+
+    def __init__(self, unit: str, step: int = 1, start: Optional[str] = None):
+        if unit not in _CALENDAR_UNITS:
+            raise ValueError(
+                f"Calendar: unknown unit {unit!r}; expected one of "
+                + ", ".join(_CALENDAR_UNITS)
+            )
+        if isinstance(step, bool) or not isinstance(step, int) or step < 1:
+            raise ValueError(
+                f"Calendar.{unit}.every({step!r}): the step must be a whole "
+                f"number of {unit}s, 1 or more."
+            )
+        wire: dict = {"unit": unit, "step": step}
+        if start is not None:
+            wire["start"] = start
+        super().__init__(wire)
+
+    def every(self, n: int) -> "CalendarPartition":
+        """The same level, ``n`` units per cell (``Calendar.month.every(3)``).
+        Steps align to the level above: months in steps of 3 start in
+        January, April, July and October."""
+        return CalendarPartition(self["unit"], n, self.get("start"))
+
+
+class _WeekPartition(CalendarPartition):
+    """``Calendar.week``: Monday-start weeks, also callable as
+    ``Calendar.week(start="sunday")``."""
+
+    def __call__(self, start: str = "monday") -> CalendarPartition:
+        if start not in ("monday", "sunday"):
+            raise ValueError(
+                f'Calendar.week: start must be "monday" or "sunday", not {start!r}.'
+            )
+        return CalendarPartition("week", 1, start)
+
+
+class Calendar:
+    """The calendar partitions, used in ``axes={"x": {"rows": [...]}}``.
+
+    Mirrors JS ``Calendar``::
+
+        chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})
+        Calendar.hour.every(6)
+        Calendar.week(start="sunday")
+
+    A custom ``format`` for a row's labels is JS-only for now.
+    """
+
+    second = CalendarPartition("second")
+    minute = CalendarPartition("minute")
+    hour = CalendarPartition("hour")
+    day = CalendarPartition("day")
+    week = _WeekPartition("week", 1, "monday")
+    month = CalendarPartition("month")
+    quarter = CalendarPartition("quarter")
+    year = CalendarPartition("year")
 
 
 # Color configuration
@@ -3176,6 +3278,33 @@ def chart(
     return ChartBuilder(data, _chart_opts(**options) or None)
 
 
+def tiers_arrow_bytes(root: Any) -> List[bytes]:
+    """The Arrow IPC bytes of each chart tier's own rows, as the widget ships
+    them beside the IR (the ``tier_arrow`` trait) and the parity harness's
+    derive server ships them too: one tier for a chart, one per child for a
+    layer, none for a bare mark. Timestamp and date columns cross as Arrow
+    times, and the widget's decode reads them as times. A tier with no rows
+    of its own ships the empty placeholder: a mark child, a chart whose data
+    is a ``ref`` / ``select_all`` (it borrows a sibling's nodes), and an
+    empty ``chart()`` scope (it takes the previous tier's marks)."""
+    from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
+
+    def tier(t: Any) -> bytes:
+        if (
+            not isinstance(t, ChartBuilder)
+            or isinstance(t.data, _RefProxy)
+            or t._uses_previous_marks()
+        ):
+            return empty_placeholder_arrow_bytes()
+        return data_to_arrow_bytes(t.data)
+
+    if isinstance(root, LayerBuilder):
+        return [tier(child) for child in root.children]
+    if isinstance(root, ChartBuilder):
+        return [tier(root)]
+    return []
+
+
 class LayerBuilder:
     """Builder class for composing multiple ChartBuilder instances as a layer."""
 
@@ -3285,27 +3414,10 @@ class LayerBuilder:
             GoFishChartWidget instance that will display in Jupyter
         """
         from .widget import GoFishChartWidget
-        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
 
-        def _serialize_child_data(child: ChartBuilder) -> bytes:
-            """Serialize a child chart's data to raw Arrow IPC bytes.
-
-            ``GoFishChartWidget`` owns the base64/JSON wire encoding (see
-            ``arrow_dict`` there) — this only ever hands it plain bytes.
-            """
-            # Ref-data tiers borrow nodes from a sibling; empty `chart()`
-            # scopes (previous-tier) inherit the preceding tier's marks
-            # JS-side — neither ships rows of its own.
-            if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
-                return empty_placeholder_arrow_bytes()
-
-            return data_to_arrow_bytes(child.data)
-
-        # Serialize each child's data and collect derive functions
-        arrow_dict: dict = {}
+        # Collect derive functions
         derive_functions: dict = {}
-        for i, child in enumerate(self.children):
-            arrow_dict[str(i)] = _serialize_child_data(child)
+        for child in self.children:
             for op in _collect_derive_operators(child.operators):
                 derive_functions[op.lambda_id] = op.fn
 
@@ -3313,7 +3425,7 @@ class LayerBuilder:
 
         widget = GoFishChartWidget(
             spec=spec,
-            arrow_dict=arrow_dict,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions=derive_functions,
             width=w,
             height=h,

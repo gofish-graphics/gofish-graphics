@@ -51,7 +51,8 @@ operator works both inside `.flow(...)` and as a combinator over marks, and a
 resolves a child. The async map over a collection, once the capitalized
 `For`, is now the lowercase `map`, so the factory namespaces `Constraint`
 (constraints) and `Schema` (column types for `chart`'s `schema` option) are
-the only capitalized function-like exports left. The fluent
+the only capitalized function-like exports left, beside `Calendar`, a
+namespace of calendar partitions for a time axis's `rows` (#1057). The fluent
 surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
 `treemap`, `pack`, `derive`, `resolve`, and `join` (`pack` takes a strategy

@@ -14,6 +14,7 @@ covers:
   - packages/gofish-graphics/src/ast/fieldExpr.ts
   - packages/gofish-graphics/src/ast/datumProjection.ts
   - packages/gofish-graphics/src/ast/schema.ts
+  - packages/gofish-graphics/src/ast/calendar.ts
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -241,6 +242,7 @@ type CONTINUOUS_TYPE = {
   origin: Origin; // where that origin sits
   measure?: Measure;
   mirrored?: true;
+  calendar?: HasCalendar; // the data are instants on this calendar
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
@@ -1297,15 +1299,30 @@ its own end), and a delta axis's width from 0, so a delta axis steps evenly
 nices** (its domains map into a fixed coordinate range; rounding them would
 break the mapping).
 
+A scope nices to **the ticks of the axis that demands it** (`AxisTicks`): a
+tick count (10) on a numeric axis, rounded with `d3.nice`; on a **time**
+space (`calendar` set, see the column types below) the calendar partition of
+the axis's inner row, rounded outward to its cells (`niceToCells` in
+`calendar.ts`), so both ends of the axis are ticks. A round number of
+milliseconds means nothing on a calendar, so a time space branches on its
+kind inside the one `niceContinuous`. The partition is the axis's explicit
+inner row (`rows[0]` of the stamped `AxisTicks`: `layout` parses
+`axes.x.rows` once, and the axis is drawn from the same rows), else the one
+the domain picks for about the tick count
+(`tickPartition`, like d3's time ticks). Both read the domain and the axis
+options only, never pixels.
+
 And it is **demand-driven**: a scope nices its domain **iff at least one node
 in the scope renders an axis on that dim**. Nicing is a presentation
 adjustment whose demand comes from axis views — with no axis there is no tick
 grid to round for, so axis-less content stays at the honest raw scale; with an
 axis, content and ticks share the one niced domain, which is the contract.
 Mechanically, `resolveAxes` leaves a persistent `axisDemand` stamp on every
-axis-owning node (the `axis` work flags are consumed and cleared by
-elaboration; the stamps survive to layout), and each solve site asks
-`GoFishNode.scopeRendersAxis(dim)`: a walk over the scope's **space-flow
+axis-owning node: the axis's `AxisTicks`, which the chart's `axes` option
+sets per dim (undefined for no axis). The `axis` work flags are consumed and
+cleared by elaboration; the stamps survive to layout. Each solve site asks
+`GoFishNode.scopeAxisTicks(dim)`, which returns the ticks of an axis in the
+scope, or undefined for none: a walk over the scope's **space-flow
 region** — up from the scope root while neither a self-scaled stash nor a coord
 boundary cuts the flow, then across that region's subtree, stopping at deeper
 stashes and coords. The region is exactly the neighborhood whose axes all view
@@ -1697,7 +1714,7 @@ chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
 ```
 
 A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the builder words. Two classes exist:
+reads only the classes, never the builder words. Three classes exist:
 
 - `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
   order. `splitEntries` groups a `by` over the column in that order instead
@@ -1732,12 +1749,84 @@ reads only the classes, never the builder words. Two classes exist:
   (`orderEntries`), and `stackOrigin` reads the stack's direction off that,
   so a row with one part puts it where a full row does. A split order that
   is neither the order nor its reverse is an error.
+- `HasCalendar` (`Schema.time({ zone })`, #1057): the values are instants,
+  read on the calendar of the IANA zone `zone` (UTC by default). It is the
+  one class that changes the data: `applySchema` (now async, because it
+  loads Temporal; see `calendar.ts`) copies the rows and turns each value
+  into epoch milliseconds (`toEpochMs`: an ISO date is the start of that day
+  in the zone, a date-time without an offset is wall-clock time in the zone).
+  It is also the one class that is inferred, and only locally: a column
+  whose first non-null value is a JS `Date` is a UTC time. Strings and
+  numbers never are. A pandas, polars or pyarrow datetime column crosses
+  from Python as an Arrow timestamp or date column, unchanged, and the
+  widget's decode (`widget-src/arrowDecode.ts`) attaches `HasCalendar` to
+  the rows, as column types. A tz-aware timestamp is an instant: it decodes
+  to epoch milliseconds, typed in its own zone. A naive timestamp or a date
+  is a wall-clock value: it decodes to an ISO string without an offset,
+  typed UTC, so `applySchema` reads it in the zone of a declared `schema`
+  entry (which wins over the decoded type) exactly as it reads the same
+  string from JS data, or in UTC without one. The decode only attaches
+  types: whoever reads the rows converts them first with its own schema (a
+  chart tier is chart data, and a callback's result goes through
+  `applyLambdaTyped` in `serialize/registry.ts`, so a lambda accessor's or a
+  single-datum `derive`'s result holds epoch milliseconds). No schema names
+  a value inside a list or a struct, so a time there decodes to epoch
+  milliseconds (a naive one read in UTC), and a list of structs, a list of
+  rows, carries its own column types. An instant has no zero. A position read from the column carries the
+  class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
+  for any typed column, with `createOperator` passing the column it resolved
+  from the whole input, measure and type together, `resolveColumn`), and the point space it
+  builds carries it as `CONTINUOUS_TYPE.calendar` (`positionCalendar`,
+  `withCalendar`). The folds that build a continuous space from parts keep
+  it (`mergeCalendars`: the overlay fold, a layer's datum-position domain in
+  `compose.ts`, a rect's two ends, the `position` operator's offset), and
+  two parts on different zones are an error, like two measures. A time space
+  is niced to the cells of its axis's inner row (`niceToCells`: the
+  smallest run of whole cells that covers the domain, so a domain of one
+  instant, which `tickPartition` ticks at days, spans the day that holds
+  it), and its axis is a time axis
+  ([Axes](/internals/frontend/axes#the-three-kinds)). An empty domain (a
+  column of nulls) or a non-finite one is not niced at all, for numbers and
+  times alike. Calendar cells
+  (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
+  on Temporal, native or the polyfill it loads when the runtime has none.
 
 The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
 same way a transform's measure provenance does: `ChartBuilder` copies the
 array and tags it (`applySchema`, which keeps the measure provenance the
 array already carries), `createOperator` copies the tag onto each
-split leaf, and a `derive` keeps it on its result. So the stack's split reads
+split leaf, and each data-transform operator (`mapOperator` in
+`marks/chart.ts`) types its result by its own typing rule. A `derive`
+(`typeLikeChartData`, also `resolve` and `join`) types its result with
+`applySchema` too, passing the input's types as `applySchema`'s `inherited`
+types, whether or not the function returned its input array. It keeps only
+those that still fit the result's values: each class has one predicate for
+the values it accepts as they stand (`ACCEPTS` in `schema.ts`: a time holds
+instants, epoch milliseconds or `Date`s, and an order holds text or
+numbers), and a type fits a value when every class it has accepts it, the
+predicates built once per column. A `Date` is an instant, so a time column
+of `Date`s keeps its inherited type, zone included, and its Dates become
+epoch milliseconds; a string needs a zone to read, so it does not fit. The
+inherited types never reinterpret or check values, so a date rewritten to
+"Mar" is plain text, not an error. Fitting reads values, not meanings: a
+derive that recodes a time to plain numbers (years) keeps `HasCalendar`,
+since any finite number is epoch milliseconds (#1089), and
+`derive(fn, { schema })` is the fix. The result's own types override the
+inherited ones column by column, inference types a column of `Date`s as a
+UTC time, and `derive(fn, { schema })` overrides all of that for the columns
+it names and converts their values like a chart's schema (a datetime column
+a Python callback returns arrives typed from the widget's decode). A result
+that is one object, not an array (a derive over a single datum), is typed
+as one row and converted the same way. The operator never tags the array its
+function returned. `log` returns its input, types and all. A `filter`
+returns a subset of its input's row objects, so its typing rule carries the
+input's types over as they are, with no fit check (a predicate that changes
+the rows it tests is not supported); a filter that keeps a value outside an
+order keeps the order, so the stray-level error fires where the order is
+used, and that error names `derive(fn, { schema })` as a fix for an order a
+derive's renamed values inherited. `applySchema` copies
+the rows only when some time value is not epoch milliseconds already;
+otherwise it tags a shallow copy of the array. So the stack's split reads
 its `by` column's type off the data it splits, and a color channel's
 `DatumValueImpl` records the type of the field it read (`fieldType`), which
 lets the categorical color scale list its domain in the column's order. A

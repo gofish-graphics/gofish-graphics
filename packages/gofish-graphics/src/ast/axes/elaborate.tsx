@@ -4,11 +4,12 @@
 
 import { GoFishNode } from "../_node";
 import { Rect } from "../shapes/rect";
-import { Text } from "../shapes/text";
+import { Text, estimateTextDimensions } from "../shapes/text";
+import { FALLBACK_FONT_FAMILY } from "../shapes/fontUtils";
 import { Spread } from "../graphicalOperators/spread";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
-import type { AlignAnchor } from "../constraints/shared";
+import { axisName, type AlignAnchor } from "../constraints/shared";
 import {
   breadthFirst,
   fmtNum,
@@ -29,6 +30,9 @@ import {
   niceContinuous,
   originIs,
   spaceMeasure,
+  axisTickPartition,
+  DEFAULT_AXIS_TICKS,
+  type AxisTicks,
 } from "../underlyingSpace";
 import type { AxesOptions, AxisOptions } from "../gofish";
 import {
@@ -36,6 +40,7 @@ import {
   wrapperDirection,
   type AxisDirection,
 } from "../axisDirection";
+import { defaultTimeRows, rowLabels } from "./timeRows";
 
 /**
  * The edge an axis on `dim` seats on when its `side` is not given, in the
@@ -81,9 +86,10 @@ const ORDINAL_LABEL_GAP = 8; // gap between content edge and the ordinal label r
 const CONTENT_NAME = "__axisContent"; // inner-tier name for the wrapped content
 const INNER_REF_NAME = "__axisInner"; // outer-tier name for the wrapped content
 const AXIS_CONTENT_GAP = 6; // gap between axis line and content
-const TICK_COUNT = 10;
 const LABEL_FONT_SIZE = 10;
 const AXIS_COLOR = "gray";
+const TIME_OUTER_TICK_LEN = 8; // a time axis's ticks for its outer rows
+const TIME_ROW_GAP = 2; // gap between two label rows of a time axis
 
 /** Per-dim [x, y] axis edge, in the owner's axis order; undefined = none
  *  given (an option) or no axis on that dim (an owner's result). */
@@ -205,16 +211,16 @@ function resolveLabelRotation(
   };
 }
 
-const dirName = (dim: 0 | 1) => (dim === 0 ? "x" : "y");
 const cross = (dim: 0 | 1): 0 | 1 => (1 - dim) as 0 | 1;
-const crossName = (dim: 0 | 1) => dirName(cross(dim));
+const crossName = (dim: 0 | 1) => axisName(cross(dim));
 
-/** The bare tick-mark rect, oriented for axis `dim`. */
-const tickRect = (dim: 0 | 1): GoFishNode =>
+/** The bare tick-mark rect, oriented for axis `dim`, `len` pixels long across
+ *  it. */
+const tickRect = (dim: 0 | 1, len = TICK_LEN): GoFishNode =>
   Rect(
     dim === 1
-      ? { w: TICK_LEN, h: 1, fill: AXIS_COLOR }
-      : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
+      ? { w: len, h: 1, fill: AXIS_COLOR }
+      : { w: 1, h: len, fill: AXIS_COLOR }
   );
 
 /** A short label+tick mark pair, spread along the cross axis. The tick is the
@@ -349,8 +355,15 @@ function gutterConstraints(
   ];
 }
 
+/** One of `positionAxis`'s `extraLabels`. */
+type ExtraLabel = {
+  value: number;
+  text: string;
+  offset?: number;
+};
+
 /**
- * Shared builder for the two "position-like" axes (continuous + difference):
+ * Shared builder for the "position-like" axes (continuous, time, difference):
  * an axis line spanning [lineMin,lineMax] via datum endpoints, an anchor + tick
  * nodes pinned at their data values, an optional set of extra labels pinned at
  * data positions (the difference deltas), and the seated gutter. Factoring this
@@ -378,8 +391,13 @@ function positionAxis(opts: {
   /** Shared hanging-point descriptor for `tickLabel` (see `LabelRotation`'s
    *  doc comment) — only consulted when `tickLabel` is given. */
   labelRotation?: LabelRotation;
-  /** Extra labels placed at a data position (difference delta labels). */
-  extraLabels?: { value: number; text: string }[];
+  /** Extra labels placed at a data position, with no tick of their own:
+   *  the delta labels of a difference axis, and the row labels of a time
+   *  axis. Each sits `offset` pixels past the line (default: past the ticks,
+   *  where a continuous axis's labels sit). `labelAngle` does not rotate
+   *  them, so they carry no `axisLabel` tag and `labelAngle: "auto"` does
+   *  not score them. */
+  extraLabels?: ExtraLabel[];
   /** The other dim's scale floor, when it also carries a position-like axis —
    *  seats this line at the plot corner instead of the content edge. */
   crossFloor?: number;
@@ -400,8 +418,8 @@ function positionAxis(opts: {
   const tickLabelNodes = opts.tickLabel
     ? tickValues.map((v, i) => opts.tickLabel!(v, i, tickLabelName(i)))
     : [];
-  // Extra labels (difference deltas) are PLAIN text — no tick mark of their own,
-  // or the axis ends up with a second row of ticks at the midpoints.
+  // Extra labels are PLAIN text — no tick mark of their own, or a
+  // difference axis ends up with a second row of ticks at the midpoints.
   const extra = opts.extraLabels ?? [];
   const labelNodes = extra.map((e, i) =>
     Text({ text: e.text, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }).name(
@@ -427,7 +445,7 @@ function positionAxis(opts: {
       ...gutterConstraints(dim, g, lineName, ticks, opts.crossFloor, side)
     );
     if (opts.tickLabel) {
-      const trackAxis = dirName(dim);
+      const trackAxis = axisName(dim);
       const gutterDir = crossName(dim);
       // Heterogeneous per-child anchor (see `positionAxis`'s `tickLabel` doc
       // comment): the label pivots at its own origin when oblique; the tick
@@ -452,14 +470,17 @@ function positionAxis(opts: {
     }
     // Each extra label is pinned at its data position along the axis, and —
     // having no tick of its own to provide an offset — DISTRIBUTEs off the
-    // (now seated) line, at the same outer offset as the continuous labels
-    // (tick + gap).
+    // (now seated) line, by default at the same outer offset as the
+    // continuous labels (tick + gap).
     extra.forEach((e, i) => {
       const label = g[labelName(i)];
       cs.push(Constraint.position(pos(e.value), [label]));
       cs.push(
         Constraint.distribute(
-          { dir: crossName(dim), spacing: TICK_LEN + LABEL_TICK_GAP },
+          {
+            dir: crossName(dim),
+            spacing: e.offset ?? TICK_LEN + LABEL_TICK_GAP,
+          },
           // Label sits on the OUTER side of the line — past it toward the gutter,
           // which flips with `side`.
           side === "end" ? [g[lineName], label] : [label, g[lineName]]
@@ -498,6 +519,7 @@ function positionAxis(opts: {
 function elaborateContinuousAxis(
   dim: 0 | 1,
   nice: [number, number],
+  ticks: AxisTicks,
   prefix: string,
   crossFloor: number | undefined,
   side: "start" | "end",
@@ -506,7 +528,7 @@ function elaborateContinuousAxis(
   mirrored = false
 ): AxisElaboration {
   const [niceMin, niceMax] = nice;
-  const tickValues = d3Ticks(niceMin, niceMax, TICK_COUNT);
+  const tickValues = d3Ticks(niceMin, niceMax, ticks.count);
   const oblique = labelRotation?.trackAlign === "baseline";
   const tickText = (v: number) => fmtNum(mirrored ? Math.abs(v) : v);
   return positionAxis({
@@ -545,6 +567,89 @@ function elaborateContinuousAxis(
   });
 }
 
+/**
+ * One time axis: a continuous axis whose ticks and labels come from calendar
+ * partitions (see axes/timeRows.ts). Ticks and labels are placed by the
+ * axis's continuous scale, like any position axis. Each row is one
+ * partition: its cells' starts are its ticks, and each label is centered on
+ * its cell's start tick, as a numeric axis's labels are. Row 0 (the inner
+ * row) sits past the ticks, as a continuous axis's labels do, and each
+ * further row sits past the one before it. Each tick is drawn once. A tick the
+ * inner row has is short; an outer-row tick that falls between inner ticks
+ * is longer, so it stands out.
+ *
+ * `nice` is the axis's domain, niced outward to the cells of the inner row
+ * (`niceContinuous` with the axis's `ticks`, the same nicing its scope's
+ * solve applies), so both ends are inner ticks. An outer row's first cell
+ * may start before the domain: its label is centered on the first tick,
+ * under the inner row's first label. The rows are `ticks.rows` (the
+ * chart's `axes.x.rows`, as `layout` stamped them), else the inner row the
+ * domain picks (`axisTickPartition`) and its parent level.
+ *
+ * Like a numeric axis, a time axis labels every tick and never drops a
+ * label; choosing ticks from the labels' room is #1063. `labelAngle` does
+ * not rotate its labels yet: a rotated row would need its depth, and so the
+ * offset of the rows past it, from its rotated label boxes.
+ */
+function elaborateTimeAxis(
+  dim: 0 | 1,
+  space: CONTINUOUS_TYPE,
+  nice: [number, number],
+  ticks: AxisTicks,
+  prefix: string,
+  crossFloor: number | undefined,
+  side: "start" | "end"
+): AxisElaboration {
+  const [lo, hi] = nice;
+  const zone = space.calendar!.zone;
+  const rows = ticks.rows ?? defaultTimeRows(axisTickPartition(space, ticks));
+  const labels = rows.map((row) => rowLabels(row, lo, hi, zone));
+
+  // Ticks: every row's label positions, each drawn once, inner row first. A
+  // tick the inner row has is short; only an outer-row tick that falls
+  // between inner ticks is long, so it stands out from the inner ticks
+  // around it. (An outer label at the first tick, for a cell that starts
+  // before the domain, adds no tick: the domain starts on an inner tick.)
+  const tickLen = new Map<number, number>();
+  labels.forEach((row, k) => {
+    for (const l of row) {
+      if (!tickLen.has(l.at))
+        tickLen.set(l.at, k === 0 ? TICK_LEN : TIME_OUTER_TICK_LEN);
+    }
+  });
+  const tickValues = [...tickLen.keys()].sort((a, b) => a - b);
+
+  // How far each row sits past the line: the ticks and gap, then every row
+  // before it. A row's depth across the axis is its labels' height (x) or
+  // its widest label (y).
+  const font = (t: string) =>
+    estimateTextDimensions(t, LABEL_FONT_SIZE, FALLBACK_FONT_FAMILY);
+  const rowDepth = (k: number) =>
+    dim === 0
+      ? font("0").height
+      : Math.max(0, ...labels[k].map((l) => font(l.text).width));
+  const rowOffset: number[] = [];
+  let offset = TICK_LEN + LABEL_TICK_GAP;
+  rows.forEach((_, k) => {
+    rowOffset.push(offset);
+    offset += rowDepth(k) + TIME_ROW_GAP;
+  });
+
+  return positionAxis({
+    dim,
+    prefix,
+    lineMin: lo,
+    lineMax: hi,
+    tickValues,
+    tickNode: (v, _i, name) => tickRect(dim, tickLen.get(v)!).name(name),
+    extraLabels: labels.flatMap((row, k) =>
+      row.map((l) => ({ value: l.at, text: l.text, offset: rowOffset[k] }))
+    ),
+    crossFloor,
+    side,
+  });
+}
+
 /** One difference axis: bare tick marks at tick values, delta labels at
  *  midpoints. `space` is the content's space; the axis spans its niced width
  *  from 0, and the content sits centered in it (`contentAt`): a delta axis
@@ -552,17 +657,18 @@ function elaborateContinuousAxis(
 function elaborateDifferenceAxis(
   dim: 0 | 1,
   content: CONTINUOUS_TYPE,
+  ticks: AxisTicks,
   prefix: string,
   crossFloor?: number,
   side: "start" | "end" = "start"
 ): AxisElaboration {
-  const space = niceContinuous(content);
+  const space = niceContinuous(content, ticks);
   // `space` is the axis's niced space (`niceContinuous`), so its width is a
   // nice value from 0 and the ticks step evenly up to it: the scope that sizes
   // the content solves against the same niced width (`niceScope`), so ticks
   // line up with the marks they annotate. The axis line spans [0, width].
   const width = dataWidth(space);
-  const tickValues = d3Ticks(0, width, TICK_COUNT);
+  const tickValues = d3Ticks(0, width, ticks.count);
   const contentAt = (width - dataWidth(content)) / 2;
   const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
     value: (v + tickValues[i + 1]) / 2,
@@ -605,7 +711,7 @@ function elaborateOrdinalAxis(
   tier = 0
 ): AxisElaboration {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
-  const trackAxis = dirName(dim); // labels track their key along the axis dim
+  const trackAxis = axisName(dim); // labels track their key along the axis dim
   const gutterDir = crossName(dim); // labels sit in the cross gutter
   const lName = (i: number) => `${prefix}ol${i}`;
   const rName = (i: number) => `${prefix}or${i}`;
@@ -708,13 +814,16 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  * ordinal axis — is the innermost tier); see `elaborateChrome` for how it's
  * bubbled up. The returned `tierCounts` adds one per dim this node claimed an
  * ordinal axis on, so an ancestor owning the same dim's outer tier reads the
- * right index for a per-tier `labelAngle` array.
+ * right index for a per-tier `labelAngle` array. `timeAxes` folds the same
+ * way: whether a time axis was drawn below this node, per dim, and the
+ * returned one adds the dims this node draws a time axis on.
  */
 function elaborationsFor(
   node: GoFishNode,
   sides: AxisSides,
   labelSettings: LabelRowSettings = () => undefined,
-  tierCounts: [number, number] = [0, 0]
+  tierCounts: [number, number] = [0, 0],
+  timeAxes: [boolean, boolean] = [false, false]
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -730,6 +839,9 @@ function elaborationsFor(
   /** Per-dim ordinal-tier count, incremented for each dim this node claimed
    *  an ordinal axis on (see the doc comment above). */
   tierCounts: [number, number];
+  /** Per-dim [x, y]: did this node, or a node below it, draw a time axis on
+   *  that dim. */
+  timeAxes: [boolean, boolean];
 } {
   const space = node._underlyingSpace;
   if (!space)
@@ -740,6 +852,7 @@ function elaborationsFor(
       owned: [false, false],
       sides: [undefined, undefined],
       tierCounts,
+      timeAxes,
     };
   // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
   // `_underlyingSpace` is the UNDEFINED sentinel — self-scaled children
@@ -759,11 +872,16 @@ function elaborationsFor(
   // so a nicing change can't skew the corner. A DIFFERENCE dim's floor is 0.
   const nices: ([number, number] | undefined)[] = [undefined, undefined];
   const floors: (number | undefined)[] = [undefined, undefined];
+  // What each owned axis ticks at, as `resolveAxes` stamped it: the same
+  // ticks its scope's solve nices the domain to. Every axis is drawn from
+  // it: a numeric axis's tick count, a time axis's rows.
+  const ticksFor = (dim: 0 | 1): AxisTicks =>
+    node.axisDemand[dim] ?? DEFAULT_AXIS_TICKS;
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     if (axisOver(s) === "absolute") {
-      const niced = niceContinuous(s) as CONTINUOUS_TYPE;
+      const niced = niceContinuous(s, ticksFor(dim)) as CONTINUOUS_TYPE;
       nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
       floors[dim] = nices[dim]![0];
     } else if (axisOver(s) === "delta") {
@@ -803,16 +921,32 @@ function elaborationsFor(
     return resolveLabelRotation(setting);
   };
   const outTierCounts: [number, number] = [...tierCounts];
+  const outTimeAxes: [boolean, boolean] = [...timeAxes];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
-    if (kind === "absolute" && isCONTINUOUS(s)) {
+    const ticks = ticksFor(dim);
+    if (kind === "absolute" && isCONTINUOUS(s) && s.calendar) {
+      const e = elaborateTimeAxis(
+        dim,
+        s,
+        nices[dim]!,
+        ticks,
+        prefix,
+        crossFloor,
+        axisSide(dim)
+      );
+      constrained.push(e);
+      anchors[dim] = e.anchor;
+      outTimeAxes[dim] = true;
+    } else if (kind === "absolute" && isCONTINUOUS(s)) {
       const e = elaborateContinuousAxis(
         dim,
         nices[dim]!,
+        ticks,
         prefix,
         crossFloor,
         axisSide(dim),
@@ -826,6 +960,7 @@ function elaborationsFor(
       const e = elaborateDifferenceAxis(
         dim,
         s,
+        ticks,
         prefix,
         crossFloor,
         axisSide(dim)
@@ -869,6 +1004,7 @@ function elaborationsFor(
       owned[1] ? axisSide(1) : undefined,
     ],
     tierCounts: outTierCounts,
+    timeAxes: outTimeAxes,
   };
 }
 
@@ -918,6 +1054,10 @@ export type ChromeOptions = {
  * for the next one out (its city row), which `elaborationsFor` uses to pick
  * the right entry of a per-tier `labelAngle` array. Sibling subtrees don't
  * interfere: each call only sees counts folded from ITS OWN children.
+ *
+ * It also reports, per dim, whether any node in the subtree drew a time axis
+ * (`timeAxes`), folded the same way, so `layout` can reject `axes.<dim>.rows`
+ * on a chart with no time axis on that dim (see `AxisOptions.rows`).
  */
 export async function elaborateChrome(
   node: GoFishNode,
@@ -926,9 +1066,11 @@ export async function elaborateChrome(
   node: GoFishNode;
   changed: boolean;
   tierCounts: [number, number];
+  timeAxes: [boolean, boolean];
 }> {
   let changed = false;
   const tierCounts: [number, number] = [0, 0];
+  const childTimeAxes: [boolean, boolean] = [false, false];
   // Bottom-up: replace each child with its elaborated form.
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
@@ -937,6 +1079,7 @@ export async function elaborateChrome(
       if (res.changed) changed = true;
       for (const dim of [0, 1] as (0 | 1)[]) {
         tierCounts[dim] = Math.max(tierCounts[dim], res.tierCounts[dim]);
+        childTimeAxes[dim] ||= res.timeAxes[dim];
       }
       if (res.node !== child) {
         node.children[i] = res.node;
@@ -952,11 +1095,13 @@ export async function elaborateChrome(
     owned,
     sides,
     tierCounts: nextTierCounts,
+    timeAxes,
   } = elaborationsFor(
     node,
     options.sides ?? [undefined, undefined],
     options.labelSettings,
-    tierCounts
+    tierCounts,
+    childTimeAxes
   );
   // A title names an axis this node draws. The measure is read off the
   // node's own space, which elaboration has not re-resolved yet.
@@ -980,7 +1125,7 @@ export async function elaborateChrome(
     titles[1] === undefined &&
     legend === undefined
   ) {
-    return { node, changed, tierCounts: nextTierCounts };
+    return { node, changed, tierCounts: nextTierCounts, timeAxes };
   }
 
   let withAxes: GoFishNode = node;
@@ -1053,7 +1198,12 @@ export async function elaborateChrome(
   });
   root.chrome = { content: node, withAxes };
 
-  return { node: root, changed: true, tierCounts: nextTierCounts };
+  return {
+    node: root,
+    changed: true,
+    tierCounts: nextTierCounts,
+    timeAxes,
+  };
 }
 
 // ── Axis titles ──────────────────────────────────────────────────────────────

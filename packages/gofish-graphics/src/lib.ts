@@ -105,9 +105,22 @@ export type {
   ColumnType,
   HasOrder,
   HasMidpoint,
+  HasCalendar,
   Level,
   SchemaEntry,
 } from "./ast/schema";
+// Calendar partitions (#1057): the cells a time axis's rows are made of
+// (`axes: { x: { rows: [Calendar.month, Calendar.year] } }`). Capitalized
+// like `Schema`: a namespace of values.
+export { Calendar, CalendarPartition } from "./ast/calendar";
+export type {
+  CalendarCell,
+  CalendarUnit,
+  CalendarJSON,
+  CellFormat,
+  WeekStart,
+} from "./ast/calendar";
+export type { TimeRowOption } from "./ast/axes/timeRows";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -223,7 +236,7 @@ export {
   subtract,
   mask,
 } from "./ast/marks/chart";
-export type { RelatableMark } from "./ast/marks/chart";
+export type { RelatableMark, DeriveOptions } from "./ast/marks/chart";
 export { compose } from "./ast/marks/compose";
 // Animation (JS-only, like the rest of the reactive layer: a sequence owns a
 // clock, which is a live signal and does not cross the Python bridge).

@@ -65,6 +65,7 @@ import { pack } from "../ast/graphicalOperators/pack";
 import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
 import { offset as offsetOp } from "../ast/graphicalOperators/offset";
 import { setMeasureProvenance, type MeasureProvenance } from "../ast/data";
+import { applySchema, type SchemaEntry } from "../ast/schema";
 import { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
@@ -82,8 +83,11 @@ export { cutSlices, cutMark, offsetOp };
  *
  * The transport (Arrow over anywidget traitlets, JSON over HTTP, etc.) is the
  * bridge's responsibility. `applyLambda` returns the callback's results as
- * plain JSON values; any transport-specific wrapping is the bridge's job to
- * undo.
+ * plain JSON values, with any transport-specific wrapping undone, and may
+ * attach the column types it decoded (`setColumnTypes`). A caller that reads
+ * rows (a `derive`, a lambda accessor) reads them through
+ * {@link applyLambdaTyped}; a mark function's reply is an IR document, not
+ * rows.
  */
 export interface DeriveBridge {
   /**
@@ -92,6 +96,32 @@ export interface DeriveBridge {
    * JSON values.
    */
   applyLambda(lambdaId: string, rows: any[]): Promise<any[]>;
+}
+
+/**
+ * Call a bridge lambda and type what it returns: the rows go through
+ * `applySchema` with `schema` before anyone reads a value, as a chart's rows
+ * do. A bridge may hand back rows whose column types it decoded with them
+ * (the widget's Arrow decode types a naive timestamp column as a time and
+ * leaves its values as wall-clock ISO strings), so this is where those values
+ * become epoch milliseconds, read in `schema`'s zone for the column when it
+ * names one. Every caller that reads a callback's rows (a `derive`, a lambda
+ * accessor) goes through here.
+ */
+export async function applyLambdaTyped(
+  bridge: DeriveBridge,
+  lambdaId: string,
+  rows: any[],
+  schema: Record<string, SchemaEntry> = {},
+  provenance?: MeasureProvenance
+): Promise<any[]> {
+  const result = await bridge.applyLambda(lambdaId, rows);
+  return applySchema(
+    provenance !== undefined
+      ? setMeasureProvenance(result, provenance)
+      : result,
+    schema
+  );
 }
 
 /**
@@ -152,7 +182,8 @@ export const OPERATOR_BUILDERS: Record<
   (opts: Record<string, any>, bridge?: DeriveBridge) => Operator<any, any>
 > = {
   // The IR names a Python lambda: the rebuilt operator calls it through the
-  // bridge and puts back the measure provenance the rows lose on the way.
+  // bridge, puts back the measure provenance the rows lose on the way, and
+  // types the returned rows by the operator's `schema`.
   derive: (opts, bridge) => {
     const lambdaId = opts.lambdaId;
     if (!lambdaId) {
@@ -178,18 +209,23 @@ export const OPERATOR_BUILDERS: Record<
     // the RPC). Re-apply it to the returned rows so channel inference unifies a
     // histogram's edges on the source field's axis (mirrors the JS bin).
     const provenance = opts.provenance as MeasureProvenance | undefined;
-    return derive(async (d: any) => {
-      const rows = Array.isArray(d) ? d : d == null ? [] : [d];
-      if (rows.length === 0) {
-        return Array.isArray(d) ? d : (d ?? null);
-      }
-      const result = await bridge.applyLambda(lambdaId, rows);
-      const tagged =
-        provenance !== undefined
-          ? setMeasureProvenance(result, provenance)
-          : result;
-      return Array.isArray(d) ? tagged : (tagged[0] ?? null);
-    });
+    return derive(
+      async (d: any) => {
+        const rows = Array.isArray(d) ? d : d == null ? [] : [d];
+        if (rows.length === 0) {
+          return Array.isArray(d) ? d : (d ?? null);
+        }
+        const typed = await applyLambdaTyped(
+          bridge,
+          lambdaId,
+          rows,
+          opts.schema,
+          provenance
+        );
+        return Array.isArray(d) ? typed : (typed[0] ?? null);
+      },
+      { schema: opts.schema }
+    );
   },
   // The IR names the layer to resolve against as a string; the factory takes
   // a selection.

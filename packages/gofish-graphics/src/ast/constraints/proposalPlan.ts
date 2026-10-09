@@ -4,7 +4,7 @@
 
 import { type Size } from "../dims";
 import { isValue } from "../data";
-import { type UnderlyingSpace } from "../underlyingSpace";
+import { type AxisTicks, type UnderlyingSpace } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
 import {
@@ -202,12 +202,13 @@ export function buildChildScalePlan(
   // Per axis: the layer's constraint plan covers it (a composed budget).
   budgetCovers: Size<boolean>,
   shared: Size<boolean>,
-  // Demand-driven nicing (issue #659): per-dim "some node in this scope renders
-  // an axis" (`GoFishNode.scopeRendersAxis`). A scope this plan roots nices its
-  // anchored POSITION domain iff the dim's demand is true — nicing is a
+  // Demand-driven nicing (issue #659): per-dim, the ticks of the axis some
+  // node in this scope renders, or undefined for none
+  // (`GoFishNode.scopeAxisTicks`). A scope this plan roots nices its anchored
+  // POSITION domain to them iff the dim has an axis — nicing is a
   // presentation adjustment whose demand comes from axis views, so axis-less
   // content stays at the honest raw scale.
-  axisDemand: (axis: 0 | 1) => boolean,
+  axisDemand: (axis: 0 | 1) => AxisTicks | undefined,
   // The ONE σ-solve site. Every scale this plan roots is derived
   // through the registry (so `GOFISH_DUMP_SCOPES` sees it and the numbers have a
   // single source); `rootKey` labels the owning layer node in the dump.
@@ -362,7 +363,7 @@ export function buildPositionScalePlan(
   // Demand-driven nicing (issue #659): nice the local domain only when the
   // scope renders an axis on that dim, so datum positions land on the same
   // rounded scale as the ticks — and stay at the honest raw scale otherwise.
-  axisDemand: (axis: 0 | 1) => boolean,
+  axisDemand: (axis: 0 | 1) => AxisTicks | undefined,
   scopes: ScopeRegistry,
   rootKey: string
 ): PositionScalePlan {

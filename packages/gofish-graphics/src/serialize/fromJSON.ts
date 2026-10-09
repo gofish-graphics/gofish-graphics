@@ -32,6 +32,7 @@ import { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";
 import { Frontend } from "gofish-ir";
 import {
+  applyLambdaTyped,
   rebuild,
   cutSlices,
   cutMark,
@@ -111,12 +112,12 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
  * Build the async arrow for a `{ __gofish_lambda: id }` sentinel. The arrow
  * is what JS-side `inferRaw` (and equivalents) calls per row. The body
  * issues a one-row RPC through the bridge and returns the lambda's result for
- * that row as the bridge hands it back: plain JSON values, with any
- * transport-specific wrapping already undone by the bridge.
+ * that row, typed by `applyLambdaTyped` (a time comes back as epoch
+ * milliseconds).
  */
 function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
   return async (d: any) => {
-    const [result] = await bridge.applyLambda(lambdaId, [d]);
+    const [result] = await applyLambdaTyped(bridge, lambdaId, [d]);
     return result;
   };
 }
@@ -684,7 +685,7 @@ function chartFromIR(
   //                                        does the auto-naming/selectAll
   //                                        wiring (see chartBuilder.ts)
   //   - null / undefined                 — data was shipped via the bridge's
-  //                                        arrow_data sidecar; use the
+  //                                        tier_arrow sidecar; use the
   //                                        `data` argument the caller passed
   // Data in the IR (inline rows, a selection, the previous tier) wins over
   // rows the host shipped beside it.
@@ -762,7 +763,8 @@ export interface IRHost {
   /** Rows shipped beside the IR instead of inline in it (the widget's Arrow
    *  sidecar), one array per chart tier; a lone chart is tier 0. A chart
    *  whose `data` is inline, a selection, or the previous tier ignores its
-   *  entry. */
+   *  entry. An array may carry column types (`setColumnTypes`), which the
+   *  chart reads as it reads its own `schema`'s, and its `schema` wins. */
   tierRows?: Record<string, any>[][];
 }
 
@@ -777,7 +779,8 @@ function definedFields<T extends Record<string, unknown>>(o: T): Partial<T> {
 /**
  * Render a whole frontend-IR root (a chart, a layer, or a bare mark) into
  * `container`. This is the one entry point both hosts use: the Python widget
- * (Arrow sidecar, anywidget RPC) and the parity harness (inline rows, HTTP).
+ * (Arrow sidecar, anywidget RPC) and the parity harness (the same Arrow
+ * sidecar, HTTP RPC).
  * Building throws synchronously on a bad spec; the returned promise settles
  * with the {@link View} once the chart has rendered.
  */

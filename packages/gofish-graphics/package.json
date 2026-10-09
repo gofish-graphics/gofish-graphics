@@ -39,7 +39,7 @@
     "fetch-titanic-passengers": "node scripts/fetch-titanic-passengers.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test": "pnpm run test:path && pnpm run test:interpolate && pnpm run test:spline && pnpm run test:time-window && pnpm run test:font && pnpm run test:bbox && pnpm run test:solver && pnpm run test:space && pnpm run test:measure && pnpm run test:geometry && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:compose && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion && pnpm run test:default-split && pnpm run test:gapminder-tower && pnpm run test:connected-scatterplot && pnpm run test:build-schedule && pnpm run test:build-in-tower && pnpm run test:name-scope && pnpm run test:axis-dims && pnpm run test:relate-schedule && pnpm run test:auto-label-angle && pnpm run test:signed-extent && pnpm run test:schema && pnpm run test:stack-origin && pnpm run test:overlap",
+    "test": "pnpm run test:path && pnpm run test:interpolate && pnpm run test:spline && pnpm run test:time-window && pnpm run test:font && pnpm run test:bbox && pnpm run test:solver && pnpm run test:space && pnpm run test:measure && pnpm run test:geometry && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:compose && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion && pnpm run test:default-split && pnpm run test:gapminder-tower && pnpm run test:connected-scatterplot && pnpm run test:build-schedule && pnpm run test:build-in-tower && pnpm run test:name-scope && pnpm run test:axis-dims && pnpm run test:relate-schedule && pnpm run test:auto-label-angle && pnpm run test:signed-extent && pnpm run test:schema && pnpm run test:time && pnpm run test:stack-origin && pnpm run test:overlap",
     "test:space": "tsx src/tests/space.test.ts",
     "test:measure": "tsx src/tests/measure.test.ts",
     "test:geometry": "tsx src/tests/geometry.test.ts",
@@ -69,6 +69,7 @@
     "test:relate-schedule": "tsx src/tests/relateSchedule.test.ts",
     "test:signed-extent": "pnpm run build && tsx src/tests/signedExtent.test.ts",
     "test:schema": "pnpm run build && tsx src/tests/schema.test.ts",
+    "test:time": "pnpm run build && tsx src/tests/time.test.ts",
     "test:stack-origin": "pnpm run build && tsx src/tests/stackOrigin.test.ts",
     "test:overlap": "pnpm run build && tsx src/tests/overlap.test.ts",
     "test:auto-label-angle": "tsx src/tests/autoLabelAngle.test.ts",
@@ -106,7 +107,8 @@
     "perfect-arrows": "^0.3.7",
     "rybitten": "^0.22.0",
     "solid-js": "^1.9.5",
-    "spectral.js": "^2.0.2"
+    "spectral.js": "^2.0.2",
+    "temporal-polyfill": "^1.0.5"
   },
   "peerDependencies": {
     "solid-js": "^1.9.5"

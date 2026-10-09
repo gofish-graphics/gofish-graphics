@@ -27,6 +27,7 @@ from gofish import (
     Constraint,
     Schema,
     ColumnSchema,
+    Calendar,
     datum,
     scatter,
     arrow,
@@ -70,6 +71,28 @@ class TestOperators:
         assert op.fn is fn
         assert "lambdaId" in op.to_dict()
         assert op.to_dict()["type"] == "derive"
+
+    def test_derive_schema_round_trips(self):
+        """`derive(fn, schema=...)` carries the result's column types in the
+        wire form of a chart's schema, and keeps them through `.translate`."""
+        from gofish import Schema
+
+        op = derive(
+            lambda d: d,
+            schema={
+                "month": Schema.ordered(["Jan", "Feb"]),
+                "at": Schema.time(zone="America/New_York"),
+            },
+        )
+        expected = {
+            "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
+            "at": {"HasCalendar": {"zone": "America/New_York"}},
+        }
+        assert op.to_dict()["schema"] == expected
+        assert op.translate(x=1).to_dict()["schema"] == expected
+        assert "schema" not in derive(lambda d: d).to_dict()
+        ir = chart([{"x": 1}]).flow(op).mark(rect(h="x")).to_ir()
+        assert ir["operators"][0]["schema"] == expected
 
     def test_derive_operator_unique_ids(self):
         """Test derive operators have unique lambda IDs."""
@@ -624,3 +647,107 @@ class TestSchema:
             .to_ir()
         )
         assert ir["options"]["schema"]["r"]["HasMidpoint"] == {"at": 0.5}
+
+
+class TestTime:
+    """`Schema.time()` (HasCalendar), `Calendar` partitions, and datetime
+    columns crossing the bridge (#1057)."""
+
+    def test_schema_time_record(self):
+        assert Schema.time() == {"HasCalendar": {"zone": "UTC"}}
+        assert Schema.time(zone="America/New_York") == {
+            "HasCalendar": {"zone": "America/New_York"}
+        }
+
+    def test_calendar_wire_form(self):
+        assert Calendar.month == {"unit": "month", "step": 1}
+        assert Calendar.hour.every(6) == {"unit": "hour", "step": 6}
+        assert Calendar.week == {"unit": "week", "step": 1, "start": "monday"}
+        assert Calendar.week(start="sunday") == {
+            "unit": "week",
+            "step": 1,
+            "start": "sunday",
+        }
+        assert Calendar.week(start="sunday").every(2)["step"] == 2
+
+    def test_calendar_rejects_bad_steps_and_starts(self):
+        with pytest.raises(ValueError, match="step must be a whole number"):
+            Calendar.month.every(0)
+        with pytest.raises(ValueError, match="monday"):
+            Calendar.week(start="friday")
+
+    def test_rows_ride_axes(self):
+        ir = (
+            chart(
+                [{"t": "2024-01-01", "v": 1}],
+                schema={"t": Schema.time()},
+                axes={"x": {"rows": [Calendar.month, Calendar.year]}},
+            )
+            .flow(scatter(by="t", x="t", y="v"))
+            .mark(line())
+            .to_ir()
+        )
+        assert ir["options"]["axes"]["x"]["rows"] == [
+            {"unit": "month", "step": 1},
+            {"unit": "year", "step": 1},
+        ]
+
+    def test_datetime_columns_cross_as_arrow_times(self):
+        """A datetime column is not marked in the IR: its Arrow type crosses
+        unchanged, zone included, and JS reads it as a time."""
+        pd = pytest.importorskip("pandas")
+        import pyarrow as pa
+
+        from gofish.arrow_utils import data_to_arrow_bytes
+
+        df = pd.DataFrame(
+            {
+                "naive": pd.to_datetime(["2024-02-28", "2024-02-29"]),
+                "ny": pd.to_datetime(["2024-02-28", "2024-02-29"]).tz_localize(
+                    "America/New_York"
+                ),
+                "n": [1, 2],
+            }
+        )
+        ir = chart(df).flow(scatter(by="naive", x="naive", y="n")).mark(line()).to_ir()
+        assert "schema" not in (ir["options"] or {})
+        schema = pa.ipc.open_stream(data_to_arrow_bytes(df)).read_all().schema
+        assert pa.types.is_timestamp(schema.field("naive").type)
+        assert schema.field("naive").type.tz is None
+        assert schema.field("ny").type.tz == "America/New_York"
+
+    def test_a_declared_schema_wins(self):
+        pd = pytest.importorskip("pandas")
+        df = pd.DataFrame({"t": pd.to_datetime(["2024-02-28"]), "n": [1]})
+        ir = (
+            chart(df, schema={"t": Schema.time(zone="Asia/Tokyo")})
+            .mark(rect(w=1))
+            .to_ir()
+        )
+        assert ir["options"]["schema"] == {"t": {"HasCalendar": {"zone": "Asia/Tokyo"}}}
+
+    def test_strings_are_never_inferred(self):
+        ir = chart([{"t": "2024-01-01", "n": 1}]).mark(rect(w=1)).to_ir()
+        assert "schema" not in (ir["options"] or {})
+
+    def test_times_cross_as_arrow_times(self):
+        import datetime
+
+        import pyarrow as pa
+
+        from gofish.arrow_utils import arrow_table_to_bytes
+
+        table = pa.table(
+            {
+                "t": pa.array(
+                    [datetime.datetime(2024, 2, 29, 12, tzinfo=datetime.timezone.utc)],
+                    type=pa.timestamp("ns", tz="UTC"),
+                ),
+                "d": pa.array([datetime.date(2024, 3, 1)], type=pa.date32()),
+            }
+        )
+        back = pa.ipc.open_stream(arrow_table_to_bytes(table)).read_all()
+        assert back.schema.field("t").type == pa.timestamp("ns", tz="UTC")
+        assert back.schema.field("d").type == pa.date32()
+        assert back.column("t").to_pylist() == table.column("t").to_pylist()
+        assert back.column("d").to_pylist() == [datetime.date(2024, 3, 1)]
