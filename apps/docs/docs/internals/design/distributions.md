@@ -69,8 +69,8 @@ that carries the value and an optional measure
 (`packages/gofish-graphics/src/ast/data.ts:122` for the wire shape,
 `data.ts:139` for the class, `data.ts:203` for `value` and `datum`). A measure is a plain
 string (`data.ts:11`). There are three sources of a measure. The field name is a weak
-default. `field(name, measure)` is a hard annotation (`data.ts:243`). A transform such as
-`bin()` tags its output array with a provenance map under a symbol
+default. `field(name, measure)` is a hard annotation (`data.ts:243`). A transform can
+tag its output array with a provenance map under a symbol
 (`MEASURE_PROVENANCE`, `data.ts:27`). `resolveMeasure` combines the three and throws on a
 conflict (`packages/gofish-graphics/src/ast/channels.ts:165`).
 

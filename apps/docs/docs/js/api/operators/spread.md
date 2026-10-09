@@ -144,7 +144,7 @@ running through the stack).
 appends one op to an ordered pipeline. It works in two disjoint places:
 
 - As `by` (a **domain** slot): `.sort(by?, order?)`, `.sort(values)` (an
-  explicit order list), `.reverse()`, `.bin({ thresholds? })`, and
+  explicit order list), `.reverse()`, `.bin(partition?)`, and
   `.dropNulls()` decide **which groups exist and in what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
@@ -194,17 +194,46 @@ aggregate expresses (severity, calendar order, a fixed ranking):
 Groups whose key isn't in the list are appended after, in natural sort
 order.
 
-**Bin a numeric field into groups** — a histogram, with no precomputed bins:
+**Bin a field into cells** — a histogram, with no precomputed bins:
 
 ```ts
-// One bar per ~10 auto-computed bins of `age`, height = row count per bin
-.flow(spread({ by: field("age").bin(), dir: "x" }))
-.mark(rect({ h: field("age").count() }))
+// One bar per half-point cell of `rating`, height = row count per cell
+.flow(spread({ by: field("rating").bin({ step: 0.5 }), dir: "x" }))
+.mark(rect({ h: field("rating").count() }))
+
+// One bar per calendar month of a time column
+.flow(spread({ by: field("date").bin(Calendar.month), dir: "x" }))
+.mark(rect({ h: field("value").sum() }))
 ```
 
-Empty bins are dropped, like an ordinary `groupBy`. Pass
-`field("age").bin({ thresholds: 5 })` (a count) or explicit thresholds
-(an array) to control the binning.
+`.bin(partition)` maps each value to its **cell**: an interval
+`[start, end)` that holds its start and not its end. The partition is one of:
+
+| Partition                                 | Cells                                                                                                                                        |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| a [Calendar](/js/api/core/calendar) value | The calendar cells of a time column, in the column's zone: `Calendar.month`, `Calendar.hour.every(6)`, `Calendar.week({ start: "sunday" })`. |
+| `{ step }`                                | Cells `step` wide, starting at multiples of `step`.                                                                                          |
+| `{ thresholds: n }`                       | About `n` cells, with the step a numeric axis with `n` ticks uses. Default: `{ thresholds: 10 }`.                                            |
+| `{ thresholds: [t1, t2, ...] }`           | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                       |
+
+A thresholds partition includes its top edge, so the largest value falls in
+the last cell. A numeric partition also takes `format: (cell) => string` for
+its labels, as a Calendar value takes `.format(fn)`. A partition with a
+format is JS-only, and serializing it is an error.
+
+The groups are the cells over the column's values in the **chart's data**
+(or the result of the last `derive`), not over the rows of one group. So
+every group of a nested split has the same cells in the same order, a cell
+with no rows is kept as an empty group, and a count picks its step from the
+chart's values. Ops after `.bin` reorder the cells.
+
+Each group's key is its cell. Its id is the cell's start, as text. An axis
+over cells labels each cell (its edges, `"0.5–1"`, or the calendar label
+`"Jan"`) between two ticks at the edges of the cell's bar, and calendar cells
+get a second row of their parent level, e.g. years under months.
+
+`spread` gives each cell an equal slot. To place each cell at its true width
+on a continuous axis, use [`partition`](/js/api/operators/partition) with the same key.
 
 **Drop rows with a missing/null grouping field**, before grouping:
 

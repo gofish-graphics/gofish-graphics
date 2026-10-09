@@ -65,7 +65,7 @@ const BASE_FIELDS = ["type", "translate", "origin", "meta", "debug"] as const;
  * runtime.
  */
 const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
-  derive: ["lambdaId", "provenance", "schema"],
+  derive: ["lambdaId", "schema"],
   resolve: ["cols", "from", "key"],
   join: ["on", "right"],
   filter: ["predicate"],
@@ -134,6 +134,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "size",
   ],
   pack: ["by"],
+  partition: ["by", "dir", "alignment", "axes"],
 };
 
 console.log("\n# Descriptor fields agree with schema.ts operator interfaces");

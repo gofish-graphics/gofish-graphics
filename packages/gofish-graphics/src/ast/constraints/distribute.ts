@@ -8,7 +8,8 @@ import { isValue, type MaybeValue } from "../data";
 import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
 import {
   CONTINUOUS_TYPE,
-  ORDINAL,
+  ordinalOver,
+  type OrdinalKey,
   UNDEFINED,
   UnderlyingSpace,
   originIs,
@@ -286,14 +287,15 @@ export type DistributeFoldOptions = {
  *  - A stack whose parts are not all continuous with an origin is a spread.
  *
  * Measures unify as types (a clash is an error). `keys` are the targets'
- * ordinal keys (node.key) in the same order as `targetSpaces`; only used to
- * pick the ORDINAL branch. This is ref-independent (plain arrays) so spread can
+ * ordinal keys (node.key, or the node's cell for a binned key) in the same
+ * order as `targetSpaces`; only used to pick the ORDINAL branch, which is over
+ * cells when every key is a cell. This is ref-independent (plain arrays) so spread can
  * call it with its positional children and the layer with its name-resolved
  * targets.
  */
 export function distributeSpaceFold(
   targetSpaces: UnderlyingSpace[],
-  keys: (string | undefined)[],
+  keys: (OrdinalKey | undefined)[],
   opts: DistributeFoldOptions
 ): UnderlyingSpace {
   const n = targetSpaces.length;
@@ -315,10 +317,10 @@ export function distributeSpaceFold(
     return magnitude(opts.size);
   }
 
-  const namedKeys = keys.filter((k): k is string => k !== undefined);
+  const namedKeys = keys.filter((k): k is OrdinalKey => k !== undefined);
   const keyed = (): UnderlyingSpace =>
     namedKeys.length > 0
-      ? ORDINAL(namedKeys, opts.measure, opts.anonymous)
+      ? ordinalOver(namedKeys, opts.measure, opts.anonymous)
       : UNDEFINED;
   if (!targetSpaces.every(hasOrigin)) return keyed();
   const targets = targetSpaces as CONTINUOUS_TYPE[];

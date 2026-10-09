@@ -31,6 +31,12 @@ import sumBy from "lodash/sumBy";
 import meanBy from "lodash/meanBy";
 import type { Measure, MaybeValue } from "./data";
 import { withWire, wireOf } from "./wire";
+import {
+  checkPartition,
+  partitionToJSON,
+  type Partition,
+  type PartitionJSON,
+} from "./cells";
 
 export type FieldOp =
   | {
@@ -44,7 +50,13 @@ export type FieldOp =
       values?: (string | number)[];
     }
   | { op: "reverse" }
-  | { op: "bin"; thresholds?: number | number[] }
+  | {
+      op: "bin";
+      /** The partition the values are binned into (cells.ts): a builder
+       *  value in JS, or its wire form from the IR. Absent: about 10 cells
+       *  (`DEFAULT_PARTITION`). */
+      partition?: Partition | PartitionJSON;
+    }
   | { op: "dropNulls" }
   | { op: "normalize" }
   | { op: "sum" }
@@ -68,8 +80,15 @@ export type FieldExprWire = {
  * `toJSON` writes the canonical {@link FieldExprWire} shape. Evaluation sites
  * read ops off either form via {@link getFieldOps}.
  */
-export class FieldExpr {
+export class FieldExpr<HasRegion extends boolean = boolean> {
   public readonly type = "field" as const;
+  /** Type-level only (no runtime field): whether this expression, used as a
+   *  grouping key, gives each group a REGION, the interval of a cell. Only
+   *  `.bin(p)` makes one (`FieldExpr<true>`), and `partition` requires one,
+   *  so `partition({ by: "date" })` or `partition({ by: field("date") })` is
+   *  a type error. Domain ops keep the flag; an aggregate folds it away.
+   *  Plain `FieldExpr` (`boolean`) accepts either. */
+  declare readonly hasRegion?: HasRegion;
   constructor(
     public readonly name: string,
     public readonly measure?: Measure,
@@ -77,8 +96,8 @@ export class FieldExpr {
     public readonly _ops: readonly FieldOp[] = []
   ) {}
 
-  private _withOp(op: FieldOp): FieldExpr {
-    return new FieldExpr(this.name, this.measure, [...this._ops, op]);
+  private _withOp<R extends boolean>(op: FieldOp): FieldExpr<R> {
+    return new FieldExpr<R>(this.name, this.measure, [...this._ops, op]);
   }
 
   /** Order groups by an explicit list of group keys — e.g.
@@ -86,15 +105,15 @@ export class FieldExpr {
    *  domain-specific order that no aggregate expresses. Groups whose key
    *  isn't in the list are appended after, in natural sort order. Valid only
    *  in a `by` (domain) slot. */
-  sort(values: (string | number)[]): FieldExpr;
+  sort(values: (string | number)[]): FieldExpr<HasRegion>;
   /** Order groups by the SUM of `by` over each group's rows (ascending unless
    *  `order: "desc"`), or by the group key itself when `by` is omitted. Valid
    *  only in a `by` (domain) slot. */
-  sort(by?: string, order?: "asc" | "desc"): FieldExpr;
+  sort(by?: string, order?: "asc" | "desc"): FieldExpr<HasRegion>;
   sort(
     byOrValues?: string | (string | number)[],
     order?: "asc" | "desc"
-  ): FieldExpr {
+  ): FieldExpr<HasRegion> {
     if (Array.isArray(byOrValues)) {
       return this._withOp({ op: "sort", values: byOrValues });
     }
@@ -106,17 +125,23 @@ export class FieldExpr {
   }
 
   /** Reverse the group order. Valid only in a `by` (domain) slot. */
-  reverse(): FieldExpr {
+  reverse(): FieldExpr<HasRegion> {
     return this._withOp({ op: "reverse" });
   }
 
-  /** Bin this (numeric) field into groups, REPLACING the base grouping.
-   *  Valid only in a `by` (domain) slot. */
-  bin(options?: { thresholds?: number | number[] }): FieldExpr {
+  /** Map each value to its CELL in `partition` (cells.ts): a Calendar value
+   *  (`Calendar.month`), `{ step }`, or `{ thresholds }` (a count or a list
+   *  of edges); about 10 cells when omitted. The groups are the cells, in
+   *  order, over the column's whole domain in the chart's data, so every
+   *  group of a split sees the same cells, and empty cells are kept. A
+   *  numeric partition takes a label `format: (cell) => string`, as a
+   *  Calendar value takes `.format(fn)`. Valid only in a `by` (domain)
+   *  slot. */
+  bin(partition?: Partition): FieldExpr<true> {
     return this._withOp({
       op: "bin",
-      ...(options?.thresholds !== undefined
-        ? { thresholds: options.thresholds }
+      ...(partition !== undefined
+        ? { partition: checkPartition(partition, "field(...).bin") }
         : {}),
     });
   }
@@ -124,7 +149,7 @@ export class FieldExpr {
   /** Drop rows whose value at this field is `null`/`undefined`, BEFORE
    *  grouping — named after polars' `drop_nulls` (pandas `dropna`, tidyr
    *  `drop_na`). Valid only in a `by` (domain) slot. */
-  dropNulls(): FieldExpr {
+  dropNulls(): FieldExpr<HasRegion> {
     return this._withOp({ op: "dropNulls" });
   }
 
@@ -134,31 +159,31 @@ export class FieldExpr {
    *  axis into a space-filling spine — see `applyEntryNormalize` below. Valid
    *  only there; anywhere else (a plain value slot, or chained after another
    *  op) it throws a clear error. */
-  normalize(): FieldExpr {
+  normalize(): FieldExpr<false> {
     return this._withOp({ op: "normalize" });
   }
 
   /** Fold the group's rows to the sum of this field. Valid only in a value
    *  (size/pos) slot. */
-  sum(): FieldExpr {
+  sum(): FieldExpr<false> {
     return this._withOp({ op: "sum" });
   }
 
   /** Fold the group's rows to the mean of this field. Valid only in a value
    *  (size/pos) slot. */
-  mean(): FieldExpr {
+  mean(): FieldExpr<false> {
     return this._withOp({ op: "mean" });
   }
 
   /** Fold the group's rows to the row count (ignores the field's own values).
    *  Valid only in a value (size/pos) slot. */
-  count(): FieldExpr {
+  count(): FieldExpr<false> {
     return this._withOp({ op: "count" });
   }
 
   /** Fold the group's rows to the number of distinct values of this field.
    *  Valid only in a value (size/pos) slot. */
-  distinct(): FieldExpr {
+  distinct(): FieldExpr<false> {
     return this._withOp({ op: "distinct" });
   }
 
@@ -189,7 +214,7 @@ export class FieldExpr {
     // fight every concrete row type at the call site.
   ): FieldPredicate {
     // The predicate is outside the op pipeline, so an expression carrying ops
-    // would silently drop them (`field("x").bin(10).between(...)` would test the
+    // would silently drop them (`field("x").bin({ step: 10 }).between(...)` would test the
     // RAW x). Say so instead of ignoring them.
     if (this._ops.length > 0) {
       throw new Error(
@@ -211,10 +236,22 @@ export class FieldExpr {
       type: this.type,
       name: this.name,
       ...(this.measure !== undefined ? { measure: this.measure } : {}),
-      ...(this._ops.length ? { ops: [...this._ops] } : {}),
+      ...(this._ops.length ? { ops: this._ops.map(opToJSON) } : {}),
     };
   }
 }
+
+/** One op's wire form: a `bin` op's partition is written as its wire form
+ *  (a loud error for a partition with a JS `format`). */
+const opToJSON = (op: FieldOp): FieldOp =>
+  op.op === "bin" && op.partition !== undefined
+    ? {
+        op: "bin",
+        partition: partitionToJSON(
+          checkPartition(op.partition, "field(...).bin")
+        ),
+      }
+    : op;
 
 export type BetweenOptions = {
   /** Which ends of the interval are inclusive. Default `"both"` — polars

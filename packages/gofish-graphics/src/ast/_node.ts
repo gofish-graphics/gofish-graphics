@@ -111,6 +111,7 @@ import {
   type LabelSpec,
 } from "./labels/labelPlacement";
 import { packEnclose } from "d3-hierarchy";
+import type { Cell } from "./cells";
 import {
   boxOfDims,
   enclosingCircle,
@@ -447,6 +448,11 @@ export class GoFishNode {
    *  spread that renders no axis. Set in `createOperator`; read when folding the
    *  distribute ordinal (see `compose` / `distributeSpaceFold`). */
   public _syntheticKey?: boolean;
+  /** The cell the node's `key` names, when the operator grouped by a binned
+   *  key (`field(x).bin(p)`): the key is the cell's id. Set in
+   *  `createOperator`; read when folding the distribute ordinal, which then
+   *  holds cells (`ORDINAL_TYPE.cells`, see `distributeSpaceFold`). */
+  public keyCell?: Cell;
   public _name?: string | Token;
   public _isScope: boolean = false;
   /**
@@ -1659,9 +1665,14 @@ export class GoFishNode {
 
     if (!this.intrinsicDims) this.intrinsicDims = [];
     // Store only the local box (min, size); the `dims` getter derives center/max.
+    // The local min stays where the node's own layout put it: a container's
+    // children are placed in its local frame, so moving that frame's min to 0
+    // would draw them off the box by the old min (a spread pinned across a
+    // cell on an upward y drew its bars one cell away). The translate is
+    // read as `absMin − localMin` either way.
     this.intrinsicDims[dir] = {
       ...(this.intrinsicDims[dir] ?? {}),
-      min: 0,
+      min: this.intrinsicDims[dir]?.min ?? 0,
       size,
     };
     this._geometry = undefined;

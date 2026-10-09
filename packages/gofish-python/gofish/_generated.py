@@ -114,7 +114,7 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
 
 # --- Leaf marks -------------------------------------------------------------
 
-def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
+def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None, inset: Optional[float] = None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
@@ -139,6 +139,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         rx: Corner radius, x. Default 0.
         ry: Corner radius, y. Default 0.
         aspect_ratio: w/h ratio to enforce; the constraining axis wins when both are data-driven.
+        inset: Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Default 0.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -163,6 +164,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         ("rx", rx),
         ("ry", ry),
         ("aspectRatio", aspect_ratio),
+        ("inset", inset),
     ]:
         if _v is not None:
             _kw[_k] = _v
@@ -828,6 +830,27 @@ def _pack_opts(*, by: Optional[str | FieldAccessor] = None, debug: Optional[bool
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _partition_opts(*, by: FieldAccessor, dir: str, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Divide the space along `dir` into the cells of a binned key. Each group is placed across its cell's interval on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size along `dir` fills its cell.
+
+    Args:
+        by: A key that has a region: a binned field, field(x).bin(p), whose cells divide the space. A plain field has no region and is an error.
+        dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r).
+        alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Default "baseline".
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("by", by),
+        ("dir", dir),
+        ("alignment", alignment),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("debug", debug),
     ]:
         if _v is not None:

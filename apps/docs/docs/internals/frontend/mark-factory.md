@@ -108,7 +108,7 @@ layer can unify scales per measure (see
 pass a column (e.g. `createMark`'s size channel), the inferer resolves it
 locally from `data`. The measure comes from `resolveMeasure` — explicit
 `field(name, measure)` annotation, else transform provenance riding the data
-array (`bin()` tags its output), else the field name as a weak default; a
+array (`setMeasureProvenance`), else the field name as a weak default; a
 contradictory annotation-vs-provenance pair throws at the channel.
 `createOperator` hoists `resolveColumn` to once per channel and passes the
 result down, since the accessor and what the data carries are loop-invariant

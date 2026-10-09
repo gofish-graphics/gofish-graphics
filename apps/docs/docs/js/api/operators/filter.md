@@ -34,7 +34,7 @@ filter(predicate);
 it from a field expression with
 [`field(name).between(lo, hi, { closed })`](/js/api/operators/spread#field-expression-pipeline).
 Its bounds are plain numbers, and it throws if the expression carries pipeline
-ops (`field("x").bin(10).between(...)`), which would otherwise test the raw
+ops (`field("x").bin({ step: 10 }).between(...)`), which would otherwise test the raw
 field: a predicate is not a value slot.
 
 A field predicate also carries its own description, so a `filter` over one

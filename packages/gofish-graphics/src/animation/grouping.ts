@@ -12,19 +12,24 @@
  * splitting all of those rows (which is what lets a `sort` sum a field over
  * each group's rows), and each child's key is the value its own rows agree on.
  */
-import { splitEntries, splitKeyFn, type SplitBy } from "../ast/datumProjection";
+import {
+  splitEntries,
+  splitKeyFn,
+  type SplitBy,
+  type SplitKey,
+} from "../ast/datumProjection";
 
 export function groupEntries<C>(
   children: C[],
   rowsOf: (child: C) => unknown[],
   by: SplitBy | undefined
-): Map<string | number, C[]> {
+): Map<SplitKey, C[]> {
   if (by === undefined) {
     return new Map(children.map((child, i) => [i, [child]]));
   }
   const rows = children.map(rowsOf);
   const allRows = rows.flat() as Record<string, unknown>[];
-  const groups = new Map<string | number, C[]>(
+  const groups = new Map<SplitKey, C[]>(
     [...splitEntries(by, allRows).keys()].map((k) => [k, []])
   );
   // A child's key is the value its rows agree on: for a field, the same

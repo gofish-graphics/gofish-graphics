@@ -319,16 +319,63 @@ for the API.
             "op": {
               "const": "bin"
             },
-            "thresholds": {
+            "partition": {
+              "description": "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), { step }, or { thresholds } (a cell count or a list of edges). Absent: about 10 cells.",
               "oneOf": [
                 {
-                  "$ref": "#/$defs/Number"
+                  "type": "object",
+                  "required": ["unit"],
+                  "properties": {
+                    "unit": {
+                      "enum": [
+                        "second",
+                        "minute",
+                        "hour",
+                        "day",
+                        "week",
+                        "month",
+                        "quarter",
+                        "year"
+                      ]
+                    },
+                    "step": {
+                      "$ref": "#/$defs/Number"
+                    },
+                    "start": {
+                      "enum": ["monday", "sunday"]
+                    }
+                  },
+                  "additionalProperties": false
                 },
                 {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/Number"
-                  }
+                  "type": "object",
+                  "required": ["step"],
+                  "properties": {
+                    "step": {
+                      "$ref": "#/$defs/Number"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": ["thresholds"],
+                  "properties": {
+                    "thresholds": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/Number"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
                 }
               ]
             }
@@ -817,13 +864,6 @@ for the API.
         "lambdaId": {
           "type": "string",
           "description": "Python-bridge handle for the remote callable."
-        },
-        "provenance": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          },
-          "description": "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure."
         },
         "schema": {
           "type": "object",
@@ -1490,6 +1530,48 @@ for the API.
         }
       }
     },
+    "PartitionOperator": {
+      "description": "Divide the space along `dir` into the cells of a binned key. Each group is placed across its cell's interval on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size along `dir` fills its cell.",
+      "type": "object",
+      "required": ["type", "by", "dir"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "partition"
+        },
+        "by": {
+          "$ref": "#/$defs/FieldAccessor",
+          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the space. A plain field has no region and is an error."
+        },
+        "dir": {
+          "type": "string",
+          "description": "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r)."
+        },
+        "alignment": {
+          "type": "string",
+          "description": "Alignment of the children on the other axis (\"start\" | \"middle\" | \"end\" | \"baseline\").",
+          "default": "baseline"
+        },
+        "axes": {
+          "$ref": "#/$defs/AxesOptions"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
     "OperatorIR": {
       "description": "A pipeline operator — a discriminated union, one member per operator type. See validate.ts and schema.ts for the same field shapes.",
       "oneOf": [
@@ -1528,6 +1610,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/PackOperator"
+        },
+        {
+          "$ref": "#/$defs/PartitionOperator"
         }
       ]
     },
@@ -1626,6 +1711,11 @@ for the API.
         "aspectRatio": {
           "$ref": "#/$defs/Number",
           "description": "w/h ratio to enforce; the constraining axis wins when both are data-driven."
+        },
+        "inset": {
+          "$ref": "#/$defs/Number",
+          "description": "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given.",
+          "default": 0
         },
         "debug": {
           "type": "boolean"

@@ -105,10 +105,9 @@ silently corrupting the shared domain.
 By default the measure is just the field name, which is usually right. Two
 things change it:
 
-- **`bin()` and other built-in transforms** tag their output automatically — a
-  histogram's `start`/`end`/`size` columns keep the _source_ field's units, and
-  `count` becomes `"count"`. You don't annotate anything; the tag survives
-  through `derive`.
+- **A transform that tags its output** with `setMeasureProvenance(rows,
+{ start: "rating", count: "count" })` gives those columns the measures it
+  names. The tag rides the array and survives through `derive`.
 - **An arbitrary `derive`** can lose that connection — once you compute a new
   column, GoFish only knows its name, not its unit. When the new column is
   really in some existing unit (and you want its axis to share with that unit's
@@ -133,5 +132,5 @@ have two remedies:
    and never shares that axis.
 
 Annotating a channel whose measure contradicts a transform's provenance (e.g.
-calling `field("count", "mm")` on a `bin()` output) is itself an error — the
-annotation and the provenance are contradictory claims.
+calling `field("count", "mm")` on a column tagged `"count"`) is itself an
+error — the annotation and the provenance are contradictory claims.

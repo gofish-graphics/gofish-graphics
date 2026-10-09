@@ -31,6 +31,7 @@ import {
   originIs,
   spaceMeasure,
   axisTickPartition,
+  cellPartition,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
 } from "../underlyingSpace";
@@ -41,6 +42,7 @@ import {
   type AxisDirection,
 } from "../axisDirection";
 import { defaultTimeRows, rowLabels } from "./timeRows";
+import type { Cell } from "../cells";
 
 /**
  * The edge an axis on `dim` seats on when its `side` is not given, in the
@@ -603,15 +605,27 @@ function elaborateTimeAxis(
   const [lo, hi] = nice;
   const zone = space.calendar!.zone;
   const rows = ticks.rows ?? defaultTimeRows(axisTickPartition(space, ticks));
-  const labels = rows.map((row) => rowLabels(row, lo, hi, zone));
+  const starts = rows.map((row) => rowLabels(row, lo, hi, zone));
+  // A row whose partition is that of the cells the axis places names those
+  // cells: each label sits midway between its cell's two boundary ticks
+  // (#1058). Any other row names points: each label sits on its tick.
+  const cells = space.cells;
+  const cellsOf = cellPartition(space);
+  const labels = rows.map((row, k) =>
+    cells !== undefined && String(row) === String(cellsOf)
+      ? cells
+          .filter((c) => c.start >= lo && c.end <= hi)
+          .map((c) => ({ at: (c.start + c.end) / 2, text: c.label }))
+      : starts[k]
+  );
 
-  // Ticks: every row's label positions, each drawn once, inner row first. A
+  // Ticks: every row's cell starts, each drawn once, inner row first. A
   // tick the inner row has is short; only an outer-row tick that falls
   // between inner ticks is long, so it stands out from the inner ticks
   // around it. (An outer label at the first tick, for a cell that starts
   // before the domain, adds no tick: the domain starts on an inner tick.)
   const tickLen = new Map<number, number>();
-  labels.forEach((row, k) => {
+  starts.forEach((row, k) => {
     for (const l of row) {
       if (!tickLen.has(l.at))
         tickLen.set(l.at, k === 0 ? TICK_LEN : TIME_OUTER_TICK_LEN);
@@ -700,6 +714,13 @@ function elaborateDifferenceAxis(
  * inner-facet labels — so an outer (e.g. lake) label row stacks BELOW the inner
  * (species) row instead of overlapping it. The orchestrator pins that layer on
  * the gutter dim so it can serve as the anchor.
+ *
+ * An ordinal over CELLS (`space.cells`, from a binned key `field(x).bin(p)`)
+ * places cells, not points: each label names its cell (the cell's label, its
+ * partition's format or the default) and is centered between the cell's two
+ * boundary ticks, a tick at each edge of the cell's node. Calendar cells add
+ * an outer row of their parent level (months get a year row), as a time axis
+ * does (see {@link cellAxisRows}).
  */
 function elaborateOrdinalAxis(
   dim: 0 | 1,
@@ -726,10 +747,11 @@ function elaborateOrdinalAxis(
       ? ["baseline", "middle"]
       : ["middle", "middle"];
 
+  const cells = space.cells;
   const nodes: GoFishNode[] = [];
   keys.forEach((k, i) => {
     const label = Text({
-      text: k,
+      text: cells?.[k]?.label ?? k,
       fontSize: LABEL_FONT_SIZE,
       fill: AXIS_COLOR,
       rotate: labelRotation?.rotate,
@@ -769,6 +791,134 @@ function elaborateOrdinalAxis(
     return cs;
   };
 
+  if (cells === undefined) return { nodes, constraints };
+  const rows = cellAxisRows(
+    dim,
+    keys.map((k) => cells[k]),
+    rName,
+    prefix,
+    side,
+    labelRotation
+  );
+  return {
+    nodes: [...nodes, ...rows.nodes],
+    constraints: (g) => [...constraints(g), ...rows.constraints(g)],
+  };
+}
+
+/** A cell's outer cell in its parent calendar level (a month's year), with
+ *  that cell's label; undefined for a numeric cell or a level with no
+ *  parent. */
+function outerCell(cell: Cell): { start: number; label: string } | undefined {
+  const c = cell.calendar;
+  const parent = c?.partition.parent;
+  if (c === undefined || parent === undefined) return undefined;
+  const outer = parent.cells(cell.start, cell.start, c.zone)[0];
+  return { start: outer.start, label: parent.label(outer, c.zone) };
+}
+
+/**
+ * The boundary ticks and the outer row of an ordinal axis over cells. The
+ * key nodes are the refs `rName(i)`, one per cell in `cells`, in order.
+ *
+ *  - Ticks: one at each edge of each cell's node, so each cell's label, which
+ *    is centered on its node, sits centered between its two boundary ticks.
+ *    Neighboring cells with no space between them share a tick.
+ *  - Outer row, for calendar cells: one label per run of cells in the same
+ *    parent cell (a year, for months), at the start of its first cell, the
+ *    first visible point of the parent cell, as a time axis places it. The
+ *    tick where a parent cell starts is long, so the boundary stands out.
+ *    The row sits past the cells' own labels.
+ */
+function cellAxisRows(
+  dim: 0 | 1,
+  cells: Cell[],
+  rName: (i: number) => string,
+  prefix: string,
+  side: "start" | "end",
+  labelRotation?: LabelRotation
+): Pick<AxisElaboration, "nodes" | "constraints"> {
+  const trackAxis = axisName(dim);
+  const gutterDir = crossName(dim);
+  const outers = cells.map(outerCell);
+  // Where each outer run starts (cell index), and its label.
+  const runs: { at: number; label: string }[] = [];
+  outers.forEach((o, i) => {
+    if (o !== undefined && (i === 0 || o.start !== outers[i - 1]?.start))
+      runs.push({ at: i, label: o.label });
+  });
+  const runStarts = new Set(runs.map((r) => r.at));
+
+  const tName = (i: number, edge: "start" | "end") =>
+    `${prefix}ct${i}${edge === "start" ? "s" : "e"}`;
+  const oName = (r: number) => `${prefix}oo${r}`;
+  const nodes: GoFishNode[] = [];
+  cells.forEach((_, i) => {
+    const long = runs.length > 0 && runStarts.has(i);
+    nodes.push(
+      tickRect(dim, long ? TIME_OUTER_TICK_LEN : TICK_LEN).name(
+        tName(i, "start")
+      )
+    );
+    nodes.push(tickRect(dim).name(tName(i, "end")));
+  });
+  runs.forEach((r, k) => {
+    const label = Text({
+      text: r.label,
+      fontSize: LABEL_FONT_SIZE,
+      fill: AXIS_COLOR,
+    }).name(oName(k));
+    nodes.push(label);
+  });
+
+  // The outer row sits past the cells' labels: the label gap, then the
+  // inner labels' depth across the axis (their height on x, their widest on
+  // y, as rotated), then the gap between two rows of a time axis.
+  const font = (t: string) =>
+    estimateTextDimensions(t, LABEL_FONT_SIZE, FALLBACK_FONT_FAMILY);
+  const a = ((labelRotation?.rotate ?? 0) * Math.PI) / 180;
+  const depth = Math.max(
+    0,
+    ...cells.map((c) => {
+      const { width, height } = font(c.label);
+      const along = dim === 0 ? height : width;
+      const across = dim === 0 ? width : height;
+      return Math.abs(along * Math.cos(a)) + Math.abs(across * Math.sin(a));
+    })
+  );
+  const outerGap = ORDINAL_LABEL_GAP + depth + TIME_ROW_GAP;
+
+  // Seat `node` just past the content's gutter edge, as an ordinal label is.
+  const seat = (g: Record<string, any>, node: any, spacing: number) =>
+    Constraint.distribute(
+      { dir: gutterDir, spacing },
+      side === "end" ? [g[INNER_REF_NAME], node] : [node, g[INNER_REF_NAME]]
+    );
+  const constraints = (g: Record<string, any>) => {
+    const cs: any[] = [];
+    cells.forEach((_, i) => {
+      for (const edge of ["start", "end"] as const) {
+        const tick = g[tName(i, edge)];
+        cs.push(
+          Constraint.align({ [trackAxis]: ["middle", edge] } as any, [
+            tick,
+            g[rName(i)],
+          ])
+        );
+        cs.push(seat(g, tick, 0));
+      }
+    });
+    runs.forEach((r, k) => {
+      cs.push(
+        Constraint.align({ [trackAxis]: ["start", "start"] } as any, [
+          g[oName(k)],
+          g[rName(r.at)],
+        ])
+      );
+      cs.push(seat(g, g[oName(k)], outerGap));
+    });
+    return cs;
+  };
   return { nodes, constraints };
 }
 

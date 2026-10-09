@@ -85,7 +85,7 @@ All paths are relative to `packages/gofish-graphics/`:
 
 - **Fluent chart builder** (recommended): `chart(data)` returns a builder with chainable methods
   - Builder methods: `.flow()`, `.mark()`, `.layer()`, `.render()`
-  - Operators (used within `.flow()`): `spread()`, `stack()`, `scatter()`, `group()`, `treemap()`, `derive()`, `filter()`, `resolve()`, `join()`
+  - Operators (used within `.flow()`): `spread()`, `stack()`, `scatter()`, `partition()`, `group()`, `treemap()`, `derive()`, `filter()`, `resolve()`, `join()`
   - Data helpers (used within `derive()`): `normalize()`, `repeat()`, etc.
   - Marks (used within `.mark()`): `rect()`, `circle()`, `ellipse()`, `line()`, `ribbon()`, `text()`, `image()`, `polygon()`, `blank()`, etc.
   - Layer naming: call `.name("bars")` on a mark so another chart can read it with `chart(selectAll("bars"))`

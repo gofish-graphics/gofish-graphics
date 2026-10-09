@@ -32,7 +32,7 @@ export type {
   FieldPredicate,
   FieldPredicateWire,
 } from "./ast/fieldExpr";
-// Measure-provenance tagging: how a data transform (e.g. `bin`) declares that
+// Measure-provenance tagging: how a data transform declares that
 // its output columns are in a source field's units. The deserializer re-applies
 // it to RPC-returned rows (the array symbol can't cross the bridge).
 export { setMeasureProvenance } from "./ast/data";
@@ -85,7 +85,6 @@ export { createMark } from "./ast/withGoFish";
 // Data
 // export { groupBy } from "./ast/iterators/groupBy";
 export { groupBy, sumBy, orderBy, meanBy };
-export { bin } from "./ast/transforms";
 
 // Shapes
 export { ref } from "./ast/shapes/ref";
@@ -130,6 +129,15 @@ export type {
   WeekStart,
 } from "./ast/calendar";
 export type { TimeRowOption } from "./ast/axes/timeRows";
+// Cells (#1058): what `field(x).bin(partition)` maps each value to. A
+// partition is a Calendar value, `{ step }`, or `{ thresholds }`.
+export type {
+  Cell,
+  Partition,
+  NumberPartition,
+  NumberCellFormat,
+  PartitionJSON,
+} from "./ast/cells";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -166,6 +174,8 @@ export * as Tile from "./families/tile";
 export type { TreemapOptions } from "./ast/graphicalOperators/treemap";
 export { pack } from "./ast/graphicalOperators/pack";
 export type { PackOptions } from "./ast/graphicalOperators/pack";
+export { partition } from "./ast/graphicalOperators/partition";
+export type { PartitionOptions } from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
 export {
   enclose,

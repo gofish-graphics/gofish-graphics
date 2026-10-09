@@ -15,6 +15,8 @@ covers:
   - packages/gofish-graphics/src/ast/datumProjection.ts
   - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/calendar.ts
+  - packages/gofish-graphics/src/ast/cells.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -243,6 +245,7 @@ type CONTINUOUS_TYPE = {
   measure?: Measure;
   mirrored?: true;
   calendar?: HasCalendar; // the data are instants on this calendar
+  cells?: readonly Cell[]; // every range placed along the axis is a cell
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
@@ -354,6 +357,17 @@ discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
 (only `UNDEFINED` is measureless), which is what lets an axis name itself off its
 own resolved space — a continuous axis by its unit, an ordinal axis by its
 grouping field (see [the layout passes](/internals/layout/passes)).
+
+An `ORDINAL` can also hold **cells** (`ORDINAL_TYPE.cells`, a key→`Cell`
+record). A split keyed by a binned key (`field(x).bin(p)`) gives each child
+node its cell (`keyCell`, set in `createOperator` beside the key, which is
+the cell's id), the distribute fold reads a child's cell as its key
+(`keyOf` in `compose.ts`), and `ordinalOver` builds the ordinal over those
+keys, with the cells when every key is one. `unionChildSpaces` keeps them
+when every unioned ordinal has them. The type is what tells the axis it
+places cells, not points: an axis over cells labels each cell between its
+boundary ticks ([Axes](/internals/frontend/axes)). It is read off the
+space, never off a datatype flag on the column.
 
 A datum value can also carry a `field`: the data field it was read from, set
 by `inferColor` when a color channel names one. That is provenance, not a
@@ -628,8 +642,17 @@ composes its targets' spaces into the layer's claim on that axis:
   cross-axis `align` fold still runs — a histogram is an interval position on x
   plus an `align` on y, and it is that align fold (SIZE→POSITION) that makes the
   count axis. The solved `(min, size)` is bridged into GoFish's
-  `(local box, translate)` split by stamping `[0, size]` into the local box and
-  deriving the absolute `min` through the placement ledger. `scatter` uses both
+  `(local box, translate)` split by keeping the local box's own `min` (where
+  the target's layout put it), stamping the solved `size`, and deriving the
+  translate as the absolute `min` less that local `min` through the placement
+  ledger. The local `min` must stay: a container's children are placed in its
+  local frame, so moving its `min` to 0 would draw them away from its box by
+  the old `min` (on an upward y, a spread pinned across a cell drew its bars
+  one cell away). The interval also sizes the target before its layout: the
+  layer proposes the span's pixel length as the child's size on that axis
+  (`buildSpanProposalMap`, `constraints/proposalPlan.ts`), so the child's
+  content fills the span it will be pinned across rather than being laid out
+  in the whole layer and then stretched. `scatter` uses both
   forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
   `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
   has a bespoke layout). A categorical
@@ -761,7 +784,9 @@ whatever its origin. A `transform.scale` is a pixel-space operation, like
 translate, so it scales the claim and never the data interval.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
 the cell's own track extent (grid), else distribute slice for that named child,
-else the full layer box.
+else the full layer box; then, on an axis an interval `position` spans, the
+span's pixel length (the pins set the child's extent there, whatever else
+proposed one).
 `buildLayerConstraintLayoutPlan` packages the per-layer execution plan — which
 children skip baseline placement, nest source-before-derived order, and
 datum-position target axes — so the layer executes deterministic artifacts
@@ -1618,12 +1643,16 @@ position.
 
 1. **Explicit annotation** — `field(name, measure)` / `datum(v, measure)`
    (`data.ts`). A real type claim about the channel's unit.
-2. **Inferred provenance** — a transform tags its output array. `bin()`
-   (`transforms.ts`) attaches a field→measure map under the well-known
-   `MEASURE_PROVENANCE` symbol (`data.ts`): its `start`/`end`/`size` columns
-   are still in the _source_ field's units (e.g. millimeters), and `count` is
-   `"count"`. The symbol rides the array, not each row, so it survives
-   `derive(...)`. Also a real type claim.
+2. **Inferred provenance** — a transform tags its output array with
+   `setMeasureProvenance`, a field→measure map under the well-known
+   `MEASURE_PROVENANCE` symbol (`data.ts`): e.g. a histogram's `start`/`end`
+   columns are still in the _source_ field's units (millimeters), and `count`
+   is `"count"`. The symbol rides the array, not each row, so it survives
+   `derive(...)`. Also a real type claim. No built-in transform tags its
+   output any more: the `bin()` data helper that did is gone, replaced by the
+   `field(x).bin(p)` key (see [Cells](#cells-a-binned-key)), and with it the
+   derive IR's `provenance` field, which carried the tag across the Python
+   bridge.
 3. **Field-name default** — a bare string accessor's field name. A _weak_
    binding, not a claim; it yields to either of the above.
 
@@ -1643,11 +1672,11 @@ the `MEASURE_PROVENANCE` symbol), but a _mark_ channel runs per split leaf — a
 a leaf is a fresh sub-array (groupBy/filter/slice) that doesn't inherit the
 symbol. So the operator re-tags each array leaf with its parent's provenance at
 the split site (`copyMeasureProvenance`, `data.ts`, applied in `createOperator`),
-letting a mark bound to a transform-output field (e.g. a bin's `start`/`end`/
-`size`) read the source measure off its own data instead of falling back to the
+letting a mark bound to a transform-output field (e.g. a histogram's `start`/
+`end`) read the source measure off its own data instead of falling back to the
 literal field name — which would otherwise turn a legitimate same-unit overlay
-into a false conflict. (Residual, tracked in #534: single-`Datum` leaves and the
-Python derive-RPC bridge still need a wrap-time / RPC-carried tag.)
+into a false conflict. (Residual, tracked in #534: single-`Datum` leaves still
+need a wrap-time tag.)
 
 This same size-vs-position measure comparison drives **embedding** (`baseEmbedded`,
 `data.ts`): inside a coordinate space, a dim's size becomes a swept coord extent
@@ -1839,12 +1868,21 @@ later class (`HasZero`, `HasCycle`, ...) is one more key on the record.
 TODO(#984): measure provenance is the unit part of the same per-column record
 and could fold into it; it stays a separate symbol for now.
 
+The typed array also carries its **domain**: the rows it was typed with,
+under the `DOMAIN_ROWS` symbol. `applySchema` sets it on the copy it returns
+(so the chart's data and each `derive`'s result are their own domains, and
+untyped data gets a tagged copy too), and `copyColumnTypes` hands it to each
+split leaf and to a `filter`'s result with the column types. A split leaf
+holds one group's rows, and its domain still names every row of the chart,
+which is what a binned key's cells cover (`domainRows`, read by
+`splitEntries`; see [Cells](#cells-a-binned-key)).
+
 ## Field expressions: a pipeline orthogonal to channel aggregation
 
 `field(name)` (`fieldExpr.ts`, #700) returns a chainable expression — a
 Polars-column-expression-style builder where each method appends one op to an
-ordered pipeline (`field("age").bin().sort()` bins first, then sorts the
-resulting bins). The pipeline is read off either a live `FieldExpr` instance
+ordered pipeline (`field("age").bin().reverse()` bins first, then reverses
+the resulting cells). The pipeline is read off either a live `FieldExpr` instance
 or its deserialized wire shape (`{ type: "field", name, measure?, ops? }`, what
 the Python bridge/IR produce directly) by the same `getFieldOps` helper, so
 every evaluation site handles both forms identically.
@@ -1852,7 +1890,7 @@ every evaluation site handles both forms identically.
 Two op families consume disjoint **slots**, and mixing them is a checked
 error rather than silently doing the wrong thing:
 
-- **Domain ops** (`.sort(by?, order?)`, `.reverse()`, `.bin({thresholds?})`,
+- **Domain ops** (`.sort(by?, order?)`, `.reverse()`, `.bin(partition?)`,
   `.dropNulls()`) apply to a `by` grouping key. `splitEntries`
   (`datumProjection.ts`) is the shared split-plus-ops helper behind
   `spread`/`stack`/`group`/`scatter`/`treemap`'s `by` (and `time.sequence`'s,
@@ -1873,7 +1911,8 @@ error rather than silently doing the wrong thing:
   (`HasOrder`, see [Column types](#column-types-the-chart-schema)), then
   applies each remaining domain op
   in pipeline order — `bin` **replaces** the base grouping entirely (re-groups
-  the raw rows into numeric bins, dropping empty ones); `sort` reorders the
+  the rows into the cells of its partition, one entry per cell, empty cells
+  included; see [Cells](#cells-a-binned-key)); `sort` reorders the
   resulting entries, either by the group key itself or by the SUM of another
   named field over each group's rows; `reverse` reverses the entries. An
   aggregate op or `normalize` reaching a `by` slot throws — a domain op
@@ -1889,7 +1928,7 @@ predicate `(row) => boolean` for the `filter` flow operator, and a predicate
 belongs to none of the three slots: it never decides which groups exist, never
 folds a group to a value, and never scales anything. Giving it an op would mean
 a fourth slot that every evaluation site had to learn to ignore. For the same
-reason it THROWS when the expression carries ops: `field("x").bin(10).between(...)`
+reason it THROWS when the expression carries ops: `field("x").bin({ step: 10 }).between(...)`
 would have tested the raw `x`, silently. `closed` is polars' `is_between`
 argument, comparing by value (SQL `RANGE`) rather than by row count (Vega's
 window `frame`). The bounds are plain numbers; a window that follows a `timer()`
@@ -1902,6 +1941,80 @@ The predicate still serializes. It carries its description
 builds both from that description), and `filter` puts it on the wire as
 `{ type: "filter", predicate }`. The description travels with the operator,
 never in the expression's `ops`, so the three slots stay as they are.
+
+### Cells: a binned key
+
+`field(x).bin(p)` (#1058) is a value transform: it maps each value of `x` to
+its **cell** in the partition `p` (`cells.ts`). A partition is a Calendar
+value (`calendar.ts`), `{ step }`, or `{ thresholds }` (a count, or a list of
+edges); the wire form of the op is `{ op: "bin", partition? }` with the
+partition's own wire form, and `checkPartition` reads either form. A `Cell`
+keeps the whole value: the interval `[start, end)` (its region), its id (its
+start, as text, so `String(cell)` is the key a node gets), its label (the
+partition's `format`, else the default: `"0.5–1"`, or the calendar label),
+and, for a calendar cell, its calendar fields, partition and zone. Cells are
+ordered by start.
+
+The cells are defined over the column's **domain**, not over the rows of the
+group being split. `binCells` takes every value the column has in the
+domain rows (`DOMAIN_ROWS`, see [Column types](#column-types-the-chart-schema))
+and returns the cells in order and the cell each value falls in
+(`cellOf`). `splitEntries` then gives every cell an entry, empty or not, so
+each group of a nested split sees the same cells in the same order, and a
+count picks its step from the whole domain (#763). The cells of a domain
+are built once per partition value and column (a cache keyed by the domain
+array and the op's partition object), so the groups share the very same
+`Cell` objects.
+
+A cell holds its start and not its end, and a Calendar value or a `{ step }`
+puts a value in the cell that holds it whatever the domain (March 1 is in
+March). A `{ thresholds }` partition is fitted to the domain, so it covers
+the closed domain: the count's step is the one a numeric axis with that many
+ticks uses (`tickIncrement`), and the largest value falls in the last cell
+when it sits on an edge, as in numpy's `histogram` and d3's `bin`.
+
+The keys of a split may now be cells (`SplitKey`). Everything that reads a
+key as text or a number reads the cell's id (its start), so `.sort()` orders
+cells by start and `time.sequence` keys its frames at cell starts.
+
+### Partition: each group across its cell
+
+`spread`, `stack` and `table` read a cell's id and order. Only the
+`partition` operator (`graphicalOperators/partition.tsx`) reads its region:
+it places each group across its cell's interval `[start, end)` on one
+continuous scale, so a 29-day February is narrower than a 31-day March and
+an empty cell keeps its place (it is a group with no rows, and it is still
+placed). Its key must have a region. Only `.bin(p)` makes one, so the type
+of a field expression says whether it does (`FieldExpr<true>`, a phantom
+`hasRegion` flag that domain ops keep and aggregates drop), and the split
+checks the wire form from Python with an error that names the fix.
+
+It has no layout code of its own. It is `scatter`'s range form with the span
+read off the key: its split hands `Scatter` one `{ min, max }` span per cell
+on `dir`, and `Scatter` elaborates them into interval `position`
+constraints. So the interval form above does all the work: the span is the
+child's size proposal (a `rect` with no size there fills its cell, and a
+`stack` or `spread` inside a cell divides the cell), and the pins place it.
+On the other axis the children are aligned, as in a scatter.
+
+Each end of a span is a datum that carries what the column says about its
+values (its measure, and its schema type, so a time column gives a time
+axis), and the cell it is an edge of (`DatumValueImpl.cell`). A range whose
+two ends are edges of one cell is that cell, so `collectPositionDomains`
+collects the cells, and the layer's type on that axis holds them
+(`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
+(`mergeCells`), as an ordinal over cells does. The type is what tells the
+axis that it places cells: a time axis over calendar cells ticks at their
+partition and labels each cell between its two boundary ticks
+([Axes](/internals/frontend/axes)). A numeric axis over numeric cells keeps
+its round-number ticks.
+
+The region a child gets is its cell's interval on `dir` and the whole space
+on the other axis. Two nested 1D partitions, one per axis, give each leaf
+the same rectangle in either order; only the order of the children
+differs. A 2D cell that is not a product of intervals (a hexagon) cannot be
+stated as two interval pins, so a 2D partition needs a region constraint of
+its own (#1059).
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always

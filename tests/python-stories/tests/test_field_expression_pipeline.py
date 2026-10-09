@@ -162,11 +162,34 @@ def story_binned_ribbon_histogram():
     # and the connector bands the resulting bin-tops into an area
     # histogram. The anchors are points (no `w`): a ribbon spans the gap
     # between consecutive anchors' facing edges, so the spacing is what
-    # gives the band its width. Bins with zero rows are dropped rather than
-    # rendered as zero-height gaps, so the band visibly skips them — see #763.
+    # gives the band its width. A bin with no rows is kept, with a count of
+    # 0, so the band returns to the baseline there (#763).
     return (
         chart(_BIN_DATA, axes=True)
         .flow(spread(by=field("age").bin(), dir="x", spacing=40))
         .mark(ribbon(h=field("age").count(), fill="steelblue")),
         {"w": 500, "h": 250},
+    )
+
+
+# Two groups whose ages cover different ranges: group A from 0 to 40, group B
+# from 30 to 99.
+_GROUPED_AGES = [{"group": "A", "age": (i * 17) % 41} for i in range(30)] + [
+    {"group": "B", "age": 30 + (i * 23) % 70} for i in range(30)
+]
+
+
+def story_shared_bins_across_groups():
+    # One histogram per group, binned by a count-based partition. The cells
+    # come from the chart's whole domain of `age` (0 to 99), not from each
+    # group's rows, so both rows of bars have the same ten bins in the same
+    # order, with the bins a group has no rows in kept as empty slots (#763).
+    return (
+        chart(_GROUPED_AGES, axes=True)
+        .flow(
+            spread(by="group", dir="y", spacing=20),
+            spread(by=field("age").bin(thresholds=10), dir="x", spacing=2),
+        )
+        .mark(rect(w=30, h=field("age").count())),
+        {"w": 500, "h": 300},
     )

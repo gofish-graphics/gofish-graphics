@@ -4,7 +4,9 @@ Partitions of the time line into calendar cells: seconds, minutes, hours,
 days, weeks, months, quarters and years. A time axis draws one row of labels
 per partition. Pass them as the `rows` of an axis in the `axes` option of
 [`chart`](/js/api/core/chart), over a time column (see
-[`Schema.time`](/js/api/core/schema)).
+[`Schema.time`](/js/api/core/schema)). A Calendar value is also a partition
+for [`field(name).bin(...)`](/js/api/operators/spread#field-expression-pipeline),
+which groups a time column's rows by their cells.
 
 ::: gofish example:hourly-temperature-line
 :::
@@ -27,6 +29,7 @@ Calendar.quarter.format(fn); // custom labels, fn: (cell) => string
 Calendar.month.every(3).format(fn);
 
 chart(data, { axes: { x: { rows: [Calendar.month, Calendar.year] } } });
+spread({ by: field("date").bin(Calendar.month), dir: "x" });
 ```
 
 ## Parameters

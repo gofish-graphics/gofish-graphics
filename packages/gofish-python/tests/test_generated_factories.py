@@ -15,6 +15,7 @@ import json
 import pytest
 
 from gofish import (
+    Calendar,
     Schema,
     blank,
     chart,
@@ -27,6 +28,7 @@ from gofish import (
     layer,
     line,
     pack,
+    partition,
     petal,
     polygon,
     rect,
@@ -101,6 +103,27 @@ def test_pack_serializes_by():
     # One packing strategy, so no option to choose one (#1013).
     with pytest.raises(TypeError):
         pack(by="lake", method={"kind": "circles"})
+
+
+def test_partition_serializes_a_binned_key():
+    d = partition(by=field("date").bin(Calendar.month), dir="x").to_dict()
+    assert d["type"] == "partition"
+    assert d["dir"] == "x"
+    assert d["by"] == {
+        "type": "field",
+        "name": "date",
+        "ops": [{"op": "bin", "partition": {"unit": "month", "step": 1}}],
+    }
+
+
+def test_partition_requires_a_key_with_a_region():
+    for by in ["rating", field("rating")]:
+        with pytest.raises(ValueError, match=r'field\("rating"\)\.bin\('):
+            partition(by=by, dir="x")
+
+
+def test_rect_inset_is_a_kwarg():
+    assert rect(h="count", inset=1).to_dict()["inset"] == 1
 
 
 def test_scatter_serializes_separate_overlap():

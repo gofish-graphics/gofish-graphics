@@ -147,7 +147,7 @@ function assertLinearSpace(scope: AxisScope): void {
     );
 }
 
-const Scatter = createNodeOperator(
+export const Scatter = createNodeOperator(
   async (
     options: ScatterProps,
     children: GoFishAST[] | Collection<GoFishAST>

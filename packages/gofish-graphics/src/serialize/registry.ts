@@ -55,6 +55,7 @@ import { enclose } from "../ast/graphicalOperators/enclose";
 import { position } from "../ast/graphicalOperators/position";
 import { treemap } from "../ast/graphicalOperators/treemap";
 import { pack } from "../ast/graphicalOperators/pack";
+import { partition } from "../ast/graphicalOperators/partition";
 // `cut` (the pure slice primitive, returns an array of slice node promises)
 // and `cutMark` (the expand-mark form) — the deserializer dispatches
 // between them by context: a `cut` IR node used as a chart `.mark(...)` →
@@ -65,7 +66,6 @@ import { pack } from "../ast/graphicalOperators/pack";
 // rather than through `FACTORIES`.
 import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
 import { offset as offsetOp } from "../ast/graphicalOperators/offset";
-import { setMeasureProvenance, type MeasureProvenance } from "../ast/data";
 import { fieldPredicate } from "../ast/fieldExpr";
 import { applySchema, type SchemaEntry } from "../ast/schema";
 import { Frontend } from "gofish-ir";
@@ -114,16 +114,10 @@ export async function applyLambdaTyped(
   bridge: DeriveBridge,
   lambdaId: string,
   rows: any[],
-  schema: Record<string, SchemaEntry> = {},
-  provenance?: MeasureProvenance
+  schema: Record<string, SchemaEntry> = {}
 ): Promise<any[]> {
   const result = await bridge.applyLambda(lambdaId, rows);
-  return applySchema(
-    provenance !== undefined
-      ? setMeasureProvenance(result, provenance)
-      : result,
-    schema
-  );
+  return applySchema(result, schema);
 }
 
 /**
@@ -160,6 +154,8 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   table,
   treemap,
   pack,
+  // Operator-only: its children come from the cells of its key.
+  partition,
   // Combinator-only marks.
   layer,
   enclose,
@@ -184,8 +180,7 @@ export const OPERATOR_BUILDERS: Record<
   (opts: Record<string, any>, bridge?: DeriveBridge) => Operator<any, any>
 > = {
   // The IR names a Python lambda: the rebuilt operator calls it through the
-  // bridge, puts back the measure provenance the rows lose on the way, and
-  // types the returned rows by the operator's `schema`.
+  // bridge and types the returned rows by the operator's `schema`.
   derive: (opts, bridge) => {
     const lambdaId = opts.lambdaId;
     if (!lambdaId) {
@@ -206,11 +201,6 @@ export const OPERATOR_BUILDERS: Record<
         "derive operator references a Python lambda but no DeriveBridge was supplied"
       );
     }
-    // A data transform (e.g. `bin`) declares measure provenance for its output
-    // columns in the IR (the array-symbol provenance can't ride the rows across
-    // the RPC). Re-apply it to the returned rows so channel inference unifies a
-    // histogram's edges on the source field's axis (mirrors the JS bin).
-    const provenance = opts.provenance as MeasureProvenance | undefined;
     return derive(
       async (d: any) => {
         const rows = Array.isArray(d) ? d : d == null ? [] : [d];
@@ -221,8 +211,7 @@ export const OPERATOR_BUILDERS: Record<
           bridge,
           lambdaId,
           rows,
-          opts.schema,
-          provenance
+          opts.schema
         );
         return Array.isArray(d) ? typed : (typed[0] ?? null);
       },

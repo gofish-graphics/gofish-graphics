@@ -55,6 +55,21 @@ import {
 
 const DEFAULT_RECT_SIZE = 16;
 
+/** A drawn extent moved in by `inset` pixels at each end, about the same
+ *  center, and never below zero size. */
+const insetBy = (
+  d: { min: number; size: number; center: number; max: number },
+  inset: number
+) => {
+  const size = Math.max(0, Math.abs(d.size) - 2 * inset);
+  return {
+    min: d.center - size / 2,
+    max: d.center + size / 2,
+    center: d.center,
+    size,
+  };
+};
+
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Rect = ({
   key,
@@ -66,6 +81,7 @@ export const Rect = ({
   filter,
   opacity = 1,
   aspectRatio,
+  inset = 0,
   ...fancyDims
 }: {
   key?: string;
@@ -79,10 +95,26 @@ export const Rect = ({
   /** w/h ratio to enforce. w = h * aspectRatio. When both dims are data-driven,
    *  the constraining axis (smaller of the two scaled sizes) is used. */
   aspectRatio?: number;
+  /** Pixels drawn in from each side of the space the rect fills: on an axis
+   *  where it has no size or span of its own (a bar's width in a `spread` or
+   *  a `partition` cell), so neighbors are drawn apart. A side the rect sizes
+   *  itself (a bar's data height) is never inset. Paint only: the rect's
+   *  box, which layout and refs read, stays the space it was given. */
+  inset?: number;
 } & FancyDims<MaybeValue<number>>) => {
   // `embedded` is authored by the resolveEmbedding pass (after underlying-space
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
   const dims = elaborateDims(fancyDims);
+  if (!(Number.isFinite(inset) && inset >= 0))
+    throw new Error(
+      `rect: inset must be a number of pixels, 0 or more, got ${inset}.`
+    );
+  // Whether the rect fills the space its parent gives it on `axis`: it sets
+  // no size and no span there (read after the resolveAliases pass, which
+  // writes the axis-name-keyed `dims` onto `dims`).
+  const fills = (axis: 0 | 1): boolean =>
+    dims[axis].size === undefined &&
+    !(dims[axis].min !== undefined && dims[axis].max !== undefined);
   const node = new GoFishNode(
     {
       key,
@@ -302,7 +334,10 @@ export const Rect = ({
         const space = coordinateTransform ?? linear();
         const isXEmbedded = intrinsicDims![0].embedded;
         const isYEmbedded = intrinsicDims![1].embedded;
-        const displayDims = displayDimsOf(intrinsicDims, transform);
+        const displayDims = displayDimsOf(intrinsicDims, transform).map(
+          (d, axis) =>
+            inset > 0 && fills(axis as 0 | 1) ? insetBy(d, inset) : d
+        );
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);

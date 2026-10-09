@@ -9,10 +9,10 @@ https://seaborn.pydata.org/generated/seaborn.jointplot.html
 from gofish import (
     Constraint,
     layer,
-    bin,
     chart,
     circle,
-    derive,
+    field,
+    partition,
     rect,
     scatter,
 )
@@ -42,27 +42,17 @@ def story_default():
         .name("scatter")
     )
 
-    # bin()'s measure provenance now rides the derive operator's IR across the
-    # RPC bridge (#537), so the bin edges auto-tag with the source field's
-    # measure — no explicit field(name, measure=...) needed. The bare "start"/
-    # "end" channels unify on the source axis just like the JS story.
     top_hist = (
         chart(data, h=80)
-        .flow(
-            derive(bin("Beak Length (mm)")),
-            scatter(x_min="start", x_max="end"),
-        )
-        .mark(rect(h="count", fill="steelblue"))
+        .flow(partition(by=field("Beak Length (mm)").bin(step=2), dir="x"))
+        .mark(rect(h=field("Beak Length (mm)").count(), fill="steelblue"))
         .name("topHist")
     )
 
     right_hist = (
         chart(data, w=80)
-        .flow(
-            derive(bin("Beak Depth (mm)")),
-            scatter(y_min="start", y_max="end"),
-        )
-        .mark(rect(w="count", fill="steelblue"))
+        .flow(partition(by=field("Beak Depth (mm)").bin(step=1), dir="y"))
+        .mark(rect(w=field("Beak Depth (mm)").count(), fill="steelblue"))
         .name("rightHist")
     )
 

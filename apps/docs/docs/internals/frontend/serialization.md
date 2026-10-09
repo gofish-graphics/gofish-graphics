@@ -153,7 +153,14 @@ expression's `ops`. A `filter` over a hand-written JS predicate has no wire
 form and emits the opaque `derive`. A `derive`'s `schema` (`derive(fn, { schema })`, Python
 `derive(fn, schema={...})`) is plain data, the wire form of a chart's
 `schema`, and the registry passes it to the rebuilt `derive`, which applies
-it to the rows the Python callback returns. Marks are a tree — leaves
+it to the rows the Python callback returns. (A `derive` once also carried a
+measure `provenance` map for the rows of the `bin()` data helper; both are
+gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
+the field expression's `ops`: `{ "op": "bin", "partition": { "unit": "month",
+"step": 1 } }`, where the partition is a Calendar value's wire form,
+`{ "step" }`, or `{ "thresholds" }` (`PartitionIR`), and an op with no
+`partition` bins into about 10 cells. A partition with a JS `format`
+function has no wire form, and serializing it is an error. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,

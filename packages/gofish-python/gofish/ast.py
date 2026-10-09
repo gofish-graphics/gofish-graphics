@@ -100,7 +100,6 @@ class DeriveOperator(Operator):
     def __init__(
         self,
         fn: Callable,
-        provenance: Optional[dict] = None,
         schema: Optional[dict] = None,
     ):
         super().__init__("derive")
@@ -110,12 +109,6 @@ class DeriveOperator(Operator):
         # the wire form of a chart's ``schema``; JS applies them to the rows
         # the callback returns.
         self.schema = schema
-        # Measure provenance a data transform (e.g. `bin`) declares for its
-        # output columns. It can't ride the data rows across the derive RPC
-        # bridge, so it travels in the operator IR and is re-applied JS-side via
-        # `setMeasureProvenance` — mirroring the JS bin's array-symbol
-        # provenance so a histogram's edges unify on the source field's axis.
-        self.provenance = provenance
 
     def translate(
         self,
@@ -124,7 +117,7 @@ class DeriveOperator(Operator):
         y: Optional[float] = None,
     ) -> "DeriveOperator":
         """Translate a derived operator while preserving its lambda handle."""
-        new_op = DeriveOperator(self.fn, self.provenance, self.schema)
+        new_op = DeriveOperator(self.fn, self.schema)
         new_op.lambda_id = self.lambda_id
         new_op._labels = list(self._labels)
         new_op._translate = {
@@ -145,10 +138,8 @@ class DeriveOperator(Operator):
         )
 
     def to_dict(self) -> dict:
-        """Convert to dict - return lambda ID (+ measure provenance, if any)."""
+        """Convert to dict - return lambda ID (+ the result's schema, if any)."""
         out = {"type": "derive", "lambdaId": self.lambda_id}
-        if self.provenance:
-            out["provenance"] = self.provenance
         if self.schema is not None:
             out["schema"] = self.schema
         if self._translate:
@@ -776,6 +767,7 @@ from ._generated import (  # noqa: E402
     _spread_combinator_opts,
     _stack_combinator_opts,
     _pack_opts,
+    _partition_opts,
     _line_opts,
     _ribbon_opts,
     _layer_opts,
@@ -1901,15 +1893,8 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
 
     Returns:
         DeriveOperator object
-
-    A transform may declare measure provenance for its output columns by
-    setting `_gofish_measure_provenance` on the callable (e.g. `bin`); it is
-    carried into the operator IR so the JS side can re-tag the rows after the
-    RPC. This is what lets `derive(bin("X"))` produce `start`/`end` edges that
-    unify on X's axis without an explicit `field(name, measure=...)`.
     """
-    provenance = getattr(fn, "_gofish_measure_provenance", None)
-    return DeriveOperator(fn, provenance, schema)
+    return DeriveOperator(fn, schema)
 
 
 def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
@@ -1925,6 +1910,46 @@ def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
     """
     options["by"] = by
     return Operator("group", **_group_opts(**options))
+
+
+def partition(*, by: "FieldAccessor", dir: str, **options: Any) -> Operator:
+    """
+    Partition operator: divide the space along ``dir`` into the cells of a
+    binned key, one group per cell, each placed across its cell's interval
+    on one continuous scale. A cell's width follows its width in data (a
+    29-day February is narrower than a 31-day March), and an empty cell
+    keeps its place. A mark with no size along ``dir`` fills its cell.
+
+        chart(daily, schema={"date": Schema.time()}).flow(
+            partition(by=field("date").bin(Calendar.month), dir="x")
+        ).mark(rect(h=field("value").sum()))
+
+    Args:
+        by: A key that has a region: a binned field, ``field(x).bin(...)``.
+            A plain field has no region and is an error.
+        dir: The axis to divide: ``"x"``, ``"y"``, or an axis name the
+            enclosing coordinate space declares.
+        **options: The generated ``_partition_opts`` core's options; see
+            the docs options table.
+
+    Returns:
+        Operator object
+    """
+    if not (
+        isinstance(by, FieldAccessor)
+        and any(op.get("op") == "bin" for op in by.get("ops", []))
+    ):
+        name = by["name"] if isinstance(by, FieldAccessor) else by
+        raise ValueError(
+            f"partition: `by` must be a key that has a region, such as "
+            f'field("{name}").bin(Calendar.month) or '
+            f'field("{name}").bin(step=1). Each group is placed across its '
+            f"cell's interval, so the key must say what the cells are. To "
+            f"give each value an equal slot instead, use spread(by=..., dir=...)."
+        )
+    options["by"] = by
+    options["dir"] = dir
+    return Operator("partition", **_partition_opts(**options))
 
 
 def resolve(cols: List[str], *, from_: Any, key: Optional[str] = None) -> Operator:
@@ -2685,13 +2710,46 @@ class FieldAccessor(dict):
         return self._with_op({"op": "reverse"})
 
     def bin(
-        self, thresholds: Optional[Union[int, float, List[float]]] = None
+        self,
+        partition: Optional["CalendarPartition"] = None,
+        *,
+        step: Optional[float] = None,
+        thresholds: Optional[Union[int, List[float]]] = None,
     ) -> "FieldAccessor":
-        """Bin this (numeric) field into groups, REPLACING the base
-        grouping. Valid only in a `by` (domain) slot."""
+        """Map each value to its CELL in a partition: a Calendar value
+        (``field("date").bin(Calendar.month)``), cells ``step`` wide
+        (``.bin(step=0.5)``), or ``thresholds``, a cell count or a list of
+        edges (``.bin(thresholds=20)``). About 10 cells when none is given.
+        The groups are the cells, in order, over the column's whole domain
+        in the chart's data, so every group of a split sees the same cells,
+        and empty cells are kept. Valid only in a `by` (domain) slot. Emits
+        the wire op ``{"op": "bin", "partition": ...}``."""
+        given = [
+            name
+            for name, v in (
+                ("a Calendar value", partition),
+                ("step", step),
+                ("thresholds", thresholds),
+            )
+            if v is not None
+        ]
+        if len(given) > 1:
+            raise TypeError(
+                "field(...).bin: give one partition, not " + " and ".join(given)
+            )
         op: dict = {"op": "bin"}
-        if thresholds is not None:
-            op["thresholds"] = thresholds
+        if partition is not None:
+            if not isinstance(partition, CalendarPartition):
+                raise TypeError(
+                    "field(...).bin: the partition must be a Calendar value "
+                    "(Calendar.month, ...); use step= or thresholds= for "
+                    f"numbers, got {partition!r}"
+                )
+            op["partition"] = dict(partition)
+        elif step is not None:
+            op["partition"] = {"step": step}
+        elif thresholds is not None:
+            op["partition"] = {"thresholds": thresholds}
         return self._with_op(op)
 
     def drop_nulls(self) -> "FieldAccessor":
@@ -2808,11 +2866,6 @@ def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
             x_min=field("lo", measure="Beak Length (mm)"),
             x_max=field("hi", measure="Beak Length (mm)"),
         )
-
-    Built-in transforms like `bin()` declare their output provenance, which now
-    travels in the derive operator's IR (see DeriveOperator), so a binned
-    histogram's `start`/`end` edges auto-tag with the source field's units — no
-    explicit annotation needed.
 
     The returned `FieldAccessor` is also chainable, mirroring JS's
     `field(...)` pipeline syntax — `field("site").sort("yield")` as an

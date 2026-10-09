@@ -3,7 +3,9 @@
 // </gofish-wiki>
 
 import { type Size } from "../dims";
-import { isValue } from "../data";
+import { getValue, getValueOffset, isValue } from "../data";
+import { pxOf } from "../domain";
+import { isPositionInterval, type PositionInterval } from "./position";
 import { type AxisTicks, type UnderlyingSpace } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
@@ -128,6 +130,56 @@ export function buildDistributeSliceMap(
   return out.size === 0 ? undefined : out;
 }
 
+/** The pixel length of an interval position coordinate under `scale`: the
+ *  distance between its two edges, each a pixel literal or a datum mapped
+ *  through the scale (as `compilePlacementCoordinate` maps it when the
+ *  constraint pins the edges). Undefined when a datum edge has no scale. */
+function spanPixels(
+  span: PositionInterval,
+  scale: ConstraintPosScales[number]
+): number | undefined {
+  const [a, b] = span.map((edge) => {
+    if (!isValue(edge)) return edge as number;
+    if (scale === undefined) return undefined;
+    return pxOf(scale, getValue(edge)!) + getValueOffset(edge);
+  });
+  if (a === undefined || b === undefined) return undefined;
+  return Math.abs(b - a);
+}
+
+/** Build per-child size proposals from interval position constraints.
+ *
+ * An interval coordinate `[min, max]` pins both edges of its target, so it
+ * DETERMINES the target's extent on that axis (`lowerPositionPlacement`).
+ * This is the top-down side of that pin: the target is laid out in the span
+ * it will be pinned across, so its content fills the span (a `partition`'s
+ * cell, a scatter's range), rather than being laid out in the whole layer
+ * and then stretched or shrunk by the pins. `posScales` are the scales the
+ * layer resolves its position constraints against. Keyed by child name, one
+ * entry per axis (undefined where no interval constrains the child). */
+export function buildSpanProposalMap(
+  constraints: readonly ConstraintSpec[],
+  posScales: ConstraintPosScales
+): Map<string, Size<number | undefined>> | undefined {
+  const out = new Map<string, Size<number | undefined>>();
+  for (const constraint of constraints) {
+    if (constraint.type !== "position") continue;
+    ([0, 1] as const).forEach((axis) => {
+      const coord = axis === 0 ? constraint.x : constraint.y;
+      if (!isPositionInterval(coord)) return;
+      const length = spanPixels(coord, posScales[axis]);
+      if (length === undefined) return;
+      for (const ref of constraint.children) {
+        if (!ref) continue;
+        const cur = out.get(ref.name) ?? [undefined, undefined];
+        cur[axis] = length;
+        out.set(ref.name, cur);
+      }
+    });
+  }
+  return out.size === 0 ? undefined : out;
+}
+
 /** Choose the concrete size proposed to one child in a layer.
  *
  * Priority is explicit and single-owner:
@@ -136,29 +188,35 @@ export function buildDistributeSliceMap(
  *   2. distribute: owns only the named child axes it sliced;
  *   3. default layer box: unconstrained/fill proposal is the full layer size.
  *
+ * An interval position (`spanByName`) then owns the axes it spans: the pins
+ * set the child's extent there, whatever else proposed one.
+ *
  * Nest proposals apply after this, because they derive a child from an already
  * laid-out source and therefore override only the derived axes. */
 export function childLayoutSizeProposal(
   childName: string | undefined,
   layerSize: Size,
   gridCellByName: Map<string, Size> | undefined,
-  sliceByName: Map<string, Size> | undefined
+  sliceByName: Map<string, Size> | undefined,
+  spanByName?: Map<string, Size<number | undefined>>
 ): Size {
+  let proposal: Size = layerSize;
   if (
     gridCellByName !== undefined &&
     childName !== undefined &&
     gridCellByName.has(childName)
   ) {
-    return gridCellByName.get(childName)!;
-  }
-  if (
-    sliceByName === undefined ||
-    childName === undefined ||
-    !sliceByName.has(childName)
+    proposal = gridCellByName.get(childName)!;
+  } else if (
+    sliceByName !== undefined &&
+    childName !== undefined &&
+    sliceByName.has(childName)
   ) {
-    return layerSize;
+    proposal = sliceByName.get(childName)!;
   }
-  return sliceByName.get(childName)!;
+  const span = childName !== undefined ? spanByName?.get(childName) : undefined;
+  if (span === undefined) return proposal;
+  return [span[0] ?? proposal[0], span[1] ?? proposal[1]];
 }
 
 export type ChildScalePlan = {

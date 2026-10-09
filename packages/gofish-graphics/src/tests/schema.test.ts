@@ -29,9 +29,8 @@ import {
   stackOrigin,
   type ColumnType,
 } from "../ast/schema";
-import { getMeasureProvenance } from "../ast/data";
+import { getMeasureProvenance, setMeasureProvenance } from "../ast/data";
 import { interval } from "../util/interval";
-import { bin } from "../ast/transforms";
 import {
   distributeSpaceFold,
   type StackOrigin,
@@ -446,10 +445,16 @@ async function main() {
 
   console.log("\n# a schema keeps what the data array already carries");
   {
-    const binned = bin([{ x: 1 }, { x: 2 }, { x: 7 }], "x");
+    const binned = setMeasureProvenance(
+      [
+        { start: 0, end: 5, count: 2 },
+        { start: 5, end: 10, count: 1 },
+      ],
+      { start: "x", end: "x", count: "count" }
+    );
     const typed = await applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
     check(
-      "bin()'s measure provenance survives a schema",
+      "a transform's measure provenance survives a schema",
       getMeasureProvenance(typed)?.start === "x",
       JSON.stringify(getMeasureProvenance(typed))
     );

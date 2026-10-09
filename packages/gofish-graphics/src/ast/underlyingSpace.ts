@@ -15,6 +15,7 @@ import {
 } from "./data";
 import { nice as d3Nice } from "d3-array";
 import type { HasCalendar } from "./schema";
+import { Cell } from "./cells";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
 
 // This module is the TYPE half of an axis: what the axis means, with no σ in
@@ -91,6 +92,13 @@ export type CONTINUOUS_TYPE = {
    *  inner row ({@link niceContinuous}). A union keeps it from any part that
    *  has it ({@link mergeCalendars}). */
   calendar?: HasCalendar;
+  /** Set when every range placed along this axis is a CELL (a `partition`'s
+   *  child spans its cell, cells.ts): the cells, in order. The axis then
+   *  places cells, not points: on a time axis the row of the cells'
+   *  partition labels each cell between its two boundary ticks
+   *  (axes/elaborate.tsx). A union keeps them only when every part has them
+   *  ({@link mergeCells}). */
+  cells?: readonly Cell[];
 };
 
 export type ORDINAL_TYPE = {
@@ -109,6 +117,13 @@ export type ORDINAL_TYPE = {
    *  `distributeSpaceFold`), never sniffed back from the domain. An
    *  explicitly-keyed or `by`-grouped ordinal leaves this false. */
   anonymous?: boolean;
+  /** Set when every key is a CELL (`field(x).bin(p)`, cells.ts): each key's
+   *  cell, by key. The axis then places cells, not points: each label names
+   *  a cell and sits between the cell's two boundary ticks, and calendar
+   *  cells get an outer row of their parent level (axes/elaborate.tsx). The
+   *  cells' regions (`[start, end)`) are what a `partition` layout would read
+   *  (#1058). */
+  cells?: Readonly<Record<string, Cell>>;
 };
 
 export type UNDEFINED_TYPE = {
@@ -217,13 +232,22 @@ export type AxisTicks = { count: number; rows?: CalendarPartition[] };
 export const DEFAULT_AXIS_TICKS: AxisTicks = { count: 10 };
 
 /** The partition a time axis over `space` ticks at: its explicit inner row,
- *  else the one its domain picks ({@link tickPartition}). */
+ *  else the partition of the cells it places ({@link cellPartition}), else
+ *  the one its domain picks ({@link tickPartition}). */
 export const axisTickPartition = (
   space: CONTINUOUS_TYPE,
   ticks: AxisTicks
 ): CalendarPartition =>
   ticks.rows?.[0] ??
+  cellPartition(space) ??
   tickPartition(space.dataInterval.min, space.dataInterval.max, ticks.count);
+
+/** The calendar partition of the cells an axis places (`space.cells`), when
+ *  they are calendar cells: a time axis over them ticks at their partition,
+ *  so each cell is a cell of its inner row. */
+export const cellPartition = (
+  space: CONTINUOUS_TYPE
+): CalendarPartition | undefined => space.cells?.[0]?.calendar?.partition;
 
 /** Nice the interval a space renders an axis over (issue #659): a pinned
  *  domain's `[min, max]`, or a delta axis's width from 0, rounded outward to
@@ -323,13 +347,38 @@ export const anchorAt = (
 export const ORDINAL = (
   domain?: string[],
   measure?: Measure,
-  anonymous?: boolean
+  anonymous?: boolean,
+  cells?: Readonly<Record<string, Cell>>
 ): UnderlyingSpace => ({
   kind: "ordinal",
   domain,
   measure,
   anonymous,
+  ...(cells !== undefined ? { cells } : {}),
 });
+
+/** An ordinal axis's keys: plain text, or cells (`field(x).bin(p)`), which
+ *  stand for their ids. */
+export type OrdinalKey = string | Cell;
+
+/** The ORDINAL over `keys`, in order: over cells when every key is a cell
+ *  ({@link ORDINAL_TYPE.cells}). */
+export const ordinalOver = (
+  keys: readonly OrdinalKey[],
+  measure?: Measure,
+  anonymous?: boolean
+): UnderlyingSpace => {
+  const domain = keys.map(String);
+  const allCells = keys.length > 0 && keys.every((k) => k instanceof Cell);
+  return ORDINAL(
+    domain,
+    measure,
+    anonymous,
+    allCells
+      ? Object.fromEntries((keys as Cell[]).map((c) => [c.id, c]))
+      : undefined
+  );
+};
 export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
   space.kind === "ordinal";
 
@@ -352,6 +401,30 @@ const pointAt = (pos: MaybeValue<number | undefined>): CONTINUOUS_TYPE => {
 export const positionCalendar = (
   pos: MaybeValue<unknown>
 ): HasCalendar | undefined => getValueFieldType(pos)?.HasCalendar;
+
+/** `space` over `cells` (see {@link CONTINUOUS_TYPE.cells}), or `space`
+ *  unchanged when there are none. */
+export const withCells = <T extends CONTINUOUS_TYPE>(
+  space: T,
+  cells: readonly Cell[] | undefined
+): T => (cells === undefined ? space : { ...space, cells });
+
+/**
+ * The cells of a union of parts on one axis: every part's cells, in order of
+ * their starts, each once, when every part holds cells; undefined when any
+ * part does not (an axis that also places points is not over cells), or
+ * when there are no parts.
+ */
+export const mergeCells = (
+  parts: (readonly Cell[] | undefined)[]
+): readonly Cell[] | undefined => {
+  if (parts.length === 0 || parts.some((p) => p === undefined))
+    return undefined;
+  if (parts.length === 1) return parts[0];
+  const byId = new Map<string, Cell>();
+  for (const part of parts) for (const c of part!) byId.set(c.id, c);
+  return [...byId.values()].sort((a, b) => a.start - b.start);
+};
 
 /** `space` on `calendar` (see {@link CONTINUOUS_TYPE.calendar}), or `space`
  *  unchanged when there is none. */

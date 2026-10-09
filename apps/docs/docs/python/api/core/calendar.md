@@ -4,7 +4,10 @@ Partitions of the time line into calendar cells: seconds, minutes, hours,
 days, weeks, months, quarters and years. A time axis draws one row of labels
 per partition. Pass them as the `"rows"` of an axis in the `axes` keyword of
 [`chart`](/python/api/core/chart), over a time column (see
-[`Schema.time`](/python/api/core/schema)).
+[`Schema.time`](/python/api/core/schema)). A Calendar value is also a
+partition for
+[`field(name).bin(...)`](/python/api/operators/spread#field-expression-pipeline),
+which groups a time column's rows by their cells.
 
 ::: gofish example:hourly-temperature-line hidden
 :::
@@ -33,6 +36,7 @@ Calendar.year
 Calendar.month.every(3)          # cells of 3 months
 
 axes={"x": {"rows": [Calendar.month, Calendar.year]}}
+spread(by=field("date").bin(Calendar.month), dir="x")
 ```
 
 ## Parameters
