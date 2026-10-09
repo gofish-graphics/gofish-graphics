@@ -82,6 +82,11 @@ export interface FieldSpec {
   doc?: string;
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
+  /** On a strategy family's `OPTION_TYPES` entry: the Python namespace whose
+   *  calls make a value (`Tile`, as in `Tile.squarify()`). The docs name the
+   *  option by it; a signature annotates the value's own type instead
+   *  (`dict`), since a namespace is not a type ({@link pyType}). */
+  pyFamily?: string;
   /** On a named type (`OPTION_TYPES`, `AUTHORED_REFS`): the Python class
    *  that builds a value of it. Its instances already carry the wire keys,
    *  so Python passes them through, and {@link pyType} names the class. */
@@ -771,7 +776,7 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   ...Object.fromEntries(
     Object.entries(STRATEGIES).map(([name, family]) => [
       name,
-      { doc: family.doc, type: strategyType(family) },
+      { doc: family.doc, type: strategyType(family), pyFamily: name },
     ])
   ),
 };
@@ -793,11 +798,17 @@ export function refPyClass(name: string): string | undefined {
 
 /**
  * The Python type of a field type, as the generated factory signatures
- * annotate it and the Python docs tables print it (one spelling for both). A
- * channel takes a literal or a field name; a named type is its Python class
- * when it has one, else the type it stands for.
+ * annotate it (`"annotation"`) and the Python docs tables print it
+ * (`"doc"`). A channel takes a literal or a field name; a named type is its
+ * Python class when it has one, else the type it stands for. The one
+ * difference between the two uses: a strategy family is a namespace, not a
+ * type, so the docs name it (`Tile`) and an annotation spells the value it
+ * makes (`dict`).
  */
-export function pyType(f: FieldType): string {
+export function pyType(
+  f: FieldType,
+  use: "annotation" | "doc" = "annotation"
+): string {
   switch (f.kind) {
     case "string":
     case "enum":
@@ -815,7 +826,7 @@ export function pyType(f: FieldType): string {
           ? "bool"
           : "str";
     case "union":
-      return [...new Set(f.options.map(pyType))].join(" | ");
+      return [...new Set(f.options.map((o) => pyType(o, use)))].join(" | ");
     case "array":
       return "list";
     case "tuple":
@@ -826,7 +837,10 @@ export function pyType(f: FieldType): string {
     case "ref": {
       const cls = refPyClass(f.name);
       if (cls !== undefined) return cls;
-      return f.name in OPTION_TYPES ? pyType(OPTION_TYPES[f.name].type) : "Any";
+      const named = OPTION_TYPES[f.name];
+      if (named === undefined) return "Any";
+      if (use === "doc" && named.pyFamily !== undefined) return named.pyFamily;
+      return pyType(named.type, use);
     }
     case "any":
       return "Any";

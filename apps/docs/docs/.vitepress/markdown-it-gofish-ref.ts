@@ -211,7 +211,8 @@ function optionsTable(
     "| --- | --- | --- | --- |",
   ];
   const body = rows.map(([name, spec]) => {
-    const type = lang === "python" ? pyType(spec.type) : tsType(spec.type);
+    const type =
+      lang === "python" ? pyType(spec.type, "doc") : tsType(spec.type);
     const required = spec.required ? "**Required.** " : "";
     const doc = spec.doc ? cell(spec.doc) : "";
     return `| ${code(fieldName(name, lang))} | ${code(type)} | ${code(

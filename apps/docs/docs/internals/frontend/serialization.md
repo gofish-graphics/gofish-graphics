@@ -459,8 +459,11 @@ the Python generator passes it through. One function, `pyType` in
 `descriptors.ts`, gives the Python type of a field: the generated factory
 signatures (the strategy modules' too) annotate with it and the Python docs
 tables print it, so the two agree. A ref prints as its `pyClass` when it has
-one, else as the Python type it stands for (`AxesOptions` is `bool | dict`, a
-strategy is a `dict`, since a Python strategy is a plain dict).
+one, else as the Python type it stands for (`AxesOptions` is `bool | dict`).
+A strategy family's entry names its Python namespace (`pyFamily`: `Tile`,
+`Overlap`, `Curve`): the docs print that name, since users write
+`Tile.squarify(...)`, and a signature annotates the value it makes (`dict`),
+since a namespace is not a type.
 
 **What's still authored, not in the table**: the envelope
 (`ChartIR`/`LayerIR`/`DataIR`/`MarkIR` union, `ChannelValue`,
