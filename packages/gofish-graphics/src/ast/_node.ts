@@ -89,6 +89,7 @@ import {
 } from "./axisDirection";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
+import type { SharingPlan } from "./constraints/compose";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
 import {
   computeRelateSchedule,
@@ -331,6 +332,25 @@ export type ResolveUnderlyingSpace = (
 ) => FancySize<UnderlyingSpace>;
 
 /**
+ * A node's sharing rule (#1114): which of its children share each axis, as a
+ * {@link SharingPlan}. Like the type hook, each node type has its own rule,
+ * and it reads only the node's children and constraints (and the node's own
+ * options), never a type or a claim. Optional: a node without a rule lets
+ * every child share both axes, as a layer with no constraints does. Nothing
+ * reads it yet except the `GOFISH_DUMP_SHARING` dump.
+ */
+export type ResolveSharing = (
+  childNodes: (GoFishNode | GoFishRef)[],
+  constraints: ConstraintSpec[]
+) => SharingPlan;
+
+/** Every child in the own set on both axes, nothing nested. */
+const shareAll: ResolveSharing = (childNodes) => ({
+  sets: [childNodes.map(() => 0), childNodes.map(() => 0)],
+  nested: [new Set(), new Set()],
+});
+
+/**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis
  * whose type is not continuous). It runs in its own walk, after every type is
  * resolved, so it may read the node's own resolved `spaces` and its children's
@@ -494,6 +514,7 @@ export class GoFishNode {
    *  {@link INTERNAL_visibleWhile}); undefined on the static path. */
   public __gfVisible?: Map<object, () => boolean>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
+  private _resolveSharing: ResolveSharing;
   private _resolveExtent: ResolveExtent;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   public _extent?: Size<Extent | undefined> = undefined;
@@ -676,6 +697,7 @@ export class GoFishNode {
       args,
       resolveUnderlyingSpace,
       resolveExtent,
+      resolveSharing,
       layout,
       lower,
       geometry,
@@ -687,6 +709,7 @@ export class GoFishNode {
       args?: any;
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
       resolveExtent?: ResolveExtent;
+      resolveSharing?: ResolveSharing;
       layout: Layout;
       lower?: Lower;
       geometry?: GeometryFn;
@@ -697,6 +720,7 @@ export class GoFishNode {
   ) {
     this.uid = `node-${GoFishNode.uidCounter++}`;
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
+    this._resolveSharing = resolveSharing ?? shareAll;
     this._resolveExtent =
       resolveExtent ?? ((_ce, _cs, spaces) => impliedExtents(spaces));
     this._layout = layout;
@@ -712,6 +736,12 @@ export class GoFishNode {
     this.args = args;
     this.shared = shared;
     this.color = color;
+  }
+
+  /** This node's sharing plan: its rule ({@link ResolveSharing}) applied to
+   *  its children and constraints. */
+  public sharing(): SharingPlan {
+    return this._resolveSharing(this.children, this.constraints);
   }
 
   /** Collect the distinct color values in this subtree, in first-seen order.

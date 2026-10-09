@@ -5,10 +5,9 @@
  * apps/docs/docs/internals/design/measure-keyed-domains.md, section 3, plus
  * the marginal histogram, a spread of charts and a stack.
  *
- * Three rows are walls and have no check here: a data-valued `w`/`h` (a layer
- * keeps its own size in a closure, so a child layer's size is not on the child
- * node), `treemap` and the `position` operator (each is its own node type with
- * no constraints). See the comment above `planSharing`.
+ * A real node's plan comes from its own sharing rule (`GoFishNode.sharing()`).
+ * A data-valued `w`/`h`, `treemap` and the `position` operator are node-level
+ * rules, not constraints.
  *
  * Run: `tsx src/tests/sharing.test.ts` (wired as `pnpm test:sharing`).
  */
@@ -23,10 +22,11 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { offset } from "../ast/graphicalOperators/offset";
 import { enclose } from "../ast/graphicalOperators/enclose";
 import { Frame } from "../ast/graphicalOperators/frame";
+import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
 import { polar } from "../ast/coordinateTransforms/polar";
-import { scatter, group, rect as rectMark } from "../lib";
+import { scatter, group, treemap, rect as rectMark } from "../lib";
 
 declare const process: { exit(code: number): never };
 
@@ -76,7 +76,7 @@ const expect = (
 async function planOf(node: any): Promise<SharingPlan> {
   node = await node;
   await node._elaborateInAxisScope?.(BASE_AXIS_SCOPE, BASE_AXIS_SCOPE);
-  return planSharing(node.constraints ?? [], node.children);
+  return node.sharing();
 }
 
 async function main() {
@@ -256,6 +256,53 @@ async function main() {
       ])
     ),
     { x: [0, 0], y: [0, 0] }
+  );
+
+  // stack({ size }) wraps each part in a layer with a data-valued size
+  // (spread.tsx), as the nested mosaic does.
+  const share = (k: number) =>
+    (layer as any)({ h: v(k) }, [(rect as any)({ w: 10, h: v(1) })]);
+  expect(
+    "a data-valued w/h on a node: nests its content on that axis",
+    await planOf(share(0.4)),
+    { x: [0], y: [0], ny: [0] }
+  );
+  {
+    const wrapped: any = await (Spread as any)(
+      { dir: "y", glue: true, size: [v(0.4), v(0.6)] },
+      [(rect as any)({ w: 10 }), (rect as any)({ w: 10 })]
+    );
+    // The wrapper's size is an axis-named `dims` entry, which the
+    // resolveAliases pass installs.
+    expect(
+      "stack({ size }): each wrapper nests its part on the stack axis",
+      await planOf(wrapped.children[0]),
+      { x: [0], y: [0], ny: [0] }
+    );
+  }
+
+  expect(
+    "treemap: nests each child on both axes",
+    await planOf(
+      (await (treemap as any)({ by: "c", w: 200, h: 100 })(rectMark({})))([
+        { c: "p" },
+        { c: "q" },
+        { c: "r" },
+      ])
+    ),
+    { x: [1, 2, 3], y: [1, 2, 3], nx: [0, 1, 2], ny: [0, 1, 2] }
+  );
+
+  const box = () => (rect as any)({ w: 10, h: v(2) });
+  expect(
+    "position operator, datum offset: the child stays shared",
+    await planOf(positionNode({ x: v(5), y: v(1) }, [box()])),
+    { x: [0], y: [0] }
+  );
+  expect(
+    "position operator, pixel offset: detaches the child on that axis",
+    await planOf(positionNode({ x: 20, y: v(1) }, [box()])),
+    { x: [1], y: [0] }
   );
 
   expect(

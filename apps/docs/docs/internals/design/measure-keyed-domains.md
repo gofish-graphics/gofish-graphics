@@ -175,6 +175,10 @@ The marginal histogram needs this order (section 6).
 | `chart()`                                            | Nothing. A chart is a frame with one child. A chart draws axes (section 5), and its `w`/`h` is a literal size.                                                                                            |
 | render root                                          | A space root and a sized node.                                                                                                                                                                            |
 
+Three rows are rules of a node rather than constraints of a layer: a
+data-valued `w`/`h`, `treemap` and the `position` operator. Each node type has a
+sharing rule next to its type hook, and `planSharing` is the layer's rule.
+
 The data-valued size row is an inherent special case, not a patch. A
 data-valued size is a value in the parent's unit, so the node already has a
 type on that axis, and its content is a second coordinate inside the box. A

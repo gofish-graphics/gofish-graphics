@@ -77,6 +77,17 @@ export const positionNode = (
       type: "position",
       key: options.key,
       shared: [false, false],
+      // A datum offset moves the child in data, so the child stays shared. A
+      // pixel offset places it elsewhere, so it is detached on that axis, as
+      // a literal `Constraint.position` detaches its child.
+      resolveSharing: (childNodes) => {
+        const set = (offset: MaybeValue<number> | undefined) =>
+          childNodes.map(() => (typeof offset === "number" ? 1 : 0));
+        return {
+          sets: [set(options.x), set(options.y)],
+          nested: [new Set(), new Set()],
+        };
+      },
       resolveUnderlyingSpace: (children: Size<UnderlyingSpace>[]) => {
         const child = children[0] ?? [UNDEFINED, UNDEFINED];
         return [

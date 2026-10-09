@@ -112,6 +112,19 @@ const Treemap = createNodeOperator(
         },
         key,
         shared: [false, false],
+        // The treemap sizes each child from data into a tile of its own, so
+        // on both axes each child is detached from the others and nested in
+        // its tile, as a grid cell is.
+        resolveSharing: (childNodes) => ({
+          sets: [
+            childNodes.map((_, i) => i + 1),
+            childNodes.map((_, i) => i + 1),
+          ],
+          nested: [
+            new Set(childNodes.map((_, i) => i)),
+            new Set(childNodes.map((_, i) => i)),
+          ],
+        }),
         resolveUnderlyingSpace: (): Size<UnderlyingSpace> => {
           // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
           // data-driven size is declared on an axis (e.g. `h: "fare"` auto-summed
