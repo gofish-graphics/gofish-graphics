@@ -22,7 +22,8 @@ from .ast import Mark, _channel
 # ("tuple", (shape, ...)), ("record", value_shape),
 # ("tagged", tag_key, {tag_value: shape}); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
-    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None)}),
+    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None), "rows": ("rows", ("array", ("ref", "Calendar")))}),
+    "Calendar": ("object", {"unit": ("unit", None), "step": ("step", None), "start": ("start", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
 }
 
@@ -1127,7 +1128,7 @@ def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: 
         axes: Draw axes: a boolean for both axes, or per-axis options {x?, y?}.
         legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
         padding: Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).
-        schema: Column types, keyed by column name, e.g. Schema.ordered(levels).
+        schema: Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [

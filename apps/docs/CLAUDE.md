@@ -146,9 +146,12 @@ single source the generated Python factory layer
   descriptor construct has a `gofish-ref` block under both `docs/js/api/` and
   `docs/python/api/`, and that every name used is a real construct. It reads the
   built table, so `pnpm --filter gofish-ir build` runs first in CI. Constructs
-  with no user-facing factory (`mark-fn`, `over`) are allowlisted in the script,
-  as is `derive`, whose one argument is a function the descriptor cannot
-  describe — its page writes that single-parameter table by hand.
+  with no user-facing factory (`mark-fn`, `over`) are allowlisted in the script.
+- A descriptor field marked `wireOnly: true` (a Python bridge handle, such as
+  `derive`'s `lambdaId` and `provenance`) is on the wire but is not an option a
+  user passes, so the generated table leaves it out. A positional argument the
+  descriptor does not model (`derive`'s `fn`) is described in prose above the
+  block.
 - The **Marks / Operators / Coordinates** sidebar subgroups are generated from
   the files in `docs/<lang>/api/{marks,operators,coords}/`
   (`collectApiSidebarGroup` in `config.mts`): a page's label is its frontmatter

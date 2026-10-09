@@ -88,6 +88,13 @@ Three per-run session contexts are initialized:
 
 These are attached to the render session and propagated to the node tree, rather than stored as module-global mutable state. This establishes clean state for the rendering process and ensures no interference between multiple chart renders.
 
+Calendar math (a time axis's cells) runs synchronously during elaboration,
+on the Temporal API that `applySchema` (`schema.ts`) loads when the chart's
+data has a time column (`loadTemporal()` in `calendar.ts`): the native API
+where the runtime has one, else `temporal-polyfill`, imported only then. A
+time axis needs a time column, so `layout` itself loads nothing, and a chart
+without one never loads the polyfill.
+
 ### Pass 2: Color Scale Resolution
 
 **Location**: `src/ast/gofish.tsx:172`
@@ -312,8 +319,9 @@ under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
 level). So a grouped or faceted chart renders one ordinal axis per grouping
 level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
 `lake` axis and a per-lake `species` axis. Wherever it sets an owning flag,
-`resolveAxes` also leaves a persistent `axisDemand` stamp — the demand bit that
-later gates per-scope domain nicing at the σ-scope solves (issue #659), since
+`resolveAxes` also leaves a persistent `axisDemand` stamp — the axis's ticks
+(`AxisTicks`: a count, and a time axis's rows), which later gate and
+shape per-scope domain nicing at the σ-scope solves (issue #659), since
 `resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
 driven at each scope's own solve (below). Then
 `elaborateChrome` **rewrites the tree**. Each node that owns chrome (axes,

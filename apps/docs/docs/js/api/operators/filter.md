@@ -36,6 +36,10 @@ returns exactly this shape. Its bounds are plain numbers, and it throws if the
 expression carries pipeline ops (`field("x").bin(10).between(...)`), which would
 otherwise test the raw field: a predicate is not a value slot.
 
+The result carries the input's [column types](/js/api/core/schema) over as
+they are, since its rows are the input's rows. A predicate that changes the
+rows it tests is not supported.
+
 ## Examples
 
 ```ts

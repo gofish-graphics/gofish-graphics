@@ -839,7 +839,7 @@ for the API.
       ]
     },
     "DeriveOperator": {
-      "description": "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
+      "description": "Transforms the data with a function, `derive(fn)`. A function does not serialize: the IR carries a Python bridge handle in its place.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -857,6 +857,11 @@ for the API.
             "type": "string"
           },
           "description": "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure."
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Schema.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant)."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -2668,11 +2673,46 @@ for the API.
                 }
               ],
               "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; \"auto\" picks 0, 45, or 90 degrees per label row so labels do not collide."
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Calendar"
+              },
+              "description": "The label rows of a time axis, inner row first, e.g. [Calendar.month, Calendar.year]. Each row is one calendar partition: its ticks are its cells' starts, and each label is centered on its cell's start tick. The domain is niced outward to the inner row's cells. Default: the level and step the domain picks for about 10 ticks, then its parent level. In JS a row's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell. A row with a format is JS-only (it has no wire form)."
             }
           }
         }
       ],
-      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle."
+      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and the rows of a time axis."
+    },
+    "Calendar": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "enum": [
+            "second",
+            "minute",
+            "hour",
+            "day",
+            "week",
+            "month",
+            "quarter",
+            "year"
+          ],
+          "description": "The calendar level of each cell."
+        },
+        "step": {
+          "$ref": "#/$defs/Number",
+          "description": "How many units one cell spans; steps align to the level above.",
+          "default": 1
+        },
+        "start": {
+          "enum": ["monday", "sunday"],
+          "description": "The first day of a week (weeks only)."
+        }
+      },
+      "description": "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3)."
     },
     "AxesOptions": {
       "oneOf": [

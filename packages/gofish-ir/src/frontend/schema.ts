@@ -144,7 +144,7 @@ export interface RawMarkIR extends BaseIRNode {
  *   The `select()` factory no longer exists in either frontend; `mode: "one"`
  *   (or absent) corresponds to `ref(name)`.
  * - **External**: `{type: "external", id?: "..."}` indicates data ships over a
- *   sidecar transport (anywidget's `arrow_data` trait) and the id keys into it.
+ *   sidecar transport (anywidget's `tier_arrow` trait) and the id keys into it.
  * - **Previous tier**: `{type: "previous-tier"}` marks an empty `chart()` /
  *   `Chart()` scope inside a `.layer(...)` chain — "inherit the immediately
  *   preceding tier's marks". The deserializer maps this to the JS
@@ -194,6 +194,11 @@ export interface DeriveOperator
    *  can't ride the data rows across the derive RPC; the deserializer re-applies
    *  it via `setMeasureProvenance`. */
   provenance?: Record<string, string>;
+  /** The column types of the derive's result, keyed by column name, in the
+   *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
+   *  type the result over the types it keeps or infers, and convert values
+   *  as a chart's schema does. */
+  schema?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -364,7 +369,8 @@ export type OverlapStrategyIR =
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
  * object: `title` (string for a custom title, `false` to suppress), `side`
- * (the frame edge), and `labelAngle` (label rotation in degrees).
+ * (the frame edge), `labelAngle` (label rotation in degrees), and `rows` (the
+ * label rows of a time axis, inner row first).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions =
@@ -373,7 +379,24 @@ export type AxisOptions =
       title?: string | false;
       side?: "start" | "end";
       labelAngle?: number | number[] | "auto";
+      rows?: CalendarPartitionIR[];
     };
+
+/** A Calendar value's wire form (`Calendar.month.every(3)`): a calendar level
+ *  at a step. `start` is the first day of a week, for weeks only. */
+export type CalendarPartitionIR = {
+  unit:
+    | "second"
+    | "minute"
+    | "hour"
+    | "day"
+    | "week"
+    | "month"
+    | "quarter"
+    | "year";
+  step?: number;
+  start?: "monday" | "sunday";
+};
 
 export interface TableOperator
   extends BaseIRNode,

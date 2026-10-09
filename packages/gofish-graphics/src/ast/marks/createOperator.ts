@@ -42,7 +42,7 @@ import {
 import {
   CHANNEL_INFER,
   axisSlotKind,
-  resolveMeasure,
+  resolveColumn,
   type DimsChannelSpec,
 } from "../channels";
 import { mapAxisDims, type AxisDimsSlot } from "../dims";
@@ -54,7 +54,7 @@ import type {
 } from "../channels";
 import { discretePosition, copyMeasureProvenance } from "../data";
 import { copyColumnTypes } from "../schema";
-import { fieldNameOf } from "../datumProjection";
+import { fieldNameOf } from "../data";
 import type { MaybeValue, Value } from "../data";
 import {
   hasNormalizeOp,
@@ -929,13 +929,14 @@ function applyChannel(
   // arrays (e.g. `scatter({x: [0, 1, 2]}, [...marks])`), and for entry-
   // flagged channels where the user passed an explicit array.
   if (Array.isArray(val)) return val;
-  // The measure is loop-invariant across split entries (it depends only on
-  // the accessor and `wholeData`'s provenance, not on which items a given
-  // entry holds), so resolve it once per channel. Only size/pos consume it;
-  // computing it for color/raw would add a spurious conflict-throw site.
-  const measure =
+  // The column (its measure and its schema type) is loop-invariant across
+  // split entries (it depends only on the accessor and what `wholeData`
+  // carries, not on which items a given entry holds), so resolve it once per
+  // channel. Only size/pos consume it; computing it for color/raw would add a
+  // spurious conflict-throw site.
+  const column =
     type === "size" || type === "pos"
-      ? resolveMeasure(wholeData, val)
+      ? resolveColumn(wholeData, val)
       : undefined;
   if (perEntry && entries !== undefined) {
     if (type === "pos" && discrete && isNonNumericEntryField(val, wholeData)) {
@@ -955,18 +956,18 @@ function applyChannel(
     if (type === "size" && hasNormalizeOp(val)) {
       const { pre } = splitAtNormalize(val);
       const rawEntryValues = [...entries.values()].map((items) =>
-        CHANNEL_INFER[type](pre, items, measure)
+        CHANNEL_INFER[type](pre, items, column)
       );
       return applyEntryNormalize(rawEntryValues, fieldNameOf(opts.by));
     }
-    // Value aggregation uses each entry's items; the measure comes from
+    // Value aggregation uses each entry's items; the column comes from
     // `wholeData` (the binned array still carries the symbol — each per-entry
     // slice does not).
     return [...entries.values()].map((items) =>
-      CHANNEL_INFER[type](val, items, measure)
+      CHANNEL_INFER[type](val, items, column)
     );
   }
-  return CHANNEL_INFER[type](val, wholeData, measure);
+  return CHANNEL_INFER[type](val, wholeData, column);
 }
 
 /**
